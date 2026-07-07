@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 1 | 🟨 In progress |
+| 0 — Foundation | 12 | 2 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **1** | **1%** |
+| **Total** | **96** | **2** | **2%** |
 
 *Update counts when marking items complete.*
 
@@ -63,7 +63,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** `docker compose config && docker compose up -d`
 
 ### P0-03 Database connection + ORM
-- [ ] **P0-03** Drizzle (or Prisma) + external PostgreSQL connection
+- [x] **P0-03** Drizzle (or Prisma) + external PostgreSQL connection
   - **Spec:** §15
   - **Deliver:** `server/db/`, migration runner, health check endpoint
   - **Acceptance:** App connects to external Postgres; migrations run cleanly

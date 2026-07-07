@@ -5,6 +5,12 @@
 .nitro
 .cache
 dist
+.worker-dist
+
+# Test artifacts
+coverage
+playwright-report
+test-results
 
 # Node dependencies
 node_modules

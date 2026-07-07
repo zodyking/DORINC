@@ -1,0 +1,16 @@
+# DORINC Suite — worker service (OCR/AI/mail/backup/thumbnail jobs)
+FROM node:24-alpine AS build
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build:worker
+
+FROM node:24-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+# pg_dump for encrypted backups (matches external PostgreSQL major)
+RUN apk add --no-cache postgresql18-client zstd
+COPY --from=build /src/.worker-dist ./.worker-dist
+COPY --from=build /src/node_modules ./node_modules
+CMD ["node", ".worker-dist/worker.mjs"]

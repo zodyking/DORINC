@@ -1,0 +1,67 @@
+# DORINC Suite — Docker Compose for Dockploy
+#
+# One container per application service. PostgreSQL is EXTERNAL —
+# never part of this stack. All services connect via DATABASE_URL.
+#
+# Profiles:
+#   default        -> nuxt-app only (MVP)
+#   workers        -> worker + pdf-worker
+#   redis          -> optional redis queue
+
+services:
+  nuxt-app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      NITRO_PORT: '3000'
+      NITRO_HOST: 0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    restart: unless-stopped
+    profiles: ['workers']
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      WORKER_KIND: general
+
+  pdf-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pdf-worker
+    restart: unless-stopped
+    profiles: ['workers']
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      WORKER_KIND: pdf
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ['redis']
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

@@ -1,0 +1,15 @@
+# DORINC Suite — pdf-worker service (Playwright Chromium renderer)
+FROM node:24-alpine AS build
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build:worker
+
+# Playwright's official image ships Chromium + all system deps
+FROM mcr.microsoft.com/playwright:v1.57.0-noble
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /src/.worker-dist ./.worker-dist
+COPY --from=build /src/node_modules ./node_modules
+CMD ["node", ".worker-dist/pdf-worker.mjs"]
