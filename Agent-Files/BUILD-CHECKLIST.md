@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 11 | 🟨 In progress |
-| 1 — Internal MVP | 38 | 3 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 5 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **14** | **15%** |
+| **Total** | **96** | **16** | **17%** |
 
 *Update counts when marking items complete.*
 
@@ -165,7 +165,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** No Super Admin → setup; after bootstrap → normal login
   - **Verify:** E2E bootstrap flow
 
-- [ ] **P1-05** Admin approve/reject signup
+- [x] **P1-05** Admin approve/reject signup
   - **Spec:** §5
   - **Deliver:** `POST /api/admin/users/:id/approve|reject`
   - **Acceptance:** Approved user gets account type; rejected cannot login

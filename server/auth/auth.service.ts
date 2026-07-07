@@ -121,6 +121,7 @@ export async function login(
   if (!ok) throw new AuthError('INVALID_CREDENTIALS')
 
   if (!row.user.isActive) throw new AuthError('DISABLED')
+  if (row.user.rejectedAt) throw new AuthError('NOT_APPROVED')
 
   const isInternal = row.accountTypeKey !== 'customer'
   if (isInternal) {
