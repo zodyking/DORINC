@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 5 | 🟨 In progress |
+| 0 — Foundation | 12 | 6 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **5** | **5%** |
+| **Total** | **96** | **6** | **6%** |
 
 *Update counts when marking items complete.*
 
@@ -94,7 +94,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Playwright screenshot portal shell
 
 ### P0-07 Auth screens UI
-- [ ] **P0-07** Login + signup UI (no backend yet)
+- [x] **P0-07** Login + signup UI (no backend yet)
   - **Mockup:** `AUTH: CUSTOMER + STAFF`
   - **Deliver:** `pages/auth/login.vue`, `pages/auth/signup.vue`
   - **Acceptance:** Matches auth card, tabs, form fields from mockup
