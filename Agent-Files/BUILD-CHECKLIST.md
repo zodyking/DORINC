@@ -115,7 +115,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Unit test error shape
 
 ### P0-10 Permission constants + middleware skeleton
-- [ ] **P0-10** Permission key registry + `requirePermission()` middleware
+- [x] **P0-10** Permission key registry + `requirePermission()` middleware
   - **Spec:** §4
   - **Deliver:** `shared/permissions/`, `server/middleware/permission.ts`
   - **Acceptance:** Middleware returns 401/403 correctly
