@@ -122,7 +122,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Unit tests for deny-wins, scope check
 
 ### P0-11 Audit service skeleton
-- [ ] **P0-11** Append-only audit write service
+- [x] **P0-11** Append-only audit write service
   - **Spec:** §11
   - **Deliver:** `server/services/audit.service.ts`, `audit_logs` migration
   - **Acceptance:** Writes immutable rows with actor snapshot + request_id
