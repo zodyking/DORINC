@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 3 | 🟨 In progress |
+| 0 — Foundation | 12 | 5 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **3** | **3%** |
+| **Total** | **96** | **5** | **5%** |
 
 *Update counts when marking items complete.*
 
@@ -78,7 +78,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Storybook page or `/dev/tokens` preview
 
 ### P0-05 App shell layout (staff)
-- [ ] **P0-05** Staff app shell — sidebar, topbar, mobile nav
+- [x] **P0-05** Staff app shell — sidebar, topbar, mobile nav
   - **Spec:** §17
   - **Mockup:** `SIDEBAR`, `TOPBAR` sections
   - **Deliver:** `layouts/staff.vue`, responsive sidebar/scrim, breadcrumb, search slot, account menu
@@ -86,7 +86,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Playwright screenshot 375px + 1440px
 
 ### P0-06 Portal shell layout
-- [ ] **P0-06** Customer portal shell
+- [x] **P0-06** Customer portal shell
   - **Spec:** §17
   - **Mockup:** `CUSTOMER PORTAL` header + nav
   - **Deliver:** `layouts/portal.vue`

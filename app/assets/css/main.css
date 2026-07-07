@@ -5,3 +5,6 @@
 
 /* Ledger component styles — extracted 1:1 from Agent-Files/invoice-ui-mockups.html */
 @import './ledger.css';
+
+/* Intentional mobile-optimization overrides (documented per rule) */
+@import './overrides.css';

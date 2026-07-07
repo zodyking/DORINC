@@ -1,0 +1,41 @@
+/* =================================================================
+   DORINC mobile-optimization overrides (user-approved deviations).
+   Keep ledger.css a pristine 1:1 extraction of the mockup; every
+   intentional mobile improvement lives here with a rationale.
+   ================================================================= */
+
+/* Portal header: at phone widths the mockup header overflows.
+   Wrap the bar and give the nav its own full-width row that scrolls
+   horizontally on one line (iPhone-app style). */
+@media (max-width: 720px) {
+  .portal-top {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 10px 14px;
+  }
+  .portal-nav {
+    order: 3;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .portal-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .portal-nav button {
+    white-space: nowrap;
+    flex: none;
+  }
+  .portal-top .co {
+    display: none;
+  }
+  .portal-user b,
+  .portal-user small {
+    display: none;
+  }
+  .portal-shell .page {
+    padding: 18px 16px 48px;
+  }
+}
