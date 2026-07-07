@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+
+/* Ledger design tokens are defined in tokens.css (P0-04) */
+@import './tokens.css';
