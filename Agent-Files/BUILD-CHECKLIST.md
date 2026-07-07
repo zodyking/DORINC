@@ -108,7 +108,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Wizard navigates all steps
 
 ### P0-09 Shared validators + error format
-- [ ] **P0-09** Zod validators + API error helper
+- [x] **P0-09** Zod validators + API error helper
   - **Spec:** §14
   - **Deliver:** `shared/validators/`, `server/utils/api-error.ts`
   - **Acceptance:** Consistent `{ code, message, details, requestId }` on all routes
