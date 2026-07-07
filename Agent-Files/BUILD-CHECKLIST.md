@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 6 | 🟨 In progress |
+| 0 — Foundation | 12 | 7 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **6** | **6%** |
+| **Total** | **96** | **7** | **7%** |
 
 *Update counts when marking items complete.*
 
@@ -101,7 +101,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Visual compare to mockup
 
 ### P0-08 First-run setup wizard UI
-- [ ] **P0-08** Server setup wizard UI
+- [x] **P0-08** Server setup wizard UI
   - **Mockup:** `SERVER SETUP WIZARD`
   - **Deliver:** `pages/setup/index.vue` multi-step wizard
   - **Acceptance:** Steps for admin email, SMTP test, DB confirm, completion

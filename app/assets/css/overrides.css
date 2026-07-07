@@ -4,6 +4,16 @@
    intentional mobile improvement lives here with a rationale.
    ================================================================= */
 
+/* Tailwind preflight strips UA list styles; the mockup relies on them. */
+.cbody ul,
+.mb ul {
+  list-style: disc;
+}
+.cbody ol,
+.mb ol {
+  list-style: decimal;
+}
+
 /* Portal header: at phone widths the mockup header overflows.
    Wrap the bar and give the nav its own full-width row that scrolls
    horizontally on one line (iPhone-app style). */
