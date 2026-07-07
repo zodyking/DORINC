@@ -2,7 +2,7 @@
 // Render pipeline (pdf_render_jobs polling) lands in P1-28.
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 3000)
 
-console.log(`[pdf-worker] started (poll ${POLL_MS}ms)`) // eslint-disable-line no-console
+console.log(`[pdf-worker] started (poll ${POLL_MS}ms)`)  
 
 async function tick() {
   // pdf_render_jobs polling registered in P1-28.
@@ -14,7 +14,7 @@ async function main() {
       await tick()
     }
     catch (err) {
-      console.error('[pdf-worker] tick failed', err) // eslint-disable-line no-console
+      console.error('[pdf-worker] tick failed', err)  
     }
     await new Promise(resolve => setTimeout(resolve, POLL_MS))
   }

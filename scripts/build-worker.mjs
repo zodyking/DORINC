@@ -9,4 +9,4 @@ rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
 cpSync(join(root, 'server', 'workers'), out, { recursive: true })
 
-console.log(`[build:worker] copied server/workers -> .worker-dist`) // eslint-disable-line no-console
+console.log(`[build:worker] copied server/workers -> .worker-dist`)  

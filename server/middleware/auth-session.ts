@@ -27,6 +27,6 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     // A DB outage must not turn into a silent auth bypass — requests just
     // proceed unauthenticated and permission checks will reject them.
-    console.error(`[auth] session resolution failed: ${(err as Error).message}`) // eslint-disable-line no-console
+    console.error(`[auth] session resolution failed: ${(err as Error).message}`)  
   }
 })

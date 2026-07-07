@@ -81,7 +81,7 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
       accountTypes: typeRows.length,
       permissions: permRows.length,
     }
-    console.log(`[seed] account_types=${counts.accountTypes} permissions=${counts.permissions} bundles synced`) // eslint-disable-line no-console
+    console.log(`[seed] account_types=${counts.accountTypes} permissions=${counts.permissions} bundles synced`)  
     return counts
   }
   finally {
@@ -92,7 +92,7 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
 // Run directly (tsx server/db/seed.ts)
 if (process.argv[1]?.replace(/\\/g, '/').endsWith('server/db/seed.ts')) {
   seedAuth().catch((err) => {
-    console.error(err) // eslint-disable-line no-console
+    console.error(err)  
     process.exit(1)
   })
 }

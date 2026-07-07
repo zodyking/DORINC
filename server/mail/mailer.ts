@@ -36,8 +36,8 @@ export async function sendMail(message: MailMessage): Promise<{ delivered: boole
   }
   catch (err) {
     if (process.env.NODE_ENV === 'production') throw err
-    console.warn(`[mail] delivery failed (dev, ignored): ${(err as Error).message}`) // eslint-disable-line no-console
-    console.info(`[mail] to=${message.to} subject="${message.subject}"\n${message.text}`) // eslint-disable-line no-console
+    console.warn(`[mail] delivery failed (dev, ignored): ${(err as Error).message}`)  
+    console.info(`[mail] to=${message.to} subject="${message.subject}"\n${message.text}`)  
     return { delivered: false }
   }
 }

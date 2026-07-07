@@ -13,6 +13,6 @@ export default defineEventHandler((event) => {
   setResponseHeader(event, 'x-request-id', requestId)
 
   if (event.path.startsWith('/api/')) {
-    console.log(`[req ${requestId}] ${event.method} ${event.path}`) // eslint-disable-line no-console
+    console.log(`[req ${requestId}] ${event.method} ${event.path}`)  
   }
 })
