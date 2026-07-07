@@ -6,6 +6,15 @@ const steps = ['Welcome', 'Database', 'Email', 'Security', 'PDF', 'Backup', 'AI'
 
 const step = ref(1)
 const done = ref(false)
+const busy = ref(false)
+const error = ref('')
+const locked = ref(false)
+
+// Bootstrap locks after the first Super Admin exists (SPEC §5)
+const { data: setupStatus } = await useFetch<{ needsBootstrap: boolean }>('/api/setup/status')
+if (setupStatus.value && !setupStatus.value.needsBootstrap) {
+  locked.value = true
+}
 
 // Step form state (persisted via API in P1-04)
 const db = reactive({ host: 'localhost', port: 5432, database: 'dorinc_prod', username: 'dorinc_app', password: '' })
@@ -27,12 +36,32 @@ function back() {
   if (step.value > 1) step.value -= 1
 }
 
-function next() {
+async function next() {
   if (step.value < steps.length) {
     step.value += 1
+    return
   }
-  else {
+
+  // Final step: create the Super Admin via the bootstrap API
+  error.value = ''
+  if (admin.password !== admin.confirm) {
+    error.value = 'Passwords do not match'
+    return
+  }
+  busy.value = true
+  try {
+    await $fetch('/api/setup/bootstrap', {
+      method: 'POST',
+      body: { name: admin.name, email: admin.email, password: admin.password },
+    })
     done.value = true
+  }
+  catch (err) {
+    const fe = err as { data?: { data?: { message?: string } } }
+    error.value = fe.data?.data?.message ?? 'Bootstrap failed — check the fields and try again'
+  }
+  finally {
+    busy.value = false
   }
 }
 </script>
@@ -46,7 +75,18 @@ function next() {
       <button class="btn">Save &amp; exit</button>
     </header>
 
-    <div class="setup-body">
+    <div v-if="locked" class="setup-body">
+      <div class="card" style="text-align:center; padding:32px 24px;">
+        <div style="font-size:48px; margin-bottom:12px;">🔒</div>
+        <h3 style="margin:0 0 8px;">Setup is locked</h3>
+        <p style="color:#64748b; margin:0 0 20px;">
+          A Super Admin already exists. Sign in to manage the system from the Control Panel.
+        </p>
+        <NuxtLink to="/auth/login?card=staff" class="btn primary">Go to sign in</NuxtLink>
+      </div>
+    </div>
+
+    <div v-else class="setup-body">
       <h2 style="margin:0 0 6px; font-size:22px;">Server setup walkthrough</h2>
       <p style="margin:0 0 18px; color:#64748b; font-size:14px;">
         Configure everything from the UI — no .env file editing. Secrets are encrypted and stored in PostgreSQL.
@@ -218,6 +258,7 @@ function next() {
             <label class="fld">Password <input v-model="admin.password" type="password" placeholder="Minimum 12 characters"></label>
             <label class="fld">Confirm password <input v-model="admin.confirm" type="password" placeholder="Repeat password"></label>
             <div class="tglrow">Send verification email now <span class="tgl"><input v-model="admin.sendVerification" type="checkbox"><span class="tr" /></span></div>
+            <p v-if="error" style="color:#dc2626; font-size:13px; margin:10px 0 0;">{{ error }}</p>
           </div>
         </div>
         <div class="card" style="margin-top:16px; background:#ecfdf5; border-color:#a7f3d0;">
@@ -241,13 +282,13 @@ function next() {
       </div>
     </div>
 
-    <footer class="setup-foot">
+    <footer v-if="!locked" class="setup-foot">
       <button class="btn" :disabled="step === 1 || done" @click="back">← Back</button>
       <span style="font-size:13px; color:#94a3b8;">Step {{ step }} of {{ steps.length }}</span>
       <div style="display:flex; gap:10px;">
         <button class="btn" :disabled="done">Save step</button>
-        <button class="btn primary" :disabled="done" @click="next">
-          {{ step === steps.length ? 'Complete setup' : 'Continue →' }}
+        <button class="btn primary" :disabled="done || busy" @click="next">
+          {{ busy ? 'Working…' : step === steps.length ? 'Complete setup' : 'Continue →' }}
         </button>
       </div>
     </footer>

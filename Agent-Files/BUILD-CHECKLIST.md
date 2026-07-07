@@ -158,7 +158,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** HTTP-only cookie, rotation on login, inactivity timeout
   - **Verify:** Integration test session lifecycle
 
-- [ ] **P1-04** Super Admin bootstrap
+- [x] **P1-04** Super Admin bootstrap
   - **Spec:** §5
   - **Mockup:** `SERVER SETUP WIZARD`
   - **Deliver:** First-run API + UI wired; locks after first Super Admin

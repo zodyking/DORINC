@@ -1,5 +1,20 @@
 <script setup lang="ts">
-// Placeholder landing — will redirect to dashboard/login once auth exists (P1-03/P1-04).
+// Root router: first-run setup → wizard; signed in → workspace/portal; else login.
+const { data: setupStatus } = await useFetch<{ needsBootstrap: boolean }>('/api/setup/status')
+
+if (setupStatus.value?.needsBootstrap) {
+  await navigateTo('/setup', { replace: true })
+}
+else {
+  const auth = useAuthStore()
+  await auth.fetchMe()
+  if (!auth.isSignedIn) {
+    await navigateTo('/auth/login', { replace: true })
+  }
+  else {
+    await navigateTo(auth.isCustomer ? '/portal' : '/dashboard', { replace: true })
+  }
+}
 </script>
 
 <template>
@@ -12,7 +27,7 @@
         DORINC Suite
       </h1>
       <p class="text-faint text-xs mt-0.5">
-        Devon On Site Repairs Inc
+        Loading…
       </p>
     </div>
   </div>

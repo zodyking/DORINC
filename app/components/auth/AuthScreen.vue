@@ -7,7 +7,8 @@ const props = defineProps<{
 const card = ref<'customer' | 'staff'>(props.initialCard ?? 'customer')
 const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
-// Wired to real auth APIs in P1-02/P1-03
+const auth = useAuthStore()
+
 const portalEmail = ref('')
 const portalPass = ref('')
 const loginEmail = ref('')
@@ -17,6 +18,63 @@ const signupEmail = ref('')
 const signupPass = ref('')
 const signupConfirm = ref('')
 const signupType = ref('Mechanic')
+
+const busy = ref(false)
+const error = ref('')
+const notice = ref('')
+
+interface FetchError {
+  data?: { data?: { message?: string }, message?: string }
+}
+
+function messageFrom(err: unknown): string {
+  const fe = err as FetchError
+  return fe.data?.data?.message ?? fe.data?.message ?? 'Something went wrong — try again'
+}
+
+async function submitLogin(email: string, password: string) {
+  busy.value = true
+  error.value = ''
+  try {
+    const user = await auth.login(email, password)
+    await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
+  }
+  catch (err) {
+    error.value = messageFrom(err)
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function submitSignup() {
+  busy.value = true
+  error.value = ''
+  notice.value = ''
+  if (signupPass.value !== signupConfirm.value) {
+    error.value = 'Passwords do not match'
+    busy.value = false
+    return
+  }
+  try {
+    const res = await $fetch<{ message: string }>('/api/auth/signup', {
+      method: 'POST',
+      body: {
+        name: signupName.value,
+        email: signupEmail.value,
+        password: signupPass.value,
+        accountType: signupType.value.toLowerCase(),
+      },
+    })
+    notice.value = res.message
+  }
+  catch (err) {
+    error.value = messageFrom(err)
+  }
+  finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -30,7 +88,7 @@ const signupType = ref('Mechanic')
           <small>Customer portal</small>
         </div>
         <div class="auth-body">
-          <form @submit.prevent>
+          <form @submit.prevent="submitLogin(portalEmail, portalPass)">
             <div class="fld">
               <label>Email</label>
               <input v-model="portalEmail" type="email" autocomplete="username" required>
@@ -39,9 +97,10 @@ const signupType = ref('Mechanic')
               <label>Password</label>
               <input v-model="portalPass" type="password" autocomplete="current-password" required>
             </div>
+            <p v-if="error" class="auth-hint" style="color:#dc2626;">{{ error }}</p>
             <div class="auth-foot"><a href="#">Forgot password?</a></div>
-            <button type="submit" class="btn primary" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              Sign in
+            <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
+              {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>
           </form>
         </div>
@@ -59,7 +118,7 @@ const signupType = ref('Mechanic')
           <button type="button" :class="{ on: tab === 'signup' }" @click="tab = 'signup'">Request account</button>
         </div>
         <div class="auth-panel" :class="{ active: tab === 'login' }">
-          <form @submit.prevent>
+          <form @submit.prevent="submitLogin(loginEmail, loginPass)">
             <div class="fld">
               <label>Email</label>
               <input v-model="loginEmail" type="email" autocomplete="username" required>
@@ -68,14 +127,15 @@ const signupType = ref('Mechanic')
               <label>Password</label>
               <input v-model="loginPass" type="password" autocomplete="current-password" required>
             </div>
+            <p v-if="error" class="auth-hint" style="color:#dc2626;">{{ error }}</p>
             <div class="auth-foot"><a href="#">Forgot password?</a></div>
-            <button type="submit" class="btn primary" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              Sign in
+            <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
+              {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>
           </form>
         </div>
         <div class="auth-panel" :class="{ active: tab === 'signup' }">
-          <form @submit.prevent>
+          <form @submit.prevent="submitSignup">
             <div class="fld">
               <label>Full name</label>
               <input v-model="signupName" type="text" placeholder="Jordan T." required>
@@ -102,9 +162,11 @@ const signupType = ref('Mechanic')
                 <option>Viewer</option>
               </select>
             </div>
+            <p v-if="error" class="auth-hint" style="color:#dc2626;">{{ error }}</p>
+            <p v-if="notice" class="auth-hint" style="color:#059669;">{{ notice }}</p>
             <p class="auth-hint">Requires admin approval.</p>
-            <button type="submit" class="btn primary" style="width:100%;justify-content:center;margin-top:12px;padding:11px;">
-              Submit request
+            <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:12px;padding:11px;">
+              {{ busy ? 'Submitting…' : 'Submit request' }}
             </button>
           </form>
         </div>

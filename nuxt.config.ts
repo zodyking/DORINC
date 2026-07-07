@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2026-07-07',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
 
   modules: ['@pinia/nuxt', '@nuxt/eslint'],
 
