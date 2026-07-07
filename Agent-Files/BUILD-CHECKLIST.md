@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 11 | 🟨 In progress |
-| 1 — Internal MVP | 38 | 1 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 3 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **12** | **13%** |
+| **Total** | **96** | **14** | **15%** |
 
 *Update counts when marking items complete.*
 
@@ -146,13 +146,13 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Seed system account types + permission bundles
   - **Verify:** Migration + seed script
 
-- [ ] **P1-02** Signup + email verification API
+- [x] **P1-02** Signup + email verification API
   - **Spec:** §5
   - **Deliver:** `POST /api/auth/signup`, `POST /api/auth/verify-email`
   - **Acceptance:** User enters pending state; verification token expires
   - **Verify:** Integration test with test SMTP
 
-- [ ] **P1-03** Login + logout + session cookies
+- [x] **P1-03** Login + logout + session cookies
   - **Spec:** §5
   - **Deliver:** `POST login`, `POST logout`, `GET me`
   - **Acceptance:** HTTP-only cookie, rotation on login, inactivity timeout
