@@ -1,4 +1,7 @@
 @import 'tailwindcss';
 
-/* Ledger design tokens are defined in tokens.css (P0-04) */
+/* Ledger theme tokens for Tailwind utilities (bg-accent, text-muted, ...) */
 @import './tokens.css';
+
+/* Ledger component styles — extracted 1:1 from Agent-Files/invoice-ui-mockups.html */
+@import './ledger.css';

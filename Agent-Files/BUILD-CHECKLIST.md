@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 2 | 🟨 In progress |
+| 0 — Foundation | 12 | 3 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **2** | **2%** |
+| **Total** | **96** | **3** | **3%** |
 
 *Update counts when marking items complete.*
 
@@ -70,7 +70,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** migration up/down on fresh external DB
 
 ### P0-04 Design system tokens
-- [ ] **P0-04** Ledger design tokens as Tailwind/UnoCSS theme
+- [x] **P0-04** Ledger design tokens as Tailwind/UnoCSS theme
   - **Spec:** §3
   - **Mockup:** CSS block lines 11–14 in `invoice-ui-mockups.html`
   - **Deliver:** `assets/css/tokens`, Inter + IBM Plex Mono fonts, base components (btn, card, pill, tbl)
