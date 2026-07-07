@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 7 | 🟨 In progress |
+| 0 — Foundation | 12 | 11 | 🟨 In progress |
 | 1 — Internal MVP | 38 | 0 | ⬜ Not started |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **7** | **7%** |
+| **Total** | **96** | **11** | **11%** |
 
 *Update counts when marking items complete.*
 
@@ -129,7 +129,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** Integration test — no update/delete endpoints exist
 
 ### P0-12 Request logging + health endpoints
-- [ ] **P0-12** Request ID middleware + `/api/health`
+- [x] **P0-12** Request ID middleware + `/api/health`
   - **Spec:** §22
   - **Deliver:** DB health, version info
   - **Acceptance:** Every log line includes requestId

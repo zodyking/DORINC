@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
     status: database === 'ok' ? 'ok' : 'degraded',
     database,
     version: pkg.version ?? '0.0.0',
+    requestId: (event.context.requestId as string | undefined) ?? '',
     time: new Date().toISOString(),
   }
 })
