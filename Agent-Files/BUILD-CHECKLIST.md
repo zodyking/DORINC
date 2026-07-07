@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 11 | 🟨 In progress |
-| 1 — Internal MVP | 38 | 0 | ⬜ Not started |
+| 1 — Internal MVP | 38 | 1 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **11** | **11%** |
+| **Total** | **96** | **12** | **13%** |
 
 *Update counts when marking items complete.*
 
@@ -141,7 +141,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### Auth & permissions
 
-- [ ] **P1-01** Database schema — auth + permissions tables
+- [x] **P1-01** Database schema — auth + permissions tables
   - **Spec:** §4, §15 (`users`, `account_types`, `permissions`, `account_type_permissions`, `user_permission_overrides`, `sessions`)
   - **Acceptance:** Seed system account types + permission bundles
   - **Verify:** Migration + seed script
