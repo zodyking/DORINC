@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 6 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 8 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **18** | **19%** |
+| **Total** | **96** | **20** | **21%** |
 
 *Update counts when marking items complete.*
 
@@ -179,7 +179,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### Customers
 
-- [ ] **P1-07** Customers schema + API
+- [x] **P1-07** Customers schema + API
   - **Spec:** §6.1, §15
   - **Deliver:** Full CRUD, archive/restore, history, search
   - **Acceptance:** Search by name, contact, bus #, VIN, plate, invoice #
@@ -191,7 +191,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Visual parity with mockup; archive/restore works
   - **Verify:** Playwright CRUD flow
 
-- [ ] **P1-09** Customer contacts management
+- [x] **P1-09** Customer contacts management
   - **Spec:** §6.1
   - **Deliver:** `POST /api/customers/:id/contacts`, UI in customer detail
   - **Acceptance:** Primary/billing contact flags; portal user flag
