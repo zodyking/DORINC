@@ -12,6 +12,7 @@ export const API_ERROR_STATUS = {
   EDIT_SESSION_ACTIVE: 423,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
+  UPSTREAM_ERROR: 502,
 } as const
 
 export type ApiErrorCode = keyof typeof API_ERROR_STATUS

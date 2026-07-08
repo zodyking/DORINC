@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 10 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 11 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **22** | **23%** |
+| **Total** | **96** | **23** | **24%** |
 
 *Update counts when marking items complete.*
 
@@ -205,7 +205,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Constraint enforced at DB + API
   - **Verify:** Integration test duplicate bus # rejection
 
-- [ ] **P1-11** VIN decode (NHTSA vPIC)
+- [x] **P1-11** VIN decode (NHTSA vPIC)
   - **Spec:** §6.2
   - **Deliver:** `POST /api/vehicles/decode-vin`
   - **Acceptance:** Normalized fields + `vin_decode_raw` jsonb stored; audited
