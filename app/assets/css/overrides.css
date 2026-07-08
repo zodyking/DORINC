@@ -14,6 +14,52 @@
   list-style: decimal;
 }
 
+/* Toggle rows: the mockup HTML uses .tglrow/.tgl/.tr but ships no CSS
+   for them — give them a sane single-line layout so checkboxes align. */
+.tglrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 13.5px;
+  border-bottom: 1px solid #f8fafc;
+}
+.tglrow:last-of-type {
+  border-bottom: none;
+}
+.tgl {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.tgl .tr {
+  display: none;
+}
+
+/* Mobile single-line rows: rows that are one line on desktop must stay
+   one line on mobile — truncate with ellipsis instead of wrapping. */
+@media (max-width: 720px) {
+  .userrow {
+    flex-wrap: nowrap;
+  }
+  .userrow .nm {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .userrow .nm b,
+  .userrow .nm small {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .userrow .end {
+    flex: none;
+    flex-wrap: nowrap;
+  }
+}
+
 /* Portal header: at phone widths the mockup header overflows.
    Wrap the bar and give the nav its own full-width row that scrolls
    horizontally on one line (iPhone-app style). */

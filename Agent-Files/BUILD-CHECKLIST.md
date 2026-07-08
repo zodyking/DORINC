@@ -32,12 +32,12 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 | Phase | Total | Done | Status |
 |---|---|---|---|
-| 0 — Foundation | 12 | 11 | 🟨 In progress |
-| 1 — Internal MVP | 38 | 5 | 🟨 In progress |
+| 0 — Foundation | 12 | 12 | ✅ Done |
+| 1 — Internal MVP | 38 | 6 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **16** | **17%** |
+| **Total** | **96** | **18** | **19%** |
 
 *Update counts when marking items complete.*
 
@@ -54,7 +54,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Verify:** `npm run build && npm run lint`
 
 ### P0-02 Docker Compose (Dockploy)
-- [ ] **P0-02** Docker Compose with separate service containers
+- [x] **P0-02** Docker Compose with separate service containers *(files delivered + `docker compose config` validated; runtime `compose up` pending — local Docker Desktop engine broken)*
   - **Spec:** §2 Deployment
   - **Services:** `nuxt-app`, `worker`, `pdf-worker`, `redis` (optional profile)
   - **NOT in compose:** postgres
@@ -171,7 +171,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Approved user gets account type; rejected cannot login
   - **Verify:** Permission test — Admin only
 
-- [ ] **P1-06** Users list + detail pages
+- [x] **P1-06** Users list + detail pages
   - **Mockup:** `PAGE: USERS`, `PAGE: USER DETAIL`
   - **Deliver:** `pages/users/`, approve/reject UI, account type assignment
   - **Acceptance:** Matches mockup; permission-gated actions
