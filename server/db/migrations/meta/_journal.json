@@ -57,6 +57,13 @@
       "when": 1783521286231,
       "tag": "0007_loud_tomas",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783521862852,
+      "tag": "0008_rare_jamie_braddock",
+      "breakpoints": true
     }
   ]
 }

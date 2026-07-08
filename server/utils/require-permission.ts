@@ -40,3 +40,19 @@ export function requirePermission(
 
   return auth.user
 }
+
+/** Non-throwing permission check — for routes that accept `.all` OR `.own` scopes. */
+export function hasPermission(
+  event: H3Event,
+  required: PermissionKey,
+  options: { ownsRecord?: boolean } = {},
+): boolean {
+  const auth = event.context.auth as AuthContext | undefined
+  if (!auth?.user) return false
+  return evaluatePermission({
+    user: auth.user,
+    overrides: auth.overrides,
+    required,
+    ownsRecord: options.ownsRecord,
+  }).allowed
+}
