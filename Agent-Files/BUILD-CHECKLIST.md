@@ -33,7 +33,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 13 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 14 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
@@ -225,7 +225,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** bytea storage; no blob in list queries; MIME + size validation; sha256
   - **Verify:** Upload/download auth integration tests
 
-- [ ] **P1-14** Thumbnail + preview generation job
+- [x] **P1-14** Thumbnail + preview generation job
   - **Spec:** §18
   - **Deliver:** worker job for image thumbnails/previews
   - **Acceptance:** Service log upload creates original + thumb + preview rows

@@ -1,6 +1,7 @@
 import { readMultipartFormData } from 'h3'
 import { useDb } from '../../db/client'
 import { FilesServiceError, maxUploadBytes, uploadFile } from '../../services/files.service'
+import { enqueueJob } from '../../services/jobs.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -30,7 +31,8 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) throw apiError(event, 'VALIDATION_ERROR', 'Invalid upload fields', parsed.error.issues)
 
   try {
-    const file = await uploadFile(useDb(), {
+    const db = useDb()
+    const file = await uploadFile(db, {
       ownerEntityType: parsed.data.ownerEntityType,
       ownerEntityId: parsed.data.ownerEntityId,
       fileKind: parsed.data.fileKind ?? 'attachment',
@@ -38,6 +40,11 @@ export default defineEventHandler(async (event) => {
       mimeType: filePart.type ?? 'application/octet-stream',
       data: filePart.data,
     }, actor.id)
+
+    // Image uploads get worker-generated thumbnail + preview rows (P1-14)
+    if (file.mimeType.startsWith('image/') && (file.fileKind === 'original' || file.fileKind === 'attachment')) {
+      await enqueueJob(db, 'thumbnail_generate', { fileId: file.id })
+    }
 
     await writeAudit(event, {
       entityType: 'file',
