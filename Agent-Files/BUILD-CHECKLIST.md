@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 18 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 22 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **30** | **31%** |
+| **Total** | **96** | **34** | **35%** |
 
 *Update counts when marking items complete.*
 
@@ -280,7 +280,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Draft editable; finalized immutable; revision on correction
   - **Verify:** Integration tests per status transition
 
-- [ ] **P1-22** Invoices list + detail UI
+- [x] **P1-22** Invoices list + detail UI
   - **Mockup:** `PAGE: INVOICES`, `PAGE: INVOICE DETAIL`
   - **Deliver:** Status pills, filters, detail with line items + PDF link
   - **Acceptance:** Matches mockup KPI cards and table

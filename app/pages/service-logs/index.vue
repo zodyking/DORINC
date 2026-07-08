@@ -117,7 +117,7 @@ function openLog(id: string) {
               <button class="btn sm" type="button" @click="openLog(log.id)">Open</button>
             </template>
             <template v-else-if="log.status === 'converted_to_invoice' && log.invoiceId">
-              <button class="btn sm" type="button" disabled title="Invoice UI coming in P1-22">View invoice</button>
+              <NuxtLink :to="`/invoices/${log.invoiceId}`" class="btn sm" @click.stop>View invoice</NuxtLink>
             </template>
             <template v-else>
               <button class="btn sm" type="button" @click="openLog(log.id)">View log</button>

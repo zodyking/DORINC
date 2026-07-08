@@ -71,6 +71,7 @@ export const invoiceMarkPaidSchema = z.object({
 export const invoiceListQuerySchema = paginationSchema.extend({
   q: z.string().max(200).optional(),
   status: invoiceStatusSchema.optional(),
+  overdue: z.coerce.boolean().optional(),
   customerId: uuidSchema.optional(),
   vehicleId: uuidSchema.optional(),
   includeArchived: z.coerce.boolean().optional(),

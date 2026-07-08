@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql, sum } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type {
   CatalogSnapshot,
@@ -95,12 +95,25 @@ export type UpdateInvoiceLineInput = Partial<AddInvoiceLineInput>
 export interface ListInvoicesFilter {
   q?: string
   status?: InvoiceStatus
+  overdue?: boolean
   customerId?: string
   vehicleId?: string
   includeArchived?: boolean
   sort?: 'newest' | 'oldest' | 'invoice_date' | 'status'
   page: number
   pageSize: number
+}
+
+export interface InvoiceListStats {
+  total: number
+  draftCount: number
+  sentCount: number
+  paidCount: number
+  overdueCount: number
+  outstandingTotal: string
+  outstandingCount: number
+  paidThisMonthTotal: string
+  overdueTotal: string
 }
 
 function buildCustomerSnapshot(customer: Awaited<ReturnType<typeof getCustomer>>): InvoiceCustomerSnapshot {
@@ -365,10 +378,9 @@ export async function listInvoiceLineItems(db: Db, invoiceId: string) {
     .orderBy(asc(invoiceLineItems.sortOrder), asc(invoiceLineItems.createdAt))
 }
 
-export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
+function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArchived' | 'customerId' | 'vehicleId' | 'q'>) {
   const conditions = []
   if (!filter.includeArchived) conditions.push(isNull(invoices.archivedAt))
-  if (filter.status) conditions.push(eq(invoices.status, filter.status))
   if (filter.customerId) conditions.push(eq(invoices.customerId, filter.customerId))
   if (filter.vehicleId) conditions.push(eq(invoices.vehicleId, filter.vehicleId))
 
@@ -381,6 +393,76 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
       ilike(invoices.complaint, term),
       sql`CAST(${invoices.invoiceNumber} AS TEXT) ILIKE ${term}`,
     ))
+  }
+
+  return conditions
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export async function getInvoiceListStats(db: Db): Promise<InvoiceListStats> {
+  const today = todayIsoDate()
+  const monthStart = `${today.slice(0, 7)}-01`
+  const base = [isNull(invoices.archivedAt)]
+
+  const [totals] = await db.select({ value: count() }).from(invoices).where(and(...base))
+  const [draftCount] = await db.select({ value: count() })
+    .from(invoices).where(and(...base, eq(invoices.status, 'draft')))
+  const [sentCount] = await db.select({ value: count() })
+    .from(invoices).where(and(...base, eq(invoices.status, 'sent')))
+  const [paidCount] = await db.select({ value: count() })
+    .from(invoices).where(and(...base, eq(invoices.status, 'paid')))
+
+  const overdueWhere = and(
+    ...base,
+    eq(invoices.status, 'sent'),
+    lt(invoices.dueDate, today),
+    gt(invoices.balanceDue, '0'),
+  )
+  const [overdueCount] = await db.select({ value: count() }).from(invoices).where(overdueWhere)
+
+  const outstandingWhere = and(
+    ...base,
+    or(eq(invoices.status, 'sent'), eq(invoices.status, 'approved')),
+    gt(invoices.balanceDue, '0'),
+  )
+  const [outstanding] = await db.select({
+    count: count(),
+    total: sum(invoices.balanceDue),
+  }).from(invoices).where(outstandingWhere)
+
+  const [overdueSum] = await db.select({ total: sum(invoices.balanceDue) })
+    .from(invoices).where(overdueWhere)
+
+  const [paidMonth] = await db.select({ total: sum(invoices.amountPaid) })
+    .from(invoices)
+    .where(and(...base, eq(invoices.status, 'paid'), sql`${invoices.paidAt} >= ${monthStart}`))
+
+  return {
+    total: Number(totals?.value ?? 0),
+    draftCount: Number(draftCount?.value ?? 0),
+    sentCount: Number(sentCount?.value ?? 0),
+    paidCount: Number(paidCount?.value ?? 0),
+    overdueCount: Number(overdueCount?.value ?? 0),
+    outstandingCount: Number(outstanding?.count ?? 0),
+    outstandingTotal: outstanding?.total ?? '0',
+    paidThisMonthTotal: paidMonth?.total ?? '0',
+    overdueTotal: overdueSum?.total ?? '0',
+  }
+}
+
+export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
+  const conditions = invoiceListBaseConditions(filter)
+
+  if (filter.overdue) {
+    conditions.push(eq(invoices.status, 'sent'))
+    conditions.push(lt(invoices.dueDate, todayIsoDate()))
+    conditions.push(gt(invoices.balanceDue, '0'))
+  }
+  else if (filter.status) {
+    conditions.push(eq(invoices.status, filter.status))
   }
 
   const where = conditions.length ? and(...conditions) : undefined
