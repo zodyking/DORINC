@@ -57,7 +57,7 @@ export const serviceLogs = pgTable('service_logs', {
 
   // Draft invoice lines (Phase 2 AI extraction lands here; reviewers may edit)
   draftLineItems: jsonb('draft_line_items'),
-  // Set when converted to an invoice (FK added once invoices table exists)
+  // Set when converted to an invoice — FK enforced in migration 0010
   invoiceId: uuid('invoice_id'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

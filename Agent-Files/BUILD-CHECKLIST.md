@@ -268,7 +268,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### Invoices
 
-- [ ] **P1-20** Invoices schema + line items
+- [x] **P1-20** Invoices schema + line items
   - **Spec:** §6.5, §15
   - **Deliver:** invoices, invoice_line_items with catalog_snapshot jsonb
   - **Acceptance:** Server-side total calculation; snapshots on line add

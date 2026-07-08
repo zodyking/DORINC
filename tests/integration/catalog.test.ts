@@ -1,7 +1,7 @@
 // Integration tests for catalog schema/API (P1-18): items, categories,
 // labor rates, search, archive, taxable flag.
 import { config } from 'dotenv'
-import { eq, like } from 'drizzle-orm'
+import { like } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'

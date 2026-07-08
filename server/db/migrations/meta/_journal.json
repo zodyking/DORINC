@@ -71,6 +71,13 @@
       "when": 1783523285372,
       "tag": "0009_mysterious_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783524568320,
+      "tag": "0010_third_white_tiger",
+      "breakpoints": true
     }
   ]
 }

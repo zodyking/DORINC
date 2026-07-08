@@ -1,7 +1,6 @@
 import { useDb } from '../../../db/client'
-import { CatalogServiceError, createCategory } from '../../../services/catalog.service'
+import { createCategory } from '../../../services/catalog.service'
 import { writeAudit } from '../../../services/audit.service'
-import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody } from '../../../utils/validate'
 import { catalogCategoryCreateSchema } from '../../../../shared/validators/catalog'
