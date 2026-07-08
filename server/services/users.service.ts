@@ -94,6 +94,64 @@ export async function rejectUser(db: Db, input: RejectInput) {
   return { user: updated!, accountTypeKey: row.accountTypeKey as AccountType }
 }
 
+export interface UpdateUserInput {
+  userId: string
+  actor: { id: string, accountType: AccountType }
+  accountTypeKey?: AccountType
+  isActive?: boolean
+}
+
+/**
+ * Update account type / active flag. Super Admin records can only be
+ * modified by a Super Admin, and nobody can be promoted to super_admin
+ * through this path (SPEC §4).
+ */
+export async function updateUser(db: Db, input: UpdateUserInput) {
+  const row = await getUserWithType(db, input.userId)
+  if (!row) throw new UsersServiceError('NOT_FOUND')
+
+  const targetIsSuperAdmin = row.accountTypeKey === 'super_admin'
+  if (targetIsSuperAdmin && input.actor.accountType !== 'super_admin') {
+    throw new UsersServiceError('SUPER_ADMIN_PROTECTED')
+  }
+
+  const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
+  const changedFields: string[] = []
+  let accountTypeKey = row.accountTypeKey as AccountType
+
+  if (input.accountTypeKey && input.accountTypeKey !== accountTypeKey) {
+    if (targetIsSuperAdmin || !APPROVABLE_ACCOUNT_TYPES.includes(input.accountTypeKey)) {
+      throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
+    }
+    const [typeRow] = await db.select().from(accountTypes)
+      .where(eq(accountTypes.key, input.accountTypeKey))
+    if (!typeRow) throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
+    changes.accountTypeId = typeRow.id
+    changedFields.push('accountTypeId')
+    accountTypeKey = input.accountTypeKey
+  }
+
+  if (input.isActive !== undefined && input.isActive !== row.user.isActive) {
+    if (targetIsSuperAdmin && !input.isActive) {
+      throw new UsersServiceError('SUPER_ADMIN_PROTECTED')
+    }
+    changes.isActive = input.isActive
+    changes.disabledAt = input.isActive ? null : new Date()
+    changedFields.push('isActive', 'disabledAt')
+  }
+
+  if (!changedFields.length) {
+    return { user: row.user, accountTypeKey, changedFields, previous: row }
+  }
+
+  const [updated] = await db.update(users)
+    .set(changes)
+    .where(eq(users.id, input.userId))
+    .returning()
+
+  return { user: updated!, accountTypeKey, changedFields, previous: row }
+}
+
 export interface ListUsersFilter {
   q?: string
   status?: 'pending' | 'active' | 'disabled' | 'rejected'
