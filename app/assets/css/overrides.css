@@ -63,6 +63,27 @@
   .userrow .end .pill {
     display: none;
   }
+  .qitem.sl-row {
+    flex-wrap: nowrap;
+  }
+  .qitem.sl-row .info {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .qitem.sl-row .info b,
+  .qitem.sl-row .info .sub {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .qitem.sl-row .qa {
+    flex: none;
+    flex-wrap: nowrap;
+  }
+  .qitem.sl-row .qa .btn.sm:not(.primary) {
+    display: none;
+  }
 }
 
 /* Grid/flex children default to min-width:auto, so a wide child (table,
