@@ -5,7 +5,6 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "build:worker": "node scripts/build-worker.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

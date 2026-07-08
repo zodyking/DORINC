@@ -2,14 +2,14 @@
 FROM node:24-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build:worker
+RUN npm ci --omit=dev --ignore-scripts
+COPY server/workers ./server/workers
 
-# Playwright's official image ships Chromium + all system deps
-FROM mcr.microsoft.com/playwright:v1.57.0-noble
+# Playwright's official image ships Chromium + all system deps.
+# When the playwright npm dependency lands (P1-28), keep its version in sync with this tag.
+FROM mcr.microsoft.com/playwright:v1.61.0-noble
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /src/.worker-dist ./.worker-dist
 COPY --from=build /src/node_modules ./node_modules
-CMD ["node", ".worker-dist/pdf-worker.mjs"]
+COPY --from=build /src/server ./server
+CMD ["node", "server/workers/pdf-worker.mjs"]

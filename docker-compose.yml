@@ -56,6 +56,19 @@ services:
       NODE_ENV: production
       WORKER_KIND: pdf
 
+  # One-shot: `docker compose run --rm migrate` applies pending migrations
+  # to the external database before rolling out a new version.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    profiles: ['migrate']
+    restart: 'no'
+    env_file:
+      - path: .env
+        required: false
+    command: ['node', 'scripts/migrate.mjs']
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped

@@ -2,7 +2,8 @@
 FROM node:24-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: postinstall runs `nuxt prepare`, which needs source not yet copied
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
