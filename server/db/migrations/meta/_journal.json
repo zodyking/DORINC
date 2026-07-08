@@ -36,6 +36,13 @@
       "when": 1783469227338,
       "tag": "0004_thankful_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783470679374,
+      "tag": "0005_fixed_polaris",
+      "breakpoints": true
     }
   ]
 }
