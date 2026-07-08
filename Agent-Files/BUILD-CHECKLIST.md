@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 15 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 18 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **27** | **28%** |
+| **Total** | **96** | **30** | **31%** |
 
 *Update counts when marking items complete.*
 
@@ -239,13 +239,13 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** All statuses supported; mechanic scope enforced
   - **Verify:** Integration tests per status
 
-- [ ] **P1-16** Service logs list + detail UI
+- [x] **P1-16** Service logs list + detail UI
   - **Mockup:** `PAGE: SERVICE LOGS`, `PAGE: SERVICE LOG DETAIL`
   - **Deliver:** Review queue, side-by-side image view, status actions
   - **Acceptance:** Mobile upload flow works; desktop review matches mockup
   - **Verify:** Playwright mobile upload simulation
 
-- [ ] **P1-17** Mobile upload log page
+- [x] **P1-17** Mobile upload log page
   - **Spec:** §17 Mechanic flow
   - **Mockup:** Upload flow in service logs section
   - **Deliver:** `pages/mobile/upload-log.vue` or responsive upload page
@@ -254,7 +254,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### Catalog
 
-- [ ] **P1-18** Catalog schema + API
+- [x] **P1-18** Catalog schema + API
   - **Spec:** §6.3
   - **Deliver:** categories, items (service/part/fee), labor rates
   - **Acceptance:** Archive items; search; taxable flag
