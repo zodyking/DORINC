@@ -1,14 +1,25 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import type { CatalogSnapshot, InvoiceCreationSource, InvoiceCustomerSnapshot, InvoiceVehicleSnapshot } from '../db/schema/invoices'
-import { invoiceLineItems, invoices } from '../db/schema/invoices'
+import type {
+  CatalogSnapshot,
+  InvoiceCreationSource,
+  InvoiceCustomerSnapshot,
+  InvoiceStatus,
+  InvoiceVehicleSnapshot,
+} from '../db/schema/invoices'
+import { formatInvoiceNumber, invoiceLineItems, invoices } from '../db/schema/invoices'
+import { customers } from '../db/schema/customers'
+import { vehicles } from '../db/schema/vehicles'
 import { getCatalogItem } from './catalog.service'
 import { getCustomer } from './customers.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
+import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
 
 export type InvoicesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
+    | 'SERVICE_LOG_NOT_FOUND' | 'SOURCE_NOT_FOUND' | 'NOT_EDITABLE' | 'INVALID_TRANSITION'
+    | 'INVALID_CREATE' | 'LINE_NOT_FOUND'
 
 export class InvoicesServiceError extends Error {
   constructor(public readonly code: InvoicesServiceErrorCode) {
@@ -16,12 +27,44 @@ export class InvoicesServiceError extends Error {
   }
 }
 
+/** Allowed status transitions (SPEC §6.5). */
+export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
+  draft: ['approved', 'void'],
+  approved: ['sent', 'void'],
+  sent: ['paid', 'void'],
+  paid: [],
+  void: [],
+}
+
+/** Only draft invoices may be edited (finalized = approved and beyond). */
+export const DRAFT_EDITABLE_STATUSES: InvoiceStatus[] = ['draft']
+
+/** Statuses eligible for correction via revision. */
+export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['approved', 'sent', 'paid']
+
 export interface CreateInvoiceInput {
-  customerId: string
+  customerId?: string
   vehicleId?: string | null
   serviceLogId?: string | null
+  sourceInvoiceId?: string | null
   creationSource?: InvoiceCreationSource
   invoiceDate: string
+  dueDate?: string | null
+  paymentTerms?: string
+  serviceLocation?: string | null
+  poNumber?: string | null
+  complaint?: string | null
+  internalNotes?: string | null
+  customerNotes?: string | null
+  taxRate?: string
+  shopSuppliesPercent?: string | null
+  feesAmount?: string
+  discountAmount?: string
+}
+
+export interface InvoicePatch {
+  vehicleId?: string | null
+  invoiceDate?: string
   dueDate?: string | null
   paymentTerms?: string
   serviceLocation?: string | null
@@ -47,6 +90,19 @@ export interface AddInvoiceLineInput {
   priceOverrideReason?: string | null
 }
 
+export type UpdateInvoiceLineInput = Partial<AddInvoiceLineInput>
+
+export interface ListInvoicesFilter {
+  q?: string
+  status?: InvoiceStatus
+  customerId?: string
+  vehicleId?: string
+  includeArchived?: boolean
+  sort?: 'newest' | 'oldest' | 'invoice_date' | 'status'
+  page: number
+  pageSize: number
+}
+
 function buildCustomerSnapshot(customer: Awaited<ReturnType<typeof getCustomer>>): InvoiceCustomerSnapshot {
   return {
     displayName: customer.displayName,
@@ -69,7 +125,7 @@ function buildVehicleSnapshot(vehicle: Awaited<ReturnType<typeof getVehicle>>): 
     year: vehicle.year,
     make: vehicle.make,
     model: vehicle.model,
-    odometer: vehicle.odometer,
+    odometer: vehicle.odometer != null ? String(vehicle.odometer) : null,
     odometerUnit: vehicle.odometerUnit,
   }
 }
@@ -90,32 +146,140 @@ export async function buildCatalogSnapshot(db: Db, catalogItemId: string): Promi
   }
 }
 
+function assertDraftEditable(invoice: { status: InvoiceStatus }) {
+  if (!DRAFT_EDITABLE_STATUSES.includes(invoice.status)) {
+    throw new InvoicesServiceError('NOT_EDITABLE')
+  }
+}
+
+async function resolveVehicleForCustomer(db: Db, customerId: string, vehicleId: string | null | undefined) {
+  if (!vehicleId) return null
+  try {
+    const vehicle = await getVehicle(db, vehicleId)
+    if (vehicle.customerId !== customerId) throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
+    return buildVehicleSnapshot(vehicle)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError) throw err
+    throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
+  }
+}
+
+async function copyLineItems(db: Db, sourceInvoiceId: string, targetInvoiceId: string, actorId: string) {
+  const lines = await listInvoiceLineItems(db, sourceInvoiceId)
+  for (const line of lines) {
+    await db.insert(invoiceLineItems).values({
+      invoiceId: targetInvoiceId,
+      lineType: line.lineType,
+      catalogItemId: line.catalogItemId,
+      catalogSnapshot: line.catalogSnapshot,
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      lineAmount: line.lineAmount,
+      taxable: line.taxable,
+      sortOrder: line.sortOrder,
+      priceOverridden: line.priceOverridden,
+      priceOverrideReason: line.priceOverrideReason,
+      createdBy: actorId,
+      updatedBy: actorId,
+    })
+  }
+}
+
+export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: string) {
+  const source = input.creationSource ?? 'blank'
+  let resolved: CreateInvoiceInput = { ...input, creationSource: source }
+
+  if (source === 'duplicate' || source === 'revision') {
+    if (!input.sourceInvoiceId) throw new InvoicesServiceError('INVALID_CREATE')
+    const src = await getInvoice(db, input.sourceInvoiceId)
+    if (source === 'revision' && !REVISION_SOURCE_STATUSES.includes(src.status)) {
+      throw new InvoicesServiceError('INVALID_TRANSITION')
+    }
+    resolved = {
+      ...resolved,
+      customerId: src.customerId,
+      vehicleId: src.vehicleId,
+      serviceLogId: src.serviceLogId,
+      invoiceDate: input.invoiceDate ?? src.invoiceDate,
+      dueDate: input.dueDate ?? src.dueDate,
+      paymentTerms: input.paymentTerms ?? src.paymentTerms,
+      serviceLocation: input.serviceLocation ?? src.serviceLocation,
+      poNumber: input.poNumber ?? src.poNumber,
+      complaint: input.complaint ?? src.complaint,
+      internalNotes: input.internalNotes ?? src.internalNotes,
+      customerNotes: input.customerNotes ?? src.customerNotes,
+      taxRate: input.taxRate ?? src.taxRate ?? '0',
+      shopSuppliesPercent: input.shopSuppliesPercent ?? src.shopSuppliesPercent,
+      feesAmount: input.feesAmount ?? src.feesAmount ?? '0',
+      discountAmount: input.discountAmount ?? src.discountAmount ?? '0',
+      sourceInvoiceId: src.id,
+    }
+  }
+  else if (source === 'vehicle') {
+    if (!input.vehicleId) throw new InvoicesServiceError('INVALID_CREATE')
+    const vehicle = await getVehicle(db, input.vehicleId)
+    resolved.customerId = vehicle.customerId
+    resolved.vehicleId = vehicle.id
+  }
+  else if (source === 'service_log') {
+    if (!input.serviceLogId) throw new InvoicesServiceError('INVALID_CREATE')
+    try {
+      const log = await getServiceLog(db, input.serviceLogId)
+      resolved.customerId = log.customerId
+      resolved.vehicleId = log.vehicleId
+      resolved.serviceLogId = log.id
+      resolved.invoiceDate = input.invoiceDate ?? log.serviceDate
+      resolved.complaint = input.complaint ?? log.complaint
+      resolved.internalNotes = input.internalNotes ?? log.internalNotes
+      resolved.serviceLocation = input.serviceLocation ?? log.location
+    }
+    catch (err) {
+      if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {
+        throw new InvoicesServiceError('SERVICE_LOG_NOT_FOUND')
+      }
+      throw err
+    }
+  }
+  else if (source === 'customer' || source === 'blank') {
+    if (!input.customerId) throw new InvoicesServiceError('INVALID_CREATE')
+    resolved.customerId = input.customerId
+  }
+  else {
+    if (!input.customerId) throw new InvoicesServiceError('INVALID_CREATE')
+    resolved.customerId = input.customerId
+  }
+
+  if (!resolved.customerId) throw new InvoicesServiceError('INVALID_CREATE')
+
+  const invoice = await createInvoiceDraft(db, resolved, actorId)
+
+  if (source === 'duplicate' || source === 'revision') {
+    await copyLineItems(db, input.sourceInvoiceId!, invoice.id, actorId)
+    await recalculateInvoiceTotals(db, invoice.id, actorId)
+    return getInvoice(db, invoice.id)
+  }
+
+  return invoice
+}
+
 export async function createInvoiceDraft(db: Db, input: CreateInvoiceInput, actorId: string) {
   let customer
   try {
-    customer = await getCustomer(db, input.customerId)
+    customer = await getCustomer(db, input.customerId!)
   }
   catch {
     throw new InvoicesServiceError('CUSTOMER_NOT_FOUND')
   }
 
-  let vehicleSnapshot: InvoiceVehicleSnapshot | null = null
-  if (input.vehicleId) {
-    try {
-      const vehicle = await getVehicle(db, input.vehicleId)
-      if (vehicle.customerId !== input.customerId) throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
-      vehicleSnapshot = buildVehicleSnapshot(vehicle)
-    }
-    catch (err) {
-      if (err instanceof InvoicesServiceError) throw err
-      throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
-    }
-  }
+  const vehicleSnapshot = await resolveVehicleForCustomer(db, input.customerId!, input.vehicleId)
 
   const [row] = await db.insert(invoices).values({
-    customerId: input.customerId,
+    customerId: input.customerId!,
     vehicleId: input.vehicleId ?? null,
     serviceLogId: input.serviceLogId ?? null,
+    sourceInvoiceId: input.sourceInvoiceId ?? null,
     creationSource: input.creationSource ?? 'blank',
     invoiceDate: input.invoiceDate,
     dueDate: input.dueDate ?? null,
@@ -139,10 +303,60 @@ export async function createInvoiceDraft(db: Db, input: CreateInvoiceInput, acto
   return row!
 }
 
+export async function duplicateInvoice(db: Db, sourceInvoiceId: string, actorId: string, invoiceDate?: string) {
+  return createInvoice(db, {
+    creationSource: 'duplicate',
+    sourceInvoiceId,
+    customerId: undefined,
+    invoiceDate: invoiceDate ?? new Date().toISOString().slice(0, 10),
+  }, actorId)
+}
+
+export async function createInvoiceRevision(db: Db, sourceInvoiceId: string, actorId: string, invoiceDate?: string) {
+  return createInvoice(db, {
+    creationSource: 'revision',
+    sourceInvoiceId,
+    customerId: undefined,
+    invoiceDate: invoiceDate ?? new Date().toISOString().slice(0, 10),
+  }, actorId)
+}
+
 export async function getInvoice(db: Db, id: string) {
   const [row] = await db.select().from(invoices).where(eq(invoices.id, id))
   if (!row) throw new InvoicesServiceError('NOT_FOUND')
   return row
+}
+
+export async function getInvoiceDetail(db: Db, id: string) {
+  const [row] = await db.select({
+    invoice: invoices,
+    customerName: customers.displayName,
+    vehicle: {
+      id: vehicles.id,
+      unitType: vehicles.unitType,
+      busNumber: vehicles.busNumber,
+      unitTag: vehicles.unitTag,
+      year: vehicles.year,
+      make: vehicles.make,
+      model: vehicles.model,
+    },
+  })
+    .from(invoices)
+    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
+    .where(eq(invoices.id, id))
+
+  if (!row) throw new InvoicesServiceError('NOT_FOUND')
+
+  const lines = await listInvoiceLineItems(db, id)
+
+  return {
+    ...row.invoice,
+    invoiceNumberFormatted: formatInvoiceNumber(row.invoice.invoiceNumber),
+    customerName: row.customerName,
+    vehicle: row.vehicle?.id ? row.vehicle : null,
+    lineItems: lines,
+  }
 }
 
 export async function listInvoiceLineItems(db: Db, invoiceId: string) {
@@ -151,13 +365,122 @@ export async function listInvoiceLineItems(db: Db, invoiceId: string) {
     .orderBy(asc(invoiceLineItems.sortOrder), asc(invoiceLineItems.createdAt))
 }
 
+export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
+  const conditions = []
+  if (!filter.includeArchived) conditions.push(isNull(invoices.archivedAt))
+  if (filter.status) conditions.push(eq(invoices.status, filter.status))
+  if (filter.customerId) conditions.push(eq(invoices.customerId, filter.customerId))
+  if (filter.vehicleId) conditions.push(eq(invoices.vehicleId, filter.vehicleId))
+
+  if (filter.q) {
+    const term = `%${filter.q}%`
+    conditions.push(or(
+      ilike(customers.displayName, term),
+      ilike(vehicles.busNumber, term),
+      ilike(invoices.poNumber, term),
+      ilike(invoices.complaint, term),
+      sql`CAST(${invoices.invoiceNumber} AS TEXT) ILIKE ${term}`,
+    ))
+  }
+
+  const where = conditions.length ? and(...conditions) : undefined
+  const orderBy = filter.sort === 'oldest'
+    ? asc(invoices.createdAt)
+    : filter.sort === 'invoice_date'
+      ? desc(invoices.invoiceDate)
+      : filter.sort === 'status'
+        ? asc(invoices.status)
+        : desc(invoices.createdAt)
+
+  const rows = await db.select({
+    invoice: invoices,
+    customerName: customers.displayName,
+    vehicle: {
+      busNumber: vehicles.busNumber,
+      make: vehicles.make,
+      model: vehicles.model,
+    },
+  })
+    .from(invoices)
+    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
+    .where(where)
+    .orderBy(orderBy)
+    .limit(filter.pageSize)
+    .offset((filter.page - 1) * filter.pageSize)
+
+  const [total] = await db.select({ value: count() })
+    .from(invoices)
+    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
+    .where(where)
+
+  return {
+    items: rows.map(r => ({
+      ...r.invoice,
+      invoiceNumberFormatted: formatInvoiceNumber(r.invoice.invoiceNumber),
+      customerName: r.customerName,
+      vehicle: r.vehicle?.busNumber ? r.vehicle : null,
+    })),
+    total: Number(total?.value ?? 0),
+    page: filter.page,
+    pageSize: filter.pageSize,
+  }
+}
+
+export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch, actorId: string) {
+  const before = await getInvoice(db, id)
+  assertDraftEditable(before)
+
+  const changes: Record<string, unknown> = { updatedBy: actorId, updatedAt: new Date() }
+  const changedFields: string[] = []
+
+  if (patch.vehicleId !== undefined) {
+    if (patch.vehicleId) {
+      const vehicleSnapshot = await resolveVehicleForCustomer(db, before.customerId, patch.vehicleId)
+      changes.vehicleId = patch.vehicleId
+      changes.vehicleSnapshot = vehicleSnapshot
+    }
+    else {
+      changes.vehicleId = null
+      changes.vehicleSnapshot = null
+    }
+    changedFields.push('vehicleId')
+  }
+
+  for (const key of [
+    'invoiceDate', 'dueDate', 'paymentTerms', 'serviceLocation', 'poNumber',
+    'complaint', 'internalNotes', 'customerNotes', 'taxRate',
+    'shopSuppliesPercent', 'feesAmount', 'discountAmount',
+  ] as const) {
+    const value = patch[key]
+    if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])) {
+      changes[key] = value
+      changedFields.push(key)
+    }
+  }
+
+  if (!changedFields.length) return { invoice: before, before, changedFields }
+
+  const [updated] = await db.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
+  const totalsFields = ['taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount']
+  if (changedFields.some(f => totalsFields.includes(f))) {
+    await recalculateInvoiceTotals(db, id, actorId)
+    const refreshed = await getInvoice(db, id)
+    return { invoice: refreshed, before, changedFields }
+  }
+
+  return { invoice: updated!, before, changedFields }
+}
+
 export async function addInvoiceLineItem(
   db: Db,
   invoiceId: string,
   input: AddInvoiceLineInput,
   actorId: string,
 ) {
-  await getInvoice(db, invoiceId)
+  const invoice = await getInvoice(db, invoiceId)
+  assertDraftEditable(invoice)
 
   let catalogSnapshot: CatalogSnapshot | null = null
   if (input.catalogItemId) {
@@ -188,7 +511,80 @@ export async function addInvoiceLineItem(
     updatedBy: actorId,
   }).returning()
 
+  await recalculateInvoiceTotals(db, invoiceId, actorId)
   return row!
+}
+
+export async function updateInvoiceLineItem(
+  db: Db,
+  invoiceId: string,
+  lineId: string,
+  patch: UpdateInvoiceLineInput,
+  actorId: string,
+) {
+  const invoice = await getInvoice(db, invoiceId)
+  assertDraftEditable(invoice)
+
+  const [existing] = await db.select().from(invoiceLineItems)
+    .where(and(eq(invoiceLineItems.id, lineId), eq(invoiceLineItems.invoiceId, invoiceId)))
+  if (!existing) throw new InvoicesServiceError('LINE_NOT_FOUND')
+
+  const changes: Record<string, unknown> = { updatedBy: actorId, updatedAt: new Date() }
+  const changedFields: string[] = []
+
+  if (patch.catalogItemId !== undefined && patch.catalogItemId !== existing.catalogItemId) {
+    if (patch.catalogItemId) {
+      try {
+        changes.catalogSnapshot = await buildCatalogSnapshot(db, patch.catalogItemId)
+        changes.catalogItemId = patch.catalogItemId
+      }
+      catch {
+        throw new InvoicesServiceError('CATALOG_NOT_FOUND')
+      }
+    }
+    else {
+      changes.catalogItemId = null
+      changes.catalogSnapshot = null
+    }
+    changedFields.push('catalogItemId')
+  }
+
+  for (const key of [
+    'lineType', 'description', 'quantity', 'unitPrice', 'taxable',
+    'sortOrder', 'priceOverridden', 'priceOverrideReason',
+  ] as const) {
+    const value = patch[key]
+    if (value !== undefined && JSON.stringify(value) !== JSON.stringify(existing[key])) {
+      changes[key] = key === 'description' && typeof value === 'string' ? value.trim() : value
+      changedFields.push(key)
+    }
+  }
+
+  if (!changedFields.length) return { line: existing, changedFields }
+
+  const qty = (changes.quantity as string | undefined) ?? existing.quantity
+  const price = (changes.unitPrice as string | undefined) ?? existing.unitPrice
+  changes.lineAmount = lineAmount(qty, price)
+
+  const [updated] = await db.update(invoiceLineItems)
+    .set(changes)
+    .where(eq(invoiceLineItems.id, lineId))
+    .returning()
+
+  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  return { line: updated!, changedFields }
+}
+
+export async function deleteInvoiceLineItem(db: Db, invoiceId: string, lineId: string, actorId: string) {
+  const invoice = await getInvoice(db, invoiceId)
+  assertDraftEditable(invoice)
+
+  const [existing] = await db.select({ id: invoiceLineItems.id }).from(invoiceLineItems)
+    .where(and(eq(invoiceLineItems.id, lineId), eq(invoiceLineItems.invoiceId, invoiceId)))
+  if (!existing) throw new InvoicesServiceError('LINE_NOT_FOUND')
+
+  await db.delete(invoiceLineItems).where(eq(invoiceLineItems.id, lineId))
+  await recalculateInvoiceTotals(db, invoiceId, actorId)
 }
 
 export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorId: string) {
@@ -204,7 +600,8 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
     taxExempt: invoice.taxExempt,
     taxRate: invoice.taxRate ?? '0',
     shopSuppliesPercent: invoice.shopSuppliesPercent ?? undefined,
-    feesAmount: invoice.feesAmount ?? '0',
+    // feesAmount column stores computed output — flat header fees land via draft patch before recalc
+    feesAmount: '0',
     discountAmount: invoice.discountAmount ?? '0',
     amountPaid: invoice.amountPaid ?? '0',
   })
@@ -221,4 +618,76 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
   }).where(eq(invoices.id, invoiceId)).returning()
 
   return { invoice: updated!, totals }
+}
+
+export async function transitionInvoice(
+  db: Db,
+  id: string,
+  to: InvoiceStatus,
+  actorId: string,
+  opts: { amountPaid?: string, paidAt?: Date } = {},
+) {
+  const before = await getInvoice(db, id)
+
+  if (!INVOICE_TRANSITIONS[before.status].includes(to)) {
+    throw new InvoicesServiceError('INVALID_TRANSITION')
+  }
+
+  if (to === 'approved') {
+    await recalculateInvoiceTotals(db, id, actorId)
+  }
+
+  const changes: Record<string, unknown> = {
+    status: to,
+    updatedBy: actorId,
+    updatedAt: new Date(),
+  }
+
+  if (to === 'approved') {
+    changes.approvedBy = actorId
+    changes.approvedAt = new Date()
+  }
+  if (to === 'sent') {
+    changes.sentAt = new Date()
+  }
+  if (to === 'paid') {
+    const refreshed = await getInvoice(db, id)
+    const amountPaid = opts.amountPaid ?? refreshed.total
+    const totals = calculateInvoiceTotals({
+      lines: (await listInvoiceLineItems(db, id)).map(line => ({
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        taxable: line.taxable,
+      })),
+      taxExempt: refreshed.taxExempt,
+      taxRate: refreshed.taxRate ?? '0',
+      shopSuppliesPercent: refreshed.shopSuppliesPercent ?? undefined,
+      feesAmount: '0',
+      discountAmount: refreshed.discountAmount ?? '0',
+      amountPaid,
+    })
+    changes.amountPaid = amountPaid
+    changes.balanceDue = totals.balanceDue
+    changes.paidAt = opts.paidAt ?? new Date()
+  }
+
+  const [updated] = await db.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
+  return { invoice: updated!, before }
+}
+
+export async function approveInvoice(db: Db, id: string, actorId: string) {
+  return transitionInvoice(db, id, 'approved', actorId)
+}
+
+export async function sendInvoice(db: Db, id: string, actorId: string) {
+  return transitionInvoice(db, id, 'sent', actorId)
+}
+
+export async function markInvoicePaid(
+  db: Db,
+  id: string,
+  actorId: string,
+  opts: { amountPaid?: string, paidAt?: Date } = {},
+) {
+  return transitionInvoice(db, id, 'paid', actorId, opts)
 }

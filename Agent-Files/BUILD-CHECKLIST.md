@@ -274,7 +274,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Server-side total calculation; snapshots on line add
   - **Verify:** Unit test totals (subtotal, tax, discount, fees, balance)
 
-- [ ] **P1-21** Invoice CRUD API
+- [x] **P1-21** Invoice CRUD API
   - **Spec:** §16
   - **Deliver:** create (all paths), update draft, line item CRUD, approve, send, mark-paid
   - **Acceptance:** Draft editable; finalized immutable; revision on correction
