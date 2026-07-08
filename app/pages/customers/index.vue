@@ -12,6 +12,7 @@ interface CustomerRow {
   createdAt: string
   primaryContact: { name: string, email: string | null, phone: string | null } | null
   contactCount: number
+  vehicleCount: number
 }
 
 const q = ref('')
@@ -79,7 +80,7 @@ function subtitleFor(c: CustomerRow): string {
           <input
             v-model="q"
             type="search"
-            placeholder="Search name, contact, email, phone…"
+            placeholder="Search name, contact, bus #, VIN, plate…"
             aria-label="Search customers"
           >
         </div>
@@ -137,8 +138,8 @@ function subtitleFor(c: CustomerRow): string {
           </div>
         </div>
         <div class="meta">
-          <!-- Vehicles/Open wire up when those modules land (P1-10, P1-20) -->
-          <span>Vehicles <b>0</b></span>
+          <!-- Open balance wires up when invoices land (P1-20) -->
+          <span>Vehicles <b>{{ c.vehicleCount }}</b></span>
           <span>Open <b>$0.00</b></span>
           <span v-if="c.archivedAt" class="pill gray">Archived</span>
           <span v-else-if="c.portalEnabled" class="pill ok">Portal on</span>

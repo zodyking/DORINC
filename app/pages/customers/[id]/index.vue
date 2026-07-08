@@ -51,6 +51,29 @@ const contacts = computed(() => data.value?.contacts ?? [])
 const history = computed(() => data.value?.history ?? [])
 const primary = computed(() => contacts.value.find(c => c.isPrimary) ?? contacts.value[0])
 
+// Fleet units for this customer (P1-10)
+interface VehicleRow {
+  id: string
+  unitType: string
+  busNumber: string | null
+  unitTag: string | null
+  vin: string | null
+  year: number | null
+  make: string | null
+  model: string | null
+  trim: string | null
+  odometer: string | null
+  odometerUnit: string
+  status: string
+  archivedAt: string | null
+}
+
+const { data: vehiclesData } = await useFetch<{ items: VehicleRow[], total: number }>(
+  '/api/vehicles',
+  { query: { customerId: route.params.id as string, pageSize: 100, sort: 'tag-asc' } },
+)
+const vehicles = computed(() => vehiclesData.value?.items ?? [])
+
 const canUpdate = computed(() => auth.can('customers.update.all'))
 const canArchive = computed(() => auth.can('customers.archive.all'))
 
@@ -213,7 +236,7 @@ function sinceYear(iso: string | undefined): string {
         <div class="kpi"><div class="t">Open balance</div><div class="v">$0.00</div><div class="d flat">No open invoices</div></div>
         <div class="kpi"><div class="t">Lifetime billed</div><div class="v">$0.00</div><div class="d flat">0 invoices</div></div>
         <div class="kpi"><div class="t">Contacts</div><div class="v">{{ contacts.length }}</div><div class="d flat">{{ primary ? primary.name : 'None yet' }}</div></div>
-        <div class="kpi"><div class="t">Vehicles</div><div class="v">0</div><div class="d flat">No units yet</div></div>
+        <div class="kpi"><div class="t">Vehicles</div><div class="v">{{ vehicles.length }}</div><div class="d flat">{{ vehicles.length ? `${vehicles.filter(v => v.status === 'active').length} active` : 'No units yet' }}</div></div>
       </div>
 
       <div class="cols">
@@ -264,8 +287,28 @@ function sinceYear(iso: string | undefined): string {
           </div>
 
           <div class="card">
-            <div class="chead"><h3>Vehicles · 0</h3><div class="right"><button class="btn sm" disabled title="Vehicles land next">+ Add vehicle</button></div></div>
-            <div class="empty" style="display:block;">No vehicles yet — the vehicles module lands next.</div>
+            <div class="chead">
+              <h3>Vehicles · {{ vehicles.length }}</h3>
+              <div class="right">
+                <NuxtLink v-if="canUpdate" :to="`/vehicles/new?customerId=${customer.id}`" class="btn sm">+ Add vehicle</NuxtLink>
+              </div>
+            </div>
+            <div v-if="vehicles.length" class="tscroll">
+              <table class="tbl">
+                <thead><tr><th>Tag / Unit</th><th>VIN</th><th class="num">Odometer</th></tr></thead>
+                <tbody>
+                  <tr v-for="v in vehicles" :key="v.id" class="click" @click="navigateTo(`/vehicles/${v.id}`)">
+                    <td>
+                      <span class="lead tag">{{ vehicleTag(v) }}</span>
+                      <span class="sub">{{ vehicleSub(v) }}</span>
+                    </td>
+                    <td class="mono" style="font-size:12px">{{ v.vin ?? '—' }}</td>
+                    <td class="num">{{ odoDisplay(v.odometer, v.odometerUnit) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="empty" style="display:block;">No vehicles yet.</div>
           </div>
         </div>
 

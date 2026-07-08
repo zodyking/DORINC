@@ -230,10 +230,21 @@ export interface VinDecodeNormalized {
 }
 
 const VPIC_BASE = 'https://vpic.nhtsa.dot.gov/api/vehicles'
+const VPIC_TIMEOUT_MS = 12_000
+
+async function fetchVpic(url: string): Promise<Response> {
+  // vPIC is occasionally slow — bound each attempt and retry once
+  try {
+    return await fetch(url, { signal: AbortSignal.timeout(VPIC_TIMEOUT_MS) })
+  }
+  catch {
+    return await fetch(url, { signal: AbortSignal.timeout(VPIC_TIMEOUT_MS) })
+  }
+}
 
 export async function decodeVin(vin: string): Promise<{ normalized: VinDecodeNormalized, raw: Record<string, string> }> {
   const clean = vin.trim().toUpperCase()
-  const res = await fetch(`${VPIC_BASE}/DecodeVinValues/${encodeURIComponent(clean)}?format=json`)
+  const res = await fetchVpic(`${VPIC_BASE}/DecodeVinValues/${encodeURIComponent(clean)}?format=json`)
   if (!res.ok) throw new Error(`vPIC responded ${res.status}`)
   const body = await res.json() as { Results?: Record<string, string>[] }
   const raw = body.Results?.[0] ?? {}

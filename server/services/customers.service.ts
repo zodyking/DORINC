@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, or, sql } fr
 import type { Db } from '../db/client'
 import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
+import { vehicles } from '../db/schema/vehicles'
 
 export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED'
 
@@ -88,7 +89,7 @@ export async function restoreCustomer(db: Db, id: string) {
 }
 
 export interface ListCustomersFilter {
-  /** Matches name, email, phone, contact name/email. Vehicle + invoice search joins land with those modules. */
+  /** Matches name, email, phone, contact name/email, vehicle bus #/VIN/plate. Invoice # search lands with invoices. */
   q?: string
   kind?: 'fleet' | 'individual'
   portal?: boolean
@@ -118,6 +119,17 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
             ilike(customerContacts.name, term),
             ilike(customerContacts.email, term),
             ilike(customerContacts.phone, term),
+          ),
+        )),
+      ),
+      // Find accounts by fleet unit — bus #, VIN, or plate (SPEC §6.1 search)
+      exists(
+        db.select({ one: sql`1` }).from(vehicles).where(and(
+          eq(vehicles.customerId, customers.id),
+          or(
+            ilike(vehicles.busNumber, term),
+            ilike(vehicles.vin, term),
+            ilike(vehicles.plate, term),
           ),
         )),
       ),
@@ -156,6 +168,14 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
     byCustomer.set(c.customerId, list)
   }
 
+  const vehicleCounts = ids.length
+    ? await db.select({ customerId: vehicles.customerId, value: count() })
+        .from(vehicles)
+        .where(and(inArray(vehicles.customerId, ids), isNull(vehicles.archivedAt)))
+        .groupBy(vehicles.customerId)
+    : []
+  const vehiclesByCustomer = new Map(vehicleCounts.map(v => [v.customerId, v.value]))
+
   return {
     items: rows.map((r) => {
       const list = byCustomer.get(r.id) ?? []
@@ -164,6 +184,7 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
         ...r,
         primaryContact: primary ? { name: primary.name, email: primary.email, phone: primary.phone } : null,
         contactCount: list.length,
+        vehicleCount: vehiclesByCustomer.get(r.id) ?? 0,
       }
     }),
     total: total!.value,
