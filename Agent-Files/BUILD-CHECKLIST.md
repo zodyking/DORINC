@@ -260,7 +260,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Archive items; search; taxable flag
   - **Verify:** API tests
 
-- [ ] **P1-19** Catalog UI
+- [x] **P1-19** Catalog UI
   - **Mockup:** `PAGE: CATALOG`
   - **Deliver:** Searchable table, add/edit modal
   - **Acceptance:** Matches mockup
