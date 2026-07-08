@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 14 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 15 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **25** | **26%** |
+| **Total** | **96** | **27** | **28%** |
 
 *Update counts when marking items complete.*
 
@@ -233,7 +233,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### Service logs
 
-- [ ] **P1-15** Service logs schema + API
+- [x] **P1-15** Service logs schema + API
   - **Spec:** §6.4
   - **Deliver:** create, file upload, status transitions, review queue, history
   - **Acceptance:** All statuses supported; mechanic scope enforced
