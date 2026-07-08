@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 12 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 13 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **24** | **25%** |
+| **Total** | **96** | **25** | **26%** |
 
 *Update counts when marking items complete.*
 
@@ -219,7 +219,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 
 ### File storage
 
-- [ ] **P1-13** `app_files` schema + upload/download API
+- [x] **P1-13** `app_files` schema + upload/download API
   - **Spec:** §8
   - **Deliver:** upload, preview, download, archive endpoints
   - **Acceptance:** bytea storage; no blob in list queries; MIME + size validation; sha256

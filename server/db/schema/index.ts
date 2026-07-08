@@ -1,5 +1,6 @@
 export * from './audit'
 export * from './auth'
 export * from './customers'
+export * from './files'
 export * from './settings'
 export * from './vehicles'

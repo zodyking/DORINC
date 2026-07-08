@@ -43,6 +43,13 @@
       "when": 1783470679374,
       "tag": "0005_fixed_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783520859112,
+      "tag": "0006_wealthy_cyclops",
+      "breakpoints": true
     }
   ]
 }
