@@ -58,6 +58,27 @@
     flex: none;
     flex-wrap: nowrap;
   }
+  /* Status pills eat the name's space on phones; the detail page still
+     shows the full status, so drop them from compact rows. */
+  .userrow .end .pill {
+    display: none;
+  }
+}
+
+/* Grid/flex children default to min-width:auto, so a wide child (table,
+   long email) blows the 1fr track past the viewport on phones. Allow the
+   detail-page columns and cards to shrink and truncate instead. */
+.cols > *,
+.stack > * {
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .card .histtable,
+  .card table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* Portal header: at phone widths the mockup header overflows.

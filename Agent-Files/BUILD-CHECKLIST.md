@@ -33,11 +33,11 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
 | Phase | Total | Done | Status |
 |---|---|---|---|
 | 0 — Foundation | 12 | 12 | ✅ Done |
-| 1 — Internal MVP | 38 | 8 | 🟨 In progress |
+| 1 — Internal MVP | 38 | 9 | 🟨 In progress |
 | 2 — AI + Portal | 24 | 0 | ⬜ Not started |
 | 3 — Advanced | 14 | 0 | ⬜ Not started |
 | 4 — Polish + Ship | 8 | 0 | ⬜ Not started |
-| **Total** | **96** | **20** | **21%** |
+| **Total** | **96** | **21** | **22%** |
 
 *Update counts when marking items complete.*
 
@@ -185,7 +185,7 @@ Phase gate: all Phase N items must be [x] before starting Phase N+1.
   - **Acceptance:** Search by name, contact, bus #, VIN, plate, invoice #
   - **Verify:** Integration tests
 
-- [ ] **P1-08** Customers list + detail UI
+- [x] **P1-08** Customers list + detail UI
   - **Mockup:** `PAGE: CUSTOMERS`, `PAGE: CUSTOMER DETAIL`
   - **Deliver:** Table with filters, split detail, history timeline, contacts tab
   - **Acceptance:** Visual parity with mockup; archive/restore works

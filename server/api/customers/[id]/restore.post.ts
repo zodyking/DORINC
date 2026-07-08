@@ -7,7 +7,7 @@ import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'customers.archive.all')
+  requirePermission(event, 'customers.archive.all')
   const { id } = validateParams(event, idParamSchema)
 
   try {
@@ -18,7 +18,6 @@ export default defineEventHandler(async (event) => {
       entityId: id,
       action: 'customers.restore',
       afterData: { archivedAt: null },
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'customers.archive.all',
       riskLevel: 'sensitive',
     })

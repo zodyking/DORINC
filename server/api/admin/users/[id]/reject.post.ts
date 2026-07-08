@@ -31,7 +31,6 @@ export default defineEventHandler(async (event) => {
       beforeData: { rejectedAt: null, isActive: true },
       afterData: { rejectedAt: result.user.rejectedAt, reason: body.reason, isActive: false },
       changedFields: ['rejectedAt', 'rejectedReason', 'isActive', 'disabledAt'],
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'users.manage.all',
       riskLevel: 'high',
     })

@@ -21,7 +21,11 @@ export const customerCreateSchema = z.object({
   notes: z.string().max(5000).nullish(),
 })
 
-export const customerUpdateSchema = customerCreateSchema.partial()
+// Note: .partial() alone would keep accountKind's .default('individual'),
+// silently resetting the kind on every partial PATCH.
+export const customerUpdateSchema = customerCreateSchema
+  .partial()
+  .extend({ accountKind: z.enum(['fleet', 'individual']).optional() })
 
 export const contactCreateSchema = z.object({
   name: nonEmptyString.max(120),

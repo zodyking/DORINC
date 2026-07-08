@@ -37,7 +37,6 @@ export default defineEventHandler(async (event) => {
         },
         afterData: { accountType: result.accountTypeKey, isActive: result.user.isActive },
         changedFields: result.changedFields,
-        actor: { id: actor.id, accountType: actor.accountType },
         permissionKey: 'users.manage.all',
         riskLevel: 'sensitive',
       })

@@ -8,7 +8,7 @@ import { idParamSchema } from '../../../../shared/validators/common'
 import { customerUpdateSchema } from '../../../../shared/validators/customers'
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'customers.update.all')
+  requirePermission(event, 'customers.update.all')
   const { id } = validateParams(event, idParamSchema)
   const body = await validateBody(event, customerUpdateSchema)
 
@@ -23,7 +23,6 @@ export default defineEventHandler(async (event) => {
         beforeData: Object.fromEntries(changedFields.map(f => [f, before[f as keyof typeof before]])),
         afterData: Object.fromEntries(changedFields.map(f => [f, customer[f as keyof typeof customer]])),
         changedFields,
-        actor: { id: actor.id, accountType: actor.accountType },
         permissionKey: 'customers.update.all',
       })
     }

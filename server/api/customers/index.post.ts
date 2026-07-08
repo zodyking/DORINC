@@ -16,7 +16,6 @@ export default defineEventHandler(async (event) => {
     entityId: customer.id,
     action: 'customers.create',
     afterData: { displayName: customer.displayName, accountKind: customer.accountKind },
-    actor: { id: actor.id, accountType: actor.accountType },
     permissionKey: 'customers.create.all',
   })
 

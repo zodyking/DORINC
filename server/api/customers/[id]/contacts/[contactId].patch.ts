@@ -11,7 +11,7 @@ import { contactUpdateSchema } from '../../../../../shared/validators/customers'
 const paramsSchema = z.object({ id: uuidSchema, contactId: uuidSchema })
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'customers.update.all')
+  requirePermission(event, 'customers.update.all')
   const { id, contactId } = validateParams(event, paramsSchema)
   const body = await validateBody(event, contactUpdateSchema)
 
@@ -24,7 +24,6 @@ export default defineEventHandler(async (event) => {
       action: 'customers.contact_update',
       beforeData: { name: before.name, isPrimary: before.isPrimary, isBilling: before.isBilling },
       afterData: { name: contact.name, isPrimary: contact.isPrimary, isBilling: contact.isBilling },
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'customers.update.all',
     })
 

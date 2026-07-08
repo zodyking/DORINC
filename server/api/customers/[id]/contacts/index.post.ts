@@ -8,7 +8,7 @@ import { idParamSchema } from '../../../../../shared/validators/common'
 import { contactCreateSchema } from '../../../../../shared/validators/customers'
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'customers.update.all')
+  requirePermission(event, 'customers.update.all')
   const { id } = validateParams(event, idParamSchema)
   const body = await validateBody(event, contactCreateSchema)
 
@@ -20,7 +20,6 @@ export default defineEventHandler(async (event) => {
       entityId: id,
       action: 'customers.contact_add',
       afterData: { contactId: contact.id, name: contact.name, isPrimary: contact.isPrimary },
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'customers.update.all',
     })
 

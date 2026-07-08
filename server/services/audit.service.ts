@@ -26,6 +26,12 @@ export interface AuditEntry {
 export async function writeAudit(event: H3Event | null, entry: AuditEntry): Promise<void> {
   const db = useDb()
 
+  // Default the actor snapshot to the authenticated user on this request
+  if (entry.actor === undefined && event) {
+    const auth = event.context.auth as { user?: PermissionUser & { name?: string, email?: string } } | undefined
+    if (auth?.user) entry = { ...entry, actor: auth.user }
+  }
+
   await db.insert(auditLogs).values({
     entityType: entry.entityType,
     entityId: entry.entityId ?? null,

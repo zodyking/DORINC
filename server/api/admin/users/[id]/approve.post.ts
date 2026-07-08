@@ -31,7 +31,6 @@ export default defineEventHandler(async (event) => {
       beforeData: { accountType: result.previousAccountTypeKey, approvedAt: null },
       afterData: { accountType: result.accountTypeKey, approvedAt: result.user.approvedAt },
       changedFields: ['approvedAt', 'approvedBy', 'accountTypeId'],
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'users.manage.all',
       riskLevel: 'sensitive',
     })

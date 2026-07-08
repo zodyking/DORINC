@@ -10,7 +10,7 @@ import { uuidSchema } from '../../../../../../shared/validators/common'
 const paramsSchema = z.object({ id: uuidSchema, contactId: uuidSchema })
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'customers.update.all')
+  requirePermission(event, 'customers.update.all')
   const { id, contactId } = validateParams(event, paramsSchema)
 
   try {
@@ -21,7 +21,6 @@ export default defineEventHandler(async (event) => {
       entityId: id,
       action: 'customers.contact_archive',
       afterData: { contactId, archivedAt: contact.archivedAt },
-      actor: { id: actor.id, accountType: actor.accountType },
       permissionKey: 'customers.update.all',
     })
 
