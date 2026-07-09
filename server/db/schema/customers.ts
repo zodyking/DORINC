@@ -1,5 +1,6 @@
 import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
+import { workerJobs } from './jobs'
 
 export interface Address {
   line1?: string
@@ -57,4 +58,29 @@ export const customerContacts = pgTable('customer_contacts', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
 }, table => [
   index('customer_contacts_customer_idx').on(table.customerId),
+])
+
+export const CREDENTIAL_EMAIL_SEND_TYPES = ['initial', 'resend'] as const
+export type CredentialEmailSendType = (typeof CREDENTIAL_EMAIL_SEND_TYPES)[number]
+
+export const CREDENTIAL_EMAIL_STATUSES = ['queued', 'sent', 'failed'] as const
+export type CredentialEmailStatus = (typeof CREDENTIAL_EMAIL_STATUSES)[number]
+
+/** Append-only log of every portal credential email (SPEC §5, §7). */
+export const customerCredentialEmailLogs = pgTable('customer_credential_email_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  customerId: uuid('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').references(() => customerContacts.id),
+  portalUserId: uuid('portal_user_id').notNull().references(() => users.id),
+  recipientEmail: text('recipient_email').notNull(),
+  sendType: text('send_type', { enum: CREDENTIAL_EMAIL_SEND_TYPES }).notNull(),
+  status: text('status', { enum: CREDENTIAL_EMAIL_STATUSES }).notNull().default('queued'),
+  workerJobId: uuid('worker_job_id').references(() => workerJobs.id),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  sentBy: uuid('sent_by').notNull().references(() => users.id),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index('customer_credential_email_logs_customer_idx').on(table.customerId),
+  index('customer_credential_email_logs_created_idx').on(table.createdAt),
 ])

@@ -6,6 +6,7 @@ import { useDb } from '../../db/client'
 import { bootstrapSuperAdmin, BootstrapLockedError } from '../../services/setup.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
+import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
 import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
 
@@ -16,7 +17,18 @@ const bootstrapSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  // Tight rate limit on first-run bootstrap — prevents Super Admin squatting (P4-07).
+  await requireRateLimit(event, 'login', rateLimitKeyFromIp(event, 'bootstrap'), {
+    maxAttempts: 3,
+    windowMs: 60 * 60 * 1000,
+  })
+
   const body = await validateBody(event, bootstrapSchema)
+  const allowedEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase()
+  if (allowedEmail && body.email.trim().toLowerCase() !== allowedEmail) {
+    throw apiError(event, 'FORBIDDEN', 'Bootstrap email does not match ADMIN_BOOTSTRAP_EMAIL')
+  }
+
   const db = useDb()
 
   try {

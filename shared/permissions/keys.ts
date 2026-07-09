@@ -47,10 +47,14 @@ export const PERMISSIONS = {
   // Estimates (Phase 3)
   'estimates.read.all': 'View estimates',
   'estimates.manage.all': 'Manage estimates',
+  'estimates.generate_pdf.all': 'Generate estimate PDFs',
 
   // Templates
   'templates.read.all': 'View invoice templates',
   'templates.manage.all': 'Manage invoice templates',
+
+  // Reports (Phase 3)
+  'reports.read.all': 'View financial and productivity reports',
 
   // Files
   'files.upload.all': 'Upload files',
@@ -78,6 +82,9 @@ export const PERMISSIONS = {
   // Customer portal (customer accounts)
   'portal.read.own': 'View own portal data',
   'portal.requests.own': 'Submit portal requests',
+
+  // Portal request review (staff)
+  'portal_requests.review.all': 'Review customer portal requests',
 } as const
 
 export type PermissionKey = keyof typeof PERMISSIONS
@@ -109,11 +116,14 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
     'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
+    'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
     'templates.read.all',
+    'reports.read.all',
     'files.upload.all', 'files.read.all',
     'users.read.all',
     'audit.read.all',
     'ai.describe.all', 'ai.help.all',
+    'portal_requests.review.all',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',
@@ -123,9 +133,12 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
     'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
+    'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
     'templates.read.all',
+    'reports.read.all',
     'files.upload.all', 'files.read.all',
     'ai.extract.all', 'ai.describe.all', 'ai.help.all',
+    'portal_requests.review.all',
   ],
   mechanic: [
     'customers.read.all',
@@ -140,11 +153,14 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'catalog.read.all',
     'service_logs.read.all',
     'invoices.read.all',
+    'estimates.read.all',
+    'reports.read.all',
     'ai.help.all',
   ],
   external_auditor: [
     'customers.read.all',
     'invoices.read.all',
+    'reports.read.all',
     'audit.read.all',
   ],
   customer: [

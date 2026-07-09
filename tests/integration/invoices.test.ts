@@ -319,4 +319,35 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
     await expect(createInvoiceRevision(db, invoice.id, ACTOR))
       .rejects.toThrow('INVALID_TRANSITION')
   })
+
+  it('records partial payment and keeps sent status until fully paid (P1-25)', async () => {
+    const invoice = await draftWithLine()
+    await approveInvoice(db, invoice.id, ACTOR)
+    await sendInvoice(db, invoice.id, ACTOR)
+
+    const sent = await getInvoiceDetail(db, invoice.id)
+    const partial = '100.00'
+    const { invoice: afterPartial } = await markInvoicePaid(db, invoice.id, ACTOR, { paymentAmount: partial })
+    expect(afterPartial.status).toBe('sent')
+    expect(afterPartial.amountPaid).toBe(partial)
+    expect(Number.parseFloat(afterPartial.balanceDue)).toBeGreaterThan(0)
+
+    const { invoice: paid } = await markInvoicePaid(db, invoice.id, ACTOR, {
+      paymentAmount: afterPartial.balanceDue,
+    })
+    expect(paid.status).toBe('paid')
+    expect(paid.balanceDue).toBe('0.00')
+    expect(Number.parseFloat(paid.amountPaid)).toBeGreaterThan(Number.parseFloat(sent.total) - 0.01)
+  })
+
+  it('rejects overpayment (P1-25)', async () => {
+    const invoice = await draftWithLine()
+    await approveInvoice(db, invoice.id, ACTOR)
+    await sendInvoice(db, invoice.id, ACTOR)
+    const sent = await getInvoiceDetail(db, invoice.id)
+
+    await expect(markInvoicePaid(db, invoice.id, ACTOR, {
+      paymentAmount: (Number.parseFloat(sent.balanceDue) + 1).toFixed(2),
+    })).rejects.toThrow('OVERPAYMENT')
+  })
 })

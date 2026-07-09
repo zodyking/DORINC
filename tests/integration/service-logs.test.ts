@@ -7,11 +7,13 @@ import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   createServiceLog,
+  convertServiceLogToInvoice,
   getServiceLog,
   listServiceLogs,
   transitionServiceLog,
   updateServiceLog,
 } from '../../server/services/service-logs.service'
+import { getInvoice } from '../../server/services/invoices.service'
 import { uploadFile } from '../../server/services/files.service'
 import { createCustomer } from '../../server/services/customers.service'
 import { createVehicle } from '../../server/services/vehicles.service'
@@ -19,6 +21,7 @@ import { appFiles } from '../../server/db/schema/files'
 import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
+import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { users } from '../../server/db/schema/auth'
 
 config()
@@ -51,6 +54,13 @@ const PNG_BYTES = Buffer.from(
 )
 
 afterAll(async () => {
+  const invoiceRows = await db.select({ id: invoices.id }).from(invoices)
+    .where(eq(invoices.customerId, owner.id))
+  const invoiceIds = invoiceRows.map(r => r.id)
+  if (invoiceIds.length) {
+    await db.delete(invoiceLineItems).where(inArray(invoiceLineItems.invoiceId, invoiceIds))
+    await db.delete(invoices).where(inArray(invoices.id, invoiceIds))
+  }
   await db.delete(appFiles).where(eq(appFiles.ownerEntityId, owner.id))
   await db.delete(serviceLogs).where(eq(serviceLogs.customerId, owner.id))
   await db.delete(vehicles).where(inArray(vehicles.customerId,
@@ -225,5 +235,48 @@ describe('P1-15 updates + list scope', () => {
     const listed = await listServiceLogs(db, { customerId: owner.id, page: 1, pageSize: 50 })
     const row = listed.items.find(i => i.id === log.id)
     expect(row?.fileCount).toBe(1)
+  })
+})
+
+describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
+  async function approvedLog() {
+    const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    await transitionServiceLog(db, log.id, 'in_review')
+    await transitionServiceLog(db, log.id, 'approved_for_invoice')
+    return log
+  }
+
+  it('creates a draft invoice with prefilled fields and marks log converted', async () => {
+    const log = await approvedLog()
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+
+    expect(converted.status).toBe('converted_to_invoice')
+    expect(converted.invoiceId).toBe(invoice.id)
+
+    const draft = await getInvoice(db, invoice.id)
+    expect(draft.status).toBe('draft')
+    expect(draft.creationSource).toBe('service_log')
+    expect(draft.serviceLogId).toBe(log.id)
+    expect(draft.customerId).toBe(owner.id)
+    expect(draft.vehicleId).toBe(unit.id)
+    expect(draft.complaint).toBe('Rough idle at cold start')
+    expect(draft.internalNotes).toBe('Replaced fuel filters')
+    expect(draft.serviceLocation).toBe('Shop bay 2')
+    expect(draft.invoiceDate).toBe('2026-07-07')
+  })
+
+  it('rejects conversion from non-approved statuses', async () => {
+    const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    await expect(convertServiceLogToInvoice(db, log.id, MECHANIC))
+      .rejects.toThrow('INVALID_TRANSITION')
+  })
+
+  it('rejects double conversion', async () => {
+    const log = await approvedLog()
+    await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    await expect(convertServiceLogToInvoice(db, log.id, MECHANIC))
+      .rejects.toThrow('ALREADY_CONVERTED')
   })
 })

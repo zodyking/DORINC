@@ -11,15 +11,24 @@ export default defineEventHandler(async (event) => {
   const { id } = validateParams(event, idParamSchema)
 
   try {
-    const { invoice, before } = await approveInvoice(useDb(), id, actor.id)
+    const { invoice, before } = await approveInvoice(useDb(), id, actor.id, actor.accountType)
+
+    const auditAction = invoice.status === 'pending_manager_approval'
+      ? 'invoices.submit_for_manager_approval'
+      : 'invoices.approve'
 
     await writeAudit(event, {
       entityType: 'invoice',
       entityId: id,
-      action: 'invoices.approve',
+      action: auditAction,
       beforeData: { status: before.status, total: before.total },
-      afterData: { status: invoice.status, total: invoice.total, approvedAt: invoice.approvedAt },
-      changedFields: ['status', 'approvedAt'],
+      afterData: {
+        status: invoice.status,
+        total: invoice.total,
+        approvedAt: invoice.approvedAt,
+        submittedForApprovalAt: invoice.submittedForApprovalAt,
+      },
+      changedFields: ['status'],
       permissionKey: 'invoices.approve.all',
       riskLevel: 'sensitive',
     })
@@ -29,6 +38,9 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
+      if (err.code === 'MANAGER_APPROVAL_REQUIRED') {
+        throw apiError(event, 'FORBIDDEN', 'Manager approval is required for this invoice')
+      }
       if (err.code === 'INVALID_TRANSITION') {
         throw apiError(event, 'CONFLICT', 'This invoice cannot be approved from its current status')
       }

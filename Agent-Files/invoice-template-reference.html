@@ -431,7 +431,7 @@
 <body>
   <div class="sheet">
     <div class="topbar">
-      <div class="brand">
+      <div class="brand" data-section="company_info">
         <div class="logo" aria-label="Shop logo">
           DOR<br/>INC
         </div>
@@ -451,7 +451,7 @@
         </div>
       </div>
 
-      <div class="docmeta">
+      <div class="docmeta" data-section="invoice_meta">
         <p class="title">INVOICE</p>
         <div class="sub mono">
           <div><span class="muted">Invoice #</span> <b>INV-000081</b></div>
@@ -470,7 +470,7 @@
     <div class="sep"></div>
 
     <div class="strip">
-      <div class="box" style="flex:1.05">
+      <div class="box" data-section="customer" style="flex:1.05">
         <h3>Customer</h3>
         <div class="kv mono">
           <div class="k">NAME</div><div class="v">Brandon Kadeem King</div>
@@ -481,7 +481,7 @@
         </div>
       </div>
 
-      <div class="box" style="flex:0.95">
+      <div class="box" data-section="job_summary" style="flex:0.95">
         <h3>Job Summary</h3>
         <div class="meta-grid">
           <div class="pill"><span class="label">Work Order</span><span class="value mono">WO-54912</span></div>
@@ -498,7 +498,7 @@
     </div>
 
     <div class="pad">
-      <div class="card">
+      <div class="card" data-section="vehicle">
         <div class="head">
           <h3>Vehicle Information</h3>
           <span class="flag">CREATED: NOT SENT</span>
@@ -523,8 +523,14 @@
               <div class="label">Notes</div><div class="val muted">Customer requested quick turnaround.</div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div class="subhead">Symptoms / Complaints</div>
+      <div class="card" data-section="symptoms" style="margin-top:14px;">
+        <div class="head">
+          <h3>Symptoms / Complaints</h3>
+        </div>
+        <div class="body">
           <div class="symptoms">
             <h3>Customer stated</h3>
             <div class="note">Engine making weird sounds. Belt squeal on cold start. Occasional washer spray not working.</div>
@@ -532,7 +538,7 @@
         </div>
       </div>
 
-      <div style="margin-top:14px;">
+      <div style="margin-top:14px;" data-section="line_items">
         <table>
           <thead>
             <tr>
@@ -598,7 +604,7 @@
       </div>
 
       <div class="bottom">
-        <div class="pay">
+        <div class="pay" data-section="payment">
           <h3>Payment & Delivery</h3>
           <div class="small tight">
             <b>Payment terms:</b> Due upon receipt<br/>
@@ -640,14 +646,14 @@
             </div>
           </div>
 
-          <div class="terms">
+          <div class="terms" data-section="terms">
             <b>Parts & labor:</b> All parts are new unless otherwise indicated. Warranty applies only as stated on work order.
             Customer is responsible for storage fees after <b>3</b> days if vehicle is not picked up.
             By authorizing repairs, customer agrees to the terms and acknowledges final totals may vary if additional issues are discovered.
           </div>
         </div>
 
-        <div class="totals">
+        <div class="totals" data-section="totals">
           <div class="head">
             <h3>Totals</h3>
             <div class="xs mono" style="opacity:.9;color:#dfe7ff;">USD • NY</div>
@@ -674,7 +680,7 @@
         </div>
       </div>
 
-      <div class="footer">
+      <div class="footer" data-section="footer">
         <div class="thankyou">
           <div class="mono small">
             <b>Devon Onsite Repairs Inc.</b><br/>

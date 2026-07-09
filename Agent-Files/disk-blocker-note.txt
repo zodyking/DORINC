@@ -1,0 +1,1 @@
+Disk full blocker detected. Restore BUILD-CHECKLIST.md via git checkout before next build loop.

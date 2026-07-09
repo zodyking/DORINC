@@ -6,6 +6,7 @@ export const WORKER_JOB_TYPES = [
   'service_log_ai_extraction',
   'invoice_description_ai',
   'backup_run',
+  'backup_retention_prune',
   'backup_verify',
   'pdf_render',
 ] as const

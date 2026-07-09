@@ -6,7 +6,7 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY server/workers ./server/workers
 
 # Playwright's official image ships Chromium + all system deps.
-# When the playwright npm dependency lands (P1-28), keep its version in sync with this tag.
+# playwright npm package version must match this image tag.
 FROM mcr.microsoft.com/playwright:v1.61.0-noble
 WORKDIR /app
 ENV NODE_ENV=production

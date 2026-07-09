@@ -11,6 +11,7 @@ import {
 } from '../../shared/permissions/keys'
 import type { PermissionKey } from '../../shared/permissions/keys'
 import { accountTypePermissions, accountTypes, permissions } from './schema/auth'
+import { seedInvoiceTemplates } from './seed-invoice-templates'
 
 config()
 
@@ -81,8 +82,12 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
       accountTypes: typeRows.length,
       permissions: permRows.length,
     }
-    console.log(`[seed] account_types=${counts.accountTypes} permissions=${counts.permissions} bundles synced`)  
-    return counts
+    console.log(`[seed] account_types=${counts.accountTypes} permissions=${counts.permissions} bundles synced`)
+
+    const templateSeed = await seedInvoiceTemplates(db)
+    console.log(`[seed] invoice_template=${templateSeed.template.slug} version=${templateSeed.publishedVersion.versionNumber} status=${templateSeed.publishedVersion.status}`)
+
+    return { ...counts, invoiceTemplate: templateSeed.template.slug }
   }
   finally {
     await pool.end()

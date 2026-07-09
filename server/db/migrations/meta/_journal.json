@@ -78,6 +78,118 @@
       "when": 1783524568320,
       "tag": "0010_third_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783552587228,
+      "tag": "0011_minor_chimera",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783553489552,
+      "tag": "0012_glossy_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783554000000,
+      "tag": "0014_backups",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783555000000,
+      "tag": "0015_credential_emails",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783556000000,
+      "tag": "0016_portal_vehicle_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783557000000,
+      "tag": "0017_portal_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783558000000,
+      "tag": "0018_portal_request_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783559000000,
+      "tag": "0019_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783560000000,
+      "tag": "0020_backup_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783561000000,
+      "tag": "0021_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783562000000,
+      "tag": "0022_estimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783563000000,
+      "tag": "0023_estimate_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783564000000,
+      "tag": "0024_estimates_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783565000000,
+      "tag": "0025_audit_hash_chain",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783566000000,
+      "tag": "0026_backup_recovery_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783567000000,
+      "tag": "0027_manager_approval",
+      "breakpoints": true
     }
   ]
 }

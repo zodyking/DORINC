@@ -1,6 +1,8 @@
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
 import { useDb } from '../db/client'
+import { isCustomerPortalActive } from '../services/portal-access.service'
+import { apiError } from '../utils/api-error'
 
 /**
  * Attach the auth context (user + permission overrides) to every request
@@ -16,11 +18,19 @@ export default defineEventHandler(async (event) => {
   try {
     const resolved = await resolveSession(useDb(), token)
     if (resolved) {
+      if (event.path.startsWith('/api/portal/') && resolved.user.accountType === 'customer') {
+        const active = await isCustomerPortalActive(useDb(), resolved.user.customerId)
+        if (!active) {
+          throw apiError(event, 'FORBIDDEN', 'Customer portal access is disabled', { reason: 'portal_disabled' })
+        }
+      }
+
       event.context.auth = {
         user: resolved.user,
         overrides: resolved.overrides,
         sessionId: resolved.sessionId,
         sessionToken: token,
+        stepUpVerifiedAt: resolved.stepUpVerifiedAt,
       }
     }
   }

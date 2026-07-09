@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import { accountTypeLabel, avColor, initials } from '~/utils/users-ui'
+
+import type { PermissionKey } from '~/shared/permissions/keys'
+
 const route = useRoute()
+const auth = useAuthStore()
 
 const sidebarOpen = ref(false)
 const menuOpen = ref(false)
@@ -10,6 +15,7 @@ interface NavItem {
   to: string
   ico: string
   count?: number
+  permission?: PermissionKey | PermissionKey[]
 }
 
 interface NavSection {
@@ -17,40 +23,73 @@ interface NavSection {
   items: NavItem[]
 }
 
+function canNav(item: NavItem): boolean {
+  if (!item.permission) return true
+  const keys = Array.isArray(item.permission) ? item.permission : [item.permission]
+  return keys.some(key => auth.can(key))
+}
+
+function filterSection(section: NavSection): NavSection | null {
+  const items = section.items.filter(canNav)
+  if (!items.length) return null
+  return { ...section, items }
+}
+
+const displayName = computed(() => auth.user?.name ?? 'Staff')
+const displayEmail = computed(() => auth.user?.email ?? '')
+const roleLabel = computed(() =>
+  auth.user ? accountTypeLabel(auth.user.accountType) : 'Signed in',
+)
+const avCls = computed(() => avColor(displayName.value))
+const avInitials = computed(() => initials(displayName.value))
+const isSuperAdmin = computed(() => auth.can('system.admin.all'))
+
 // Counts become live once list APIs land (Phase 1)
-const nav = computed<NavSection[]>(() => [
-  {
-    label: 'Workspace',
-    items: [
-      { label: 'Dashboard', to: '/dashboard', ico: '▫' },
-      { label: 'Invoices', to: '/invoices', ico: '▤' },
-      { label: 'Customers', to: '/customers', ico: '◉' },
-      { label: 'Vehicles', to: '/vehicles', ico: '⛟' },
-      { label: 'Service Logs', to: '/service-logs', ico: '✎' },
-      { label: 'Catalog', to: '/catalog', ico: '▦' },
-    ],
-  },
-  {
-    label: 'Billing tools',
-    items: [
-      { label: 'New Invoice', to: '/invoices/new', ico: '✚' },
-      { label: 'Template Designer', to: '/templates/designer', ico: '◨' },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { label: 'Users', to: '/users', ico: '👥' },
-      { label: 'System Logs', to: '/system-logs', ico: '▣' },
-    ],
-  },
-  {
-    label: 'Super Admin',
-    items: [
-      { label: 'Control Panel', to: '/admin', ico: '🛡' },
-    ],
-  },
-])
+const nav = computed<NavSection[]>(() => {
+  const sections: NavSection[] = [
+    {
+      label: 'Workspace',
+      items: [
+        { label: 'Dashboard', to: '/dashboard', ico: '▫' },
+        { label: 'Invoices', to: '/invoices', ico: '▤', permission: 'invoices.read.all' },
+        { label: 'Reports', to: '/reports', ico: '◧', permission: 'reports.read.all' },
+        { label: 'Customers', to: '/customers', ico: '◉', permission: 'customers.read.all' },
+        { label: 'Vehicles', to: '/vehicles', ico: '⛟', permission: 'vehicles.read.all' },
+        { label: 'Service Logs', to: '/service-logs', ico: '✎', permission: ['service_logs.read.all', 'service_logs.read.own'] },
+        { label: 'Portal Requests', to: '/portal-requests', ico: '✉', permission: 'portal_requests.review.all' },
+        { label: 'Catalog', to: '/catalog', ico: '▦', permission: 'catalog.read.all' },
+      ],
+    },
+    {
+      label: 'Billing tools',
+      items: [
+        { label: 'New Invoice', to: '/invoices/new', ico: '✚', permission: 'invoices.create.all' },
+        { label: 'Template Designer', to: '/templates/designer', ico: '◨', permission: 'templates.read.all' },
+      ],
+    },
+    {
+      label: 'System',
+      items: [
+        { label: 'Users', to: '/users', ico: '👥', permission: 'users.read.all' },
+        { label: 'System Logs', to: '/system-logs', ico: '▣', permission: 'audit.read.all' },
+      ],
+    },
+  ]
+
+  if (isSuperAdmin.value) {
+    sections.push({
+      label: 'Super Admin',
+      items: [{ label: 'Control Panel', to: '/admin', ico: '🛡', permission: 'system.admin.all' }],
+    })
+  }
+
+  return sections.map(filterSection).filter((s): s is NavSection => s !== null)
+})
+
+async function signOut() {
+  closeOverlays()
+  await auth.logout()
+}
 
 const crumb = computed(() => {
   for (const section of nav.value) {
@@ -80,6 +119,7 @@ watch(() => route.path, () => {
 
 <template>
   <div class="app">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <!-- SIDEBAR -->
     <nav class="side" :class="{ open: sidebarOpen }" aria-label="Primary">
       <div class="logo"><span class="sq">DR</span> DORINC Suite</div>
@@ -132,34 +172,57 @@ watch(() => route.path, () => {
             :aria-expanded="menuOpen"
             @click="menuOpen = !menuOpen; notifOpen = false"
           >
-            <span class="av indigo">DR</span>
-            <span class="who"><b>Staff</b><small>DORINC</small></span>
+            <span class="av" :class="avCls">{{ avInitials }}</span>
+            <span class="who"><b>{{ displayName }}</b><small>{{ displayEmail || 'DORINC' }}</small></span>
             <span class="car">▾</span>
           </button>
           <div class="menu" :class="{ open: menuOpen }" role="menu">
             <div class="mhead">
-              <b>Staff</b>
-              <small>Signed in</small>
+              <b>{{ displayName }}</b>
+              <small>{{ displayEmail }}</small>
+              <span class="role">{{ roleLabel }}</span>
             </div>
-            <NuxtLink to="/account" class="menu-link" @click="closeOverlays">
-              <button>👤 &nbsp;My account</button>
+            <NuxtLink to="/account" class="menu-link" role="menuitem" @click="closeOverlays">
+              👤 &nbsp;My account
             </NuxtLink>
-            <NuxtLink to="/admin" class="menu-link" @click="closeOverlays">
-              <button>🛡 &nbsp;Control panel</button>
+            <NuxtLink v-if="isSuperAdmin" to="/admin" class="menu-link" role="menuitem" @click="closeOverlays">
+              🛡 &nbsp;Control panel
             </NuxtLink>
             <hr>
-            <button class="danger">⏻ &nbsp;Sign out</button>
+            <button class="danger" @click="signOut">⏻ &nbsp;Sign out</button>
           </div>
         </div>
       </header>
 
-      <slot />
+      <div class="pwa-banner-wrap">
+        <PwaInstallBanner />
+      </div>
+
+      <main id="main-content" class="main-body">
+        <slot />
+      </main>
     </div>
+
+    <HelpPlatformHelpWidget />
   </div>
 </template>
 
 <style scoped>
 .menu-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
   text-decoration: none;
+}
+.menu-link:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 </style>

@@ -80,6 +80,7 @@ export const sessions = pgTable('sessions', {
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  stepUpVerifiedAt: timestamp('step_up_verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   index('sessions_user_idx').on(table.userId),

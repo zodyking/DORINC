@@ -76,6 +76,7 @@ const history = computed(() => data.value?.history ?? [])
 const draftLines = computed(() => (Array.isArray(log.value?.draftLineItems) ? log.value!.draftLineItems! : []))
 
 const canReview = computed(() => auth.can('service_logs.review.all'))
+const canExtract = computed(() => auth.can('ai.extract.all') && canReview.value)
 const canConvert = computed(() => auth.can('service_logs.convert.all'))
 const isOwner = computed(() => log.value?.submittedBy === auth.user?.id)
 
@@ -88,6 +89,130 @@ watch(imageFiles, (imgs) => {
 }, { immediate: true })
 
 const selectedFile = computed(() => imageFiles.value.find(f => f.id === selectedFileId.value) ?? imageFiles.value[0])
+
+interface AiSuggestionRow {
+  id: string
+  status: 'pending' | 'accepted' | 'edited' | 'rejected'
+  featureType: string
+  originalContent: Record<string, unknown> | null
+  suggestedContent: Record<string, unknown>
+  createdAt: string
+}
+
+const { data: aiData, refresh: refreshAi } = await useFetch<{ suggestions: AiSuggestionRow[] }>(
+  `/api/service-logs/${id}/ai-suggestions`,
+)
+
+const aiSuggestions = computed(() => aiData.value?.suggestions ?? [])
+
+const pendingExtraction = computed(() => {
+  const fileId = selectedFile.value?.id
+  const pending = aiSuggestions.value.filter(s => s.status === 'pending' && s.featureType === 'service_log_extraction')
+  if (!fileId) return pending[0] ?? null
+  return pending.find((s) => {
+    const fid = s.suggestedContent.fileId as string | undefined
+    return !fid || fid === fileId
+  }) ?? pending[0] ?? null
+})
+
+const extractBusy = ref(false)
+const extractError = ref('')
+const editComplaint = ref('')
+const editInternal = ref('')
+const editDraftJson = ref('')
+
+watch(pendingExtraction, (s) => {
+  if (!s) {
+    editComplaint.value = ''
+    editInternal.value = ''
+    editDraftJson.value = ''
+    return
+  }
+  const c = s.suggestedContent as { complaint?: string, internalNotes?: string, draftLineItems?: unknown[] }
+  editComplaint.value = c.complaint ?? ''
+  editInternal.value = c.internalNotes ?? ''
+  editDraftJson.value = c.draftLineItems?.length
+    ? JSON.stringify(c.draftLineItems, null, 2)
+    : ''
+}, { immediate: true })
+
+let aiPollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopAiPoll() {
+  if (aiPollTimer) {
+    clearInterval(aiPollTimer)
+    aiPollTimer = null
+  }
+}
+
+function startAiPoll() {
+  stopAiPoll()
+  aiPollTimer = setInterval(async () => {
+    await refreshAi()
+    if (pendingExtraction.value || !extractBusy.value) stopAiPoll()
+  }, 2000)
+}
+
+onBeforeUnmount(() => stopAiPoll())
+
+async function runExtraction() {
+  if (!canExtract.value) return
+  extractBusy.value = true
+  extractError.value = ''
+  try {
+    await $fetch(`/api/service-logs/${id}/ai-extract`, {
+      method: 'POST',
+      body: { fileId: selectedFileId.value ?? undefined },
+    })
+    startAiPoll()
+    await refreshAi()
+  }
+  catch (e: unknown) {
+    extractError.value = (e as { data?: { message?: string } })?.data?.message ?? 'AI extraction failed — enter details manually'
+  }
+  finally {
+    extractBusy.value = false
+  }
+}
+
+function buildExtractionContent() {
+  let draftLineItems: unknown[] | undefined
+  if (editDraftJson.value.trim()) {
+    draftLineItems = JSON.parse(editDraftJson.value) as unknown[]
+  }
+  return {
+    complaint: editComplaint.value || null,
+    internalNotes: editInternal.value || null,
+    draftLineItems,
+    fileId: selectedFileId.value ?? undefined,
+  }
+}
+
+async function reviewExtraction(action: 'accept' | 'edit' | 'reject') {
+  const suggestion = pendingExtraction.value
+  if (!suggestion) return
+  extractBusy.value = true
+  extractError.value = ''
+  try {
+    const body: Record<string, unknown> = { action }
+    if (action === 'edit' || action === 'accept') {
+      body.content = action === 'edit' ? buildExtractionContent() : suggestion.suggestedContent
+    }
+    await $fetch(`/api/ai/suggestions/${suggestion.id}/review`, { method: 'POST', body })
+    await Promise.all([refresh(), refreshAi()])
+  }
+  catch (e: unknown) {
+    if (action === 'edit' && (e as Error).message?.includes('JSON')) {
+      extractError.value = 'Draft line items must be valid JSON'
+    }
+    else {
+      extractError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Review failed'
+    }
+  }
+  finally {
+    extractBusy.value = false
+  }
+}
 
 const busy = ref(false)
 const actionError = ref('')
@@ -104,6 +229,23 @@ async function changeStatus(status: ServiceLogStatus, reason?: string) {
     actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Status change failed'
   }
   finally {
+    busy.value = false
+  }
+}
+
+async function convertToInvoice() {
+  if (!log.value) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    const { invoice } = await $fetch<{ invoice: { id: string } }>(
+      `/api/service-logs/${id}/convert-to-invoice`,
+      { method: 'POST', body: {} },
+    )
+    await navigateTo(`/invoices/${invoice.id}/edit`)
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Invoice conversion failed'
     busy.value = false
   }
 }
@@ -187,11 +329,18 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           v-if="canConvert && log.status === 'approved_for_invoice'"
           class="btn primary"
           type="button"
-          disabled
-          title="Invoice conversion arrives in P1-26"
+          :disabled="busy"
+          @click="convertToInvoice"
         >
-          Create invoice
+          Convert to invoice
         </button>
+        <NuxtLink
+          v-if="log.status === 'converted_to_invoice' && log.invoiceId"
+          :to="`/invoices/${log.invoiceId}/edit`"
+          class="btn primary"
+        >
+          Edit invoice
+        </NuxtLink>
       </div>
     </div>
 
@@ -230,6 +379,50 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
                 <b style="display:block; font-size:11px; color:#94a3b8; margin-bottom:4px;">COMPLAINT</b>
                 {{ log.complaint }}
               </p>
+
+              <div v-if="canExtract" class="sl-ai-panel">
+                <div class="sl-ai-head">
+                  <b>✦ AI extraction</b>
+                  <button
+                    type="button"
+                    class="btn sm"
+                    :disabled="extractBusy || !imageFiles.length"
+                    @click="runExtraction"
+                  >
+                    {{ extractBusy && !pendingExtraction ? 'Running…' : 'Extract from image' }}
+                  </button>
+                </div>
+                <p v-if="extractError" class="help" style="color:#dc2626; margin:0 0 8px;">{{ extractError }}</p>
+                <p v-else-if="!pendingExtraction" class="help" style="margin:0;">
+                  Suggest fields from the selected photo — accept, edit, or reject. Manual entry always works if AI fails.
+                </p>
+
+                <div v-if="pendingExtraction" class="sl-review">
+                  <div class="r stack">
+                    <span class="k">Suggested complaint</span>
+                    <textarea v-model="editComplaint" rows="2" class="sl-ai-field" />
+                  </div>
+                  <div class="r stack">
+                    <span class="k">Suggested internal notes</span>
+                    <textarea v-model="editInternal" rows="2" class="sl-ai-field" />
+                  </div>
+                  <div class="r stack">
+                    <span class="k">Draft lines (JSON)</span>
+                    <textarea v-model="editDraftJson" rows="3" class="sl-ai-field mono" placeholder="[]" />
+                  </div>
+                  <div class="sl-ai-acts">
+                    <button type="button" class="btn sm primary" :disabled="extractBusy" @click="reviewExtraction('accept')">
+                      Accept
+                    </button>
+                    <button type="button" class="btn sm" :disabled="extractBusy" @click="reviewExtraction('edit')">
+                      Accept with edits
+                    </button>
+                    <button type="button" class="btn sm" :disabled="extractBusy" @click="reviewExtraction('reject')">
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -387,4 +580,29 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
     grid-template-columns: 1fr;
   }
 }
+.sl-ai-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+.sl-ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sl-ai-head b { font-size: 12px; color: #4f46e5; }
+.sl-ai-field {
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  resize: vertical;
+  color: #334155;
+}
+.sl-ai-field.mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+.sl-ai-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 </style>

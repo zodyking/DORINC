@@ -2,6 +2,7 @@ import { useDb } from '../../../../db/client'
 import { InvoicesServiceError, updateInvoiceLineItem } from '../../../../services/invoices.service'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
+import { requireEditSession } from '../../../../utils/require-edit-session'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../../utils/validate'
 import { invoiceLineParamSchema, invoiceLineUpdateSchema } from '../../../../../shared/validators/invoices'
@@ -11,8 +12,11 @@ export default defineEventHandler(async (event) => {
   const { id, lineId } = validateParams(event, invoiceLineParamSchema)
   const patch = await validateBody(event, invoiceLineUpdateSchema)
 
+  const db = useDb()
+  await requireEditSession(event, db, 'invoice', id, actor.id)
+
   try {
-    const { line, changedFields } = await updateInvoiceLineItem(useDb(), id, lineId, patch, actor.id)
+    const { line, changedFields } = await updateInvoiceLineItem(db, id, lineId, patch, actor.id)
 
     if (changedFields.length) {
       await writeAudit(event, {

@@ -37,3 +37,12 @@ export const contactCreateSchema = z.object({
 })
 
 export const contactUpdateSchema = contactCreateSchema.partial()
+
+export const portalAccessSchema = z.object({
+  enabled: z.boolean(),
+  contactId: z.string().uuid().optional(),
+})
+
+export const sendCredentialsSchema = z.object({
+  contactId: z.string().uuid().optional(),
+})

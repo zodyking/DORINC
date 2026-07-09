@@ -4,6 +4,7 @@ import { FilesServiceError, maxUploadBytes, uploadFile } from '../../services/fi
 import { enqueueJob } from '../../services/jobs.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
+import { rateLimitKeyFromUser, requireRateLimit } from '../../utils/require-rate-limit'
 import { requirePermission } from '../../utils/require-permission'
 import { fileUploadFieldsSchema } from '../../../shared/validators/files'
 
@@ -14,6 +15,7 @@ import { fileUploadFieldsSchema } from '../../../shared/validators/files'
  */
 export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'files.upload.all')
+  await requireRateLimit(event, 'upload', rateLimitKeyFromUser(actor.id))
 
   const parts = await readMultipartFormData(event, { maxSize: maxUploadBytes() + 1024 * 1024 })
     .catch(() => null)

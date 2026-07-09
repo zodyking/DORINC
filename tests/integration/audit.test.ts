@@ -16,6 +16,7 @@ const marker = `audit-test-${Date.now()}`
 describe('audit_logs append-only integration', () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`)
+    await db.execute(sql`ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_update_delete`)
   })
 
   afterAll(async () => {

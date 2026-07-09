@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
 
-export const invoiceStatusSchema = z.enum(['draft', 'approved', 'sent', 'paid', 'void'])
+export const invoiceStatusSchema = z.enum(['draft', 'pending_manager_approval', 'approved', 'sent', 'paid', 'void'])
 
 export const invoiceCreationSourceSchema = z.enum([
   'blank',
@@ -63,9 +63,17 @@ export const invoiceLineUpdateSchema = invoiceLineCreateSchema
   .extend({ lineType: invoiceLineTypeSchema.optional() })
   .partial()
 
+export const invoicePaymentMethodSchema = z.enum(['ach', 'check', 'cash', 'credit_card', 'wire'])
+
 export const invoiceMarkPaidSchema = z.object({
+  /** Incremental payment for this transaction (preferred). */
+  paymentAmount: moneySchema.optional(),
+  /** Legacy total cumulative amount_paid. */
   amountPaid: moneySchema.optional(),
-  paidAt: z.string().datetime().nullish(),
+  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullish(),
+  method: invoicePaymentMethodSchema.optional(),
+  reference: z.string().max(100).nullish(),
+  notes: z.string().max(2000).nullish(),
 })
 
 export const invoiceListQuerySchema = paginationSchema.extend({

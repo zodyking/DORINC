@@ -1,4 +1,4 @@
-import { boolean, date, index, integer, jsonb, numeric, pgSequence, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, date, index, integer, jsonb, numeric, pgSequence, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import type { Address } from './customers'
 import { customers } from './customers'
@@ -6,10 +6,15 @@ import { serviceLogs } from './service-logs'
 import { vehicles } from './vehicles'
 import { users } from './auth'
 import type { CatalogItemType } from './catalog'
+import { appFiles } from './files'
+import { invoiceTemplateVersions } from './invoice-templates'
+import { pdfRenderJobs } from './pdf-render-jobs'
+import { estimates } from './estimates'
 
 /** Invoice lifecycle (SPEC §6.5). Overdue is derived from due_date + sent status. */
 export const INVOICE_STATUSES = [
   'draft',
+  'pending_manager_approval',
   'approved',
   'sent',
   'paid',
@@ -81,9 +86,8 @@ export const invoices = pgTable('invoices', {
   customerId: uuid('customer_id').notNull().references(() => customers.id),
   vehicleId: uuid('vehicle_id').references(() => vehicles.id),
   serviceLogId: uuid('service_log_id').references(() => serviceLogs.id),
-  // Reserved for Phase 2/3 — FKs added when tables land
   serviceRequestId: uuid('service_request_id'),
-  estimateId: uuid('estimate_id'),
+  estimateId: uuid('estimate_id').references(() => estimates.id),
   sourceInvoiceId: uuid('source_invoice_id'),
 
   creationSource: text('creation_source', { enum: INVOICE_CREATION_SOURCES }).notNull().default('blank'),
@@ -121,6 +125,8 @@ export const invoices = pgTable('invoices', {
   updatedBy: uuid('updated_by').references(() => users.id),
   approvedBy: uuid('approved_by').references(() => users.id),
   approvedAt: timestamp('approved_at', { withTimezone: true }),
+  submittedForApprovalAt: timestamp('submitted_for_approval_at', { withTimezone: true }),
+  submittedForApprovalBy: uuid('submitted_for_approval_by').references(() => users.id),
   sentAt: timestamp('sent_at', { withTimezone: true }),
   paidAt: timestamp('paid_at', { withTimezone: true }),
 
@@ -162,6 +168,24 @@ export const invoiceLineItems = pgTable('invoice_line_items', {
 }, table => [
   index('invoice_line_items_invoice_idx').on(table.invoiceId),
   index('invoice_line_items_catalog_idx').on(table.catalogItemId),
+])
+
+/**
+ * Official invoice PDFs — one immutable row per finalized invoice (SPEC §9).
+ * Links app_files blob to the template version used at generation time.
+ */
+export const invoiceFiles = pgTable('invoice_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  invoiceId: uuid('invoice_id').notNull().references(() => invoices.id, { onDelete: 'cascade' }),
+  fileId: uuid('file_id').notNull().references(() => appFiles.id),
+  templateVersionId: uuid('template_version_id').notNull().references(() => invoiceTemplateVersions.id),
+  sha256Hash: text('sha256_hash').notNull(),
+  pdfRenderJobId: uuid('pdf_render_job_id').references(() => pdfRenderJobs.id),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex('invoice_files_invoice_unique').on(table.invoiceId),
+  index('invoice_files_file_idx').on(table.fileId),
 ])
 
 /** Format DB invoice_number as INV-000092. */

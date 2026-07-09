@@ -9,7 +9,7 @@ import { appFiles } from '../db/schema/files'
 
 export type ServiceLogsServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'VEHICLE_CUSTOMER_MISMATCH'
-    | 'INVALID_TRANSITION' | 'NOT_EDITABLE'
+    | 'INVALID_TRANSITION' | 'NOT_EDITABLE' | 'ALREADY_CONVERTED'
 
 export class ServiceLogsServiceError extends Error {
   constructor(public readonly code: ServiceLogsServiceErrorCode) {
@@ -173,6 +173,33 @@ export async function transitionServiceLog(
     .returning()
 
   return { log: updated!, before }
+}
+
+/** Creates a draft invoice from an approved log and marks the log converted (SPEC §6.4, §6.5). */
+export async function convertServiceLogToInvoice(
+  db: Db,
+  id: string,
+  actorId: string,
+  opts: { invoiceDate?: string } = {},
+) {
+  const before = await getServiceLog(db, id)
+
+  if (before.invoiceId || before.status === 'converted_to_invoice') {
+    throw new ServiceLogsServiceError('ALREADY_CONVERTED')
+  }
+  if (before.status !== 'approved_for_invoice') {
+    throw new ServiceLogsServiceError('INVALID_TRANSITION')
+  }
+
+  const { createInvoice } = await import('./invoices.service')
+  const invoice = await createInvoice(db, {
+    creationSource: 'service_log',
+    serviceLogId: before.id,
+    invoiceDate: opts.invoiceDate ?? before.serviceDate,
+  }, actorId)
+
+  const { log } = await transitionServiceLog(db, id, 'converted_to_invoice', { invoiceId: invoice.id })
+  return { invoice, log, before }
 }
 
 export interface ListServiceLogsFilter {

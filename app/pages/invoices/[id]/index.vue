@@ -61,6 +61,16 @@ const route = useRoute()
 const auth = useAuthStore()
 const id = route.params.id as string
 
+const {
+  activeEditor,
+  loading: sessionLoading,
+  canAdminRelease,
+  isSelfEditing,
+  forceRelease,
+  forceReleaseBusy,
+  forceReleaseError,
+} = useEditingSessionStatus('invoice', id)
+
 const { data, refresh, error } = await useFetch<{
   invoice: Invoice
   history: HistoryRow[]
@@ -73,6 +83,9 @@ const lines = computed(() => invoice.value?.lineItems ?? [])
 const canRead = computed(() => auth.can('invoices.read.all'))
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
+const canManagerApprove = computed(() =>
+  ['manager', 'admin', 'super_admin'].includes(auth.user?.accountType ?? ''),
+)
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
@@ -89,12 +102,18 @@ const headlineStatus = computed(() => {
 
 const isDraft = computed(() => invoice.value?.status === 'draft')
 const showRecordPayment = computed(() =>
-  invoice.value && ['sent', 'approved'].includes(invoice.value.status)
+  invoice.value && invoice.value.status === 'sent'
   && Number.parseFloat(invoice.value.balanceDue) > 0,
 )
 
 const busy = ref(false)
 const actionError = ref('')
+
+async function runAdminForceRelease() {
+  const reason = window.prompt('Reason for force-releasing this edit lock (required):')
+  if (!reason?.trim()) return
+  await forceRelease(reason.trim())
+}
 
 async function runAction(path: string) {
   if (!invoice.value) return
@@ -186,6 +205,15 @@ const summaryRows = computed(() => {
           Approve
         </button>
         <button
+          v-if="canApprove && canManagerApprove && invoice.status === 'pending_manager_approval'"
+          type="button"
+          class="btn primary"
+          :disabled="busy"
+          @click="runAction(`/api/invoices/${id}/approve`)"
+        >
+          Manager approve
+        </button>
+        <button
           v-if="canSend && invoice.status === 'approved'"
           type="button"
           class="btn"
@@ -198,7 +226,6 @@ const summaryRows = computed(() => {
           v-if="canUpdate && isDraft"
           :to="`/invoices/${id}/edit`"
           class="btn"
-          title="Full editor arrives in P1-24"
         >
           Edit
         </NuxtLink>
@@ -206,7 +233,6 @@ const summaryRows = computed(() => {
           v-if="canRecordPayment && showRecordPayment"
           :to="`/invoices/${id}/payment`"
           class="btn primary"
-          title="Payment form arrives in P1-25"
         >
           Record payment
         </NuxtLink>
@@ -214,6 +240,30 @@ const summaryRows = computed(() => {
     </div>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
+
+    <div
+      v-if="isDraft && activeEditor && !sessionLoading"
+      class="edit-lock-banner"
+    >
+      <div>
+        <template v-if="isSelfEditing">
+          You have this invoice open in the editor.
+        </template>
+        <template v-else>
+          <b>{{ activeEditor.userName }}</b> is editing this invoice — detail view is read-only until they finish.
+        </template>
+      </div>
+      <button
+        v-if="canAdminRelease && !isSelfEditing"
+        type="button"
+        class="btn sm"
+        :disabled="forceReleaseBusy"
+        @click="runAdminForceRelease"
+      >
+        Force release
+      </button>
+    </div>
+    <p v-if="forceReleaseError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ forceReleaseError }}</p>
 
     <div class="cols">
       <div class="stack">

@@ -12,14 +12,19 @@ import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { getCatalogItem } from './catalog.service'
 import { getCustomer } from './customers.service'
+import { addMoney, compareMoney, isZeroMoney, subtractMoney } from '../../shared/money'
+import type { AccountType } from '../../shared/permissions/keys'
+import { getManagerApprovalThreshold } from './billing-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
+import { serviceRequests } from '../db/schema/portal-requests'
 
 export type InvoicesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
     | 'SERVICE_LOG_NOT_FOUND' | 'SOURCE_NOT_FOUND' | 'NOT_EDITABLE' | 'INVALID_TRANSITION'
-    | 'INVALID_CREATE' | 'LINE_NOT_FOUND'
+    | 'INVALID_CREATE' | 'LINE_NOT_FOUND' | 'INVALID_PAYMENT' | 'OVERPAYMENT'
+    | 'MANAGER_APPROVAL_REQUIRED'
 
 export class InvoicesServiceError extends Error {
   constructor(public readonly code: InvoicesServiceErrorCode) {
@@ -29,7 +34,8 @@ export class InvoicesServiceError extends Error {
 
 /** Allowed status transitions (SPEC §6.5). */
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
-  draft: ['approved', 'void'],
+  draft: ['pending_manager_approval', 'approved', 'void'],
+  pending_manager_approval: ['approved', 'void'],
   approved: ['sent', 'void'],
   sent: ['paid', 'void'],
   paid: [],
@@ -46,6 +52,7 @@ export interface CreateInvoiceInput {
   customerId?: string
   vehicleId?: string | null
   serviceLogId?: string | null
+  serviceRequestId?: string | null
   sourceInvoiceId?: string | null
   creationSource?: InvoiceCreationSource
   invoiceDate: string
@@ -107,6 +114,7 @@ export interface ListInvoicesFilter {
 export interface InvoiceListStats {
   total: number
   draftCount: number
+  pendingManagerApprovalCount: number
   sentCount: number
   paidCount: number
   overdueCount: number
@@ -114,6 +122,12 @@ export interface InvoiceListStats {
   outstandingCount: number
   paidThisMonthTotal: string
   overdueTotal: string
+}
+
+const MANAGER_APPROVAL_ACCOUNT_TYPES: AccountType[] = ['manager', 'admin', 'super_admin']
+
+export function canManagerApproveInvoices(accountType?: AccountType | string | null): boolean {
+  return !!accountType && MANAGER_APPROVAL_ACCOUNT_TYPES.includes(accountType as AccountType)
 }
 
 function buildCustomerSnapshot(customer: Awaited<ReturnType<typeof getCustomer>>): InvoiceCustomerSnapshot {
@@ -255,6 +269,17 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       throw err
     }
   }
+  else if (source === 'service_request') {
+    if (!input.serviceRequestId) throw new InvoicesServiceError('INVALID_CREATE')
+    const [req] = await db.select().from(serviceRequests).where(eq(serviceRequests.id, input.serviceRequestId))
+    if (!req) throw new InvoicesServiceError('INVALID_CREATE')
+    resolved.customerId = req.customerId
+    resolved.vehicleId = req.vehicleId
+    resolved.serviceRequestId = req.id
+    resolved.complaint = input.complaint ?? req.description
+    resolved.serviceLocation = input.serviceLocation ?? req.location
+    resolved.internalNotes = input.internalNotes ?? null
+  }
   else if (source === 'customer' || source === 'blank') {
     if (!input.customerId) throw new InvoicesServiceError('INVALID_CREATE')
     resolved.customerId = input.customerId
@@ -292,6 +317,7 @@ export async function createInvoiceDraft(db: Db, input: CreateInvoiceInput, acto
     customerId: input.customerId!,
     vehicleId: input.vehicleId ?? null,
     serviceLogId: input.serviceLogId ?? null,
+    serviceRequestId: input.serviceRequestId ?? null,
     sourceInvoiceId: input.sourceInvoiceId ?? null,
     creationSource: input.creationSource ?? 'blank',
     invoiceDate: input.invoiceDate,
@@ -410,6 +436,8 @@ export async function getInvoiceListStats(db: Db): Promise<InvoiceListStats> {
   const [totals] = await db.select({ value: count() }).from(invoices).where(and(...base))
   const [draftCount] = await db.select({ value: count() })
     .from(invoices).where(and(...base, eq(invoices.status, 'draft')))
+  const [pendingManagerCount] = await db.select({ value: count() })
+    .from(invoices).where(and(...base, eq(invoices.status, 'pending_manager_approval')))
   const [sentCount] = await db.select({ value: count() })
     .from(invoices).where(and(...base, eq(invoices.status, 'sent')))
   const [paidCount] = await db.select({ value: count() })
@@ -443,6 +471,7 @@ export async function getInvoiceListStats(db: Db): Promise<InvoiceListStats> {
   return {
     total: Number(totals?.value ?? 0),
     draftCount: Number(draftCount?.value ?? 0),
+    pendingManagerApprovalCount: Number(pendingManagerCount?.value ?? 0),
     sentCount: Number(sentCount?.value ?? 0),
     paidCount: Number(paidCount?.value ?? 0),
     overdueCount: Number(overdueCount?.value ?? 0),
@@ -725,6 +754,11 @@ export async function transitionInvoice(
     updatedAt: new Date(),
   }
 
+  if (to === 'pending_manager_approval') {
+    changes.submittedForApprovalAt = new Date()
+    changes.submittedForApprovalBy = actorId
+  }
+
   if (to === 'approved') {
     changes.approvedBy = actorId
     changes.approvedAt = new Date()
@@ -757,19 +791,108 @@ export async function transitionInvoice(
   return { invoice: updated!, before }
 }
 
-export async function approveInvoice(db: Db, id: string, actorId: string) {
+export async function approveInvoice(
+  db: Db,
+  id: string,
+  actorId: string,
+  actorAccountType?: AccountType | string | null,
+) {
+  const before = await getInvoice(db, id)
+
+  if (before.status === 'pending_manager_approval') {
+    if (!canManagerApproveInvoices(actorAccountType)) {
+      throw new InvoicesServiceError('MANAGER_APPROVAL_REQUIRED')
+    }
+    return transitionInvoice(db, id, 'approved', actorId)
+  }
+
+  if (before.status !== 'draft') {
+    throw new InvoicesServiceError('INVALID_TRANSITION')
+  }
+
+  const threshold = await getManagerApprovalThreshold(db)
+  const requiresManager = compareMoney(before.total, threshold) >= 0
+
+  if (requiresManager && !canManagerApproveInvoices(actorAccountType)) {
+    return transitionInvoice(db, id, 'pending_manager_approval', actorId)
+  }
+
   return transitionInvoice(db, id, 'approved', actorId)
 }
 
 export async function sendInvoice(db: Db, id: string, actorId: string) {
-  return transitionInvoice(db, id, 'sent', actorId)
+  const result = await transitionInvoice(db, id, 'sent', actorId)
+  const { notifyInvoiceSent } = await import('./customer-notifications.service')
+  await notifyInvoiceSent(db, id).catch(() => {})
+  return result
 }
 
 export async function markInvoicePaid(
   db: Db,
   id: string,
   actorId: string,
-  opts: { amountPaid?: string, paidAt?: Date } = {},
+  opts: {
+    paymentAmount?: string
+    amountPaid?: string
+    paidAt?: Date
+  } = {},
 ) {
-  return transitionInvoice(db, id, 'paid', actorId, opts)
+  return db.transaction(async (tx) => {
+    const [before] = await tx.select().from(invoices).where(eq(invoices.id, id)).for('update').limit(1)
+    if (!before) throw new InvoicesServiceError('NOT_FOUND')
+
+    if (before.status !== 'sent') {
+      throw new InvoicesServiceError('INVALID_TRANSITION')
+    }
+
+    const balanceDue = before.balanceDue ?? '0'
+    let paymentAmount: string
+    if (opts.paymentAmount) {
+      paymentAmount = opts.paymentAmount
+    }
+    else if (opts.amountPaid) {
+      paymentAmount = subtractMoney(opts.amountPaid, before.amountPaid ?? '0')
+    }
+    else {
+      paymentAmount = balanceDue
+    }
+
+    if (compareMoney(paymentAmount, '0') <= 0) {
+      throw new InvoicesServiceError('INVALID_PAYMENT')
+    }
+    if (compareMoney(paymentAmount, balanceDue) > 0) {
+      throw new InvoicesServiceError('OVERPAYMENT')
+    }
+
+    const newAmountPaid = addMoney(before.amountPaid ?? '0', paymentAmount)
+    const lines = await listInvoiceLineItems(tx, id)
+    const totals = calculateInvoiceTotals({
+      lines: lines.map(line => ({
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        taxable: line.taxable,
+      })),
+      taxExempt: before.taxExempt,
+      taxRate: before.taxRate ?? '0',
+      shopSuppliesPercent: before.shopSuppliesPercent ?? undefined,
+      feesAmount: '0',
+      discountAmount: before.discountAmount ?? '0',
+      amountPaid: newAmountPaid,
+    })
+
+    const changes: Record<string, unknown> = {
+      amountPaid: newAmountPaid,
+      balanceDue: totals.balanceDue,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    }
+
+    if (isZeroMoney(totals.balanceDue) || compareMoney(totals.balanceDue, '0') <= 0) {
+      changes.status = 'paid'
+      changes.paidAt = opts.paidAt ?? new Date()
+    }
+
+    const [updated] = await tx.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
+    return { invoice: updated!, before }
+  })
 }

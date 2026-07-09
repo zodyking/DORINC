@@ -3,11 +3,13 @@ import { AuthError, verifyEmail } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
+import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
 
 const verifySchema = z.object({ token: z.string().min(16).max(128) })
 
 export default defineEventHandler(async (event) => {
+  await requireRateLimit(event, 'verify_email', rateLimitKeyFromIp(event))
   const { token } = await validateBody(event, verifySchema)
 
   try {

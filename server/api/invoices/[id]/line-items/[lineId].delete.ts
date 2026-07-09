@@ -2,6 +2,7 @@ import { useDb } from '../../../../db/client'
 import { deleteInvoiceLineItem, InvoicesServiceError } from '../../../../services/invoices.service'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
+import { requireEditSession } from '../../../../utils/require-edit-session'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateParams } from '../../../../utils/validate'
 import { invoiceLineParamSchema } from '../../../../../shared/validators/invoices'
@@ -10,8 +11,11 @@ export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'invoices.update.all')
   const { id, lineId } = validateParams(event, invoiceLineParamSchema)
 
+  const db = useDb()
+  await requireEditSession(event, db, 'invoice', id, actor.id)
+
   try {
-    await deleteInvoiceLineItem(useDb(), id, lineId, actor.id)
+    await deleteInvoiceLineItem(db, id, lineId, actor.id)
 
     await writeAudit(event, {
       entityType: 'invoice',

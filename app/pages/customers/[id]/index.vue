@@ -76,6 +76,47 @@ const vehicles = computed(() => vehiclesData.value?.items ?? [])
 
 const canUpdate = computed(() => auth.can('customers.update.all'))
 const canArchive = computed(() => auth.can('customers.archive.all'))
+const canPortalAccess = computed(() => auth.can('customers.portal_access.all'))
+const canSendCredentials = computed(() => auth.can('customers.send_credentials.all'))
+
+interface PortalAccessSummary {
+  portalEnabled: boolean
+  userCount: number
+  users: Array<{
+    id: string
+    name: string
+    email: string
+    lastLoginAt: string | null
+    mustChangePassword: boolean
+    tempPasswordExpiresAt: string | null
+  }>
+  lastCredentialEmail: { at: string, status: string } | null
+}
+
+interface CredentialEmailRow {
+  id: string
+  recipientEmail: string
+  sendType: string
+  status: string
+  sentAt: string | null
+  createdAt: string
+  sentByName: string
+}
+
+const { data: portalData, refresh: refreshPortal } = await useFetch<PortalAccessSummary>(
+  `/api/customers/${route.params.id}/portal-access`,
+)
+const { data: credentialHistory, refresh: refreshCredentialHistory } = await useFetch<{ items: CredentialEmailRow[] }>(
+  `/api/customers/${route.params.id}/credential-email-history`,
+)
+
+const portal = computed(() => portalData.value)
+const credentialEmails = computed(() => credentialHistory.value?.items ?? [])
+const lastPortalLogin = computed(() => {
+  const dates = portal.value?.users.map(u => u.lastLoginAt).filter(Boolean) as string[]
+  if (!dates.length) return null
+  return dates.sort().reverse()[0]!
+})
 
 const busy = ref(false)
 const flash = ref('')
@@ -92,6 +133,8 @@ async function run(action: () => Promise<unknown>, note: string) {
   try {
     await action()
     await refresh()
+    await refreshPortal()
+    await refreshCredentialHistory()
     flash.value = note
     flashKind.value = 'ok'
   }
@@ -107,6 +150,19 @@ async function run(action: () => Promise<unknown>, note: string) {
 const toggleArchive = () => run(
   () => $fetch(`/api/customers/${route.params.id}/${customer.value!.archivedAt ? 'restore' : 'archive'}`, { method: 'POST' }),
   customer.value!.archivedAt ? 'Customer restored' : 'Customer archived',
+)
+
+const togglePortal = () => run(
+  () => $fetch(`/api/customers/${route.params.id}/portal-access`, {
+    method: 'POST',
+    body: { enabled: !portal.value?.portalEnabled },
+  }),
+  portal.value?.portalEnabled ? 'Portal access disabled' : 'Portal access enabled',
+)
+
+const sendCredentials = () => run(
+  () => $fetch(`/api/customers/${route.params.id}/send-credentials`, { method: 'POST', body: {} }),
+  'Credential email queued',
 )
 
 // ---- Contacts management (P1-09) ----
@@ -182,6 +238,9 @@ const HIST_LABELS: Record<string, string> = {
   'customers.contact_add': 'Contact added',
   'customers.contact_update': 'Contact updated',
   'customers.contact_archive': 'Contact archived',
+  'customers.portal_enable': 'Portal enabled',
+  'customers.portal_disable': 'Portal disabled',
+  'customers.credential_email_send': 'Credential email sent',
 }
 
 function histChange(h: HistoryRow): string {
@@ -190,9 +249,16 @@ function histChange(h: HistoryRow): string {
   return label + fields
 }
 
+function credWhen(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 function sinceYear(iso: string | undefined): string {
   return iso ? new Date(iso).getFullYear().toString() : ''
 }
+
+const SEND_LABELS: Record<string, string> = { initial: 'Initial send', resend: 'Resend' }
+const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Sent', failed: 'Failed' }
 </script>
 
 <template>
@@ -217,7 +283,22 @@ function sinceYear(iso: string | undefined): string {
         </div>
         <div class="actions">
           <NuxtLink v-if="canUpdate" :to="`/customers/${customer.id}/edit`" class="btn">Edit account</NuxtLink>
-          <button class="btn" disabled title="Portal access lands in Phase 2">Resend portal invite</button>
+          <button
+            v-if="canPortalAccess"
+            class="btn"
+            :disabled="busy || !!customer.archivedAt"
+            @click="togglePortal"
+          >
+            {{ portal?.portalEnabled ? 'Disable portal' : 'Enable portal' }}
+          </button>
+          <button
+            v-if="canSendCredentials"
+            class="btn"
+            :disabled="busy || !portal?.portalEnabled || !!customer.archivedAt"
+            @click="sendCredentials"
+          >
+            {{ credentialEmails.length ? 'Resend portal invite' : 'Send portal invite' }}
+          </button>
           <button
             v-if="canArchive"
             class="btn"
@@ -328,10 +409,34 @@ function sinceYear(iso: string | undefined): string {
             <div class="chead"><h3>Portal access</h3></div>
             <dl class="kv">
               <dt>Status</dt>
-              <dd><span :class="customer.portalEnabled ? 'pill ok' : 'pill gray'">{{ customer.portalEnabled ? 'Active' : 'Not enabled' }}</span></dd>
-              <dt>Users</dt><dd>0 logins</dd>
-              <dt>Pending requests</dt><dd>None</dd>
+              <dd><span :class="portal?.portalEnabled ? 'pill ok' : 'pill gray'">{{ portal?.portalEnabled ? 'Active' : 'Not enabled' }}</span></dd>
+              <dt>Users</dt><dd>{{ portal?.userCount ?? 0 }} {{ portal?.userCount === 1 ? 'login' : 'logins' }}</dd>
+              <dt>Last login</dt><dd>{{ lastPortalLogin ? credWhen(lastPortalLogin) : '—' }}</dd>
+              <dt>Last credential email</dt>
+              <dd>
+                <template v-if="portal?.lastCredentialEmail">
+                  {{ credWhen(portal.lastCredentialEmail.at) }}
+                  · {{ CRED_STATUS_LABELS[portal.lastCredentialEmail.status] ?? portal.lastCredentialEmail.status }}
+                </template>
+                <template v-else>—</template>
+              </dd>
             </dl>
+            <div v-if="credentialEmails.length" class="cbody" style="border-top:1px solid #f1f5f9; padding-top:12px;">
+              <div style="font-size:12px; color:#64748b; margin-bottom:8px;">Credential email log</div>
+              <div class="tscroll">
+                <table class="tbl hist-log">
+                  <thead><tr><th>When</th><th>To</th><th>Type</th><th>Status</th></tr></thead>
+                  <tbody>
+                    <tr v-for="row in credentialEmails" :key="row.id">
+                      <td class="when">{{ credWhen(row.sentAt ?? row.createdAt) }}</td>
+                      <td>{{ row.recipientEmail }}</td>
+                      <td>{{ SEND_LABELS[row.sendType] ?? row.sendType }}</td>
+                      <td><span class="pill" :class="row.status === 'sent' ? 'ok' : row.status === 'failed' ? 'bad' : 'gray'">{{ CRED_STATUS_LABELS[row.status] ?? row.status }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           <div class="card">
             <div class="chead"><h3>Notes</h3></div>

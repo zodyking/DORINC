@@ -8,6 +8,7 @@ import {
   userPermissionOverrides,
   users,
 } from '../db/schema/auth'
+import { customers } from '../db/schema/customers'
 import { hashPassword, verifyPassword } from './password'
 import { generateToken, hashToken } from './tokens'
 import type { AccountType, PermissionKey } from '../../shared/permissions/keys'
@@ -26,6 +27,9 @@ export type AuthServiceError
     | 'NOT_VERIFIED'
     | 'NOT_APPROVED'
     | 'DISABLED'
+    | 'PORTAL_NOT_LINKED'
+    | 'PORTAL_DISABLED'
+    | 'TEMP_PASSWORD_EXPIRED'
 
 export class AuthError extends Error {
   constructor(public readonly code: AuthServiceError) {
@@ -123,8 +127,23 @@ export async function login(
   if (!row.user.isActive) throw new AuthError('DISABLED')
   if (row.user.rejectedAt) throw new AuthError('NOT_APPROVED')
 
-  const isInternal = row.accountTypeKey !== 'customer'
-  if (isInternal) {
+  const isCustomer = row.accountTypeKey === 'customer'
+  if (isCustomer) {
+    if (!row.user.customerId) throw new AuthError('PORTAL_NOT_LINKED')
+    const [customer] = await db.select({ portalEnabled: customers.portalEnabled, archivedAt: customers.archivedAt })
+      .from(customers)
+      .where(eq(customers.id, row.user.customerId))
+    if (!customer || customer.archivedAt || !customer.portalEnabled) {
+      throw new AuthError('PORTAL_DISABLED')
+    }
+    if (
+      row.user.tempPasswordExpiresAt
+      && row.user.tempPasswordExpiresAt.getTime() < Date.now()
+    ) {
+      throw new AuthError('TEMP_PASSWORD_EXPIRED')
+    }
+  }
+  else {
     if (!row.user.emailVerifiedAt) throw new AuthError('NOT_VERIFIED')
     if (!row.user.approvedAt) throw new AuthError('NOT_APPROVED')
   }
@@ -160,9 +179,15 @@ export async function logout(db: Db, sessionToken: string): Promise<void> {
 }
 
 export interface ResolvedSession {
-  user: PermissionUser & { name: string, email: string, customerId: string | null }
+  user: PermissionUser & {
+    name: string
+    email: string
+    customerId: string | null
+    mustChangePassword: boolean
+  }
   overrides: PermissionOverrides
   sessionId: string
+  stepUpVerifiedAt: Date | null
 }
 
 /** Resolve a session token into an auth context. Enforces inactivity + absolute expiry. */
@@ -210,8 +235,10 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
       name: row.user.name,
       email: row.user.email,
       customerId: row.user.customerId,
+      mustChangePassword: row.user.mustChangePassword,
     },
     overrides,
     sessionId: row.session.id,
+    stepUpVerifiedAt: row.session.stepUpVerifiedAt,
   }
 }

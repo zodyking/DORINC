@@ -76,6 +76,12 @@ export function fileThumbEmoji(mimeType: string, fileKind: string): string {
 export function formatAuditAction(action: string): string {
   if (action === 'service_logs.create') return 'Log created'
   if (action === 'service_logs.update') return 'Log updated'
+  if (action.startsWith('ai.')) {
+    if (action === 'ai.extraction.queued') return 'AI extraction queued'
+    if (action === 'ai.suggestion.accepted') return 'AI extraction accepted'
+    if (action === 'ai.suggestion.edited') return 'AI suggestion edited & applied'
+    if (action === 'ai.suggestion.rejected') return 'AI suggestion rejected'
+  }
   if (action.startsWith('service_logs.status.')) {
     const status = action.replace('service_logs.status.', '')
     return `Status → ${serviceLogStatusPill(status as ServiceLogStatus).label}`

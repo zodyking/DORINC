@@ -11,6 +11,7 @@ dist
 coverage
 playwright-report
 test-results
+tests/e2e/.fixture-cache.json
 
 # Node dependencies
 node_modules

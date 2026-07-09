@@ -4,7 +4,7 @@ import type { InvoiceVehicleSnapshotDisplay } from '~/utils/invoices-ui'
 
 definePageMeta({ layout: 'staff' })
 
-type StatusChip = 'all' | 'draft' | 'sent' | 'overdue' | 'paid'
+type StatusChip = 'all' | 'draft' | 'pending_manager_approval' | 'sent' | 'overdue' | 'paid'
 
 interface InvoiceRow {
   id: string
@@ -22,6 +22,7 @@ interface InvoiceRow {
 interface InvoiceStats {
   total: number
   draftCount: number
+  pendingManagerApprovalCount?: number
   sentCount: number
   paidCount: number
   overdueCount: number
@@ -31,12 +32,13 @@ interface InvoiceStats {
   overdueTotal: string
 }
 
+const route = useRoute()
 const auth = useAuthStore()
 const canRead = computed(() => auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 
 const q = ref('')
-const statusChip = ref<StatusChip>('all')
+const statusChip = ref<StatusChip>((route.query.status as StatusChip) || 'all')
 const page = ref(1)
 const PAGE_SIZE = 25
 
@@ -63,6 +65,7 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE))
 const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: stats.value?.total ?? 0 },
   { key: 'draft' as const, label: 'Draft', count: stats.value?.draftCount ?? 0 },
+  { key: 'pending_manager_approval' as const, label: 'Pending approval', count: stats.value?.pendingManagerApprovalCount ?? 0 },
   { key: 'sent' as const, label: 'Sent', count: stats.value?.sentCount ?? 0 },
   { key: 'overdue' as const, label: 'Overdue', count: stats.value?.overdueCount ?? 0 },
   { key: 'paid' as const, label: 'Paid', count: stats.value?.paidCount ?? 0 },

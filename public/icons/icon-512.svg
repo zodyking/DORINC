@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="DORINC">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <rect x="64" y="64" width="168" height="168" rx="40" fill="#ffffff"/>
+  <text x="148" y="182" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800" fill="#2563eb">DR</text>
+  <text x="256" y="352" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="56" font-weight="700" fill="#ffffff">DORINC</text>
+</svg>

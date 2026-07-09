@@ -79,3 +79,11 @@ export function maxMoney(a: string, b: string): string {
 export function isZeroMoney(value: string): boolean {
   return parseMoney(value) === 0n
 }
+
+/** Compare two money strings. Returns negative if a < b, 0 if equal, positive if a > b. */
+export function compareMoney(a: string, b: string): number {
+  const diff = parseMoney(a) - parseMoney(b)
+  if (diff < 0n) return -1
+  if (diff > 0n) return 1
+  return 0
+}
