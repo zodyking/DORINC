@@ -43,14 +43,9 @@ const route = useRoute()
 const auth = useAuthStore()
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
-const canVoidInvoice = computed(() =>
-  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+const canRemoveInvoice = computed(() =>
+  auth.can('deletion_requests.review.all') || auth.can('deletion_requests.submit.all'),
 )
-const canRequestDeletion = computed(() =>
-  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
-)
-
-const voidBusyId = ref('')
 
 const q = ref('')
 const statusChip = ref<StatusChip>((route.query.status as StatusChip) || 'all')
@@ -158,24 +153,6 @@ function removableRow(row: InvoiceRow) {
   return row.status !== 'void' && row.status !== 'paid'
 }
 
-async function voidInvoiceRow(row: InvoiceRow, event: Event) {
-  event.stopPropagation()
-  if (!canVoidInvoice.value || !removableRow(row)) return
-  if (!window.confirm(`Void ${row.invoiceNumberFormatted}? The invoice stays on file with a voided status.`)) return
-  voidBusyId.value = row.id
-  try {
-    await $fetch(`/api/invoices/${row.id}/void`, { method: 'POST' })
-    await Promise.all([refreshList(), refreshStats()])
-  }
-  catch (e: unknown) {
-    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Could not void invoice'
-    window.alert(msg)
-  }
-  finally {
-    voidBusyId.value = ''
-  }
-}
-
 async function retryLoad() {
   await Promise.all([refreshList(), refreshStats()])
 }
@@ -261,7 +238,7 @@ async function retryLoad() {
               <th class="col-due">Due</th>
               <th class="col-status">Status</th>
               <th class="num col-amt">Amount</th>
-              <th v-if="canVoidInvoice || canRequestDeletion" class="col-act">Actions</th>
+              <th v-if="canRemoveInvoice" class="col-act">Actions</th>
             </tr>
           </thead>
           <tbody id="inv-rows">
@@ -284,23 +261,15 @@ async function retryLoad() {
                 </span>
               </td>
               <td class="num col-amt">{{ moneyDisplay(row.total) }}</td>
-              <td v-if="canVoidInvoice || canRequestDeletion" class="col-act" @click.stop>
-                <button
-                  v-if="canVoidInvoice && removableRow(row)"
-                  type="button"
-                  class="btn sm danger"
-                  :disabled="voidBusyId === row.id"
-                  @click="voidInvoiceRow(row, $event)"
-                >
-                  Void
-                </button>
-                <NuxtLink
-                  v-else-if="canRequestDeletion && removableRow(row)"
-                  :to="`/invoices/${row.id}/edit`"
-                  class="btn sm"
-                >
-                  Request deletion
-                </NuxtLink>
+              <td v-if="canRemoveInvoice" class="col-act" @click.stop>
+                <DeleteEntityButton
+                  v-if="removableRow(row)"
+                  entity-type="invoice"
+                  :entity-id="row.id"
+                  :entity-label="row.invoiceNumberFormatted"
+                  @deleted="retryLoad()"
+                  @submitted="retryLoad()"
+                />
               </td>
             </tr>
           </tbody>

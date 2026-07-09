@@ -34,10 +34,10 @@ export class InvoicesServiceError extends Error {
 
 /** Allowed status transitions (SPEC §6.5). */
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
-  draft: ['pending_manager_approval', 'approved', 'void'],
-  pending_manager_approval: ['approved', 'void'],
-  approved: ['sent', 'void'],
-  sent: ['paid', 'void'],
+  draft: ['pending_manager_approval', 'approved'],
+  pending_manager_approval: ['approved'],
+  approved: ['sent'],
+  sent: ['paid'],
   paid: [],
   void: [],
 }

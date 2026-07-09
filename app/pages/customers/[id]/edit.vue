@@ -134,6 +134,14 @@ async function restore() {
           >
             Restore
           </button>
+          <DeleteEntityButton
+            v-if="customer && !customer.archivedAt"
+            entity-type="customer"
+            :entity-id="customer.id"
+            :entity-label="customer.displayName"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'"
+          />
         </div>
       </div>
       <p v-if="flash" class="flash ok" style="margin:-8px 0 16px;">{{ flash }}</p>
@@ -144,17 +152,7 @@ async function restore() {
         submit-label="Save changes"
         @submit="submit"
         @cancel="navigateTo(`/customers/${route.params.id}`)"
-      >
-        <template v-if="customer && !customer.archivedAt" #footer-extra>
-          <DeleteEntityButton
-            entity-type="customer"
-            :entity-id="customer.id"
-            :entity-label="customer.displayName"
-            :disabled="busy"
-            @submitted="flash = 'Deletion request submitted for admin review'"
-          />
-        </template>
-      </CustomersCustomerForm>
+      />
     </template>
   </section>
 </template>
