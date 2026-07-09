@@ -29,10 +29,10 @@ In Dockploy, create a Compose application from this repo using `docker-compose.y
 
 | Service | Profile | Role |
 |---|---|---|
-| `nuxt-app` | default | Web app |
-| `worker` | — | Mail, invoice send, backups, AI, retention |
-| `pdf-worker` | — | Playwright PDF rendering |
-| `migrate` | `migrate` | One-shot DB migrations on upgrade |
+| `nuxt-app` | default | Web app (applies DB migrations on boot) |
+| `worker` | — | Mail, invoice send, backups, AI, retention (applies migrations on boot) |
+| `pdf-worker` | — | Playwright PDF rendering (applies migrations on boot) |
+| `migrate` | `migrate` | Optional one-shot migrate (not required — boot migrate covers upgrades) |
 | `redis` | `redis` | Optional |
 
 Persist the **`dorinc-runtime`** volume — it stores database connection settings under `.data/`.
@@ -90,13 +90,15 @@ Every deploy starts three containers: `nuxt-app`, `worker`, and `pdf-worker`. Af
 
 ### 7. Upgrades
 
-After pulling a new release, run migrations once:
+Redeploy on Dockploy. Pending migrations (`0029`, `0030`, …) apply automatically when `nuxt-app`, `worker`, and `pdf-worker` start — no manual migrate step.
+
+Look for `[migrate] pending migrations applied on boot` in container logs. If migrate fails, the container exits so the schema cannot stay stale.
+
+Optional (manual one-shot, usually unnecessary):
 
 ```bash
 docker compose --profile migrate run --rm migrate
 ```
-
-Then redeploy (all three services restart together).
 
 ## Local development
 
@@ -107,9 +109,18 @@ npm run dev
 
 Open **http://localhost:3000/setup**. Requires Node.js 24+ and PostgreSQL.
 
+Emails and invoice PDFs are processed by background workers. In local dev, run them in separate terminals (otherwise mail stays **Queued**):
+
+```bash
+npm run worker
+npm run worker:pdf
+```
+
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Dev server |
+| `npm run worker` | Mail, invoice send, backups, AI queue |
+| `npm run worker:pdf` | Playwright PDF rendering |
 | `npm run build` | Production build |
 | `npm run db:migrate` | Apply migrations |
 | `npm test` | Unit + Playwright tests |

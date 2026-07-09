@@ -29,7 +29,7 @@ export const newVehicleRequests = pgTable('new_vehicle_requests', {
   reviewedBy: uuid('reviewed_by').references(() => users.id),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   reviewReason: text('review_reason'),
-  resultVehicleId: uuid('result_vehicle_id').references(() => vehicles.id),
+  resultVehicleId: uuid('result_vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -46,7 +46,7 @@ export const serviceRequests = pgTable('service_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
   submittedBy: uuid('submitted_by').notNull().references(() => users.id),
-  vehicleId: uuid('vehicle_id').notNull().references(() => vehicles.id),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
 
@@ -97,7 +97,7 @@ export const vehicleChangeRequests = pgTable('vehicle_change_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
   submittedBy: uuid('submitted_by').notNull().references(() => users.id),
-  vehicleId: uuid('vehicle_id').notNull().references(() => vehicles.id),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
 

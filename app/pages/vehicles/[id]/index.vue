@@ -115,16 +115,8 @@ function histWhen(iso: string): string {
         </div>
         <div class="actions">
           <NuxtLink v-if="canUpdate" :to="`/vehicles/${vehicle.id}/edit`" class="btn">Edit unit</NuxtLink>
-          <RequestDeletionButton
-            v-if="!vehicle.archivedAt"
-            entity-type="vehicle"
-            :entity-id="vehicle.id"
-            :entity-label="vehicleTag(vehicle)"
-            :disabled="busy"
-            @submitted="flash = 'Deletion request submitted for admin review'; flashKind = 'ok'"
-          />
           <button
-            v-else-if="canArchive"
+            v-if="vehicle.archivedAt && canArchive"
             class="btn"
             :disabled="busy"
             @click="toggleArchive"

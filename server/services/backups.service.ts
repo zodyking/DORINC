@@ -14,6 +14,12 @@ import { getNotifyEmail, getSmtpConfig } from './app-config.service'
 import { getDatabaseUrl } from './runtime-config.service'
 import { enqueueJob } from './jobs.service'
 import {
+  buildStyledEmail,
+  emailMuted,
+  emailParagraph,
+  escapeHtml,
+} from '../mail/email-layout'
+import {
   getBackupIntegrationView,
   GoogleDriveBackupError,
   uploadEncryptedBackupToDrive,
@@ -268,10 +274,31 @@ async function queueBackupNotification(
   if (opts.error) lines.push(`Error: ${opts.error}`)
   lines.push('', `Time: ${new Date().toISOString()}`)
 
-  await enqueueJob(db, 'email_send', {
-    to,
+  const title = opts.success ? 'Backup completed' : 'Backup failed'
+  const bodyHtml = [
+    emailParagraph(opts.success
+      ? 'An encrypted database backup completed successfully.'
+      : 'An encrypted database backup <strong>failed</strong>.'),
+    emailMuted(`File: ${escapeHtml(opts.filename)}`),
+    emailMuted(`Trigger: ${escapeHtml(opts.trigger)}`),
+    opts.driveFileId ? emailMuted(`Google Drive file: ${escapeHtml(opts.driveFileId)}`) : '',
+    opts.error ? emailMuted(`Error: ${escapeHtml(opts.error)}`) : '',
+    emailMuted(`Time: ${escapeHtml(new Date().toISOString())}`),
+  ].filter(Boolean).join('')
+
+  const mail = buildStyledEmail({
     subject,
     text: lines.join('\n'),
+    title,
+    preheader: subject,
+    bodyHtml,
+  })
+
+  await enqueueJob(db, 'email_send', {
+    to,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
   })
 }
 

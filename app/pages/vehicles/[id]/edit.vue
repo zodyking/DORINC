@@ -20,37 +20,61 @@ interface Vehicle {
   odometerUnit: 'mi' | 'hrs'
   status: 'active' | 'inactive' | 'retired'
   notes: string | null
+  archivedAt: string | null
 }
 
 const route = useRoute()
+const auth = useAuthStore()
 
-const { data, error } = await useFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null }>(
+const { data, error, refresh } = await useFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null }>(
   `/api/vehicles/${route.params.id}`,
 )
 
-const v = data.value?.vehicle
+const v = computed(() => data.value?.vehicle)
+const canArchive = computed(() => auth.can('vehicles.archive.all'))
 
 const form = reactive<VehicleFormValue>({
-  customerId: v?.customerId ?? '',
-  unitType: v?.unitType ?? 'truck',
-  busNumber: v?.busNumber || v?.unitTag || '',
+  customerId: '',
+  unitType: 'truck',
+  busNumber: '',
   unitTag: '',
-  vin: v?.vin ?? '',
-  plate: v?.plate ?? '',
-  year: v?.year != null ? String(v.year) : '',
-  make: v?.make ?? '',
-  model: v?.model ?? '',
-  trim: v?.trim ?? '',
-  color: v?.color ?? '',
-  odometer: v?.odometer ?? '',
-  odometerUnit: v?.odometerUnit ?? 'mi',
-  status: v?.status ?? 'active',
-  notes: v?.notes ?? '',
+  vin: '',
+  plate: '',
+  year: '',
+  make: '',
+  model: '',
+  trim: '',
+  color: '',
+  odometer: '',
+  odometerUnit: 'mi',
+  status: 'active',
+  notes: '',
   vinDecodeRaw: null,
+})
+
+watchEffect(() => {
+  const vehicle = data.value?.vehicle
+  if (!vehicle) return
+  form.customerId = vehicle.customerId
+  form.unitType = vehicle.unitType
+  form.busNumber = vehicle.busNumber || vehicle.unitTag || ''
+  form.unitTag = ''
+  form.vin = vehicle.vin ?? ''
+  form.plate = vehicle.plate ?? ''
+  form.year = vehicle.year != null ? String(vehicle.year) : ''
+  form.make = vehicle.make ?? ''
+  form.model = vehicle.model ?? ''
+  form.trim = vehicle.trim ?? ''
+  form.color = vehicle.color ?? ''
+  form.odometer = vehicle.odometer ?? ''
+  form.odometerUnit = vehicle.odometerUnit ?? 'mi'
+  form.status = vehicle.status ?? 'active'
+  form.notes = vehicle.notes ?? ''
 })
 
 const busy = ref(false)
 const saveError = ref('')
+const flash = ref('')
 
 async function submit() {
   busy.value = true
@@ -86,6 +110,23 @@ async function submit() {
     busy.value = false
   }
 }
+
+async function restore() {
+  busy.value = true
+  saveError.value = ''
+  try {
+    await $fetch(`/api/vehicles/${route.params.id}/restore`, { method: 'POST' })
+    flash.value = 'Vehicle restored'
+    await refresh()
+  }
+  catch (err) {
+    const fe = err as { data?: { data?: { message?: string } } }
+    saveError.value = fe.data?.data?.message ?? 'Could not restore vehicle'
+  }
+  finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -96,13 +137,36 @@ async function submit() {
     <template v-else>
       <div class="pagehead">
         <div>
-          <h2>Edit unit</h2>
+          <h2>
+            Edit unit
+            <span v-if="v.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
+          </h2>
           <p>
             <NuxtLink to="/vehicles">Vehicles</NuxtLink> /
             <NuxtLink :to="`/vehicles/${v.id}`">{{ vehicleTag(v) }}</NuxtLink> / Edit
           </p>
         </div>
+        <div class="actions">
+          <RequestDeletionButton
+            v-if="!v.archivedAt"
+            entity-type="vehicle"
+            :entity-id="v.id"
+            :entity-label="vehicleTag(v)"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'"
+          />
+          <button
+            v-else-if="canArchive"
+            type="button"
+            class="btn"
+            :disabled="busy"
+            @click="restore"
+          >
+            Restore
+          </button>
+        </div>
       </div>
+      <p v-if="flash" class="flash ok" style="margin:-8px 0 16px;">{{ flash }}</p>
       <VehiclesVehicleForm
         v-model="form"
         :busy="busy"

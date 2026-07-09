@@ -2,6 +2,11 @@ import { useDb } from '../../db/client'
 import { isBootstrapped } from '../../services/setup.service'
 import { saveSmtpConfig } from '../../services/app-config.service'
 import { sendMail, resetMailTransport } from '../../mail/mailer'
+import {
+  buildStyledEmail,
+  emailMuted,
+  emailParagraph,
+} from '../../mail/email-layout'
 import { hasDatabaseConfig } from '../../services/runtime-config.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
@@ -30,15 +35,21 @@ export default defineEventHandler(async (event) => {
     })
     resetMailTransport()
 
-    const result = await sendMail({
-      to: body.to,
+    const mail = buildStyledEmail({
       subject: `${BRAND_NAME} setup — SMTP test`,
       text: [
         `This is a test message from the ${BRAND_NAME} setup wizard.`,
         '',
         'If you received this, SMTP is configured correctly.',
       ].join('\n'),
+      title: 'SMTP test successful',
+      preheader: `${BRAND_NAME} SMTP is configured correctly`,
+      bodyHtml: [
+        emailParagraph(`This is a test message from the <strong>${BRAND_NAME}</strong> setup wizard.`),
+        emailMuted('If you received this, SMTP is configured correctly.'),
+      ].join(''),
     })
+    const result = await sendMail({ to: body.to, ...mail })
 
     return {
       ok: true,

@@ -367,6 +367,7 @@ export async function getInvoice(db: Db, id: string) {
 }
 
 export async function getInvoiceDetail(db: Db, id: string) {
+  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
   const [row] = await db.select({
     invoice: invoices,
     customerName: customers.displayName,
@@ -381,7 +382,7 @@ export async function getInvoiceDetail(db: Db, id: string) {
     },
   })
     .from(invoices)
-    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(eq(invoices.id, id))
 
@@ -392,7 +393,7 @@ export async function getInvoiceDetail(db: Db, id: string) {
   return {
     ...row.invoice,
     invoiceNumberFormatted: formatInvoiceNumber(row.invoice.invoiceNumber),
-    customerName: row.customerName,
+    customerName: resolveCustomerDisplayName(row.customerName, row.invoice.customerSnapshot),
     vehicle: row.vehicle?.id ? row.vehicle : null,
     lineItems: lines,
   }
@@ -513,7 +514,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     },
   })
     .from(invoices)
-    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(where)
     .orderBy(orderBy)
@@ -522,15 +523,17 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
 
   const [total] = await db.select({ value: count() })
     .from(invoices)
-    .innerJoin(customers, eq(invoices.customerId, customers.id))
+    .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(where)
+
+  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
 
   return {
     items: rows.map(r => ({
       ...r.invoice,
       invoiceNumberFormatted: formatInvoiceNumber(r.invoice.invoiceNumber),
-      customerName: r.customerName,
+      customerName: resolveCustomerDisplayName(r.customerName, r.invoice.customerSnapshot),
       vehicle: r.vehicle?.busNumber ? r.vehicle : null,
     })),
     total: Number(total?.value ?? 0),

@@ -53,20 +53,12 @@ const nav = computed<NavSection[]>(() => {
       items: [
         { label: 'Dashboard', to: '/dashboard', ico: '▫' },
         { label: 'Invoices', to: '/invoices', ico: '▤', permission: 'invoices.read.all' },
-        { label: 'Reports', to: '/reports', ico: '◧', permission: 'reports.read.all' },
         { label: 'Customers', to: '/customers', ico: '◉', permission: 'customers.read.all' },
         { label: 'Vehicles', to: '/vehicles', ico: '⛟', permission: 'vehicles.read.all' },
         { label: 'Service Logs', to: '/service-logs', ico: '✎', permission: ['service_logs.read.all', 'service_logs.read.own'] },
         { label: 'Portal Requests', to: '/portal-requests', ico: '✉', permission: 'portal_requests.review.all' },
         { label: 'Deletion Requests', to: '/deletion-requests', ico: '🗑', permission: 'deletion_requests.review.all' },
         { label: 'Catalog', to: '/catalog', ico: '▦', permission: 'catalog.read.all' },
-      ],
-    },
-    {
-      label: 'Billing tools',
-      items: [
-        { label: 'New Invoice', to: '/invoices/new', ico: '✚', permission: 'invoices.create.all' },
-        { label: 'Template Designer', to: '/templates/designer', ico: '◨', permission: 'templates.read.all' },
       ],
     },
     {
@@ -80,8 +72,8 @@ const nav = computed<NavSection[]>(() => {
 
   if (isSuperAdmin.value) {
     sections.push({
-      label: 'Super Admin',
-      items: [{ label: 'Control Panel', to: '/admin', ico: '🛡', permission: 'system.admin.all' }],
+      label: 'Administration',
+      items: [{ label: 'Control Panel', to: '/admin', ico: '⚙', permission: 'system.admin.all' }],
     })
   }
 

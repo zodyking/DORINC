@@ -117,20 +117,21 @@ afterAll(async () => {
 
 describe('P2-03 portal customer login', () => {
   it('logs in a portal user when portal is enabled', async () => {
-    const result = await login(db, portalUserA.email, password, { portal: 'customer' })
+    expect(portalUserA.username).toBeTruthy()
+    const result = await login(db, portalUserA.username!, password, { portal: 'customer' })
     expect(result.accountTypeKey).toBe('customer')
     expect(result.user.customerId).toBe(customerA.id)
   })
 
   it('blocks login when portal is disabled', async () => {
     await db.update(customers).set({ portalEnabled: false }).where(eq(customers.id, customerA.id))
-    await expect(login(db, portalUserA.email, password, { portal: 'customer' })).rejects.toThrow('PORTAL_DISABLED')
+    await expect(login(db, portalUserA.username!, password, { portal: 'customer' })).rejects.toThrow('PORTAL_DISABLED')
     await db.update(customers).set({ portalEnabled: true }).where(eq(customers.id, customerA.id))
   })
 
   it('blocks login when customer link is missing', async () => {
     await db.update(users).set({ customerId: null }).where(eq(users.id, portalUserA.id))
-    await expect(login(db, portalUserA.email, password, { portal: 'customer' })).rejects.toThrow('PORTAL_NOT_LINKED')
+    await expect(login(db, portalUserA.username!, password, { portal: 'customer' })).rejects.toThrow('PORTAL_NOT_LINKED')
     await db.update(users).set({ customerId: customerA.id }).where(eq(users.id, portalUserA.id))
   })
 
@@ -138,7 +139,7 @@ describe('P2-03 portal customer login', () => {
     await db.update(users)
       .set({ tempPasswordExpiresAt: new Date(Date.now() - 60_000) })
       .where(eq(users.id, portalUserA.id))
-    await expect(login(db, portalUserA.email, password, { portal: 'customer' })).rejects.toThrow('TEMP_PASSWORD_EXPIRED')
+    await expect(login(db, portalUserA.username!, password, { portal: 'customer' })).rejects.toThrow('TEMP_PASSWORD_EXPIRED')
     await db.update(users)
       .set({ tempPasswordExpiresAt: null })
       .where(eq(users.id, portalUserA.id))

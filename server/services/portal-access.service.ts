@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { hashPassword } from '../auth/password'
+import { generatePortalTempPassword } from '../auth/portal-password'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, users } from '../db/schema/auth'
 import {
@@ -8,9 +8,18 @@ import {
   customerCredentialEmailLogs,
   customers,
 } from '../db/schema/customers'
+import { allocateUniquePortalUsername } from '../../shared/format/portal-username'
 import { enqueueJob } from './jobs.service'
 import { addContact, getCustomer, listContacts } from './customers.service'
 import { getAppUrl } from './app-config.service'
+import {
+  buildStyledEmail,
+  emailButton,
+  emailMuted,
+  emailPanel,
+  emailParagraph,
+  escapeHtml,
+} from '../mail/email-layout'
 
 export const TEMP_PASSWORD_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -29,8 +38,9 @@ export class PortalAccessServiceError extends Error {
   }
 }
 
+/** @deprecated Use generatePortalTempPassword — kept as alias for existing imports/tests. */
 export function generateTempPassword(): string {
-  return randomBytes(12).toString('base64url').slice(0, 16)
+  return generatePortalTempPassword()
 }
 
 async function getCustomerAccountTypeId(db: Db) {
@@ -64,10 +74,29 @@ async function resolveContact(db: Db, customerId: string, contactId?: string) {
   })
 }
 
+async function usernameIsTaken(db: Db, username: string, exceptUserId?: string) {
+  const [row] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1)
+  if (!row) return false
+  return exceptUserId ? row.id !== exceptUserId : true
+}
+
+async function ensurePortalUsername(db: Db, userId: string, displayName: string, existingUsername: string | null) {
+  if (existingUsername) return existingUsername
+  const username = await allocateUniquePortalUsername(
+    displayName,
+    candidate => usernameIsTaken(db, candidate, userId),
+  )
+  await db.update(users)
+    .set({ username, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+  return username
+}
+
 export interface PortalUserSummary {
   id: string
   name: string
   email: string
+  username: string | null
   contactId: string | null
   mustChangePassword: boolean
   tempPasswordExpiresAt: string | null
@@ -83,6 +112,7 @@ export async function getPortalAccessSummary(db: Db, customerId: string) {
       id: users.id,
       name: users.name,
       email: users.email,
+      username: users.username,
       mustChangePassword: users.mustChangePassword,
       tempPasswordExpiresAt: users.tempPasswordExpiresAt,
     })
@@ -111,6 +141,7 @@ export async function getPortalAccessSummary(db: Db, customerId: string) {
       id: u.id,
       name: u.name,
       email: u.email,
+      username: u.username,
       contactId: contactByPortalUser.get(u.id) ?? null,
       mustChangePassword: u.mustChangePassword,
       tempPasswordExpiresAt: u.tempPasswordExpiresAt?.toISOString() ?? null,
@@ -170,6 +201,7 @@ async function ensurePortalUser(
   if (!contact.email) throw new PortalAccessServiceError('NO_EMAIL')
   const email = contact.email.trim().toLowerCase()
   const customerAccountTypeId = await getCustomerAccountTypeId(db)
+  const customer = await getCustomer(db, customerId)
 
   const [existing] = await db.select().from(users).where(eq(users.email, email))
   let portalUserId: string
@@ -178,9 +210,11 @@ async function ensurePortalUser(
     if (existing.customerId && existing.customerId !== customerId) {
       throw new PortalAccessServiceError('EMAIL_IN_USE')
     }
+    const username = await ensurePortalUsername(db, existing.id, customer.displayName, existing.username)
     const [updated] = await db.update(users)
       .set({
         customerId,
+        username,
         isActive: true,
         disabledAt: null,
         emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
@@ -192,10 +226,15 @@ async function ensurePortalUser(
     portalUserId = updated!.id
   }
   else {
-    const tempPassword = generateTempPassword()
+    const tempPassword = generatePortalTempPassword()
+    const username = await allocateUniquePortalUsername(
+      customer.displayName,
+      candidate => usernameIsTaken(db, candidate),
+    )
     const [created] = await db.insert(users).values({
       name: contact.name,
       email,
+      username,
       passwordHash: await hashPassword(tempPassword),
       accountTypeId: customerAccountTypeId,
       customerId,
@@ -216,7 +255,7 @@ async function ensurePortalUser(
   return portalUserId
 }
 
-function buildCredentialEmail(name: string, email: string, tempPassword: string) {
+function buildCredentialEmail(name: string, username: string, tempPassword: string) {
   const appUrl = getAppUrl()
   const loginUrl = `${appUrl}/auth/login`
   const subject = 'Your DORINC Customer Portal access'
@@ -226,22 +265,34 @@ function buildCredentialEmail(name: string, email: string, tempPassword: string)
     'A staff member has sent you access to the DORINC Customer Portal.',
     '',
     `Sign in: ${loginUrl}`,
-    `Email: ${email}`,
+    `Username: ${username}`,
     `Temporary password: ${tempPassword}`,
     '',
     'This temporary password expires in 7 days. You will be required to choose a new password on first login.',
     '',
     'If you did not expect this email, contact Devon On Site Repairs Inc.',
   ].join('\n')
-  const html = [
-    `<p>Hello ${name},</p>`,
-    '<p>A staff member has sent you access to the <strong>DORINC Customer Portal</strong>.</p>',
-    `<p><a href="${loginUrl}">Sign in to the portal</a></p>`,
-    `<p><strong>Email:</strong> ${email}<br><strong>Temporary password:</strong> ${tempPassword}</p>`,
-    '<p>This temporary password expires in 7 days. You will be required to choose a new password on first login.</p>',
-    '<p>If you did not expect this email, contact Devon On Site Repairs Inc.</p>',
+
+  const bodyHtml = [
+    emailParagraph(`Hello ${escapeHtml(name)},`),
+    emailParagraph('A staff member has sent you access to the <strong>DORINC Customer Portal</strong>.'),
+    emailButton(loginUrl, 'Sign in to the portal'),
+    emailPanel(
+      'Sign-in details',
+      `<strong>Username:</strong> ${escapeHtml(username)}<br><strong>Temporary password:</strong> ${escapeHtml(tempPassword)}`,
+    ),
+    emailMuted('This temporary password expires in 7 days. You will be required to choose a new password on first login.'),
+    emailMuted('If you did not expect this email, contact Devon On Site Repairs Inc.'),
   ].join('')
-  return { subject, text, html }
+
+  return buildStyledEmail({
+    subject,
+    text,
+    title: 'Customer Portal access',
+    preheader: 'Your temporary portal password is ready',
+    bodyHtml,
+    appUrl,
+  })
 }
 
 export async function sendPortalCredentials(
@@ -257,9 +308,17 @@ export async function sendPortalCredentials(
   if (!contact?.email) throw new PortalAccessServiceError('NO_EMAIL')
 
   const portalUserId = await ensurePortalUser(db, customerId, contact, sentBy)
-  const tempPassword = generateTempPassword()
+  const tempPassword = generatePortalTempPassword()
   const email = contact.email.trim().toLowerCase()
   const expiresAt = new Date(Date.now() + TEMP_PASSWORD_TTL_MS)
+
+  const [portalUser] = await db.select().from(users).where(eq(users.id, portalUserId))
+  const username = await ensurePortalUsername(
+    db,
+    portalUserId,
+    customer.displayName,
+    portalUser?.username ?? null,
+  )
 
   await db.update(users)
     .set({
@@ -280,7 +339,7 @@ export async function sendPortalCredentials(
     .limit(1)
 
   const sendType = priorSends.length ? 'resend' as const : 'initial' as const
-  const mail = buildCredentialEmail(contact.name, email, tempPassword)
+  const mail = buildCredentialEmail(contact.name, username, tempPassword)
 
   const [log] = await db.insert(customerCredentialEmailLogs).values({
     customerId,
@@ -304,7 +363,7 @@ export async function sendPortalCredentials(
     .set({ workerJobId: job.id })
     .where(eq(customerCredentialEmailLogs.id, log!.id))
 
-  return { log: log!, job, sendType }
+  return { log: log!, job, sendType, username }
 }
 
 export async function listCredentialEmailHistory(db: Db, customerId: string, limit = 25) {

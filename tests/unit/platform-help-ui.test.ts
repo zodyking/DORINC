@@ -19,5 +19,6 @@ describe('platform-help (P2-15)', () => {
     expect(helpPageKeyFromRoute('/invoices/abc-123/edit')).toBe('editor')
     expect(helpPageKeyFromRoute('/invoices/abc-123')).toBe('invoice-detail')
     expect(helpPageKeyFromRoute('/admin')).toBe('admin')
+    expect(helpPageKeyFromRoute('/admin', { tab: 'designer' })).toBe('designer')
   })
 })

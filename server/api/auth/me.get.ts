@@ -3,7 +3,9 @@ import { apiError } from '../../utils/api-error'
 import { ACCOUNT_TYPE_BUNDLES } from '../../../shared/permissions/keys'
 
 export default defineEventHandler((event) => {
-  const auth = event.context.auth as (AuthContext & { user: { name: string, email: string, customerId: string | null } }) | undefined
+  const auth = event.context.auth as (AuthContext & {
+    user: { name: string, email: string, username: string | null, customerId: string | null }
+  }) | undefined
   if (!auth?.user) {
     throw apiError(event, 'UNAUTHENTICATED', 'Not signed in')
   }
@@ -17,6 +19,7 @@ export default defineEventHandler((event) => {
       id: auth.user.id,
       name: auth.user.name,
       email: auth.user.email,
+      username: auth.user.username,
       accountType: auth.user.accountType,
       customerId: auth.user.customerId,
     },

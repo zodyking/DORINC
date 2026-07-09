@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { customers } from './customers'
 import { vehicles } from './vehicles'
 import { users } from './auth'
+import type { InvoiceCustomerSnapshot, InvoiceVehicleSnapshot } from './invoices'
 
 /** Lifecycle statuses (SPEC §6.4). OCR/AI states are reserved for Phase 2 workers. */
 export const SERVICE_LOG_STATUSES = [
@@ -36,8 +37,10 @@ export const serviceLogs = pgTable('service_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   logNumber: integer('log_number').notNull().unique().default(sql`nextval('service_log_number_seq')`),
 
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  vehicleId: uuid('vehicle_id').notNull().references(() => vehicles.id),
+  /** Nullable after hard-delete of customer — display uses customerSnapshot. */
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+  /** Nullable after hard-delete of vehicle — display uses vehicleSnapshot. */
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
   submittedBy: uuid('submitted_by').notNull().references(() => users.id),
 
   serviceDate: date('service_date', { mode: 'string' }).notNull(),
@@ -59,6 +62,10 @@ export const serviceLogs = pgTable('service_logs', {
   draftLineItems: jsonb('draft_line_items'),
   // Set when converted to an invoice — FK enforced in migration 0010
   invoiceId: uuid('invoice_id'),
+
+  /** Frozen customer/vehicle info so hard-deletes do not erase history. */
+  customerSnapshot: jsonb('customer_snapshot').$type<InvoiceCustomerSnapshot>(),
+  vehicleSnapshot: jsonb('vehicle_snapshot').$type<InvoiceVehicleSnapshot>(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

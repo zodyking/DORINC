@@ -1,6 +1,12 @@
 // invoice_send handler — waits for PDF, emails attachment, then marks invoice sent.
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
+import {
+  buildStyledEmail,
+  emailMuted,
+  emailParagraph,
+  escapeHtml,
+} from '../../mail/email-layout.mjs'
 
 let _transport
 let _transportKey
@@ -192,15 +198,31 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
 
       if (!payload.subject) {
         const invNum = `INV-${String(invoice.invoice_number).padStart(6, '0')}`
-        payload.subject = `Invoice ${invNum} is ready`
-        payload.text = [
-          `Hello ${payload.recipientName ?? 'there'},`,
+        const recipientName = payload.recipientName ?? 'there'
+        const dueLine = invoice.due_date ? `Due date: ${invoice.due_date}` : null
+        const totalLine = invoice.total ? `Total: ${invoice.total}` : null
+        const text = [
+          `Hello ${recipientName},`,
           '',
           `Invoice ${invNum} is attached.`,
-          invoice.due_date ? `Due date: ${invoice.due_date}` : '',
-          invoice.total ? `Total: ${invoice.total}` : '',
+          dueLine,
+          totalLine,
         ].filter(Boolean).join('\n')
-        payload.html = `<p>Hello ${payload.recipientName ?? 'there'},</p><p>Invoice <strong>${invNum}</strong> is attached.</p>`
+        const mail = buildStyledEmail({
+          subject: `Invoice ${invNum} is ready`,
+          text,
+          title: `Invoice ${invNum}`,
+          preheader: `Invoice ${invNum} is attached`,
+          bodyHtml: [
+            emailParagraph(`Hello ${escapeHtml(recipientName)},`),
+            emailParagraph(`Invoice <strong>${escapeHtml(invNum)}</strong> is attached to this email.`),
+            dueLine ? emailMuted(escapeHtml(dueLine)) : '',
+            totalLine ? emailMuted(escapeHtml(totalLine)) : '',
+          ].filter(Boolean).join(''),
+        })
+        payload.subject = mail.subject
+        payload.text = mail.text
+        payload.html = mail.html
         payload.attachmentFilename = pdfRow.original_filename
       }
 

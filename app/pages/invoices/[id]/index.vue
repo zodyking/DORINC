@@ -128,16 +128,6 @@ const canManagerApprove = computed(() =>
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
-const canVoidInvoice = computed(() =>
-  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
-)
-const canRequestDeletion = computed(() =>
-  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
-)
-
-const removableInvoice = computed(() =>
-  invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
-)
 
 const pill = computed(() => {
   if (!invoice.value) return { cls: 'pill gray', label: '—' }
@@ -286,22 +276,6 @@ const summaryRows = computed(() => {
         >
           Record payment
         </NuxtLink>
-        <RequestDeletionButton
-          v-if="removableInvoice && canRequestDeletion"
-          entity-type="invoice"
-          :entity-id="invoice.id"
-          :entity-label="invoice.invoiceNumberFormatted"
-          :disabled="busy"
-          @submitted="refresh()"
-        />
-        <VoidInvoiceButton
-          v-if="removableInvoice && canVoidInvoice"
-          :invoice-id="invoice.id"
-          :invoice-label="invoice.invoiceNumberFormatted"
-          :status="invoice.status"
-          :disabled="busy"
-          @voided="refresh()"
-        />
       </div>
     </div>
 

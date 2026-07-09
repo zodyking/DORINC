@@ -63,6 +63,13 @@ a{ color:#4f46e5; }
   outline:none; border-color:#a5b4fc; background:#fff; box-shadow:0 0 0 3px rgba(79,70,229,.12);
 }
 .auth-panel .row2, .auth-body .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.auth-panel .secret-fld, .auth-body .secret-fld{ position:relative; }
+.auth-panel .secret-fld input, .auth-body .secret-fld input{ padding-right:72px; }
+.auth-panel .secret-fld .reveal, .auth-body .secret-fld .reveal{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  appearance:none; border:none; background:#f1f5f9; border-radius:6px;
+  font:inherit; font-size:11px; font-weight:600; color:#475569; padding:4px 8px; cursor:pointer;
+}
 .auth-foot{
   display:flex; justify-content:flex-end; margin-top:4px;
 }
@@ -1149,8 +1156,18 @@ body.help-chat-open{ overflow:hidden; }
 
 /* ---------- Import / export (settings) ---------- */
 .ie-banner{
-  background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;
-  padding:14px 18px; margin-bottom:16px; font-size:13px; color:#475569; line-height:1.55;
+  background:#eef2ff; border:1px solid #c7d2fe; border-radius:12px; padding:14px 16px;
+  font-size:13px; color:#4338ca; line-height:1.5; margin-bottom:16px;
+}
+.admin-banner{
+  display:flex; gap:14px; align-items:flex-start; background:#fff; border:1px solid #e2e8f0;
+  border-radius:14px; padding:16px 18px;
+}
+.admin-banner .ico{ font-size:22px; line-height:1; flex:none; }
+.admin-banner b{ display:block; font-size:14px; margin-bottom:4px; }
+.admin-banner p{ margin:0; font-size:13px; color:#64748b; line-height:1.5; }
+.cp-quicklinks{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;
 }
 .edit-lock-banner{
   display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;

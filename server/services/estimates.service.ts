@@ -289,6 +289,7 @@ export async function createEstimate(db: Db, input: CreateEstimateInput, actorId
 }
 
 export async function getEstimateDetail(db: Db, id: string) {
+  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
   const [row] = await db.select({
     estimate: estimates,
     customerName: customers.displayName,
@@ -303,7 +304,7 @@ export async function getEstimateDetail(db: Db, id: string) {
     },
   })
     .from(estimates)
-    .innerJoin(customers, eq(estimates.customerId, customers.id))
+    .leftJoin(customers, eq(estimates.customerId, customers.id))
     .leftJoin(vehicles, eq(estimates.vehicleId, vehicles.id))
     .where(eq(estimates.id, id))
 
@@ -314,7 +315,7 @@ export async function getEstimateDetail(db: Db, id: string) {
   return {
     ...row.estimate,
     estimateNumberFormatted: formatEstimateNumber(row.estimate.estimateNumber),
-    customerName: row.customerName,
+    customerName: resolveCustomerDisplayName(row.customerName, row.estimate.customerSnapshot),
     vehicle: row.vehicle?.id ? row.vehicle : null,
     lineItems: lines,
   }
@@ -394,7 +395,7 @@ export async function listEstimates(db: Db, filter: ListEstimatesFilter) {
     },
   })
     .from(estimates)
-    .innerJoin(customers, eq(estimates.customerId, customers.id))
+    .leftJoin(customers, eq(estimates.customerId, customers.id))
     .leftJoin(vehicles, eq(estimates.vehicleId, vehicles.id))
     .where(where)
     .orderBy(orderBy)
@@ -403,15 +404,17 @@ export async function listEstimates(db: Db, filter: ListEstimatesFilter) {
 
   const [total] = await db.select({ value: count() })
     .from(estimates)
-    .innerJoin(customers, eq(estimates.customerId, customers.id))
+    .leftJoin(customers, eq(estimates.customerId, customers.id))
     .leftJoin(vehicles, eq(estimates.vehicleId, vehicles.id))
     .where(where)
+
+  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
 
   return {
     items: rows.map(r => ({
       ...r.estimate,
       estimateNumberFormatted: formatEstimateNumber(r.estimate.estimateNumber),
-      customerName: r.customerName,
+      customerName: resolveCustomerDisplayName(r.customerName, r.estimate.customerSnapshot),
       vehicle: r.vehicle?.busNumber ? r.vehicle : null,
     })),
     total: Number(total?.value ?? 0),

@@ -115,7 +115,7 @@ async function submitModal() {
     <div class="pagehead">
       <div>
         <h2>Deletion requests</h2>
-        <p>Staff requests to archive or void records — admin approval required</p>
+        <p>Staff requests to permanently delete records — admin approval required</p>
       </div>
       <div class="actions">
         <NuxtLink to="/dashboard" class="btn">Dashboard</NuxtLink>
@@ -222,7 +222,7 @@ async function submitModal() {
         <div class="cbody">
           <p style="font-size:13px; color:#94a3b8; margin:0 0 12px;">
             {{ modalMode === 'approve'
-              ? 'The record will be archived or voided. This cannot be undone without restoring the record separately.'
+              ? 'The record will be permanently deleted. Related invoices and logs keep frozen copies of customer/vehicle details.'
               : 'The record stays active. Tell the requester why deletion was declined.' }}
           </p>
           <p style="margin:0 0 12px;">

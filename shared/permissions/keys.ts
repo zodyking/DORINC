@@ -77,7 +77,7 @@ export const PERMISSIONS = {
 
   // Backups + system
   'backups.manage.all': 'Run and manage backups',
-  'system.admin.all': 'Super Admin control panel',
+  'system.admin.all': 'Control Panel',
 
   // Customer portal (customer accounts)
   'portal.read.own': 'View own portal data',

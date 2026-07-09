@@ -10,7 +10,7 @@ export interface Address {
   zip?: string
 }
 
-/** Customers — archived, never hard-deleted (SPEC §6.1, §22.15). */
+/** Customers — hard-delete allowed; related invoices/logs keep frozen snapshots. */
 export const customers = pgTable('customers', {
   id: uuid('id').primaryKey().defaultRandom(),
 

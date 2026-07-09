@@ -7,13 +7,9 @@ import { refreshAppConfigCache } from '../services/app-config.service'
 export default defineNitroPlugin(async () => {
   if (!hasDatabaseConfig()) return
 
-  try {
-    await applyPendingMigrations(useDb())
-    console.log('[migrate] pending migrations applied on boot')
-  }
-  catch (err) {
-    console.error(`[migrate] boot migration failed: ${(err as Error).message}`)
-  }
+  // Fail boot if migrations cannot apply — Dockploy redeploy must not run on a stale schema.
+  await applyPendingMigrations(useDb())
+  console.log('[migrate] pending migrations applied on boot')
 
   try {
     await refreshAppConfigCache(useDb())

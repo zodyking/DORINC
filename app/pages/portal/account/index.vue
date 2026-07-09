@@ -16,6 +16,7 @@ interface PortalMePayload {
     id: string
     name: string
     email: string
+    username: string | null
     mustChangePassword: boolean
   }
   company: {
@@ -112,6 +113,10 @@ async function signOut() {
           <label class="fld">
             <span>Name</span>
             <input type="text" :value="data.user.name" readonly style="background:#f1f5f9;">
+          </label>
+          <label class="fld">
+            <span>Username</span>
+            <input type="text" :value="data.user.username ?? '—'" readonly style="background:#f1f5f9;">
           </label>
           <label class="fld">
             <span>Email</span>

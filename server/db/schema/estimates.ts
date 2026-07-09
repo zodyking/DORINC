@@ -44,9 +44,9 @@ export const estimates = pgTable('estimates', {
   id: uuid('id').primaryKey().defaultRandom(),
   estimateNumber: integer('estimate_number').notNull().unique().default(sql`nextval('estimate_number_seq')`),
 
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  vehicleId: uuid('vehicle_id').references(() => vehicles.id),
-  serviceLogId: uuid('service_log_id').references(() => serviceLogs.id),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
+  serviceLogId: uuid('service_log_id').references(() => serviceLogs.id, { onDelete: 'set null' }),
   serviceRequestId: uuid('service_request_id'),
 
   creationSource: text('creation_source', { enum: ESTIMATE_CREATION_SOURCES }).notNull().default('blank'),

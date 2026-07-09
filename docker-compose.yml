@@ -66,7 +66,7 @@ services:
     networks:
       - dokploy-network
 
-  # Optional: apply migrations when upgrading (first install runs migrate via /setup).
+  # Optional one-shot migrate. Upgrades normally rely on boot migrate in nuxt-app/worker/pdf-worker.
   migrate:
     build:
       context: .

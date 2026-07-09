@@ -14,10 +14,28 @@ const emit = defineEmits<{ submitted: [] }>()
 const auth = useAuthStore()
 const canSubmit = computed(() => auth.can('deletion_requests.submit.all'))
 const canReview = computed(() => auth.can('deletion_requests.review.all'))
-const canDirectVoid = computed(() =>
-  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+/** Admins void invoices directly via VoidInvoiceButton — hide the request button only for invoices. */
+const canDirectVoidInvoice = computed(() =>
+  props.entityType === 'invoice'
+  && auth.can('invoices.void.all')
+  && auth.can('deletion_requests.review.all'),
 )
-const showSubmit = computed(() => canSubmit.value && !canDirectVoid.value)
+const showSubmit = computed(() => canSubmit.value && !canDirectVoidInvoice.value)
+
+const preservationNote = computed(() => {
+  switch (props.entityType) {
+    case 'customer':
+      return 'The customer account is permanently removed. Related invoices, service logs, and vehicles keep their full customer information.'
+    case 'vehicle':
+      return 'The unit is permanently removed. Related invoices and service logs keep their full unit information.'
+    case 'service_log':
+      return 'The service log is permanently removed. Linked invoices keep their line items and customer/vehicle details.'
+    case 'invoice':
+      return 'The invoice is permanently removed. This cannot be undone.'
+    default:
+      return 'Related records keep their full information after this record is removed.'
+  }
+})
 
 const { data: pendingData, refresh: refreshPending } = await useFetch<{
   pending: { id: string, status: string, reason: string, createdAt: string } | null
@@ -95,8 +113,8 @@ async function submit() {
       <div class="chead"><h3>Request deletion</h3></div>
       <div class="cbody">
         <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-          An admin must approve before <strong>{{ entityLabel }}</strong> is removed.
-          Records are archived or voided — never permanently erased.
+          An admin must approve before <strong>{{ entityLabel }}</strong> is permanently deleted.
+          {{ preservationNote }}
         </p>
         <label class="fld">
           Reason for deletion

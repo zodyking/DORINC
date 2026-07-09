@@ -26,6 +26,7 @@ export interface E2EFixtures {
   stamp: number
   staffEmail: string
   portalEmail: string
+  portalUsername: string
   customerId: string
   vehicleId: string
   invoiceId: string
@@ -70,7 +71,7 @@ async function promoteToSuperAdmin(userId: string) {
 
 export async function ensureE2EFixtures(): Promise<E2EFixtures> {
   const cached = readCachedFixtures()
-  if (cached) return cached
+  if (cached?.portalUsername) return cached
 
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required for Playwright E2E fixture seeding')
@@ -149,7 +150,7 @@ export async function ensureE2EFixtures(): Promise<E2EFixtures> {
   await sendInvoice(database, invoice.id, staffUser.id)
   await sendEstimate(database, estimate.id, staffUser.id)
 
-  await createPortalUser(database, {
+  const portalUser = await createPortalUser(database, {
     customerId: customer.id,
     name: 'E2E Portal User',
     email: portalEmail,
@@ -160,6 +161,7 @@ export async function ensureE2EFixtures(): Promise<E2EFixtures> {
     stamp,
     staffEmail,
     portalEmail,
+    portalUsername: portalUser.username!,
     customerId: customer.id,
     vehicleId: vehicle.id,
     invoiceId: invoice.id,
@@ -179,16 +181,24 @@ async function clearLoginRateLimits() {
   await database.delete(rateLimitEvents)
 }
 
-export async function loginViaApi(baseURL: string, email: string, password: string) {
-  const cacheKey = `${baseURL}:${email}`
+export async function loginViaApi(
+  baseURL: string,
+  identifier: string,
+  password: string,
+  portal: 'customer' | 'staff' = 'staff',
+) {
+  const cacheKey = `${baseURL}:${portal}:${identifier}`
   const cached = sessionCookieCache.get(cacheKey)
   if (cached) return cached
 
   async function attemptLogin() {
+    const body = portal === 'customer'
+      ? { username: identifier, password, portal }
+      : { email: identifier, password, portal }
     return fetch(`${baseURL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     })
   }
 
@@ -199,7 +209,7 @@ export async function loginViaApi(baseURL: string, email: string, password: stri
   }
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`Login failed for ${email}: ${res.status} ${body}`)
+    throw new Error(`Login failed for ${identifier}: ${res.status} ${body}`)
   }
 
   const setCookie = res.headers.get('set-cookie') ?? ''

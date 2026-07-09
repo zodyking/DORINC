@@ -229,7 +229,7 @@ async function voidInvoiceRow(row: InvoiceRow, event: Event) {
                 </button>
                 <NuxtLink
                   v-else-if="canRequestDeletion && removableRow(row)"
-                  :to="`/invoices/${row.id}`"
+                  :to="`/invoices/${row.id}/edit`"
                   class="btn sm"
                 >
                   Request deletion

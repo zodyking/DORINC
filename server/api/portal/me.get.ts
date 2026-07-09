@@ -7,7 +7,7 @@ import type { AuthContext } from '../../utils/require-permission'
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
   const auth = event.context.auth as AuthContext & {
-    user: { name: string, email: string, mustChangePassword?: boolean }
+    user: { name: string, email: string, username: string | null, mustChangePassword?: boolean }
   }
 
   try {
@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
       userId: user.id,
       userName: auth.user.name,
       userEmail: auth.user.email,
+      username: auth.user.username,
       mustChangePassword: auth.user.mustChangePassword ?? false,
       customerId: user.customerId,
     })

@@ -31,6 +31,8 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   email: text('email').notNull(),
+  /** Customer portal login id (short company slug). Staff accounts leave this null. */
+  username: text('username'),
   passwordHash: text('password_hash').notNull(),
   accountTypeId: uuid('account_type_id').notNull().references(() => accountTypes.id),
 
@@ -54,6 +56,7 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   uniqueIndex('users_email_unique').on(table.email),
+  uniqueIndex('users_username_unique').on(table.username),
   index('users_account_type_idx').on(table.accountTypeId),
   index('users_customer_idx').on(table.customerId),
 ])

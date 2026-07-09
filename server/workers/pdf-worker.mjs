@@ -20,6 +20,7 @@ async function main() {
   }
   catch (err) {
     console.error('[pdf-worker] boot migration failed', err)
+    process.exit(1)
   }
 
   await verifyDatabaseConnection('pdf-worker')

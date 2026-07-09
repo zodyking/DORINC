@@ -83,9 +83,9 @@ export const invoices = pgTable('invoices', {
   id: uuid('id').primaryKey().defaultRandom(),
   invoiceNumber: integer('invoice_number').notNull().unique().default(sql`nextval('invoice_number_seq')`),
 
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  vehicleId: uuid('vehicle_id').references(() => vehicles.id),
-  serviceLogId: uuid('service_log_id').references(() => serviceLogs.id),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
+  serviceLogId: uuid('service_log_id').references(() => serviceLogs.id, { onDelete: 'set null' }),
   serviceRequestId: uuid('service_request_id'),
   estimateId: uuid('estimate_id').references(() => estimates.id),
   sourceInvoiceId: uuid('source_invoice_id'),

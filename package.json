@@ -9,6 +9,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "worker": "node server/workers/worker.mjs",
+    "worker:pdf": "node server/workers/pdf-worker.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run && playwright test",

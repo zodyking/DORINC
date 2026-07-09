@@ -50,7 +50,7 @@ describe('P2-01 customer credential email flow', () => {
   it('enables portal from account email when no contact exists yet', async () => {
     const accountEmail = `account-only@${emailDomain}`
     const customer = await createCustomer(db, {
-      displayName: `PortalAccountEmail-${stamp}`,
+      displayName: `Hollis Logistics ${stamp}`,
       accountKind: 'fleet',
       email: accountEmail,
     }, STAFF)
@@ -61,6 +61,7 @@ describe('P2-01 customer credential email flow', () => {
     const summary = await getPortalAccessSummary(db, customer.id)
     expect(summary.userCount).toBe(1)
     expect(summary.users[0]?.email).toBe(accountEmail)
+    expect(summary.users[0]?.username).toBe('hollis')
 
     await db.delete(customers).where(eq(customers.id, customer.id))
     await db.delete(users).where(eq(users.email, accountEmail))
@@ -68,7 +69,7 @@ describe('P2-01 customer credential email flow', () => {
 
   it('enables portal access, sends credentials, and logs every send', async () => {
     const customer = await createCustomer(db, {
-      displayName: `PortalTest-${stamp}`,
+      displayName: `Marren Farms ${stamp}`,
       accountKind: 'individual',
     }, STAFF)
     customerId = customer.id
@@ -88,6 +89,13 @@ describe('P2-01 customer credential email flow', () => {
     expect(first.log.recipientEmail).toBe(contactEmail)
     expect(first.log.status).toBe('queued')
     expect(first.job.jobType).toBe('email_send')
+    expect(first.username).toBe('marren')
+    expect(first.job.payload).toMatchObject({
+      text: expect.stringContaining('Username: marren'),
+    })
+    expect(String((first.job.payload as { text?: string }).text)).toMatch(
+      /Temporary password: [A-Za-z]{8}[0-9][!@#$%&*]/,
+    )
 
     const resend = await sendPortalCredentials(db, customerId, STAFF)
     expect(resend.sendType).toBe('resend')

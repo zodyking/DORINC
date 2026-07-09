@@ -4,6 +4,7 @@ import type { CustomerFormValue } from '~/components/customers/CustomerForm.vue'
 definePageMeta({ layout: 'staff' })
 
 const route = useRoute()
+const auth = useAuthStore()
 
 interface Address { line1?: string, city?: string, state?: string, zip?: string }
 interface Customer {
@@ -17,9 +18,13 @@ interface Customer {
   taxExempt: boolean
   paymentTerms: string
   notes: string | null
+  archivedAt: string | null
 }
 
-const { data, error } = await useFetch<{ customer: Customer }>(`/api/customers/${route.params.id}`)
+const { data, error, refresh } = await useFetch<{ customer: Customer }>(`/api/customers/${route.params.id}`)
+
+const customer = computed(() => data.value?.customer)
+const canArchive = computed(() => auth.can('customers.archive.all'))
 
 const form = reactive<CustomerFormValue>({
   displayName: '',
@@ -49,6 +54,7 @@ watchEffect(() => {
 
 const busy = ref(false)
 const errorMsg = ref('')
+const flash = ref('')
 
 function cleanAddress(a: { line1: string, city: string, state: string, zip: string }) {
   return (a.line1 || a.city || a.state || a.zip) ? a : null
@@ -82,6 +88,23 @@ async function submit() {
     busy.value = false
   }
 }
+
+async function restore() {
+  busy.value = true
+  errorMsg.value = ''
+  try {
+    await $fetch(`/api/customers/${route.params.id}/restore`, { method: 'POST' })
+    flash.value = 'Customer restored'
+    await refresh()
+  }
+  catch (err) {
+    const fe = err as { data?: { data?: { message?: string } } }
+    errorMsg.value = fe.data?.data?.message ?? 'Could not restore customer'
+  }
+  finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -92,13 +115,36 @@ async function submit() {
     <template v-else>
       <div class="pagehead">
         <div>
-          <h2>Edit account</h2>
+          <h2>
+            Edit account
+            <span v-if="customer?.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
+          </h2>
           <p>
             <NuxtLink to="/customers">Customers</NuxtLink> /
-            <NuxtLink :to="`/customers/${route.params.id}`">{{ data?.customer.displayName }}</NuxtLink> / Edit
+            <NuxtLink :to="`/customers/${route.params.id}`">{{ customer?.displayName }}</NuxtLink> / Edit
           </p>
         </div>
+        <div class="actions">
+          <RequestDeletionButton
+            v-if="customer && !customer.archivedAt"
+            entity-type="customer"
+            :entity-id="customer.id"
+            :entity-label="customer.displayName"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'"
+          />
+          <button
+            v-else-if="customer?.archivedAt && canArchive"
+            type="button"
+            class="btn"
+            :disabled="busy"
+            @click="restore"
+          >
+            Restore
+          </button>
+        </div>
       </div>
+      <p v-if="flash" class="flash ok" style="margin:-8px 0 16px;">{{ flash }}</p>
       <CustomersCustomerForm
         v-model="form"
         :busy="busy"

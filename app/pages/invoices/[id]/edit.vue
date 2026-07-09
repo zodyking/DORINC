@@ -595,7 +595,7 @@ const aiPopStyle = computed(() => {
           </p>
         </div>
         <div class="actions">
-          <NuxtLink to="/templates/designer" class="btn">Template designer</NuxtLink>
+          <NuxtLink to="/admin?tab=designer" class="btn">Template designer</NuxtLink>
           <button type="button" class="btn" disabled title="Coming soon">Preview PDF</button>
           <RequestDeletionButton
             v-if="removableInvoice && canRequestDeletion"

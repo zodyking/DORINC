@@ -7,14 +7,19 @@ import {
   entityDeletionRequests,
 } from '../db/schema/deletion-requests'
 import { formatInvoiceNumber } from '../db/schema/invoices'
-import { archiveCustomer, CustomersServiceError, getCustomer } from './customers.service'
-import { getInvoice, getInvoiceDetail, InvoicesServiceError, transitionInvoice } from './invoices.service'
+import { CustomersServiceError, getCustomer } from './customers.service'
+import {
+  hardDeleteCustomer,
+  hardDeleteInvoice,
+  hardDeleteServiceLog,
+  hardDeleteVehicle,
+} from './hard-delete.service'
+import { getInvoice, InvoicesServiceError } from './invoices.service'
 import {
   getServiceLog,
   ServiceLogsServiceError,
-  transitionServiceLog,
 } from './service-logs.service'
-import { archiveVehicle, getVehicle, VehiclesServiceError } from './vehicles.service'
+import { getVehicle, VehiclesServiceError } from './vehicles.service'
 
 export type DeletionRequestsServiceErrorCode
   = 'NOT_FOUND'
@@ -67,10 +72,10 @@ function vehicleLabel(busNumber: string | null, unitTag: string | null, make: st
 
 function entityHref(type: DeletionEntityType, id: string): string {
   switch (type) {
-    case 'customer': return `/customers/${id}`
-    case 'vehicle': return `/vehicles/${id}`
+    case 'customer': return `/customers/${id}/edit`
+    case 'vehicle': return `/vehicles/${id}/edit`
     case 'service_log': return `/service-logs/${id}`
-    case 'invoice': return `/invoices/${id}`
+    case 'invoice': return `/invoices/${id}/edit`
   }
 }
 
@@ -98,45 +103,38 @@ async function resolveEntityLabel(db: Db, entityType: DeletionEntityType, entity
 async function assertEntityDeletable(db: Db, entityType: DeletionEntityType, entityId: string) {
   switch (entityType) {
     case 'customer': {
-      const row = await getCustomer(db, entityId)
-      if (row.archivedAt) throw new DeletionRequestsServiceError('ALREADY_REMOVED')
+      await getCustomer(db, entityId)
       return
     }
     case 'vehicle': {
-      const row = await getVehicle(db, entityId)
-      if (row.archivedAt) throw new DeletionRequestsServiceError('ALREADY_REMOVED')
+      await getVehicle(db, entityId)
       return
     }
     case 'service_log': {
-      const row = await getServiceLog(db, entityId)
-      if (row.status === 'archived') throw new DeletionRequestsServiceError('ALREADY_REMOVED')
-      if (row.status === 'converted_to_invoice' || row.invoiceId) {
-        throw new DeletionRequestsServiceError('INVALID_TRANSITION')
-      }
+      await getServiceLog(db, entityId)
       return
     }
     case 'invoice': {
       const row = await getInvoice(db, entityId)
-      if (row.status === 'void') throw new DeletionRequestsServiceError('ALREADY_REMOVED')
       if (row.status === 'paid') throw new DeletionRequestsServiceError('INVALID_TRANSITION')
       return
     }
   }
 }
 
-async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId: string, actorId: string, reason: string) {
+async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId: string, _actorId: string, _reason: string) {
   switch (entityType) {
     case 'customer':
-      await archiveCustomer(db, entityId)
+      await hardDeleteCustomer(db, entityId)
       return
     case 'vehicle':
-      await archiveVehicle(db, entityId)
+      await hardDeleteVehicle(db, entityId)
       return
     case 'service_log':
-      await transitionServiceLog(db, entityId, 'archived', { reason })
+      await hardDeleteServiceLog(db, entityId)
       return
     case 'invoice':
-      await transitionInvoice(db, entityId, 'void', actorId)
+      await hardDeleteInvoice(db, entityId)
       return
   }
 }

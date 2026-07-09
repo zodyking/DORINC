@@ -17,7 +17,7 @@ const input = ref('')
 const messages = ref<Array<{ role: 'user' | 'bot' | 'typing', html: string }>>([])
 
 const canUseHelp = computed(() => auth.can('ai.help.all'))
-const pageKey = computed(() => helpPageKeyFromRoute(route.path))
+const pageKey = computed(() => helpPageKeyFromRoute(route.path, route.query))
 const contextLabel = computed(() => helpContextLabel(pageKey.value))
 const suggestions = computed(() => helpSuggestionsForPage(pageKey.value))
 

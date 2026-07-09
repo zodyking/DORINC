@@ -17,9 +17,10 @@ function loadFixtures(): E2EFixtures | null {
 
 async function applyAuth(context: import('@playwright/test').BrowserContext, fx: E2EFixtures, auth: 'none' | 'staff' | 'portal') {
   if (auth === 'none') return
-  const email = auth === 'staff' ? fx.staffEmail : fx.portalEmail
   const baseURL = test.info().project.use.baseURL ?? 'http://localhost:3000'
-  const cookie = await loginViaApi(baseURL, email, E2E_PASSWORD)
+  const cookie = auth === 'staff'
+    ? await loginViaApi(baseURL, fx.staffEmail, E2E_PASSWORD, 'staff')
+    : await loginViaApi(baseURL, fx.portalUsername, E2E_PASSWORD, 'customer')
   await context.addCookies([cookie])
 }
 

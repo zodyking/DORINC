@@ -112,15 +112,24 @@ export interface LoginResult {
 
 export async function login(
   db: Db,
-  email: string,
+  identifier: string,
   password: string,
   meta: { ipAddress?: string | null, userAgent?: string | null, portal?: LoginPortal } = {},
 ): Promise<LoginResult> {
-  const [row] = await db
-    .select({ user: users, accountTypeKey: accountTypes.key })
-    .from(users)
-    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
-    .where(eq(users.email, email.trim().toLowerCase()))
+  const portal = meta.portal ?? 'staff'
+  const trimmed = identifier.trim()
+
+  const [row] = portal === 'customer'
+    ? await db
+      .select({ user: users, accountTypeKey: accountTypes.key })
+      .from(users)
+      .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+      .where(eq(users.username, trimmed.toLowerCase()))
+    : await db
+      .select({ user: users, accountTypeKey: accountTypes.key })
+      .from(users)
+      .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+      .where(eq(users.email, trimmed.toLowerCase()))
 
   if (!row) throw new AuthError('INVALID_CREDENTIALS')
 
@@ -192,6 +201,7 @@ export interface ResolvedSession {
   user: PermissionUser & {
     name: string
     email: string
+    username: string | null
     customerId: string | null
     mustChangePassword: boolean
   }
@@ -244,6 +254,7 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
       approvedAt: row.user.approvedAt,
       name: row.user.name,
       email: row.user.email,
+      username: row.user.username,
       customerId: row.user.customerId,
       mustChangePassword: row.user.mustChangePassword,
     },

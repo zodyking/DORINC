@@ -3,10 +3,10 @@ import { sql } from 'drizzle-orm'
 import { customers } from './customers'
 import { users } from './auth'
 
-/** Vehicles / fleet units — belong to customers (SPEC §6.2). Archived, never deleted. */
+/** Vehicles / fleet units — belong to customers (SPEC §6.2). Hard-delete keeps history via snapshots on related records. */
 export const vehicles = pgTable('vehicles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
 
   unitType: text('unit_type', { enum: ['truck', 'bus', 'equipment', 'tractor', 'other'] }).notNull().default('truck'),
   // Fleet-assigned number, unique per customer (e.g. "HL-114")

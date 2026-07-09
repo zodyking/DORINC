@@ -21,6 +21,7 @@ export interface PortalMePayload {
     id: string
     name: string
     email: string
+    username: string | null
     mustChangePassword: boolean
   }
   company: {
@@ -340,7 +341,14 @@ export async function getPortalCustomer(db: Db, customerId: string) {
 
 export async function getPortalMe(
   db: Db,
-  input: { userId: string, userName: string, userEmail: string, mustChangePassword: boolean, customerId: string },
+  input: {
+    userId: string
+    userName: string
+    userEmail: string
+    username: string | null
+    mustChangePassword: boolean
+    customerId: string
+  },
 ): Promise<PortalMePayload> {
   const company = await getPortalCustomer(db, input.customerId)
   return {
@@ -348,6 +356,7 @@ export async function getPortalMe(
       id: input.userId,
       name: input.userName,
       email: input.userEmail,
+      username: input.username,
       mustChangePassword: input.mustChangePassword,
     },
     company: {
@@ -722,21 +731,36 @@ export async function createPortalUser(
     name: string
     email: string
     passwordHash: string
+    username?: string
     mustChangePassword?: boolean
     tempPasswordExpiresAt?: Date | null
   },
 ) {
   const { accountTypes, users } = await import('../db/schema/auth')
+  const { allocateUniquePortalUsername } = await import('../../shared/format/portal-username')
   const [typeRow] = await db.select().from(accountTypes).where(eq(accountTypes.key, 'customer'))
   if (!typeRow) throw new Error('customer account type missing — run db:seed')
+
+  const [customer] = await db.select().from(customers).where(eq(customers.id, input.customerId))
+  if (!customer) throw new PortalServiceError('NOT_FOUND')
 
   await db.update(customers)
     .set({ portalEnabled: true, updatedAt: new Date() })
     .where(eq(customers.id, input.customerId))
 
+  const username = input.username
+    ?? await allocateUniquePortalUsername(
+      customer.displayName,
+      async (candidate) => {
+        const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.username, candidate)).limit(1)
+        return !!taken
+      },
+    )
+
   const [user] = await db.insert(users).values({
     name: input.name.trim(),
     email: input.email.trim().toLowerCase(),
+    username,
     passwordHash: input.passwordHash,
     accountTypeId: typeRow.id,
     customerId: input.customerId,

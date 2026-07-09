@@ -354,7 +354,7 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           Edit invoice
         </NuxtLink>
         <RequestDeletionButton
-          v-if="log.status !== 'archived' && log.status !== 'converted_to_invoice'"
+          v-if="log.status !== 'archived'"
           entity-type="service_log"
           :entity-id="log.id"
           :entity-label="logNumberDisplay(log.logNumber)"

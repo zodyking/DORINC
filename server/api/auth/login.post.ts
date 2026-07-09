@@ -7,20 +7,28 @@ import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
-import { emailSchema } from '../../../shared/validators/common'
+import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
 
-const loginSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1).max(200),
-  portal: z.enum(['customer', 'staff']),
-})
+const loginSchema = z.discriminatedUnion('portal', [
+  z.object({
+    portal: z.literal('customer'),
+    username: nonEmptyString.max(32),
+    password: z.string().min(1).max(200),
+  }),
+  z.object({
+    portal: z.literal('staff'),
+    email: emailSchema,
+    password: z.string().min(1).max(200),
+  }),
+])
 
 export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event))
   const body = await validateBody(event, loginSchema)
+  const identifier = body.portal === 'customer' ? body.username : body.email
 
   try {
-    const result = await login(useDb(), body.email, body.password, {
+    const result = await login(useDb(), identifier, body.password, {
       ipAddress: getRequestIP(event, { xForwardedFor: true }),
       userAgent: getHeader(event, 'user-agent'),
       portal: body.portal,
@@ -46,6 +54,7 @@ export default defineEventHandler(async (event) => {
         id: result.user.id,
         name: result.user.name,
         email: result.user.email,
+        username: result.user.username,
         accountType: result.accountTypeKey,
         customerId: result.user.customerId,
         mustChangePassword: result.user.mustChangePassword,
@@ -65,7 +74,11 @@ export default defineEventHandler(async (event) => {
         catch {
           // Alert creation must not block login error response
         }
-        throw apiError(event, 'UNAUTHENTICATED', 'Invalid email or password')
+        throw apiError(
+          event,
+          'UNAUTHENTICATED',
+          body.portal === 'customer' ? 'Invalid username or password' : 'Invalid email or password',
+        )
       }
       switch (err.code) {
         case 'NOT_VERIFIED':

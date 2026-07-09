@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Super Admin control panel — system health MVP (mockup: PAGE: SUPER ADMIN CONTROL PANEL / P1-34).
+// Control Panel — system health, import/export, backups, and configuration.
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
@@ -236,6 +236,30 @@ const recoveryTestBusy = ref<string | null>(null)
 const dismissAlertBusy = ref<string | null>(null)
 
 const route = useRoute()
+const router = useRouter()
+
+type ControlPanelTab = 'overview' | 'designer' | 'import' | 'backup' | 'email-ai' | 'security'
+const controlPanelTabs: { id: ControlPanelTab, label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'designer', label: 'Template Designer' },
+  { id: 'import', label: 'Import / Export' },
+  { id: 'backup', label: 'Backup & Restore' },
+  { id: 'email-ai', label: 'Email & AI' },
+  { id: 'security', label: 'Security' },
+]
+const activeTab = ref<ControlPanelTab>('overview')
+
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'overview' || tab === 'designer' || tab === 'import' || tab === 'backup' || tab === 'email-ai' || tab === 'security') {
+    activeTab.value = tab
+  }
+}, { immediate: true })
+
+function setControlPanelTab(tab: ControlPanelTab) {
+  activeTab.value = tab
+  const query = { ...route.query, tab }
+  router.replace({ query })
+}
 
 watch(() => route.query.backup_oauth, (val) => {
   if (!val || !import.meta.client) return
@@ -551,12 +575,27 @@ async function runSmtpTest() {
   <section class="page active">
     <div class="pagehead">
       <div>
-        <h2>Super Admin Control Panel</h2>
-        <p>System health, workspace config, and server status</p>
+        <h2>Control Panel</h2>
+        <p>System health, data management, backups, and workspace configuration</p>
       </div>
       <div class="actions">
-        <NuxtLink to="/setup" class="btn primary">Server setup wizard</NuxtLink>
+        <NuxtLink to="/setup" class="btn primary">Server Setup Wizard</NuxtLink>
       </div>
+    </div>
+
+    <div v-if="!error && status" class="subtabs" role="tablist" aria-label="Control panel sections">
+      <button
+        v-for="tab in controlPanelTabs"
+        :key="tab.id"
+        type="button"
+        class="chip"
+        :class="{ on: activeTab === tab.id }"
+        role="tab"
+        :aria-selected="activeTab === tab.id"
+        @click="setControlPanelTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
     </div>
 
     <div v-if="error" class="card" style="padding:24px; margin-bottom:16px;">
@@ -565,6 +604,14 @@ async function runSmtpTest() {
     </div>
 
     <template v-else-if="status">
+      <div v-show="activeTab === 'overview'">
+      <div class="admin-banner" style="margin-bottom:16px;">
+        <span class="ico">🔐</span>
+        <div>
+          <b>UI-managed configuration</b>
+          <p>Database, SMTP, encryption, workers, backups, and AI credentials are stored encrypted in PostgreSQL and managed through this panel or the setup wizard.</p>
+        </div>
+      </div>
       <div class="health" style="margin-bottom:16px;">
         <div class="hcard" :class="databaseHealthTone(status.database)">
           <span class="ic">🗄</span>
@@ -652,12 +699,32 @@ async function runSmtpTest() {
         </div>
       </div>
 
-      <div class="cols">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="chead"><h3>Quick Links</h3></div>
+        <div class="cbody cp-quicklinks">
+          <NuxtLink to="/users" class="btn">Users &amp; Moderation</NuxtLink>
+          <NuxtLink to="/deletion-requests" class="btn">Deletion Requests</NuxtLink>
+          <NuxtLink to="/system-logs" class="btn">System Logs</NuxtLink>
+          <button type="button" class="btn" @click="setControlPanelTab('designer')">Template Designer</button>
+          <button type="button" class="btn" @click="setControlPanelTab('import')">Import / Export</button>
+          <NuxtLink to="/setup" class="btn">Server Setup Wizard</NuxtLink>
+        </div>
+      </div>
+      </div>
+
+      <div v-if="activeTab === 'designer'">
+        <ControlPanelTemplateDesigner />
+      </div>
+
+      <div v-show="activeTab === 'import'">
+        <ControlPanelImportExport />
+      </div>
+
+      <div v-show="activeTab === 'email-ai'" class="cols">
         <div class="stack">
           <div class="card">
             <div class="chead">
-              <h3>SMTP test</h3>
-              <div class="right"><span class="pill indigo">Super Admin</span></div>
+              <h3>SMTP Test</h3>
             </div>
             <div class="cbody">
               <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
@@ -737,9 +804,59 @@ async function runSmtpTest() {
               </span>
             </div>
           </div>
-        </div>
 
-        <div class="stack">
+          <div v-if="canManageAi && aiData" class="card">
+            <div class="chead"><h3>Usage This Month</h3></div>
+            <dl class="kv">
+              <dt>{{ aiFeatureLabel('service_log_extraction') }}</dt>
+              <dd>{{ aiData.usage.byFeature.service_log_extraction ?? 0 }} runs</dd>
+              <dt>{{ aiFeatureLabel('invoice_description') }}</dt>
+              <dd>{{ aiData.usage.byFeature.invoice_description ?? 0 }} drafts</dd>
+              <dt>{{ aiFeatureLabel('platform_help') }}</dt>
+              <dd>{{ aiData.usage.byFeature.platform_help ?? 0 }} queries</dd>
+              <dt>Approved</dt>
+              <dd>{{ aiData.usage.approvedSuggestions }}</dd>
+              <dt>Est. cost (month)</dt>
+              <dd>${{ aiData.usage.estimatedCostUsd.toFixed(2) }}</dd>
+              <dt>Daily spend</dt>
+              <dd>{{ formatCapUsage(aiData.spendCaps.dailyUsd, aiData.spendCaps.dailyCapUsd) }}</dd>
+              <dt>Monthly spend</dt>
+              <dd>{{ formatCapUsage(aiData.spendCaps.monthlyUsd, aiData.spendCaps.monthlyCapUsd) }}</dd>
+            </dl>
+          </div>
+
+          <div v-if="canManageAi && usageLogs?.items?.length" class="card">
+            <div class="chead">
+              <h3>AI Usage Log</h3>
+              <div class="right"><span class="pill indigo">{{ usageLogs.total }} entries</span></div>
+            </div>
+            <div class="tscroll">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Feature</th>
+                    <th>Model</th>
+                    <th class="num">Tokens</th>
+                    <th class="num">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in usageLogs.items" :key="row.id">
+                    <td><span class="mono" style="font-size:12px">{{ new Date(row.createdAt).toLocaleString() }}</span></td>
+                    <td>{{ aiFeatureLabel(row.featureType) }}</td>
+                    <td><span class="mono" style="font-size:11px">{{ row.model }}</span></td>
+                    <td class="num">{{ row.totalTokens }}</td>
+                    <td class="num">${{ row.estimatedCostUsd.toFixed(4) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'backup'" class="stack">
           <div class="card">
             <div class="chead">
               <h3>Backup</h3>
@@ -883,10 +1000,12 @@ async function runSmtpTest() {
               </table>
             </div>
           </div>
+      </div>
 
+      <div v-show="activeTab === 'security'" class="stack">
           <div class="card">
             <div class="chead">
-              <h3>Suspicious activity</h3>
+              <h3>Suspicious Activity</h3>
               <div class="right">
                 <span class="pill" :class="(suspiciousAlerts?.items?.length ?? 0) > 0 ? 'warn' : 'ok'">
                   {{ suspiciousAlerts?.items?.length ?? 0 }} open
@@ -928,68 +1047,8 @@ async function runSmtpTest() {
             </p>
           </div>
 
-          <div v-if="canManageAi && aiData" class="card">
-            <div class="chead"><h3>Usage this month</h3></div>
-            <dl class="kv">
-              <dt>{{ aiFeatureLabel('service_log_extraction') }}</dt>
-              <dd>{{ aiData.usage.byFeature.service_log_extraction ?? 0 }} runs</dd>
-              <dt>{{ aiFeatureLabel('invoice_description') }}</dt>
-              <dd>{{ aiData.usage.byFeature.invoice_description ?? 0 }} drafts</dd>
-              <dt>{{ aiFeatureLabel('platform_help') }}</dt>
-              <dd>{{ aiData.usage.byFeature.platform_help ?? 0 }} queries</dd>
-              <dt>Approved</dt>
-              <dd>{{ aiData.usage.approvedSuggestions }}</dd>
-              <dt>Est. cost (month)</dt>
-              <dd>${{ aiData.usage.estimatedCostUsd.toFixed(2) }}</dd>
-              <dt>Daily spend</dt>
-              <dd>
-                <span :class="aiData.spendCaps.dailyExceeded ? 'pill over' : ''">
-                  {{ formatCapUsage(aiData.spendCaps.dailyUsd, aiData.spendCaps.dailyCapUsd) }}
-                </span>
-              </dd>
-              <dt>Monthly spend</dt>
-              <dd>
-                <span :class="aiData.spendCaps.monthlyExceeded ? 'pill over' : ''">
-                  {{ formatCapUsage(aiData.spendCaps.monthlyUsd, aiData.spendCaps.monthlyCapUsd) }}
-                </span>
-              </dd>
-            </dl>
-            <p v-if="aiData.spendCaps.anyExceeded" class="help" style="color:#dc2626; padding:0 16px 12px; margin:0;">
-              Spend cap exceeded — new AI calls use built-in fallback until the period resets.
-            </p>
-          </div>
-
-          <div v-if="canManageAi && usageLogs?.items?.length" class="card">
-            <div class="chead">
-              <h3>AI usage log</h3>
-              <div class="right"><span class="pill indigo">{{ usageLogs.total }} entries</span></div>
-            </div>
-            <div class="tscroll">
-              <table class="tbl">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Feature</th>
-                    <th>Model</th>
-                    <th class="num">Tokens</th>
-                    <th class="num">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in usageLogs.items" :key="row.id">
-                    <td><span class="mono" style="font-size:12px">{{ new Date(row.createdAt).toLocaleString() }}</span></td>
-                    <td>{{ aiFeatureLabel(row.featureType) }}</td>
-                    <td><span class="mono" style="font-size:11px">{{ row.model }}</span></td>
-                    <td class="num">{{ row.totalTokens }}</td>
-                    <td class="num">${{ row.estimatedCostUsd.toFixed(4) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           <div class="card">
-            <div class="chead"><h3>Worker queue</h3></div>
+            <div class="chead"><h3>Worker Queue</h3></div>
             <dl class="kv">
               <dt>Status</dt>
               <dd>{{ workerQueueStatusLabel(status.workerQueue.status) }}</dd>
@@ -1023,16 +1082,6 @@ async function runSmtpTest() {
               </table>
             </div>
           </div>
-
-          <div class="card">
-            <div class="chead"><h3>Quick links</h3></div>
-            <div class="cbody" style="display:flex; flex-direction:column; gap:8px;">
-              <NuxtLink to="/users" class="btn">Users &amp; moderation</NuxtLink>
-              <NuxtLink to="/templates/designer" class="btn">Template designer</NuxtLink>
-              <NuxtLink to="/setup" class="btn">Server setup wizard</NuxtLink>
-            </div>
-          </div>
-        </div>
       </div>
     </template>
 

@@ -65,14 +65,16 @@ export interface ServiceLogInput {
 }
 
 export async function createServiceLog(db: Db, input: ServiceLogInput, submittedBy: string) {
-  const [customer] = await db.select({ id: customers.id })
+  const [customer] = await db.select()
     .from(customers).where(and(eq(customers.id, input.customerId), isNull(customers.archivedAt)))
   if (!customer) throw new ServiceLogsServiceError('CUSTOMER_NOT_FOUND')
 
-  const [vehicle] = await db.select({ id: vehicles.id, customerId: vehicles.customerId })
+  const [vehicle] = await db.select()
     .from(vehicles).where(and(eq(vehicles.id, input.vehicleId), isNull(vehicles.archivedAt)))
   if (!vehicle) throw new ServiceLogsServiceError('VEHICLE_NOT_FOUND')
   if (vehicle.customerId !== input.customerId) throw new ServiceLogsServiceError('VEHICLE_CUSTOMER_MISMATCH')
+
+  const { buildCustomerSnapshot, buildVehicleSnapshot } = await import('./entity-snapshots')
 
   const [row] = await db.insert(serviceLogs).values({
     customerId: input.customerId,
@@ -84,11 +86,14 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     workType: input.workType ?? 'repair',
     complaint: input.complaint ?? null,
     internalNotes: input.internalNotes ?? null,
+    customerSnapshot: buildCustomerSnapshot(customer),
+    vehicleSnapshot: buildVehicleSnapshot(vehicle),
   }).returning()
   return row!
 }
 
 export async function getServiceLog(db: Db, id: string) {
+  const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
   const [row] = await db
     .select({
       log: serviceLogs,
@@ -107,16 +112,55 @@ export async function getServiceLog(db: Db, id: string) {
       },
     })
     .from(serviceLogs)
-    .innerJoin(customers, eq(serviceLogs.customerId, customers.id))
-    .innerJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+    .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
+    .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
     .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(eq(serviceLogs.id, id))
   if (!row) throw new ServiceLogsServiceError('NOT_FOUND')
+
+  const vehicleFromLive = row.vehicle?.id
+    ? {
+        id: row.vehicle.id,
+        unitType: row.vehicle.unitType,
+        busNumber: row.vehicle.busNumber,
+        unitTag: row.vehicle.unitTag,
+        year: row.vehicle.year,
+        make: row.vehicle.make,
+        model: row.vehicle.model,
+        trim: row.vehicle.trim,
+        vin: row.vehicle.vin,
+      }
+    : null
+
+  const snapVehicle = resolveVehicleDisplay(row.vehicle, row.log.vehicleSnapshot)
+
   return {
     ...row.log,
-    customerName: row.customerName,
+    customerName: resolveCustomerDisplayName(row.customerName, row.log.customerSnapshot),
     submitterName: row.submitterName,
-    vehicle: row.vehicle,
+    vehicle: vehicleFromLive ?? (snapVehicle
+      ? {
+          id: row.log.vehicleId ?? '',
+          unitType: snapVehicle.unitType,
+          busNumber: snapVehicle.busNumber,
+          unitTag: snapVehicle.unitTag,
+          year: snapVehicle.year,
+          make: snapVehicle.make,
+          model: snapVehicle.model,
+          trim: null as string | null,
+          vin: snapVehicle.vin,
+        }
+      : {
+          id: '',
+          unitType: 'truck',
+          busNumber: null,
+          unitTag: null,
+          year: null,
+          make: null,
+          model: null,
+          trim: null,
+          vin: null,
+        }),
   }
 }
 
@@ -260,8 +304,8 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     },
   })
     .from(serviceLogs)
-    .innerJoin(customers, eq(serviceLogs.customerId, customers.id))
-    .innerJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+    .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
+    .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
     .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
     .orderBy(orderBy)
@@ -270,8 +314,8 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
 
   const [total] = await db.select({ value: count() })
     .from(serviceLogs)
-    .innerJoin(customers, eq(serviceLogs.customerId, customers.id))
-    .innerJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+    .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
+    .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
     .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
 
@@ -293,14 +337,30 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     for (const c of counts) fileCounts.set(c.ownerId, Number(c.value))
   }
 
+  const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
+
   return {
-    items: rows.map(r => ({
-      ...r.log,
-      customerName: r.customerName,
-      submitterName: r.submitterName,
-      vehicle: r.vehicle,
-      fileCount: fileCounts.get(r.log.id) ?? 0,
-    })),
+    items: rows.map(r => {
+      const snapVehicle = resolveVehicleDisplay(r.vehicle, r.log.vehicleSnapshot)
+      return {
+        ...r.log,
+        customerName: resolveCustomerDisplayName(r.customerName, r.log.customerSnapshot),
+        submitterName: r.submitterName,
+        vehicle: r.vehicle?.unitType || r.vehicle?.busNumber
+          ? r.vehicle
+          : snapVehicle
+            ? {
+                unitType: snapVehicle.unitType,
+                busNumber: snapVehicle.busNumber,
+                unitTag: snapVehicle.unitTag,
+                year: snapVehicle.year,
+                make: snapVehicle.make,
+                model: snapVehicle.model,
+              }
+            : null,
+        fileCount: fileCounts.get(r.log.id) ?? 0,
+      }
+    }),
     total: Number(total!.value),
     page: filter.page,
     pageSize: filter.pageSize,

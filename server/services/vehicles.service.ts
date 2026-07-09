@@ -36,7 +36,8 @@ export interface VehicleInput {
   vinDecodeRaw?: unknown
 }
 
-async function assertBusNumberAvailable(db: Db, customerId: string, busNumber: string, excludeId?: string) {
+async function assertBusNumberAvailable(db: Db, customerId: string | null, busNumber: string, excludeId?: string) {
+  if (!customerId) return
   const conditions = [
     eq(vehicles.customerId, customerId),
     eq(vehicles.busNumber, busNumber),
@@ -140,7 +141,9 @@ export async function restoreVehicle(db: Db, id: string) {
   const before = await getVehicle(db, id)
   if (!before.archivedAt) throw new VehiclesServiceError('NOT_ARCHIVED')
   // Restoring must not resurrect a duplicate bus number
-  if (before.busNumber) await assertBusNumberAvailable(db, before.customerId, before.busNumber, id)
+  if (before.busNumber && before.customerId) {
+    await assertBusNumberAvailable(db, before.customerId, before.busNumber, id)
+  }
   const [row] = await db.update(vehicles)
     .set({ archivedAt: null, updatedAt: new Date() })
     .where(eq(vehicles.id, id))
@@ -192,7 +195,7 @@ export async function listVehicles(db: Db, filter: ListVehiclesFilter) {
   const base = db.select({
     vehicle: vehicles,
     customerName: customers.displayName,
-  }).from(vehicles).innerJoin(customers, eq(vehicles.customerId, customers.id))
+  }).from(vehicles).leftJoin(customers, eq(vehicles.customerId, customers.id))
 
   const rows = await base
     .where(where)

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+import { toTitleCase } from '#shared/format/person-name'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -11,15 +12,23 @@ const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
 const auth = useAuthStore()
 
-const portalEmail = ref('')
+const portalUsername = ref('')
 const portalPass = ref('')
 const loginEmail = ref('')
 const loginPass = ref('')
-const signupName = ref('')
+const signupFirstName = ref('')
+const signupLastName = ref('')
 const signupEmail = ref('')
 const signupPass = ref('')
 const signupConfirm = ref('')
 const signupType = ref('Mechanic')
+
+const reveal = reactive({
+  portal: false,
+  login: false,
+  signupPass: false,
+  signupConfirm: false,
+})
 
 const busy = ref(false)
 const error = ref('')
@@ -34,11 +43,15 @@ function messageFrom(err: unknown): string {
   return fe.data?.data?.message ?? fe.data?.message ?? 'Something went wrong — try again'
 }
 
-async function submitLogin(email: string, password: string) {
+function titleCaseNameField(field: Ref<string>) {
+  field.value = toTitleCase(field.value)
+}
+
+async function submitLogin(identifier: string, password: string) {
   busy.value = true
   error.value = ''
   try {
-    const user = await auth.login(email, password, card.value)
+    const user = await auth.login(identifier, password, card.value)
     await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
   }
   catch (err) {
@@ -58,11 +71,14 @@ async function submitSignup() {
     busy.value = false
     return
   }
+  titleCaseNameField(signupFirstName)
+  titleCaseNameField(signupLastName)
   try {
     const res = await $fetch<{ message: string }>('/api/auth/signup', {
       method: 'POST',
       body: {
-        name: signupName.value,
+        firstName: signupFirstName.value,
+        lastName: signupLastName.value,
         email: signupEmail.value,
         password: signupPass.value,
         accountType: signupType.value.toLowerCase(),
@@ -92,14 +108,33 @@ async function submitSignup() {
           </div>
         </div>
         <div class="auth-body">
-          <form @submit.prevent="submitLogin(portalEmail, portalPass)">
+          <form @submit.prevent="submitLogin(portalUsername, portalPass)">
             <div class="fld">
-              <label for="portal-email">Email</label>
-              <input id="portal-email" v-model="portalEmail" type="email" autocomplete="username" required>
+              <label for="portal-username">Username</label>
+              <input
+                id="portal-username"
+                v-model="portalUsername"
+                type="text"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              >
             </div>
             <div class="fld">
               <label for="portal-password">Password</label>
-              <input id="portal-password" v-model="portalPass" type="password" autocomplete="current-password" required>
+              <div class="secret-fld">
+                <input
+                  id="portal-password"
+                  v-model="portalPass"
+                  :type="reveal.portal ? 'text' : 'password'"
+                  autocomplete="current-password"
+                  required
+                >
+                <button type="button" class="reveal" @click="reveal.portal = !reveal.portal">
+                  {{ reveal.portal ? 'Hide' : 'Show' }}
+                </button>
+              </div>
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <div class="auth-foot"><button type="button" class="auth-link">Forgot password?</button></div>
@@ -131,7 +166,18 @@ async function submitSignup() {
             </div>
             <div class="fld">
               <label for="staff-login-password">Password</label>
-              <input id="staff-login-password" v-model="loginPass" type="password" autocomplete="current-password" required>
+              <div class="secret-fld">
+                <input
+                  id="staff-login-password"
+                  v-model="loginPass"
+                  :type="reveal.login ? 'text' : 'password'"
+                  autocomplete="current-password"
+                  required
+                >
+                <button type="button" class="reveal" @click="reveal.login = !reveal.login">
+                  {{ reveal.login ? 'Hide' : 'Show' }}
+                </button>
+              </div>
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <div class="auth-foot"><button type="button" class="auth-link">Forgot password?</button></div>
@@ -142,22 +188,68 @@ async function submitSignup() {
         </div>
         <div class="auth-panel" role="tabpanel" :class="{ active: tab === 'signup' }">
           <form @submit.prevent="submitSignup">
-            <div class="fld">
-              <label for="signup-name">Full name</label>
-              <input id="signup-name" v-model="signupName" type="text" placeholder="Jordan T." required>
+            <div class="row2">
+              <div class="fld">
+                <label for="signup-first-name">First Name</label>
+                <input
+                  id="signup-first-name"
+                  v-model="signupFirstName"
+                  type="text"
+                  placeholder="Jordan"
+                  autocomplete="given-name"
+                  required
+                  @blur="titleCaseNameField(signupFirstName)"
+                >
+              </div>
+              <div class="fld">
+                <label for="signup-last-name">Last Name</label>
+                <input
+                  id="signup-last-name"
+                  v-model="signupLastName"
+                  type="text"
+                  placeholder="Taylor"
+                  autocomplete="family-name"
+                  required
+                  @blur="titleCaseNameField(signupLastName)"
+                >
+              </div>
             </div>
             <div class="fld">
-              <label for="signup-email">Work email</label>
-              <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@dorinc.local" required>
+              <label for="signup-email">Work Email</label>
+              <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@dorinc.local" autocomplete="email" required>
             </div>
             <div class="row2">
               <div class="fld">
                 <label for="signup-password">Password</label>
-                <input id="signup-password" v-model="signupPass" type="password" placeholder="Min. 12 characters" required>
+                <div class="secret-fld">
+                  <input
+                    id="signup-password"
+                    v-model="signupPass"
+                    :type="reveal.signupPass ? 'text' : 'password'"
+                    placeholder="Min. 12 characters"
+                    autocomplete="new-password"
+                    required
+                  >
+                  <button type="button" class="reveal" @click="reveal.signupPass = !reveal.signupPass">
+                    {{ reveal.signupPass ? 'Hide' : 'Show' }}
+                  </button>
+                </div>
               </div>
               <div class="fld">
-                <label for="signup-confirm">Confirm</label>
-                <input id="signup-confirm" v-model="signupConfirm" type="password" placeholder="Repeat" required>
+                <label for="signup-confirm">Confirm Password</label>
+                <div class="secret-fld">
+                  <input
+                    id="signup-confirm"
+                    v-model="signupConfirm"
+                    :type="reveal.signupConfirm ? 'text' : 'password'"
+                    placeholder="Repeat"
+                    autocomplete="new-password"
+                    required
+                  >
+                  <button type="button" class="reveal" @click="reveal.signupConfirm = !reveal.signupConfirm">
+                    {{ reveal.signupConfirm ? 'Hide' : 'Show' }}
+                  </button>
+                </div>
               </div>
             </div>
             <div class="fld">

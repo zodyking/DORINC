@@ -86,6 +86,7 @@ interface PortalAccessSummary {
     id: string
     name: string
     email: string
+    username: string | null
     lastLoginAt: string | null
     mustChangePassword: boolean
     tempPasswordExpiresAt: string | null
@@ -299,16 +300,8 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
           >
             {{ credentialEmails.length ? 'Resend portal invite' : 'Send portal invite' }}
           </button>
-          <RequestDeletionButton
-            v-if="!customer.archivedAt"
-            entity-type="customer"
-            :entity-id="customer.id"
-            :entity-label="customer.displayName"
-            :disabled="busy"
-            @submitted="flash = 'Deletion request submitted for admin review'; flashKind = 'ok'"
-          />
           <button
-            v-else-if="canArchive"
+            v-if="customer.archivedAt && canArchive"
             class="btn"
             :disabled="busy"
             @click="toggleArchive"
@@ -419,6 +412,8 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
               <dt>Status</dt>
               <dd><span :class="portal?.portalEnabled ? 'pill ok' : 'pill gray'">{{ portal?.portalEnabled ? 'Active' : 'Not enabled' }}</span></dd>
               <dt>Users</dt><dd>{{ portal?.userCount ?? 0 }} {{ portal?.userCount === 1 ? 'login' : 'logins' }}</dd>
+              <dt>Username</dt>
+              <dd class="mono">{{ portal?.users[0]?.username ?? '—' }}</dd>
               <dt>Last login</dt><dd>{{ lastPortalLogin ? credWhen(lastPortalLogin) : '—' }}</dd>
               <dt>Last credential email</dt>
               <dd>

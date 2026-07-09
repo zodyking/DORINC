@@ -61,6 +61,7 @@ async function main() {
   }
   catch (err) {
     console.error('[worker] boot migration failed', err)
+    process.exit(1)
   }
 
   await verifyDatabaseConnection('worker')

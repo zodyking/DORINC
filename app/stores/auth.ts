@@ -4,6 +4,7 @@ export interface AuthUser {
   id: string
   name: string
   email: string
+  username?: string | null
   accountType: string
   customerId?: string | null
   mustChangePassword?: boolean
@@ -38,10 +39,13 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
     },
 
-    async login(email: string, password: string, portal: 'customer' | 'staff') {
+    async login(identifier: string, password: string, portal: 'customer' | 'staff') {
+      const body = portal === 'customer'
+        ? { username: identifier, password, portal }
+        : { email: identifier, password, portal }
       const res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
         method: 'POST',
-        body: { email, password, portal },
+        body,
       })
       this.user = res.user
       await this.fetchMe()

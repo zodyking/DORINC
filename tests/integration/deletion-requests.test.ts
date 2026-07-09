@@ -24,7 +24,7 @@ import {
   createInvoice,
   getInvoice,
 } from '../../server/services/invoices.service'
-import { createServiceLog } from '../../server/services/service-logs.service'
+import { createServiceLog, getServiceLog } from '../../server/services/service-logs.service'
 import { createVehicle, getVehicle } from '../../server/services/vehicles.service'
 
 config()
@@ -162,11 +162,37 @@ describe('deletion request workflow', () => {
     )).rejects.toBeInstanceOf(DeletionRequestsServiceError)
   })
 
-  it('approves vehicle deletion and archives the unit', async () => {
+  it('approves vehicle deletion and hard-deletes the unit while keeping invoice snapshots', async () => {
+    const v = await createVehicle(db, {
+      customerId: customer.id,
+      unitType: 'truck',
+      busNumber: `DR-DEL-${stamp}`,
+      make: 'Kenworth',
+      model: 'T680',
+      year: 2021,
+    }, ACTOR)
+    const inv = await createInvoice(db, {
+      customerId: customer.id,
+      vehicleId: v.id,
+      invoiceDate: '2026-07-04',
+      dueDate: '2026-08-04',
+    }, ACTOR)
+    createdInvoiceIds.push(inv.id)
+    await addInvoiceLineItem(db, inv.id, {
+      description: 'Inspection',
+      quantity: '1',
+      unitPrice: '50.00',
+      lineType: 'labor',
+      taxable: true,
+    }, ACTOR)
+
+    const before = await getInvoice(db, inv.id)
+    expect(before.vehicleSnapshot?.busNumber).toBe(`DR-DEL-${stamp}`)
+
     const created = await createDeletionRequest(
       db,
       'vehicle',
-      vehicle.id,
+      v.id,
       'Unit sold and removed from fleet',
       ACTOR,
     )
@@ -175,11 +201,16 @@ describe('deletion request workflow', () => {
     const { request } = await approveDeletionRequest(db, created.id, ACTOR, 'Confirmed with fleet manager')
     expect(request.status).toBe('approved')
 
-    const archived = await getVehicle(db, vehicle.id)
-    expect(archived.archivedAt).not.toBeNull()
+    await expect(getVehicle(db, v.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    const after = await getInvoice(db, inv.id)
+    expect(after.vehicleId).toBeNull()
+    expect(after.vehicleSnapshot?.busNumber).toBe(`DR-DEL-${stamp}`)
+    expect(after.vehicleSnapshot?.make).toBe('Kenworth')
+    expect(after.customerSnapshot.displayName).toContain(`DelReq-${stamp}`)
   })
 
-  it('approves draft invoice deletion and voids the invoice', async () => {
+  it('approves draft invoice deletion and hard-deletes the invoice', async () => {
     const created = await createDeletionRequest(
       db,
       'invoice',
@@ -192,11 +223,12 @@ describe('deletion request workflow', () => {
     const { request } = await approveDeletionRequest(db, created.id, ACTOR)
     expect(request.status).toBe('approved')
 
-    const voided = await getInvoice(db, draftInvoice.id)
-    expect(voided.status).toBe('void')
+    await expect(getInvoice(db, draftInvoice.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    const invIdx = createdInvoiceIds.indexOf(draftInvoice.id)
+    if (invIdx >= 0) createdInvoiceIds.splice(invIdx, 1)
   })
 
-  it('approves service log deletion and archives the log', async () => {
+  it('approves service log deletion and hard-deletes the log', async () => {
     const created = await createDeletionRequest(
       db,
       'service_log',
@@ -209,5 +241,75 @@ describe('deletion request workflow', () => {
     const { request } = await approveDeletionRequest(db, created.id, ACTOR)
     expect(request.status).toBe('approved')
     expect(request.entityType).toBe('service_log')
+    await expect(getServiceLog(db, serviceLog.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('hard-deletes a customer while invoices keep full customer and vehicle snapshots', async () => {
+    const keepCustomer = await createCustomer(db, {
+      displayName: `DelKeep-${stamp}`,
+      accountKind: 'fleet',
+      email: 'delkeep@example.com',
+      phone: '555-0100',
+      paymentTerms: 'net_30',
+    }, ACTOR)
+    const keepVehicle = await createVehicle(db, {
+      customerId: keepCustomer.id,
+      unitType: 'truck',
+      busNumber: `DK-${stamp}`,
+      vin: '1FUJGHDV8CLBP0001',
+      make: 'Peterbilt',
+      model: '579',
+      year: 2020,
+    }, ACTOR)
+    const keepInvoice = await createInvoice(db, {
+      customerId: keepCustomer.id,
+      vehicleId: keepVehicle.id,
+      invoiceDate: '2026-07-03',
+      dueDate: '2026-08-03',
+    }, ACTOR)
+    createdInvoiceIds.push(keepInvoice.id)
+    await addInvoiceLineItem(db, keepInvoice.id, {
+      description: 'Brake inspection',
+      quantity: '1',
+      unitPrice: '150.00',
+      lineType: 'labor',
+      taxable: true,
+    }, ACTOR)
+
+    const before = await getInvoice(db, keepInvoice.id)
+    expect(before.customerSnapshot.displayName).toBe(`DelKeep-${stamp}`)
+    expect(before.customerSnapshot.email).toBe('delkeep@example.com')
+    expect(before.vehicleSnapshot?.busNumber).toBe(`DK-${stamp}`)
+    expect(before.vehicleSnapshot?.vin).toBe('1FUJGHDV8CLBP0001')
+    expect(before.vehicleSnapshot?.make).toBe('Peterbilt')
+
+    const custReq = await createDeletionRequest(
+      db,
+      'customer',
+      keepCustomer.id,
+      'Fleet account closed — keep billing history',
+      ACTOR,
+    )
+    createdRequestIds.push(custReq.id)
+    await approveDeletionRequest(db, custReq.id, ACTOR)
+
+    await expect(getCustomer(db, keepCustomer.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(getVehicle(db, keepVehicle.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    const after = await getInvoice(db, keepInvoice.id)
+    expect(after.id).toBe(keepInvoice.id)
+    expect(after.status).toBe(before.status)
+    expect(after.customerId).toBeNull()
+    expect(after.vehicleId).toBeNull()
+    expect(after.customerSnapshot.displayName).toBe(`DelKeep-${stamp}`)
+    expect(after.customerSnapshot.email).toBe('delkeep@example.com')
+    expect(after.vehicleSnapshot?.busNumber).toBe(`DK-${stamp}`)
+    expect(after.vehicleSnapshot?.vin).toBe('1FUJGHDV8CLBP0001')
+    expect(after.vehicleSnapshot?.make).toBe('Peterbilt')
+
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, keepInvoice.id))
+    await db.delete(invoices).where(eq(invoices.id, keepInvoice.id))
+    const invIdx = createdInvoiceIds.indexOf(keepInvoice.id)
+    if (invIdx >= 0) createdInvoiceIds.splice(invIdx, 1)
   })
 })
