@@ -546,11 +546,49 @@ export async function getBackupEncryptedPayload(db: Db, runId: string): Promise<
   return row.encryptedPayload
 }
 
+/** Download encrypted backup artifact for offline storage (still AES-GCM encrypted). */
+export async function getBackupDownload(db: Db, runId: string): Promise<{
+  filename: string
+  encrypted: Buffer
+  sha256Checksum: string
+  encryptedBytes: number
+}> {
+  const [row] = await db.select({
+    filename: backupRuns.filename,
+    status: backupRuns.status,
+    encryptedPayload: backupRuns.encryptedPayload,
+    sha256Checksum: backupRuns.sha256Checksum,
+    encryptedBytes: backupRuns.encryptedBytes,
+  })
+    .from(backupRuns)
+    .where(eq(backupRuns.id, runId))
+    .limit(1)
+
+  if (!row || row.status !== 'completed') throw new BackupsServiceError('NOT_FOUND')
+  return {
+    filename: row.filename,
+    encrypted: row.encryptedPayload,
+    sha256Checksum: row.sha256Checksum,
+    encryptedBytes: row.encryptedBytes,
+  }
+}
+
 /** Decrypt + decompress a completed backup run — for verify/restore tests only. */
 export async function decryptBackupRun(db: Db, runId: string): Promise<Buffer> {
   const encrypted = await getBackupEncryptedPayload(db, runId)
   const compressed = decryptBuffer(encrypted)
   return decompressDump(compressed)
+}
+
+/** Decrypt an uploaded .enc backup file using the workspace master key. */
+export function decryptUploadedBackupFile(encrypted: Buffer): Buffer {
+  try {
+    const compressed = decryptBuffer(encrypted)
+    return decompressDump(compressed)
+  }
+  catch {
+    throw new BackupsServiceError('VERIFY_FAILED')
+  }
 }
 
 /** Validate decrypted dump with pg_restore --list (no plaintext artifact retained). */
@@ -778,6 +816,72 @@ export async function restoreBackupFromRun(
     safetyBackupRunId: safety.id,
     restoredFromRunId: source.id,
     restoredFilename: source.filename,
+  }
+}
+
+/**
+ * Restore from an uploaded encrypted backup file (.dump.zst.enc).
+ * Creates a safety backup first; same Super Admin + step-up gate as run restore.
+ */
+export async function restoreBackupFromUploadedFile(
+  db: Db,
+  encryptedFile: Buffer,
+  originalFilename: string,
+  actor: BackupActor,
+  reason: string,
+  event: H3Event | null = null,
+): Promise<{ safetyBackupRunId: string, restoredFilename: string }> {
+  const databaseUrl = getDatabaseUrl()?.trim()
+  if (!databaseUrl) throw new BackupsServiceError('RESTORE_FAILED')
+
+  let dump: Buffer
+  try {
+    dump = decryptUploadedBackupFile(encryptedFile)
+  }
+  catch {
+    throw new BackupsServiceError('VERIFY_FAILED')
+  }
+
+  const safety = await runSafetyBackup(db, actor, event)
+  if (safety.status !== 'completed') throw new BackupsServiceError('RESTORE_FAILED')
+
+  const safeName = originalFilename.replace(/[^\w.-]+/g, '_').slice(0, 180) || 'uploaded-backup.dump.zst.enc'
+
+  try {
+    await restoreBackupToDatabase(dump, databaseUrl)
+  }
+  catch (err) {
+    const message = err instanceof Error ? err.message : 'Restore failed'
+    await writeAudit(event, {
+      entityType: 'backup',
+      entityId: safety.id,
+      action: 'backup.restore_failed',
+      afterData: { filename: safeName, reason, safetyBackupRunId: safety.id, error: message, source: 'upload' },
+      actor,
+      permissionKey: 'system.admin.all',
+      riskLevel: 'high',
+    })
+    throw new BackupsServiceError('RESTORE_FAILED')
+  }
+
+  await writeAudit(event, {
+    entityType: 'backup',
+    entityId: safety.id,
+    action: 'backup.restored',
+    afterData: {
+      filename: safeName,
+      reason,
+      safetyBackupRunId: safety.id,
+      source: 'upload',
+    },
+    actor,
+    permissionKey: 'system.admin.all',
+    riskLevel: 'high',
+  })
+
+  return {
+    safetyBackupRunId: safety.id,
+    restoredFilename: safeName,
   }
 }
 

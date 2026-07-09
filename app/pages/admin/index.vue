@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Control Panel — system health, import/export, backups, and configuration.
+import ControlPanelBackupRestore from '~/components/admin/ControlPanelBackupRestore.vue'
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelTemplateDesigner from '~/components/admin/ControlPanelTemplateDesigner.vue'
 import { BRAND_NAME } from '~/constants/brand'
@@ -7,20 +8,14 @@ import {
   aiFeatureLabel,
   aiHealthTone,
   aiStatusLabel,
-  backupDestinationLabel,
   backupHealthTone,
-  backupRunStatusClass,
   backupStatusLabel,
   databaseHealthTone,
-  driveConnectionLabel,
   formatAiCost,
-  formatBackupSize,
   formatCapUsage,
   formatDbLatency,
-  formatScheduleDisplay,
   pdfWorkerHealthTone,
   pdfWorkerStatusLabel,
-  recoveryTestStatusClass,
   smtpHealthTone,
   smtpSummary,
   suspiciousAlertRuleLabel,
@@ -131,31 +126,6 @@ interface AiUsageLogItem {
   createdAt: string
 }
 
-interface BackupRunItem {
-  id: string
-  filename: string
-  status: string
-  trigger: string
-  encryptedBytes: number
-  sha256Checksum: string
-  driveFileId: string | null
-  driveUploadedAt: string | null
-  finishedAt: string | null
-  createdAt: string
-  errorMessage: string | null
-}
-
-interface RecoveryTestItem {
-  id: string
-  backupRunId: string
-  status: string
-  valid: boolean | null
-  tocEntries: number | null
-  errorMessage: string | null
-  finishedAt: string | null
-  createdAt: string
-}
-
 interface SuspiciousAlertItem {
   id: string
   ruleKey: string
@@ -166,75 +136,10 @@ interface SuspiciousAlertItem {
   createdAt: string
 }
 
-interface BackupSettingsView {
-  id: string
-  enabled: boolean
-  scheduleCron: string | null
-  retentionDaily: number
-  retentionWeekly: number
-  retentionMonthly: number
-  storageMode: string
-  notifyEmail: string | null
-  updatedAt: string
-}
-
-interface BackupIntegrationView {
-  provider: 'google_drive'
-  connected: boolean
-  configured: boolean
-  accountEmail: string | null
-  folderId: string | null
-  lastTestedAt: string | null
-  lastError: string | null
-}
-
-const backupBusy = ref(false)
-const backupMessage = ref('')
-const backupError = ref('')
-const driveTestBusy = ref(false)
-const driveDisconnectBusy = ref(false)
-
-const canManageBackups = computed(() => auth.can('backups.manage.all'))
-
-const { data: backupData, refresh: refreshBackupData } = await useFetch<{
-  integration: BackupIntegrationView
-  settings: BackupSettingsView
-}>('/api/admin/backups/integration', { immediate: canManageBackups.value })
-
-const backupForm = reactive({
-  enabled: false,
-  notifyEmail: '' as string,
-})
-
-watch(() => backupData.value?.settings, (s) => {
-  if (!s) return
-  backupForm.enabled = s.enabled
-  backupForm.notifyEmail = s.notifyEmail ?? ''
-}, { immediate: true })
-
-const { data: backupRuns, refresh: refreshRuns } = await useFetch<{ items: BackupRunItem[] }>(
-  '/api/admin/backups/runs',
-  { immediate: canManageBackups.value },
-)
-
-const { data: recoveryTests, refresh: refreshRecoveryTests } = await useFetch<{ items: RecoveryTestItem[] }>(
-  '/api/admin/backups/recovery-tests',
-)
-
 const { data: suspiciousAlerts, refresh: refreshSuspiciousAlerts } = await useFetch<{ items: SuspiciousAlertItem[] }>(
   '/api/admin/security/suspicious-activity',
 )
 
-const { data: stepUpStatus, refresh: refreshStepUp } = await useFetch<{ verified: boolean, expiresAt: string | null }>(
-  '/api/auth/step-up/status',
-)
-
-const restoreModalOpen = ref(false)
-const restoreTarget = ref<BackupRunItem | null>(null)
-const restorePassword = ref('')
-const restoreReason = ref('')
-const restoreBusy = ref(false)
-const recoveryTestBusy = ref<string | null>(null)
 const dismissAlertBusy = ref<string | null>(null)
 
 const route = useRoute()
@@ -263,170 +168,9 @@ function setControlPanelTab(tab: ControlPanelTab) {
   router.replace({ query })
 }
 
-watch(() => route.query.backup_oauth, (val) => {
-  if (!val || !import.meta.client) return
-  if (val === 'connected') backupMessage.value = 'Google Drive connected successfully'
-  else if (val === 'denied') backupError.value = 'Google Drive authorization was denied'
-  else if (val === 'error') {
-    backupError.value = typeof route.query.reason === 'string'
-      ? decodeURIComponent(route.query.reason)
-      : 'Google Drive connection failed'
-  }
-  refreshBackupData()
-  refresh()
-}, { immediate: true })
-
-async function runBackupNow() {
-  backupBusy.value = true
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    const res = await $fetch<{ filename: string, sha256Checksum: string }>('/api/admin/backups/run', {
-      method: 'POST',
-    })
-    backupMessage.value = `Backup completed — ${res.filename}`
-    await Promise.all([refresh(), refreshRuns(), refreshBackupData()])
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Backup failed'
-    await refresh()
-  }
-  finally {
-    backupBusy.value = false
-  }
-}
-
-async function connectGoogleDrive() {
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    const res = await $fetch<{ url: string }>('/api/admin/backups/google/auth-url')
-    window.location.href = res.url
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not start Google OAuth'
-  }
-}
-
-async function disconnectGoogleDrive() {
-  driveDisconnectBusy.value = true
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    await $fetch('/api/admin/backups/google/disconnect', { method: 'POST' })
-    backupMessage.value = 'Google Drive disconnected'
-    await Promise.all([refresh(), refreshBackupData()])
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Disconnect failed'
-  }
-  finally {
-    driveDisconnectBusy.value = false
-  }
-}
-
-async function testDriveConnection() {
-  driveTestBusy.value = true
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    const res = await $fetch<{ message: string }>('/api/admin/backups/test-connection', { method: 'POST' })
-    backupMessage.value = res.message
-    await Promise.all([refresh(), refreshBackupData()])
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Connection test failed'
-  }
-  finally {
-    driveTestBusy.value = false
-  }
-}
-
-const backupSaveBusy = ref(false)
-
-async function saveBackupSettings() {
-  backupSaveBusy.value = true
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    await $fetch('/api/admin/backups/settings', {
-      method: 'PATCH',
-      body: {
-        enabled: backupForm.enabled,
-        notifyEmail: backupForm.notifyEmail.trim() || null,
-      },
-    })
-    backupMessage.value = 'Backup settings saved'
-    await Promise.all([refresh(), refreshBackupData()])
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
-  }
-  finally {
-    backupSaveBusy.value = false
-  }
-}
-
-function openRestoreModal(run: BackupRunItem) {
-  restoreTarget.value = run
-  restorePassword.value = ''
-  restoreReason.value = ''
-  restoreModalOpen.value = true
-}
-
-function closeRestoreModal() {
-  restoreModalOpen.value = false
-  restoreTarget.value = null
-}
-
-async function runRecoveryTestForRun(run: BackupRunItem) {
-  recoveryTestBusy.value = run.id
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    const res = await $fetch<{ valid: boolean, tocEntries: number | null }>(
-      `/api/admin/backups/${run.id}/recovery-test`,
-      { method: 'POST' },
-    )
-    backupMessage.value = res.valid
-      ? `Recovery test passed — ${res.tocEntries ?? 0} archive entries verified`
-      : 'Recovery test failed'
-    await refreshRecoveryTests()
-  }
-  catch (e: unknown) {
-    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Recovery test failed'
-  }
-  finally {
-    recoveryTestBusy.value = null
-  }
-}
-
-async function submitRestore() {
-  if (!restoreTarget.value) return
-  restoreBusy.value = true
-  backupMessage.value = ''
-  backupError.value = ''
-  try {
-    await $fetch(`/api/admin/backups/${restoreTarget.value.id}/restore`, {
-      method: 'POST',
-      body: {
-        password: restorePassword.value,
-        reason: restoreReason.value.trim(),
-      },
-    })
-    backupMessage.value = `Restore completed from ${restoreTarget.value.filename}`
-    closeRestoreModal()
-    await Promise.all([refresh(), refreshRuns(), refreshRecoveryTests(), refreshSuspiciousAlerts(), refreshStepUp()])
-  }
-  catch (e: unknown) {
-    const data = (e as { data?: { message?: string, details?: { reason?: string } } })?.data
-    backupError.value = data?.details?.reason === 'step_up_required'
-      ? 'Step-up verification required — re-enter your password'
-      : data?.message ?? 'Restore failed'
-  }
-  finally {
-    restoreBusy.value = false
-  }
+function formatBackupWhen(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString()
 }
 
 async function dismissSuspiciousAlert(alertId: string) {
@@ -438,11 +182,6 @@ async function dismissSuspiciousAlert(alertId: string) {
   finally {
     dismissAlertBusy.value = null
   }
-}
-
-function formatBackupWhen(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString()
 }
 
 const { data: status, refresh, error } = await useFetch<SystemStatus>('/api/admin/system/status')
@@ -855,150 +594,11 @@ async function runSmtpTest() {
         </div>
       </div>
 
-      <div v-show="activeTab === 'backup'" class="stack">
-          <div class="card">
-            <div class="chead">
-              <h3>Backup</h3>
-              <div class="right">
-                <span class="pill" :class="status.backup.status === 'healthy' ? 'ok' : status.backup.status === 'error' ? 'over' : 'warn'">
-                  {{ backupStatusLabel(status.backup.status) }}
-                </span>
-              </div>
-            </div>
-            <dl class="kv">
-              <dt>Status</dt>
-              <dd>{{ backupStatusLabel(status.backup.status) }}</dd>
-              <dt>Schedule</dt>
-              <dd>{{ formatScheduleDisplay(status.backup.scheduleEnabled, status.backup.scheduleLabel) }}</dd>
-              <dt>Last backup</dt>
-              <dd>{{ formatBackupWhen(status.backup.lastRunAt) }}</dd>
-              <dt>Destination</dt>
-              <dd>{{ backupDestinationLabel(status.backup.driveConnected) }}</dd>
-              <dt>Google Drive</dt>
-              <dd>{{ driveConnectionLabel(status.backup.driveConnected, status.backup.driveAccountEmail) }}</dd>
-              <dt v-if="backupData?.settings">Retention</dt>
-              <dd v-if="backupData?.settings">
-                {{ backupData.settings.retentionDaily }} daily · {{ backupData.settings.retentionMonthly }} monthly
-              </dd>
-            </dl>
-            <div class="cbody" style="padding-top:0;">
-              <div class="tglrow" style="margin-bottom:12px;">
-                Nightly schedule
-                <span class="tgl"><input v-model="backupForm.enabled" type="checkbox"><span class="tr" /></span>
-              </div>
-              <label class="fld">
-                Notification email
-                <input v-model="backupForm.notifyEmail" type="email" placeholder="admin@example.com">
-              </label>
-              <p v-if="backupMessage" style="color:#059669; font-size:13px; margin:0 0 10px;">{{ backupMessage }}</p>
-              <p v-if="backupError" style="color:#dc2626; font-size:13px; margin:0 0 10px;">{{ backupError }}</p>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                <button class="btn primary" :disabled="backupBusy" @click="runBackupNow">
-                  {{ backupBusy ? 'Running backup…' : 'Run backup now' }}
-                </button>
-                <button class="btn" :disabled="backupSaveBusy" @click="saveBackupSettings">
-                  {{ backupSaveBusy ? 'Saving…' : 'Save settings' }}
-                </button>
-              </div>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button
-                  v-if="!status.backup.driveConnected"
-                  class="btn"
-                  :disabled="!backupData?.integration.configured"
-                  @click="connectGoogleDrive"
-                >
-                  Connect Google Drive
-                </button>
-                <button
-                  v-else
-                  class="btn"
-                  :disabled="driveDisconnectBusy"
-                  @click="disconnectGoogleDrive"
-                >
-                  {{ driveDisconnectBusy ? 'Disconnecting…' : 'Disconnect Drive' }}
-                </button>
-                <button class="btn" :disabled="driveTestBusy || !status.backup.driveConnected" @click="testDriveConnection">
-                  {{ driveTestBusy ? 'Testing…' : 'Test connection' }}
-                </button>
-              </div>
-              <span class="help" style="display:block; margin-top:8px;">
-                pg_dump → zstd → AES-256-GCM. Encrypted archives upload to Google Drive when connected.
-                Restore requires Super Admin step-up verification and creates a safety backup first.
-                {{ backupData?.integration.configured ? '' : 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable OAuth.' }}
-              </span>
-              <p v-if="stepUpStatus?.verified" class="help" style="display:block; margin-top:6px; color:#059669;">
-                Step-up verified until {{ formatBackupWhen(stepUpStatus.expiresAt) }}
-              </p>
-            </div>
-            <div v-if="backupRuns?.items?.length" class="tscroll" style="margin-top:12px;">
-              <table class="tbl">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Trigger</th>
-                    <th>Status</th>
-                    <th class="num">Size</th>
-                    <th>Drive</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="run in backupRuns.items" :key="run.id">
-                    <td><span class="mono" style="font-size:12px">{{ formatBackupWhen(run.finishedAt ?? run.createdAt) }}</span></td>
-                    <td>{{ run.trigger }}</td>
-                    <td>
-                      <span class="pill" :class="backupRunStatusClass(run.status)">{{ run.status }}</span>
-                    </td>
-                    <td class="num">{{ formatBackupSize(run.encryptedBytes) }}</td>
-                    <td>
-                      <span v-if="run.driveFileId" class="pill ok">Uploaded</span>
-                      <span v-else class="pill warn">DB only</span>
-                    </td>
-                    <td>
-                      <div v-if="run.status === 'completed'" style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <button
-                          class="btn sm"
-                          :disabled="recoveryTestBusy === run.id"
-                          @click="runRecoveryTestForRun(run)"
-                        >
-                          {{ recoveryTestBusy === run.id ? 'Testing…' : 'Test recovery' }}
-                        </button>
-                        <button class="btn sm" @click="openRestoreModal(run)">Restore…</button>
-                      </div>
-                      <span v-else>—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div v-if="recoveryTests?.items?.length" class="card">
-            <div class="chead">
-              <h3>Recovery tests</h3>
-              <div class="right"><span class="pill indigo">Verify only</span></div>
-            </div>
-            <div class="tscroll">
-              <table class="tbl">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Backup run</th>
-                    <th>Status</th>
-                    <th class="num">TOC entries</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="test in recoveryTests.items" :key="test.id">
-                    <td><span class="mono" style="font-size:12px">{{ formatBackupWhen(test.finishedAt ?? test.createdAt) }}</span></td>
-                    <td><span class="mono" style="font-size:11px">{{ test.backupRunId.slice(0, 8) }}…</span></td>
-                    <td><span class="pill" :class="recoveryTestStatusClass(test.status)">{{ test.status }}</span></td>
-                    <td class="num">{{ test.tocEntries ?? '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+      <div v-if="activeTab === 'backup'">
+        <ControlPanelBackupRestore
+          :backup-status="status.backup"
+          @refreshed="refresh()"
+        />
       </div>
 
       <div v-show="activeTab === 'security'" class="stack">
@@ -1084,37 +684,5 @@ async function runSmtpTest() {
       </div>
     </template>
 
-    <div v-if="restoreModalOpen && restoreTarget" class="modal-scrim" @click.self="closeRestoreModal">
-      <div class="card modal-card" style="max-width:480px; width:100%;">
-        <div class="chead">
-          <h3>Restore database</h3>
-          <div class="right"><span class="pill over">Destructive</span></div>
-        </div>
-        <div class="cbody">
-          <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-            Restores from <span class="mono">{{ restoreTarget.filename }}</span>.
-            A fresh safety backup runs first. Requires your password (step-up verification).
-          </p>
-          <label class="fld">
-            Reason for restore
-            <textarea v-model="restoreReason" rows="3" placeholder="Describe why this restore is needed (min 10 characters)" />
-          </label>
-          <label class="fld">
-            Your password
-            <input v-model="restorePassword" type="password" autocomplete="current-password">
-          </label>
-          <div style="display:flex; gap:8px; margin-top:12px;">
-            <button
-              class="btn primary"
-              :disabled="restoreBusy || restoreReason.trim().length < 10 || !restorePassword"
-              @click="submitRestore"
-            >
-              {{ restoreBusy ? 'Restoring…' : 'Begin restore' }}
-            </button>
-            <button class="btn" :disabled="restoreBusy" @click="closeRestoreModal">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
