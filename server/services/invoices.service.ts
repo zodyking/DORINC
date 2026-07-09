@@ -821,10 +821,9 @@ export async function approveInvoice(
 }
 
 export async function sendInvoice(db: Db, id: string, actorId: string) {
-  const result = await transitionInvoice(db, id, 'sent', actorId)
-  const { notifyInvoiceSent } = await import('./customer-notifications.service')
-  await notifyInvoiceSent(db, id).catch(() => {})
-  return result
+  const { queueInvoiceSend } = await import('./invoice-send.service')
+  const result = await queueInvoiceSend(db, id, actorId)
+  return { invoice: result.invoice, before: result.invoice }
 }
 
 export async function markInvoicePaid(

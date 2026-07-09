@@ -75,11 +75,44 @@ const {
 const { data, refresh, error } = await useFetch<{
   invoice: Invoice
   history: HistoryRow[]
+  sendDelivery: {
+    jobId: string
+    status: string
+    lastError: string | null
+    recipientEmail: string | null
+    updatedAt: string
+  } | null
 }>(`/api/invoices/${id}`)
 
 const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
+const sendDelivery = computed(() => data.value?.sendDelivery)
 const lines = computed(() => invoice.value?.lineItems ?? [])
+
+const sendInProgress = computed(() =>
+  invoice.value?.status === 'approved'
+  && sendDelivery.value
+  && ['queued', 'processing'].includes(sendDelivery.value.status),
+)
+const sendFailed = computed(() =>
+  invoice.value?.status === 'approved'
+  && sendDelivery.value?.status === 'failed',
+)
+
+let sendPollTimer: ReturnType<typeof setInterval> | undefined
+watch(sendInProgress, (active) => {
+  if (active && !sendPollTimer) {
+    sendPollTimer = setInterval(() => { refresh() }, 5000)
+  }
+  else if (!active && sendPollTimer) {
+    clearInterval(sendPollTimer)
+    sendPollTimer = undefined
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (sendPollTimer) clearInterval(sendPollTimer)
+})
 
 const { data: linkedLogData } = await useFetch<{ log: { logNumber: number } }>(
   () => (invoice.value?.serviceLogId ? `/api/service-logs/${invoice.value.serviceLogId}` : null),
@@ -95,6 +128,16 @@ const canManagerApprove = computed(() =>
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
+const canVoidInvoice = computed(() =>
+  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+)
+const canRequestDeletion = computed(() =>
+  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
+)
+
+const removableInvoice = computed(() =>
+  invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
+)
 
 const pill = computed(() => {
   if (!invoice.value) return { cls: 'pill gray', label: '—' }
@@ -126,8 +169,9 @@ async function runAction(path: string) {
   busy.value = true
   actionError.value = ''
   try {
-    await $fetch(path, { method: 'POST' })
+    const result = await $fetch<{ message?: string }>(path, { method: 'POST' })
     await refresh()
+    if (result.message) actionError.value = result.message
   }
   catch (e: unknown) {
     actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Action failed'
@@ -220,9 +264,9 @@ const summaryRows = computed(() => {
           Manager approve
         </button>
         <button
-          v-if="canSend && invoice.status === 'approved'"
+          v-if="canSend && invoice.status === 'approved' && !sendInProgress"
           type="button"
-          class="btn"
+          class="btn primary"
           :disabled="busy"
           @click="runAction(`/api/invoices/${id}/send`)"
         >
@@ -243,17 +287,33 @@ const summaryRows = computed(() => {
           Record payment
         </NuxtLink>
         <RequestDeletionButton
-          v-if="invoice.status !== 'void' && invoice.status !== 'paid'"
+          v-if="removableInvoice && canRequestDeletion"
           entity-type="invoice"
           :entity-id="invoice.id"
           :entity-label="invoice.invoiceNumberFormatted"
           :disabled="busy"
           @submitted="refresh()"
         />
+        <VoidInvoiceButton
+          v-if="removableInvoice && canVoidInvoice"
+          :invoice-id="invoice.id"
+          :invoice-label="invoice.invoiceNumberFormatted"
+          :status="invoice.status"
+          :disabled="busy"
+          @voided="refresh()"
+        />
       </div>
     </div>
 
-    <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
+    <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
+    <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
+      Email delivery in progress to {{ sendDelivery?.recipientEmail ?? 'customer' }}.
+      Status will change to Sent after the PDF is generated and the email is delivered.
+    </p>
+    <p v-if="sendFailed" class="flash" style="margin:-8px 0 16px; background:#fef2f2; color:#b91c1c;">
+      Email delivery failed{{ sendDelivery?.lastError ? `: ${sendDelivery.lastError}` : '' }}.
+      Fix the issue (check pdf-worker and worker containers), then click Send invoice again.
+    </p>
 
     <div
       v-if="isDraft && activeEditor && !sessionLoading"

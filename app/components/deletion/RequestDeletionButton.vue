@@ -14,6 +14,10 @@ const emit = defineEmits<{ submitted: [] }>()
 const auth = useAuthStore()
 const canSubmit = computed(() => auth.can('deletion_requests.submit.all'))
 const canReview = computed(() => auth.can('deletion_requests.review.all'))
+const canDirectVoid = computed(() =>
+  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+)
+const showSubmit = computed(() => canSubmit.value && !canDirectVoid.value)
 
 const { data: pendingData, refresh: refreshPending } = await useFetch<{
   pending: { id: string, status: string, reason: string, createdAt: string } | null
@@ -23,6 +27,9 @@ const { data: pendingData, refresh: refreshPending } = await useFetch<{
     entityId: props.entityId,
   })),
   watch: [() => props.entityId],
+  lazy: true,
+  server: false,
+  default: () => ({ pending: null }),
 })
 
 const pending = computed(() => pendingData.value?.pending)
@@ -63,7 +70,7 @@ async function submit() {
 </script>
 
 <template>
-  <template v-if="canSubmit && !removed">
+  <template v-if="showSubmit && !removed">
     <span v-if="pending" class="pill warn" style="margin-right:8px;">Deletion pending</span>
     <button
       v-if="!pending"

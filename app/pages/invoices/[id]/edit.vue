@@ -120,6 +120,15 @@ const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canDescribe = computed(() => auth.can('ai.describe.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
+const canVoidInvoice = computed(() =>
+  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+)
+const canRequestDeletion = computed(() =>
+  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
+)
+const removableInvoice = computed(() =>
+  invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
+)
 const editable = computed(() => canUpdate.value && canEdit.value && isDraft.value)
 
 const pill = computed(() => {
@@ -355,7 +364,10 @@ async function finalizeAndSend() {
   try {
     await patchHeader()
     if (canApprove.value) await $fetch(`/api/invoices/${id}/approve`, { method: 'POST' })
-    if (canSend.value) await $fetch(`/api/invoices/${id}/send`, { method: 'POST' })
+    if (canSend.value) {
+      const sendResult = await $fetch<{ message?: string }>(`/api/invoices/${id}/send`, { method: 'POST' })
+      saveError.value = sendResult.message ?? 'Invoice queued for email delivery.'
+    }
     await navigateTo(`/invoices/${id}`)
   }
   catch (e: unknown) {
@@ -585,6 +597,22 @@ const aiPopStyle = computed(() => {
         <div class="actions">
           <NuxtLink to="/templates/designer" class="btn">Template designer</NuxtLink>
           <button type="button" class="btn" disabled title="Coming soon">Preview PDF</button>
+          <RequestDeletionButton
+            v-if="removableInvoice && canRequestDeletion"
+            entity-type="invoice"
+            :entity-id="id"
+            :entity-label="invoice.invoiceNumberFormatted"
+            :disabled="busy"
+            @submitted="refresh()"
+          />
+          <VoidInvoiceButton
+            v-if="removableInvoice && canVoidInvoice"
+            :invoice-id="id"
+            :invoice-label="invoice.invoiceNumberFormatted"
+            :status="invoice.status"
+            :disabled="busy"
+            @voided="refresh()"
+          />
         </div>
       </div>
 

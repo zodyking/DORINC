@@ -64,7 +64,7 @@ async function latestNotificationJob(kind: string) {
     .select()
     .from(workerJobs)
     .where(and(
-      eq(workerJobs.jobType, 'email_send'),
+      inArray(workerJobs.jobType, ['email_send', 'invoice_send']),
       sql`${workerJobs.payload}->>'notificationKind' = ${kind}`,
       sql`${workerJobs.payload}->>'customerId' = ${customerId}`,
     ))
@@ -74,7 +74,7 @@ async function latestNotificationJob(kind: string) {
 }
 
 describe('P2-19 customer-facing email notifications', () => {
-  it('queues invoice_sent mail when an invoice is sent', async () => {
+  it('queues invoice_send when an invoice is sent', async () => {
     const customer = await createCustomer(db, {
       displayName: `Notify-${stamp}`,
       accountKind: 'fleet',
@@ -123,9 +123,10 @@ describe('P2-19 customer-facing email notifications', () => {
 
     const job = await latestNotificationJob('invoice_sent')
     expect(job).toBeTruthy()
+    expect(job!.jobType).toBe('invoice_send')
     expect(job!.payload).toMatchObject({
       notificationKind: 'invoice_sent',
-      to: contactEmail,
+      recipientEmail: contactEmail,
       customerId,
       invoiceId: invoice.id,
     })

@@ -177,10 +177,15 @@ function listSelect() {
 }
 
 export async function countPendingDeletionRequests(db: Db): Promise<number> {
-  const [row] = await db.select({ value: count() })
-    .from(entityDeletionRequests)
-    .where(eq(entityDeletionRequests.status, 'pending'))
-  return Number(row?.value ?? 0)
+  try {
+    const [row] = await db.select({ value: count() })
+      .from(entityDeletionRequests)
+      .where(eq(entityDeletionRequests.status, 'pending'))
+    return Number(row?.value ?? 0)
+  }
+  catch {
+    return 0
+  }
 }
 
 export async function getPendingDeletionRequest(db: Db, entityType: DeletionEntityType, entityId: string) {

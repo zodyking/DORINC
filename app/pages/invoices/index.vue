@@ -36,6 +36,14 @@ const route = useRoute()
 const auth = useAuthStore()
 const canRead = computed(() => auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
+const canVoidInvoice = computed(() =>
+  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
+)
+const canRequestDeletion = computed(() =>
+  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
+)
+
+const voidBusyId = ref('')
 
 const q = ref('')
 const statusChip = ref<StatusChip>((route.query.status as StatusChip) || 'all')
@@ -55,8 +63,8 @@ const query = computed(() => ({
   sort: 'newest' as const,
 }))
 
-const { data: stats } = await useFetch<InvoiceStats>('/api/invoices/stats')
-const { data } = await useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', { query })
+const { data: stats, refresh: refreshStats } = await useFetch<InvoiceStats>('/api/invoices/stats')
+const { data, refresh: refreshList } = await useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', { query })
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
@@ -86,6 +94,28 @@ const subtitle = computed(() => {
 
 function openInvoice(id: string) {
   navigateTo(`/invoices/${id}`)
+}
+
+function removableRow(row: InvoiceRow) {
+  return row.status !== 'void' && row.status !== 'paid'
+}
+
+async function voidInvoiceRow(row: InvoiceRow, event: Event) {
+  event.stopPropagation()
+  if (!canVoidInvoice.value || !removableRow(row)) return
+  if (!window.confirm(`Void ${row.invoiceNumberFormatted}? The invoice stays on file with a voided status.`)) return
+  voidBusyId.value = row.id
+  try {
+    await $fetch(`/api/invoices/${row.id}/void`, { method: 'POST' })
+    await Promise.all([refreshList(), refreshStats()])
+  }
+  catch (e: unknown) {
+    const msg = (e as { data?: { message?: string } })?.data?.message ?? 'Could not void invoice'
+    window.alert(msg)
+  }
+  finally {
+    voidBusyId.value = ''
+  }
 }
 </script>
 
@@ -164,6 +194,7 @@ function openInvoice(id: string) {
               <th class="col-due">Due</th>
               <th class="col-status">Status</th>
               <th class="num col-amt">Amount</th>
+              <th v-if="canVoidInvoice || canRequestDeletion" class="col-act">Actions</th>
             </tr>
           </thead>
           <tbody id="inv-rows">
@@ -186,6 +217,24 @@ function openInvoice(id: string) {
                 </span>
               </td>
               <td class="num col-amt">{{ moneyDisplay(row.total) }}</td>
+              <td v-if="canVoidInvoice || canRequestDeletion" class="col-act" @click.stop>
+                <button
+                  v-if="canVoidInvoice && removableRow(row)"
+                  type="button"
+                  class="btn sm danger"
+                  :disabled="voidBusyId === row.id"
+                  @click="voidInvoiceRow(row, $event)"
+                >
+                  Void
+                </button>
+                <NuxtLink
+                  v-else-if="canRequestDeletion && removableRow(row)"
+                  :to="`/invoices/${row.id}`"
+                  class="btn sm"
+                >
+                  Request deletion
+                </NuxtLink>
+              </td>
             </tr>
           </tbody>
         </table>

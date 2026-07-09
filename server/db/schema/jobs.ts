@@ -3,6 +3,7 @@ import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-o
 export const WORKER_JOB_TYPES = [
   'thumbnail_generate',
   'email_send',
+  'invoice_send',
   'service_log_ai_extraction',
   'invoice_description_ai',
   'backup_run',

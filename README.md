@@ -30,8 +30,8 @@ In Dockploy, create a Compose application from this repo using `docker-compose.y
 | Service | Profile | Role |
 |---|---|---|
 | `nuxt-app` | default | Web app |
-| `worker` | `workers` | Mail, backups, AI, retention |
-| `pdf-worker` | `workers` | Playwright PDF rendering |
+| `worker` | — | Mail, invoice send, backups, AI, retention |
+| `pdf-worker` | — | Playwright PDF rendering |
 | `migrate` | `migrate` | One-shot DB migrations on upgrade |
 | `redis` | `redis` | Optional |
 
@@ -84,9 +84,9 @@ Complete the wizard:
 
 Health check: `GET /api/health`
 
-### 6. Enable workers (recommended)
+### 6. Workers (automatic)
 
-In Dockploy, enable the `workers` profile so mail and PDF jobs run in the background.
+Every deploy starts three containers: `nuxt-app`, `worker`, and `pdf-worker`. After deploy, open **Control Panel** and confirm PDF worker and worker queue show healthy (not backlog).
 
 ### 7. Upgrades
 
@@ -96,7 +96,7 @@ After pulling a new release, run migrations once:
 docker compose --profile migrate run --rm migrate
 ```
 
-Then redeploy `nuxt-app` (and workers if enabled).
+Then redeploy (all three services restart together).
 
 ## Local development
 

@@ -4,6 +4,7 @@ import pg from 'pg'
 import { requireDatabaseUrl } from '../lib/runtime-config.mjs'
 import { processThumbnailJobs } from './handlers/derivatives.mjs'
 import { processMailJobs } from './handlers/mail.mjs'
+import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
 import { processAiJobs } from './handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from './handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handlers/retention.mjs'
@@ -23,6 +24,11 @@ async function tick() {
   const mail = await processMailJobs(pool)
   if (mail.processed || mail.failed) {
     console.log(`[worker] email_send processed=${mail.processed} failed=${mail.failed}`)
+  }
+
+  const invoiceSend = await processInvoiceSendJobs(pool)
+  if (invoiceSend.processed || invoiceSend.failed) {
+    console.log(`[worker] invoice_send processed=${invoiceSend.processed} failed=${invoiceSend.failed}`)
   }
 
   const ai = await processAiJobs(pool)

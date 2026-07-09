@@ -4,9 +4,8 @@
 #   PORT=38471         # container listen port (must match Domains → Port)
 #   APP_URL=https://…  # public URL
 #
-# Do NOT publish host ports — Dockploy Traefik routes via Domains.
-# Default is 38471 to avoid clashing with Dockploy and common app ports.
-# Everything else (database, security keys, SMTP, AI) is configured in /setup.
+# Services deployed together: nuxt-app + worker + pdf-worker (mail, PDF, backups, AI).
+# Optional profiles: migrate (one-shot), redis (not required for Phase 1).
 
 services:
   nuxt-app:
@@ -37,7 +36,6 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
-    profiles: ['workers']
     volumes:
       - dorinc-runtime:/app/.data
     environment:
@@ -50,7 +48,6 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pdf-worker
     restart: unless-stopped
-    profiles: ['workers']
     volumes:
       - dorinc-runtime:/app/.data
     environment:

@@ -31,6 +31,7 @@ import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { users } from '../../server/db/schema/auth'
+import { flushInvoiceSendPipeline } from '../helpers/invoice-send'
 
 config()
 
@@ -44,6 +45,7 @@ const ACTOR = anyUser!.id
 const customer = await createCustomer(db, {
   displayName: `InvTest-${stamp} Hollis Logistics`,
   accountKind: 'fleet',
+  email: `invtest-${stamp}@test.dorinc.local`,
   taxExempt: true,
   paymentTerms: 'net_30',
 }, ACTOR)
@@ -273,7 +275,8 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
     expect(approved.status).toBe('approved')
     expect(approved.approvedAt).not.toBeNull()
 
-    const { invoice: sent } = await sendInvoice(db, invoice.id, ACTOR)
+    await sendInvoice(db, invoice.id, ACTOR)
+    const sent = await flushInvoiceSendPipeline(pool, db, invoice.id)
     expect(sent.status).toBe('sent')
     expect(sent.sentAt).not.toBeNull()
 
@@ -292,6 +295,7 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
 
     await approveInvoice(db, invoice.id, ACTOR)
     await sendInvoice(db, invoice.id, ACTOR)
+    await flushInvoiceSendPipeline(pool, db, invoice.id)
     await markInvoicePaid(db, invoice.id, ACTOR)
     await expect(transitionInvoice(db, invoice.id, 'draft', ACTOR))
       .rejects.toThrow('INVALID_TRANSITION')
@@ -301,6 +305,7 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
     const invoice = await draftWithLine()
     await approveInvoice(db, invoice.id, ACTOR)
     await sendInvoice(db, invoice.id, ACTOR)
+    await flushInvoiceSendPipeline(pool, db, invoice.id)
     await markInvoicePaid(db, invoice.id, ACTOR)
 
     const revision = await createInvoiceRevision(db, invoice.id, ACTOR)

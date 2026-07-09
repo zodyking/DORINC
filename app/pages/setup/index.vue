@@ -855,12 +855,12 @@ async function next() {
           <div class="chead"><h3>PDF worker</h3></div>
           <div class="cbody">
             <p style="font-size:13px; color:#475569; margin:0 0 14px;">
-              PDF generation uses the Playwright worker included in the Docker <code>workers</code> profile. No extra configuration is required for most deployments.
+              PDF generation uses the Playwright pdf-worker container, which starts automatically with your Docker Compose deploy. No extra configuration is required for most deployments.
             </p>
             <label class="fld">Default template
               <select v-model="pdf.template"><option>Professional Bill Matrix v1</option></select>
             </label>
-            <span class="conn-ok show">✓ PDF worker runs with Docker workers profile</span>
+            <span class="conn-ok show">✓ pdf-worker starts with every deploy</span>
           </div>
         </div>
       </div>
