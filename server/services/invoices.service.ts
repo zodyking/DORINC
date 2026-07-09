@@ -527,7 +527,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(where)
 
-  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
+  const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
 
   return {
     items: rows.map((r) => {
@@ -540,11 +540,34 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
           || r.customerName
           || 'Customer'
       }
+      const liveVehicle = r.vehicle?.busNumber || r.vehicle?.make
+        ? {
+            busNumber: r.vehicle.busNumber,
+            make: r.vehicle.make,
+            model: r.vehicle.model,
+          }
+        : null
+      let vehicleSnapshot: ReturnType<typeof resolveVehicleDisplay>
+      try {
+        vehicleSnapshot = resolveVehicleDisplay(liveVehicle, r.invoice.vehicleSnapshot)
+      }
+      catch {
+        vehicleSnapshot = r.invoice.vehicleSnapshot ?? null
+      }
       return {
-        ...r.invoice,
+        id: r.invoice.id,
+        invoiceNumber: r.invoice.invoiceNumber,
         invoiceNumberFormatted: formatInvoiceNumber(r.invoice.invoiceNumber),
+        status: r.invoice.status,
+        invoiceDate: r.invoice.invoiceDate,
+        dueDate: r.invoice.dueDate,
+        total: r.invoice.total,
+        balanceDue: r.invoice.balanceDue,
+        customerId: r.invoice.customerId,
+        vehicleId: r.invoice.vehicleId,
         customerName,
-        vehicle: r.vehicle?.busNumber ? r.vehicle : null,
+        vehicleSnapshot,
+        vehicle: liveVehicle,
       }
     }),
     total: Number(total?.value ?? 0),

@@ -1,6 +1,6 @@
 // Portal estimates presentation helpers (P3-03).
 
-import { invoiceDateDisplay, moneyDisplay } from './invoices-ui'
+import { invoiceDateDisplay } from './invoices-ui'
 
 export type PortalEstimateFilter = 'all' | 'pending' | 'approved' | 'rejected'
 
@@ -45,4 +45,3 @@ export function portalEstimateListSublabel(
   return invoiceDateDisplay(estimateDate)
 }
 
-export { invoiceDateDisplay, moneyDisplay }

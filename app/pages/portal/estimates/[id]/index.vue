@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // Customer portal estimate detail — approve/reject actions (P3-03).
+import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import {
-  invoiceDateDisplay,
-  moneyDisplay,
   portalEstimateStatus,
 } from '~/utils/portal-estimates-ui'
 import { vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // Customer portal invoices list — filters, PDF download (mockup: Portal Invoices / P2-05).
+import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import {
-  invoiceDateDisplay,
-  moneyDisplay,
   portalInvoiceFilterLabel,
   portalInvoiceListSublabel,
   portalInvoiceMatchesFilter,

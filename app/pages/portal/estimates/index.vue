@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // Customer portal estimates list — approve/reject workflow (P3-03).
+import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import {
-  invoiceDateDisplay,
-  moneyDisplay,
   portalEstimateFilterLabel,
   portalEstimateListSublabel,
   portalEstimateMatchesFilter,

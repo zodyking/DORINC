@@ -939,7 +939,8 @@ table.tbl{ width:100%; border-collapse:collapse; }
 .pill.warn{ background:#fffbeb; color:#d97706; }
 .pill.indigo{ background:#eef2ff; color:#4f46e5; }
 .cfoot{ display:flex; justify-content:space-between; align-items:center; padding:12px 18px; color:#64748b; font-size:13px; flex-wrap:wrap; gap:8px; }
-.empty{ padding:36px 18px; text-align:center; color:#94a3b8; font-size:13.5px; display:none; }
+/* Vue pages toggle empty states with v-if — do not hide by default (display:none made whole pages look blank). */
+.empty{ padding:36px 18px; text-align:center; color:#94a3b8; font-size:13.5px; }
 .cp-state{ padding:36px 18px; text-align:center; color:#64748b; font-size:13.5px; }
 
 /* ---------- KPIs ---------- */

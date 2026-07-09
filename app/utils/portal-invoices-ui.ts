@@ -53,4 +53,4 @@ export function portalInvoicePdfUrl(invoiceId: string): string {
   return `/api/portal/invoices/${invoiceId}/pdf`
 }
 
-export { invoiceDateDisplay, moneyDisplay, portalInvoiceStatus }
+export { portalInvoiceStatus }

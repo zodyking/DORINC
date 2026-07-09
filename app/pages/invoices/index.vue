@@ -41,7 +41,7 @@ interface InvoiceStats {
 
 const route = useRoute()
 const auth = useAuthStore()
-const canRead = computed(() => auth.can('invoices.read.all'))
+const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 const canVoidInvoice = computed(() =>
   auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
@@ -70,14 +70,16 @@ const query = computed(() => ({
   sort: 'newest' as const,
 }))
 
+// Do not await — awaiting client-only fetches can leave the page blank under Suspense.
 const {
   data: stats,
   refresh: refreshStats,
   error: statsError,
   pending: statsPending,
-} = await useFetch<InvoiceStats>('/api/invoices/stats', {
+} = useFetch<InvoiceStats>('/api/invoices/stats', {
   server: false,
   lazy: true,
+  immediate: false,
 })
 
 const {
@@ -85,15 +87,31 @@ const {
   refresh: refreshList,
   error: listError,
   pending: listPending,
-} = await useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', {
+} = useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', {
   query,
   server: false,
   lazy: true,
+  immediate: false,
 })
+
+watch(canRead, (allowed) => {
+  if (allowed) {
+    refreshStats()
+    refreshList()
+  }
+}, { immediate: true })
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => {
+  const count = pageCount.value
+  if (count <= 12) return Array.from({ length: count }, (_, i) => i + 1)
+  const current = page.value
+  const start = Math.max(1, Math.min(current - 4, count - 11))
+  const end = Math.min(count, start + 11)
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+})
 const pageError = computed(() =>
   (listError.value as { data?: { message?: string } } | null)?.data?.message
   ?? (statsError.value as { data?: { message?: string } } | null)?.data?.message
@@ -155,8 +173,12 @@ async function retryLoad() {
 </script>
 
 <template>
-  <section v-if="!canRead" class="page active">
-    <div class="empty">You do not have permission to view invoices.</div>
+  <section v-if="!auth.loaded" class="page active">
+    <div class="cp-state">Loading…</div>
+  </section>
+
+  <section v-else-if="!canRead" class="page active">
+    <div class="cp-state">You do not have permission to view invoices.</div>
   </section>
 
   <section v-else class="page active">
@@ -288,7 +310,7 @@ async function retryLoad() {
         <div v-if="pageCount > 1" class="pager">
           <button type="button" aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
           <button
-            v-for="p in pageCount"
+            v-for="p in pagerPages"
             :key="p"
             type="button"
             :class="{ on: p === page }"

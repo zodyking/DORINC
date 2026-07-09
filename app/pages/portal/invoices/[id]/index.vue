@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // Customer portal invoice detail — line items + PDF download (mockup: Portal Invoice detail / P2-05).
+import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import {
-  invoiceDateDisplay,
-  moneyDisplay,
   portalInvoiceDetailStatus,
   portalInvoicePdfUrl,
 } from '~/utils/portal-invoices-ui'
