@@ -3,7 +3,7 @@ import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
 import { catalogItems } from '../db/schema/catalog'
-import { customers } from '../db/schema/customers'
+import { customerContacts, customerCredentialEmailLogs, customers } from '../db/schema/customers'
 import { editingSessions } from '../db/schema/editing-sessions'
 import { estimates } from '../db/schema/estimates'
 import { invoiceLineItems, invoices } from '../db/schema/invoices'
@@ -462,6 +462,38 @@ async function clearCustomerBlockingRows(db: Db) {
   await db.delete(portalGeneralRequests)
 }
 
+/**
+ * Wipe customers also removes portal logins. Sessions / tokens cascade from users;
+ * contact + credential-log FKs must be cleared first.
+ */
+async function deleteCustomerPortalUsers(db: Db) {
+  const [customerType] = await db.select({ id: accountTypes.id })
+    .from(accountTypes)
+    .where(eq(accountTypes.key, 'customer'))
+    .limit(1)
+  if (!customerType) return
+
+  const portalUsers = await db.select({ id: users.id })
+    .from(users)
+    .where(eq(users.accountTypeId, customerType.id))
+
+  if (!portalUsers.length) return
+
+  const ids = portalUsers.map(u => u.id)
+
+  await db.update(customerContacts)
+    .set({ portalUserId: null, updatedAt: new Date() })
+    .where(inArray(customerContacts.portalUserId, ids))
+
+  await db.delete(customerCredentialEmailLogs)
+    .where(inArray(customerCredentialEmailLogs.portalUserId, ids))
+
+  await db.delete(editingSessions)
+    .where(inArray(editingSessions.userId, ids))
+
+  await db.delete(users).where(inArray(users.id, ids))
+}
+
 /** Permanently delete all rows in a workspace table (Control Panel — type DELETE to confirm). */
 export async function wipeDataExchangeTable(
   db: Db,
@@ -493,6 +525,7 @@ export async function wipeDataExchangeTable(
       break
     case 'customers':
       await clearCustomerBlockingRows(db)
+      await deleteCustomerPortalUsers(db)
       await db.delete(customers)
       break
     default:

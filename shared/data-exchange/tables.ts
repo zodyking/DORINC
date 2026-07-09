@@ -20,7 +20,7 @@ export const DATA_EXCHANGE_TABLES: DataExchangeTableDef[] = [
   {
     key: 'customers',
     label: 'Customers',
-    description: 'Accounts, contacts, portal flags',
+    description: 'Accounts, contacts — wipe also deletes portal logins',
     importable: true,
     wipeable: true,
   },

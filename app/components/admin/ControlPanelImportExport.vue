@@ -251,7 +251,10 @@ async function runWipe() {
       <div class="cbody">
         <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
           This permanently deletes <strong>{{ wipeTarget.rowCount.toLocaleString() }}</strong> row{{ wipeTarget.rowCount === 1 ? '' : 's' }}
-          from <span class="mono">{{ wipeTarget.key }}</span>. Related portal requests may be removed when wiping customers.
+          from <span class="mono">{{ wipeTarget.key }}</span>.
+          <template v-if="wipeTarget.key === 'customers'">
+            Portal requests and all customer portal logins are deleted with them.
+          </template>
           This cannot be undone — export a backup first if you need one.
         </p>
         <label class="fld">
