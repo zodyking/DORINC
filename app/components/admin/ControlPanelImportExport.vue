@@ -17,7 +17,10 @@ interface ImportResult {
   errors: string[]
 }
 
-const { data, refresh } = await useFetch<{ items: DataExchangeTableSummary[] }>('/api/admin/data-exchange')
+const { data, refresh, error: tablesError, pending: tablesPending } = useFetch<{ items: DataExchangeTableSummary[] }>(
+  '/api/admin/data-exchange',
+  { server: false, lazy: true },
+)
 
 const selectedKey = ref<string | null>(null)
 const importMode = ref<'upsert' | 'insert_only' | 'dry_run'>('dry_run')
@@ -82,7 +85,11 @@ async function runImport() {
       <div class="chead">
         <h3>Data Tables</h3>
       </div>
-      <div v-if="data?.items?.length">
+      <div v-if="tablesPending" class="cbody" style="font-size:13px; color:#64748b;">Loading tables…</div>
+      <div v-else-if="tablesError" class="cbody" style="font-size:13px; color:#dc2626;">
+        Could not load data tables. Refresh the page or check your admin permissions.
+      </div>
+      <div v-else-if="data?.items?.length">
         <div
           v-for="table in data.items"
           :key="table.key"
@@ -111,7 +118,7 @@ async function runImport() {
           </div>
         </div>
       </div>
-      <p v-else class="cbody" style="font-size:13px; color:#64748b;">Loading tables…</p>
+      <p v-else class="cbody" style="font-size:13px; color:#64748b;">No exportable tables found.</p>
     </div>
 
     <div class="card">

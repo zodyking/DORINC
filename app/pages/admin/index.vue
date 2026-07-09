@@ -1,5 +1,7 @@
 <script setup lang="ts">
 // Control Panel — system health, import/export, backups, and configuration.
+import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
+import ControlPanelTemplateDesigner from '~/components/admin/ControlPanelTemplateDesigner.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
@@ -713,7 +715,7 @@ async function runSmtpTest() {
         <ControlPanelTemplateDesigner />
       </div>
 
-      <div v-show="activeTab === 'import'">
+      <div v-if="activeTab === 'import'">
         <ControlPanelImportExport />
       </div>
 
