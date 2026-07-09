@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, or, sql } fr
 import type { Db } from '../db/client'
 import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
+import { invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
 
 export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED'
@@ -164,6 +165,8 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
 
   // Primary contact per page of customers — no blobs, cheap join
   const ids = rows.map(r => r.id)
+  await relinkOrphanInvoicesByName(db, rows.map(r => ({ id: r.id, displayName: r.displayName })))
+
   const contacts = ids.length
     ? await db.select().from(customerContacts)
         .where(and(
@@ -185,22 +188,106 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
         .where(and(inArray(vehicles.customerId, ids), isNull(vehicles.archivedAt)))
         .groupBy(vehicles.customerId)
     : []
-  const vehiclesByCustomer = new Map(vehicleCounts.map(v => [v.customerId, v.value]))
+  const vehiclesByCustomer = new Map(vehicleCounts.map(v => [v.customerId, Number(v.value)]))
+
+  // Invoice totals for the page — open = sent/approved with balance due > 0 (same rule as invoice KPIs).
+  const invoiceStats = ids.length
+    ? await db.select({
+        customerId: invoices.customerId,
+        invoiceCount: count(),
+        openInvoiceCount: sql<number>`count(*) filter (
+          where ${invoices.status} in ('sent', 'approved')
+            and ${invoices.balanceDue} > 0
+        )`,
+        openBalance: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
+          where ${invoices.status} in ('sent', 'approved')
+            and ${invoices.balanceDue} > 0
+        ), 0)`,
+        lifetimeBilled: sql<string>`coalesce(sum(${invoices.total}) filter (
+          where ${invoices.status} <> 'void'
+        ), 0)`,
+      })
+        .from(invoices)
+        .where(and(
+          inArray(invoices.customerId, ids),
+          isNull(invoices.archivedAt),
+        ))
+        .groupBy(invoices.customerId)
+    : []
+  const invoicesByCustomer = new Map(invoiceStats.map(row => [row.customerId!, {
+    invoiceCount: Number(row.invoiceCount ?? 0),
+    openInvoiceCount: Number(row.openInvoiceCount ?? 0),
+    openBalance: String(row.openBalance ?? '0'),
+    lifetimeBilled: String(row.lifetimeBilled ?? '0'),
+  }]))
 
   return {
     items: rows.map((r) => {
       const list = byCustomer.get(r.id) ?? []
       const primary = list.find(c => c.isPrimary) ?? list[0] ?? null
+      const inv = invoicesByCustomer.get(r.id)
       return {
         ...r,
         primaryContact: primary ? { name: primary.name, email: primary.email, phone: primary.phone } : null,
         contactCount: list.length,
         vehicleCount: vehiclesByCustomer.get(r.id) ?? 0,
+        invoiceCount: inv?.invoiceCount ?? 0,
+        openInvoiceCount: inv?.openInvoiceCount ?? 0,
+        openBalance: inv?.openBalance ?? '0',
+        lifetimeBilled: inv?.lifetimeBilled ?? '0',
       }
     }),
     total: total!.value,
     page: filter.page,
     pageSize: filter.pageSize,
+  }
+}
+
+/** Attach orphan imported invoices (null customer_id) to matching customers by snapshot name. */
+async function relinkOrphanInvoicesByName(
+  db: Db,
+  customerRows: Array<{ id: string, displayName: string }>,
+) {
+  for (const customer of customerRows) {
+    const name = customer.displayName.trim()
+    if (!name) continue
+    await db.execute(sql`
+      UPDATE invoices
+      SET customer_id = ${customer.id}, updated_at = now()
+      WHERE customer_id IS NULL
+        AND archived_at IS NULL
+        AND lower(coalesce(customer_snapshot->>'displayName', '')) = lower(${name})
+    `)
+  }
+}
+
+/** Billing summary for a single customer detail page. */
+export async function getCustomerBillingSummary(db: Db, customerId: string) {
+  const customer = await getCustomer(db, customerId)
+  await relinkOrphanInvoicesByName(db, [{ id: customer.id, displayName: customer.displayName }])
+
+  const [row] = await db.select({
+    invoiceCount: count(),
+    openInvoiceCount: sql<number>`count(*) filter (
+      where ${invoices.status} in ('sent', 'approved')
+        and ${invoices.balanceDue} > 0
+    )`,
+    openBalance: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
+      where ${invoices.status} in ('sent', 'approved')
+        and ${invoices.balanceDue} > 0
+    ), 0)`,
+    lifetimeBilled: sql<string>`coalesce(sum(${invoices.total}) filter (
+      where ${invoices.status} <> 'void'
+    ), 0)`,
+  })
+    .from(invoices)
+    .where(and(eq(invoices.customerId, customerId), isNull(invoices.archivedAt)))
+
+  return {
+    invoiceCount: Number(row?.invoiceCount ?? 0),
+    openInvoiceCount: Number(row?.openInvoiceCount ?? 0),
+    openBalance: String(row?.openBalance ?? '0'),
+    lifetimeBilled: String(row?.lifetimeBilled ?? '0'),
   }
 }
 

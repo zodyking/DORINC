@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, count, eq, ilike, inArray, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
@@ -703,6 +703,22 @@ async function resolveExistingFk(
   return row?.id ?? null
 }
 
+async function resolveCustomerIdForImport(
+  db: Db,
+  customerId: string | null,
+  displayName: string | null | undefined,
+): Promise<string | null> {
+  const byId = await resolveExistingFk(db, 'customers', customerId)
+  if (byId) return byId
+  const name = displayName?.trim()
+  if (!name) return null
+  const [row] = await db.select({ id: customers.id })
+    .from(customers)
+    .where(and(ilike(customers.displayName, name), isNull(customers.archivedAt)))
+    .limit(1)
+  return row?.id ?? null
+}
+
 async function importInvoices(
   db: Db,
   rows: Record<string, unknown>[],
@@ -755,7 +771,11 @@ async function importInvoices(
 
     if (mode === 'dry_run') continue
 
-    const customerId = await resolveExistingFk(db, 'customers', optionalUuid(row.customerId))
+    const customerId = await resolveCustomerIdForImport(
+      db,
+      optionalUuid(row.customerId),
+      customerSnapshot.displayName,
+    )
     const vehicleId = await resolveExistingFk(db, 'vehicles', optionalUuid(row.vehicleId))
     const serviceLogId = await resolveExistingFk(db, 'service_logs', optionalUuid(row.serviceLogId))
 

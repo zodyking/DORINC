@@ -1,9 +1,10 @@
 import { desc, eq, and } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
-import { CustomersServiceError, getCustomer, listContacts } from '../../../services/customers.service'
+import { CustomersServiceError, getCustomer, getCustomerBillingSummary, listContacts } from '../../../services/customers.service'
+import { listInvoices } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
-import { requirePermission } from '../../../utils/require-permission'
+import { hasPermission, requirePermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
@@ -15,6 +16,16 @@ export default defineEventHandler(async (event) => {
   try {
     const customer = await getCustomer(db, id)
     const contacts = await listContacts(db, id)
+    const billing = await getCustomerBillingSummary(db, id)
+
+    const recentInvoices = hasPermission(event, 'invoices.read.all')
+      ? (await listInvoices(db, {
+          customerId: id,
+          page: 1,
+          pageSize: 8,
+          sort: 'newest',
+        })).items
+      : []
 
     // Append-only change history straight from the audit trail (SPEC §6.1)
     const history = await db
@@ -30,7 +41,7 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(auditLogs.createdAt))
       .limit(25)
 
-    return { customer, contacts, history }
+    return { customer, contacts, history, billing, recentInvoices }
   }
   catch (err) {
     if (err instanceof CustomersServiceError && err.code === 'NOT_FOUND') {

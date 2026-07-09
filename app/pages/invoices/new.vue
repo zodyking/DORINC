@@ -71,6 +71,11 @@ const poNumber = ref('')
 
 const lines = ref<DraftLine[]>([createEmptyLine()])
 
+const route = useRoute()
+if (typeof route.query.customerId === 'string' && route.query.customerId) {
+  customerId.value = route.query.customerId
+}
+
 const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
   { query: { pageSize: 100, sort: 'name-asc' } },

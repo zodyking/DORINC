@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  invoiceDateDisplay,
+  invoiceStatusPill,
+  moneyDisplay,
+  type InvoiceStatus,
+} from '~/utils/invoices-ui'
+import { avColor, initials } from '~/utils/users-ui'
+
 definePageMeta({ layout: 'staff' })
 
 interface Address { line1?: string, line2?: string, city?: string, state?: string, zip?: string }
@@ -40,16 +48,44 @@ interface HistoryRow {
 const route = useRoute()
 const auth = useAuthStore()
 
+interface BillingSummary {
+  invoiceCount: number
+  openInvoiceCount: number
+  openBalance: string
+  lifetimeBilled: string
+}
+
+interface RecentInvoiceRow {
+  id: string
+  invoiceNumberFormatted: string
+  status: string
+  invoiceDate: string
+  dueDate: string | null
+  total: string
+  balanceDue: string
+}
+
 const { data, refresh, error } = await useFetch<{
   customer: Customer
   contacts: Contact[]
   history: HistoryRow[]
+  billing: BillingSummary
+  recentInvoices: RecentInvoiceRow[]
 }>(`/api/customers/${route.params.id}`)
 
 const customer = computed(() => data.value?.customer)
 const contacts = computed(() => data.value?.contacts ?? [])
 const history = computed(() => data.value?.history ?? [])
+const billing = computed(() => data.value?.billing ?? {
+  invoiceCount: 0,
+  openInvoiceCount: 0,
+  openBalance: '0',
+  lifetimeBilled: '0',
+})
+const recentInvoices = computed(() => data.value?.recentInvoices ?? [])
 const primary = computed(() => contacts.value.find(c => c.isPrimary) ?? contacts.value[0])
+const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
+const canReadInvoices = computed(() => auth.can('invoices.read.all'))
 
 // Fleet units for this customer (P1-10)
 interface VehicleRow {
@@ -308,15 +344,33 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
           >
             Restore
           </button>
-          <button class="btn primary" disabled title="Coming soon">+ New Invoice</button>
+          <NuxtLink
+            v-if="canCreateInvoice"
+            :to="`/invoices/new?customerId=${customer.id}`"
+            class="btn primary"
+          >
+            + New Invoice
+          </NuxtLink>
         </div>
       </div>
 
       <p v-if="flash" class="flash" :class="flashKind">{{ flash }}</p>
 
       <div class="kpis">
-        <div class="kpi"><div class="t">Open balance</div><div class="v">$0.00</div><div class="d flat">No open invoices</div></div>
-        <div class="kpi"><div class="t">Lifetime billed</div><div class="v">$0.00</div><div class="d flat">0 invoices</div></div>
+        <div class="kpi">
+          <div class="t">Open balance</div>
+          <div class="v">{{ moneyDisplay(billing.openBalance) }}</div>
+          <div class="d flat">
+            {{ billing.openInvoiceCount
+              ? `${billing.openInvoiceCount} open invoice${billing.openInvoiceCount === 1 ? '' : 's'}`
+              : 'No open invoices' }}
+          </div>
+        </div>
+        <div class="kpi">
+          <div class="t">Lifetime billed</div>
+          <div class="v">{{ moneyDisplay(billing.lifetimeBilled) }}</div>
+          <div class="d flat">{{ billing.invoiceCount }} invoice{{ billing.invoiceCount === 1 ? '' : 's' }}</div>
+        </div>
         <div class="kpi"><div class="t">Contacts</div><div class="v">{{ contacts.length }}</div><div class="d flat">{{ primary ? primary.name : 'None yet' }}</div></div>
         <div class="kpi"><div class="t">Vehicles</div><div class="v">{{ vehicles.length }}</div><div class="d flat">{{ vehicles.length ? `${vehicles.filter(v => v.status === 'active').length} active` : 'No units yet' }}</div></div>
       </div>
@@ -324,8 +378,50 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
       <div class="cols">
         <div class="stack">
           <div class="card">
-            <div class="chead"><h3>Invoices</h3></div>
-            <div class="empty" style="display:block;">No invoices yet.</div>
+            <div class="chead">
+              <h3>Invoices · {{ billing.invoiceCount }}</h3>
+              <div class="right">
+                <NuxtLink
+                  v-if="canReadInvoices"
+                  :to="`/invoices?q=${encodeURIComponent(customer.displayName)}`"
+                  class="btn sm"
+                >
+                  View all
+                </NuxtLink>
+              </div>
+            </div>
+            <div v-if="recentInvoices.length" class="tscroll">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Issued</th>
+                    <th>Status</th>
+                    <th class="num">Amount</th>
+                    <th class="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="inv in recentInvoices"
+                    :key="inv.id"
+                    class="click"
+                    @click="navigateTo(`/invoices/${inv.id}`)"
+                  >
+                    <td><span class="lead">{{ inv.invoiceNumberFormatted }}</span></td>
+                    <td>{{ invoiceDateDisplay(inv.invoiceDate) }}</td>
+                    <td>
+                      <span :class="invoiceStatusPill(inv.status as InvoiceStatus, inv.dueDate, inv.balanceDue).cls">
+                        {{ invoiceStatusPill(inv.status as InvoiceStatus, inv.dueDate, inv.balanceDue).label }}
+                      </span>
+                    </td>
+                    <td class="num">{{ moneyDisplay(inv.total) }}</td>
+                    <td class="num">{{ moneyDisplay(inv.balanceDue) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="empty" style="display:block;">No invoices yet.</div>
           </div>
 
           <div class="card">
