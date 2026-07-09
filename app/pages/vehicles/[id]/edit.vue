@@ -156,6 +156,14 @@ async function restore() {
           >
             Restore
           </button>
+          <DeleteEntityButton
+            v-if="!v.archivedAt"
+            entity-type="vehicle"
+            :entity-id="v.id"
+            :entity-label="vehicleTag(v)"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'"
+          />
         </div>
       </div>
       <p v-if="flash" class="flash ok" style="margin:-8px 0 16px;">{{ flash }}</p>
@@ -166,17 +174,7 @@ async function restore() {
         submit-label="Save unit"
         @submit="submit"
         @cancel="navigateTo(`/vehicles/${route.params.id}`)"
-      >
-        <template v-if="!v.archivedAt" #footer-extra>
-          <DeleteEntityButton
-            entity-type="vehicle"
-            :entity-id="v.id"
-            :entity-label="vehicleTag(v)"
-            :disabled="busy"
-            @submitted="flash = 'Deletion request submitted for admin review'"
-          />
-        </template>
-      </VehiclesVehicleForm>
+      />
     </template>
   </section>
 </template>

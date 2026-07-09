@@ -8,7 +8,7 @@ export type DeletionEntityType = (typeof DELETION_ENTITY_TYPES)[number]
 export const DELETION_REQUEST_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type DeletionRequestStatus = (typeof DELETION_REQUEST_STATUSES)[number]
 
-/** Staff-initiated deletion requests — admin approval executes archive/void (SPEC §12). */
+/** Staff-initiated deletion requests — admin approval executes hard delete with snapshots (SPEC §12). */
 export const entityDeletionRequests = pgTable('entity_deletion_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   entityType: text('entity_type', { enum: DELETION_ENTITY_TYPES }).notNull(),

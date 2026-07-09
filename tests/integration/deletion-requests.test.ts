@@ -1,4 +1,4 @@
-// Integration tests for staff deletion request workflow (archive/void with admin approval).
+// Integration tests for staff deletion request workflow (hard delete with admin approval).
 import { config } from 'dotenv'
 import { eq, inArray, like } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'

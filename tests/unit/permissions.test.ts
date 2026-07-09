@@ -66,8 +66,8 @@ describe('evaluatePermission', () => {
   it('deny wins over override allow', () => {
     expect(evaluatePermission({
       user: user(),
-      required: 'invoices.void.all',
-      overrides: { allow: ['invoices.void.all'], deny: ['invoices.void.all'] },
+      required: 'invoices.create.all',
+      overrides: { allow: ['invoices.create.all'], deny: ['invoices.create.all'] },
     })).toEqual({ allowed: false, reason: 'denied' })
   })
 

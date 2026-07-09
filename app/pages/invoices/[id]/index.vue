@@ -197,6 +197,9 @@ const headlineStatus = computed(() => {
 })
 
 const isDraft = computed(() => invoice.value?.status === 'draft')
+const removableInvoice = computed(() =>
+  invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
+)
 const showRecordPayment = computed(() =>
   invoice.value && invoice.value.status === 'sent'
   && Number.parseFloat(invoice.value.balanceDue) > 0,
@@ -356,6 +359,13 @@ const summaryRows = computed(() => {
         >
           Record payment
         </NuxtLink>
+        <DeleteEntityButton
+          v-if="removableInvoice"
+          entity-type="invoice"
+          :entity-id="id"
+          :entity-label="invoice.invoiceNumberFormatted"
+          :disabled="busy"
+        />
       </div>
     </div>
 

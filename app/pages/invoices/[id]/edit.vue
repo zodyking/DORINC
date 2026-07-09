@@ -120,9 +120,6 @@ const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canDescribe = computed(() => auth.can('ai.describe.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
-const canVoidInvoice = computed(() =>
-  auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
-)
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
@@ -599,13 +596,12 @@ const aiPopStyle = computed(() => {
             :allow-official-download="['approved', 'sent', 'paid'].includes(invoice.status)"
             :can-generate-pdf="auth.can('invoices.generate_pdf.all')"
           />
-          <VoidInvoiceButton
-            v-if="removableInvoice && canVoidInvoice"
-            :invoice-id="id"
-            :invoice-label="invoice.invoiceNumberFormatted"
-            :status="invoice.status"
+          <DeleteEntityButton
+            v-if="removableInvoice"
+            entity-type="invoice"
+            :entity-id="id"
+            :entity-label="invoice.invoiceNumberFormatted"
             :disabled="busy"
-            @voided="refresh()"
           />
         </div>
       </div>
@@ -814,22 +810,9 @@ const aiPopStyle = computed(() => {
               >
                 Finalize &amp; send
               </button>
-              <DeleteEntityButton
-                v-if="removableInvoice"
-                entity-type="invoice"
-                :entity-id="id"
-                :entity-label="invoice.invoiceNumberFormatted"
-                :disabled="busy"
-              />
             </div>
-            <div v-else-if="removableInvoice" class="savebar">
+            <div v-else class="savebar">
               <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
-              <DeleteEntityButton
-                entity-type="invoice"
-                :entity-id="id"
-                :entity-label="invoice.invoiceNumberFormatted"
-                :disabled="busy"
-              />
             </div>
           </div>
 
