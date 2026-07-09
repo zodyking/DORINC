@@ -15,12 +15,15 @@ const locked = ref(false)
 const { data: setupStatus, refresh: refreshStatus } = await useFetch<{
   needsBootstrap: boolean
   progress: { database: boolean, smtp: boolean, security: boolean, ai: boolean }
-  envLocked: { security: boolean, smtp: boolean }
+  envLocked: { security: boolean, appUrl: boolean, smtp: boolean }
+  env: { appUrl: string | null }
 }>('/api/setup/status')
 
 if (setupStatus.value && !setupStatus.value.needsBootstrap) {
   locked.value = true
 }
+
+const appUrlEnvLocked = computed(() => !!setupStatus.value?.envLocked.appUrl)
 
 const db = reactive({
   host: 'localhost',
@@ -56,7 +59,10 @@ const admin = reactive({ name: '', email: '', password: '', confirm: '', sendVer
 
 const reveal = reactive<Record<string, boolean>>({})
 
-if (import.meta.client && !security.appUrl) {
+if (setupStatus.value?.env?.appUrl) {
+  security.appUrl = setupStatus.value.env.appUrl
+}
+else if (import.meta.client && !security.appUrl) {
   security.appUrl = window.location.origin
 }
 
@@ -385,8 +391,17 @@ async function next() {
             </div>
             <div style="margin-top:16px;">
               <label class="fld">Public app URL
-                <input v-model="security.appUrl" type="url" placeholder="https://invoices.yourdomain.com">
-                <span class="help">Required for portal links and credential emails</span>
+                <input
+                  v-model="security.appUrl"
+                  type="url"
+                  placeholder="https://invoices.yourdomain.com"
+                  :readonly="appUrlEnvLocked"
+                >
+                <span class="help">
+                  {{ appUrlEnvLocked
+                    ? 'Set from APP_URL in Dockploy — used for portal links and emails'
+                    : 'Required for portal links and credential emails' }}
+                </span>
               </label>
             </div>
           </div>

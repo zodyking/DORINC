@@ -234,12 +234,16 @@ export async function getSetupProgress(db: Db): Promise<SetupProgress> {
   }
 }
 
+export function isAppUrlEnvLocked(): boolean {
+  return !!envAppUrl()
+}
+
 export async function saveSecurityConfig(
   db: Db,
   input: {
     masterKeyHex?: string
     sessionSecretHex?: string
-    appUrl: string
+    appUrl?: string
     maxUploadMb?: number
   },
 ): Promise<void> {
@@ -249,7 +253,8 @@ export async function saveSecurityConfig(
 
   const masterKeyHex = input.masterKeyHex?.trim() || hexKey()
   const sessionSecretHex = input.sessionSecretHex?.trim() || hexKey()
-  const appUrl = input.appUrl.trim().replace(/\/$/, '')
+  // Dockploy sets APP_URL in env; wizard value is used only when env is absent.
+  const appUrl = (envAppUrl() ?? input.appUrl ?? '').trim().replace(/\/$/, '')
   const maxUploadMb = input.maxUploadMb ?? 25
 
   if (!/^https?:\/\/.+/i.test(appUrl)) {

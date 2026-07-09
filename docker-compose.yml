@@ -1,7 +1,12 @@
 # DORINC Suite — Docker Compose for Dockploy
 #
-# Zero .env required. Deploy containers, visit /setup, configure in the UI.
-# Persistent runtime config (database URL) lives in the dorinc-runtime volume.
+# Dockploy env (only these):
+#   PORT=38471         # container listen port (must match Domains → Port)
+#   APP_URL=https://…  # public URL
+#
+# Do NOT publish host ports — Dockploy Traefik routes via Domains.
+# Default is 38471 to avoid clashing with Dockploy and common app ports.
+# Everything else (database, security keys, SMTP, AI) is configured in /setup.
 
 services:
   nuxt-app:
@@ -9,16 +14,19 @@ services:
       context: .
       dockerfile: docker/Dockerfile.app
     restart: unless-stopped
-    ports:
-      - '3000:3000'
+    # Internal only — Dokploy Domains / Traefik reach this port on the Docker network.
+    expose:
+      - '${PORT:-38471}'
     volumes:
       - dorinc-runtime:/app/.data
     environment:
       NODE_ENV: production
-      NITRO_PORT: '3000'
+      PORT: ${PORT:-38471}
+      NITRO_PORT: ${PORT:-38471}
       NITRO_HOST: 0.0.0.0
+      APP_URL: ${APP_URL}
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
+      test: ['CMD-SHELL', 'wget -qO- "http://127.0.0.1:$$PORT/api/health" || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -35,6 +43,7 @@ services:
     environment:
       NODE_ENV: production
       WORKER_KIND: general
+      APP_URL: ${APP_URL:-}
 
   pdf-worker:
     build:
@@ -47,6 +56,7 @@ services:
     environment:
       NODE_ENV: production
       WORKER_KIND: pdf
+      APP_URL: ${APP_URL:-}
 
   # Optional: apply migrations when upgrading (first install runs migrate via /setup).
   migrate:

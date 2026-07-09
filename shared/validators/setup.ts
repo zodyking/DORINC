@@ -14,7 +14,8 @@ export type SetupDatabaseInput = z.infer<typeof setupDatabaseSchema>
 export const setupSecuritySchema = z.object({
   masterKeyHex: z.string().regex(/^[0-9a-f]{64}$/i).optional(),
   sessionSecretHex: z.string().min(32).optional(),
-  appUrl: z.string().url(),
+  /** Optional when APP_URL is set in the environment (Dockploy). */
+  appUrl: z.string().url().optional(),
   maxUploadMb: z.coerce.number().int().min(1).max(500).optional(),
 })
 

@@ -6,7 +6,7 @@
 
 Self-hosted invoice, customer, vehicle, and fleet billing software for service shops.
 
-Deploy with **Docker Compose on Dockploy**, open `/setup`, and finish configuration in the browser. No `.env` file is required for a normal install.
+Deploy with **Docker Compose on Dockploy**, set two environment variables, open `/setup`, and finish configuration in the browser.
 
 ## Features
 
@@ -29,7 +29,7 @@ In Dockploy, create a Compose application from this repo using `docker-compose.y
 
 | Service | Profile | Role |
 |---|---|---|
-| `nuxt-app` | default | Web app (port **3000**) |
+| `nuxt-app` | default | Web app |
 | `worker` | `workers` | Mail, backups, AI, retention |
 | `pdf-worker` | `workers` | Playwright PDF rendering |
 | `migrate` | `migrate` | One-shot DB migrations on upgrade |
@@ -37,29 +37,58 @@ In Dockploy, create a Compose application from this repo using `docker-compose.y
 
 Persist the **`dorinc-runtime`** volume — it stores database connection settings under `.data/`.
 
-### 3. Deploy and open setup
+### 3. Environment (Dockploy only)
+
+Set **only** these two variables in the Compose Environment tab:
+
+```env
+PORT=38471
+APP_URL=https://your-domain.example
+```
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Port the app listens on **inside** the container (default `38471`) |
+| `APP_URL` | Public URL for portal links, emails, and OAuth callbacks |
+
+Do **not** put database, SMTP, encryption keys, or AI credentials in Dockploy env — those are configured in the setup wizard.
+
+`PORT` is not a host port. Compose uses `expose` (Docker network only). Default is **38471** so it does not clash with Dockploy or common app ports.
+
+### 4. Domains (Dockploy)
+
+In the **Domains** tab, add your domain and point it at:
+
+| Field | Value |
+|---|---|
+| Service | `nuxt-app` |
+| Port | `38471` (must match `PORT`) |
+
+Dockploy/Traefik handles HTTPS and public routing.
+
+### 5. Deploy and open setup
 
 Deploy the default profile (`nuxt-app`). Then open:
 
 ```text
-https://your-domain/setup
+https://your-domain.example/setup
 ```
 
 Complete the wizard:
 
 1. Connect PostgreSQL
-2. Create the Super Admin account
-3. Configure security / app URL
-4. Configure SMTP (recommended)
-5. Optional: PDF, backup, and AI settings
+2. Create encryption / session keys (public URL is already set from `APP_URL`)
+3. Configure SMTP (recommended)
+4. Optional: PDF, backup, and AI settings
+5. Create the Super Admin account
 
 Health check: `GET /api/health`
 
-### 4. Enable workers (recommended)
+### 6. Enable workers (recommended)
 
 In Dockploy, enable the `workers` profile so mail and PDF jobs run in the background.
 
-### 5. Upgrades
+### 7. Upgrades
 
 After pulling a new release, run migrations once:
 

@@ -58,6 +58,8 @@ export default defineNuxtConfig({
     },
   },
 
+  // Dockploy: set PORT + APP_URL only. DB/SMTP/keys come from /setup (runtime).
+  // NUXT_PUBLIC_APP_URL also overrides public.appUrl at runtime if needed.
   runtimeConfig: {
     databaseUrl: process.env.DATABASE_URL ?? '',
     sessionSecret: process.env.SESSION_SECRET ?? '',
