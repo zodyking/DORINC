@@ -4,7 +4,17 @@ import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
 import { catalogItems } from '../db/schema/catalog'
 import { customers } from '../db/schema/customers'
+import { editingSessions } from '../db/schema/editing-sessions'
+import { estimates } from '../db/schema/estimates'
 import { invoiceLineItems, invoices } from '../db/schema/invoices'
+import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
+import {
+  invoiceChangeRequests,
+  newVehicleRequests,
+  portalGeneralRequests,
+  serviceRequests,
+  vehicleChangeRequests,
+} from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import {
@@ -19,7 +29,22 @@ export interface DataExchangeTableSummary {
   label: string
   description: string
   importable: boolean
+  wipeable: boolean
   rowCount: number
+}
+
+export type DataExchangeServiceErrorCode = 'NOT_WIPEABLE'
+
+export class DataExchangeServiceError extends Error {
+  constructor(public readonly code: DataExchangeServiceErrorCode, message?: string) {
+    super(message ?? code)
+  }
+}
+
+export interface DataExchangeWipeResult {
+  table: DataExchangeTableKey
+  deleted: number
+  remaining: number
 }
 
 export interface DataExchangeImportResult {
@@ -102,10 +127,6 @@ async function countTable(db: Db, key: DataExchangeTableKey): Promise<number> {
       const [row] = await db.select({ value: count() }).from(invoices)
       return Number(row?.value ?? 0)
     }
-    case 'invoice_line_items': {
-      const [row] = await db.select({ value: count() }).from(invoiceLineItems)
-      return Number(row?.value ?? 0)
-    }
     case 'service_logs': {
       const [row] = await db.select({ value: count() }).from(serviceLogs)
       return Number(row?.value ?? 0)
@@ -139,6 +160,24 @@ export async function listDataExchangeTables(db: Db): Promise<DataExchangeTableS
   }))
 }
 
+async function fetchInvoiceExportRows(db: Db): Promise<Record<string, unknown>[]> {
+  const invoiceRows = await db.select().from(invoices)
+  const lineRows = await db.select().from(invoiceLineItems)
+  const linesByInvoice = new Map<string, Record<string, unknown>[]>()
+
+  for (const line of lineRows) {
+    const bucket = linesByInvoice.get(line.invoiceId) ?? []
+    bucket.push({ ...line })
+    linesByInvoice.set(line.invoiceId, bucket)
+  }
+
+  return invoiceRows.map((invoice) => {
+    const lineItems = (linesByInvoice.get(invoice.id) ?? [])
+      .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0))
+    return { ...invoice, lineItems }
+  })
+}
+
 async function fetchExportRows(db: Db, key: DataExchangeTableKey): Promise<Record<string, unknown>[]> {
   switch (key) {
     case 'customers':
@@ -146,9 +185,7 @@ async function fetchExportRows(db: Db, key: DataExchangeTableKey): Promise<Recor
     case 'vehicles':
       return (await db.select().from(vehicles)).map(r => ({ ...r }))
     case 'invoices':
-      return (await db.select().from(invoices)).map(r => ({ ...r }))
-    case 'invoice_line_items':
-      return (await db.select().from(invoiceLineItems)).map(r => ({ ...r }))
+      return fetchInvoiceExportRows(db)
     case 'service_logs':
       return (await db.select().from(serviceLogs)).map(r => ({ ...r }))
     case 'catalog_items':
@@ -196,6 +233,16 @@ export async function exportDataExchangeTable(
       body: JSON.stringify({ table: key, exportedAt: new Date().toISOString(), rows }, null, 2),
     }
   }
+
+  if (key === 'invoices') {
+    const headersOnly = rows.map(({ lineItems: _lineItems, ...invoice }) => invoice)
+    return {
+      filename: `dorinc-${key}-${stamp}.csv`,
+      contentType: 'text/csv; charset=utf-8',
+      body: rowsToCsv(headersOnly),
+    }
+  }
+
   return {
     filename: `dorinc-${key}-${stamp}.csv`,
     contentType: 'text/csv; charset=utf-8',
@@ -388,4 +435,70 @@ export async function importDataExchangeTable(
   }
 
   return { table: key, mode, ...result }
+}
+
+async function clearInvoiceForeignKeys(db: Db) {
+  await db.update(serviceRequests)
+    .set({ resultInvoiceId: null })
+    .where(sql`${serviceRequests.resultInvoiceId} IS NOT NULL`)
+  await db.update(invoiceChangeRequests)
+    .set({ invoiceId: null, resultInvoiceId: null })
+    .where(sql`${invoiceChangeRequests.invoiceId} IS NOT NULL OR ${invoiceChangeRequests.resultInvoiceId} IS NOT NULL`)
+  await db.update(estimates)
+    .set({ convertedInvoiceId: null })
+    .where(sql`${estimates.convertedInvoiceId} IS NOT NULL`)
+  await db.update(serviceLogs)
+    .set({ invoiceId: null })
+    .where(sql`${serviceLogs.invoiceId} IS NOT NULL`)
+  await db.delete(pdfRenderJobs).where(eq(pdfRenderJobs.entityType, 'invoice'))
+  await db.delete(editingSessions).where(eq(editingSessions.entityType, 'invoice'))
+}
+
+async function clearCustomerBlockingRows(db: Db) {
+  await db.delete(newVehicleRequests)
+  await db.delete(serviceRequests)
+  await db.delete(invoiceChangeRequests)
+  await db.delete(vehicleChangeRequests)
+  await db.delete(portalGeneralRequests)
+}
+
+/** Permanently delete all rows in a workspace table (Control Panel — type DELETE to confirm). */
+export async function wipeDataExchangeTable(
+  db: Db,
+  key: DataExchangeTableKey,
+): Promise<DataExchangeWipeResult> {
+  const def = dataExchangeTable(key)
+  if (!def?.wipeable) {
+    throw new DataExchangeServiceError('NOT_WIPEABLE', 'This table cannot be wiped')
+  }
+
+  const before = await countTable(db, key)
+
+  switch (key) {
+    case 'catalog_items':
+      await db.delete(catalogItems)
+      break
+    case 'invoices':
+      await clearInvoiceForeignKeys(db)
+      await db.delete(invoices)
+      break
+    case 'service_logs':
+      await db.update(invoices)
+        .set({ serviceLogId: null })
+        .where(sql`${invoices.serviceLogId} IS NOT NULL`)
+      await db.delete(serviceLogs)
+      break
+    case 'vehicles':
+      await db.delete(vehicles)
+      break
+    case 'customers':
+      await clearCustomerBlockingRows(db)
+      await db.delete(customers)
+      break
+    default:
+      throw new DataExchangeServiceError('NOT_WIPEABLE', 'This table cannot be wiped')
+  }
+
+  const remaining = await countTable(db, key)
+  return { table: key, deleted: before - remaining, remaining }
 }

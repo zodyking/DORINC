@@ -2,7 +2,6 @@ export type DataExchangeTableKey
   = | 'customers'
     | 'vehicles'
     | 'invoices'
-    | 'invoice_line_items'
     | 'service_logs'
     | 'catalog_items'
     | 'users'
@@ -13,6 +12,8 @@ export interface DataExchangeTableDef {
   label: string
   description: string
   importable: boolean
+  /** Destructive wipe — requires typing DELETE in the control panel. */
+  wipeable: boolean
 }
 
 export const DATA_EXCHANGE_TABLES: DataExchangeTableDef[] = [
@@ -21,48 +22,49 @@ export const DATA_EXCHANGE_TABLES: DataExchangeTableDef[] = [
     label: 'Customers',
     description: 'Accounts, contacts, portal flags',
     importable: true,
+    wipeable: true,
   },
   {
     key: 'vehicles',
     label: 'Vehicles',
     description: 'Fleet units, VIN, customer link',
     importable: true,
+    wipeable: true,
   },
   {
     key: 'invoices',
     label: 'Invoices',
-    description: 'Invoice headers — status, dates, totals (no line items)',
+    description: 'Invoice headers + nested line items (JSON export)',
     importable: true,
-  },
-  {
-    key: 'invoice_line_items',
-    label: 'Invoice Line Items',
-    description: 'Qty, rate, type, description per invoice',
-    importable: true,
+    wipeable: true,
   },
   {
     key: 'service_logs',
     label: 'Service Logs',
     description: 'Metadata only — photos stay in file storage',
     importable: true,
+    wipeable: true,
   },
   {
     key: 'catalog_items',
     label: 'Catalog Items',
     description: 'Parts, labor rates, fees, SKUs',
     importable: true,
+    wipeable: true,
   },
   {
     key: 'users',
     label: 'Internal Users',
     description: 'Staff profiles and roles — no password hashes',
     importable: false,
+    wipeable: false,
   },
   {
     key: 'audit_logs',
     label: 'Audit Log',
     description: 'Export only — append-only, no import',
     importable: false,
+    wipeable: false,
   },
 ]
 

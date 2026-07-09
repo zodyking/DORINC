@@ -15,3 +15,11 @@ export const DATA_EXCHANGE_IMPORT_MODES = ['upsert', 'insert_only', 'dry_run'] a
 export type DataExchangeImportMode = (typeof DATA_EXCHANGE_IMPORT_MODES)[number]
 
 export const dataExchangeImportModeSchema = z.enum(DATA_EXCHANGE_IMPORT_MODES)
+
+export const DATA_EXCHANGE_WIPE_CONFIRMATION = 'DELETE' as const
+
+export const dataExchangeWipeBodySchema = z.object({
+  confirmation: z.literal(DATA_EXCHANGE_WIPE_CONFIRMATION, {
+    errorMap: () => ({ message: 'Type DELETE to confirm' }),
+  }),
+})
