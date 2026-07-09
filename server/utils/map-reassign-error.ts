@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { ReassignServiceError } from '../../../services/reassign.service'
-import { apiError } from '../../api-error'
+import { ReassignServiceError } from '../services/reassign.service'
+import { apiError } from './api-error'
 
 export function mapReassignError(event: H3Event, err: unknown): never {
   if (!(err instanceof ReassignServiceError)) throw err
