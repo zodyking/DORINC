@@ -246,6 +246,7 @@ const smtp = reactive({
   port: 587,
   username: '',
   password: '',
+  fromName: 'DORINC',
   from: '',
   status: 'idle' as 'idle' | 'loading' | 'success' | 'error',
   message: '',
@@ -396,13 +397,18 @@ async function saveSmtp(test = false) {
   smtp.status = 'loading'
   smtp.errorMessage = ''
   try {
+    const fromAddress = smtp.from.trim()
+    const fromName = smtp.fromName.trim()
+    const from = fromName
+      ? `"${fromName.replace(/"/g, '')}" <${fromAddress}>`
+      : fromAddress
     const body = {
       host: smtp.host,
       port: smtp.port,
       username: smtp.username,
       password: smtp.password,
-      from: smtp.from,
-      to: admin.email || smtp.from,
+      from,
+      to: admin.email || fromAddress,
     }
     const res = test
       ? await $fetch<{ message: string, delivered?: boolean }>('/api/setup/smtp-test', { method: 'POST', body })
@@ -761,7 +767,9 @@ async function next() {
               <input v-model="smtp.password" :type="reveal.smtp ? 'text' : 'password'" placeholder="App password">
               <button type="button" class="reveal" @click="reveal.smtp = !reveal.smtp">{{ reveal.smtp ? 'Hide' : 'Show' }}</button>
             </label>
+            <label class="fld">From name <input v-model="smtp.fromName" type="text" placeholder="DORINC"></label>
             <label class="fld">From address <input v-model="smtp.from" type="email" placeholder="notifications@yourdomain.com"></label>
+            <span class="help" style="display:block;margin:-6px 0 12px;">Shown in inboxes as: {{ smtp.fromName.trim() || 'DORINC' }} &lt;{{ smtp.from.trim() || 'notifications@yourdomain.com' }}&gt;</span>
             <div class="setup-actions">
               <button class="btn primary" :disabled="busy || setupStatus?.envLocked.smtp" @click="saveSmtp(true)">
                 {{ smtp.status === 'loading' ? 'Sending test…' : 'Send test email' }}
