@@ -23,7 +23,7 @@ interface CatalogItemRow {
   createdAt: string
 }
 
-type TypeChip = 'all' | 'part' | 'labor' | 'fee'
+type TypeChip = 'all' | 'part' | 'service' | 'labor' | 'fee'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.can('catalog.manage.all'))
@@ -43,15 +43,16 @@ const query = computed(() => ({
   sort: 'name-asc' as const,
 }))
 
-const { data, refresh } = await useFetch<{ items: CatalogItemRow[], total: number }>(
+const { data, refresh, pending, error: listError } = await useFetch<{ items: CatalogItemRow[], total: number }>(
   '/api/catalog/items',
   { query },
 )
 
-const { data: allCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
-const { data: partCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
-const { data: laborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
-const { data: feeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
+const { data: allCount, refresh: refreshAllCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
+const { data: partCount, refresh: refreshPartCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
+const { data: serviceCount, refresh: refreshServiceCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'service', pageSize: 1 } })
+const { data: laborCount, refresh: refreshLaborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
+const { data: feeCount, refresh: refreshFeeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
 
 const { data: categoriesData, refresh: refreshCategories } = await useFetch<{ items: { id: string, name: string }[] }>(
   '/api/catalog/categories',
@@ -61,13 +62,25 @@ const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const categories = computed(() => categoriesData.value?.items ?? [])
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const hasActiveFilter = computed(() => !!q.value.trim() || typeChip.value !== 'all')
 
 const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: allCount.value?.total ?? 0 },
   { key: 'part' as const, label: 'Parts', count: partCount.value?.total ?? 0 },
+  { key: 'service' as const, label: 'Services', count: serviceCount.value?.total ?? 0 },
   { key: 'labor' as const, label: 'Labor', count: laborCount.value?.total ?? 0 },
   { key: 'fee' as const, label: 'Fees', count: feeCount.value?.total ?? 0 },
 ])
+
+async function refreshCounts() {
+  await Promise.all([
+    refreshAllCount(),
+    refreshPartCount(),
+    refreshServiceCount(),
+    refreshLaborCount(),
+    refreshFeeCount(),
+  ])
+}
 
 const rangeLabel = computed(() => {
   if (!total.value) return 'No items'
@@ -153,7 +166,16 @@ function bodyPayload() {
   }
 }
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const data = (err as { data?: { message?: string, data?: { message?: string } } })?.data
+  return data?.message ?? data?.data?.message ?? fallback
+}
+
 async function submitItem() {
+  if (!form.name.trim()) {
+    formError.value = 'Name is required'
+    return
+  }
   formBusy.value = true
   formError.value = ''
   try {
@@ -170,11 +192,10 @@ async function submitItem() {
       })
     }
     closeItemModal()
-    await Promise.all([refresh(), refreshCategories()])
+    await Promise.all([refresh(), refreshCategories(), refreshCounts()])
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    formError.value = fe.data?.data?.message ?? 'Could not save catalog item'
+    formError.value = apiErrorMessage(err, 'Could not save catalog item')
   }
   finally {
     formBusy.value = false
@@ -189,15 +210,18 @@ async function archiveItem() {
   try {
     await $fetch(`/api/catalog/items/${editingId.value}/archive`, { method: 'POST' })
     closeItemModal()
-    await refresh()
+    await Promise.all([refresh(), refreshCounts()])
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    formError.value = fe.data?.data?.message ?? 'Could not archive item'
+    formError.value = apiErrorMessage(err, 'Could not archive item')
   }
   finally {
     formBusy.value = false
   }
+}
+
+async function onCategoriesChanged() {
+  await refreshCategories()
 }
 
 function onRowClick(row: CatalogItemRow) {
@@ -291,8 +315,16 @@ function onRowClick(row: CatalogItemRow) {
             </tr>
           </tbody>
         </table>
+        <div v-else-if="listError" id="cat-rows-empty" class="empty" style="display:block;">
+          Could not load catalog items. Refresh and try again.
+        </div>
+        <div v-else-if="pending" id="cat-rows-empty" class="empty" style="display:block;">
+          Loading catalog…
+        </div>
         <div v-else id="cat-rows-empty" class="empty" style="display:block;">
-          No catalog items match your search.
+          <template v-if="hasActiveFilter">No catalog items match your search.</template>
+          <template v-else-if="canManage">No catalog items yet — create one with <b>+ New Item</b>, or import from Control Panel.</template>
+          <template v-else>No catalog items yet.</template>
         </div>
       </div>
 
@@ -313,7 +345,7 @@ function onRowClick(row: CatalogItemRow) {
       </div>
     </div>
 
-    <CatalogCategoriesModal v-model:open="categoriesOpen" />
+    <CatalogCategoriesModal v-model:open="categoriesOpen" @changed="onCategoriesChanged" />
 
     <div
       id="cat-item-scrim"
@@ -336,7 +368,7 @@ function onRowClick(row: CatalogItemRow) {
           :error="formError"
           :categories="categories"
           :editing="!!editingId"
-          :submit-label="editingId ? 'Save changes' : 'Create item'"
+          :submit-label="formBusy ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save changes' : 'Create item')"
           @submit="submitItem"
           @cancel="closeItemModal"
           @archive="archiveItem"

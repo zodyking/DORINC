@@ -34,7 +34,7 @@ export const DATA_EXCHANGE_TABLES: DataExchangeTableDef[] = [
   {
     key: 'invoices',
     label: 'Invoices',
-    description: 'Invoice headers + nested line items (JSON export)',
+    description: 'Invoice headers + nested line items (JSON import/export)',
     importable: true,
     wipeable: true,
   },

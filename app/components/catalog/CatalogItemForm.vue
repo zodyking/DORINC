@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Add/edit catalog item fields (mockup: PAGE: CATALOG + New Item modal).
-import type { CatalogItemType } from '~/utils/catalog-ui'
+import { CATALOG_UOM_OPTIONS, type CatalogItemType } from '~/utils/catalog-ui'
 
 export interface CatalogItemFormValue {
   itemType: CatalogItemType
@@ -18,7 +18,7 @@ export interface CatalogItemFormValue {
 
 const model = defineModel<CatalogItemFormValue>({ required: true })
 
-defineProps<{
+const props = defineProps<{
   busy?: boolean
   submitLabel: string
   error?: string
@@ -27,6 +27,15 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{ submit: [], cancel: [], archive: [] }>()
+
+watch(() => model.value.itemType, (type) => {
+  if (props.editing) return
+  if (type === 'labor' && model.value.uom === 'each') model.value.uom = 'hr'
+  if (type === 'fee' && (model.value.uom === 'each' || model.value.uom === 'hr')) model.value.uom = 'pct'
+  if ((type === 'part' || type === 'service') && (model.value.uom === 'hr' || model.value.uom === 'pct')) {
+    model.value.uom = 'each'
+  }
+})
 </script>
 
 <template>

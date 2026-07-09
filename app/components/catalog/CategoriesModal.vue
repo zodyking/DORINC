@@ -9,6 +9,8 @@ interface CategoryRow {
 
 const open = defineModel<boolean>('open', { default: false })
 
+const emit = defineEmits<{ changed: [] }>()
+
 const { data, refresh } = await useFetch<{ items: CategoryRow[] }>('/api/catalog/categories')
 
 const categories = computed(() => data.value?.items ?? [])
@@ -23,6 +25,11 @@ function close() {
   error.value = ''
 }
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const data = (err as { data?: { message?: string, data?: { message?: string } } })?.data
+  return data?.message ?? data?.data?.message ?? fallback
+}
+
 async function addCategory() {
   const name = newName.value.trim()
   if (!name) return
@@ -32,10 +39,10 @@ async function addCategory() {
     await $fetch('/api/catalog/categories', { method: 'POST', body: { name } })
     newName.value = ''
     await refresh()
+    emit('changed')
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    error.value = fe.data?.data?.message ?? 'Could not add category'
+    error.value = apiErrorMessage(err, 'Could not add category')
   }
   finally {
     busy.value = false
@@ -52,7 +59,7 @@ function onScrimClick(e: MouseEvent) {
     id="cat-cat-scrim"
     class="modal-scrim"
     :class="{ open }"
-    aria-hidden="true"
+    :aria-hidden="!open"
     @click="onScrimClick"
   >
     <div class="modal" role="dialog" aria-labelledby="cat-cat-title" aria-modal="true" @click.stop>

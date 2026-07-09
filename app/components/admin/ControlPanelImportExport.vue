@@ -31,8 +31,10 @@ const { data, refresh, error: tablesError, pending: tablesPending } = useFetch<{
   { server: false, lazy: true },
 )
 
+const route = useRoute()
+
 const selectedKey = ref<string | null>(null)
-const importMode = ref<'upsert' | 'insert_only' | 'dry_run'>('dry_run')
+const importMode = ref<'upsert' | 'insert_only' | 'dry_run'>('upsert')
 const importFile = ref<File | null>(null)
 const importBusy = ref(false)
 const importResult = ref<ImportResult | null>(null)
@@ -47,6 +49,12 @@ const wipeMessage = ref('')
 
 const selected = computed(() => data.value?.items.find(t => t.key === selectedKey.value) ?? null)
 const wipeConfirmed = computed(() => wipeConfirmation.value === DATA_EXCHANGE_WIPE_CONFIRMATION)
+
+watch([() => route.query.table, () => data.value?.items], ([table, items]) => {
+  if (typeof table !== 'string' || !table || !items?.length) return
+  const match = items.find(t => t.key === table && t.importable)
+  if (match) selectedKey.value = match.key
+}, { immediate: true })
 
 function selectTable(key: string) {
   selectedKey.value = key
@@ -199,14 +207,15 @@ async function runWipe() {
       <div class="cbody">
         <template v-if="selected?.importable">
           <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-            Upload a CSV or JSON file exported from this table. Use <b>Validate only</b> first to check rows without writing.
+            Upload a CSV or JSON file exported from this table.
+            <b>Upsert by ID</b> writes rows to the database; choose <b>Validate only</b> to preview without saving.
           </p>
           <label class="fld">
             Import mode
             <select v-model="importMode">
-              <option value="dry_run">Validate only (dry run)</option>
-              <option value="upsert">Upsert by ID</option>
+              <option value="upsert">Upsert by ID (save to database)</option>
               <option value="insert_only">Insert only (skip existing IDs)</option>
+              <option value="dry_run">Validate only (no data saved)</option>
             </select>
           </label>
           <label class="fld">
@@ -215,9 +224,17 @@ async function runWipe() {
           </label>
           <p v-if="importError" style="color:#dc2626; font-size:13px;">{{ importError }}</p>
           <div v-if="importResult" style="font-size:13px; margin:12px 0;">
-            <p style="color:#059669; margin:0 0 8px;">
-              {{ importResult.mode === 'dry_run' ? 'Validation complete' : 'Import complete' }}
-              — {{ importResult.total }} rows,
+            <p
+              v-if="importResult.mode === 'dry_run'"
+              style="color:#b45309; margin:0 0 8px; padding:8px 10px; background:#fffbeb; border:1px solid #fde68a; border-radius:6px;"
+            >
+              <b>Validation only — nothing was saved.</b>
+              {{ importResult.total }} rows checked,
+              {{ importResult.errors.length ? `${importResult.errors.length} issue(s)` : 'no issues' }}.
+              Switch to <b>Upsert by ID</b> and run again to import.
+            </p>
+            <p v-else style="color:#059669; margin:0 0 8px;">
+              Import complete — {{ importResult.total }} rows,
               {{ importResult.inserted }} inserted,
               {{ importResult.updated }} updated,
               {{ importResult.skipped }} skipped

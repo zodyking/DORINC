@@ -3,10 +3,22 @@ import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
 import { catalogItems } from '../db/schema/catalog'
-import { customerContacts, customerCredentialEmailLogs, customers } from '../db/schema/customers'
+import { customerContacts, customerCredentialEmailLogs, customers, type Address } from '../db/schema/customers'
 import { editingSessions } from '../db/schema/editing-sessions'
 import { estimates } from '../db/schema/estimates'
-import { invoiceLineItems, invoices } from '../db/schema/invoices'
+import {
+  INVOICE_CREATION_SOURCES,
+  INVOICE_LINE_TYPES,
+  INVOICE_STATUSES,
+  invoiceLineItems,
+  invoices,
+  type InvoiceCreationSource,
+  type InvoiceCustomerSnapshot,
+  type InvoiceLineType,
+  type InvoiceStatus,
+  type InvoiceVehicleSnapshot,
+} from '../db/schema/invoices'
+import { lineAmount } from './invoice-totals.service'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   invoiceChangeRequests,
@@ -77,6 +89,18 @@ function rowsToCsv(rows: Record<string, unknown>[]): string {
     lines.push(headers.map(h => escapeCsv(serializeCell(row[h]))).join(','))
   }
   return lines.join('\n')
+}
+
+function parseImportAddress(value: unknown): Address | null {
+  if (!value || typeof value !== 'object') return null
+  const address = value as Record<string, unknown>
+  const line1 = address.line1 != null ? String(address.line1).trim() : undefined
+  const line2 = address.line2 != null ? String(address.line2).trim() : undefined
+  const city = address.city != null ? String(address.city).trim() : undefined
+  const state = address.state != null ? String(address.state).trim() : undefined
+  const zip = address.zip != null ? String(address.zip).trim() : undefined
+  if (!line1 && !line2 && !city && !state && !zip) return null
+  return { line1, line2, city, state, zip }
 }
 
 function normalizeImportRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -268,6 +292,8 @@ async function importCustomers(
       continue
     }
     const id = typeof row.id === 'string' ? row.id : undefined
+    const billingAddress = parseImportAddress(row.billingAddress)
+    const serviceAddress = parseImportAddress(row.serviceAddress)
     if (mode === 'dry_run') continue
 
     if (id) {
@@ -279,6 +305,8 @@ async function importCustomers(
           accountKind: (row.accountKind as 'fleet' | 'individual') ?? 'individual',
           email: row.email ? String(row.email) : null,
           phone: row.phone ? String(row.phone) : null,
+          billingAddress,
+          serviceAddress,
           taxExempt: Boolean(row.taxExempt),
           paymentTerms: row.paymentTerms ? String(row.paymentTerms) : 'due_on_receipt',
           notes: row.notes ? String(row.notes) : null,
@@ -296,6 +324,8 @@ async function importCustomers(
       accountKind: (row.accountKind as 'fleet' | 'individual') ?? 'individual',
       email: row.email ? String(row.email) : null,
       phone: row.phone ? String(row.phone) : null,
+      billingAddress,
+      serviceAddress,
       taxExempt: Boolean(row.taxExempt),
       paymentTerms: row.paymentTerms ? String(row.paymentTerms) : 'due_on_receipt',
       notes: row.notes ? String(row.notes) : null,
@@ -305,6 +335,28 @@ async function importCustomers(
   }
 
   return { total: rows.length, inserted, updated, skipped, errors }
+}
+
+async function resolveCustomerIdForImport(
+  db: Db,
+  row: Record<string, unknown>,
+): Promise<string | null> {
+  const explicitId = String(row.customerId ?? '').trim()
+  if (explicitId) {
+    const resolved = await resolveExistingFk(db, 'customers', explicitId)
+    if (resolved) return resolved
+  }
+
+  const customerName = String(row.customerName ?? row.customerDisplayName ?? '').trim()
+  if (!customerName) return explicitId || null
+
+  const [match] = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(sql`lower(trim(${customers.displayName})) = lower(trim(${customerName}))`)
+    .limit(1)
+
+  return match?.id ?? explicitId || null
 }
 
 async function importVehicles(
@@ -319,11 +371,22 @@ async function importVehicles(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!
-    const customerId = String(row.customerId ?? '').trim()
+    const customerId = await resolveCustomerIdForImport(db, row)
     if (!customerId) {
-      errors.push(`Row ${i + 1}: customerId is required`)
+      errors.push(`Row ${i + 1}: customerId or customerName is required`)
       continue
     }
+
+    const [customer] = await db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.id, customerId))
+      .limit(1)
+    if (!customer) {
+      errors.push(`Row ${i + 1}: customer not found for customerId/customerName`)
+      continue
+    }
+
     if (mode === 'dry_run') continue
 
     const id = typeof row.id === 'string' ? row.id : undefined
@@ -407,6 +470,319 @@ async function importCatalogItems(
   return { total: rows.length, inserted, updated, skipped, errors }
 }
 
+function moneyField(value: unknown, fallback = '0'): string {
+  if (value == null || value === '') return fallback
+  const n = Number(String(value).replace(/[$,\s]/g, ''))
+  if (!Number.isFinite(n)) return fallback
+  return n.toFixed(2)
+}
+
+function optionalUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function parseInvoiceDate(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10)
+  const d = new Date(String(value))
+  if (Number.isNaN(d.getTime())) return null
+  return d.toISOString().slice(0, 10)
+}
+
+function parseCustomerSnapshot(raw: unknown): InvoiceCustomerSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const displayName = String(row.displayName ?? row.name ?? '').trim()
+  if (!displayName) return null
+  return {
+    displayName,
+    email: row.email ? String(row.email) : null,
+    phone: row.phone ? String(row.phone) : null,
+    billingAddress: (row.billingAddress as InvoiceCustomerSnapshot['billingAddress']) ?? null,
+    serviceAddress: (row.serviceAddress as InvoiceCustomerSnapshot['serviceAddress']) ?? null,
+    taxExempt: Boolean(row.taxExempt),
+    paymentTerms: row.paymentTerms ? String(row.paymentTerms) : 'due_on_receipt',
+  }
+}
+
+function parseVehicleSnapshot(raw: unknown): InvoiceVehicleSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  return {
+    unitType: String(row.unitType ?? 'truck'),
+    busNumber: row.busNumber ? String(row.busNumber) : null,
+    unitTag: row.unitTag ? String(row.unitTag) : null,
+    vin: row.vin ? String(row.vin) : null,
+    plate: row.plate ? String(row.plate) : null,
+    year: row.year != null && row.year !== '' ? Number(row.year) : null,
+    make: row.make ? String(row.make) : null,
+    model: row.model ? String(row.model) : null,
+    odometer: row.odometer != null ? String(row.odometer) : null,
+    odometerUnit: row.odometerUnit ? String(row.odometerUnit) : 'mi',
+  }
+}
+
+function parseImportLineItems(
+  raw: unknown,
+  rowIndex: number,
+  errors: string[],
+): Array<{
+  id?: string
+  lineType: InvoiceLineType
+  catalogItemId: string | null
+  catalogSnapshot: unknown
+  description: string
+  quantity: string
+  unitPrice: string
+  lineAmount: string
+  taxable: boolean
+  sortOrder: number
+  priceOverridden: boolean
+  priceOverrideReason: string | null
+}> {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) {
+    errors.push(`Row ${rowIndex}: lineItems must be an array`)
+    return []
+  }
+
+  const lines: ReturnType<typeof parseImportLineItems> = []
+  for (let i = 0; i < raw.length; i++) {
+    const item = normalizeImportRow((raw[i] ?? {}) as Record<string, unknown>)
+    const description = String(item.description ?? item.name ?? '').trim()
+    if (!description) {
+      errors.push(`Row ${rowIndex} line ${i + 1}: description is required`)
+      continue
+    }
+
+    const lineTypeRaw = String(item.lineType ?? item.type ?? 'service').toLowerCase()
+    const lineType = (INVOICE_LINE_TYPES as readonly string[]).includes(lineTypeRaw)
+      ? lineTypeRaw as InvoiceLineType
+      : 'service'
+
+    // Legacy aliases: qty / hours / hrs → quantity; rate → unitPrice; amount → lineAmount
+    // Prefer a non-zero hours/qty alias when quantity is missing or zero (common legacy export bug).
+    const quantityCandidates = [
+      item.quantity,
+      item.qty,
+      item.hours,
+      item.hrs,
+      item.laborHours,
+    ]
+    const quantityRaw = quantityCandidates.find((v) => {
+      if (v == null || v === '') return false
+      return Number(String(v).replace(/[$,\s]/g, '')) !== 0
+    }) ?? item.quantity ?? item.qty ?? item.hours ?? item.hrs ?? item.laborHours
+    const quantity = moneyField(quantityRaw, '1.00')
+    const unitPrice = moneyField(item.unitPrice ?? item.rate ?? item.price, '0.00')
+    const computed = lineAmount(quantity, unitPrice)
+    const amountRaw = item.lineAmount ?? item.amount ?? item.total
+    const amount = amountRaw != null && amountRaw !== '' ? moneyField(amountRaw, computed) : computed
+
+    lines.push({
+      id: typeof item.id === 'string' ? item.id : undefined,
+      lineType,
+      catalogItemId: optionalUuid(item.catalogItemId),
+      catalogSnapshot: item.catalogSnapshot ?? null,
+      description,
+      quantity,
+      unitPrice,
+      lineAmount: amount,
+      taxable: item.taxable == null ? true : Boolean(item.taxable),
+      sortOrder: item.sortOrder != null && item.sortOrder !== '' ? Number(item.sortOrder) : i,
+      priceOverridden: Boolean(item.priceOverridden),
+      priceOverrideReason: item.priceOverrideReason ? String(item.priceOverrideReason) : null,
+    })
+  }
+  return lines
+}
+
+async function resolveExistingFk(
+  db: Db,
+  table: 'customers' | 'vehicles' | 'service_logs',
+  id: string | null,
+): Promise<string | null> {
+  if (!id) return null
+  if (table === 'customers') {
+    const [row] = await db.select({ id: customers.id }).from(customers).where(eq(customers.id, id)).limit(1)
+    return row?.id ?? null
+  }
+  if (table === 'vehicles') {
+    const [row] = await db.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).limit(1)
+    return row?.id ?? null
+  }
+  const [row] = await db.select({ id: serviceLogs.id }).from(serviceLogs).where(eq(serviceLogs.id, id)).limit(1)
+  return row?.id ?? null
+}
+
+async function importInvoices(
+  db: Db,
+  rows: Record<string, unknown>[],
+  mode: DataExchangeImportMode,
+): Promise<Omit<DataExchangeImportResult, 'table' | 'mode'>> {
+  let inserted = 0
+  let updated = 0
+  let skipped = 0
+  const errors: string[] = []
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    const invoiceDate = parseInvoiceDate(row.invoiceDate ?? row.date)
+    if (!invoiceDate) {
+      errors.push(`Row ${i + 1}: invoiceDate is required (YYYY-MM-DD)`)
+      continue
+    }
+
+    const customerSnapshot = parseCustomerSnapshot(row.customerSnapshot)
+      ?? (row.customerName || row.billTo
+        ? parseCustomerSnapshot({
+            displayName: row.customerName ?? row.billTo,
+            email: row.customerEmail,
+            phone: row.customerPhone,
+            taxExempt: row.taxExempt,
+            paymentTerms: row.paymentTerms,
+          })
+        : null)
+
+    if (!customerSnapshot) {
+      errors.push(`Row ${i + 1}: customerSnapshot.displayName (or customerName) is required`)
+      continue
+    }
+
+    const statusRaw = String(row.status ?? 'draft').toLowerCase()
+    const status = (INVOICE_STATUSES as readonly string[]).includes(statusRaw)
+      ? statusRaw as InvoiceStatus
+      : 'draft'
+
+    const sourceRaw = String(row.creationSource ?? 'blank').toLowerCase()
+    const creationSource = (INVOICE_CREATION_SOURCES as readonly string[]).includes(sourceRaw)
+      ? sourceRaw as InvoiceCreationSource
+      : 'blank'
+
+    const lineItems = parseImportLineItems(row.lineItems ?? row.lines, i + 1, errors)
+    const id = optionalUuid(row.id)
+    const invoiceNumber = row.invoiceNumber != null && row.invoiceNumber !== ''
+      ? Number(row.invoiceNumber)
+      : null
+
+    if (mode === 'dry_run') continue
+
+    const customerId = await resolveExistingFk(db, 'customers', optionalUuid(row.customerId))
+    const vehicleId = await resolveExistingFk(db, 'vehicles', optionalUuid(row.vehicleId))
+    const serviceLogId = await resolveExistingFk(db, 'service_logs', optionalUuid(row.serviceLogId))
+
+    const header = {
+      customerId,
+      vehicleId,
+      serviceLogId,
+      estimateId: null as string | null,
+      sourceInvoiceId: optionalUuid(row.sourceInvoiceId),
+      creationSource,
+      status,
+      invoiceDate,
+      dueDate: parseInvoiceDate(row.dueDate),
+      paymentTerms: row.paymentTerms ? String(row.paymentTerms) : customerSnapshot.paymentTerms,
+      customerSnapshot,
+      vehicleSnapshot: parseVehicleSnapshot(row.vehicleSnapshot),
+      serviceLocation: row.serviceLocation ? String(row.serviceLocation) : null,
+      poNumber: row.poNumber ? String(row.poNumber) : null,
+      complaint: row.complaint ? String(row.complaint) : null,
+      internalNotes: row.internalNotes ? String(row.internalNotes) : null,
+      customerNotes: row.customerNotes ? String(row.customerNotes) : null,
+      subtotal: moneyField(row.subtotal),
+      taxAmount: moneyField(row.taxAmount),
+      discountAmount: moneyField(row.discountAmount),
+      feesAmount: moneyField(row.feesAmount),
+      total: moneyField(row.total),
+      amountPaid: moneyField(row.amountPaid),
+      balanceDue: moneyField(row.balanceDue ?? row.total),
+      taxExempt: row.taxExempt == null ? customerSnapshot.taxExempt : Boolean(row.taxExempt),
+      taxRate: row.taxRate != null && row.taxRate !== '' ? String(row.taxRate) : '0',
+      shopSuppliesPercent: row.shopSuppliesPercent != null && row.shopSuppliesPercent !== ''
+        ? moneyField(row.shopSuppliesPercent)
+        : null,
+      updatedAt: new Date(),
+    }
+
+    // Prefer stored totals; if missing but lines exist, derive from lines
+    if ((row.subtotal == null || row.subtotal === '') && lineItems.length) {
+      const derivedSubtotal = lineItems.reduce((sum, line) => sum + Number(line.lineAmount), 0)
+      header.subtotal = derivedSubtotal.toFixed(2)
+      if (row.total == null || row.total === '') {
+        header.total = header.subtotal
+        header.balanceDue = moneyField(
+          Number(header.subtotal) - Number(header.amountPaid) + Number(header.taxAmount) + Number(header.feesAmount) - Number(header.discountAmount),
+        )
+      }
+    }
+
+    let existingId: string | null = null
+    if (id) {
+      const [byId] = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.id, id)).limit(1)
+      existingId = byId?.id ?? null
+    }
+    if (!existingId && invoiceNumber != null && Number.isFinite(invoiceNumber)) {
+      const [byNum] = await db.select({ id: invoices.id }).from(invoices)
+        .where(eq(invoices.invoiceNumber, invoiceNumber)).limit(1)
+      existingId = byNum?.id ?? null
+    }
+
+    if (existingId) {
+      if (mode === 'insert_only') { skipped++; continue }
+      await db.update(invoices).set(header).where(eq(invoices.id, existingId))
+      await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, existingId))
+      if (lineItems.length) {
+        await db.insert(invoiceLineItems).values(lineItems.map(line => ({
+          ...(line.id ? { id: line.id } : {}),
+          invoiceId: existingId!,
+          lineType: line.lineType,
+          catalogItemId: line.catalogItemId,
+          catalogSnapshot: line.catalogSnapshot as never,
+          description: line.description,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineAmount: line.lineAmount,
+          taxable: line.taxable,
+          sortOrder: line.sortOrder,
+          priceOverridden: line.priceOverridden,
+          priceOverrideReason: line.priceOverrideReason,
+        })))
+      }
+      updated++
+      continue
+    }
+
+    const [created] = await db.insert(invoices).values({
+      ...(id ? { id } : {}),
+      ...(invoiceNumber != null && Number.isFinite(invoiceNumber) ? { invoiceNumber } : {}),
+      ...header,
+    }).returning({ id: invoices.id })
+
+    if (lineItems.length && created) {
+      await db.insert(invoiceLineItems).values(lineItems.map(line => ({
+        ...(line.id ? { id: line.id } : {}),
+        invoiceId: created.id,
+        lineType: line.lineType,
+        catalogItemId: line.catalogItemId,
+        catalogSnapshot: line.catalogSnapshot as never,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        lineAmount: line.lineAmount,
+        taxable: line.taxable,
+        sortOrder: line.sortOrder,
+        priceOverridden: line.priceOverridden,
+        priceOverrideReason: line.priceOverrideReason,
+      })))
+    }
+    inserted++
+  }
+
+  return { total: rows.length, inserted, updated, skipped, errors }
+}
+
 export async function importDataExchangeTable(
   db: Db,
   key: DataExchangeTableKey,
@@ -429,6 +805,9 @@ export async function importDataExchangeTable(
       break
     case 'catalog_items':
       result = await importCatalogItems(db, rows, mode)
+      break
+    case 'invoices':
+      result = await importInvoices(db, rows, mode)
       break
     default:
       throw new Error(`Import for ${key} is not implemented yet — export and re-import via customers, vehicles, and catalog first`)

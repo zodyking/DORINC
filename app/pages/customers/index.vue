@@ -1,6 +1,9 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'staff' })
 
+const auth = useAuthStore()
+const canImport = computed(() => auth.can('system.admin.all'))
+
 interface CustomerRow {
   id: string
   displayName: string
@@ -68,7 +71,13 @@ function subtitleFor(c: CustomerRow): string {
         <p>{{ data?.total ?? 0 }} accounts · {{ fleetCount }} fleet · {{ items.length - fleetCount }} individual</p>
       </div>
       <div class="actions">
-        <button class="btn">Import</button>
+        <NuxtLink
+          v-if="canImport"
+          to="/admin?tab=import&table=customers"
+          class="btn"
+        >
+          Import
+        </NuxtLink>
         <NuxtLink to="/customers/new" class="btn primary">+ New Customer</NuxtLink>
       </div>
     </div>
