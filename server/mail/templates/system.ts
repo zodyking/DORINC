@@ -5,4 +5,4 @@ export {
   buildPortalCredentialEmail,
   buildBackupNotificationEmail,
   buildInvoiceAttachedEmail,
-} from './templates/system.mjs'
+} from './system.mjs'
