@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { emailSchema, nonEmptyString } from './common'
 
 export const accountProfileSchema = z.object({
-  name: nonEmptyString.max(120),
+  firstName: nonEmptyString.max(60),
+  lastName: nonEmptyString.max(60),
   email: emailSchema,
 })
 

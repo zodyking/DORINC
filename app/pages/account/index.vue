@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // My account — profile, password, sessions (mockup: PAGE: MY ACCOUNT / P1-35).
+import { splitPersonName, toTitleCase } from '#shared/format/person-name'
 import {
   formatLastLogin,
   formatMemberSince,
@@ -39,7 +40,8 @@ const { data, refresh, error } = await useFetch<{ account: AccountDetail }>('/ap
 
 const account = computed(() => data.value?.account)
 
-const profileName = ref('')
+const profileFirstName = ref('')
+const profileLastName = ref('')
 const profileEmail = ref('')
 const profileBusy = ref(false)
 const profileMessage = ref('')
@@ -47,7 +49,9 @@ const profileError = ref('')
 
 watch(account, (a) => {
   if (!a) return
-  profileName.value = a.name
+  const { firstName, lastName } = splitPersonName(a.name)
+  profileFirstName.value = firstName
+  profileLastName.value = lastName
   profileEmail.value = a.email
 }, { immediate: true })
 
@@ -65,9 +69,17 @@ async function saveProfile() {
   profileMessage.value = ''
   profileError.value = ''
   try {
+    const firstName = toTitleCase(profileFirstName.value)
+    const lastName = toTitleCase(profileLastName.value)
+    profileFirstName.value = firstName
+    profileLastName.value = lastName
     const res = await $fetch<{ user: { name: string, email: string } }>('/api/account/profile', {
       method: 'PATCH',
-      body: { name: profileName.value.trim(), email: profileEmail.value.trim() },
+      body: {
+        firstName,
+        lastName,
+        email: profileEmail.value.trim(),
+      },
     })
     profileMessage.value = 'Profile saved'
     if (auth.user) {
@@ -168,13 +180,29 @@ const avInitials = computed(() => initials(displayName.value))
               {{ avInitials }}
             </span>
             <div style="flex:1; min-width:220px;">
-              <label class="fld">
-                Full name
-                <input v-model="profileName" type="text">
-              </label>
+              <div class="row2">
+                <label class="fld">
+                  First name
+                  <input
+                    v-model="profileFirstName"
+                    type="text"
+                    autocomplete="given-name"
+                    @blur="profileFirstName = toTitleCase(profileFirstName)"
+                  >
+                </label>
+                <label class="fld">
+                  Last name
+                  <input
+                    v-model="profileLastName"
+                    type="text"
+                    autocomplete="family-name"
+                    @blur="profileLastName = toTitleCase(profileLastName)"
+                  >
+                </label>
+              </div>
               <label class="fld">
                 Email
-                <input v-model="profileEmail" type="email">
+                <input v-model="profileEmail" type="email" autocomplete="email">
               </label>
               <p v-if="profileMessage" style="color:#059669; font-size:13px;">{{ profileMessage }}</p>
               <p v-if="profileError" style="color:#dc2626; font-size:13px;">{{ profileError }}</p>

@@ -54,29 +54,34 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const canRead = computed(() => auth.can('templates.read.all'))
-const canManage = computed(() => auth.can('templates.manage.all'))
-const canUpload = computed(() => auth.can('files.upload.all'))
+const authPending = computed(() => !auth.loaded)
+const canRead = computed(() => auth.loaded && auth.can('templates.read.all'))
+const canManage = computed(() => auth.loaded && auth.can('templates.manage.all'))
+const canUpload = computed(() => auth.loaded && auth.can('files.upload.all'))
 
 const selectedTemplateId = ref<string | null>(null)
 const useRealPreview = ref(true)
 
-const { data: listData, refresh: refreshList } = await useFetch<{ items: TemplateListItem[] }>(
+const { data: listData, refresh: refreshList } = useFetch<{ items: TemplateListItem[] }>(
   '/api/invoice-templates',
+  { server: false, lazy: true, immediate: canRead },
 )
 
-const { data: previewInvoiceData } = await useFetch<{ preview: PreviewInvoiceApiRow | null }>(
+const { data: previewInvoiceData } = useFetch<{ preview: PreviewInvoiceApiRow | null }>(
   '/api/invoice-templates/preview-invoice',
-  { immediate: canRead.value },
+  { server: false, lazy: true, immediate: canRead },
 )
 
-const { data, refresh, pending, error } = await useFetch<TemplateDetailResponse>(
+const { data, refresh, pending, error } = useFetch<TemplateDetailResponse>(
   () => (selectedTemplateId.value
     ? `/api/invoice-templates/${selectedTemplateId.value}`
     : '/api/invoice-templates'),
   {
     query: computed(() => (selectedTemplateId.value ? {} : { default: 'true' })),
     watch: [selectedTemplateId],
+    server: false,
+    lazy: true,
+    immediate: canRead,
   },
 )
 
@@ -334,11 +339,13 @@ async function testRenderPdf() {
 </script>
 
 <template>
-  <div v-if="!canRead" class="empty">You do not have permission to view invoice templates.</div>
+  <div v-if="authPending" class="cp-state">Loading template designer…</div>
 
-  <div v-else-if="pending && !data" class="empty">Loading template designer…</div>
+  <div v-else-if="!canRead" class="cp-state">You do not have permission to view invoice templates.</div>
 
-  <div v-else-if="error || !template" class="empty">Could not load the invoice template.</div>
+  <div v-else-if="pending && !data" class="cp-state">Loading template designer…</div>
+
+  <div v-else-if="error || !template" class="cp-state">Could not load the invoice template.</div>
 
   <div v-else>
     <div class="card" style="margin-bottom:16px;">

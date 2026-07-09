@@ -2,6 +2,7 @@ import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { sessions, users } from '../db/schema/auth'
 import { verifyPassword, hashPassword } from '../auth/password'
+import { formatPersonName } from '../../shared/format/person-name'
 
 export type AccountServiceError
   = | 'EMAIL_TAKEN'
@@ -79,9 +80,10 @@ export async function getAccountDetail(
 export async function updateAccountProfile(
   db: Db,
   userId: string,
-  input: { name: string, email: string },
+  input: { firstName: string, lastName: string, email: string },
 ) {
   const email = input.email.trim().toLowerCase()
+  const name = formatPersonName(input.firstName, input.lastName)
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
@@ -90,7 +92,7 @@ export async function updateAccountProfile(
   if (existing) throw new AccountServiceError('EMAIL_TAKEN')
 
   const [user] = await db.update(users)
-    .set({ name: input.name.trim(), email, updatedAt: new Date() })
+    .set({ name, email, updatedAt: new Date() })
     .where(eq(users.id, userId))
     .returning()
 
