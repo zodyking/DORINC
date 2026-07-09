@@ -353,13 +353,6 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
         >
           Edit invoice
         </NuxtLink>
-        <RequestDeletionButton
-          v-if="log.status !== 'archived'"
-          entity-type="service_log"
-          :entity-id="log.id"
-          :entity-label="logNumberDisplay(log.logNumber)"
-          :disabled="busy"
-        />
       </div>
     </div>
 
@@ -559,6 +552,18 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           </div>
         </div>
       </div>
+    </div>
+
+    <div v-if="log && log.status !== 'archived'" class="savebar">
+      <NuxtLink to="/service-logs" class="btn">Back to service logs</NuxtLink>
+      <DeleteEntityButton
+        v-if="!log.invoiceId"
+        entity-type="service_log"
+        :entity-id="log.id"
+        :entity-label="logNumberDisplay(log.logNumber)"
+        :disabled="busy"
+      />
+      <span v-else class="help" style="margin-left:auto;">Linked to an invoice — delete the invoice first or unlink before removing this log.</span>
     </div>
 
     <div class="lightbox" :class="{ open: lightboxOpen }" @click="lightboxOpen = false">

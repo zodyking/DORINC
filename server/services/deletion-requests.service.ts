@@ -111,7 +111,8 @@ async function assertEntityDeletable(db: Db, entityType: DeletionEntityType, ent
       return
     }
     case 'service_log': {
-      await getServiceLog(db, entityId)
+      const row = await getServiceLog(db, entityId)
+      if (row.invoiceId) throw new DeletionRequestsServiceError('INVALID_TRANSITION')
       return
     }
     case 'invoice': {
@@ -340,6 +341,18 @@ export async function approveDeletionRequest(db: Db, id: string, actorId: string
   }
 
   return { request: mapRow(await getRequestById(db, id)) }
+}
+
+export async function directDeleteEntity(
+  db: Db,
+  entityType: DeletionEntityType,
+  entityId: string,
+  _actorId: string,
+  _reason?: string | null,
+) {
+  await assertEntityDeletable(db, entityType, entityId)
+  await executeDeletion(db, entityType, entityId, _actorId, _reason ?? '')
+  return { entityType, entityId }
 }
 
 export async function rejectDeletionRequest(db: Db, id: string, actorId: string, reviewReason: string) {

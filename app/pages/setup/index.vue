@@ -855,7 +855,7 @@ async function next() {
           <div class="chead"><h3>PDF worker</h3></div>
           <div class="cbody">
             <p style="font-size:13px; color:#475569; margin:0 0 14px;">
-              PDF generation uses the Playwright pdf-worker container, which starts automatically with your Docker Compose deploy. No extra configuration is required for most deployments.
+              PDF generation uses the <b>laravel-pdf</b> container (DomPDF — same engine as <b>barryvdh/laravel-dompdf</b> / InvoiceShelf). The <b>pdf-worker</b> queue processor starts automatically with Docker Compose. No extra configuration is required for most deployments.
             </p>
             <label class="fld">Default template
               <select v-model="pdf.template"><option>Professional Bill Matrix v1</option></select>

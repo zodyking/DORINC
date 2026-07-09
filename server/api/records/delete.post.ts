@@ -1,67 +1,55 @@
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import {
-  createDeletionRequest,
   DeletionRequestsServiceError,
+  directDeleteEntity,
 } from '../../services/deletion-requests.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
 import { validateBody } from '../../utils/validate'
-import { deletionRequestCreateSchema } from '../../../shared/validators/deletion-requests'
+import { directDeleteSchema } from '../../../shared/validators/deletion-requests'
 
 function mapError(event: Parameters<typeof apiError>[0], err: DeletionRequestsServiceError, entityType: string) {
   switch (err.code) {
     case 'ENTITY_NOT_FOUND':
       throw apiError(event, 'NOT_FOUND', 'Record not found')
-    case 'DUPLICATE_PENDING':
-      throw apiError(event, 'CONFLICT', 'A deletion request is already pending for this record')
-    case 'ALREADY_REMOVED':
-      throw apiError(event, 'CONFLICT', 'This record is already archived or voided')
     case 'INVALID_TRANSITION':
       throw apiError(event, 'VALIDATION_ERROR', entityType === 'service_log'
         ? 'Service logs linked to an invoice cannot be deleted'
-        : 'This record cannot be deleted in its current state')
+        : entityType === 'invoice'
+          ? 'Paid invoices cannot be deleted'
+          : 'This record cannot be deleted in its current state')
     default:
       throw err
   }
 }
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'deletion_requests.submit.all')
-  const body = await validateBody(event, deletionRequestCreateSchema)
+  const actor = requirePermission(event, 'deletion_requests.review.all')
+  const body = await validateBody(event, directDeleteSchema)
 
   try {
-    const request = await createDeletionRequest(
+    await directDeleteEntity(
       useDb(),
       body.entityType,
       body.entityId,
-      body.reason,
       actor.id,
+      body.reason,
     )
 
     await writeAudit(event, {
       entityType: body.entityType,
       entityId: body.entityId,
-      action: 'deletion_requests.submit',
+      action: 'records.delete',
       afterData: {
-        requestId: request.id,
         entityType: body.entityType,
-        reason: body.reason,
+        reason: body.reason ?? null,
       },
-      permissionKey: 'deletion_requests.submit.all',
+      permissionKey: 'deletion_requests.review.all',
       riskLevel: 'sensitive',
     })
 
-    return {
-      request: {
-        id: request.id,
-        entityType: request.entityType,
-        entityId: request.entityId,
-        status: request.status,
-        entityLabel: request.entityLabel,
-        createdAt: request.createdAt.toISOString(),
-      },
-    }
+    return { ok: true, entityType: body.entityType, entityId: body.entityId }
   }
   catch (err) {
     if (err instanceof DeletionRequestsServiceError) mapError(event, err, body.entityType)

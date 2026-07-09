@@ -6,22 +6,27 @@ import { applyPendingMigrationsOnBoot } from '../lib/migrate-on-boot.mjs'
 import { verifyDatabaseConnection } from '../lib/verify-database.mjs'
 import { processThumbnailJobs } from './handlers/derivatives.mjs'
 import { processMailJobs } from './handlers/mail.mjs'
+import { drainMailQueue } from './handlers/mail-drain.mjs'
 import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
 import { processAiJobs } from './handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from './handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handlers/retention.mjs'
+import { touchWorkerHeartbeat } from '../lib/worker-heartbeat.mjs'
 
-const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 5000)
+const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 1500)
+const MAIL_BATCH = Number(process.env.MAIL_BATCH_SIZE ?? 20)
 
 async function tick(pool) {
+  await touchWorkerHeartbeat(pool, 'general')
+
+  const mail = await drainMailQueue(pool, MAIL_BATCH)
+  if (mail.processed || mail.failed) {
+    console.log(`[worker] email_send processed=${mail.processed} failed=${mail.failed}`)
+  }
+
   const thumbs = await processThumbnailJobs(pool)
   if (thumbs.processed || thumbs.failed) {
     console.log(`[worker] thumbnail_generate processed=${thumbs.processed} failed=${thumbs.failed}`)
-  }
-
-  const mail = await processMailJobs(pool)
-  if (mail.processed || mail.failed) {
-    console.log(`[worker] email_send processed=${mail.processed} failed=${mail.failed}`)
   }
 
   const invoiceSend = await processInvoiceSendJobs(pool)

@@ -28,11 +28,12 @@ async function getTransport(pool) {
 }
 
 /**
+ * Process queued email_send jobs (drain up to batch per call).
  * @param {import('pg').Pool} pool
  * @param {number} [batch]
  * @returns {Promise<{ processed: number, failed: number }>}
  */
-export async function processMailJobs(pool, batch = 5) {
+export async function processMailJobs(pool, batch = 20) {
   let processed = 0
   let failed = 0
 

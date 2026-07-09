@@ -1,12 +1,11 @@
 // invoice_send handler — waits for PDF, emails attachment, then marks invoice sent.
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
-import {
-  buildStyledEmail,
-  emailMuted,
-  emailParagraph,
-  escapeHtml,
-} from '../../mail/email-layout.mjs'
+import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
+
+function workerAppUrl() {
+  return process.env.APP_URL?.trim() || 'http://localhost:3000'
+}
 
 let _transport
 let _transportKey
@@ -181,7 +180,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         if (pendingPdf) {
           await pool.query(
             `UPDATE worker_jobs
-             SET status = 'queued', run_after = now() + interval '10 seconds', last_error = 'Waiting for PDF render'
+             SET status = 'queued', run_after = now() + interval '3 seconds', last_error = 'Waiting for PDF render'
              WHERE id = $1`,
             [job.id],
           )
@@ -199,26 +198,12 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       if (!payload.subject) {
         const invNum = `INV-${String(invoice.invoice_number).padStart(6, '0')}`
         const recipientName = payload.recipientName ?? 'there'
-        const dueLine = invoice.due_date ? `Due date: ${invoice.due_date}` : null
-        const totalLine = invoice.total ? `Total: ${invoice.total}` : null
-        const text = [
-          `Hello ${recipientName},`,
-          '',
-          `Invoice ${invNum} is attached.`,
-          dueLine,
-          totalLine,
-        ].filter(Boolean).join('\n')
-        const mail = buildStyledEmail({
-          subject: `Invoice ${invNum} is ready`,
-          text,
-          title: `Invoice ${invNum}`,
-          preheader: `Invoice ${invNum} is attached`,
-          bodyHtml: [
-            emailParagraph(`Hello ${escapeHtml(recipientName)},`),
-            emailParagraph(`Invoice <strong>${escapeHtml(invNum)}</strong> is attached to this email.`),
-            dueLine ? emailMuted(escapeHtml(dueLine)) : '',
-            totalLine ? emailMuted(escapeHtml(totalLine)) : '',
-          ].filter(Boolean).join(''),
+        const mail = buildInvoiceAttachedEmail({
+          recipientName,
+          invoiceNumber: invNum,
+          dueDate: invoice.due_date ?? null,
+          total: invoice.total ?? null,
+          appUrl: workerAppUrl(),
         })
         payload.subject = mail.subject
         payload.text = mail.text
@@ -248,7 +233,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       if (waitingForPdf && attempts < job.max_attempts) {
         await pool.query(
           `UPDATE worker_jobs
-           SET status = 'queued', run_after = now() + interval '10 seconds', last_error = $2
+           SET status = 'queued', run_after = now() + interval '3 seconds', last_error = $2
            WHERE id = $1`,
           [job.id, message],
         )

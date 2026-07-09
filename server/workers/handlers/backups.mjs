@@ -3,6 +3,11 @@ import { spawn } from 'node:child_process'
 import { zstdCompressSync } from 'node:zlib'
 import { decryptBuffer, encryptBuffer, sha256Hex } from '../lib/encryption.mjs'
 import { getDatabaseUrl } from '../../lib/runtime-config.mjs'
+import { buildBackupNotificationEmail } from '../../mail/templates/system.mjs'
+
+function workerAppUrl() {
+  return process.env.APP_URL?.trim() || ''
+}
 
 function defaultScheduleCron() {
   return process.env.BACKUP_SCHEDULE?.trim() || '0 2 * * *'
@@ -166,23 +171,19 @@ async function queueNotification(pool, opts) {
   const to = defaultNotifyEmail(rows[0]?.notify_email)
   if (!to) return
 
-  const subject = opts.success
-    ? `DORINC backup completed — ${opts.filename}`
-    : `DORINC backup failed — ${opts.filename}`
-  const lines = [
-    opts.success ? 'An encrypted database backup completed successfully.' : 'An encrypted database backup failed.',
-    '',
-    `File: ${opts.filename}`,
-    `Trigger: ${opts.trigger}`,
-  ]
-  if (opts.driveFileId) lines.push(`Google Drive file: ${opts.driveFileId}`)
-  if (opts.error) lines.push(`Error: ${opts.error}`)
-  lines.push('', `Time: ${new Date().toISOString()}`)
+  const mail = buildBackupNotificationEmail({
+    success: opts.success,
+    filename: opts.filename,
+    trigger: opts.trigger,
+    driveFileId: opts.driveFileId,
+    error: opts.error,
+    appUrl: workerAppUrl(),
+  })
 
   await pool.query(
     `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
      VALUES ('email_send', $1, 'queued', 0, 3, now())`,
-    [JSON.stringify({ to, subject, text: lines.join('\n') })],
+    [JSON.stringify({ to, subject: mail.subject, text: mail.text, html: mail.html })],
   )
 }
 

@@ -38,7 +38,7 @@ describe('P1-34 Super Admin system status', () => {
     expect(['not_configured', 'disabled', 'active', 'error']).toContain(status.ai.status)
     expect(status.ai.monthlyCostUsd).toBeTypeOf('number')
     expect(['running', 'idle', 'backlog', 'error', 'unknown']).toContain(status.pdfWorker.status)
-    expect(status.pdfWorker.message).toContain('Playwright Chromium')
+    expect(status.pdfWorker.message).toContain('DomPDF')
     expect(status.pdfWorker.queued).toBeTypeOf('number')
     expect(status.pdfWorker.processing).toBeTypeOf('number')
     expect(status.pdfWorker.failed).toBeTypeOf('number')

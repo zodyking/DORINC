@@ -700,14 +700,11 @@ async function runSmtpTest() {
       </div>
 
       <div class="card" style="margin-bottom:16px;">
-        <div class="chead"><h3>Quick Links</h3></div>
+        <div class="chead"><h3>Administration</h3></div>
         <div class="cbody cp-quicklinks">
           <NuxtLink to="/users" class="btn">Users &amp; Moderation</NuxtLink>
           <NuxtLink to="/deletion-requests" class="btn">Deletion Requests</NuxtLink>
           <NuxtLink to="/system-logs" class="btn">System Logs</NuxtLink>
-          <button type="button" class="btn" @click="setControlPanelTab('designer')">Template Designer</button>
-          <button type="button" class="btn" @click="setControlPanelTab('import')">Import / Export</button>
-          <NuxtLink to="/setup" class="btn">Server Setup Wizard</NuxtLink>
         </div>
       </div>
       </div>

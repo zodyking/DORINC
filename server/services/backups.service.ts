@@ -10,15 +10,10 @@ import { backupRuns, backupSettings, type BackupRunStatus } from '../db/schema/b
 import { backupRecoveryTests, type BackupRecoveryTestStatus } from '../db/schema/security'
 import { decryptBuffer, encryptBuffer, sha256Hex } from './encryption.service'
 import { writeAudit } from './audit.service'
-import { getNotifyEmail, getSmtpConfig } from './app-config.service'
+import { getNotifyEmail, getSmtpConfig, getAppUrl } from './app-config.service'
 import { getDatabaseUrl } from './runtime-config.service'
 import { enqueueJob } from './jobs.service'
-import {
-  buildStyledEmail,
-  emailMuted,
-  emailParagraph,
-  escapeHtml,
-} from '../mail/email-layout'
+import { buildBackupNotificationEmail } from '../mail/templates/system'
 import {
   getBackupIntegrationView,
   GoogleDriveBackupError,
@@ -258,40 +253,13 @@ async function queueBackupNotification(
   const to = settings.notifyEmail?.trim() || defaultNotifyEmail()
   if (!to) return
 
-  const subject = opts.success
-    ? `DORINC backup completed — ${opts.filename}`
-    : `DORINC backup failed — ${opts.filename}`
-
-  const lines = [
-    opts.success
-      ? 'An encrypted database backup completed successfully.'
-      : 'An encrypted database backup failed.',
-    '',
-    `File: ${opts.filename}`,
-    `Trigger: ${opts.trigger}`,
-  ]
-  if (opts.driveFileId) lines.push(`Google Drive file: ${opts.driveFileId}`)
-  if (opts.error) lines.push(`Error: ${opts.error}`)
-  lines.push('', `Time: ${new Date().toISOString()}`)
-
-  const title = opts.success ? 'Backup completed' : 'Backup failed'
-  const bodyHtml = [
-    emailParagraph(opts.success
-      ? 'An encrypted database backup completed successfully.'
-      : 'An encrypted database backup <strong>failed</strong>.'),
-    emailMuted(`File: ${escapeHtml(opts.filename)}`),
-    emailMuted(`Trigger: ${escapeHtml(opts.trigger)}`),
-    opts.driveFileId ? emailMuted(`Google Drive file: ${escapeHtml(opts.driveFileId)}`) : '',
-    opts.error ? emailMuted(`Error: ${escapeHtml(opts.error)}`) : '',
-    emailMuted(`Time: ${escapeHtml(new Date().toISOString())}`),
-  ].filter(Boolean).join('')
-
-  const mail = buildStyledEmail({
-    subject,
-    text: lines.join('\n'),
-    title,
-    preheader: subject,
-    bodyHtml,
+  const mail = buildBackupNotificationEmail({
+    success: opts.success,
+    filename: opts.filename,
+    trigger: opts.trigger,
+    driveFileId: opts.driveFileId,
+    error: opts.error,
+    appUrl: getAppUrl(),
   })
 
   await enqueueJob(db, 'email_send', {

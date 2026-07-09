@@ -2,13 +2,7 @@ import { z } from 'zod'
 import { AuthError, signup } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
 import { sendMail } from '../../mail/mailer'
-import {
-  buildStyledEmail,
-  emailButton,
-  emailMuted,
-  emailParagraph,
-  escapeHtml,
-} from '../../mail/email-layout'
+import { buildSignupVerificationEmail } from '../../mail/templates/system'
 import { writeAudit } from '../../services/audit.service'
 import { getAppUrl } from '../../services/app-config.service'
 import { apiError } from '../../utils/api-error'
@@ -39,24 +33,10 @@ export default defineEventHandler(async (event) => {
 
     const appUrl = getAppUrl()
     const verifyUrl = `${appUrl}/auth/verify-email?token=${verificationToken}`
-    const mail = buildStyledEmail({
-      subject: `Verify your ${BRAND_NAME} account`,
-      text: [
-        `Hi ${user.name},`,
-        '',
-        `Confirm your email to continue your ${BRAND_NAME} signup:`,
-        verifyUrl,
-        '',
-        'The link expires in 24 hours. After verification an administrator must approve your account.',
-      ].join('\n'),
-      title: 'Verify your email',
-      preheader: `Confirm your ${BRAND_NAME} signup`,
-      bodyHtml: [
-        emailParagraph(`Hi ${escapeHtml(user.name)},`),
-        emailParagraph(`Confirm your email to continue your <strong>${BRAND_NAME}</strong> signup.`),
-        emailButton(verifyUrl, 'Verify email'),
-        emailMuted('The link expires in 24 hours. After verification an administrator must approve your account.'),
-      ].join(''),
+    const mail = buildSignupVerificationEmail({
+      name: user.name,
+      verifyUrl,
+      brandName: BRAND_NAME,
       appUrl,
     })
     await sendMail({ to: user.email, ...mail })

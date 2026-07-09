@@ -2,12 +2,7 @@ import { sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { getSmtpConfig } from './app-config.service'
 import { sendMail } from '../mail/mailer'
-import {
-  buildStyledEmail,
-  emailMuted,
-  emailParagraph,
-  escapeHtml,
-} from '../mail/email-layout'
+import { buildSmtpTestEmail } from '../mail/templates/system'
 import { getBackupHealth } from './backups.service'
 import { getAiHealth, getMonthlyUsageCost } from './ai-provider.service'
 import { getPdfWorkerHealth, getWorkerQueueHealth, type PdfWorkerHealth, type WorkerQueueHealth } from './worker-health.service'
@@ -104,22 +99,11 @@ export async function getSystemStatus(db: Db): Promise<SystemStatus> {
 }
 
 export async function sendSmtpTest(to: string, actorName: string): Promise<{ delivered: boolean }> {
-  const sentAt = new Date().toISOString()
-  const mail = buildStyledEmail({
-    subject: `${BRAND_NAME} SMTP test`,
-    text: [
-      `This is a test message from the ${BRAND_NAME} Super Admin control panel.`,
-      '',
-      `Sent by ${actorName} at ${sentAt}.`,
-      'If you received this, SMTP is configured correctly.',
-    ].join('\n'),
-    title: 'SMTP test successful',
-    preheader: `${BRAND_NAME} SMTP is configured correctly`,
-    bodyHtml: [
-      emailParagraph(`This is a test message from the <strong>${BRAND_NAME}</strong> Super Admin control panel.`),
-      emailMuted(`Sent by ${escapeHtml(actorName)} at ${escapeHtml(sentAt)}.`),
-      emailMuted('If you received this, SMTP is configured correctly.'),
-    ].join(''),
+  const mail = buildSmtpTestEmail({
+    brandName: BRAND_NAME,
+    source: 'Super Admin control panel',
+    actorName,
+    sentAt: new Date().toISOString(),
   })
   return sendMail({ to, ...mail })
 }

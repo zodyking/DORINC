@@ -12,14 +12,7 @@ import { allocateUniquePortalUsername } from '../../shared/format/portal-usernam
 import { enqueueJob } from './jobs.service'
 import { addContact, getCustomer, listContacts } from './customers.service'
 import { getAppUrl } from './app-config.service'
-import {
-  buildStyledEmail,
-  emailButton,
-  emailMuted,
-  emailPanel,
-  emailParagraph,
-  escapeHtml,
-} from '../mail/email-layout'
+import { buildPortalCredentialEmail } from '../mail/templates/system'
 
 export const TEMP_PASSWORD_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -256,42 +249,11 @@ async function ensurePortalUser(
 }
 
 function buildCredentialEmail(name: string, username: string, tempPassword: string) {
-  const appUrl = getAppUrl()
-  const loginUrl = `${appUrl}/auth/login`
-  const subject = 'Your DORINC Customer Portal access'
-  const text = [
-    `Hello ${name},`,
-    '',
-    'A staff member has sent you access to the DORINC Customer Portal.',
-    '',
-    `Sign in: ${loginUrl}`,
-    `Username: ${username}`,
-    `Temporary password: ${tempPassword}`,
-    '',
-    'This temporary password expires in 7 days. You will be required to choose a new password on first login.',
-    '',
-    'If you did not expect this email, contact Devon On Site Repairs Inc.',
-  ].join('\n')
-
-  const bodyHtml = [
-    emailParagraph(`Hello ${escapeHtml(name)},`),
-    emailParagraph('A staff member has sent you access to the <strong>DORINC Customer Portal</strong>.'),
-    emailButton(loginUrl, 'Sign in to the portal'),
-    emailPanel(
-      'Sign-in details',
-      `<strong>Username:</strong> ${escapeHtml(username)}<br><strong>Temporary password:</strong> ${escapeHtml(tempPassword)}`,
-    ),
-    emailMuted('This temporary password expires in 7 days. You will be required to choose a new password on first login.'),
-    emailMuted('If you did not expect this email, contact Devon On Site Repairs Inc.'),
-  ].join('')
-
-  return buildStyledEmail({
-    subject,
-    text,
-    title: 'Customer Portal access',
-    preheader: 'Your temporary portal password is ready',
-    bodyHtml,
-    appUrl,
+  return buildPortalCredentialEmail({
+    name,
+    username,
+    tempPassword,
+    appUrl: getAppUrl(),
   })
 }
 

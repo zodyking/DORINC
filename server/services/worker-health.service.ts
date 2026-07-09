@@ -1,10 +1,12 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
+import { appSettings } from '../db/schema/settings'
 import { workerJobs } from '../db/schema/jobs'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000
 const BACKLOG_QUEUED_MS = 5 * 60 * 1000
+const WORKER_HEARTBEAT_STALE_MS = 60 * 1000
 
 export type PdfWorkerStatus = 'running' | 'idle' | 'backlog' | 'error' | 'unknown'
 export type WorkerQueueStatus = 'healthy' | 'idle' | 'backlog' | 'error'
@@ -86,11 +88,57 @@ async function lastFinishedAt(db: Db, table: typeof workerJobs | typeof pdfRende
   return row?.finishedAt ?? null
 }
 
-function pdfWorkerMessage(counts: StatusCounts): string {
-  const parts = ['Playwright Chromium']
+async function readWorkerHeartbeat(db: Db, kind: 'pdf' | 'general'): Promise<Date | null> {
+  const key = `worker.${kind}.heartbeat`
+  const [row] = await db
+    .select({ value: appSettings.value, updatedAt: appSettings.updatedAt })
+    .from(appSettings)
+    .where(eq(appSettings.key, key))
+    .limit(1)
+  if (!row) return null
+  const payload = row.value as { at?: string } | null
+  if (payload?.at) {
+    const parsed = new Date(payload.at)
+    if (!Number.isNaN(parsed.getTime())) return parsed
+  }
+  return row.updatedAt ?? null
+}
+
+function isHeartbeatFresh(at: Date | null): boolean {
+  if (!at) return false
+  return Date.now() - at.getTime() < WORKER_HEARTBEAT_STALE_MS
+}
+
+function pdfEngineLabel(): string {
+  const url = process.env.PDF_RENDER_URL?.trim()
+  if (url || process.env.NODE_ENV === 'production') {
+    return 'DomPDF · Laravel PDF service'
+  }
+  return 'DomPDF · local Playwright fallback'
+}
+
+async function probePdfRenderService(): Promise<boolean> {
+  const base = (process.env.PDF_RENDER_URL?.trim() || 'http://laravel-pdf:8080').replace(/\/$/, '')
+  if (process.env.NODE_ENV !== 'production' && !process.env.PDF_RENDER_URL?.trim()) {
+    return false
+  }
+  try {
+    const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) })
+    if (!res.ok) return false
+    const body = await res.json() as { ok?: boolean }
+    return body.ok === true
+  }
+  catch {
+    return false
+  }
+}
+
+function pdfWorkerMessage(counts: StatusCounts, extras: string[] = []): string {
+  const parts = [pdfEngineLabel()]
   if (counts.queued + counts.processing === 0) parts.push('queue idle')
   else parts.push(`${counts.queued} queued · ${counts.processing} active`)
   parts.push(`${counts.failed} failed`)
+  parts.push(...extras)
   return parts.join(' · ')
 }
 
@@ -104,14 +152,20 @@ function resolvePdfWorkerStatus(
   staleProcessing: number,
   backlogQueued: number,
   lastSuccessAt: Date | null,
+  heartbeatAt: Date | null,
 ): PdfWorkerStatus {
   if (staleProcessing > 0 || (counts.failed > 0 && backlogQueued > 0)) return 'error'
-  if (backlogQueued > 0) return 'backlog'
+  if (backlogQueued > 0) {
+    if (!isHeartbeatFresh(heartbeatAt)) return 'error'
+    return 'backlog'
+  }
   if (counts.processing > 0) return 'running'
   if (counts.queued + counts.failed === 0) {
-    return lastSuccessAt ? 'idle' : 'unknown'
+    if (isHeartbeatFresh(heartbeatAt)) return 'idle'
+    if (lastSuccessAt) return 'idle'
+    return 'unknown'
   }
-  return 'running'
+  return isHeartbeatFresh(heartbeatAt) ? 'running' : 'unknown'
 }
 
 function resolveWorkerQueueStatus(
@@ -126,17 +180,39 @@ function resolveWorkerQueueStatus(
 }
 
 export async function getPdfWorkerHealth(db: Db): Promise<PdfWorkerHealth> {
-  const [counts, staleProcessing, backlogQueued, lastSuccess] = await Promise.all([
+  const [counts, staleProcessing, backlogQueued, lastSuccess, heartbeatAt, pdfServiceOk] = await Promise.all([
     countByStatus(db, pdfRenderJobs),
     countStaleProcessing(db, pdfRenderJobs),
     countBacklogQueued(db, pdfRenderJobs),
     lastFinishedAt(db, pdfRenderJobs),
+    readWorkerHeartbeat(db, 'pdf'),
+    probePdfRenderService(),
   ])
 
-  const status = resolvePdfWorkerStatus(counts, staleProcessing, backlogQueued, lastSuccess)
-  let message = pdfWorkerMessage(counts)
-  if (status === 'backlog') message = `${message} · jobs waiting`
-  if (status === 'error') message = staleProcessing > 0 ? `${message} · stuck job` : `${message} · check worker logs`
+  const status = resolvePdfWorkerStatus(
+    counts,
+    staleProcessing,
+    backlogQueued,
+    lastSuccess,
+    heartbeatAt,
+  )
+
+  const extras: string[] = []
+  if (status === 'backlog') extras.push('jobs waiting')
+  if (status === 'error') {
+    extras.push(staleProcessing > 0 ? 'stuck job' : 'check worker logs')
+  }
+  if (status === 'unknown') {
+    if (!isHeartbeatFresh(heartbeatAt)) extras.push('pdf-worker container not detected')
+    if (!pdfServiceOk && (process.env.PDF_RENDER_URL || process.env.NODE_ENV === 'production')) {
+      extras.push('laravel-pdf service unreachable')
+    }
+  }
+  if (status === 'idle' && !lastSuccess && isHeartbeatFresh(heartbeatAt)) {
+    extras.push('awaiting first job')
+  }
+
+  const message = pdfWorkerMessage(counts, extras)
 
   return {
     status,

@@ -79,9 +79,10 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
       </div>
     </div>
     <p v-if="error" style="color:#dc2626; font-size:13px; margin:12px 0 0;">{{ error }}</p>
-    <div style="display:flex; gap:10px; margin-top:16px;">
+    <div class="form-footer">
       <button type="submit" class="btn primary" :disabled="busy">{{ busy ? 'Saving…' : submitLabel }}</button>
       <button type="button" class="btn" :disabled="busy" @click="emit('cancel')">Cancel</button>
+      <slot name="footer-extra" />
     </div>
   </form>
 </template>

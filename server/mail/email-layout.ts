@@ -8,6 +8,7 @@ export {
   EMAIL_TOKENS,
   escapeHtml,
   emailButton,
+  emailBadge,
   emailPanel,
   emailParagraph,
   emailMuted,

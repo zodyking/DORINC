@@ -2,6 +2,7 @@
 import { getAppUrl } from '../services/app-config.service'
 import {
   buildStyledEmail,
+  emailBadge,
   emailButton,
   emailMuted,
   emailParagraph,
@@ -105,6 +106,7 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
   ].filter(Boolean).join('\n')
 
   const bodyHtml = [
+    emailBadge(statusLabel, input.status === 'approved' ? 'ok' : 'error'),
     emailParagraph(`Hello ${escapeHtml(input.recipientName)},`),
     emailParagraph(`Your <strong>${escapeHtml(kindLabel.toLowerCase())}</strong> &ldquo;${escapeHtml(input.requestTitle)}&rdquo; has been <strong>${statusLabel}</strong>.`),
     reasonLine ? emailMuted(escapeHtml(reasonLine)) : '',

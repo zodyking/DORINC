@@ -1,0 +1,11 @@
+{
+  "name": "dorinc/laravel-pdf",
+  "description": "HTML to PDF microservice using DomPDF (same engine as barryvdh/laravel-dompdf / InvoiceShelf)",
+  "require": {
+    "php": "^8.2",
+    "dompdf/dompdf": "^3.1"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}

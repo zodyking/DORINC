@@ -123,9 +123,6 @@ const canSend = computed(() => auth.can('invoices.send.all'))
 const canVoidInvoice = computed(() =>
   auth.can('invoices.void.all') && auth.can('deletion_requests.review.all'),
 )
-const canRequestDeletion = computed(() =>
-  auth.can('deletion_requests.submit.all') && !canVoidInvoice.value,
-)
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
@@ -597,14 +594,6 @@ const aiPopStyle = computed(() => {
         <div class="actions">
           <NuxtLink to="/admin?tab=designer" class="btn">Template designer</NuxtLink>
           <button type="button" class="btn" disabled title="Coming soon">Preview PDF</button>
-          <RequestDeletionButton
-            v-if="removableInvoice && canRequestDeletion"
-            entity-type="invoice"
-            :entity-id="id"
-            :entity-label="invoice.invoiceNumberFormatted"
-            :disabled="busy"
-            @submitted="refresh()"
-          />
           <VoidInvoiceButton
             v-if="removableInvoice && canVoidInvoice"
             :invoice-id="id"
@@ -810,7 +799,7 @@ const aiPopStyle = computed(() => {
 
             <div v-if="editable" class="savebar">
               <button type="button" class="btn" :disabled="busy" @click="patchHeader">Save draft</button>
-              <NuxtLink :to="`/invoices/${id}`" class="btn danger">Discard</NuxtLink>
+              <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
               <button
                 type="button"
                 class="btn primary"
@@ -820,6 +809,22 @@ const aiPopStyle = computed(() => {
               >
                 Finalize &amp; send
               </button>
+              <DeleteEntityButton
+                v-if="removableInvoice"
+                entity-type="invoice"
+                :entity-id="id"
+                :entity-label="invoice.invoiceNumberFormatted"
+                :disabled="busy"
+              />
+            </div>
+            <div v-else-if="removableInvoice" class="savebar">
+              <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
+              <DeleteEntityButton
+                entity-type="invoice"
+                :entity-id="id"
+                :entity-label="invoice.invoiceNumberFormatted"
+                :disabled="busy"
+              />
             </div>
           </div>
 

@@ -5,7 +5,7 @@
 #   APP_URL=https://…  # public URL
 #   DATABASE_URL=…     # optional override (recommended if workers cannot resolve setup host)
 #
-# Services deployed together: nuxt-app + worker + pdf-worker (mail, PDF, backups, AI).
+# Services deployed together: nuxt-app + worker + pdf-worker + laravel-pdf (mail, PDF, backups, AI).
 # All services join dokploy-network so linked Postgres hostnames resolve from workers too.
 # Optional profiles: migrate (one-shot), redis (not required for Phase 1).
 
@@ -27,6 +27,7 @@ services:
       NITRO_HOST: 0.0.0.0
       APP_URL: ${APP_URL}
       DATABASE_URL: ${DATABASE_URL:-}
+      PDF_RENDER_URL: ${PDF_RENDER_URL:-http://laravel-pdf:8080}
     networks:
       - dokploy-network
     healthcheck:
@@ -46,6 +47,8 @@ services:
     environment:
       NODE_ENV: production
       WORKER_KIND: general
+      WORKER_POLL_MS: ${WORKER_POLL_MS:-1500}
+      MAIL_BATCH_SIZE: ${MAIL_BATCH_SIZE:-20}
       APP_URL: ${APP_URL:-}
       DATABASE_URL: ${DATABASE_URL:-}
     networks:
@@ -63,8 +66,27 @@ services:
       WORKER_KIND: pdf
       APP_URL: ${APP_URL:-}
       DATABASE_URL: ${DATABASE_URL:-}
+      PDF_RENDER_URL: ${PDF_RENDER_URL:-http://laravel-pdf:8080}
     networks:
       - dokploy-network
+    depends_on:
+      - laravel-pdf
+
+  laravel-pdf:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.laravel-pdf
+    restart: unless-stopped
+    expose:
+      - '8080'
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ['CMD-SHELL', 'php -r "exit(@file_get_contents(\"http://127.0.0.1:8080/health\") ? 0 : 1);"']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Optional one-shot migrate. Upgrades normally rely on boot migrate in nuxt-app/worker/pdf-worker.
   migrate:

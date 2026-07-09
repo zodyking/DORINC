@@ -9,6 +9,12 @@ export const deletionRequestCreateSchema = z.object({
   reason: z.string().trim().min(10, 'Explain why this record should be removed (min 10 characters)').max(2000),
 })
 
+export const directDeleteSchema = z.object({
+  entityType: deletionEntityTypeSchema,
+  entityId: uuidSchema,
+  reason: z.string().trim().max(2000).optional(),
+})
+
 export const deletionRequestReviewSchema = z.object({
   reason: z.string().trim().max(2000).optional(),
 })

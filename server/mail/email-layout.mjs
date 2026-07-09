@@ -86,6 +86,21 @@ export function emailMuted(text) {
 }
 
 /**
+ * @param {string} label
+ * @param {'ok'|'warn'|'error'} [tone]
+ * @returns {string}
+ */
+export function emailBadge(label, tone = 'ok') {
+  const colors = {
+    ok: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
+    warn: { bg: '#fffbeb', fg: '#b45309', border: '#fcd34d' },
+    error: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
+  }
+  const c = colors[tone] ?? colors.ok
+  return `<span style="display:inline-block;margin:0 0 14px;padding:4px 10px;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${c.fg};background:${c.bg};border:1px solid ${c.border};border-radius:999px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</span>`
+}
+
+/**
  * Wrap body HTML in the shared modern white-card layout.
  *
  * @param {{
@@ -106,10 +121,15 @@ export function wrapEmailHtml(opts) {
     ? escapeHtml(opts.footerNote)
     : `© ${new Date().getFullYear()} ${EMAIL_BRAND_LEGAL}. All rights reserved.`
   const appUrl = opts.appUrl ? String(opts.appUrl).replace(/\/$/, '') : ''
+  const logoUrl = opts.logoUrl ?? (appUrl ? `${appUrl}/images/dorinc-icon-trans.png` : null)
 
   const brandBlock = appUrl
-    ? `<a href="${escapeHtml(appUrl)}" style="display:inline-block;font-size:15px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};text-decoration:none;font-family:${t.font};">${brand}</a>`
-    : `<span style="display:inline-block;font-size:15px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};font-family:${t.font};">${brand}</span>`
+    ? `<a href="${escapeHtml(appUrl)}" style="display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-family:${t.font};">`
+      + (logoUrl
+        ? `<img src="${escapeHtml(logoUrl)}" width="32" height="32" alt="" style="display:block;border-radius:8px;">`
+        : '')
+      + `<span style="font-size:16px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};">${brand}</span></a>`
+    : `<span style="display:inline-block;font-size:16px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};font-family:${t.font};">${brand}</span>`
 
   const titleBlock = title
     ? `<h1 style="margin:0 0 16px;font-size:20px;font-weight:700;letter-spacing:-0.02em;color:${t.ink};font-family:${t.font};line-height:1.3;">${title}</h1>`
@@ -142,7 +162,10 @@ ${preheader ? `<div style="display:none;font-size:1px;color:${t.bg};line-height:
     <td align="center" style="padding:32px 16px;">
       <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;width:100%;background:${t.surface};border:1px solid ${t.line};border-radius:${t.radius};overflow:hidden;">
         <tr>
-          <td class="email-pad" style="padding:24px 28px 16px;border-bottom:1px solid ${t.line};">
+          <td style="height:4px;background:linear-gradient(90deg,${t.accent} 0%,${t.accentStrong} 100%);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <tr>
+          <td class="email-pad" style="padding:22px 28px 16px;border-bottom:1px solid ${t.line};">
             ${brandBlock}
           </td>
         </tr>
@@ -154,7 +177,7 @@ ${preheader ? `<div style="display:none;font-size:1px;color:${t.bg};line-height:
         </tr>
         <tr>
           <td class="email-pad" style="padding:18px 28px 24px;border-top:1px solid ${t.line};font-size:12px;line-height:1.5;color:${t.faint};font-family:${t.font};">
-            ${footerNote}
+            ${footerNote}${appUrl ? `<br><a href="${escapeHtml(appUrl)}" style="color:${t.muted};text-decoration:none;">${escapeHtml(appUrl.replace(/^https?:\/\//, ''))}</a>` : ''}
           </td>
         </tr>
       </table>

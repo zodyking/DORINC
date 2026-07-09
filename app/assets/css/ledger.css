@@ -1006,6 +1006,12 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
   box-shadow:0 -6px 24px -12px rgba(15,23,42,.15);
 }
 .savebar .note{ color:#94a3b8; font-size:12.5px; margin-right:auto; }
+.form-footer{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  margin-top:16px; padding-top:16px; border-top:1px solid #f1f5f9;
+}
+.form-footer .btn.danger,
+.savebar .btn.danger{ margin-left:auto; }
 
 /* ---------- Workflow status + AI popover ---------- */
 .wizbar{

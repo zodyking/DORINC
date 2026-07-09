@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY server/workers ./server/workers
 COPY server/lib ./server/lib
+COPY server/mail ./server/mail
 COPY server/db/migrations ./server/db/migrations
 COPY scripts/migrate.mjs ./scripts/migrate.mjs
 
