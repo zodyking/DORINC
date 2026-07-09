@@ -24,6 +24,9 @@ interface VehicleRow {
 
 const auth = useAuthStore()
 const canCreate = computed(() => auth.can('vehicles.create.all'))
+const canBulkDecode = computed(() =>
+  auth.can('vehicles.decode_vin.all') && auth.can('vehicles.update.all'),
+)
 
 const q = ref('')
 const fType = ref<'all' | 'truck' | 'bus' | 'equipment' | 'tractor' | 'other'>('all')
@@ -32,6 +35,10 @@ const fSort = ref<'tag-asc' | 'tag-desc' | 'customer-asc' | 'odo-desc' | 'newest
 const showArchived = ref(false)
 const page = ref(1)
 const PAGE_SIZE = 25
+
+const bulkDecodeBusy = ref(false)
+const bulkDecodeMessage = ref('')
+const bulkDecodeError = ref('')
 
 watch([q, fType, fCustomer, fSort, showArchived], () => { page.value = 1 })
 
@@ -45,10 +52,43 @@ const query = computed(() => ({
   includeArchived: showArchived.value || undefined,
 }))
 
-const { data } = await useFetch<{ items: VehicleRow[], total: number }>(
+const { data, refresh } = await useFetch<{ items: VehicleRow[], total: number }>(
   '/api/vehicles',
   { query },
 )
+
+async function runBulkVinDecode() {
+  if (bulkDecodeBusy.value) return
+  if (!window.confirm(
+    'Decode VIN for all vehicles missing year, make, or model and save the results? This may take a minute for large fleets.',
+  )) return
+
+  bulkDecodeBusy.value = true
+  bulkDecodeMessage.value = ''
+  bulkDecodeError.value = ''
+  try {
+    const res = await $fetch<{
+      scanned: number
+      updated: number
+      skipped: number
+      failed: number
+    }>('/api/vehicles/decode-missing', {
+      method: 'POST',
+      body: { limit: 200 },
+    })
+    bulkDecodeMessage.value = res.scanned === 0
+      ? 'No vehicles need VIN decode — all entries with a VIN already have year, make, and model.'
+      : `Decoded ${res.scanned} vehicle${res.scanned === 1 ? '' : 's'}: ${res.updated} updated, ${res.skipped} skipped, ${res.failed} failed.`
+    await refresh()
+  }
+  catch (err) {
+    const data = (err as { data?: { message?: string } })?.data
+    bulkDecodeError.value = data?.message ?? 'Bulk VIN decode failed'
+  }
+  finally {
+    bulkDecodeBusy.value = false
+  }
+}
 
 const { data: customersData } = await useFetch<{ items: { id: string, displayName: string }[] }>(
   '/api/customers',
@@ -89,10 +129,21 @@ const rangeLabel = computed(() => {
         <p>{{ total }} unit{{ total === 1 ? '' : 's' }} across {{ customerCount }} customer{{ customerCount === 1 ? '' : 's' }}</p>
       </div>
       <div class="actions">
-        <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn">Decode VIN</NuxtLink>
+        <button
+          v-if="canBulkDecode"
+          type="button"
+          class="btn"
+          :disabled="bulkDecodeBusy"
+          @click="runBulkVinDecode"
+        >
+          {{ bulkDecodeBusy ? 'Decoding VINs…' : 'Decode missing VINs' }}
+        </button>
         <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn primary">+ Add Vehicle</NuxtLink>
       </div>
     </div>
+
+    <p v-if="bulkDecodeMessage" class="help" style="color:#059669; margin:0 0 12px;">{{ bulkDecodeMessage }}</p>
+    <p v-if="bulkDecodeError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ bulkDecodeError }}</p>
 
     <div class="card">
       <div class="fsbar">

@@ -119,10 +119,15 @@ export function lineQuantityDisplay(quantity: string, lineType: InvoiceLineType)
 }
 
 export function vehicleSnapshotSub(snapshot: InvoiceVehicleSnapshotDisplay | null | undefined): string {
-  if (!snapshot) return 'No vehicle on invoice'
-  const ymm = vehicleSub(snapshot as VehicleDisplay)
-  const vin = snapshot.vin?.trim()
-  return vin ? `${ymm} · ${vin}` : ymm
+  if (!snapshot || typeof snapshot !== 'object') return 'No vehicle on invoice'
+  try {
+    const ymm = vehicleSub(snapshot as VehicleDisplay)
+    const vin = typeof snapshot.vin === 'string' ? snapshot.vin.trim() : ''
+    return vin ? `${ymm} · ${vin}` : ymm
+  }
+  catch {
+    return 'Vehicle details unavailable'
+  }
 }
 
 export function formatInvoiceAuditAction(action: string): string {

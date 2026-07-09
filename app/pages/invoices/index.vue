@@ -1,6 +1,13 @@
 <script setup lang="ts">
 // Invoices list — KPI cards, status chips, filters, table (mockup: PAGE: INVOICES).
-import type { InvoiceVehicleSnapshotDisplay } from '~/utils/invoices-ui'
+import {
+  invoiceDateDisplay,
+  invoiceStatusPill,
+  moneyDisplay,
+  vehicleSnapshotSub,
+  type InvoiceStatus,
+  type InvoiceVehicleSnapshotDisplay,
+} from '~/utils/invoices-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -63,12 +70,36 @@ const query = computed(() => ({
   sort: 'newest' as const,
 }))
 
-const { data: stats, refresh: refreshStats } = await useFetch<InvoiceStats>('/api/invoices/stats')
-const { data, refresh: refreshList } = await useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', { query })
+const {
+  data: stats,
+  refresh: refreshStats,
+  error: statsError,
+  pending: statsPending,
+} = await useFetch<InvoiceStats>('/api/invoices/stats', {
+  server: false,
+  lazy: true,
+})
+
+const {
+  data,
+  refresh: refreshList,
+  error: listError,
+  pending: listPending,
+} = await useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', {
+  query,
+  server: false,
+  lazy: true,
+})
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pageError = computed(() =>
+  (listError.value as { data?: { message?: string } } | null)?.data?.message
+  ?? (statsError.value as { data?: { message?: string } } | null)?.data?.message
+  ?? (listError.value ? 'Could not load invoices' : null)
+  ?? (statsError.value ? 'Could not load invoice stats' : null),
+)
 
 const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: stats.value?.total ?? 0 },
@@ -117,6 +148,10 @@ async function voidInvoiceRow(row: InvoiceRow, event: Event) {
     voidBusyId.value = ''
   }
 }
+
+async function retryLoad() {
+  await Promise.all([refreshList(), refreshStats()])
+}
 </script>
 
 <template>
@@ -134,6 +169,11 @@ async function voidInvoiceRow(row: InvoiceRow, event: Event) {
         <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary">+ New Invoice</NuxtLink>
       </div>
+    </div>
+
+    <div v-if="pageError" class="card" style="padding:20px; margin-bottom:16px;">
+      <p style="margin:0 0 12px; color:#dc2626;">{{ pageError }}</p>
+      <button type="button" class="btn" @click="retryLoad">Retry</button>
     </div>
 
     <div class="kpis">
@@ -238,6 +278,8 @@ async function voidInvoiceRow(row: InvoiceRow, event: Event) {
             </tr>
           </tbody>
         </table>
+        <div v-else-if="listPending || statsPending" id="inv-rows-empty" class="empty">Loading invoices…</div>
+        <div v-else-if="pageError" id="inv-rows-empty" class="empty">Could not load invoices.</div>
         <div v-else id="inv-rows-empty" class="empty">No invoices match your search.</div>
       </div>
 

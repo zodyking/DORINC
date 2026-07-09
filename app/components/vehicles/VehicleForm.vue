@@ -31,6 +31,18 @@ const props = defineProps<{
 
 const emit = defineEmits<{ submit: [], cancel: [] }>()
 
+/** School-bus fleet default paint code. */
+const BUS_DEFAULT_COLOR = 'YW'
+
+watch(() => model.value.unitType, (type, prev) => {
+  if (type === 'bus' && !model.value.color.trim()) {
+    model.value.color = BUS_DEFAULT_COLOR
+  }
+  else if (prev === 'bus' && type !== 'bus' && model.value.color.trim() === BUS_DEFAULT_COLOR) {
+    model.value.color = ''
+  }
+})
+
 // ---- VIN decode (P1-11) ----
 const decoding = ref(false)
 const decodeNote = ref('')
@@ -148,7 +160,10 @@ async function decodeVin() {
             <div class="row3">
               <label class="fld">Trim <input v-model="model.trim" type="text"></label>
               <label class="fld">Plate <input v-model="model.plate" type="text" placeholder="DE 12345"></label>
-              <label class="fld">Color <input v-model="model.color" type="text" placeholder="White"></label>
+              <label class="fld">Color
+                <input v-model="model.color" type="text" :placeholder="model.unitType === 'bus' ? 'YW' : 'White'">
+                <span v-if="model.unitType === 'bus'" class="help">School buses default to YW</span>
+              </label>
             </div>
           </div>
         </div>

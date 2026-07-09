@@ -4,6 +4,9 @@ import { vehicles } from '../db/schema/vehicles'
 import { customers } from '../db/schema/customers'
 import { CustomersServiceError, getCustomer } from './customers.service'
 
+/** School-bus fleet default paint code. */
+export const BUS_DEFAULT_COLOR = 'YW'
+
 export type VehiclesServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED' | 'DUPLICATE_BUS_NUMBER' | 'CUSTOMER_NOT_FOUND'
 
 export class VehiclesServiceError extends Error {
@@ -62,9 +65,13 @@ export async function createVehicle(db: Db, input: VehicleInput, createdBy: stri
   const busNumber = input.busNumber?.trim() || null
   if (busNumber) await assertBusNumberAvailable(db, input.customerId, busNumber)
 
+  const unitType = input.unitType ?? 'truck'
+  const color = input.color?.trim()
+    || (unitType === 'bus' ? BUS_DEFAULT_COLOR : null)
+
   const [row] = await db.insert(vehicles).values({
     customerId: input.customerId,
-    unitType: input.unitType ?? 'truck',
+    unitType,
     busNumber,
     unitTag: input.unitTag ?? null,
     vin: input.vin?.trim().toUpperCase() || null,
@@ -76,7 +83,7 @@ export async function createVehicle(db: Db, input: VehicleInput, createdBy: stri
     bodyClass: input.bodyClass ?? null,
     engine: input.engine ?? null,
     fuelType: input.fuelType ?? null,
-    color: input.color ?? null,
+    color,
     odometer: input.odometer != null ? String(input.odometer) : null,
     odometerUnit: input.odometerUnit ?? 'mi',
     status: input.status ?? 'active',
@@ -280,4 +287,133 @@ export async function decodeVin(vin: string): Promise<{ normalized: VinDecodeNor
     },
     raw,
   }
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export interface BulkVinDecodeResult {
+  scanned: number
+  updated: number
+  skipped: number
+  failed: number
+  items: Array<{
+    id: string
+    vin: string
+    status: 'updated' | 'skipped' | 'failed'
+    year?: number | null
+    make?: string | null
+    model?: string | null
+    error?: string
+  }>
+}
+
+/**
+ * Decode VIN for live vehicles missing year, make, or model and persist results.
+ * Buses without a color also get the school-bus default (YW).
+ */
+export async function bulkDecodeMissingVehicleFields(
+  db: Db,
+  opts: { limit?: number } = {},
+): Promise<BulkVinDecodeResult> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500)
+
+  // School buses with no color → YW
+  await db.update(vehicles)
+    .set({ color: BUS_DEFAULT_COLOR, updatedAt: new Date() })
+    .where(and(
+      isNull(vehicles.archivedAt),
+      eq(vehicles.unitType, 'bus'),
+      sql`(${vehicles.color} IS NULL OR trim(${vehicles.color}) = '')`,
+    ))
+
+  const candidates = await db.select({
+    id: vehicles.id,
+    vin: vehicles.vin,
+    unitType: vehicles.unitType,
+    year: vehicles.year,
+    make: vehicles.make,
+    model: vehicles.model,
+    trim: vehicles.trim,
+    bodyClass: vehicles.bodyClass,
+    engine: vehicles.engine,
+    fuelType: vehicles.fuelType,
+    color: vehicles.color,
+  })
+    .from(vehicles)
+    .where(and(
+      isNull(vehicles.archivedAt),
+      sql`${vehicles.vin} IS NOT NULL AND length(trim(${vehicles.vin})) >= 5`,
+      sql`(
+        ${vehicles.year} IS NULL
+        OR ${vehicles.make} IS NULL OR trim(${vehicles.make}) = ''
+        OR ${vehicles.model} IS NULL OR trim(${vehicles.model}) = ''
+      )`,
+    ))
+    .orderBy(asc(vehicles.createdAt))
+    .limit(limit)
+
+  const result: BulkVinDecodeResult = {
+    scanned: candidates.length,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    items: [],
+  }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const row = candidates[i]!
+    const vin = row.vin!.trim().toUpperCase()
+
+    try {
+      const { normalized, raw } = await decodeVin(vin)
+      const patch: Partial<Omit<VehicleInput, 'customerId'>> = {
+        vinDecodeRaw: raw,
+      }
+
+      if (row.year == null && normalized.year != null) patch.year = normalized.year
+      if ((!row.make || !row.make.trim()) && normalized.make) patch.make = normalized.make
+      if ((!row.model || !row.model.trim()) && normalized.model) patch.model = normalized.model
+      if ((!row.trim || !row.trim.trim()) && normalized.trim) patch.trim = normalized.trim
+      if ((!row.bodyClass || !row.bodyClass.trim()) && normalized.bodyClass) patch.bodyClass = normalized.bodyClass
+      if ((!row.engine || !row.engine.trim()) && normalized.engine) patch.engine = normalized.engine
+      if ((!row.fuelType || !row.fuelType.trim()) && normalized.fuelType) patch.fuelType = normalized.fuelType
+      if (row.unitType === 'bus' && (!row.color || !row.color.trim())) patch.color = BUS_DEFAULT_COLOR
+
+      const filled = patch.year != null || patch.make || patch.model || patch.trim
+        || patch.bodyClass || patch.engine || patch.fuelType || patch.color
+
+      if (!filled) {
+        result.skipped++
+        result.items.push({ id: row.id, vin, status: 'skipped', error: normalized.errorText ?? 'No year/make/model returned' })
+      }
+      else {
+        await updateVehicle(db, row.id, patch)
+        result.updated++
+        result.items.push({
+          id: row.id,
+          vin,
+          status: 'updated',
+          year: patch.year ?? row.year,
+          make: (patch.make as string | undefined) ?? row.make,
+          model: (patch.model as string | undefined) ?? row.model,
+        })
+      }
+    }
+    catch (err) {
+      result.failed++
+      result.items.push({
+        id: row.id,
+        vin,
+        status: 'failed',
+        error: err instanceof Error ? err.message : 'Decode failed',
+      })
+    }
+
+    // Be polite to NHTSA vPIC between requests
+    if (i < candidates.length - 1) await sleep(250)
+  }
+
+  return result
 }

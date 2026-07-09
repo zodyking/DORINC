@@ -530,12 +530,23 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
   const { resolveCustomerDisplayName } = await import('./entity-snapshots')
 
   return {
-    items: rows.map(r => ({
-      ...r.invoice,
-      invoiceNumberFormatted: formatInvoiceNumber(r.invoice.invoiceNumber),
-      customerName: resolveCustomerDisplayName(r.customerName, r.invoice.customerSnapshot),
-      vehicle: r.vehicle?.busNumber ? r.vehicle : null,
-    })),
+    items: rows.map((r) => {
+      let customerName: string
+      try {
+        customerName = resolveCustomerDisplayName(r.customerName, r.invoice.customerSnapshot)
+      }
+      catch {
+        customerName = (r.invoice.customerSnapshot as { displayName?: string } | null)?.displayName
+          || r.customerName
+          || 'Customer'
+      }
+      return {
+        ...r.invoice,
+        invoiceNumberFormatted: formatInvoiceNumber(r.invoice.invoiceNumber),
+        customerName,
+        vehicle: r.vehicle?.busNumber ? r.vehicle : null,
+      }
+    }),
     total: Number(total?.value ?? 0),
     page: filter.page,
     pageSize: filter.pageSize,

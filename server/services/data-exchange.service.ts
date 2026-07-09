@@ -1,4 +1,4 @@
-import { count, eq, inArray, sql } from 'drizzle-orm'
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
@@ -101,6 +101,32 @@ function parseImportAddress(value: unknown): Address | null {
   const zip = address.zip != null ? String(address.zip).trim() : undefined
   if (!line1 && !line2 && !city && !state && !zip) return null
   return { line1, line2, city, state, zip }
+}
+
+function optionalImportText(value: unknown): string | null {
+  if (value == null) return null
+  const trimmed = String(value).trim()
+  return trimmed || null
+}
+
+function optionalImportYear(value: unknown): number | null {
+  if (value == null) return null
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+  const year = Number(trimmed)
+  return Number.isFinite(year) && year > 0 ? Math.round(year) : null
+}
+
+function formatImportDbError(err: unknown): string {
+  if (!err || typeof err !== 'object') return 'Database error'
+  const top = err as { message?: string, cause?: { message?: string, code?: string, constraint?: string } }
+  const cause = top.cause
+  if (cause?.code === '23505') {
+    return `Duplicate record (${cause.constraint ?? 'unique constraint'})`
+  }
+  if (cause?.message) return cause.message
+  if (top.message && !top.message.startsWith('Failed query')) return top.message
+  return 'Database error'
 }
 
 function normalizeImportRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -348,7 +374,7 @@ async function resolveCustomerIdForImport(
   }
 
   const customerName = String(row.customerName ?? row.customerDisplayName ?? '').trim()
-  if (!customerName) return explicitId || null
+  if (!customerName) return null
 
   const [match] = await db
     .select({ id: customers.id })
@@ -356,7 +382,50 @@ async function resolveCustomerIdForImport(
     .where(sql`lower(trim(${customers.displayName})) = lower(trim(${customerName}))`)
     .limit(1)
 
-  return match?.id ?? explicitId ?? null
+  return match?.id ?? null
+}
+
+async function findVehicleIdByBusNumber(
+  db: Db,
+  customerId: string,
+  busNumber: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ id: vehicles.id })
+    .from(vehicles)
+    .where(and(
+      eq(vehicles.customerId, customerId),
+      eq(vehicles.busNumber, busNumber),
+      isNull(vehicles.archivedAt),
+    ))
+    .limit(1)
+  return row?.id ?? null
+}
+
+function buildVehicleImportPatch(row: Record<string, unknown>, customerId: string) {
+  const unitTypeRaw = String(row.unitType ?? 'truck').toLowerCase()
+  const unitType = (['truck', 'bus', 'equipment', 'tractor', 'other'] as const).includes(unitTypeRaw as never)
+    ? unitTypeRaw as 'truck' | 'bus' | 'equipment' | 'tractor' | 'other'
+    : 'truck'
+  const statusRaw = String(row.status ?? 'active').toLowerCase()
+  const status = (['active', 'inactive', 'retired'] as const).includes(statusRaw as never)
+    ? statusRaw as 'active' | 'inactive' | 'retired'
+    : 'active'
+
+  return {
+    customerId,
+    unitType,
+    busNumber: optionalImportText(row.busNumber),
+    unitTag: optionalImportText(row.unitTag),
+    vin: optionalImportText(row.vin)?.toUpperCase() ?? null,
+    plate: optionalImportText(row.plate),
+    year: optionalImportYear(row.year),
+    make: optionalImportText(row.make),
+    model: optionalImportText(row.model),
+    status,
+    notes: optionalImportText(row.notes),
+    updatedAt: new Date(),
+  }
 }
 
 async function importVehicles(
@@ -371,52 +440,55 @@ async function importVehicles(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!
-    const customerId = await resolveCustomerIdForImport(db, row)
-    if (!customerId) {
-      errors.push(`Row ${i + 1}: customerId or customerName is required`)
-      continue
-    }
-
-    const [customer] = await db
-      .select({ id: customers.id })
-      .from(customers)
-      .where(eq(customers.id, customerId))
-      .limit(1)
-    if (!customer) {
-      errors.push(`Row ${i + 1}: customer not found for customerId/customerName`)
-      continue
-    }
-
-    if (mode === 'dry_run') continue
-
-    const id = typeof row.id === 'string' ? row.id : undefined
-    const patch = {
-      customerId,
-      unitType: (row.unitType as 'truck' | 'bus' | 'equipment' | 'tractor' | 'other') ?? 'truck',
-      busNumber: row.busNumber ? String(row.busNumber) : null,
-      unitTag: row.unitTag ? String(row.unitTag) : null,
-      vin: row.vin ? String(row.vin) : null,
-      plate: row.plate ? String(row.plate) : null,
-      year: row.year != null && row.year !== '' ? Number(row.year) : null,
-      make: row.make ? String(row.make) : null,
-      model: row.model ? String(row.model) : null,
-      status: (row.status as 'active' | 'inactive' | 'retired') ?? 'active',
-      notes: row.notes ? String(row.notes) : null,
-      updatedAt: new Date(),
-    }
-
-    if (id) {
-      const [existing] = await db.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id))
-      if (existing) {
-        if (mode === 'insert_only') { skipped++; continue }
-        await db.update(vehicles).set(patch).where(eq(vehicles.id, id))
-        updated++
+    try {
+      const customerId = await resolveCustomerIdForImport(db, row)
+      if (!customerId) {
+        errors.push(`Row ${i + 1}: customerId or customerName is required`)
         continue
       }
-    }
 
-    await db.insert(vehicles).values({ ...(id ? { id } : {}), ...patch })
-    inserted++
+      const [customer] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(eq(customers.id, customerId))
+        .limit(1)
+      if (!customer) {
+        errors.push(`Row ${i + 1}: customer not found for customerId/customerName — import customers first`)
+        continue
+      }
+
+      if (mode === 'dry_run') continue
+
+      const patch = buildVehicleImportPatch(row, customerId)
+      const importId = optionalUuid(row.id) ?? undefined
+
+      let targetId = importId
+      if (targetId) {
+        const [existingById] = await db.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, targetId))
+        if (!existingById && patch.busNumber) {
+          targetId = await findVehicleIdByBusNumber(db, customerId, patch.busNumber) ?? undefined
+        }
+      }
+      else if (patch.busNumber) {
+        targetId = await findVehicleIdByBusNumber(db, customerId, patch.busNumber) ?? undefined
+      }
+
+      if (targetId) {
+        const [existing] = await db.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, targetId))
+        if (existing) {
+          if (mode === 'insert_only') { skipped++; continue }
+          await db.update(vehicles).set(patch).where(eq(vehicles.id, targetId))
+          updated++
+          continue
+        }
+      }
+
+      await db.insert(vehicles).values({ ...(importId ? { id: importId } : {}), ...patch })
+      inserted++
+    }
+    catch (err) {
+      errors.push(`Row ${i + 1}: ${formatImportDbError(err)}`)
+    }
   }
 
   return { total: rows.length, inserted, updated, skipped, errors }
@@ -571,14 +643,28 @@ function parseImportLineItems(
       item.hrs,
       item.laborHours,
     ]
-    const quantityRaw = quantityCandidates.find((v) => {
+    let quantityRaw = quantityCandidates.find((v) => {
       if (v == null || v === '') return false
       return Number(String(v).replace(/[$,\s]/g, '')) !== 0
     }) ?? item.quantity ?? item.qty ?? item.hours ?? item.hrs ?? item.laborHours
-    const quantity = moneyField(quantityRaw, '1.00')
+
     const unitPrice = moneyField(item.unitPrice ?? item.rate ?? item.price, '0.00')
-    const computed = lineAmount(quantity, unitPrice)
     const amountRaw = item.lineAmount ?? item.amount ?? item.total
+
+    // Legacy labor lines often store hours as 0 while keeping unitPrice + lineAmount
+    const qtyNum = Number(String(quantityRaw ?? '').replace(/[$,\s]/g, ''))
+    const priceNum = Number(unitPrice)
+    const amountNum = amountRaw != null && amountRaw !== ''
+      ? Number(String(amountRaw).replace(/[$,\s]/g, ''))
+      : NaN
+    if ((!Number.isFinite(qtyNum) || qtyNum === 0)
+      && Number.isFinite(priceNum) && priceNum > 0
+      && Number.isFinite(amountNum) && amountNum > 0) {
+      quantityRaw = (amountNum / priceNum).toFixed(2)
+    }
+
+    const quantity = moneyField(quantityRaw, '1.00')
+    const computed = lineAmount(quantity, unitPrice)
     const amount = amountRaw != null && amountRaw !== '' ? moneyField(amountRaw, computed) : computed
 
     lines.push({
