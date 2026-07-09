@@ -88,6 +88,9 @@ export const PERMISSIONS = {
   // Deletion requests (staff submit → admin approve)
   'deletion_requests.submit.all': 'Request record deletion',
   'deletion_requests.review.all': 'Approve or reject deletion requests',
+
+  // Record reassignment (fix mis-linked imports / transfers)
+  'records.reassign.all': 'Reassign invoices, vehicles, and service logs between customers',
 } as const
 
 export type PermissionKey = keyof typeof PERMISSIONS
@@ -128,6 +131,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'ai.describe.all', 'ai.help.all',
     'portal_requests.review.all',
     'deletion_requests.submit.all',
+    'records.reassign.all',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',
@@ -144,6 +148,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'ai.extract.all', 'ai.describe.all', 'ai.help.all',
     'portal_requests.review.all',
     'deletion_requests.submit.all',
+    'records.reassign.all',
   ],
   mechanic: [
     'customers.read.all',

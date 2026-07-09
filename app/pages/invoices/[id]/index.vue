@@ -359,6 +359,17 @@ const summaryRows = computed(() => {
         >
           Record payment
         </NuxtLink>
+        <ReassignEntityButton
+          v-if="invoice.status !== 'void'"
+          entity-type="invoice"
+          :entity-id="id"
+          :entity-label="invoice.invoiceNumberFormatted"
+          :current-customer-id="invoice.customerId"
+          :current-customer-name="invoice.customerName"
+          :current-vehicle-id="invoice.vehicleId"
+          :disabled="busy"
+          @reassigned="refresh()"
+        />
         <DeleteEntityButton
           v-if="removableInvoice"
           entity-type="invoice"
