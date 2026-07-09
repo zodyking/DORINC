@@ -10,7 +10,12 @@ export default defineEventHandler(async (event) => {
   const { id } = validateParams(event, idParamSchema)
 
   const db = useDb()
-  await ensureDefaultInvoiceTemplate(db)
+  try {
+    await ensureDefaultInvoiceTemplate(db)
+  }
+  catch (err) {
+    console.error('[invoice-templates] ensure default failed:', err)
+  }
   const detail = await getInvoiceTemplateDetail(db, id)
   if (!detail) throw apiError(event, 'NOT_FOUND', 'Invoice template not found')
 

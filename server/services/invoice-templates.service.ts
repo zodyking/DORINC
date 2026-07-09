@@ -39,8 +39,18 @@ export async function ensureDefaultInvoiceTemplate(db: Db) {
     .limit(1)
   if (row) return
 
-  const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
-  await seedInvoiceTemplates(db)
+  try {
+    const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
+    await seedInvoiceTemplates(db)
+  }
+  catch (err) {
+    const [again] = await db.select({ id: invoiceTemplates.id })
+      .from(invoiceTemplates)
+      .where(isNull(invoiceTemplates.archivedAt))
+      .limit(1)
+    if (again) return
+    throw err
+  }
 }
 
 export async function listInvoiceTemplates(db: Db) {

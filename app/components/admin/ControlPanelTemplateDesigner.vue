@@ -150,7 +150,6 @@ function loadSourceFromVersion(v: TemplateVersionRow) {
 watch(activeVersion, (v) => {
   if (!v) return
   loadSourceFromVersion(v)
-  void refreshPreview()
 }, { immediate: true })
 
 watch(sourceCode, () => {
@@ -172,8 +171,12 @@ const versionMeta = computed(() => {
 
 const loadErrorMessage = computed(() => {
   if (!error.value) return 'Could not load the invoice template.'
-  const msg = (error.value as { data?: { message?: string } })?.data?.message
-  return msg ?? 'Could not load the invoice template.'
+  const err = error.value as {
+    data?: { message?: string }
+    message?: string
+    statusMessage?: string
+  }
+  return err.data?.message ?? err.message ?? err.statusMessage ?? 'Could not load the invoice template.'
 })
 
 function insertSnippet(snippet: string) {

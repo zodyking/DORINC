@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       }
     }
     const message = err instanceof Error ? err.message : 'PDF preview failed'
-    throw apiError(event, 'INTERNAL', message)
+    const code = message.includes('Laravel PDF service failed') ? 'UPSTREAM_ERROR' : 'INTERNAL_ERROR'
+    throw apiError(event, code, message)
   }
 })

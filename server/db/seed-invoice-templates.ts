@@ -1,7 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { and, desc, eq } from 'drizzle-orm'
 import type { Db } from './client'
+import { loadInvoiceTemplateReferenceHtml } from '../assets/invoice-template-reference.loader'
 import {
   DEFAULT_INVOICE_TEMPLATE_DESIGN,
   invoiceTemplateVersions,
@@ -11,27 +10,11 @@ import {
 export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'professional-bill-matrix'
 export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Professional Bill Matrix'
 
-/** Production ships this under server/assets; Agent-Files is local-dev only. */
-export function resolveInvoiceTemplateReferencePath(): string {
-  const candidates = [
-    join(process.cwd(), 'server', 'assets', 'invoice-template-reference.html'),
-    join(process.cwd(), 'Agent-Files', 'invoice-template-reference.html'),
-  ]
-  for (const path of candidates) {
-    if (existsSync(path)) return path
-  }
-  throw new Error(
-    `Missing invoice template reference HTML. Expected one of:\n${candidates.map(p => `  - ${p}`).join('\n')}`,
-  )
-}
-
-function loadReferenceHtml(): string {
-  return readFileSync(resolveInvoiceTemplateReferencePath(), 'utf8')
-}
+export { resolveInvoiceTemplateReferencePath } from '../assets/invoice-template-reference.loader'
 
 /** Idempotent seed — default template published as v1 (P1-27). */
 export async function seedInvoiceTemplates(db: Db) {
-  const htmlContent = loadReferenceHtml()
+  const htmlContent = loadInvoiceTemplateReferenceHtml()
 
   const [template] = await db.insert(invoiceTemplates)
     .values({
@@ -58,14 +41,18 @@ export async function seedInvoiceTemplates(db: Db) {
     .limit(1)
 
   if (existingVersion.length === 0) {
-    await db.insert(invoiceTemplateVersions).values({
-      templateId: template!.id,
-      versionNumber: 1,
-      status: 'published',
-      htmlContent,
-      designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
-      publishedAt: new Date(),
-    })
+    await db.insert(invoiceTemplateVersions)
+      .values({
+        templateId: template!.id,
+        versionNumber: 1,
+        status: 'published',
+        htmlContent,
+        designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
+        publishedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [invoiceTemplateVersions.templateId, invoiceTemplateVersions.versionNumber],
+      })
   }
   else {
     await db.update(invoiceTemplateVersions)

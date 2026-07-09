@@ -11,7 +11,12 @@ import { requirePermission } from '../../utils/require-permission'
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'templates.read.all')
   const db = useDb()
-  await ensureDefaultInvoiceTemplate(db)
+  try {
+    await ensureDefaultInvoiceTemplate(db)
+  }
+  catch (err) {
+    console.error('[invoice-templates] ensure default failed:', err)
+  }
   const query = getQuery(event)
 
   if (query.default === 'true' || query.default === '1') {
