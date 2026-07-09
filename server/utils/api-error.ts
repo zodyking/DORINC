@@ -11,6 +11,8 @@ export const API_ERROR_STATUS = {
   CONFLICT: 409,
   EDIT_SESSION_ACTIVE: 423,
   RATE_LIMITED: 429,
+  /** Setup incomplete / dependency not ready (DB, SMTP, etc.). */
+  SERVICE_UNAVAILABLE: 503,
   INTERNAL_ERROR: 500,
   UPSTREAM_ERROR: 502,
 } as const

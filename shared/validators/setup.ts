@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { parsePostgresConnectionString } from '../postgres-connection'
 import { emailSchema, nonEmptyString } from './common'
 
 export const setupDatabaseFieldsSchema = z.object({
@@ -10,25 +9,16 @@ export const setupDatabaseFieldsSchema = z.object({
   password: z.string().max(500),
 })
 
+/** Separate fields, or a Dockploy-style `connectionString` URI. */
 export const setupDatabaseSchema = z.union([
   z.object({
     connectionString: nonEmptyString.max(2000),
-  }).transform(({ connectionString }) => {
-    try {
-      return parsePostgresConnectionString(connectionString)
-    }
-    catch (err) {
-      throw new z.ZodError([{
-        code: 'custom',
-        message: (err as Error).message,
-        path: ['connectionString'],
-      }])
-    }
   }),
   setupDatabaseFieldsSchema,
 ])
 
 export type SetupDatabaseInput = z.infer<typeof setupDatabaseFieldsSchema>
+export type SetupDatabaseRequest = z.infer<typeof setupDatabaseSchema>
 
 export const setupSecuritySchema = z.object({
   masterKeyHex: z.string().regex(/^[0-9a-f]{64}$/i).optional(),

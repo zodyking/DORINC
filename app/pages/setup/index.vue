@@ -297,6 +297,17 @@ function back() {
   if (step.value > 1) step.value -= 1
 }
 
+function fetchErrorMessage(err: unknown, fallback: string): string {
+  const e = err as {
+    data?: { message?: string, data?: { message?: string }, statusMessage?: string }
+    message?: string
+    statusMessage?: string
+  }
+  const msg = e?.data?.message || e?.data?.data?.message || e?.message || e?.statusMessage
+  if (msg && msg !== 'Server Error') return msg
+  return fallback
+}
+
 async function saveDatabase() {
   busy.value = true
   error.value = ''
@@ -335,7 +346,7 @@ async function saveDatabase() {
   }
   catch (err) {
     db.status = 'error'
-    db.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Database setup failed'
+    db.errorMessage = fetchErrorMessage(err, 'Database setup failed')
     error.value = db.errorMessage
     return false
   }
@@ -369,7 +380,7 @@ async function saveSecurity() {
   }
   catch (err) {
     security.status = 'error'
-    security.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save security settings'
+    security.errorMessage = fetchErrorMessage(err, 'Failed to save security settings')
     error.value = security.errorMessage
     return false
   }
@@ -404,7 +415,7 @@ async function saveSmtp(test = false) {
   }
   catch (err) {
     smtp.status = 'error'
-    smtp.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save SMTP settings'
+    smtp.errorMessage = fetchErrorMessage(err, 'Failed to save SMTP settings')
     error.value = smtp.errorMessage
     return false
   }
