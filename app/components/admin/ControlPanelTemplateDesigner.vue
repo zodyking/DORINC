@@ -80,17 +80,16 @@ const previewError = ref('')
 const previewUrl = ref('')
 const previewInvoiceLabel = ref('sample invoice')
 
-const { data: listData, refresh: refreshList } = useFetch<{ items: TemplateListItem[] }>(
+const { data: listData, pending: listPending, error: listError, refresh: refreshList } = useFetch<{ items: TemplateListItem[] }>(
   '/api/invoice-templates',
   { server: false, lazy: true, immediate: false },
 )
 
 const { data, refresh, pending, error } = useFetch<TemplateDetailResponse>(
-  () => (selectedTemplateId.value
+  () => selectedTemplateId.value
     ? `/api/invoice-templates/${selectedTemplateId.value}`
-    : '/api/invoice-templates'),
+    : null,
   {
-    query: computed(() => (selectedTemplateId.value ? {} : { default: 'true' })),
     watch: [selectedTemplateId],
     server: false,
     lazy: true,
@@ -106,7 +105,6 @@ const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ 
 watch(canRead, (allowed) => {
   if (allowed) {
     refreshList()
-    refresh()
     refreshPreviewInvoice()
   }
 }, { immediate: true })
@@ -170,12 +168,12 @@ const versionMeta = computed(() => {
 })
 
 const loadErrorMessage = computed(() => {
-  if (!error.value) return 'Could not load the invoice template.'
-  const err = error.value as {
+  const err = (error.value ?? listError.value) as {
     data?: { message?: string }
     message?: string
     statusMessage?: string
-  }
+  } | null
+  if (!err) return 'Could not load the invoice template.'
   return err.data?.message ?? err.message ?? err.statusMessage ?? 'Could not load the invoice template.'
 })
 
@@ -335,6 +333,14 @@ onUnmounted(() => {
   <div v-if="authPending" class="cp-state">Loading template designer…</div>
 
   <div v-else-if="!canRead" class="cp-state">You do not have permission to view invoice templates.</div>
+
+  <div v-else-if="listPending && !listData" class="cp-state">Loading template designer…</div>
+
+  <div v-else-if="listError" class="cp-state">{{ loadErrorMessage }}</div>
+
+  <div v-else-if="!selectedTemplateId" class="cp-state">
+    No invoice templates found. Redeploy or seed the default template, then refresh.
+  </div>
 
   <div v-else-if="pending && !data" class="cp-state">Loading template designer…</div>
 

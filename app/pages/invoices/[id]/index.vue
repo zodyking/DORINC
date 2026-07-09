@@ -82,12 +82,22 @@ const { data, refresh, error } = await useFetch<{
     recipientEmail: string | null
     updatedAt: string
   } | null
+  pdf: {
+    hasOfficialPdf: boolean
+    invoiceFileId: string | null
+    pendingJobId: string | null
+    pendingJobStatus: string | null
+  } | null
 }>(`/api/invoices/${id}`)
 
 const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
 const sendDelivery = computed(() => data.value?.sendDelivery)
+const pdfStatus = computed(() => data.value?.pdf)
 const lines = computed(() => invoice.value?.lineItems ?? [])
+const isPdfEligible = computed(() =>
+  !!invoice.value && ['approved', 'sent', 'paid'].includes(invoice.value.status),
+)
 
 const sendInProgress = computed(() =>
   invoice.value?.status === 'approved'
@@ -218,14 +228,15 @@ const summaryRows = computed(() => {
         </p>
       </div>
       <div class="actions">
-        <button
-          type="button"
-          class="btn"
-          disabled
-          :title="canGeneratePdf ? 'Coming soon' : 'Requires generate PDF permission'"
-        >
-          Download PDF
-        </button>
+        <InvoicePdfActions
+          v-if="canGeneratePdf"
+          :invoice-id="id"
+          :invoice-label="invoice.invoiceNumberFormatted"
+          :allow-official-download="isPdfEligible"
+          :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
+          :can-generate-pdf="canGeneratePdf"
+          @refreshed="refresh()"
+        />
         <button
           v-if="canSend && invoice.status === 'sent'"
           type="button"

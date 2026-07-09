@@ -6,6 +6,7 @@ import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { formatMoney, parseMoney } from '../../shared/money'
 import { getFileWithData } from './files.service'
+import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getInvoiceDetail, InvoicesServiceError } from './invoices.service'
 
@@ -283,4 +284,53 @@ export async function getInvoicePdfDownload(db: Db, invoiceId: string) {
   }
 
   return { record, file }
+}
+
+/** Live DomPDF render for preview (any status) — does not store an official PDF. */
+export async function previewInvoicePdf(db: Db, invoiceId: string) {
+  let detail
+  try {
+    detail = await getInvoiceDetail(db, invoiceId)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      throw new InvoicePdfServiceError('NOT_FOUND')
+    }
+    throw err
+  }
+
+  let version
+  try {
+    ;({ version } = await getDefaultPublishedTemplateVersion(db))
+  }
+  catch (err) {
+    if (err instanceof InvoicePdfServiceError && err.code === 'TEMPLATE_NOT_FOUND') {
+      throw err
+    }
+    throw err
+  }
+
+  const htmlContent = buildInvoiceRenderHtml(version.htmlContent, detail)
+  const marginInches = version.designSettings.marginInches ?? 0.5
+  const paper = version.designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
+  const pdf = await renderHtmlToPdfBuffer(htmlContent, { paper, marginInches })
+
+  return {
+    pdf,
+    filename: `${detail.invoiceNumberFormatted}.pdf`,
+    invoiceNumberFormatted: detail.invoiceNumberFormatted,
+    status: detail.status,
+    isOfficialEligible: PDF_ELIGIBLE_STATUSES.includes(detail.status),
+  }
+}
+
+export async function getInvoicePdfStatus(db: Db, invoiceId: string) {
+  const record = await getInvoicePdfRecord(db, invoiceId)
+  const pending = await getPendingPdfRenderJob(db, invoiceId)
+  return {
+    hasOfficialPdf: Boolean(record),
+    invoiceFileId: record?.id ?? null,
+    pendingJobId: pending?.id ?? null,
+    pendingJobStatus: pending?.status ?? null,
+  }
 }

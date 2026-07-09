@@ -2,6 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
 import { getInvoiceDetail, InvoicesServiceError } from '../../../services/invoices.service'
+import { getInvoicePdfStatus } from '../../../services/invoice-pdf.service'
 import { getInvoiceSendDeliveryStatus } from '../../../services/invoice-send.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
@@ -37,8 +38,9 @@ export default defineEventHandler(async (event) => {
       : invoice
 
     const sendDelivery = await getInvoiceSendDeliveryStatus(db, id)
+    const pdf = await getInvoicePdfStatus(db, id)
 
-    return { invoice: viewInvoice, history, sendDelivery }
+    return { invoice: viewInvoice, history, sendDelivery, pdf }
   }
   catch (err) {
     if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {

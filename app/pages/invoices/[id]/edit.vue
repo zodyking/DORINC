@@ -593,7 +593,12 @@ const aiPopStyle = computed(() => {
         </div>
         <div class="actions">
           <NuxtLink to="/admin?tab=designer" class="btn">Template designer</NuxtLink>
-          <button type="button" class="btn" disabled title="Coming soon">Preview PDF</button>
+          <InvoicePdfActions
+            :invoice-id="id"
+            :invoice-label="invoice.invoiceNumberFormatted"
+            :allow-official-download="['approved', 'sent', 'paid'].includes(invoice.status)"
+            :can-generate-pdf="auth.can('invoices.generate_pdf.all')"
+          />
           <VoidInvoiceButton
             v-if="removableInvoice && canVoidInvoice"
             :invoice-id="id"
