@@ -34,6 +34,8 @@ interface ServiceLog {
   draftLineItems: DraftLine[] | null
   statusReason: string | null
   invoiceId: string | null
+  customerId: string | null
+  vehicleId: string | null
   customerName: string
   submitterName: string
   submittedBy: string
@@ -353,6 +355,17 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
         >
           Edit invoice
         </NuxtLink>
+        <ReassignEntityButton
+          v-if="log.status !== 'converted_to_invoice' && log.status !== 'archived'"
+          entity-type="service_log"
+          :entity-id="log.id"
+          :entity-label="logNumberDisplay(log.logNumber)"
+          :current-customer-id="log.customerId"
+          :current-customer-name="log.customerName"
+          :current-vehicle-id="log.vehicleId"
+          :disabled="busy"
+          @reassigned="refresh()"
+        />
         <DeleteEntityButton
           v-if="log.status !== 'archived' && !log.invoiceId"
           entity-type="service_log"

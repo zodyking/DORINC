@@ -156,6 +156,16 @@ async function restore() {
           >
             Restore
           </button>
+          <ReassignEntityButton
+            v-if="!v.archivedAt"
+            entity-type="vehicle"
+            :entity-id="v.id"
+            :entity-label="vehicleTag(v)"
+            :current-customer-id="v.customerId"
+            :current-customer-name="data?.customer?.displayName"
+            :disabled="busy"
+            @reassigned="refresh()"
+          />
           <DeleteEntityButton
             v-if="!v.archivedAt"
             entity-type="vehicle"

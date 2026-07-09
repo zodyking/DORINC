@@ -596,6 +596,17 @@ const aiPopStyle = computed(() => {
             :allow-official-download="['approved', 'sent', 'paid'].includes(invoice.status)"
             :can-generate-pdf="auth.can('invoices.generate_pdf.all')"
           />
+          <ReassignEntityButton
+            v-if="invoice.status !== 'void'"
+            entity-type="invoice"
+            :entity-id="id"
+            :entity-label="invoice.invoiceNumberFormatted"
+            :current-customer-id="invoice.customerId"
+            :current-customer-name="invoice.customerName"
+            :current-vehicle-id="invoice.vehicleId"
+            :disabled="busy"
+            @reassigned="refresh()"
+          />
           <DeleteEntityButton
             v-if="removableInvoice"
             entity-type="invoice"
