@@ -2,6 +2,7 @@
 // Job handlers are wired in as each phase lands (P1-14 thumbnails, P2-02 mail, ...).
 import pg from 'pg'
 import { requireDatabaseUrl } from '../lib/runtime-config.mjs'
+import { applyPendingMigrationsOnBoot } from '../lib/migrate-on-boot.mjs'
 import { processThumbnailJobs } from './handlers/derivatives.mjs'
 import { processMailJobs } from './handlers/mail.mjs'
 import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
@@ -11,11 +12,7 @@ import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handler
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 5000)
 
-const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 4 })
-
-console.log(`[worker] general worker started (poll ${POLL_MS}ms)`)
-
-async function tick() {
+async function tick(pool) {
   const thumbs = await processThumbnailJobs(pool)
   if (thumbs.processed || thumbs.failed) {
     console.log(`[worker] thumbnail_generate processed=${thumbs.processed} failed=${thumbs.failed}`)
@@ -58,9 +55,19 @@ async function tick() {
 }
 
 async function main() {
+  try {
+    await applyPendingMigrationsOnBoot()
+  }
+  catch (err) {
+    console.error('[worker] boot migration failed', err)
+  }
+
+  const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 4 })
+  console.log(`[worker] general worker started (poll ${POLL_MS}ms)`)
+
   for (;;) {
     try {
-      await tick()
+      await tick(pool)
     }
     catch (err) {
       console.error('[worker] tick failed', err)

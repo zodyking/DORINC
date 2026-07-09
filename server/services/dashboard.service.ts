@@ -277,19 +277,34 @@ function activityDetail(action: string, data: Record<string, unknown> | null, at
   return when
 }
 
+async function safeReviewCount(label: string, fn: () => Promise<number>): Promise<number> {
+  try {
+    return await fn()
+  }
+  catch (err) {
+    console.warn(`[dashboard] ${label} count skipped: ${(err as Error).message}`)
+    return 0
+  }
+}
+
 async function reviewQueueCounts(db: Db): Promise<DashboardReviewQueue> {
-  const [serviceLogCount] = await db.select({ value: count() })
-    .from(serviceLogs)
-    .where(and(isNull(serviceLogs.archivedAt), inArray(serviceLogs.status, SERVICE_LOG_REVIEW_QUEUE_STATUSES)))
+  const serviceLogsN = await safeReviewCount('service logs', async () => {
+    const [row] = await db.select({ value: count() })
+      .from(serviceLogs)
+      .where(and(isNull(serviceLogs.archivedAt), inArray(serviceLogs.status, SERVICE_LOG_REVIEW_QUEUE_STATUSES)))
+    return Number(row?.value ?? 0)
+  })
 
-  const [managerApprovalCount] = await db.select({ value: count() })
-    .from(invoices)
-    .where(and(isNull(invoices.archivedAt), eq(invoices.status, 'pending_manager_approval')))
+  const portalRequestsN = await safeReviewCount('portal requests', () => countPendingPortalRequests(db))
+  const deletionRequestsN = await safeReviewCount('deletion requests', () => countPendingDeletionRequests(db))
 
-  const serviceLogsN = Number(serviceLogCount?.value ?? 0)
-  const portalRequestsN = await countPendingPortalRequests(db)
-  const deletionRequestsN = await countPendingDeletionRequests(db)
-  const managerApprovalsN = Number(managerApprovalCount?.value ?? 0)
+  const managerApprovalsN = await safeReviewCount('manager approvals', async () => {
+    const [row] = await db.select({ value: count() })
+      .from(invoices)
+      .where(and(isNull(invoices.archivedAt), eq(invoices.status, 'pending_manager_approval')))
+    return Number(row?.value ?? 0)
+  })
+
   return {
     serviceLogs: serviceLogsN,
     portalRequests: portalRequestsN,
