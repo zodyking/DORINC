@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+
 definePageMeta({ layout: false })
 
 const steps = ['Welcome', 'Database', 'Security', 'Email', 'PDF', 'Backup', 'AI', 'Admin'] as const
@@ -26,11 +28,28 @@ const db = reactive({
   database: 'dorinc',
   username: 'postgres',
   password: '',
-  tested: false,
+  status: 'idle' as 'idle' | 'loading' | 'success' | 'error',
   message: '',
+  errorMessage: '',
 })
-const smtp = reactive({ host: '', port: 587, username: '', password: '', from: '', tested: false })
-const security = reactive({ masterKey: '', sessionSecret: '', appUrl: '', saved: false })
+const smtp = reactive({
+  host: '',
+  port: 587,
+  username: '',
+  password: '',
+  from: '',
+  status: 'idle' as 'idle' | 'loading' | 'success' | 'error',
+  message: '',
+  errorMessage: '',
+})
+const security = reactive({
+  masterKey: '',
+  sessionSecret: '',
+  appUrl: '',
+  status: 'idle' as 'idle' | 'loading' | 'success' | 'error',
+  message: '',
+  errorMessage: '',
+})
 const pdf = reactive({ serviceUrl: 'http://localhost:3100/pdf', template: 'Professional Bill Matrix v1' })
 const ai = reactive({ apiKey: '', model: 'anthropic/claude-sonnet-4', saved: false })
 const admin = reactive({ name: '', email: '', password: '', confirm: '', sendVerification: true })
@@ -52,6 +71,16 @@ function generateKey() {
 
 if (!security.masterKey) generateKey()
 
+function stepComplete(n: number): boolean {
+  const p = setupStatus.value?.progress
+  if (!p) return false
+  if (n === 2) return p.database
+  if (n === 3) return p.security
+  if (n === 4) return p.smtp
+  if (n === 7) return p.ai
+  return false
+}
+
 function back() {
   if (step.value > 1) step.value -= 1
 }
@@ -60,6 +89,8 @@ async function saveDatabase() {
   busy.value = true
   error.value = ''
   stepMessage.value = ''
+  db.status = 'loading'
+  db.errorMessage = ''
   try {
     const res = await $fetch<{ ok: boolean, message: string }>('/api/setup/database', {
       method: 'POST',
@@ -71,15 +102,16 @@ async function saveDatabase() {
         password: db.password,
       },
     })
-    db.tested = true
+    db.status = 'success'
     db.message = res.message
     stepMessage.value = res.message
     await refreshStatus()
     return true
   }
   catch (err) {
-    error.value = (err as { data?: { message?: string } })?.data?.message ?? 'Database setup failed'
-    db.tested = false
+    db.status = 'error'
+    db.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Database setup failed'
+    error.value = db.errorMessage
     return false
   }
   finally {
@@ -91,6 +123,8 @@ async function saveSecurity() {
   busy.value = true
   error.value = ''
   stepMessage.value = ''
+  security.status = 'loading'
+  security.errorMessage = ''
   try {
     if (!security.masterKey || security.masterKey.length !== 64) generateKey()
     if (!security.sessionSecret) generateKey()
@@ -102,13 +136,16 @@ async function saveSecurity() {
         appUrl: security.appUrl,
       },
     })
-    security.saved = true
-    stepMessage.value = 'Security settings saved'
+    security.status = 'success'
+    security.message = 'Security settings saved — encryption keys stored'
+    stepMessage.value = security.message
     await refreshStatus()
     return true
   }
   catch (err) {
-    error.value = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save security settings'
+    security.status = 'error'
+    security.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save security settings'
+    error.value = security.errorMessage
     return false
   }
   finally {
@@ -120,6 +157,8 @@ async function saveSmtp(test = false) {
   busy.value = true
   error.value = ''
   stepMessage.value = ''
+  smtp.status = 'loading'
+  smtp.errorMessage = ''
   try {
     const body = {
       host: smtp.host,
@@ -130,15 +169,18 @@ async function saveSmtp(test = false) {
       to: admin.email || smtp.from,
     }
     const res = test
-      ? await $fetch<{ message: string }>('/api/setup/smtp-test', { method: 'POST', body })
+      ? await $fetch<{ message: string, delivered?: boolean }>('/api/setup/smtp-test', { method: 'POST', body })
       : await $fetch<{ message: string }>('/api/setup/smtp', { method: 'POST', body })
-    smtp.tested = true
+    smtp.status = 'success'
+    smtp.message = res.message
     stepMessage.value = res.message
     await refreshStatus()
     return true
   }
   catch (err) {
-    error.value = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save SMTP settings'
+    smtp.status = 'error'
+    smtp.errorMessage = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save SMTP settings'
+    error.value = smtp.errorMessage
     return false
   }
   finally {
@@ -220,7 +262,7 @@ async function next() {
 <template>
   <div class="setup-scrim open" role="dialog" aria-label="Server setup wizard">
     <header class="setup-top">
-      <div class="logo"><img class="sq" src="/images/dorinc-icon.png" alt="" width="30" height="30"> DORINC Suite</div>
+      <div class="logo"><img class="sq" :src="BRAND_ICON" alt="" width="32" height="32"> {{ BRAND_NAME }}</div>
       <span class="sp" />
       <span class="pill indigo">First-run setup</span>
     </header>
@@ -237,44 +279,43 @@ async function next() {
     </div>
 
     <div v-else class="setup-body">
-      <h2 style="margin:0 0 6px; font-size:22px;">Server setup walkthrough</h2>
-      <p style="margin:0 0 18px; color:#64748b; font-size:14px;">
-        Configure everything from the UI — only the database connection string is required on the server.
-        Secrets are encrypted and stored in PostgreSQL.
-      </p>
+      <div class="setup-head">
+        <header class="setup-hero">
+          <img
+            src="/images/banner-1.png"
+            alt="DORINC — shop invoice software for service shops and fleet billing"
+            class="setup-hero__img"
+            width="1200"
+            height="630"
+          >
+        </header>
 
-      <div class="setup-note">
-        <b>What you need on the server:</b> Node.js 20+, a PostgreSQL 14+ database (any host), and this app running.
-        No <code>.env</code> file required.
-      </div>
-
-      <div class="wizard setup-wizard">
-        <div
-          v-for="(label, i) in steps"
-          :key="label"
-          class="wstep"
-          :class="{ on: !done && step === i + 1, done: done || step > i + 1 }"
-          @click="!done && (step = i + 1)"
-        >
-          <span class="n">{{ i + 1 }}</span> {{ label }}
+        <div class="wizard setup-wizard">
+          <div
+            v-for="(label, i) in steps"
+            :key="label"
+            class="wstep"
+            :class="{ on: !done && step === i + 1, done: done || step > i + 1 || stepComplete(i + 1) }"
+            @click="!done && (step = i + 1)"
+          >
+            <span class="n">{{ i + 1 }}</span> {{ label }}
+          </div>
         </div>
       </div>
 
       <!-- 1 · Welcome -->
       <div class="wpanel" :class="{ active: !done && step === 1 }">
         <div class="card">
-          <div class="chead"><h3>Welcome to DORINC Suite</h3></div>
-          <div class="cbody" style="font-size:14px; color:#475569; line-height:1.6;">
-            <p>This wizard walks you through server configuration. Each step saves independently — you can exit and resume anytime from <b>Super Admin → Control Panel</b>.</p>
-            <ul style="margin:14px 0; padding-left:20px;">
-              <li>Verify PostgreSQL connection</li>
-              <li>Generate encryption keys and set your public app URL</li>
-              <li>SMTP for verification and invoice emails</li>
-              <li>PDF worker (Playwright Chromium — included in Docker workers profile)</li>
-              <li>Optional: Google Drive backups and OpenRouter AI</li>
-              <li>First Super Admin account</li>
+          <div class="chead"><h3>Welcome to {{ BRAND_NAME }}</h3></div>
+          <div class="cbody setup-intro">
+            <p>This wizard configures your server in a few minutes. Each step saves independently — resume anytime from <b>Super Admin → Control Panel</b>.</p>
+            <ul class="setup-intro__list">
+              <li>Connect PostgreSQL and run migrations</li>
+              <li>Generate encryption keys and set your public URL</li>
+              <li>Configure SMTP for emails and invoices</li>
+              <li>Create your first Super Admin account</li>
             </ul>
-            <p><b>Zero .env configuration.</b> Everything — database, SMTP, encryption keys — is saved by this wizard.</p>
+            <p class="setup-intro__note">Optional steps: PDF worker, Google Drive backups, and OpenRouter AI.</p>
           </div>
         </div>
       </div>
@@ -292,8 +333,19 @@ async function next() {
               <input v-model="db.password" :type="reveal.db ? 'text' : 'password'" placeholder="Enter database password">
               <button type="button" class="reveal" @click="reveal.db = !reveal.db">{{ reveal.db ? 'Hide' : 'Show' }}</button>
             </label>
-            <button class="btn primary" :disabled="busy" @click="saveDatabase">Test connection &amp; run migrations</button>
-            <span v-if="db.tested || setupStatus?.progress.database" class="conn-ok show">✓ {{ db.message || 'Connected — schema up to date' }}</span>
+            <button class="btn primary" :disabled="busy" @click="saveDatabase">
+              {{ db.status === 'loading' ? 'Connecting…' : 'Test connection & run migrations' }}
+            </button>
+            <div
+              v-if="db.status === 'success' || setupStatus?.progress.database"
+              class="setup-feedback setup-feedback--success"
+              role="status"
+            >
+              ✓ {{ db.message || 'Connected — schema up to date' }}
+            </div>
+            <div v-else-if="db.status === 'error'" class="setup-feedback setup-feedback--error" role="alert">
+              {{ db.errorMessage }}
+            </div>
           </div>
         </div>
       </div>
@@ -303,7 +355,7 @@ async function next() {
         <div class="card">
           <div class="chead"><h3>Security &amp; encryption</h3></div>
           <div class="cbody">
-            <p style="font-size:13px; color:#475569; margin:0 0 14px;">
+            <p class="setup-step-hint">
               A master encryption key protects all stored secrets. Generate one now — you'll need step-up auth to rotate it later.
             </p>
             <label class="fld secret-fld">Master key
@@ -315,8 +367,22 @@ async function next() {
               >
               <button type="button" class="reveal" @click="reveal.key = !reveal.key">{{ reveal.key ? 'Hide' : 'Show' }}</button>
             </label>
-            <button class="btn primary" :disabled="busy || setupStatus?.envLocked.security" @click="generateKey">Generate keys</button>
-            <span v-if="security.saved || setupStatus?.progress.security" class="conn-ok show">✓ Key generated and stored encrypted</span>
+            <div class="setup-actions">
+              <button class="btn primary" :disabled="busy || setupStatus?.envLocked.security" @click="generateKey">Generate keys</button>
+              <button class="btn" :disabled="busy || setupStatus?.envLocked.security" @click="saveSecurity">
+                {{ security.status === 'loading' ? 'Saving…' : 'Save security settings' }}
+              </button>
+            </div>
+            <div
+              v-if="security.status === 'success' || setupStatus?.progress.security"
+              class="setup-feedback setup-feedback--success"
+              role="status"
+            >
+              ✓ {{ security.message || 'Encryption keys stored securely' }}
+            </div>
+            <div v-else-if="security.status === 'error'" class="setup-feedback setup-feedback--error" role="alert">
+              {{ security.errorMessage }}
+            </div>
             <div style="margin-top:16px;">
               <label class="fld">Public app URL
                 <input v-model="security.appUrl" type="url" placeholder="https://invoices.yourdomain.com">
@@ -340,8 +406,24 @@ async function next() {
               <button type="button" class="reveal" @click="reveal.smtp = !reveal.smtp">{{ reveal.smtp ? 'Hide' : 'Show' }}</button>
             </label>
             <label class="fld">From address <input v-model="smtp.from" type="email" placeholder="notifications@yourdomain.com"></label>
-            <button class="btn primary" :disabled="busy || setupStatus?.envLocked.smtp" @click="saveSmtp(true)">Send test email to me</button>
-            <span v-if="smtp.tested || setupStatus?.progress.smtp" class="conn-ok show">✓ SMTP configured</span>
+            <div class="setup-actions">
+              <button class="btn primary" :disabled="busy || setupStatus?.envLocked.smtp" @click="saveSmtp(true)">
+                {{ smtp.status === 'loading' ? 'Sending test…' : 'Send test email' }}
+              </button>
+              <button class="btn" :disabled="busy || setupStatus?.envLocked.smtp" @click="saveSmtp(false)">
+                Save without test
+              </button>
+            </div>
+            <div
+              v-if="smtp.status === 'success' || setupStatus?.progress.smtp"
+              class="setup-feedback setup-feedback--success"
+              role="status"
+            >
+              ✓ {{ smtp.message || 'SMTP configured' }}
+            </div>
+            <div v-else-if="smtp.status === 'error'" class="setup-feedback setup-feedback--error" role="alert">
+              {{ smtp.errorMessage }}
+            </div>
           </div>
         </div>
       </div>
@@ -421,7 +503,7 @@ async function next() {
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
           <h3 style="margin:0 0 8px;">Setup complete</h3>
           <p style="color:#64748b; margin:0 0 20px;">
-            DORINC Suite is configured. Open the Control Panel anytime to review health and moderation queues.
+            {{ BRAND_NAME }} is configured. Open the Control Panel anytime to review health and moderation queues.
           </p>
           <NuxtLink to="/admin" class="btn primary">Go to Control Panel</NuxtLink>
         </div>

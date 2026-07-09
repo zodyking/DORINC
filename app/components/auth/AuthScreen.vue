@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
   initialTab?: 'login' | 'signup'
@@ -83,9 +85,11 @@ async function submitSignup() {
       <!-- Customer portal card -->
       <div v-if="card === 'customer'" class="auth-card">
         <div class="auth-head">
-          <img class="sq" src="/images/dorinc-icon.png" alt="" width="44" height="44">
-          <b>DORINC</b>
-          <small>Customer portal</small>
+          <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
+          <div class="auth-head__text">
+            <b>DORINC</b>
+            <small>Customer portal</small>
+          </div>
         </div>
         <div class="auth-body">
           <form @submit.prevent="submitLogin(portalEmail, portalPass)">
@@ -109,9 +113,11 @@ async function submitSignup() {
       <!-- Staff workspace card -->
       <div v-if="card === 'staff'" class="auth-card">
         <div class="auth-head">
-          <img class="sq" src="/images/dorinc-icon.png" alt="" width="44" height="44">
-          <b>DORINC</b>
-          <small>Staff workspace</small>
+          <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
+          <div class="auth-head__text">
+            <b>DORINC</b>
+            <small>Staff workspace</small>
+          </div>
         </div>
         <div class="auth-tabs" role="tablist" aria-label="Staff sign in options">
           <button type="button" role="tab" :aria-selected="tab === 'login'" :class="{ on: tab === 'login' }" @click="tab = 'login'">Sign in</button>
@@ -180,7 +186,7 @@ async function submitSignup() {
         Customer account?
         <button type="button" class="auth-link" @click="card = 'customer'">Customer portal</button>
       </p>
-      <footer class="suite-foot">© 2015 DORINC Suite. All rights reserved.</footer>
+      <footer class="suite-foot">© 2015 {{ BRAND_NAME }}. All rights reserved.</footer>
     </div>
   </main>
 </template>

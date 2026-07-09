@@ -1,64 +1,73 @@
 <p align="center">
-  <img src="public/images/banner-1.png" alt="DORINC Suite — Shop Invoice Software" width="100%">
+  <img src="public/images/banner-1.png" alt="DORINC — Shop Invoice Software" width="100%">
 </p>
 
-# DORINC Suite
+# DORINC
 
 Self-hosted invoice, customer, vehicle, and fleet billing software for service shops.
 
-Deploy the app, open `/setup`, connect your PostgreSQL database, and configure SMTP, security, and admin access in the browser. No required `.env` file for a normal install.
+Deploy with **Docker Compose on Dockploy**, open `/setup`, and finish configuration in the browser. No `.env` file is required for a normal install.
 
 ## Features
 
-- **Invoices** — create, send, track, and record payments; PDF generation via Playwright
-- **Customers & vehicles** — fleet-aware customer records with VIN / unit tracking
-- **Service logs** — shop work history tied to vehicles and invoices
-- **Catalog** — parts and labor line items
-- **Customer portal** — customers view invoices, vehicles, and submit requests
-- **Template designer** — customize invoice layout
-- **Admin control** — users, permissions, audit logs, backups, SMTP, optional AI (OpenRouter)
-- **First-run wizard** — database, security, and mail configured in the UI
+- Invoices, payments, and PDF generation
+- Customers, vehicles, and fleet tracking
+- Service logs, parts/labor catalog
+- Customer portal
+- Invoice template designer
+- Admin: users, permissions, audit, backups, SMTP, optional AI
 
-## Requirements
+## Deploy on Dockploy
 
-| Dependency | Notes |
-|---|---|
-| **PostgreSQL** | External database (not bundled). Managed Postgres, Dockploy DB, or your own host. |
-| **Node.js 24+** | For local development only. Docker images use Node 24. |
-| **Docker** (recommended) | Production deploy via Compose |
+### 1. Provision PostgreSQL
 
-Optional: Redis + background workers for mail/PDF queues in production.
+Use an external database (Dockploy Postgres, managed Postgres, or your own host). PostgreSQL is **not** included in the compose stack.
 
-## Quick start (Docker)
+### 2. Create the Compose app
 
-```bash
-docker compose up -d --build
+In Dockploy, create a Compose application from this repo using `docker-compose.yml`.
+
+| Service | Profile | Role |
+|---|---|---|
+| `nuxt-app` | default | Web app (port **3000**) |
+| `worker` | `workers` | Mail, backups, AI, retention |
+| `pdf-worker` | `workers` | Playwright PDF rendering |
+| `migrate` | `migrate` | One-shot DB migrations on upgrade |
+| `redis` | `redis` | Optional |
+
+Persist the **`dorinc-runtime`** volume — it stores database connection settings under `.data/`.
+
+### 3. Deploy and open setup
+
+Deploy the default profile (`nuxt-app`). Then open:
+
+```text
+https://your-domain/setup
 ```
 
-Open **http://localhost:3000/setup** and complete the wizard:
+Complete the wizard:
 
-1. Connect PostgreSQL (connection is stored under `.data/` / the `dorinc-runtime` volume)
+1. Connect PostgreSQL
 2. Create the Super Admin account
-3. Configure SMTP (optional but recommended)
-4. Finish security / app URL settings
+3. Configure security / app URL
+4. Configure SMTP (recommended)
+5. Optional: PDF, backup, and AI settings
 
-The app listens on port **3000**. Persist the `dorinc-runtime` volume so database connection settings survive restarts.
+Health check: `GET /api/health`
 
-### Production workers (optional)
+### 4. Enable workers (recommended)
 
-```bash
-docker compose --profile workers up -d --build
-```
+In Dockploy, enable the `workers` profile so mail and PDF jobs run in the background.
 
-This starts the general worker and PDF worker alongside the app. Add Redis with `--profile redis` if you use a queue.
+### 5. Upgrades
 
-### Migrations on upgrade
-
-First install migrates through `/setup`. For later upgrades:
+After pulling a new release, run migrations once:
 
 ```bash
 docker compose --profile migrate run --rm migrate
 ```
+
+Then redeploy `nuxt-app` (and workers if enabled).
 
 ## Local development
 
@@ -67,63 +76,14 @@ npm install
 npm run dev
 ```
 
-Then open **http://localhost:3000/setup** (same wizard as production).
-
-Useful scripts:
+Open **http://localhost:3000/setup**. Requires Node.js 24+ and PostgreSQL.
 
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Dev server |
 | `npm run build` | Production build |
-| `npm run preview` | Preview production build |
-| `npm run db:migrate` | Apply Drizzle migrations |
-| `npm run db:seed` | Seed data (dev/test) |
+| `npm run db:migrate` | Apply migrations |
 | `npm test` | Unit + Playwright tests |
-| `npm run lint` | ESLint |
-
-## Configuration
-
-Normal installs need **no environment variables**. The setup wizard writes:
-
-- `.data/runtime.json` — PostgreSQL connection
-- Encrypted `app_settings` in the database — SMTP, keys, app URL, etc.
-
-Optional overrides (CI, advanced operators) are documented in [`.env.example`](.env.example):
-
-```bash
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-APP_URL=https://invoices.example.com
-SESSION_SECRET=
-ENCRYPTION_MASTER_KEY=
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM=
-```
-
-## Stack
-
-| Layer | Choice |
-|---|---|
-| App | Nuxt 4 / Vue 3 / TypeScript / Pinia / Tailwind |
-| API | Nitro server routes |
-| Database | PostgreSQL + Drizzle ORM |
-| Files | Stored in PostgreSQL |
-| PDF | Playwright Chromium (`pdf-worker`) |
-| Email | SMTP |
-| AI (optional) | OpenRouter |
-| Deploy | Docker Compose (e.g. Dockploy) |
-
-## Project layout
-
-```
-app/           Nuxt UI (pages, layouts, components)
-server/        API routes, services, workers, mail
-shared/        Shared validators & types
-public/        Static assets (icons, banner, favicon)
-docker/        App, worker, and PDF worker Dockerfiles
-```
 
 ## License
 

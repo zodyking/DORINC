@@ -1,4 +1,5 @@
 import type { AiFeatureType } from '../db/schema/ai'
+import { BRAND_NAME } from '../../shared/brand'
 import { getAppUrl } from './app-config.service'
 
 export type OpenRouterServiceErrorCode = 'API_ERROR' | 'PARSE_ERROR' | 'EMPTY_RESPONSE'
@@ -79,7 +80,7 @@ export async function openRouterChat(
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': getAppUrl(),
-      'X-Title': 'DORINC Suite',
+      'X-Title': BRAND_NAME,
     },
     body: JSON.stringify({
       model,

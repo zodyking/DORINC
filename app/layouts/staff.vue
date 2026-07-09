@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { accountTypeLabel, avColor, initials } from '~/utils/users-ui'
 
 import type { PermissionKey } from '~/shared/permissions/keys'
@@ -122,7 +123,7 @@ watch(() => route.path, () => {
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <!-- SIDEBAR -->
     <nav class="side" :class="{ open: sidebarOpen }" aria-label="Primary">
-      <div class="logo"><img class="sq" src="/images/dorinc-icon.png" alt="" width="30" height="30"> DORINC Suite</div>
+      <div class="logo"><img class="sq" :src="BRAND_ICON" alt="" width="32" height="32"> {{ BRAND_NAME }}</div>
       <template v-for="section in nav" :key="section.label">
         <div class="label">{{ section.label }}</div>
         <NuxtLink

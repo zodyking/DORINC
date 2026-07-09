@@ -10,9 +10,10 @@ import {
 import { logAiUsage } from './ai-jobs.service'
 import { matchPlatformHelpAnswer } from '../../shared/platform-help'
 import { getAppUrl } from './app-config.service'
+import { BRAND_NAME } from '../../shared/brand'
 
 const HELP_SYSTEM_PROMPT = [
-  'You are the DORINC Suite platform assistant.',
+  `You are the ${BRAND_NAME} platform assistant.`,
   'You ONLY explain how to use the application: workflows, navigation, roles, settings, and features.',
   'You NEVER modify records, access customer or invoice data, or bypass permissions.',
   'Keep answers concise (2–4 sentences). Use simple HTML <b> tags for emphasis when helpful.',
@@ -73,7 +74,7 @@ async function callOpenRouterHelp(
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': getAppUrl(),
-      'X-Title': 'DORINC Suite',
+      'X-Title': BRAND_NAME,
     },
     body: JSON.stringify({
       model,

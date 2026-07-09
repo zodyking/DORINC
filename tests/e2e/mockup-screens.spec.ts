@@ -92,7 +92,7 @@ test('PWA manifest is served', async ({ request }) => {
   const res = await request.get('/manifest.webmanifest')
   expect(res.ok()).toBeTruthy()
   const manifest = await res.json()
-  expect(manifest.name).toBe('DORINC Suite')
+  expect(manifest.name).toBe('DORINC')
   expect(manifest.icons?.length).toBeGreaterThan(0)
 })
 

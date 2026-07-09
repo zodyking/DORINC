@@ -41,7 +41,7 @@ describe('PWA manifest (P4-01)', () => {
       display: string
       icons: Array<{ sizes: string }>
     }
-    expect(manifest.name).toBe('DORINC Suite')
+    expect(manifest.name).toBe('DORINC')
     expect(manifest.short_name).toBe('DORINC')
     expect(manifest.start_url).toBe('/')
     expect(manifest.display).toBe('standalone')

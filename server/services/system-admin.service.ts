@@ -6,6 +6,7 @@ import { getBackupHealth } from './backups.service'
 import { getAiHealth, getMonthlyUsageCost } from './ai-provider.service'
 import { getPdfWorkerHealth, getWorkerQueueHealth, type PdfWorkerHealth, type WorkerQueueHealth } from './worker-health.service'
 import pkg from '../../package.json'
+import { BRAND_NAME } from '../../shared/brand'
 
 export interface SystemStatus {
   database: 'ok' | 'error'
@@ -99,9 +100,9 @@ export async function getSystemStatus(db: Db): Promise<SystemStatus> {
 export async function sendSmtpTest(to: string, actorName: string): Promise<{ delivered: boolean }> {
   const result = await sendMail({
     to,
-    subject: 'DORINC Suite SMTP test',
+    subject: `${BRAND_NAME} SMTP test`,
     text: [
-      'This is a test message from the DORINC Suite Super Admin control panel.',
+      `This is a test message from the ${BRAND_NAME} Super Admin control panel.`,
       '',
       `Sent by ${actorName} at ${new Date().toISOString()}.`,
       'If you received this, SMTP is configured correctly.',

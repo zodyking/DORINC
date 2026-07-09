@@ -20,14 +20,14 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: 'en' },
-      title: 'DORINC Suite',
+      title: 'DORINC',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'theme-color', content: '#2563eb' },
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-title', content: 'DORINC' },
-        { name: 'application-name', content: 'DORINC Suite' },
+        { name: 'application-name', content: 'DORINC' },
         { name: 'description', content: 'Fleet billing, service logs, and customer portal for DORINC.' },
       ],
       link: [

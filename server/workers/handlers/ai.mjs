@@ -67,7 +67,7 @@ async function openRouterChat(apiKey, model, messages, temperature = 0.3) {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': process.env.APP_URL ?? 'http://localhost:3000',
-      'X-Title': 'DORINC Suite',
+      'X-Title': 'DORINC',
     },
     body: JSON.stringify({
       model,

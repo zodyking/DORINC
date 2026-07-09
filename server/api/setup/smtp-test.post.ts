@@ -6,6 +6,7 @@ import { hasDatabaseConfig } from '../../services/runtime-config.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
 import { setupSmtpTestSchema } from '../../../shared/validators/setup'
+import { BRAND_NAME } from '../../../shared/brand'
 
 export default defineEventHandler(async (event) => {
   if (!hasDatabaseConfig()) {
@@ -31,9 +32,9 @@ export default defineEventHandler(async (event) => {
 
     const result = await sendMail({
       to: body.to,
-      subject: 'DORINC Suite setup — SMTP test',
+      subject: `${BRAND_NAME} setup — SMTP test`,
       text: [
-        'This is a test message from the DORINC Suite setup wizard.',
+        `This is a test message from the ${BRAND_NAME} setup wizard.`,
         '',
         'If you received this, SMTP is configured correctly.',
       ].join('\n'),

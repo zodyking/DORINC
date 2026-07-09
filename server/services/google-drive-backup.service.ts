@@ -345,7 +345,7 @@ export async function uploadEncryptedBackupToDrive(
   const metadata: Record<string, unknown> = {
     name: filename,
     mimeType: 'application/octet-stream',
-    description: 'DORINC Suite encrypted database backup (AES-256-GCM + zstd)',
+    description: 'DORINC encrypted database backup (AES-256-GCM + zstd)',
   }
   if (integration.folderId) metadata.parents = [integration.folderId]
 

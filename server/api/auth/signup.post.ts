@@ -7,6 +7,7 @@ import { getAppUrl } from '../../services/app-config.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
 import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
+import { BRAND_NAME } from '../../../shared/brand'
 
 const signupSchema = z.object({
   name: nonEmptyString.max(120),
@@ -30,11 +31,11 @@ export default defineEventHandler(async (event) => {
     const appUrl = getAppUrl()
     await sendMail({
       to: user.email,
-      subject: 'Verify your DORINC Suite account',
+      subject: `Verify your ${BRAND_NAME} account`,
       text: [
         `Hi ${user.name},`,
         '',
-        'Confirm your email to continue your DORINC Suite signup:',
+        `Confirm your email to continue your ${BRAND_NAME} signup:`,
         `${appUrl}/auth/verify-email?token=${verificationToken}`,
         '',
         'The link expires in 24 hours. After verification an administrator must approve your account.',

@@ -8,6 +8,7 @@ import {
 } from '../db/schema/ai'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { getAppUrl } from './app-config.service'
+import { BRAND_NAME } from '../../shared/brand'
 import type { AiProviderSettingsPatch } from '../../shared/validators/ai'
 
 export type AiProviderServiceErrorCode = 'NOT_CONFIGURED' | 'KEY_MISSING' | 'CONNECTION_FAILED' | 'SPEND_CAP_EXCEEDED'
@@ -196,7 +197,7 @@ export async function testOpenRouterConnection(apiKey: string): Promise<OpenRout
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'HTTP-Referer': getAppUrl(),
-      'X-Title': 'DORINC Suite',
+      'X-Title': BRAND_NAME,
     },
   })
 

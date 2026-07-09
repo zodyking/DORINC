@@ -131,7 +131,7 @@ async function uploadToDrive(pool, filename, encryptedPayload) {
   const metadata = {
     name: filename,
     mimeType: 'application/octet-stream',
-    description: 'DORINC Suite encrypted database backup (AES-256-GCM + zstd)',
+    description: 'DORINC encrypted database backup (AES-256-GCM + zstd)',
   }
   if (integration.row.folder_id) metadata.parents = [integration.row.folder_id]
 

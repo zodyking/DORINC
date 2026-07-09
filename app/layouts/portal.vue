@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 const route = useRoute()
 const auth = useAuthStore()
 
@@ -33,7 +34,7 @@ async function signOut() {
   <div class="portal-shell">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="portal-top">
-      <div class="brand"><img class="sq" src="/images/dorinc-icon.png" alt="" width="30" height="30"> DORINC <span class="co">Customer portal</span></div>
+      <div class="brand"><img class="sq" :src="BRAND_ICON" alt="" width="32" height="32"> DORINC <span class="co">Customer portal</span></div>
       <nav class="portal-nav" aria-label="Portal">
         <NuxtLink
           v-for="item in nav"
@@ -60,7 +61,7 @@ async function signOut() {
       <slot />
     </main>
 
-    <footer class="suite-foot">© 2015 DORINC Suite. All rights reserved.</footer>
+    <footer class="suite-foot">© 2015 {{ BRAND_NAME }}. All rights reserved.</footer>
   </div>
 </template>
 

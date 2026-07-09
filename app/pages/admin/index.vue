@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Super Admin control panel — system health MVP (mockup: PAGE: SUPER ADMIN CONTROL PANEL / P1-34).
+import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
   aiHealthTone,
@@ -603,7 +604,7 @@ async function runSmtpTest() {
           <span class="ic">📦</span>
           <div>
             <b>App version</b>
-            <small>DORINC Suite v{{ status.version }}</small>
+            <small>{{ BRAND_NAME }} v{{ status.version }}</small>
           </div>
           <span class="st pill ok">Running</span>
         </div>
