@@ -14,6 +14,7 @@
     "test": "vitest run && playwright test",
     "test:e2e": "playwright test",
     "smoke:load": "node scripts/load-smoke.mjs",
+    "capture:welcome": "node scripts/capture-welcome-shots.mjs",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx server/db/seed.ts",
     "db:migrate": "drizzle-kit migrate",

@@ -5,12 +5,183 @@ definePageMeta({ layout: false })
 
 const steps = ['Welcome', 'Database', 'Security', 'Email', 'PDF', 'Backup', 'AI', 'Admin'] as const
 
+const welcomeSlides = [
+  {
+    image: '/images/welcome-invoices.png',
+    tagline: 'Send bills that look like you mean business',
+    title: 'Invoices & PDFs',
+    desc: 'Build invoices from shop work, record payments as they come in, and print or email PDF copies to customers.',
+    details: ['Line items for parts, labor, and shop fees', 'Balances and payment history', 'Professional PDFs ready to send'],
+  },
+  {
+    image: '/images/welcome-vehicles.png',
+    tagline: 'Every truck and trailer on record',
+    title: 'Fleet & vehicles',
+    desc: 'Attach units to customer accounts and pull up vehicle details the moment a job comes in.',
+    details: ['VIN, plate, and unit numbers', 'Retail and fleet accounts', 'Service history per unit'],
+  },
+  {
+    image: '/images/welcome-portal.png',
+    tagline: 'A login for your customers',
+    title: 'Customer portal',
+    desc: 'Give customers their own secure login to stay on top of work and paperwork.',
+    details: ['View invoices anytime', 'Download PDF copies', 'Submit requests and approve estimates'],
+  },
+  {
+    image: '/images/welcome-service-logs.png',
+    tagline: 'The job story, start to finish',
+    title: 'Service logs',
+    desc: 'Document what happened in the bay with the detail your bookkeeper and customer both need.',
+    details: ['Photos on the job record', 'Parts and labor line by line', 'History on each vehicle'],
+  },
+  {
+    image: '/images/welcome-catalog.png',
+    tagline: 'Your rates, saved and ready',
+    title: 'Parts & labor catalog',
+    desc: 'Build a catalog of the parts and labor rates your shop uses every day.',
+    details: ['Reuse common line items', 'Drop onto invoices and logs', 'Consistent pricing for your team'],
+  },
+  {
+    image: '/images/welcome-templates.png',
+    tagline: 'Your brand on every bill',
+    title: 'Invoice templates',
+    desc: 'Design invoice layouts with your logo, columns, and shop details baked in.',
+    details: ['Template designer', 'Branded PDF output', 'Update once, reuse forever'],
+  },
+  {
+    image: '/images/welcome-estimates.png',
+    tagline: 'Quotes before the wrench turns',
+    title: 'Estimates',
+    desc: 'Send estimates for upcoming work and let customers approve before you start.',
+    details: ['Same line-item tools', 'Portal review and approval', 'Convert to invoices'],
+  },
+  {
+    image: '/images/welcome-customers.png',
+    tagline: 'One list for your whole book',
+    title: 'Customers & fleets',
+    desc: 'Keep retail walk-ins and fleet accounts organized with contacts, vehicles, and billing in one profile.',
+    details: ['Customer profiles', 'Fleet accounts with many units', 'Billing and portal access'],
+  },
+  {
+    image: '/images/welcome-ai-descriptions.png',
+    tagline: 'Help writing invoice lines',
+    title: 'AI invoice descriptions',
+    desc: 'When a line item needs the right words, AI drafts descriptions from your invoice context.',
+    details: ['Works on draft invoices', 'Clear parts and labor wording', 'You approve before it saves'],
+    ai: true,
+  },
+  {
+    image: '/images/welcome-ai-extraction.png',
+    tagline: 'Pull details out of shop notes',
+    title: 'AI service log extraction',
+    desc: 'Add photos or rough notes on a job and AI suggests parts, labor, and log details to review.',
+    details: ['Extract from notes and photos', 'Review queue for your team', 'Accept or edit before adding'],
+    ai: true,
+  },
+  {
+    image: '/images/welcome-ai-help.png',
+    tagline: 'Answers without leaving the app',
+    title: 'AI help assistant',
+    desc: 'Staff can ask how-to questions inside DORINC and get answers about daily shop workflows.',
+    details: ['Help chat on staff screens', 'Invoices, customers, and logs', 'Great for new hires'],
+    ai: true,
+  },
+] as const
+
 const step = ref(1)
 const done = ref(false)
 const busy = ref(false)
 const error = ref('')
 const stepMessage = ref('')
 const locked = ref(false)
+const setupWizardRef = ref<HTMLElement | null>(null)
+
+const WELCOME_AUTOPLAY_MS = 3000
+const welcomeSlide = ref(0)
+const welcomeTouchStart = ref<number | null>(null)
+const welcomePaused = ref(false)
+const welcomeProgressKey = ref(0)
+let welcomeTimer: ReturnType<typeof setInterval> | null = null
+
+function goWelcomeSlide(index: number) {
+  welcomeSlide.value = ((index % welcomeSlides.length) + welcomeSlides.length) % welcomeSlides.length
+  welcomeProgressKey.value += 1
+}
+
+function prevWelcomeSlide() {
+  goWelcomeSlide(welcomeSlide.value - 1)
+}
+
+function nextWelcomeSlide() {
+  goWelcomeSlide(welcomeSlide.value + 1)
+}
+
+function stopWelcomeAutoplay() {
+  if (welcomeTimer) {
+    clearInterval(welcomeTimer)
+    welcomeTimer = null
+  }
+}
+
+function startWelcomeAutoplay() {
+  stopWelcomeAutoplay()
+  if (welcomePaused.value || !import.meta.client) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  welcomeTimer = setInterval(() => {
+    if (step.value === 1 && !done.value && !welcomePaused.value) nextWelcomeSlide()
+  }, WELCOME_AUTOPLAY_MS)
+}
+
+function pauseWelcomeAutoplay() {
+  welcomePaused.value = true
+  stopWelcomeAutoplay()
+}
+
+function resumeWelcomeAutoplay() {
+  welcomePaused.value = false
+  startWelcomeAutoplay()
+}
+
+function onWelcomeTouchStart(event: TouchEvent) {
+  welcomeTouchStart.value = event.touches[0]?.clientX ?? null
+  pauseWelcomeAutoplay()
+}
+
+function onWelcomeTouchEnd(event: TouchEvent) {
+  if (welcomeTouchStart.value == null) return
+  const endX = event.changedTouches[0]?.clientX ?? welcomeTouchStart.value
+  const delta = endX - welcomeTouchStart.value
+  welcomeTouchStart.value = null
+  if (Math.abs(delta) >= 40) {
+    if (delta < 0) nextWelcomeSlide()
+    else prevWelcomeSlide()
+  }
+  resumeWelcomeAutoplay()
+}
+
+function scrollActiveSetupStep() {
+  if (!import.meta.client || window.innerWidth > 640) return
+  nextTick(() => {
+    setupWizardRef.value?.querySelector<HTMLElement>('.wstep.on')?.scrollIntoView({
+      inline: 'center',
+      block: 'nearest',
+      behavior: 'smooth',
+    })
+  })
+}
+
+watch(step, (n) => {
+  scrollActiveSetupStep()
+  if (n === 1) startWelcomeAutoplay()
+  else stopWelcomeAutoplay()
+})
+
+onMounted(() => {
+  scrollActiveSetupStep()
+  if (step.value === 1) startWelcomeAutoplay()
+})
+
+onBeforeUnmount(stopWelcomeAutoplay)
 
 const { data: setupStatus, refresh: refreshStatus } = await useFetch<{
   needsBootstrap: boolean
@@ -296,7 +467,7 @@ async function next() {
           >
         </header>
 
-        <div class="wizard setup-wizard">
+        <div ref="setupWizardRef" class="wizard setup-wizard">
           <div
             v-for="(label, i) in steps"
             :key="label"
@@ -311,17 +482,89 @@ async function next() {
 
       <!-- 1 · Welcome -->
       <div class="wpanel" :class="{ active: !done && step === 1 }">
-        <div class="card">
-          <div class="chead"><h3>Welcome to {{ BRAND_NAME }}</h3></div>
-          <div class="cbody setup-intro">
-            <p>This wizard configures your server in a few minutes. Each step saves independently — resume anytime from <b>Super Admin → Control Panel</b>.</p>
-            <ul class="setup-intro__list">
-              <li>Connect PostgreSQL and run migrations</li>
-              <li>Generate encryption keys and set your public URL</li>
-              <li>Configure SMTP for emails and invoices</li>
-              <li>Create your first Super Admin account</li>
-            </ul>
-            <p class="setup-intro__note">Optional steps: PDF worker, Google Drive backups, and OpenRouter AI.</p>
+        <div class="card setup-welcome">
+          <div
+            class="setup-welcome__viewport"
+            @mouseenter="pauseWelcomeAutoplay"
+            @mouseleave="resumeWelcomeAutoplay"
+            @focusin="pauseWelcomeAutoplay"
+            @focusout="resumeWelcomeAutoplay"
+            @touchstart.passive="onWelcomeTouchStart"
+            @touchend.passive="onWelcomeTouchEnd"
+          >
+            <div
+              class="setup-welcome__track"
+              :style="{ transform: `translateX(-${welcomeSlide * 100}%)` }"
+            >
+              <article
+                v-for="slide in welcomeSlides"
+                :key="slide.title"
+                class="setup-welcome__hero"
+                :class="{ 'setup-welcome__hero--ai': slide.ai }"
+              >
+                <div class="setup-welcome__glow" aria-hidden="true" />
+                <div class="setup-welcome__copy">
+                  <h2 class="setup-welcome__title">{{ slide.title }}</h2>
+                  <p class="setup-welcome__tagline">{{ slide.tagline }}</p>
+                  <p class="setup-welcome__desc">{{ slide.desc }}</p>
+                  <ul class="setup-welcome__bullets">
+                    <li v-for="detail in slide.details" :key="detail">{{ detail }}</li>
+                  </ul>
+                </div>
+                <div class="setup-welcome__shot">
+                  <div class="setup-welcome__shot-frame">
+                    <img
+                      :src="slide.image"
+                      :alt="`${slide.title} preview`"
+                      class="setup-welcome__shot-img"
+                      width="1198"
+                      height="900"
+                      loading="lazy"
+                    >
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <button
+              type="button"
+              class="setup-welcome__arrow setup-welcome__arrow--prev"
+              aria-label="Previous feature"
+              @click="prevWelcomeSlide(); startWelcomeAutoplay()"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              class="setup-welcome__arrow setup-welcome__arrow--next"
+              aria-label="Next feature"
+              @click="nextWelcomeSlide(); startWelcomeAutoplay()"
+            >
+              ›
+            </button>
+
+            <div class="setup-welcome__foot">
+              <div class="setup-welcome__timer" aria-hidden="true">
+                <div
+                  :key="welcomeProgressKey"
+                  class="setup-welcome__timer-fill"
+                  :class="{ paused: welcomePaused }"
+                />
+              </div>
+              <div class="setup-welcome__dots" role="tablist" aria-label="Feature slides">
+                <button
+                  v-for="(_, i) in welcomeSlides"
+                  :key="i"
+                  type="button"
+                  role="tab"
+                  class="setup-welcome__dot"
+                  :class="{ on: welcomeSlide === i }"
+                  :aria-selected="welcomeSlide === i"
+                  :aria-label="`${welcomeSlides[i].title}, slide ${i + 1} of ${welcomeSlides.length}`"
+                  @click="goWelcomeSlide(i); startWelcomeAutoplay()"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -527,8 +770,8 @@ async function next() {
 
     <footer v-if="!locked" class="setup-foot">
       <button class="btn" :disabled="step === 1 || done" @click="back">← Back</button>
-      <span style="font-size:13px; color:#94a3b8;">Step {{ step }} of {{ steps.length }}</span>
-      <div style="display:flex; gap:10px;">
+      <span class="setup-foot__progress">Step {{ step }} of {{ steps.length }}</span>
+      <div class="setup-foot__actions">
         <button class="btn" :disabled="done || busy" @click="saveCurrentStep">Save step</button>
         <button class="btn primary" :disabled="done || busy" @click="next">
           {{ busy ? 'Working…' : step === steps.length ? 'Complete setup' : 'Continue →' }}
