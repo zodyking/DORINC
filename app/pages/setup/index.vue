@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+import { parsePostgresConnectionString } from '#shared/postgres-connection'
 
 definePageMeta({ layout: false })
 
@@ -196,7 +197,10 @@ if (setupStatus.value && !setupStatus.value.needsBootstrap) {
 
 const appUrlEnvLocked = computed(() => !!setupStatus.value?.envLocked.appUrl)
 
+const dbMode = ref<'connectionString' | 'fields'>('connectionString')
+
 const db = reactive({
+  connectionString: '',
   host: 'localhost',
   port: 5432,
   database: 'dorinc',
@@ -205,6 +209,37 @@ const db = reactive({
   status: 'idle' as 'idle' | 'loading' | 'success' | 'error',
   message: '',
   errorMessage: '',
+  parseError: '',
+})
+
+const dbParsedPreview = computed(() => {
+  if (dbMode.value !== 'connectionString' || !db.connectionString.trim()) {
+    return null
+  }
+  try {
+    return parsePostgresConnectionString(db.connectionString)
+  }
+  catch {
+    return null
+  }
+})
+
+watch(dbMode, (mode) => {
+  db.parseError = ''
+  if (mode === 'fields' && dbParsedPreview.value) {
+    Object.assign(db, dbParsedPreview.value)
+  }
+})
+
+watch(() => db.connectionString, () => {
+  db.parseError = ''
+  if (dbMode.value !== 'connectionString' || !db.connectionString.trim()) return
+  try {
+    parsePostgresConnectionString(db.connectionString)
+  }
+  catch (err) {
+    db.parseError = (err as Error).message
+  }
 })
 const smtp = reactive({
   host: '',
@@ -268,16 +303,29 @@ async function saveDatabase() {
   stepMessage.value = ''
   db.status = 'loading'
   db.errorMessage = ''
+  db.parseError = ''
   try {
+    const body = dbMode.value === 'connectionString'
+      ? { connectionString: db.connectionString.trim() }
+      : {
+          host: db.host,
+          port: db.port,
+          database: db.database,
+          username: db.username,
+          password: db.password,
+        }
+
+    if (dbMode.value === 'connectionString' && !db.connectionString.trim()) {
+      db.parseError = 'Paste your PostgreSQL connection string from Dockploy'
+      db.status = 'error'
+      db.errorMessage = db.parseError
+      error.value = db.parseError
+      return false
+    }
+
     const res = await $fetch<{ ok: boolean, message: string }>('/api/setup/database', {
       method: 'POST',
-      body: {
-        host: db.host,
-        port: db.port,
-        database: db.database,
-        username: db.username,
-        password: db.password,
-      },
+      body,
     })
     db.status = 'success'
     db.message = res.message
@@ -574,14 +622,53 @@ async function next() {
         <div class="card">
           <div class="chead"><h3>Connect PostgreSQL</h3></div>
           <div class="cbody">
-            <label class="fld">Host <input v-model="db.host" type="text"></label>
-            <label class="fld">Port <input v-model.number="db.port" type="number"></label>
-            <label class="fld">Database <input v-model="db.database" type="text"></label>
-            <label class="fld">Username <input v-model="db.username" type="text"></label>
-            <label class="fld secret-fld">Password
-              <input v-model="db.password" :type="reveal.db ? 'text' : 'password'" placeholder="Enter database password">
-              <button type="button" class="reveal" @click="reveal.db = !reveal.db">{{ reveal.db ? 'Hide' : 'Show' }}</button>
+            <p class="setup-step-hint">
+              Paste the full connection string from Dockploy, or enter host and credentials separately.
+            </p>
+            <label class="fld">Connection method
+              <select v-model="dbMode">
+                <option value="connectionString">Connection string (Dockploy)</option>
+                <option value="fields">Separate fields (advanced)</option>
+              </select>
             </label>
+
+            <template v-if="dbMode === 'connectionString'">
+              <label class="fld">Connection string
+                <input
+                  v-model="db.connectionString"
+                  type="text"
+                  placeholder="postgresql://postgres:password@host:5432/postgres"
+                  autocomplete="off"
+                  spellcheck="false"
+                  style="font-family:'IBM Plex Mono',monospace;font-size:12px;"
+                >
+                <span class="help">Copy the full URI from your Dockploy PostgreSQL app — do not paste it into Host.</span>
+              </label>
+              <div v-if="dbParsedPreview" class="setup-db-preview" role="status">
+                <p class="setup-db-preview__title">Parsed connection</p>
+                <dl class="setup-db-preview__grid">
+                  <dt>Host</dt><dd>{{ dbParsedPreview.host }}</dd>
+                  <dt>Port</dt><dd>{{ dbParsedPreview.port }}</dd>
+                  <dt>Database</dt><dd>{{ dbParsedPreview.database }}</dd>
+                  <dt>Username</dt><dd>{{ dbParsedPreview.username }}</dd>
+                </dl>
+              </div>
+              <div v-else-if="db.parseError" class="setup-feedback setup-feedback--error" role="alert">
+                {{ db.parseError }}
+              </div>
+            </template>
+
+            <template v-else>
+              <label class="fld">Host <input v-model="db.host" type="text" placeholder="dorinc-suite-data-aa6dyg"></label>
+              <label class="fld">Port <input v-model.number="db.port" type="number"></label>
+              <label class="fld">Database <input v-model="db.database" type="text"></label>
+              <label class="fld">Username <input v-model="db.username" type="text"></label>
+              <label class="fld secret-fld">Password
+                <input v-model="db.password" :type="reveal.db ? 'text' : 'password'" placeholder="Enter database password">
+                <button type="button" class="reveal" @click="reveal.db = !reveal.db">{{ reveal.db ? 'Hide' : 'Show' }}</button>
+              </label>
+            </template>
+
             <button class="btn primary" :disabled="busy" @click="saveDatabase">
               {{ db.status === 'loading' ? 'Connecting…' : 'Test connection & run migrations' }}
             </button>

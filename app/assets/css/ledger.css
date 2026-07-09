@@ -670,6 +670,15 @@ a{ color:#4f46e5; }
 }
 .setup-feedback--success{ background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; }
 .setup-feedback--error{ background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+.setup-db-preview{
+  margin:0 0 14px; padding:12px 14px; border-radius:10px; background:#f8fafc; border:1px solid #e2e8f0;
+}
+.setup-db-preview__title{ margin:0 0 8px; font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+.setup-db-preview__grid{
+  display:grid; grid-template-columns:auto 1fr; gap:4px 12px; margin:0; font-size:13px; line-height:1.4;
+}
+.setup-db-preview__grid dt{ margin:0; color:#64748b; font-weight:500; }
+.setup-db-preview__grid dd{ margin:0; color:#0f172a; font-family:"IBM Plex Mono",monospace; font-size:12px; word-break:break-all; }
 .setup-foot{
   padding:14px 24px; background:#fff; border-top:1px solid #e2e8f0;
   display:flex; align-items:center; gap:10px; justify-content:space-between; flex-wrap:wrap;
