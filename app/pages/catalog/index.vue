@@ -1,0 +1,399 @@
+<script setup lang="ts">
+// Catalog list with search, type chips, add/edit modal (mockup: PAGE: CATALOG).
+import type { CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
+import type { CatalogItemType } from '~/utils/catalog-ui'
+
+definePageMeta({ layout: 'staff' })
+
+interface CatalogItemRow {
+  id: string
+  itemType: CatalogItemType
+  sku: string | null
+  name: string
+  description: string | null
+  categoryId: string | null
+  categoryName: string | null
+  defaultPrice: string | null
+  cost: string | null
+  markupPercent: string | null
+  taxable: boolean
+  uom: string
+  vendor: string | null
+  archivedAt: string | null
+  createdAt: string
+}
+
+type TypeChip = 'all' | 'part' | 'labor' | 'fee'
+
+const auth = useAuthStore()
+const canManage = computed(() => auth.can('catalog.manage.all'))
+
+const q = ref('')
+const typeChip = ref<TypeChip>('all')
+const page = ref(1)
+const PAGE_SIZE = 25
+
+watch([q, typeChip], () => { page.value = 1 })
+
+const query = computed(() => ({
+  page: page.value,
+  pageSize: PAGE_SIZE,
+  q: q.value || undefined,
+  itemType: typeChip.value === 'all' ? undefined : typeChip.value,
+  sort: 'name-asc' as const,
+}))
+
+const { data, refresh } = await useFetch<{ items: CatalogItemRow[], total: number }>(
+  '/api/catalog/items',
+  { query },
+)
+
+const { data: allCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
+const { data: partCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
+const { data: laborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
+const { data: feeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
+
+const { data: categoriesData, refresh: refreshCategories } = await useFetch<{ items: { id: string, name: string }[] }>(
+  '/api/catalog/categories',
+)
+
+const items = computed(() => data.value?.items ?? [])
+const total = computed(() => data.value?.total ?? 0)
+const categories = computed(() => categoriesData.value?.items ?? [])
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+
+const chips = computed(() => [
+  { key: 'all' as const, label: 'All', count: allCount.value?.total ?? 0 },
+  { key: 'part' as const, label: 'Parts', count: partCount.value?.total ?? 0 },
+  { key: 'labor' as const, label: 'Labor', count: laborCount.value?.total ?? 0 },
+  { key: 'fee' as const, label: 'Fees', count: feeCount.value?.total ?? 0 },
+])
+
+const rangeLabel = computed(() => {
+  if (!total.value) return 'No items'
+  const from = (page.value - 1) * PAGE_SIZE + 1
+  const to = Math.min(page.value * PAGE_SIZE, total.value)
+  return `Showing ${from}—${to} of ${total.value}`
+})
+
+// ---- Modals ----
+const categoriesOpen = ref(false)
+const itemModalOpen = ref(false)
+const editingId = ref<string | null>(null)
+const formBusy = ref(false)
+const formError = ref('')
+
+const emptyForm = (): CatalogItemFormValue => ({
+  itemType: 'part',
+  sku: '',
+  name: '',
+  description: '',
+  categoryId: '',
+  defaultPrice: '',
+  cost: '',
+  markupPercent: '',
+  taxable: true,
+  uom: 'each',
+  vendor: '',
+})
+
+const form = reactive<CatalogItemFormValue>(emptyForm())
+
+function openNewItem() {
+  if (!canManage.value) return
+  editingId.value = null
+  Object.assign(form, emptyForm())
+  formError.value = ''
+  itemModalOpen.value = true
+}
+
+function openEditItem(row: CatalogItemRow) {
+  if (!canManage.value) return
+  editingId.value = row.id
+  Object.assign(form, {
+    itemType: row.itemType,
+    sku: row.sku ?? '',
+    name: row.name,
+    description: row.description ?? '',
+    categoryId: row.categoryId ?? '',
+    defaultPrice: row.defaultPrice ?? '',
+    cost: row.cost ?? '',
+    markupPercent: row.markupPercent ?? '',
+    taxable: row.taxable,
+    uom: row.uom,
+    vendor: row.vendor ?? '',
+  })
+  formError.value = ''
+  itemModalOpen.value = true
+}
+
+function closeItemModal() {
+  itemModalOpen.value = false
+  editingId.value = null
+  formError.value = ''
+}
+
+function onItemScrimClick(e: MouseEvent) {
+  if ((e.target as HTMLElement).id === 'cat-item-scrim') closeItemModal()
+}
+
+function bodyPayload() {
+  return {
+    itemType: form.itemType,
+    sku: form.sku || null,
+    name: form.name,
+    description: form.description || null,
+    categoryId: form.categoryId || null,
+    defaultPrice: form.defaultPrice || null,
+    cost: form.cost || null,
+    markupPercent: form.markupPercent || null,
+    taxable: form.taxable,
+    uom: form.uom,
+    vendor: form.vendor || null,
+  }
+}
+
+async function submitItem() {
+  formBusy.value = true
+  formError.value = ''
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/catalog/items/${editingId.value}`, {
+        method: 'PATCH',
+        body: bodyPayload(),
+      })
+    }
+    else {
+      await $fetch('/api/catalog/items', {
+        method: 'POST',
+        body: bodyPayload(),
+      })
+    }
+    closeItemModal()
+    await Promise.all([refresh(), refreshCategories()])
+  }
+  catch (err) {
+    const fe = err as { data?: { data?: { message?: string } } }
+    formError.value = fe.data?.data?.message ?? 'Could not save catalog item'
+  }
+  finally {
+    formBusy.value = false
+  }
+}
+
+async function archiveItem() {
+  if (!editingId.value) return
+  if (!window.confirm('Archive this catalog item? It will be hidden from new invoice lines.')) return
+  formBusy.value = true
+  formError.value = ''
+  try {
+    await $fetch(`/api/catalog/items/${editingId.value}/archive`, { method: 'POST' })
+    closeItemModal()
+    await refresh()
+  }
+  catch (err) {
+    const fe = err as { data?: { data?: { message?: string } } }
+    formError.value = fe.data?.data?.message ?? 'Could not archive item'
+  }
+  finally {
+    formBusy.value = false
+  }
+}
+
+function onRowClick(row: CatalogItemRow) {
+  if (canManage.value) openEditItem(row)
+}
+</script>
+
+<template>
+  <section class="page active">
+    <div class="pagehead">
+      <div>
+        <h2>Catalog</h2>
+        <p>Parts, labor rates and fees used to build invoice lines</p>
+      </div>
+      <div class="actions">
+        <button
+          v-if="canManage"
+          type="button"
+          class="btn"
+          @click="categoriesOpen = true"
+        >
+          Manage categories
+        </button>
+        <button
+          v-if="canManage"
+          type="button"
+          class="btn primary"
+          @click="openNewItem"
+        >
+          + New Item
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">
+        <button
+          v-for="chip in chips"
+          :key="chip.key"
+          type="button"
+          class="chip"
+          :class="{ on: typeChip === chip.key }"
+          @click="typeChip = chip.key"
+        >
+          {{ chip.label }} · {{ chip.count }}
+        </button>
+        <div class="right">
+          <div class="search" style="width:220px; height:32px;">
+            <span class="gl">⌕</span>
+            <input
+              v-model="q"
+              type="search"
+              placeholder="Search items, SKUs, categories…"
+              aria-label="Search catalog items"
+            >
+          </div>
+        </div>
+      </div>
+
+      <div class="tscroll">
+        <table v-if="items.length" class="tbl cat-tbl">
+          <thead>
+            <tr>
+              <th class="cell-item">Item</th>
+              <th class="col-sku">SKU</th>
+              <th class="col-cat">Category</th>
+              <th class="col-type">Type</th>
+              <th class="num col-price">Rate / Price</th>
+            </tr>
+          </thead>
+          <tbody id="cat-rows">
+            <tr
+              v-for="row in items"
+              :key="row.id"
+              class="click"
+              :class="{ archived: !!row.archivedAt }"
+              @click="onRowClick(row)"
+            >
+              <td class="cell-item">
+                <span class="lead">{{ row.name }}</span>
+                <span v-if="row.description" class="sub">{{ row.description }}</span>
+              </td>
+              <td class="mono col-sku" style="font-size:12px">{{ row.sku ?? '—' }}</td>
+              <td class="col-cat">{{ row.categoryName ?? '—' }}</td>
+              <td class="col-type">
+                <span :class="catalogTypePill(row.itemType)">{{ catalogTypeLabel(row.itemType) }}</span>
+              </td>
+              <td class="num col-price">
+                {{ catalogPriceDisplay(row.defaultPrice, row.uom, row.itemType) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else id="cat-rows-empty" class="empty" style="display:block;">
+          No catalog items match your search.
+        </div>
+      </div>
+
+      <div class="cfoot">
+        <span>{{ rangeLabel }}</span>
+        <div v-if="pageCount > 1" class="pager">
+          <button aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+          <button
+            v-for="p in pageCount"
+            :key="p"
+            :class="{ on: p === page }"
+            @click="page = p"
+          >
+            {{ p }}
+          </button>
+          <button aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
+        </div>
+      </div>
+    </div>
+
+    <CatalogCategoriesModal v-model:open="categoriesOpen" />
+
+    <div
+      id="cat-item-scrim"
+      class="modal-scrim"
+      :class="{ open: itemModalOpen }"
+      :aria-hidden="!itemModalOpen"
+      @click="onItemScrimClick"
+    >
+      <div class="modal" role="dialog" aria-labelledby="cat-item-title" aria-modal="true" @click.stop>
+        <div class="mhead">
+          <div>
+            <h3 id="cat-item-title">{{ editingId ? 'Edit catalog item' : 'New catalog item' }}</h3>
+            <p>Default pricing and metadata copied into invoice line snapshots</p>
+          </div>
+          <button type="button" class="close" aria-label="Close" @click="closeItemModal">✕</button>
+        </div>
+        <CatalogCatalogItemForm
+          v-model="form"
+          :busy="formBusy"
+          :error="formError"
+          :categories="categories"
+          :editing="!!editingId"
+          :submit-label="editingId ? 'Save changes' : 'Create item'"
+          @submit="submitItem"
+          @cancel="closeItemModal"
+          @archive="archiveItem"
+        />
+      </div>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.chead {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chead .right {
+  margin-left: auto;
+}
+tr.archived .lead {
+  opacity: 0.65;
+}
+
+/* Mobile: single-line rows — hide SKU/category, truncate item + price */
+@media (max-width: 720px) {
+  .cat-tbl .col-sku,
+  .cat-tbl .col-cat {
+    display: none;
+  }
+  .cat-tbl {
+    display: table;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .cat-tbl .cell-item {
+    width: 52%;
+  }
+  .cat-tbl .col-type {
+    width: 22%;
+  }
+  .cat-tbl .col-price {
+    width: 26%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cat-tbl .cell-item .lead,
+  .cat-tbl .cell-item .sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  .chead .right {
+    width: 100%;
+    margin-left: 0;
+  }
+  .chead .search {
+    width: 100% !important;
+  }
+}
+</style>

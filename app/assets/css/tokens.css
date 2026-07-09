@@ -1,0 +1,26 @@
+/* ================= LEDGER DESIGN SYSTEM — Tailwind theme =================
+   bg #f8fafc · surface #fff · ink #0f172a · muted #64748b
+   accent #4f46e5 · line #e2e8f0 · radius 10/14 · Inter + IBM Plex Mono
+   Component classes live in ledger.css (extracted 1:1 from the mockup).
+   ========================================================================= */
+
+@theme {
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-faint: #94a3b8;
+  --color-accent: #4f46e5;
+  --color-accent-strong: #4338ca;
+  --color-accent-soft: #eef2ff;
+  --color-accent-line: #c7d2fe;
+  --color-line: #e2e8f0;
+  --color-line-soft: #f1f5f9;
+  --color-row: #fafbfc;
+
+  --radius-ctl: 10px;
+  --radius-card: 14px;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}

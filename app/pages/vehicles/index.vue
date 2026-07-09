@@ -1,0 +1,244 @@
+<script setup lang="ts">
+// Staff vehicles list (mockup: PAGE: VEHICLES).
+definePageMeta({ layout: 'staff' })
+
+interface VehicleRow {
+  id: string
+  customerId: string
+  customerName: string
+  unitType: string
+  busNumber: string | null
+  unitTag: string | null
+  vin: string | null
+  plate: string | null
+  year: number | null
+  make: string | null
+  model: string | null
+  trim: string | null
+  odometer: string | null
+  odometerUnit: string
+  status: string
+  archivedAt: string | null
+  createdAt: string
+}
+
+const auth = useAuthStore()
+const canCreate = computed(() => auth.can('vehicles.create.all'))
+
+const q = ref('')
+const fType = ref<'all' | 'truck' | 'bus' | 'equipment' | 'tractor' | 'other'>('all')
+const fCustomer = ref('all')
+const fSort = ref<'tag-asc' | 'tag-desc' | 'customer-asc' | 'odo-desc' | 'newest'>('tag-asc')
+const showArchived = ref(false)
+const page = ref(1)
+const PAGE_SIZE = 25
+
+watch([q, fType, fCustomer, fSort, showArchived], () => { page.value = 1 })
+
+const query = computed(() => ({
+  page: page.value,
+  pageSize: PAGE_SIZE,
+  q: q.value || undefined,
+  unitType: fType.value === 'all' ? undefined : fType.value,
+  customerId: fCustomer.value === 'all' ? undefined : fCustomer.value,
+  sort: fSort.value,
+  includeArchived: showArchived.value || undefined,
+}))
+
+const { data } = await useFetch<{ items: VehicleRow[], total: number }>(
+  '/api/vehicles',
+  { query },
+)
+
+const { data: customersData } = await useFetch<{ items: { id: string, displayName: string }[] }>(
+  '/api/customers',
+  { query: { pageSize: 100, sort: 'name-asc' } },
+)
+
+const items = computed(() => data.value?.items ?? [])
+const total = computed(() => data.value?.total ?? 0)
+const customerOptions = computed(() => customersData.value?.items ?? [])
+const customerCount = computed(() => new Set(items.value.map(v => v.customerId)).size)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+
+const filtersDirty = computed(() =>
+  fType.value !== 'all' || fCustomer.value !== 'all' || fSort.value !== 'tag-asc' || showArchived.value || !!q.value,
+)
+
+function clearFilters() {
+  q.value = ''
+  fType.value = 'all'
+  fCustomer.value = 'all'
+  fSort.value = 'tag-asc'
+  showArchived.value = false
+}
+
+const rangeLabel = computed(() => {
+  if (!total.value) return 'No vehicles'
+  const from = (page.value - 1) * PAGE_SIZE + 1
+  const to = Math.min(page.value * PAGE_SIZE, total.value)
+  return `Showing ${from}—${to} of ${total.value}`
+})
+</script>
+
+<template>
+  <section class="page active">
+    <div class="pagehead">
+      <div>
+        <h2>Vehicles</h2>
+        <p>{{ total }} unit{{ total === 1 ? '' : 's' }} across {{ customerCount }} customer{{ customerCount === 1 ? '' : 's' }}</p>
+      </div>
+      <div class="actions">
+        <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn">Decode VIN</NuxtLink>
+        <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn primary">+ Add Vehicle</NuxtLink>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="fsbar">
+        <div class="fs-group" style="flex:1; min-width:180px;">
+          <div class="search" style="width:100%; height:32px;">
+            <span class="gl">⌕</span>
+            <input
+              v-model="q"
+              type="search"
+              placeholder="Search tag, VIN, plate, make, customer…"
+              aria-label="Search vehicles"
+            >
+          </div>
+        </div>
+        <div class="fs-group">
+          <label for="veh-f-type">Unit type</label>
+          <select id="veh-f-type" v-model="fType">
+            <option value="all">All types</option>
+            <option value="truck">Trucks</option>
+            <option value="bus">Buses</option>
+            <option value="equipment">Equipment</option>
+            <option value="tractor">Ag / tractors</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="fs-group">
+          <label for="veh-f-customer">Customer</label>
+          <select id="veh-f-customer" v-model="fCustomer">
+            <option value="all">All customers</option>
+            <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+          </select>
+        </div>
+        <span class="fs-sep" aria-hidden="true" />
+        <div class="fs-group">
+          <label for="veh-f-sort">Sort by</label>
+          <select id="veh-f-sort" v-model="fSort">
+            <option value="tag-asc">Tag A → Z</option>
+            <option value="tag-desc">Tag Z → A</option>
+            <option value="customer-asc">Customer A → Z</option>
+            <option value="odo-desc">Odometer / hours high → low</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </div>
+        <div class="fs-group">
+          <label for="veh-f-archived">Archived</label>
+          <select id="veh-f-archived" v-model="showArchived">
+            <option :value="false">Hidden</option>
+            <option :value="true">Shown</option>
+          </select>
+        </div>
+        <div class="fs-meta">
+          <span class="fs-count">{{ items.length }} of {{ total }} vehicle{{ total === 1 ? '' : 's' }}</span>
+          <button type="button" class="fs-clear" :disabled="!filtersDirty" @click="clearFilters">Clear filters</button>
+        </div>
+      </div>
+
+      <div class="tscroll">
+        <table v-if="items.length" class="tbl veh-tbl">
+          <thead>
+            <tr>
+              <th class="cell-tag">Tag / Unit</th>
+              <th class="col-vin">VIN / Serial</th>
+              <th class="cell-cust">Customer</th>
+              <th class="col-odo">Odometer / Hours</th>
+              <th class="col-added">Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="v in items"
+              :key="v.id"
+              class="click"
+              @click="navigateTo(`/vehicles/${v.id}`)"
+            >
+              <td class="cell-tag">
+                <span class="lead tag">{{ vehicleTag(v) }}<span v-if="v.archivedAt" class="pill gray" style="margin-left:8px; vertical-align:1px;">Archived</span></span>
+                <span class="sub">{{ vehicleSub(v) }}</span>
+              </td>
+              <td class="mono col-vin" style="font-size:12px">{{ v.vin ?? '—' }}</td>
+              <td class="cell-cust">{{ v.customerName }}</td>
+              <td class="col-odo">{{ odoDisplay(v.odometer, v.odometerUnit) }}</td>
+              <td class="col-added">{{ new Date(v.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty" style="display:block;">
+          No vehicles match your search.
+        </div>
+      </div>
+
+      <div class="cfoot">
+        <span>{{ rangeLabel }}</span>
+        <div v-if="pageCount > 1" class="pager">
+          <button aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+          <button
+            v-for="p in pageCount"
+            :key="p"
+            :class="{ on: p === page }"
+            @click="page = p"
+          >
+            {{ p }}
+          </button>
+          <button aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+/* Mobile: rows stay single-line — drop low-priority columns, truncate the rest */
+@media (max-width: 720px) {
+  .veh-tbl .col-vin,
+  .veh-tbl .col-added {
+    display: none;
+  }
+  .veh-tbl :deep(th),
+  .veh-tbl :deep(td) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .veh-tbl {
+    /* overrides.css turns card tables into scrollable blocks on mobile;
+       this table truncates instead so rows stay single-line without scroll */
+    display: table;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .veh-tbl .cell-tag {
+    width: 40%;
+  }
+  .veh-tbl .cell-cust {
+    width: 28%;
+  }
+  .veh-tbl .col-odo {
+    width: 32%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .veh-tbl .cell-tag .lead,
+  .veh-tbl .cell-tag .sub,
+  .veh-tbl .cell-cust {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+</style>

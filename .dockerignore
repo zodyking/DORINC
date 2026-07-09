@@ -1,0 +1,14 @@
+node_modules
+.nuxt
+.output
+.worker-dist
+.git
+.env
+.env.*
+!.env.example
+Agent-Files
+terminals
+coverage
+playwright-report
+test-results
+*.log

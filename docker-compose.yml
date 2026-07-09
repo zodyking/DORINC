@@ -1,0 +1,71 @@
+# DORINC Suite — Docker Compose for Dockploy
+#
+# Zero .env required. Deploy containers, visit /setup, configure in the UI.
+# Persistent runtime config (database URL) lives in the dorinc-runtime volume.
+
+services:
+  nuxt-app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - dorinc-runtime:/app/.data
+    environment:
+      NODE_ENV: production
+      NITRO_PORT: '3000'
+      NITRO_HOST: 0.0.0.0
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    restart: unless-stopped
+    profiles: ['workers']
+    volumes:
+      - dorinc-runtime:/app/.data
+    environment:
+      NODE_ENV: production
+      WORKER_KIND: general
+
+  pdf-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pdf-worker
+    restart: unless-stopped
+    profiles: ['workers']
+    volumes:
+      - dorinc-runtime:/app/.data
+    environment:
+      NODE_ENV: production
+      WORKER_KIND: pdf
+
+  # Optional: apply migrations when upgrading (first install runs migrate via /setup).
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    profiles: ['migrate']
+    restart: 'no'
+    volumes:
+      - dorinc-runtime:/app/.data
+    command: ['node', 'scripts/migrate.mjs']
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ['redis']
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
+  dorinc-runtime:

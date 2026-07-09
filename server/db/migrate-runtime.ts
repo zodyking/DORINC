@@ -1,0 +1,7 @@
+import { join } from 'node:path'
+import { migrate } from 'drizzle-orm/node-postgres/migrator'
+import type { Db } from './client'
+
+export async function applyPendingMigrations(db: Db): Promise<void> {
+  await migrate(db, { migrationsFolder: join(process.cwd(), 'server/db/migrations') })
+}

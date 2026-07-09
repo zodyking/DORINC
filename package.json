@@ -1,0 +1,51 @@
+{
+  "name": "dorinc-suite",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run && playwright test",
+    "test:e2e": "playwright test",
+    "smoke:load": "node scripts/load-smoke.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "tsx server/db/seed.ts",
+    "db:migrate": "drizzle-kit migrate",
+    "db:backfill-audit-hash": "tsx server/db/backfill-audit-hash.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@pinia/nuxt": "^0.11.3",
+    "@tailwindcss/vite": "^4.3.2",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "nodemailer": "^9.0.3",
+    "nuxt": "^4.4.8",
+    "pg": "^8.22.0",
+    "pinia": "^3.0.4",
+    "playwright": "1.61.0",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^4.3.2",
+    "vue": "^3.5.39",
+    "vue-router": "^5.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.16.0",
+    "@playwright/test": "1.61.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.6.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

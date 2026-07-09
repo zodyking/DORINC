@@ -1,0 +1,333 @@
+<script setup lang="ts">
+// Platform-wide audit log (mockup: PAGE: SYSTEM LOGS). Append-only — no delete UI.
+definePageMeta({ layout: 'staff' })
+
+type AuditCategory = 'all' | 'settings' | 'users' | 'backups' | 'security'
+
+interface AuditLogRow {
+  id: string
+  entityType: string
+  entityId: string | null
+  action: string
+  actorUserId: string | null
+  actorName: string | null
+  actorEmail: string | null
+  actorAccountType: string | null
+  changedFields: unknown
+  afterData: unknown
+  beforeData: unknown
+  riskLevel: string
+  ipAddress: string | null
+  requestId: string | null
+  createdAt: string
+}
+
+interface UserOption {
+  id: string
+  name: string
+  email: string
+}
+
+const auth = useAuthStore()
+const canRead = computed(() => auth.can('audit.read.all'))
+
+const q = ref('')
+const category = ref<AuditCategory>('all')
+const entityType = ref('')
+const action = ref('')
+const actorUserId = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
+const page = ref(1)
+const PAGE_SIZE = 25
+
+watch([q, category, entityType, action, actorUserId, dateFrom, dateTo], () => { page.value = 1 })
+
+const query = computed(() => ({
+  page: page.value,
+  pageSize: PAGE_SIZE,
+  q: q.value || undefined,
+  category: category.value,
+  entityType: entityType.value || undefined,
+  action: action.value || undefined,
+  actorUserId: actorUserId.value || undefined,
+  dateFrom: dateFrom.value || undefined,
+  dateTo: dateTo.value || undefined,
+}))
+
+const { data: facets } = await useFetch<{ entityTypes: string[], actions: string[] }>(
+  '/api/audit-logs/facets',
+  { immediate: canRead.value },
+)
+
+const { data: usersData } = await useFetch<{ items: UserOption[] }>(
+  '/api/admin/users',
+  { query: { pageSize: 100 }, immediate: canRead.value && auth.can('users.read.all') },
+)
+
+const { data } = await useFetch<{ items: AuditLogRow[], total: number }>(
+  '/api/audit-logs',
+  { query, immediate: canRead.value },
+)
+
+const items = computed(() => data.value?.items ?? [])
+const total = computed(() => data.value?.total ?? 0)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+
+const entityOptions = computed(() => facets.value?.entityTypes ?? [])
+const actionOptions = computed(() => facets.value?.actions ?? [])
+const userOptions = computed(() => usersData.value?.items ?? [])
+
+const filtersDirty = computed(() =>
+  category.value !== 'all'
+  || !!entityType.value
+  || !!action.value
+  || !!actorUserId.value
+  || !!dateFrom.value
+  || !!dateTo.value,
+)
+
+function clearFilters() {
+  category.value = 'all'
+  entityType.value = ''
+  action.value = ''
+  actorUserId.value = ''
+  dateFrom.value = ''
+  dateTo.value = ''
+}
+
+const rangeLabel = computed(() => {
+  if (!total.value) return 'No log entries'
+  const from = (page.value - 1) * PAGE_SIZE + 1
+  const to = Math.min(page.value * PAGE_SIZE, total.value)
+  return `Showing ${from}—${to} of ${total.value.toLocaleString()}`
+})
+
+const subtitle = computed(() => {
+  const n = total.value
+  return `${n.toLocaleString()} event${n === 1 ? '' : 's'} · append-only audit trail`
+})
+</script>
+
+<template>
+  <section v-if="!canRead" class="page active">
+    <div class="empty">You do not have permission to view system logs.</div>
+  </section>
+
+  <section v-else class="page active">
+    <div class="pagehead">
+      <div>
+        <h2>System Logs</h2>
+        <p>Platform-wide events — settings, security, imports, backups, and jobs</p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" disabled title="Export arrives in a later phase">Export log</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">
+        <button
+          v-for="chip in AUDIT_CATEGORY_CHIPS"
+          :key="chip.key"
+          type="button"
+          class="chip"
+          :class="{ on: category === chip.key }"
+          @click="category = chip.key"
+        >
+          {{ chip.label }}
+        </button>
+        <div class="right">
+          <div class="search" style="width:240px; height:32px;">
+            <span class="gl">⌕</span>
+            <input
+              v-model="q"
+              type="search"
+              placeholder="Search system events, users, actions…"
+              aria-label="Search system logs"
+            >
+          </div>
+        </div>
+      </div>
+
+      <div class="filterbar">
+        <label class="flt">
+          <span>Entity</span>
+          <select v-model="entityType" aria-label="Filter by entity type">
+            <option value="">All entities</option>
+            <option v-for="et in entityOptions" :key="et" :value="et">{{ entityTypeLabel(et) }}</option>
+          </select>
+        </label>
+        <label class="flt">
+          <span>Action</span>
+          <select v-model="action" aria-label="Filter by action">
+            <option value="">All actions</option>
+            <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </label>
+        <label v-if="userOptions.length" class="flt">
+          <span>User</span>
+          <select v-model="actorUserId" aria-label="Filter by user">
+            <option value="">All users</option>
+            <option v-for="u in userOptions" :key="u.id" :value="u.id">{{ u.name }}</option>
+          </select>
+        </label>
+        <label class="flt">
+          <span>From</span>
+          <input v-model="dateFrom" type="date" aria-label="Filter from date">
+        </label>
+        <label class="flt">
+          <span>To</span>
+          <input v-model="dateTo" type="date" aria-label="Filter to date">
+        </label>
+        <button v-if="filtersDirty" type="button" class="btn sm" @click="clearFilters">Clear filters</button>
+      </div>
+
+      <div class="tscroll">
+        <table v-if="items.length" id="audit-rows" class="tbl audit-tbl">
+          <thead>
+            <tr>
+              <th class="col-time">Time</th>
+              <th class="col-user">User</th>
+              <th class="col-action">Action</th>
+              <th class="col-detail">Detail</th>
+              <th class="col-ip">IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in items" :key="row.id">
+              <td class="col-time mono when">{{ auditWhenDisplay(row.createdAt) }}</td>
+              <td class="col-user">{{ auditActorDisplay(row.actorName, row.actorEmail) }}</td>
+              <td class="col-action">
+                <span :class="auditActionPill(row.action, row.riskLevel).cls">
+                  {{ auditActionPill(row.action, row.riskLevel).label }}
+                </span>
+              </td>
+              <td class="col-detail">{{ auditDetailDisplay(row) }}</td>
+              <td class="col-ip mono">{{ auditIpDisplay(row.ipAddress) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else id="audit-rows-empty" class="empty">No system log entries match your search.</div>
+      </div>
+
+      <div class="cfoot">
+        <span>{{ rangeLabel }}</span>
+        <div v-if="pageCount > 1" class="pager">
+          <button type="button" aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+          <button
+            v-for="p in Math.min(pageCount, 7)"
+            :key="p"
+            type="button"
+            :class="{ on: p === page }"
+            @click="page = p"
+          >
+            {{ p }}
+          </button>
+          <button type="button" aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="append-note">{{ subtitle }}</p>
+  </section>
+</template>
+
+<style scoped>
+.chead {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chead .right {
+  margin-left: auto;
+}
+
+.filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  padding: 0 18px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.flt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.flt select,
+.flt input[type='date'] {
+  min-width: 140px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  text-transform: none;
+  letter-spacing: normal;
+  background: #fff;
+}
+
+.mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.when {
+  white-space: nowrap;
+}
+
+.append-note {
+  margin: 12px 2px 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+@media (max-width: 720px) {
+  .audit-tbl .col-detail,
+  .audit-tbl .col-ip {
+    display: none;
+  }
+  .audit-tbl {
+    display: table;
+    table-layout: fixed;
+    width: 100%;
+  }
+  .audit-tbl .col-time {
+    width: 26%;
+  }
+  .audit-tbl .col-user {
+    width: 24%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .audit-tbl .col-action {
+    width: 50%;
+  }
+  .audit-tbl .col-action .pill {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .filterbar {
+    padding: 0 12px 12px;
+  }
+  .flt select,
+  .flt input[type='date'] {
+    min-width: 120px;
+  }
+}
+</style>

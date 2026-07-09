@@ -1,0 +1,44 @@
+import { resolveSession } from '../auth/auth.service'
+import { getSessionCookie } from '../auth/session-cookie'
+import { useDb, hasDatabaseConfigured } from '../db/client'
+import { hasDatabaseConfig } from '../services/runtime-config.service'
+import { isCustomerPortalActive } from '../services/portal-access.service'
+import { apiError } from '../utils/api-error'
+
+/**
+ * Attach the auth context (user + permission overrides) to every request
+ * that carries a valid session cookie. Permission enforcement happens in
+ * route handlers via requirePermission().
+ */
+export default defineEventHandler(async (event) => {
+  if (!event.path.startsWith('/api/')) return
+  if (!hasDatabaseConfig() || !hasDatabaseConfigured()) return
+
+  const token = getSessionCookie(event)
+  if (!token) return
+
+  try {
+    const resolved = await resolveSession(useDb(), token)
+    if (resolved) {
+      if (event.path.startsWith('/api/portal/') && resolved.user.accountType === 'customer') {
+        const active = await isCustomerPortalActive(useDb(), resolved.user.customerId)
+        if (!active) {
+          throw apiError(event, 'FORBIDDEN', 'Customer portal access is disabled', { reason: 'portal_disabled' })
+        }
+      }
+
+      event.context.auth = {
+        user: resolved.user,
+        overrides: resolved.overrides,
+        sessionId: resolved.sessionId,
+        sessionToken: token,
+        stepUpVerifiedAt: resolved.stepUpVerifiedAt,
+      }
+    }
+  }
+  catch (err) {
+    // A DB outage must not turn into a silent auth bypass — requests just
+    // proceed unauthenticated and permission checks will reject them.
+    console.error(`[auth] session resolution failed: ${(err as Error).message}`)  
+  }
+})
