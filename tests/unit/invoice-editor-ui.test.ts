@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyCatalogItemToLineFields,
   autosavedLabel,
   catalogItemSub,
   catalogTypeToLineType,
@@ -20,6 +21,31 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(catalogTypeToLineType('part')).toBe('part')
     expect(catalogTypeToLineType('labor')).toBe('labor')
     expect(catalogTypeToLineType('unknown')).toBe('service')
+  })
+
+  it('applies catalog picks onto line fields', () => {
+    expect(applyCatalogItemToLineFields({
+      id: 'cat-1',
+      itemType: 'labor',
+      sku: null,
+      name: 'Labor — Diesel tech',
+      defaultPrice: '145.00',
+      uom: 'hr',
+    })).toEqual({
+      lineType: 'labor',
+      description: 'Labor — Diesel tech',
+      quantity: '1',
+      unitPrice: '145.00',
+      catalogItemId: 'cat-1',
+    })
+    expect(applyCatalogItemToLineFields({
+      id: 'cat-2',
+      itemType: 'part',
+      sku: 'P-1',
+      name: 'Filter',
+      defaultPrice: null,
+      uom: 'each',
+    }).unitPrice).toBe('0')
   })
 
   it('renders catalog quick-add subtitles', () => {

@@ -7,31 +7,15 @@ const props = defineProps<{
   entityLabel: string
   removed?: boolean
   disabled?: boolean
-  /** Route after a direct delete succeeds */
-  redirectTo?: string
 }>()
 
-const emit = defineEmits<{ submitted: [], deleted: [] }>()
+const emit = defineEmits<{ submitted: [] }>()
 
 const auth = useAuthStore()
-const router = useRouter()
 
-const canDirectDelete = computed(() => auth.loaded && auth.can('deletion_requests.review.all'))
-const canRequest = computed(() =>
-  auth.loaded && auth.can('deletion_requests.submit.all') && !canDirectDelete.value,
-)
+const canSubmit = computed(() => auth.loaded && auth.can('deletion_requests.submit.all'))
 const canReview = computed(() => auth.loaded && auth.can('deletion_requests.review.all'))
-const canShow = computed(() => canDirectDelete.value || canRequest.value)
-
-const defaultRedirect = computed(() => {
-  switch (props.entityType) {
-    case 'customer': return '/customers'
-    case 'vehicle': return '/vehicles'
-    case 'service_log': return '/service-logs'
-    case 'invoice': return '/invoices'
-    default: return '/dashboard'
-  }
-})
+const canShow = computed(() => canSubmit.value)
 
 const preservationNote = computed(() => {
   switch (props.entityType) {
@@ -62,42 +46,15 @@ const { data: pendingData, refresh: refreshPending } = useFetch<{
   default: () => ({ pending: null }),
 })
 
-watch(canRequest, (ok) => {
+watch(canSubmit, (ok) => {
   if (ok && import.meta.client) void refreshPending()
 }, { immediate: true })
 
 const pending = computed(() => pendingData.value?.pending)
-const deleteModalOpen = ref(false)
 const requestModalOpen = ref(false)
 const reason = ref('')
 const busy = ref(false)
 const error = ref('')
-
-async function confirmDirectDelete() {
-  busy.value = true
-  error.value = ''
-  try {
-    await $fetch('/api/records/delete', {
-      method: 'POST',
-      body: {
-        entityType: props.entityType,
-        entityId: props.entityId,
-        reason: reason.value.trim() || undefined,
-      },
-    })
-    deleteModalOpen.value = false
-    reason.value = ''
-    emit('deleted')
-    await router.push(props.redirectTo ?? defaultRedirect.value)
-  }
-  catch (e: unknown) {
-    const err = e as { data?: { message?: string, data?: { message?: string } } }
-    error.value = err.data?.data?.message ?? err.data?.message ?? 'Could not delete this record'
-  }
-  finally {
-    busy.value = false
-  }
-}
 
 async function submitRequest() {
   if (reason.value.trim().length < 10) {
@@ -129,12 +86,6 @@ async function submitRequest() {
   }
 }
 
-function openDeleteModal() {
-  error.value = ''
-  reason.value = ''
-  deleteModalOpen.value = true
-}
-
 function openRequestModal() {
   error.value = ''
   reason.value = ''
@@ -144,62 +95,25 @@ function openRequestModal() {
 
 <template>
   <template v-if="!removed && canShow">
-    <span v-if="canRequest && pending" class="pill warn" style="margin-right:8px;">Deletion pending</span>
+    <span v-if="pending" class="pill warn" style="margin-right:8px;">Deletion pending</span>
 
     <button
-      v-if="canDirectDelete"
+      v-if="!pending"
       type="button"
       class="btn danger"
       :disabled="disabled || busy"
-      @click="openDeleteModal"
+      @click="openRequestModal"
     >
-      Delete
+      Request deletion
     </button>
-
-    <template v-else-if="canRequest">
-      <button
-        v-if="!pending"
-        type="button"
-        class="btn danger"
-        :disabled="disabled || busy"
-        @click="openRequestModal"
-      >
-        Request deletion
-      </button>
-      <NuxtLink
-        v-if="canReview && pending"
-        to="/deletion-requests"
-        class="btn sm"
-      >
-        Review queue
-      </NuxtLink>
-    </template>
+    <NuxtLink
+      v-if="canReview && pending"
+      to="/deletion-requests"
+      class="btn sm"
+    >
+      Review queue
+    </NuxtLink>
   </template>
-
-  <div v-if="deleteModalOpen" class="modal-scrim open" @click.self="deleteModalOpen = false">
-    <div class="card modal-card" style="max-width:480px; width:100%;">
-      <div class="chead">
-        <h3>Delete record</h3>
-        <span class="pill over">Permanent</span>
-      </div>
-      <div class="cbody">
-        <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-          Permanently delete <strong>{{ entityLabel }}</strong>? {{ preservationNote }}
-        </p>
-        <label class="fld">
-          Reason (optional)
-          <textarea v-model="reason" rows="3" placeholder="Why is this being removed?" />
-        </label>
-        <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button type="button" class="btn danger" :disabled="busy" @click="confirmDirectDelete">
-            {{ busy ? 'Deleting…' : 'Delete permanently' }}
-          </button>
-          <button type="button" class="btn" :disabled="busy" @click="deleteModalOpen = false">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <div v-if="requestModalOpen" class="modal-scrim open" @click.self="requestModalOpen = false">
     <div class="card modal-card" style="max-width:480px; width:100%;">

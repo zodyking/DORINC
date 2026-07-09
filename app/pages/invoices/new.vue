@@ -1,5 +1,8 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
+import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import { applyCatalogItemToLineFields, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+
 definePageMeta({ layout: 'staff' })
 
 interface CustomerPick {
@@ -222,6 +225,8 @@ function onServiceLogPick(logId: string) {
   if (log) vehicleId.value = log.vehicleId
 }
 
+const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
+
 function addLine() {
   lines.value.push(createEmptyLine())
 }
@@ -229,6 +234,36 @@ function addLine() {
 function removeLine(localId: string) {
   if (lines.value.length <= 1) return
   lines.value = lines.value.filter(l => l.localId !== localId)
+}
+
+function applyCatalogToLine(line: DraftLine, item: CatalogQuickItem) {
+  const fields = applyCatalogItemToLineFields(item)
+  line.lineType = fields.lineType
+  line.description = fields.description
+  line.quantity = fields.quantity
+  line.unitPrice = fields.unitPrice
+  line.catalogItemId = fields.catalogItemId
+}
+
+function onLineDescriptionTyped(line: DraftLine) {
+  line.catalogItemId = null
+}
+
+function setLineAcRef(localId: string, el: unknown) {
+  lineAcRefs.value[localId] = el as { focus: () => void } | null
+}
+
+function focusCatalogSearch() {
+  const target = lines.value.find(l => !l.description.trim()) ?? lines.value[lines.value.length - 1]
+  if (!target) {
+    addLine()
+    nextTick(() => {
+      const newest = lines.value[lines.value.length - 1]
+      if (newest) lineAcRefs.value[newest.localId]?.focus()
+    })
+    return
+  }
+  lineAcRefs.value[target.localId]?.focus()
 }
 
 function nextStep() {
@@ -297,6 +332,7 @@ async function syncLines(id: string) {
       description: line.description.trim(),
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      catalogItemId: line.catalogItemId || null,
       sortOrder: i,
     }
 
@@ -545,7 +581,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <div class="chead">
           <h3>Line items</h3>
           <div class="right">
-            <button type="button" class="btn sm" disabled title="Coming soon">From catalog</button>
+            <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
             <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
           </div>
         </div>
@@ -568,7 +604,14 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                     <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                   </select>
                 </td>
-                <td><input v-model="line.description" type="text" placeholder="Description"></td>
+                <td>
+                  <CatalogLineAutocomplete
+                    :ref="(el) => setLineAcRef(line.localId, el)"
+                    v-model="line.description"
+                    @typed="onLineDescriptionTyped(line)"
+                    @select="applyCatalogToLine(line, $event)"
+                  />
+                </td>
                 <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
                 <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
                 <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
