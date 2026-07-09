@@ -356,7 +356,7 @@ async function resolveCustomerIdForImport(
     .where(sql`lower(trim(${customers.displayName})) = lower(trim(${customerName}))`)
     .limit(1)
 
-  return match?.id ?? explicitId || null
+  return match?.id ?? explicitId ?? null
 }
 
 async function importVehicles(
