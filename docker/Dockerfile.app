@@ -14,5 +14,7 @@ ENV PORT=38471
 ENV NITRO_PORT=38471
 ENV NITRO_HOST=0.0.0.0
 COPY --from=build /src/.output ./.output
+# Setup wizard + migrate profile need Drizzle SQL on disk (not bundled in Nitro output).
+COPY --from=build /src/server/db/migrations ./server/db/migrations
 EXPOSE 38471
 CMD ["node", ".output/server/index.mjs"]
