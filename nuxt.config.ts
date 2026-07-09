@@ -80,5 +80,11 @@ export default defineNuxtConfig({
     experimental: {
       tasks: true,
     },
+    esbuild: {
+      options: {
+        // shared/money.ts uses BigInt literals; default es2019 can break at runtime on Node 24.
+        target: 'es2020',
+      },
+    },
   },
 })
