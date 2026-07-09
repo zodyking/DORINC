@@ -191,16 +191,72 @@ export interface OpenRouterTestResult {
   modelCount: number
 }
 
-/** Verify OpenRouter credentials via GET /api/v1/models. */
-export async function testOpenRouterConnection(apiKey: string): Promise<OpenRouterTestResult> {
-  const res = await fetch('https://openrouter.ai/api/v1/models', {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': getAppUrl(),
-      'X-Title': BRAND_NAME,
-    },
-  })
+export interface OpenRouterModelOption {
+  id: string
+  name: string
+  /** Display label: `Model Name - $in/$out per 1M` */
+  label: string
+  promptPerMillion: number | null
+  completionPerMillion: number | null
+}
 
+interface OpenRouterModelRow {
+  id?: string
+  name?: string
+  architecture?: { modality?: string, input_modalities?: string[] }
+  pricing?: { prompt?: string, completion?: string }
+}
+
+function formatUsdPerMillion(perToken: string | undefined): { text: string, perMillion: number | null } {
+  if (perToken == null || perToken === '') return { text: '—', perMillion: null }
+  const n = Number(perToken)
+  if (!Number.isFinite(n)) return { text: '—', perMillion: null }
+  if (n === 0) return { text: 'Free', perMillion: 0 }
+  const perMillion = n * 1_000_000
+  if (perMillion < 0.01) return { text: `$${perMillion.toFixed(4)}`, perMillion }
+  if (perMillion < 1) return { text: `$${perMillion.toFixed(3)}`, perMillion }
+  return { text: `$${perMillion.toFixed(2)}`, perMillion }
+}
+
+function isTextCapableModel(row: OpenRouterModelRow): boolean {
+  const modality = row.architecture?.modality?.toLowerCase() ?? ''
+  if (modality.includes('text')) return true
+  const inputs = row.architecture?.input_modalities ?? []
+  if (inputs.some(m => m.toLowerCase() === 'text')) return true
+  // Older rows may omit architecture — keep them.
+  return !row.architecture
+}
+
+function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
+  const id = row.id?.trim()
+  if (!id) return null
+  const name = row.name?.trim() || id
+  const prompt = formatUsdPerMillion(row.pricing?.prompt)
+  const completion = formatUsdPerMillion(row.pricing?.completion)
+  const cost
+    = prompt.perMillion === 0 && completion.perMillion === 0
+      ? 'Free'
+      : `${prompt.text}/${completion.text} per 1M`
+  return {
+    id,
+    name,
+    label: `${name} - ${cost}`,
+    promptPerMillion: prompt.perMillion,
+    completionPerMillion: completion.perMillion,
+  }
+}
+
+/** List OpenRouter models with pricing. API key optional (public catalog). */
+export async function listOpenRouterModels(apiKey?: string): Promise<OpenRouterModelOption[]> {
+  const headers: Record<string, string> = {
+    'HTTP-Referer': getAppUrl(),
+    'X-Title': BRAND_NAME,
+  }
+  if (apiKey?.trim()) {
+    headers.Authorization = `Bearer ${apiKey.trim()}`
+  }
+
+  const res = await fetch('https://openrouter.ai/api/v1/models', { headers })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new AiProviderServiceError(
@@ -209,10 +265,23 @@ export async function testOpenRouterConnection(apiKey: string): Promise<OpenRout
     )
   }
 
-  const payload = await res.json() as { data?: unknown[] }
+  const payload = await res.json() as { data?: OpenRouterModelRow[] }
+  const rows = Array.isArray(payload.data) ? payload.data : []
+  const options = rows
+    .filter(isTextCapableModel)
+    .map(toModelOption)
+    .filter((m): m is OpenRouterModelOption => m != null)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+
+  return options
+}
+
+/** Verify OpenRouter credentials via GET /api/v1/models. */
+export async function testOpenRouterConnection(apiKey: string): Promise<OpenRouterTestResult> {
+  const models = await listOpenRouterModels(apiKey)
   return {
     ok: true,
-    modelCount: Array.isArray(payload.data) ? payload.data.length : 0,
+    modelCount: models.length,
   }
 }
 

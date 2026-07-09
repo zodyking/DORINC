@@ -175,6 +175,9 @@ watch(step, (n) => {
   scrollActiveSetupStep()
   if (n === 1) startWelcomeAutoplay()
   else stopWelcomeAutoplay()
+  if (n === 7 && ai.modelsStatus === 'idle') {
+    void loadAiModels()
+  }
 })
 
 onMounted(() => {
@@ -261,8 +264,26 @@ const security = reactive({
   errorMessage: '',
 })
 const pdf = reactive({ serviceUrl: 'http://localhost:3100/pdf', template: 'Professional Bill Matrix v1' })
-const ai = reactive({ apiKey: '', model: 'anthropic/claude-sonnet-4', saved: false })
+const ai = reactive({
+  apiKey: '',
+  model: 'anthropic/claude-sonnet-4',
+  saved: false,
+  models: [] as Array<{ id: string, name: string, label: string }>,
+  modelsStatus: 'idle' as 'idle' | 'loading' | 'success' | 'error',
+  modelsError: '',
+  modelsFilter: '',
+})
 const admin = reactive({ name: '', email: '', password: '', confirm: '', sendVerification: true })
+
+const aiModelOptions = computed(() => {
+  const q = ai.modelsFilter.trim().toLowerCase()
+  if (!q) return ai.models
+  return ai.models.filter(m =>
+    m.label.toLowerCase().includes(q)
+    || m.id.toLowerCase().includes(q)
+    || m.name.toLowerCase().includes(q),
+  )
+})
 
 const reveal = reactive<Record<string, boolean>>({})
 
@@ -430,6 +451,38 @@ async function saveSmtp(test = false) {
   }
 }
 
+async function loadAiModels() {
+  ai.modelsStatus = 'loading'
+  ai.modelsError = ''
+  try {
+    const res = await $fetch<{
+      ok: boolean
+      count: number
+      models: Array<{ id: string, name: string, label: string }>
+    }>('/api/setup/ai-models', {
+      method: 'POST',
+      body: { apiKey: ai.apiKey.trim() || undefined },
+    })
+    ai.models = res.models
+    ai.modelsStatus = 'success'
+    const preferred = [
+      ai.model,
+      'anthropic/claude-sonnet-4',
+      'anthropic/claude-3.5-sonnet',
+      'openai/gpt-4o',
+    ]
+    const pick = preferred.find(id => id && res.models.some(m => m.id === id))
+      ?? res.models[0]?.id
+    if (pick) ai.model = pick
+    return true
+  }
+  catch (err) {
+    ai.modelsStatus = 'error'
+    ai.modelsError = fetchErrorMessage(err, 'Failed to load OpenRouter models')
+    return false
+  }
+}
+
 async function saveAi() {
   if (!ai.apiKey.trim()) return true
   busy.value = true
@@ -444,7 +497,7 @@ async function saveAi() {
     return true
   }
   catch (err) {
-    error.value = (err as { data?: { message?: string } })?.data?.message ?? 'Failed to save AI settings'
+    error.value = fetchErrorMessage(err, 'Failed to save AI settings')
     return false
   }
   finally {
@@ -826,13 +879,37 @@ async function next() {
         <div class="card">
           <div class="chead"><h3>AI provider (optional)</h3></div>
           <div class="cbody">
+            <p class="setup-step-hint">
+              Paste your OpenRouter key, then load the live model catalog. Costs are shown as input/output per 1M tokens.
+            </p>
             <label class="fld secret-fld">OpenRouter API key
               <input v-model="ai.apiKey" :type="reveal.ai ? 'text' : 'password'" placeholder="sk-or-…">
               <button type="button" class="reveal" @click="reveal.ai = !reveal.ai">{{ reveal.ai ? 'Hide' : 'Show' }}</button>
             </label>
-            <label class="fld">Default model
-              <select v-model="ai.model"><option value="anthropic/claude-sonnet-4">anthropic/claude-sonnet-4</option></select>
+            <div class="setup-actions" style="margin-bottom:12px;">
+              <button class="btn primary" type="button" :disabled="ai.modelsStatus === 'loading'" @click="loadAiModels">
+                {{ ai.modelsStatus === 'loading' ? 'Loading models…' : 'Load models from OpenRouter' }}
+              </button>
+            </div>
+            <label class="fld">Filter models
+              <input v-model="ai.modelsFilter" type="search" placeholder="Search by name or id…" :disabled="!ai.models.length">
             </label>
+            <label class="fld">Default model
+              <select v-model="ai.model" :disabled="!aiModelOptions.length">
+                <option v-if="!aiModelOptions.length" value="" disabled>
+                  {{ ai.modelsStatus === 'loading' ? 'Loading…' : 'Load models to choose' }}
+                </option>
+                <option v-for="m in aiModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+              </select>
+              <span class="help">
+                {{ ai.modelsStatus === 'success'
+                  ? `${aiModelOptions.length} model${aiModelOptions.length === 1 ? '' : 's'} shown`
+                  : 'Live list from OpenRouter' }}
+              </span>
+            </label>
+            <div v-if="ai.modelsStatus === 'error'" class="setup-feedback setup-feedback--error" role="alert">
+              {{ ai.modelsError }}
+            </div>
             <button class="btn" @click="next">Skip for now →</button>
           </div>
         </div>
