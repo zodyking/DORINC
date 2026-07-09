@@ -3,12 +3,12 @@ import { config } from 'dotenv'
 import { and, eq, desc } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   DEFAULT_INVOICE_TEMPLATE_NAME,
   DEFAULT_INVOICE_TEMPLATE_SLUG,
+  resolveInvoiceTemplateReferencePath,
   seedInvoiceTemplates,
 } from '../../server/db/seed-invoice-templates'
 import {
@@ -40,10 +40,7 @@ describe('P1-27 invoice template seed', () => {
     expect(publishedVersion.htmlContent.length).toBeGreaterThan(1000)
     expect(baselineVersion.designSettings.pageSize).toBe('Letter')
 
-    const referenceHtml = readFileSync(
-      join(process.cwd(), 'Agent-Files', 'invoice-template-reference.html'),
-      'utf8',
-    )
+    const referenceHtml = readFileSync(resolveInvoiceTemplateReferencePath(), 'utf8')
     expect(baselineVersion.htmlContent).toBe(referenceHtml)
 
     const [storedTemplate] = await db.select().from(invoiceTemplates)

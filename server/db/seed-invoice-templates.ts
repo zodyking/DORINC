@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { and, desc, eq } from 'drizzle-orm'
 import type { Db } from './client'
@@ -11,9 +11,22 @@ import {
 export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'professional-bill-matrix'
 export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Professional Bill Matrix'
 
+/** Production ships this under server/assets; Agent-Files is local-dev only. */
+export function resolveInvoiceTemplateReferencePath(): string {
+  const candidates = [
+    join(process.cwd(), 'server', 'assets', 'invoice-template-reference.html'),
+    join(process.cwd(), 'Agent-Files', 'invoice-template-reference.html'),
+  ]
+  for (const path of candidates) {
+    if (existsSync(path)) return path
+  }
+  throw new Error(
+    `Missing invoice template reference HTML. Expected one of:\n${candidates.map(p => `  - ${p}`).join('\n')}`,
+  )
+}
+
 function loadReferenceHtml(): string {
-  const htmlPath = join(process.cwd(), 'Agent-Files', 'invoice-template-reference.html')
-  return readFileSync(htmlPath, 'utf8')
+  return readFileSync(resolveInvoiceTemplateReferencePath(), 'utf8')
 }
 
 /** Idempotent seed — default template published as v1 (P1-27). */
