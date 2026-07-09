@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY server/workers ./server/workers
 COPY server/lib ./server/lib
+COPY server/db/migrations ./server/db/migrations
 
 # Playwright's official image ships Chromium + all system deps.
 # playwright npm package version must match this image tag.

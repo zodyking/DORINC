@@ -1,10 +1,12 @@
 # DORINC Suite — Docker Compose for Dockploy
 #
-# Dockploy env (only these):
+# Dockploy env:
 #   PORT=38471         # container listen port (must match Domains → Port)
 #   APP_URL=https://…  # public URL
+#   DATABASE_URL=…     # optional override (recommended if workers cannot resolve setup host)
 #
 # Services deployed together: nuxt-app + worker + pdf-worker (mail, PDF, backups, AI).
+# All services join dokploy-network so linked Postgres hostnames resolve from workers too.
 # Optional profiles: migrate (one-shot), redis (not required for Phase 1).
 
 services:
@@ -24,6 +26,9 @@ services:
       NITRO_PORT: ${PORT:-38471}
       NITRO_HOST: 0.0.0.0
       APP_URL: ${APP_URL}
+      DATABASE_URL: ${DATABASE_URL:-}
+    networks:
+      - dokploy-network
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- "http://127.0.0.1:$$PORT/api/health" || exit 1']
       interval: 30s
@@ -42,6 +47,9 @@ services:
       NODE_ENV: production
       WORKER_KIND: general
       APP_URL: ${APP_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+    networks:
+      - dokploy-network
 
   pdf-worker:
     build:
@@ -54,6 +62,9 @@ services:
       NODE_ENV: production
       WORKER_KIND: pdf
       APP_URL: ${APP_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+    networks:
+      - dokploy-network
 
   # Optional: apply migrations when upgrading (first install runs migrate via /setup).
   migrate:
@@ -64,6 +75,10 @@ services:
     restart: 'no'
     volumes:
       - dorinc-runtime:/app/.data
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+    networks:
+      - dokploy-network
     command: ['node', 'scripts/migrate.mjs']
 
   redis:
@@ -72,6 +87,12 @@ services:
     profiles: ['redis']
     volumes:
       - redis-data:/data
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
 
 volumes:
   redis-data:

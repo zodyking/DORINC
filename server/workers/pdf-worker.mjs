@@ -2,6 +2,7 @@
 import pg from 'pg'
 import { requireDatabaseUrl } from '../lib/runtime-config.mjs'
 import { applyPendingMigrationsOnBoot } from '../lib/migrate-on-boot.mjs'
+import { verifyDatabaseConnection } from '../lib/verify-database.mjs'
 import { processPdfRenderJobs } from './handlers/pdf-render.mjs'
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 3000)
@@ -20,6 +21,8 @@ async function main() {
   catch (err) {
     console.error('[pdf-worker] boot migration failed', err)
   }
+
+  await verifyDatabaseConnection('pdf-worker')
 
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 4 })
   console.log(`[pdf-worker] started (poll ${POLL_MS}ms)`)

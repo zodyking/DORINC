@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import { zstdCompressSync } from 'node:zlib'
 import { decryptBuffer, encryptBuffer, sha256Hex } from '../lib/encryption.mjs'
-import { getDatabaseUrl } from '../lib/runtime-config.mjs'
+import { getDatabaseUrl } from '../../lib/runtime-config.mjs'
 
 function defaultScheduleCron() {
   return process.env.BACKUP_SCHEDULE?.trim() || '0 2 * * *'

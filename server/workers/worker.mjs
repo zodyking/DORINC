@@ -3,6 +3,7 @@
 import pg from 'pg'
 import { requireDatabaseUrl } from '../lib/runtime-config.mjs'
 import { applyPendingMigrationsOnBoot } from '../lib/migrate-on-boot.mjs'
+import { verifyDatabaseConnection } from '../lib/verify-database.mjs'
 import { processThumbnailJobs } from './handlers/derivatives.mjs'
 import { processMailJobs } from './handlers/mail.mjs'
 import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
@@ -61,6 +62,8 @@ async function main() {
   catch (err) {
     console.error('[worker] boot migration failed', err)
   }
+
+  await verifyDatabaseConnection('worker')
 
   const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 4 })
   console.log(`[worker] general worker started (poll ${POLL_MS}ms)`)
