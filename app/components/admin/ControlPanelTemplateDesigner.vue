@@ -169,12 +169,16 @@ const versionMeta = computed(() => {
 
 const loadErrorMessage = computed(() => {
   const err = (error.value ?? listError.value) as {
-    data?: { message?: string }
+    data?: { message?: string, data?: { message?: string } }
     message?: string
     statusMessage?: string
   } | null
   if (!err) return 'Could not load the invoice template.'
-  return err.data?.message ?? err.message ?? err.statusMessage ?? 'Could not load the invoice template.'
+  const nested = err.data?.data?.message ?? err.data?.message
+  if (nested) return nested
+  const generic = err.message ?? err.statusMessage
+  if (generic && generic !== 'Server Error') return generic
+  return 'Could not load the invoice template.'
 })
 
 function insertSnippet(snippet: string) {

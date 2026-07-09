@@ -207,6 +207,7 @@ const showRecordPayment = computed(() =>
 
 const busy = ref(false)
 const actionError = ref('')
+const viewTab = ref<'detail' | 'pdf'>('detail')
 
 async function runAdminForceRelease() {
   const reason = window.prompt('Reason for unlocking this invoice for editing (required):')
@@ -414,7 +415,32 @@ const summaryRows = computed(() => {
     </div>
     <p v-if="forceReleaseError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ forceReleaseError }}</p>
 
-    <div class="cols">
+    <div v-if="canGeneratePdf" class="ed-tabs-wrap">
+      <div class="ed-tabs" role="tablist" aria-label="Invoice views">
+        <button
+          type="button"
+          class="ed-tab"
+          :class="{ on: viewTab === 'detail' }"
+          role="tab"
+          :aria-selected="viewTab === 'detail'"
+          @click="viewTab = 'detail'"
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          class="ed-tab"
+          :class="{ on: viewTab === 'pdf' }"
+          role="tab"
+          :aria-selected="viewTab === 'pdf'"
+          @click="viewTab = 'pdf'"
+        >
+          PDF preview
+        </button>
+      </div>
+    </div>
+
+    <div v-show="viewTab === 'detail'" class="cols">
       <div class="stack">
         <div class="card">
           <div class="chead">
@@ -554,6 +580,23 @@ const summaryRows = computed(() => {
             </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div v-if="viewTab === 'pdf' && canGeneratePdf" class="card">
+      <div class="chead">
+        <h3>PDF preview</h3>
+        <p class="sub" style="margin:0;">Embedded viewer — use toolbar for refresh and download</p>
+      </div>
+      <div class="cbody">
+        <InvoicePdfPreviewPane
+          :invoice-id="id"
+          :invoice-label="invoice.invoiceNumberFormatted"
+          :prefer-official="isPdfEligible"
+          :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
+          :can-generate-pdf="canGeneratePdf"
+          @refreshed="refresh()"
+        />
       </div>
     </div>
   </section>
