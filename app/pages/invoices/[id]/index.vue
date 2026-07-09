@@ -1,8 +1,26 @@
 <script setup lang="ts">
 // Invoice detail — line items, API totals, status actions, PDF placeholder (mockup: PAGE: INVOICE DETAIL).
-import type { InvoiceVehicleSnapshotDisplay } from '~/utils/invoices-ui'
+import {
+  auditWhenDisplay,
+  formatInvoiceAuditAction,
+  invoiceDateDisplay,
+  invoiceStatusHeadline,
+  invoiceStatusPill,
+  lineQuantityDisplay,
+  lineTypeLabel,
+  lineTypePill,
+  moneyDisplay,
+  paymentTermsLabel,
+  type InvoiceLineType,
+  type InvoiceStatus,
+  type InvoiceVehicleSnapshotDisplay,
+} from '~/utils/invoices-ui'
+import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
+import { logNumberDisplay } from '~/utils/service-logs-ui'
 
 definePageMeta({ layout: 'staff' })
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface CatalogSnapshotBits {
   description: string | null
@@ -31,11 +49,11 @@ interface Invoice {
   dueDate: string | null
   paymentTerms: string
   poNumber: string | null
-  customerId: string
+  customerId: string | null
   vehicleId: string | null
   serviceLogId: string | null
   customerName: string
-  customerSnapshot: CustomerSnapshotBits
+  customerSnapshot: CustomerSnapshotBits | null
   vehicleSnapshot: InvoiceVehicleSnapshotDisplay | null
   subtotal: string
   taxAmount: string
@@ -60,7 +78,8 @@ interface HistoryRow {
 
 const route = useRoute()
 const auth = useAuthStore()
-const id = route.params.id as string
+const id = computed(() => String(route.params.id || ''))
+const idValid = computed(() => UUID_RE.test(id.value))
 
 const {
   activeEditor,
@@ -70,9 +89,9 @@ const {
   forceRelease,
   forceReleaseBusy,
   forceReleaseError,
-} = useEditingSessionStatus('invoice', id)
+} = useEditingSessionStatus('invoice', id.value)
 
-const { data, refresh, error } = await useFetch<{
+const { data, refresh, error, pending } = useFetch<{
   invoice: Invoice
   history: HistoryRow[]
   sendDelivery: {
@@ -88,7 +107,11 @@ const { data, refresh, error } = await useFetch<{
     pendingJobId: string | null
     pendingJobStatus: string | null
   } | null
-}>(`/api/invoices/${id}`)
+}>(() => (idValid.value ? `/api/invoices/${id.value}` : null), {
+  server: false,
+  lazy: true,
+  watch: [id],
+})
 
 const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
@@ -98,6 +121,14 @@ const lines = computed(() => invoice.value?.lineItems ?? [])
 const isPdfEligible = computed(() =>
   !!invoice.value && ['approved', 'sent', 'paid'].includes(invoice.value.status),
 )
+
+const loadErrorMessage = computed(() => {
+  if (!idValid.value) return 'This invoice link is invalid.'
+  const msg = (error.value as { data?: { message?: string } } | null)?.data?.message
+  if (msg) return msg
+  if (error.value) return 'Invoice not found or you do not have access.'
+  return null
+})
 
 const sendInProgress = computed(() =>
   invoice.value?.status === 'approved'
@@ -124,12 +155,12 @@ onUnmounted(() => {
   if (sendPollTimer) clearInterval(sendPollTimer)
 })
 
-const { data: linkedLogData } = await useFetch<{ log: { logNumber: number } }>(
+const { data: linkedLogData } = useFetch<{ log: { logNumber: number } }>(
   () => (invoice.value?.serviceLogId ? `/api/service-logs/${invoice.value.serviceLogId}` : null),
-  { watch: [() => invoice.value?.serviceLogId] },
+  { server: false, lazy: true, watch: [() => invoice.value?.serviceLogId] },
 )
 
-const canRead = computed(() => auth.can('invoices.read.all'))
+const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canManagerApprove = computed(() =>
@@ -207,12 +238,34 @@ const summaryRows = computed(() => {
 </script>
 
 <template>
-  <section v-if="!canRead" class="page active">
-    <div class="empty">You do not have permission to view invoices.</div>
+  <section v-if="!auth.loaded || (canRead && pending && !invoice && !loadErrorMessage)" class="page active">
+    <div class="cp-state">Loading invoice…</div>
   </section>
 
-  <section v-else-if="error" class="page active">
-    <div class="empty">Invoice not found or you do not have access.</div>
+  <section v-else-if="!canRead" class="page active">
+    <div class="pagehead">
+      <div>
+        <h2>Invoice</h2>
+        <p><NuxtLink to="/invoices">← Back to invoices</NuxtLink></p>
+      </div>
+    </div>
+    <div class="cp-state">You do not have permission to view invoices.</div>
+  </section>
+
+  <section v-else-if="loadErrorMessage" class="page active">
+    <div class="pagehead">
+      <div>
+        <h2>Invoice</h2>
+        <p><NuxtLink to="/invoices">← Back to invoices</NuxtLink></p>
+      </div>
+    </div>
+    <div class="card" style="padding:20px;">
+      <p style="margin:0 0 12px; color:#dc2626;">{{ loadErrorMessage }}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button v-if="idValid" type="button" class="btn" @click="refresh()">Retry</button>
+        <NuxtLink to="/invoices" class="btn primary">View all invoices</NuxtLink>
+      </div>
+    </div>
   </section>
 
   <section v-else-if="invoice" class="page active">
@@ -397,14 +450,14 @@ const summaryRows = computed(() => {
         <div class="card">
           <div class="chead">
             <h3>Customer</h3>
-            <div class="right">
+            <div v-if="invoice.customerId" class="right">
               <NuxtLink :to="`/customers/${invoice.customerId}`" class="btn ghost sm">View →</NuxtLink>
             </div>
           </div>
           <dl class="kv">
             <dt>Account</dt><dd>{{ invoice.customerName }}</dd>
-            <dt>Email</dt><dd>{{ invoice.customerSnapshot.email ?? '—' }}</dd>
-            <dt>Phone</dt><dd>{{ invoice.customerSnapshot.phone ?? '—' }}</dd>
+            <dt>Email</dt><dd>{{ invoice.customerSnapshot?.email ?? '—' }}</dd>
+            <dt>Phone</dt><dd>{{ invoice.customerSnapshot?.phone ?? '—' }}</dd>
             <dt>Terms</dt><dd>{{ paymentTermsLabel(invoice.paymentTerms) }}</dd>
             <dt>PO / ref</dt><dd>{{ invoice.poNumber ?? '—' }}</dd>
             <dt>Balance due</dt><dd>{{ moneyDisplay(invoice.balanceDue) }}</dd>
@@ -421,7 +474,7 @@ const summaryRows = computed(() => {
           <dl class="kv">
             <dt>Unit</dt><dd>{{ vehicleSub(invoice.vehicleSnapshot) }}</dd>
             <dt>VIN</dt><dd class="mono" style="font-size:12px">{{ invoice.vehicleSnapshot.vin ?? '—' }}</dd>
-            <dt>Odometer</dt><dd>{{ odoDisplay(invoice.vehicleSnapshot.odometer, invoice.vehicleSnapshot.odometerUnit) }}</dd>
+            <dt>Odometer</dt><dd>{{ odoDisplay(invoice.vehicleSnapshot.odometer, invoice.vehicleSnapshot.odometerUnit || 'mi') }}</dd>
             <dt>Fleet #</dt><dd>{{ invoice.vehicleSnapshot.busNumber ?? invoice.vehicleSnapshot.unitTag ?? '—' }}</dd>
           </dl>
         </div>

@@ -37,8 +37,21 @@ export default defineEventHandler(async (event) => {
       ? redactInvoiceForAuditor(invoice)
       : invoice
 
-    const sendDelivery = await getInvoiceSendDeliveryStatus(db, id)
-    const pdf = await getInvoicePdfStatus(db, id)
+    let sendDelivery = null
+    try {
+      sendDelivery = await getInvoiceSendDeliveryStatus(db, id)
+    }
+    catch {
+      sendDelivery = null
+    }
+
+    let pdf = null
+    try {
+      pdf = await getInvoicePdfStatus(db, id)
+    }
+    catch {
+      pdf = null
+    }
 
     return { invoice: viewInvoice, history, sendDelivery, pdf }
   }

@@ -86,6 +86,10 @@ async function signOut() {
 }
 
 const crumb = computed(() => {
+  if (route.path === '/invoices/new') return 'New invoice'
+  if (/^\/invoices\/[^/]+/.test(route.path) && route.path !== '/invoices/new') {
+    return 'Invoice'
+  }
   for (const section of nav.value) {
     const hit = section.items.find(i => isActive(i.to))
     if (hit) return hit.label

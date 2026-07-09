@@ -367,7 +367,7 @@ export async function getInvoice(db: Db, id: string) {
 }
 
 export async function getInvoiceDetail(db: Db, id: string) {
-  const { resolveCustomerDisplayName } = await import('./entity-snapshots')
+  const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
   const [row] = await db.select({
     invoice: invoices,
     customerName: customers.displayName,
@@ -390,10 +390,38 @@ export async function getInvoiceDetail(db: Db, id: string) {
 
   const lines = await listInvoiceLineItems(db, id)
 
+  let customerName: string
+  try {
+    customerName = resolveCustomerDisplayName(row.customerName, row.invoice.customerSnapshot)
+  }
+  catch {
+    customerName = row.invoice.customerSnapshot?.displayName || row.customerName || 'Customer'
+  }
+
+  const liveVehicle = row.vehicle?.id
+    ? {
+        unitType: row.vehicle.unitType,
+        busNumber: row.vehicle.busNumber,
+        unitTag: row.vehicle.unitTag,
+        year: row.vehicle.year,
+        make: row.vehicle.make,
+        model: row.vehicle.model,
+      }
+    : null
+
+  let vehicleSnapshot: ReturnType<typeof resolveVehicleDisplay>
+  try {
+    vehicleSnapshot = resolveVehicleDisplay(liveVehicle, row.invoice.vehicleSnapshot)
+  }
+  catch {
+    vehicleSnapshot = row.invoice.vehicleSnapshot ?? null
+  }
+
   return {
     ...row.invoice,
     invoiceNumberFormatted: formatInvoiceNumber(row.invoice.invoiceNumber),
-    customerName: resolveCustomerDisplayName(row.customerName, row.invoice.customerSnapshot),
+    customerName,
+    vehicleSnapshot,
     vehicle: row.vehicle?.id ? row.vehicle : null,
     lineItems: lines,
   }
