@@ -1,4 +1,5 @@
 import { useDb } from '../../db/client'
+import { acquireEditingSession } from '../../services/editing-sessions.service'
 import { createInvoice, InvoicesServiceError } from '../../services/invoices.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
@@ -11,7 +12,12 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, invoiceCreateSchema)
 
   try {
-    const invoice = await createInvoice(useDb(), body, actor.id)
+    const db = useDb()
+    const invoice = await createInvoice(db, body, actor.id)
+
+    const authUser = (event.context.auth as { user?: { name?: string, email?: string } })?.user
+    const userName = authUser?.name?.trim() || authUser?.email || 'Staff user'
+    await acquireEditingSession(db, 'invoice', invoice.id, actor.id, userName)
 
     await writeAudit(event, {
       entityType: 'invoice',

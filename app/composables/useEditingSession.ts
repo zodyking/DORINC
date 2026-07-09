@@ -57,7 +57,9 @@ export function useEditingSession(entityType: 'invoice' | 'estimate', entityId: 
         startLockPolling()
       }
       else {
-        error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not acquire edit lock'
+        error.value = (e as { data?: { message?: string, data?: { message?: string } } })?.data?.data?.message
+          ?? (e as { data?: { message?: string } })?.data?.message
+          ?? 'Could not open the editor — refresh and try again'
       }
     }
     finally {

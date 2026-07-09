@@ -30,6 +30,9 @@ export type AuthServiceError
     | 'PORTAL_NOT_LINKED'
     | 'PORTAL_DISABLED'
     | 'TEMP_PASSWORD_EXPIRED'
+    | 'WRONG_PORTAL'
+
+export type LoginPortal = 'customer' | 'staff'
 
 export class AuthError extends Error {
   constructor(public readonly code: AuthServiceError) {
@@ -111,7 +114,7 @@ export async function login(
   db: Db,
   email: string,
   password: string,
-  meta: { ipAddress?: string | null, userAgent?: string | null } = {},
+  meta: { ipAddress?: string | null, userAgent?: string | null, portal?: LoginPortal } = {},
 ): Promise<LoginResult> {
   const [row] = await db
     .select({ user: users, accountTypeKey: accountTypes.key })
@@ -146,6 +149,13 @@ export async function login(
   else {
     if (!row.user.emailVerifiedAt) throw new AuthError('NOT_VERIFIED')
     if (!row.user.approvedAt) throw new AuthError('NOT_APPROVED')
+  }
+
+  if (meta.portal === 'customer' && !isCustomer) {
+    throw new AuthError('WRONG_PORTAL')
+  }
+  if (meta.portal === 'staff' && isCustomer) {
+    throw new AuthError('WRONG_PORTAL')
   }
 
   // Session rotation: revoke any live sessions, then issue a fresh token

@@ -5,6 +5,7 @@ import { invoices, formatInvoiceNumber } from '../db/schema/invoices'
 import { serviceLogs } from '../db/schema/service-logs'
 import { SERVICE_LOG_REVIEW_QUEUE_STATUSES } from './service-logs.service'
 import { countPendingPortalRequests } from './portal-request-review.service'
+import { countPendingDeletionRequests } from './deletion-requests.service'
 import { vehicles } from '../db/schema/vehicles'
 import { customers } from '../db/schema/customers'
 import { getInvoiceListStats } from './invoices.service'
@@ -47,6 +48,7 @@ export interface DashboardActivityItem {
 export interface DashboardReviewQueue {
   serviceLogs: number
   portalRequests: number
+  deletionRequests: number
   aiExtractions: number
   managerApprovals: number
   total: number
@@ -286,13 +288,15 @@ async function reviewQueueCounts(db: Db): Promise<DashboardReviewQueue> {
 
   const serviceLogsN = Number(serviceLogCount?.value ?? 0)
   const portalRequestsN = await countPendingPortalRequests(db)
+  const deletionRequestsN = await countPendingDeletionRequests(db)
   const managerApprovalsN = Number(managerApprovalCount?.value ?? 0)
   return {
     serviceLogs: serviceLogsN,
     portalRequests: portalRequestsN,
+    deletionRequests: deletionRequestsN,
     aiExtractions: 0,
     managerApprovals: managerApprovalsN,
-    total: serviceLogsN + portalRequestsN + managerApprovalsN,
+    total: serviceLogsN + portalRequestsN + deletionRequestsN + managerApprovalsN,
   }
 }
 

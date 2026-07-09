@@ -115,15 +115,23 @@ function histWhen(iso: string): string {
         </div>
         <div class="actions">
           <NuxtLink v-if="canUpdate" :to="`/vehicles/${vehicle.id}/edit`" class="btn">Edit unit</NuxtLink>
+          <RequestDeletionButton
+            v-if="!vehicle.archivedAt"
+            entity-type="vehicle"
+            :entity-id="vehicle.id"
+            :entity-label="vehicleTag(vehicle)"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'; flashKind = 'ok'"
+          />
           <button
-            v-if="canArchive"
+            v-else-if="canArchive"
             class="btn"
             :disabled="busy"
             @click="toggleArchive"
           >
-            {{ vehicle.archivedAt ? 'Restore' : 'Archive' }}
+            Restore
           </button>
-          <button class="btn primary" disabled title="Invoices land later in Phase 1">+ New Invoice</button>
+          <button class="btn primary" disabled title="Coming soon">+ New Invoice</button>
         </div>
       </div>
 
@@ -153,7 +161,7 @@ function histWhen(iso: string): string {
           </div>
           <div class="card">
             <div class="chead"><h3>Recent invoices</h3></div>
-            <div class="empty" style="display:block;">No invoices yet — invoicing lands later in Phase 1.</div>
+            <div class="empty" style="display:block;">No invoices yet.</div>
           </div>
           <div v-if="vehicle.notes" class="card">
             <div class="chead"><h3>Notes</h3></div>
@@ -164,7 +172,7 @@ function histWhen(iso: string): string {
         </div>
         <div class="stack">
           <div class="card">
-            <div class="chead"><h3>Change history</h3><span style="font-size:12px;color:#94a3b8;">Append-only</span></div>
+            <div class="chead"><h3>Change history</h3></div>
             <div v-if="history.length" class="tscroll">
               <table class="tbl hist-log">
                 <thead><tr><th>When</th><th>User</th><th>Change</th></tr></thead>

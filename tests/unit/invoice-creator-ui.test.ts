@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  previewLineAmount,
+  previewLinesSubtotal,
   canProceedWizardStep,
   createEmptyLine,
   dueDateFromTerms,
@@ -30,8 +32,16 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     line.description = 'Diagnostic labor'
     expect(isDraftLineValid(line)).toBe(true)
     expect(canProceedWizardStep(1, { customerId: '', vehicleId: '', lines: [] })).toBe(false)
-    expect(canProceedWizardStep(2, { customerId: 'c1', vehicleId: '', lines: [] })).toBe(false)
-    expect(canProceedWizardStep(2, { customerId: 'c1', vehicleId: 'v1', lines: [] })).toBe(true)
+    expect(canProceedWizardStep(2, { customerId: 'c1', vehicleId: '', lines: [] })).toBe(true)
     expect(canProceedWizardStep(3, { customerId: 'c1', vehicleId: 'v1', lines: [line] })).toBe(true)
+  })
+
+  it('previews line amounts and subtotals while typing', () => {
+    const line = createEmptyLine()
+    line.description = 'Brake labor'
+    line.quantity = '2'
+    line.unitPrice = '145.00'
+    expect(previewLineAmount('2', '145.00')).toBe('290.00')
+    expect(previewLinesSubtotal([line])).toBe('290.00')
   })
 })

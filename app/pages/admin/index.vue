@@ -565,18 +565,6 @@ async function runSmtpTest() {
     </div>
 
     <template v-else-if="status">
-      <div class="admin-banner">
-        <span class="ico">🔐</span>
-        <div>
-          <b>UI-managed configuration — no .env editing</b>
-          <p>
-            Database, SMTP, encryption keys, PDF worker, backups, and AI credentials are stored encrypted
-            in PostgreSQL and managed through this admin UI. The only server requirement is a running Nuxt
-            app plus an external PostgreSQL instance.
-          </p>
-        </div>
-      </div>
-
       <div class="health" style="margin-bottom:16px;">
         <div class="hcard" :class="databaseHealthTone(status.database)">
           <span class="ic">🗄</span>

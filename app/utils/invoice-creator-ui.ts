@@ -1,5 +1,6 @@
 // Invoice creator wizard helpers (mockup: PAGE: INVOICE CREATOR / P1-23).
 
+import { addMoney, multiplyMoney } from '#shared/money'
 import type { InvoiceLineType } from './invoices-ui'
 
 export const INVOICE_WIZARD_STEPS = [
@@ -73,7 +74,62 @@ export function canProceedWizardStep(
   ctx: { customerId: string, vehicleId: string, lines: DraftLine[] },
 ): boolean {
   if (step === 1) return Boolean(ctx.customerId)
-  if (step === 2) return Boolean(ctx.customerId && ctx.vehicleId)
+  if (step === 2) return Boolean(ctx.customerId)
   if (step === 3) return ctx.lines.some(isDraftLineValid)
   return true
+}
+
+/** Live line total while typing — matches server rounding. */
+export function previewLineAmount(quantity: string, unitPrice: string): string {
+  try {
+    if (!quantity.trim() || !unitPrice.trim()) return ''
+    if (Number.parseFloat(quantity) <= 0) return ''
+    if (Number.parseFloat(unitPrice) < 0) return ''
+    return multiplyMoney(quantity, unitPrice)
+  }
+  catch {
+    return ''
+  }
+}
+
+export function previewLinesSubtotal(lines: DraftLine[]): string {
+  const amounts = lines
+    .filter(isDraftLineValid)
+    .map(line => previewLineAmount(line.quantity, line.unitPrice))
+    .filter(Boolean)
+  if (!amounts.length) return '0.00'
+  try {
+    return addMoney(...amounts)
+  }
+  catch {
+    return '0.00'
+  }
+}
+
+export interface DraftTotalsPreview {
+  subtotal: string
+  taxAmount: string
+  taxExempt: boolean
+  feesAmount: string
+  shopSuppliesPercent: string | null
+  discountAmount: string
+  total: string
+}
+
+/** Estimate invoice totals from draft lines before the first save. */
+export function previewDraftTotals(
+  lines: DraftLine[],
+  opts: { taxExempt?: boolean } = {},
+): DraftTotalsPreview {
+  const subtotal = previewLinesSubtotal(lines)
+  const taxExempt = opts.taxExempt ?? false
+  return {
+    subtotal,
+    taxAmount: '0.00',
+    taxExempt,
+    feesAmount: '0',
+    shopSuppliesPercent: null,
+    discountAmount: '0',
+    total: subtotal,
+  }
 }

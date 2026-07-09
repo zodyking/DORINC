@@ -299,15 +299,23 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
           >
             {{ credentialEmails.length ? 'Resend portal invite' : 'Send portal invite' }}
           </button>
+          <RequestDeletionButton
+            v-if="!customer.archivedAt"
+            entity-type="customer"
+            :entity-id="customer.id"
+            :entity-label="customer.displayName"
+            :disabled="busy"
+            @submitted="flash = 'Deletion request submitted for admin review'; flashKind = 'ok'"
+          />
           <button
-            v-if="canArchive"
+            v-else-if="canArchive"
             class="btn"
             :disabled="busy"
             @click="toggleArchive"
           >
-            {{ customer.archivedAt ? 'Restore' : 'Archive' }}
+            Restore
           </button>
-          <button class="btn primary" disabled title="Invoices land later in Phase 1">+ New Invoice</button>
+          <button class="btn primary" disabled title="Coming soon">+ New Invoice</button>
         </div>
       </div>
 
@@ -324,7 +332,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
         <div class="stack">
           <div class="card">
             <div class="chead"><h3>Invoices</h3></div>
-            <div class="empty" style="display:block;">No invoices yet — invoicing lands later in Phase 1.</div>
+            <div class="empty" style="display:block;">No invoices yet.</div>
           </div>
 
           <div class="card">
@@ -445,7 +453,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
             </div>
           </div>
           <div class="card">
-            <div class="chead"><h3>Change history</h3><span style="font-size:12px;color:#94a3b8;">Append-only</span></div>
+            <div class="chead"><h3>Change history</h3></div>
             <div v-if="history.length" class="tscroll">
               <table class="tbl hist-log">
                 <thead><tr><th>When</th><th>User</th><th>Change</th></tr></thead>

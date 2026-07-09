@@ -47,6 +47,25 @@ afterAll(async () => {
 })
 
 describe('P2-01 customer credential email flow', () => {
+  it('enables portal from account email when no contact exists yet', async () => {
+    const accountEmail = `account-only@${emailDomain}`
+    const customer = await createCustomer(db, {
+      displayName: `PortalAccountEmail-${stamp}`,
+      accountKind: 'fleet',
+      email: accountEmail,
+    }, STAFF)
+
+    const enabled = await setPortalAccess(db, customer.id, true, STAFF)
+    expect(enabled.customer.portalEnabled).toBe(true)
+
+    const summary = await getPortalAccessSummary(db, customer.id)
+    expect(summary.userCount).toBe(1)
+    expect(summary.users[0]?.email).toBe(accountEmail)
+
+    await db.delete(customers).where(eq(customers.id, customer.id))
+    await db.delete(users).where(eq(users.email, accountEmail))
+  })
+
   it('enables portal access, sends credentials, and logs every send', async () => {
     const customer = await createCustomer(db, {
       displayName: `PortalTest-${stamp}`,

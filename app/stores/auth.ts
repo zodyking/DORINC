@@ -38,10 +38,10 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
     },
 
-    async login(email: string, password: string) {
+    async login(email: string, password: string, portal: 'customer' | 'staff') {
       const res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
         method: 'POST',
-        body: { email, password },
+        body: { email, password, portal },
       })
       this.user = res.user
       await this.fetchMe()

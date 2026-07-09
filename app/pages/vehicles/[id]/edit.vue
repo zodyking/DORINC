@@ -33,8 +33,8 @@ const v = data.value?.vehicle
 const form = reactive<VehicleFormValue>({
   customerId: v?.customerId ?? '',
   unitType: v?.unitType ?? 'truck',
-  busNumber: v?.busNumber ?? '',
-  unitTag: v?.unitTag ?? '',
+  busNumber: v?.busNumber || v?.unitTag || '',
+  unitTag: '',
   vin: v?.vin ?? '',
   plate: v?.plate ?? '',
   year: v?.year != null ? String(v.year) : '',
@@ -61,7 +61,7 @@ async function submit() {
       body: {
         unitType: form.unitType,
         busNumber: form.busNumber || null,
-        unitTag: form.unitTag || null,
+        unitTag: null,
         vin: form.vin || null,
         plate: form.plate || null,
         year: form.year ? Number(form.year) : null,

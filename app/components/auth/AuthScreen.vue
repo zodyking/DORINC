@@ -38,7 +38,7 @@ async function submitLogin(email: string, password: string) {
   busy.value = true
   error.value = ''
   try {
-    const user = await auth.login(email, password)
+    const user = await auth.login(email, password, card.value)
     await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
   }
   catch (err) {

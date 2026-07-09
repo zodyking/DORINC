@@ -51,6 +51,7 @@ interface DashboardPayload {
     reviewQueue: {
       serviceLogs: number
       portalRequests: number
+      deletionRequests: number
       aiExtractions: number
       managerApprovals: number
       total: number
@@ -234,6 +235,10 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
                 <dt>Portal requests</dt>
                 <dd>
                   <NuxtLink to="/portal-requests">{{ dash.billing.reviewQueue.portalRequests }} pending</NuxtLink>
+                </dd>
+                <dt>Deletion requests</dt>
+                <dd>
+                  <NuxtLink to="/deletion-requests">{{ dash.billing.reviewQueue.deletionRequests }} pending</NuxtLink>
                 </dd>
                 <dt>AI extractions</dt>
                 <dd>{{ dash.billing.reviewQueue.aiExtractions }} to approve</dd>

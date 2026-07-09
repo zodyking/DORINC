@@ -167,7 +167,7 @@ function activityTitle(a: ActivityRow): string {
             <button class="btn primary" :disabled="busy" @click="approve">Approve</button>
           </template>
           <template v-else>
-            <button class="btn" disabled title="Available in a later phase">Reset password</button>
+            <button class="btn" disabled title="Coming soon">Reset password</button>
             <button
               v-if="canManage && !isSuperAdminRecord"
               class="btn"

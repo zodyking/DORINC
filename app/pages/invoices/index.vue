@@ -101,7 +101,7 @@ function openInvoice(id: string) {
         <p>{{ subtitle }}</p>
       </div>
       <div class="actions">
-        <button type="button" class="btn" disabled title="Export arrives in a later phase">Export CSV</button>
+        <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary">+ New Invoice</NuxtLink>
       </div>
     </div>
@@ -115,7 +115,7 @@ function openInvoice(id: string) {
       <div class="kpi">
         <div class="t">Paid this month</div>
         <div class="v">{{ moneyDisplay(stats?.paidThisMonthTotal) }}</div>
-        <div class="d up">From API totals</div>
+        <div class="d up">Payments received</div>
       </div>
       <div class="kpi">
         <div class="t">Overdue</div>

@@ -137,7 +137,7 @@ async function submitPayment() {
                 :max="invoice.balanceDue"
                 inputmode="decimal"
               >
-              <span class="help">Server validates against open balance — numeric(12,2)</span>
+              <span class="help">Must not exceed the open balance</span>
               <span v-if="amountError" class="help" style="color:#dc2626;">{{ amountError }}</span>
             </label>
             <label class="fld">

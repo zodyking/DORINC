@@ -88,4 +88,19 @@ export default defineNuxtConfig({
       },
     },
   },
+
+  hooks: {
+    'pages:extend'(pages) {
+      for (const page of pages) {
+        if (page.meta?.layout !== 'staff') continue
+        const existing = page.meta.middleware
+        const list = existing
+          ? (Array.isArray(existing) ? existing : [existing])
+          : []
+        if (!list.includes('staff-auth')) {
+          page.meta.middleware = ['staff-auth', ...list]
+        }
+      }
+    },
+  },
 })

@@ -43,7 +43,7 @@ async function submit() {
         customerId: form.customerId,
         unitType: form.unitType,
         busNumber: form.busNumber || null,
-        unitTag: form.unitTag || null,
+        unitTag: null,
         vin: form.vin || null,
         plate: form.plate || null,
         year: form.year ? Number(form.year) : null,

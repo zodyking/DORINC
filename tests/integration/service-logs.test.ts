@@ -279,4 +279,15 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
     await expect(convertServiceLogToInvoice(db, log.id, MECHANIC))
       .rejects.toThrow('ALREADY_CONVERTED')
   })
+
+  it('keeps converted logs in the all list but not the review queue', async () => {
+    const log = await approvedLog()
+    const { log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+
+    const all = await listServiceLogs(db, { customerId: owner.id, page: 1, pageSize: 50 })
+    expect(all.items.some(i => i.id === converted.id && i.status === 'converted_to_invoice')).toBe(true)
+
+    const review = await listServiceLogs(db, { customerId: owner.id, queue: 'review', page: 1, pageSize: 50 })
+    expect(review.items.some(i => i.id === converted.id)).toBe(false)
+  })
 })

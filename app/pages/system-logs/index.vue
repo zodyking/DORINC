@@ -105,7 +105,7 @@ const rangeLabel = computed(() => {
 
 const subtitle = computed(() => {
   const n = total.value
-  return `${n.toLocaleString()} event${n === 1 ? '' : 's'} · append-only audit trail`
+  return `${n.toLocaleString()} event${n === 1 ? '' : 's'}`
 })
 </script>
 
@@ -121,7 +121,7 @@ const subtitle = computed(() => {
         <p>Platform-wide events — settings, security, imports, backups, and jobs</p>
       </div>
       <div class="actions">
-        <button type="button" class="btn" disabled title="Export arrives in a later phase">Export log</button>
+        <button type="button" class="btn" disabled title="Coming soon">Export log</button>
       </div>
     </div>
 

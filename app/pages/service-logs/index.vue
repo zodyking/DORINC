@@ -32,14 +32,16 @@ const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && aut
 const q = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
+const viewMode = ref<'all' | 'review'>('all')
 
 watch(q, () => { page.value = 1 })
+watch(viewMode, () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
-  queue: canReview.value ? 'review' as const : undefined,
+  queue: canReview.value && viewMode.value === 'review' ? 'review' as const : undefined,
   sort: 'newest' as const,
 }))
 
@@ -53,7 +55,8 @@ const total = computed(() => data.value?.total ?? 0)
 const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Service Logs')
 const queueTitle = computed(() => {
   if (isMechanicScope.value) return `My logs · ${total.value}`
-  return `Review queue · ${total.value}`
+  if (viewMode.value === 'review') return `Review queue · ${total.value}`
+  return `All logs · ${total.value}`
 })
 
 function openLog(id: string) {
@@ -69,7 +72,9 @@ function openLog(id: string) {
         <p id="sl-page-sub">
           {{ isMechanicScope
             ? 'Your field uploads and their review status'
-            : 'Field uploads land here for review before they become invoice lines' }}
+            : viewMode === 'review'
+              ? 'Logs awaiting accountant review before invoicing'
+              : 'All field service logs — including those already linked to invoices' }}
         </p>
       </div>
       <div class="actions">
@@ -80,7 +85,25 @@ function openLog(id: string) {
     <div class="card">
       <div class="chead">
         <h3>{{ queueTitle }}</h3>
-        <div class="right">
+        <div class="right" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <div v-if="canReview" class="chiprow" role="tablist" aria-label="Service log view" style="margin:0;">
+            <button
+              type="button"
+              class="chip"
+              :class="{ on: viewMode === 'all' }"
+              @click="viewMode = 'all'"
+            >
+              All logs
+            </button>
+            <button
+              type="button"
+              class="chip"
+              :class="{ on: viewMode === 'review' }"
+              @click="viewMode = 'review'"
+            >
+              Review queue
+            </button>
+          </div>
           <div class="search" style="width:220px; height:32px;">
             <span class="gl">⌕</span>
             <input

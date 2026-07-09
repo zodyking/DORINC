@@ -195,7 +195,6 @@ const avInitials = computed(() => initials(displayName.value))
             <label class="fld">
               New password
               <input v-model="newPassword" type="password" placeholder="Minimum 12 characters" autocomplete="new-password">
-              <span class="help">Hashed with Argon2id — never stored in plain text.</span>
             </label>
             <p v-if="passwordMessage" style="color:#059669; font-size:13px;">{{ passwordMessage }}</p>
             <p v-if="passwordError" style="color:#dc2626; font-size:13px;">{{ passwordError }}</p>

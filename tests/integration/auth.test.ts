@@ -104,23 +104,23 @@ describe('P1-03 login + session lifecycle', () => {
       requestedAccountType: 'viewer',
     })
 
-    await expect(login(db, email, 'a-long-password-123')).rejects.toThrow('NOT_VERIFIED')
+    await expect(login(db, email, 'a-long-password-123', { portal: 'staff' })).rejects.toThrow('NOT_VERIFIED')
     await verifyEmail(db, verificationToken)
-    await expect(login(db, email, 'a-long-password-123')).rejects.toThrow('NOT_APPROVED')
+    await expect(login(db, email, 'a-long-password-123', { portal: 'staff' })).rejects.toThrow('NOT_APPROVED')
   })
 
   it('logs in, resolves the session, rotates on re-login, revokes on logout', async () => {
     const { email, userId } = await makeApprovedUser('session')
 
-    await expect(login(db, email, 'wrong-password')).rejects.toThrow('INVALID_CREDENTIALS')
+    await expect(login(db, email, 'wrong-password', { portal: 'staff' })).rejects.toThrow('INVALID_CREDENTIALS')
 
-    const first = await login(db, email, 'a-long-password-123')
+    const first = await login(db, email, 'a-long-password-123', { portal: 'staff' })
     const resolved = await resolveSession(db, first.sessionToken)
     expect(resolved?.user.id).toBe(userId)
     expect(resolved?.user.accountType).toBe('accountant')
 
     // Rotation: a second login revokes the first session
-    const second = await login(db, email, 'a-long-password-123')
+    const second = await login(db, email, 'a-long-password-123', { portal: 'staff' })
     expect(await resolveSession(db, first.sessionToken)).toBeNull()
     expect(await resolveSession(db, second.sessionToken)).not.toBeNull()
 
@@ -130,7 +130,7 @@ describe('P1-03 login + session lifecycle', () => {
 
   it('expires sessions after inactivity', async () => {
     const { email } = await makeApprovedUser('idle')
-    const { sessionToken } = await login(db, email, 'a-long-password-123')
+    const { sessionToken } = await login(db, email, 'a-long-password-123', { portal: 'staff' })
 
     // Simulate 2h idle
     await db.update(sessions)
@@ -143,6 +143,13 @@ describe('P1-03 login + session lifecycle', () => {
   it('blocks disabled users', async () => {
     const { email, userId } = await makeApprovedUser('disabled')
     await db.update(users).set({ isActive: false, disabledAt: new Date() }).where(eq(users.id, userId))
-    await expect(login(db, email, 'a-long-password-123')).rejects.toThrow(AuthError)
+    await expect(login(db, email, 'a-long-password-123', { portal: 'staff' })).rejects.toThrow(AuthError)
+  })
+
+  it('rejects staff login via customer portal and customer via staff portal', async () => {
+    const { email } = await makeApprovedUser('portal-split-staff')
+    await expect(
+      login(db, email, 'a-long-password-123', { portal: 'customer' }),
+    ).rejects.toThrow('WRONG_PORTAL')
   })
 })

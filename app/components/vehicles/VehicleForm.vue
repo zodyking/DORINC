@@ -96,8 +96,8 @@ async function decodeVin() {
                 <option v-for="c in props.customers" :key="c.id" :value="c.id">{{ c.displayName }}</option>
               </select>
             </label>
-            <label class="fld">Fleet / bus number
-              <input v-model="model.busNumber" type="text" placeholder="e.g. HL-120">
+            <label class="fld">Fleet tag
+              <input v-model="model.busNumber" type="text" placeholder="e.g. HL-120, Bus #43">
               <span class="help">How the team identifies this unit — unique per customer</span>
             </label>
             <label class="fld">Unit type
@@ -108,9 +108,6 @@ async function decodeVin() {
                 <option value="tractor">Tractor</option>
                 <option value="other">Other</option>
               </select>
-            </label>
-            <label class="fld">Unit tag / nickname
-              <input v-model="model.unitTag" type="text" placeholder="e.g. Yard loader, tri-axle dump">
             </label>
             <label class="fld">Status
               <select v-model="model.status">
@@ -160,7 +157,7 @@ async function decodeVin() {
           <div class="cbody">
             <div class="row2odo">
               <label class="fld">Odometer / hours <input v-model="model.odometer" type="number" min="0" step="0.1" placeholder="412806"></label>
-              <label class="fld">Unit
+              <label class="fld">Reading in
                 <select v-model="model.odometerUnit">
                   <option value="mi">Miles</option>
                   <option value="hrs">Hours</option>

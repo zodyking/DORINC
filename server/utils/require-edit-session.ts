@@ -24,7 +24,7 @@ export async function requireEditSession(
         })
       }
       if (err.code === 'SESSION_REQUIRED') {
-        throw apiError(event, 'EDIT_SESSION_ACTIVE', 'Acquire an editing session before making changes')
+        throw apiError(event, 'EDIT_SESSION_ACTIVE', 'This invoice is locked — refresh the page and try again')
       }
     }
     throw err

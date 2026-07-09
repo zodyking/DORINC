@@ -325,7 +325,7 @@ async function testRenderPdf() {
       `/api/invoice-templates/${template.value.id}/test-pdf`,
       { method: 'POST', body: { designSettings: designSettingsFromForm(form) } },
     )
-    actionMessage.value = `Test PDF queued (job ${job.id.slice(0, 8)}…) — check pdf-worker queue`
+    actionMessage.value = 'Test PDF queued — it will appear in your downloads shortly.'
   }
   catch (e: unknown) {
     actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Test render failed'
@@ -608,8 +608,6 @@ async function testRenderPdf() {
             </div>
           </div>
           <dl class="kv" style="margin:0; border-top:1px solid #f1f5f9;">
-            <dt>Render engine</dt><dd>Playwright Chromium</dd>
-            <dt>Source</dt><dd>HTML template</dd>
             <dt>Version</dt><dd>{{ versionMeta }}</dd>
             <dt>Used by</dt><dd>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</dd>
             <dt>Paper</dt><dd>{{ form.pageSize }} · {{ form.marginInches }}in margins</dd>

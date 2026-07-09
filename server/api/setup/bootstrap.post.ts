@@ -60,6 +60,7 @@ export default defineEventHandler(async (event) => {
     const result = await login(db, user.email, body.password, {
       ipAddress: getRequestIP(event, { xForwardedFor: true }),
       userAgent: getHeader(event, 'user-agent'),
+      portal: 'staff',
     })
     setSessionCookie(event, result.sessionToken)
 

@@ -33,6 +33,7 @@ interface Invoice {
   poNumber: string | null
   customerId: string
   vehicleId: string | null
+  serviceLogId: string | null
   customerName: string
   customerSnapshot: CustomerSnapshotBits
   vehicleSnapshot: InvoiceVehicleSnapshotDisplay | null
@@ -80,6 +81,11 @@ const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
 const lines = computed(() => invoice.value?.lineItems ?? [])
 
+const { data: linkedLogData } = await useFetch<{ log: { logNumber: number } }>(
+  () => (invoice.value?.serviceLogId ? `/api/service-logs/${invoice.value.serviceLogId}` : null),
+  { watch: [() => invoice.value?.serviceLogId] },
+)
+
 const canRead = computed(() => auth.can('invoices.read.all'))
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
@@ -110,7 +116,7 @@ const busy = ref(false)
 const actionError = ref('')
 
 async function runAdminForceRelease() {
-  const reason = window.prompt('Reason for force-releasing this edit lock (required):')
+  const reason = window.prompt('Reason for unlocking this invoice for editing (required):')
   if (!reason?.trim()) return
   await forceRelease(reason.trim())
 }
@@ -182,7 +188,7 @@ const summaryRows = computed(() => {
           type="button"
           class="btn"
           disabled
-          :title="canGeneratePdf ? 'PDF generation arrives in P1-29' : 'Requires generate PDF permission'"
+          :title="canGeneratePdf ? 'Coming soon' : 'Requires generate PDF permission'"
         >
           Download PDF
         </button>
@@ -191,7 +197,7 @@ const summaryRows = computed(() => {
           type="button"
           class="btn"
           disabled
-          title="Send reminder arrives with SMTP integration"
+          title="Coming soon"
         >
           Send reminder
         </button>
@@ -236,6 +242,14 @@ const summaryRows = computed(() => {
         >
           Record payment
         </NuxtLink>
+        <RequestDeletionButton
+          v-if="invoice.status !== 'void' && invoice.status !== 'paid'"
+          entity-type="invoice"
+          :entity-id="invoice.id"
+          :entity-label="invoice.invoiceNumberFormatted"
+          :disabled="busy"
+          @submitted="refresh()"
+        />
       </div>
     </div>
 
@@ -367,10 +381,23 @@ const summaryRows = computed(() => {
           </dl>
         </div>
 
+        <div v-if="invoice.serviceLogId" class="card">
+          <div class="chead">
+            <h3>Source service log</h3>
+            <div class="right">
+              <NuxtLink :to="`/service-logs/${invoice.serviceLogId}`" class="btn ghost sm">View →</NuxtLink>
+            </div>
+          </div>
+          <dl class="kv">
+            <dt>Log</dt>
+            <dd>{{ logNumberDisplay(linkedLogData?.log?.logNumber ?? 0) }}</dd>
+            <dt>Status</dt><dd>Linked to this invoice</dd>
+          </dl>
+        </div>
+
         <div class="card">
           <div class="chead">
             <h3>Change history</h3>
-            <span style="font-size:12px;color:#94a3b8;">Append-only</span>
           </div>
           <div class="tscroll">
             <table class="tbl hist-log">

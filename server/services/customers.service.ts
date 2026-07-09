@@ -37,6 +37,17 @@ export async function createCustomer(db: Db, input: CustomerInput, createdBy: st
     notes: input.notes ?? null,
     createdBy,
   }).returning()
+
+  const accountEmail = input.email?.trim()
+  if (accountEmail) {
+    await addContact(db, row!.id, {
+      name: input.displayName.trim(),
+      email: accountEmail,
+      phone: input.phone ?? null,
+      isPrimary: true,
+    })
+  }
+
   return row!
 }
 

@@ -85,6 +85,10 @@ export const PERMISSIONS = {
 
   // Portal request review (staff)
   'portal_requests.review.all': 'Review customer portal requests',
+
+  // Deletion requests (staff submit → admin approve)
+  'deletion_requests.submit.all': 'Request record deletion',
+  'deletion_requests.review.all': 'Approve or reject deletion requests',
 } as const
 
 export type PermissionKey = keyof typeof PERMISSIONS
@@ -115,7 +119,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'catalog.read.all', 'catalog.manage.all',
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
-    'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
+    'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all', 'invoices.void.all',
     'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
     'templates.read.all',
     'reports.read.all',
@@ -124,6 +128,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'audit.read.all',
     'ai.describe.all', 'ai.help.all',
     'portal_requests.review.all',
+    'deletion_requests.submit.all',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',
@@ -132,13 +137,14 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'catalog.read.all', 'catalog.manage.all',
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
-    'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
+    'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all', 'invoices.void.all',
     'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
     'templates.read.all',
     'reports.read.all',
     'files.upload.all', 'files.read.all',
     'ai.extract.all', 'ai.describe.all', 'ai.help.all',
     'portal_requests.review.all',
+    'deletion_requests.submit.all',
   ],
   mechanic: [
     'customers.read.all',
@@ -146,6 +152,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'service_logs.read.own', 'service_logs.upload.own',
     'files.upload.all',
     'ai.help.all',
+    'deletion_requests.submit.all',
   ],
   viewer: [
     'customers.read.all',

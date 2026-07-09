@@ -12,6 +12,7 @@ import { emailSchema } from '../../../shared/validators/common'
 const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1).max(200),
+  portal: z.enum(['customer', 'staff']),
 })
 
 export default defineEventHandler(async (event) => {
@@ -22,6 +23,7 @@ export default defineEventHandler(async (event) => {
     const result = await login(useDb(), body.email, body.password, {
       ipAddress: getRequestIP(event, { xForwardedFor: true }),
       userAgent: getHeader(event, 'user-agent'),
+      portal: body.portal,
     })
 
     setSessionCookie(event, result.sessionToken)
@@ -78,6 +80,15 @@ export default defineEventHandler(async (event) => {
           throw apiError(event, 'FORBIDDEN', 'Portal access is not enabled for this account', { reason: 'portal_disabled' })
         case 'PORTAL_NOT_LINKED':
           throw apiError(event, 'FORBIDDEN', 'Portal account is not linked to a customer', { reason: 'portal_not_linked' })
+        case 'WRONG_PORTAL':
+          throw apiError(
+            event,
+            'FORBIDDEN',
+            body.portal === 'customer'
+              ? 'Use the staff portal to sign in'
+              : 'Use the customer portal to sign in',
+            { reason: 'wrong_portal' },
+          )
       }
     }
     throw err

@@ -45,13 +45,13 @@ describe('P1-05 admin approve/reject', () => {
 
   it('approve grants the requested account type and enables login', async () => {
     const pending = await makeVerifiedPendingUser('approve')
-    await expect(login(db, pending.email, PASSWORD)).rejects.toThrow('NOT_APPROVED')
+    await expect(login(db, pending.email, PASSWORD, { portal: 'staff' })).rejects.toThrow('NOT_APPROVED')
 
     const result = await approveUser(db, { userId: pending.id, approvedBy: FAKE_ADMIN_ID })
     expect(result.accountTypeKey).toBe('mechanic')
     expect(result.user.approvedAt).not.toBeNull()
 
-    const session = await login(db, pending.email, PASSWORD)
+    const session = await login(db, pending.email, PASSWORD, { portal: 'staff' })
     expect(session.accountTypeKey).toBe('mechanic')
   })
 
@@ -63,7 +63,7 @@ describe('P1-05 admin approve/reject', () => {
       accountTypeKey: 'accountant',
     })
     expect(result.accountTypeKey).toBe('accountant')
-    const session = await login(db, pending.email, PASSWORD)
+    const session = await login(db, pending.email, PASSWORD, { portal: 'staff' })
     expect(session.accountTypeKey).toBe('accountant')
   })
 
@@ -87,7 +87,7 @@ describe('P1-05 admin approve/reject', () => {
     expect(result.user.rejectedAt).not.toBeNull()
     expect(result.user.isActive).toBe(false)
 
-    await expect(login(db, pending.email, PASSWORD)).rejects.toThrow(/DISABLED|NOT_APPROVED/)
+    await expect(login(db, pending.email, PASSWORD, { portal: 'staff' })).rejects.toThrow(/DISABLED|NOT_APPROVED/)
   })
 
   it('approve/reject require a pending user', async () => {

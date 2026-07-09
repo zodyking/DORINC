@@ -9,7 +9,7 @@ import {
   customers,
 } from '../db/schema/customers'
 import { enqueueJob } from './jobs.service'
-import { getCustomer, listContacts } from './customers.service'
+import { addContact, getCustomer, listContacts } from './customers.service'
 import { getAppUrl } from './app-config.service'
 
 export const TEMP_PASSWORD_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -46,9 +46,22 @@ async function resolveContact(db: Db, customerId: string, contactId?: string) {
     if (!match) throw new PortalAccessServiceError('CONTACT_NOT_FOUND')
     return match
   }
-  return contacts.find(c => c.isPrimary && c.email)
+
+  const existing = contacts.find(c => c.isPrimary && c.email)
     ?? contacts.find(c => c.email)
-    ?? null
+  if (existing) return existing
+
+  // Account email counts for portal access — create a primary contact when none exists yet.
+  const customer = await getCustomer(db, customerId)
+  const accountEmail = customer.email?.trim()
+  if (!accountEmail) return null
+
+  return addContact(db, customerId, {
+    name: customer.displayName,
+    email: accountEmail,
+    phone: customer.phone ?? null,
+    isPrimary: true,
+  })
 }
 
 export interface PortalUserSummary {

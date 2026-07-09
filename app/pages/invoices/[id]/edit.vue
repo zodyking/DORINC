@@ -8,7 +8,7 @@ import {
   editorSummaryRows,
   formatHistoryChange,
 } from '~/utils/invoice-editor-ui'
-import { dueDateFromTerms, LINE_TYPE_OPTIONS } from '~/utils/invoice-creator-ui'
+import { dueDateFromTerms, LINE_TYPE_OPTIONS, previewLineAmount, previewLinesSubtotal } from '~/utils/invoice-creator-ui'
 import {
   auditWhenDisplay,
   invoiceDateDisplay,
@@ -88,6 +88,7 @@ const {
   lockedByOther,
   loading: sessionLoading,
   canEdit,
+  error: sessionError,
 } = useEditingSession('invoice', id)
 
 const { data, refresh, error } = await useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
@@ -126,9 +127,24 @@ const pill = computed(() => {
   return invoiceStatusPill(invoice.value.status as 'draft', invoice.value.dueDate, '0')
 })
 
-const summaryRows = computed(() =>
-  invoice.value ? editorSummaryRows(invoice.value) : [],
-)
+const summaryRows = computed(() => {
+  if (!invoice.value) return []
+  const liveSubtotal = previewLinesSubtotal(lines.value.map(line => ({
+    localId: line.id,
+    lineType: line.lineType,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+  })))
+  if (liveSubtotal === invoice.value.subtotal) {
+    return editorSummaryRows(invoice.value)
+  }
+  return editorSummaryRows({
+    ...invoice.value,
+    subtotal: liveSubtotal,
+    total: liveSubtotal,
+  })
+})
 
 const autosaveText = computed(() => {
   void autosaveTick.value
@@ -568,7 +584,7 @@ const aiPopStyle = computed(() => {
         </div>
         <div class="actions">
           <NuxtLink to="/templates/designer" class="btn">Template designer</NuxtLink>
-          <button type="button" class="btn" disabled title="PDF generation arrives in P1-29">Preview PDF</button>
+          <button type="button" class="btn" disabled title="Coming soon">Preview PDF</button>
         </div>
       </div>
 
@@ -581,7 +597,8 @@ const aiPopStyle = computed(() => {
         </div>
       </div>
 
-      <div v-else-if="sessionLoading" class="help" style="margin:-8px 0 16px;">Acquiring edit lock…</div>
+      <div v-else-if="sessionLoading" class="help" style="margin:-8px 0 16px;">Loading editor…</div>
+      <div v-else-if="sessionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ sessionError }}</div>
 
       <div v-if="!isDraft" class="card" style="margin-bottom:16px;">
         <div class="cbody">
@@ -734,7 +751,7 @@ const aiPopStyle = computed(() => {
                       <td>
                         <input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" :disabled="!editable" @blur="patchLine(line)">
                       </td>
-                      <td class="amt">{{ moneyDisplay(line.lineAmount) }}</td>
+                      <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount) }}</td>
                       <td>
                         <button
                           type="button"
@@ -764,7 +781,6 @@ const aiPopStyle = computed(() => {
             </div>
 
             <div v-if="editable" class="savebar">
-              <span class="note">Totals are recomputed server-side on save — numeric(12,2).</span>
               <button type="button" class="btn" :disabled="busy" @click="patchHeader">Save draft</button>
               <NuxtLink :to="`/invoices/${id}`" class="btn danger">Discard</NuxtLink>
               <button
@@ -805,8 +821,6 @@ const aiPopStyle = computed(() => {
             <div class="card">
               <div class="chead"><h3>PDF output</h3></div>
               <dl class="kv">
-                <dt>Engine</dt><dd>Playwright PDF</dd>
-                <dt>Template</dt><dd>Bill Matrix v2</dd>
                 <dt>Paper</dt><dd>Letter · 0.5in margins</dd>
                 <dt>Delivery</dt><dd>Portal + email</dd>
               </dl>
@@ -815,7 +829,6 @@ const aiPopStyle = computed(() => {
             <div class="card">
               <div class="chead">
                 <h3>Change history</h3>
-                <span style="font-size:12px;color:#94a3b8;">Append-only</span>
               </div>
               <div class="tscroll">
                 <table class="tbl hist-log">
@@ -851,7 +864,7 @@ const aiPopStyle = computed(() => {
                 <div class="photos ed-log-photos">
                   <div v-for="f in (serviceLogData?.files ?? []).slice(0, 8)" :key="f.id" class="photo">🖼</div>
                 </div>
-                <p class="help" style="margin-top:12px;">Tap to enlarge · originals stored in PostgreSQL bytea</p>
+                <p class="help" style="margin-top:12px;">Tap to enlarge</p>
               </div>
             </div>
             <div class="card">

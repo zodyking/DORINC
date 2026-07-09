@@ -4,6 +4,8 @@ import { parsePostgresConnectionString } from '#shared/postgres-connection'
 
 definePageMeta({ layout: false })
 
+const auth = useAuthStore()
+
 const steps = ['Welcome', 'Database', 'Security', 'Email', 'PDF', 'Backup', 'AI', 'Admin'] as const
 
 const welcomeSlides = [
@@ -543,7 +545,9 @@ async function next() {
       method: 'POST',
       body: { name: admin.name, email: admin.email, password: admin.password },
     })
+    await auth.fetchMe()
     done.value = true
+    await navigateTo('/admin')
   }
   catch (err) {
     error.value = (err as { data?: { message?: string } })?.data?.message ?? 'Bootstrap failed — check the fields and try again'

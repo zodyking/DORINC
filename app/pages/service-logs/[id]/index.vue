@@ -216,6 +216,7 @@ async function reviewExtraction(action: 'accept' | 'edit' | 'reject') {
 
 const busy = ref(false)
 const actionError = ref('')
+const convertFlash = ref('')
 
 async function changeStatus(status: ServiceLogStatus, reason?: string) {
   if (!log.value) return
@@ -237,15 +238,19 @@ async function convertToInvoice() {
   if (!log.value) return
   busy.value = true
   actionError.value = ''
+  convertFlash.value = ''
   try {
-    const { invoice } = await $fetch<{ invoice: { id: string } }>(
+    const { invoice } = await $fetch<{ invoice: { id: string, invoiceNumberFormatted?: string } }>(
       `/api/service-logs/${id}/convert-to-invoice`,
       { method: 'POST', body: {} },
     )
-    await navigateTo(`/invoices/${invoice.id}/edit`)
+    await refresh()
+    convertFlash.value = invoice.id
   }
   catch (e: unknown) {
     actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Invoice conversion failed'
+  }
+  finally {
     busy.value = false
   }
 }
@@ -336,15 +341,43 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
         </button>
         <NuxtLink
           v-if="log.status === 'converted_to_invoice' && log.invoiceId"
+          :to="`/invoices/${log.invoiceId}`"
+          class="btn"
+        >
+          View invoice
+        </NuxtLink>
+        <NuxtLink
+          v-if="log.status === 'converted_to_invoice' && log.invoiceId"
           :to="`/invoices/${log.invoiceId}/edit`"
           class="btn primary"
         >
           Edit invoice
         </NuxtLink>
+        <RequestDeletionButton
+          v-if="log.status !== 'archived' && log.status !== 'converted_to_invoice'"
+          entity-type="service_log"
+          :entity-id="log.id"
+          :entity-label="logNumberDisplay(log.logNumber)"
+          :disabled="busy"
+        />
       </div>
     </div>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
+    <p v-if="convertFlash" class="flash ok" style="margin:-8px 0 16px;">
+      Invoice created and linked to this service log. The log stays on file.
+      <NuxtLink :to="`/invoices/${convertFlash}`">View invoice</NuxtLink>
+      ·
+      <NuxtLink :to="`/invoices/${convertFlash}/edit`">Edit invoice</NuxtLink>
+    </p>
+    <p
+      v-else-if="log.status === 'converted_to_invoice' && log.invoiceId"
+      class="flash ok"
+      style="margin:-8px 0 16px;"
+    >
+      This service log is linked to an invoice and remains on file.
+      <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
+    </p>
     <p v-if="log.statusReason" class="help" style="margin:-8px 0 16px;">
       Review note: {{ log.statusReason }}
     </p>
@@ -447,9 +480,6 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
                 <span v-else>{{ fileThumbEmoji(f.mimeType, f.fileKind) }}</span>
               </button>
             </div>
-            <p style="margin:12px 0 0; font-size:12.5px; color:#64748b;">
-              Stored in PostgreSQL bytea · thumbnails generated on upload
-            </p>
           </div>
         </div>
 
@@ -501,6 +531,12 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
             <dt>Location</dt><dd>{{ log.location ?? '—' }}</dd>
             <dt>Work type</dt><dd>{{ workTypeLabel(log.workType) }}</dd>
             <dt>Status</dt><dd><span :class="pill.cls">{{ pill.label }}</span></dd>
+            <template v-if="log.invoiceId">
+              <dt>Linked invoice</dt>
+              <dd>
+                <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
+              </dd>
+            </template>
           </dl>
         </div>
 

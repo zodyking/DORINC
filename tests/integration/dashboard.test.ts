@@ -36,6 +36,7 @@ describe('P1-37 dashboard service', () => {
     expect(dash.billing?.reviewQueue).toMatchObject({
       serviceLogs: expect.any(Number),
       portalRequests: expect.any(Number),
+      deletionRequests: expect.any(Number),
       aiExtractions: 0,
     })
   })

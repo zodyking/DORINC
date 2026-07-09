@@ -7,6 +7,7 @@ interface CustomerPick {
   displayName: string
   accountKind: string
   paymentTerms: string
+  taxExempt: boolean
 }
 
 interface VehiclePick extends VehicleDisplay {
@@ -56,6 +57,8 @@ const lastSavedAt = ref<Date | null>(null)
 const invoiceId = ref<string | null>(null)
 const invoiceNumberFormatted = ref<string | null>(null)
 const savedInvoice = ref<SavedInvoiceTotals | null>(null)
+const editingSessionId = ref<string | null>(null)
+let editingHeartbeatTimer: ReturnType<typeof setInterval> | null = null
 
 const customerId = ref('')
 const vehicleId = ref('')
@@ -139,8 +142,9 @@ const autosaveClass = computed(() => {
 })
 
 const summaryRows = computed(() => {
-  const inv = savedInvoice.value
-  if (!inv) return []
+  const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
+    taxExempt: selectedCustomer.value?.taxExempt,
+  })
   const rows: { label: string, value: string, grand?: boolean }[] = [
     { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
   ]
@@ -155,9 +159,47 @@ const summaryRows = computed(() => {
   if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
     rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
   }
-  rows.push({ label: 'Estimated total', value: moneyDisplay(inv.total), grand: true })
+  rows.push({
+    label: savedInvoice.value ? 'Total' : 'Estimated total',
+    value: moneyDisplay(inv.total),
+    grand: true,
+  })
   return rows
 })
+
+function invoiceErrorMessage(err: unknown, fallback: string): string {
+  const e = err as { data?: { message?: string, data?: { message?: string } } }
+  return e.data?.data?.message ?? e.data?.message ?? fallback
+}
+
+async function ensureEditingSession(id: string) {
+  if (editingSessionId.value) return
+  const { session } = await $fetch<{ session: { id: string } }>(
+    '/api/editing-sessions/acquire',
+    { method: 'POST', body: { entityType: 'invoice', entityId: id } },
+  )
+  editingSessionId.value = session.id
+  if (!editingHeartbeatTimer) {
+    editingHeartbeatTimer = setInterval(() => {
+      if (!editingSessionId.value) return
+      void $fetch(`/api/editing-sessions/${editingSessionId.value}/heartbeat`, { method: 'POST' })
+    }, 20_000)
+  }
+}
+
+function stopEditingSession() {
+  if (editingHeartbeatTimer) {
+    clearInterval(editingHeartbeatTimer)
+    editingHeartbeatTimer = null
+  }
+  const id = editingSessionId.value
+  editingSessionId.value = null
+  if (id) {
+    void $fetch(`/api/editing-sessions/${id}/release`, { method: 'POST' })
+  }
+}
+
+onBeforeUnmount(() => stopEditingSession())
 
 function initials(name: string): string {
   return name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -225,6 +267,7 @@ async function ensureDraft(): Promise<string> {
   }
 
   if (invoiceId.value) {
+    await ensureEditingSession(invoiceId.value)
     await $fetch(`/api/invoices/${invoiceId.value}`, { method: 'PATCH', body })
     return invoiceId.value
   }
@@ -235,6 +278,7 @@ async function ensureDraft(): Promise<string> {
   )
   invoiceId.value = invoice.id
   invoiceNumberFormatted.value = formatInvoiceNumberDisplay(invoice.invoiceNumber)
+  await ensureEditingSession(invoice.id)
   return invoice.id
 }
 
@@ -242,20 +286,27 @@ async function syncLines(id: string) {
   for (let i = 0; i < lines.value.length; i++) {
     const line = lines.value[i]!
     if (!isDraftLineValid(line)) continue
-    if (line.serverId) continue
+
+    const body = {
+      lineType: line.lineType,
+      description: line.description.trim(),
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      sortOrder: i,
+    }
+
+    if (line.serverId) {
+      const { line: updated } = await $fetch<{ line: { id: string, lineAmount: string } }>(
+        `/api/invoices/${id}/line-items/${line.serverId}`,
+        { method: 'PATCH', body },
+      )
+      line.lineAmount = updated.lineAmount
+      continue
+    }
 
     const { line: created } = await $fetch<{ line: { id: string, lineAmount: string } }>(
       `/api/invoices/${id}/line-items`,
-      {
-        method: 'POST',
-        body: {
-          lineType: line.lineType,
-          description: line.description.trim(),
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          sortOrder: i,
-        },
-      },
+      { method: 'POST', body: { ...body } },
     )
     line.serverId = created.id
     line.lineAmount = created.lineAmount
@@ -278,7 +329,7 @@ async function saveDraft(): Promise<boolean> {
     return true
   }
   catch (e: unknown) {
-    submitError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    submitError.value = invoiceErrorMessage(e, 'Save failed')
     return false
   }
   finally {
@@ -316,7 +367,7 @@ async function finalizeAndSend() {
     await navigateTo(`/invoices/${invoiceId.value}`)
   }
   catch (e: unknown) {
-    submitError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Finalize failed'
+    submitError.value = invoiceErrorMessage(e, 'Finalize failed')
   }
   finally {
     busy.value = false
@@ -425,7 +476,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                 <span class="chk" />
               </button>
             </div>
-            <div v-else class="sl-empty-veh">No vehicles for this customer yet.</div>
+            <div v-else class="sl-empty-veh">No vehicles for this customer yet — you can continue without one.</div>
             <p v-if="selectedVehicle" class="help" style="margin-top:12px;">
               <template v-if="selectedVehicle.vin">VIN {{ selectedVehicle.vin }}</template>
               <template v-if="selectedVehicle.vin && selectedVehicle.odometer"> · </template>
@@ -489,7 +540,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <div class="chead">
           <h3>Line items</h3>
           <div class="right">
-            <button type="button" class="btn sm" disabled title="Catalog picker arrives in P1-24">From catalog</button>
+            <button type="button" class="btn sm" disabled title="Coming soon">From catalog</button>
             <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
           </div>
         </div>
@@ -515,7 +566,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                 <td><input v-model="line.description" type="text" placeholder="Description"></td>
                 <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
                 <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
-                <td class="amt">{{ line.lineAmount ? moneyDisplay(line.lineAmount) : '—' }}</td>
+                <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
                 <td>
                   <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
                 </td>
@@ -523,7 +574,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
             </tbody>
           </table>
         </div>
-        <div v-if="savedInvoice" class="ed-sums">
+        <div class="ed-sums">
           <div
             v-for="(row, i) in summaryRows"
             :key="i"
@@ -534,7 +585,6 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
             <span>{{ row.value }}</span>
           </div>
         </div>
-        <p v-else class="help" style="padding:12px 18px;">Totals appear from the API after you save draft.</p>
       </div>
       <div class="wiz-foot">
         <button type="button" class="btn" @click="prevStep">← Back</button>
@@ -569,24 +619,22 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
             <dd>{{ invoiceDateDisplay(invoiceDate) }} → {{ invoiceDateDisplay(dueDate) }}</dd>
             <dt>Line items</dt><dd>{{ validLines.length }}</dd>
             <dt>Total</dt>
-            <dd style="color:#4f46e5; font-size:18px">{{ savedInvoice ? moneyDisplay(savedInvoice.total) : '—' }}</dd>
+            <dd style="color:#4f46e5; font-size:18px">{{ moneyDisplay((savedInvoice ?? previewDraftTotals(lines, { taxExempt: selectedCustomer?.taxExempt })).total) }}</dd>
           </dl>
         </div>
         <div class="stack">
           <div class="card">
-            <div class="chead"><h3>PDF &amp; delivery</h3></div>
+            <div class="chead"><h3>Delivery</h3></div>
             <dl class="kv">
-              <dt>Engine</dt><dd>Playwright PDF</dd>
-              <dt>Template</dt><dd>Bill Matrix v2</dd>
-              <dt>On finalize</dt><dd>Generate PDF + queue email</dd>
+              <dt>On finalize</dt><dd>Generate PDF and email the customer</dd>
               <dt>Portal</dt><dd>Visible to customer immediately</dd>
             </dl>
           </div>
           <div class="card">
             <div class="chead"><h3>Workflow</h3></div>
             <div class="cbody" style="font-size:13px; color:#64748b; line-height:1.55;">
-              <b style="color:#0f172a">Save draft</b> — keeps the wizard data and assigns an invoice number.<br><br>
-              <b style="color:#0f172a">Finalize &amp; send</b> — locks totals server-side, renders PDF, sends to portal + email.
+              <b style="color:#0f172a">Save draft</b> — keeps your work and assigns an invoice number.<br><br>
+              <b style="color:#0f172a">Finalize &amp; send</b> — locks the invoice, generates the PDF, and notifies the customer.
             </div>
           </div>
         </div>
