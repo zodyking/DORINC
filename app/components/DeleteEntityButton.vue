@@ -16,9 +16,12 @@ const emit = defineEmits<{ submitted: [], deleted: [] }>()
 const auth = useAuthStore()
 const router = useRouter()
 
-const canDirectDelete = computed(() => auth.can('deletion_requests.review.all'))
-const canRequest = computed(() => auth.can('deletion_requests.submit.all') && !canDirectDelete.value)
-const canReview = computed(() => auth.can('deletion_requests.review.all'))
+const canDirectDelete = computed(() => auth.loaded && auth.can('deletion_requests.review.all'))
+const canRequest = computed(() =>
+  auth.loaded && auth.can('deletion_requests.submit.all') && !canDirectDelete.value,
+)
+const canReview = computed(() => auth.loaded && auth.can('deletion_requests.review.all'))
+const canShow = computed(() => canDirectDelete.value || canRequest.value)
 
 const defaultRedirect = computed(() => {
   switch (props.entityType) {
@@ -45,7 +48,7 @@ const preservationNote = computed(() => {
   }
 })
 
-const { data: pendingData, refresh: refreshPending } = await useFetch<{
+const { data: pendingData, refresh: refreshPending } = useFetch<{
   pending: { id: string, status: string, reason: string, createdAt: string } | null
 }>('/api/deletion-requests/pending', {
   query: computed(() => ({
@@ -53,10 +56,15 @@ const { data: pendingData, refresh: refreshPending } = await useFetch<{
     entityId: props.entityId,
   })),
   watch: [() => props.entityId],
+  immediate: false,
   lazy: true,
   server: false,
   default: () => ({ pending: null }),
 })
+
+watch(canRequest, (ok) => {
+  if (ok && import.meta.client) void refreshPending()
+}, { immediate: true })
 
 const pending = computed(() => pendingData.value?.pending)
 const deleteModalOpen = ref(false)
@@ -135,7 +143,7 @@ function openRequestModal() {
 </script>
 
 <template>
-  <template v-if="!removed">
+  <template v-if="!removed && canShow">
     <span v-if="canRequest && pending" class="pill warn" style="margin-right:8px;">Deletion pending</span>
 
     <button
