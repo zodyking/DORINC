@@ -70,7 +70,8 @@ const query = computed(() => ({
   sort: 'newest' as const,
 }))
 
-// Do not await — awaiting client-only fetches can leave the page blank under Suspense.
+// Client-only fetches — do not await (Suspense blank) and do not refresh during SSR
+// (server:false refresh on the server never completes, leaving pending stuck after hydrate).
 const {
   data: stats,
   refresh: refreshStats,
@@ -94,12 +95,20 @@ const {
   immediate: false,
 })
 
+function loadInvoices() {
+  if (!import.meta.client) return
+  if (!auth.loaded || !auth.can('invoices.read.all')) return
+  void refreshStats()
+  void refreshList()
+}
+
+onMounted(() => {
+  loadInvoices()
+})
+
 watch(canRead, (allowed) => {
-  if (allowed) {
-    refreshStats()
-    refreshList()
-  }
-}, { immediate: true })
+  if (allowed) loadInvoices()
+})
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
@@ -173,11 +182,7 @@ async function retryLoad() {
 </script>
 
 <template>
-  <section v-if="!auth.loaded" class="page active">
-    <div class="cp-state">Loading…</div>
-  </section>
-
-  <section v-else-if="!canRead" class="page active">
+  <section v-if="auth.loaded && !canRead" class="page active">
     <div class="cp-state">You do not have permission to view invoices.</div>
   </section>
 
@@ -185,7 +190,7 @@ async function retryLoad() {
     <div class="pagehead">
       <div>
         <h2>Invoices</h2>
-        <p>{{ subtitle }}</p>
+        <p>{{ auth.loaded ? subtitle : 'Loading…' }}</p>
       </div>
       <div class="actions">
         <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>

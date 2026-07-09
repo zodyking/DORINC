@@ -80,6 +80,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const id = computed(() => String(route.params.id || ''))
 const idValid = computed(() => UUID_RE.test(id.value))
+const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 
 const {
   activeEditor,
@@ -110,7 +111,23 @@ const { data, refresh, error, pending } = useFetch<{
 }>(() => (idValid.value ? `/api/invoices/${id.value}` : null), {
   server: false,
   lazy: true,
-  watch: [id],
+  immediate: false,
+  watch: false,
+})
+
+function loadInvoiceDetail() {
+  if (!import.meta.client) return
+  if (!canRead.value) return
+  if (!idValid.value) return
+  void refresh()
+}
+
+onMounted(() => {
+  loadInvoiceDetail()
+})
+
+watch([canRead, id], () => {
+  loadInvoiceDetail()
 })
 
 const invoice = computed(() => data.value?.invoice)
@@ -160,7 +177,6 @@ const { data: linkedLogData } = useFetch<{ log: { logNumber: number } }>(
   { server: false, lazy: true, watch: [() => invoice.value?.serviceLogId] },
 )
 
-const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canManagerApprove = computed(() =>

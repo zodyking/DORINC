@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type {
   CatalogSnapshot,
@@ -460,54 +460,51 @@ function todayIsoDate(): string {
 export async function getInvoiceListStats(db: Db): Promise<InvoiceListStats> {
   const today = todayIsoDate()
   const monthStart = `${today.slice(0, 7)}-01`
-  const base = [isNull(invoices.archivedAt)]
 
-  const [totals] = await db.select({ value: count() }).from(invoices).where(and(...base))
-  const [draftCount] = await db.select({ value: count() })
-    .from(invoices).where(and(...base, eq(invoices.status, 'draft')))
-  const [pendingManagerCount] = await db.select({ value: count() })
-    .from(invoices).where(and(...base, eq(invoices.status, 'pending_manager_approval')))
-  const [sentCount] = await db.select({ value: count() })
-    .from(invoices).where(and(...base, eq(invoices.status, 'sent')))
-  const [paidCount] = await db.select({ value: count() })
-    .from(invoices).where(and(...base, eq(invoices.status, 'paid')))
-
-  const overdueWhere = and(
-    ...base,
-    eq(invoices.status, 'sent'),
-    lt(invoices.dueDate, today),
-    gt(invoices.balanceDue, '0'),
-  )
-  const [overdueCount] = await db.select({ value: count() }).from(invoices).where(overdueWhere)
-
-  const outstandingWhere = and(
-    ...base,
-    or(eq(invoices.status, 'sent'), eq(invoices.status, 'approved')),
-    gt(invoices.balanceDue, '0'),
-  )
-  const [outstanding] = await db.select({
-    count: count(),
-    total: sum(invoices.balanceDue),
-  }).from(invoices).where(outstandingWhere)
-
-  const [overdueSum] = await db.select({ total: sum(invoices.balanceDue) })
-    .from(invoices).where(overdueWhere)
-
-  const [paidMonth] = await db.select({ total: sum(invoices.amountPaid) })
+  // One pass over invoices — avoids 8 sequential count/sum queries on large imports.
+  const [row] = await db.select({
+    total: count(),
+    draftCount: sql<number>`count(*) filter (where ${invoices.status} = 'draft')`,
+    pendingManagerApprovalCount: sql<number>`count(*) filter (where ${invoices.status} = 'pending_manager_approval')`,
+    sentCount: sql<number>`count(*) filter (where ${invoices.status} = 'sent')`,
+    paidCount: sql<number>`count(*) filter (where ${invoices.status} = 'paid')`,
+    overdueCount: sql<number>`count(*) filter (
+      where ${invoices.status} = 'sent'
+        and ${invoices.dueDate} < ${today}
+        and ${invoices.balanceDue} > 0
+    )`,
+    outstandingCount: sql<number>`count(*) filter (
+      where ${invoices.status} in ('sent', 'approved')
+        and ${invoices.balanceDue} > 0
+    )`,
+    outstandingTotal: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
+      where ${invoices.status} in ('sent', 'approved')
+        and ${invoices.balanceDue} > 0
+    ), 0)`,
+    overdueTotal: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
+      where ${invoices.status} = 'sent'
+        and ${invoices.dueDate} < ${today}
+        and ${invoices.balanceDue} > 0
+    ), 0)`,
+    paidThisMonthTotal: sql<string>`coalesce(sum(${invoices.amountPaid}) filter (
+      where ${invoices.status} = 'paid'
+        and ${invoices.paidAt} >= ${monthStart}::timestamptz
+    ), 0)`,
+  })
     .from(invoices)
-    .where(and(...base, eq(invoices.status, 'paid'), sql`${invoices.paidAt} >= ${monthStart}`))
+    .where(isNull(invoices.archivedAt))
 
   return {
-    total: Number(totals?.value ?? 0),
-    draftCount: Number(draftCount?.value ?? 0),
-    pendingManagerApprovalCount: Number(pendingManagerCount?.value ?? 0),
-    sentCount: Number(sentCount?.value ?? 0),
-    paidCount: Number(paidCount?.value ?? 0),
-    overdueCount: Number(overdueCount?.value ?? 0),
-    outstandingCount: Number(outstanding?.count ?? 0),
-    outstandingTotal: outstanding?.total ?? '0',
-    paidThisMonthTotal: paidMonth?.total ?? '0',
-    overdueTotal: overdueSum?.total ?? '0',
+    total: Number(row?.total ?? 0),
+    draftCount: Number(row?.draftCount ?? 0),
+    pendingManagerApprovalCount: Number(row?.pendingManagerApprovalCount ?? 0),
+    sentCount: Number(row?.sentCount ?? 0),
+    paidCount: Number(row?.paidCount ?? 0),
+    overdueCount: Number(row?.overdueCount ?? 0),
+    outstandingCount: Number(row?.outstandingCount ?? 0),
+    outstandingTotal: String(row?.outstandingTotal ?? '0'),
+    paidThisMonthTotal: String(row?.paidThisMonthTotal ?? '0'),
+    overdueTotal: String(row?.overdueTotal ?? '0'),
   }
 }
 
