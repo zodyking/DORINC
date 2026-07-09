@@ -703,7 +703,7 @@ async function resolveExistingFk(
   return row?.id ?? null
 }
 
-async function resolveCustomerIdForImport(
+async function resolveCustomerIdByIdOrName(
   db: Db,
   customerId: string | null,
   displayName: string | null | undefined,
@@ -771,7 +771,7 @@ async function importInvoices(
 
     if (mode === 'dry_run') continue
 
-    const customerId = await resolveCustomerIdForImport(
+    const customerId = await resolveCustomerIdByIdOrName(
       db,
       optionalUuid(row.customerId),
       customerSnapshot.displayName,
