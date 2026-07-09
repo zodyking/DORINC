@@ -1,11 +1,17 @@
 import { useDb } from '../../db/client'
-import { getDefaultInvoiceTemplate, getInvoiceTemplateDetail, listInvoiceTemplates } from '../../services/invoice-templates.service'
+import {
+  ensureDefaultInvoiceTemplate,
+  getDefaultInvoiceTemplate,
+  getInvoiceTemplateDetail,
+  listInvoiceTemplates,
+} from '../../services/invoice-templates.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'templates.read.all')
   const db = useDb()
+  await ensureDefaultInvoiceTemplate(db)
   const query = getQuery(event)
 
   if (query.default === 'true' || query.default === '1') {

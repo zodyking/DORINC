@@ -11,6 +11,7 @@ import { mergeTemplateSections } from '../../shared/invoice-template-design'
 import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
 import { buildInvoiceRenderHtml } from './invoice-pdf.service'
 import { getInvoiceDetail } from './invoices.service'
+import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 
 export type InvoiceTemplatesServiceErrorCode
@@ -27,7 +28,19 @@ export class InvoiceTemplatesServiceError extends Error {
 }
 
 export interface PublishInvoiceTemplateInput {
-  designSettings: InvoiceTemplateDesignSettings
+  designSettings?: InvoiceTemplateDesignSettings
+  htmlContent?: string
+}
+
+export async function ensureDefaultInvoiceTemplate(db: Db) {
+  const [row] = await db.select({ id: invoiceTemplates.id })
+    .from(invoiceTemplates)
+    .where(isNull(invoiceTemplates.archivedAt))
+    .limit(1)
+  if (row) return
+
+  const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
+  await seedInvoiceTemplates(db)
 }
 
 export async function listInvoiceTemplates(db: Db) {
@@ -136,20 +149,24 @@ export async function publishInvoiceTemplateVersion(
   const latest = await getLatestTemplateVersion(db, templateId)
   if (!latest) throw new InvoiceTemplatesServiceError('NO_VERSION')
 
-  const designSettings: InvoiceTemplateDesignSettings = {
-    ...latest.designSettings,
-    ...input.designSettings,
-    sections: mergeTemplateSections({
-      ...latest.designSettings.sections,
-      ...input.designSettings.sections,
-    }),
-  }
+  const designSettings: InvoiceTemplateDesignSettings = input.designSettings
+    ? {
+        ...latest.designSettings,
+        ...input.designSettings,
+        sections: mergeTemplateSections({
+          ...latest.designSettings.sections,
+          ...input.designSettings.sections,
+        }),
+      }
+    : latest.designSettings
 
-  const htmlContent = applyDesignSettingsToHtml(
-    latest.htmlContent,
-    designSettings,
-    logoPreviewPath(designSettings.logoFileId),
-  )
+  const htmlContent = input.htmlContent?.trim()
+    ? input.htmlContent.trim()
+    : applyDesignSettingsToHtml(
+        latest.htmlContent,
+        designSettings,
+        logoPreviewPath(designSettings.logoFileId),
+      )
 
   const [version] = await db.insert(invoiceTemplateVersions).values({
     templateId,
@@ -282,10 +299,38 @@ export async function getTemplatePreviewInvoice(db: Db) {
   }
 }
 
+export interface TestRenderTemplatePdfInput {
+  designSettings?: InvoiceTemplateDesignSettings
+  htmlContent?: string
+}
+
+export async function previewTemplatePdf(
+  db: Db,
+  templateId: string,
+  htmlContent: string,
+) {
+  const detail = await getInvoiceTemplateDetail(db, templateId)
+  if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
+
+  const preview = await getTemplatePreviewInvoice(db)
+  if (!preview) throw new InvoiceTemplatesServiceError('NO_PREVIEW_INVOICE')
+
+  const invoiceDetail = await getInvoiceDetail(db, preview.id)
+  const renderHtml = buildInvoiceRenderHtml(htmlContent, invoiceDetail)
+  const marginInches = detail.latestVersion.designSettings.marginInches
+  const paper = detail.latestVersion.designSettings.pageSize === 'A4' ? 'a4' : 'letter'
+  const pdf = await renderHtmlToPdfBuffer(renderHtml, { paper, marginInches })
+
+  return {
+    pdf,
+    previewInvoiceNumber: preview.invoiceNumberFormatted,
+  }
+}
+
 export async function testRenderTemplatePdf(
   db: Db,
   templateId: string,
-  designSettings: InvoiceTemplateDesignSettings,
+  input: TestRenderTemplatePdfInput,
   actorId: string,
 ) {
   const detail = await getInvoiceTemplateDetail(db, templateId)
@@ -295,22 +340,29 @@ export async function testRenderTemplatePdf(
   if (!preview) throw new InvoiceTemplatesServiceError('NO_PREVIEW_INVOICE')
 
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
-  const mergedSettings: InvoiceTemplateDesignSettings = {
-    ...detail.latestVersion.designSettings,
-    ...designSettings,
-    sections: mergeTemplateSections({
-      ...detail.latestVersion.designSettings.sections,
-      ...designSettings.sections,
-    }),
-  }
 
-  const baseHtml = detail.publishedVersion?.htmlContent ?? detail.latestVersion.htmlContent
-  const styledHtml = applyDesignSettingsToHtml(
-    baseHtml,
-    mergedSettings,
-    logoPreviewPath(mergedSettings.logoFileId),
-  )
-  const htmlContent = buildInvoiceRenderHtml(styledHtml, invoiceDetail)
+  let htmlContent: string
+  if (input.htmlContent?.trim()) {
+    htmlContent = buildInvoiceRenderHtml(input.htmlContent.trim(), invoiceDetail)
+  }
+  else {
+    const mergedSettings: InvoiceTemplateDesignSettings = {
+      ...detail.latestVersion.designSettings,
+      ...input.designSettings!,
+      sections: mergeTemplateSections({
+        ...detail.latestVersion.designSettings.sections,
+        ...input.designSettings!.sections,
+      }),
+    }
+
+    const baseHtml = detail.publishedVersion?.htmlContent ?? detail.latestVersion.htmlContent
+    const styledHtml = applyDesignSettingsToHtml(
+      baseHtml,
+      mergedSettings,
+      logoPreviewPath(mergedSettings.logoFileId),
+    )
+    htmlContent = buildInvoiceRenderHtml(styledHtml, invoiceDetail)
+  }
 
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'invoice',

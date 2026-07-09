@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, testTemplatePdfSchema)
 
   try {
-    const result = await testRenderTemplatePdf(useDb(), id, body.designSettings, actor.id)
+    const result = await testRenderTemplatePdf(useDb(), id, body, actor.id)
 
     await writeAudit(event, {
       entityType: 'invoice_template',

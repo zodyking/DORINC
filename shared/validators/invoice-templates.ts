@@ -17,8 +17,17 @@ export const invoiceTemplateDesignSettingsSchema = z.object({
   })).optional(),
 })
 
+const templateHtmlContentSchema = z.string().min(1).max(500_000)
+
 export const publishInvoiceTemplateSchema = z.object({
-  designSettings: invoiceTemplateDesignSettingsSchema,
+  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  htmlContent: templateHtmlContentSchema.optional(),
+}).refine(v => v.designSettings || v.htmlContent, {
+  message: 'Provide designSettings or htmlContent',
+})
+
+export const previewTemplatePdfSchema = z.object({
+  htmlContent: templateHtmlContentSchema,
 })
 
 export const duplicateInvoiceTemplateSchema = z.object({
@@ -30,5 +39,8 @@ export const patchInvoiceTemplateSchema = z.object({
 }).refine(v => v.isDefault === true, { message: 'No supported patch fields' })
 
 export const testTemplatePdfSchema = z.object({
-  designSettings: invoiceTemplateDesignSettingsSchema,
+  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  htmlContent: templateHtmlContentSchema.optional(),
+}).refine(v => v.designSettings || v.htmlContent, {
+  message: 'Provide designSettings or htmlContent',
 })

@@ -1,24 +1,9 @@
 <script setup lang="ts">
 import {
-  DEFAULT_INVOICE_TEMPLATE_DESIGN,
-  designSettingsFromForm,
-  detectFontPreset,
-  logoPreviewUrl,
-  previewSampleFromInvoice,
-  previewStyleVars,
   publishStatusLabel,
-  sectionLabel,
-  sectionVisible,
-  sectionsFromSettings,
-  TEMPLATE_FONT_OPTIONS,
-  TEMPLATE_PAGE_SIZE_OPTIONS,
-  TEMPLATE_PREVIEW_SAMPLE,
-  TEMPLATE_SECTION_DEFS,
   templateOptionLabel,
-  type InvoiceTemplateSectionKey,
-  type PreviewInvoiceApiRow,
-  type TemplateFontPreset,
   versionStatusLabel,
+  type InvoiceTemplateDesignSettings,
 } from '~/utils/invoice-template-designer-ui'
 
 interface TemplateListItem {
@@ -34,7 +19,8 @@ interface TemplateVersionRow {
   id: string
   versionNumber: number
   status: string
-  designSettings: typeof DEFAULT_INVOICE_TEMPLATE_DESIGN
+  htmlContent: string
+  designSettings: InvoiceTemplateDesignSettings
   publishedAt: string | null
 }
 
@@ -50,6 +36,24 @@ interface TemplateDetailResponse {
   usageCount: number
 }
 
+const TD_SNIPPETS = [
+  { label: 'company_info', snippet: ' data-section="company_info"' },
+  { label: 'invoice_meta', snippet: ' data-section="invoice_meta"' },
+  { label: 'customer', snippet: ' data-section="customer"' },
+  { label: 'vehicle', snippet: ' data-section="vehicle"' },
+  { label: 'line_items', snippet: ' data-section="line_items"' },
+  { label: 'totals', snippet: ' data-section="totals"' },
+  { label: 'footer', snippet: ' data-section="footer"' },
+  { label: '--accent', snippet: 'var(--accent)' },
+  { label: 'line row', snippet: `<tr>
+  <td><div class="desc">Description</div></td>
+  <td class="center"><span class="type-badge">L</span></td>
+  <td class="center mono">1</td>
+  <td class="num mono">$0.00</td>
+  <td class="num mono">$0.00</td>
+</tr>` },
+] as const
+
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -57,19 +61,28 @@ const router = useRouter()
 const authPending = computed(() => !auth.loaded)
 const canRead = computed(() => auth.loaded && auth.can('templates.read.all'))
 const canManage = computed(() => auth.loaded && auth.can('templates.manage.all'))
-const canUpload = computed(() => auth.loaded && auth.can('files.upload.all'))
 
 const selectedTemplateId = ref<string | null>(null)
-const useRealPreview = ref(true)
+const sourceCode = ref('')
+const savedSource = ref('')
+const dirty = ref(false)
+const codeEditor = ref<HTMLTextAreaElement | null>(null)
+
+const publishBusy = ref(false)
+const publishError = ref('')
+const actionError = ref('')
+const actionMessage = ref('')
+const testPdfBusy = ref(false)
+const duplicateBusy = ref(false)
+
+const previewBusy = ref(false)
+const previewError = ref('')
+const previewUrl = ref('')
+const previewInvoiceLabel = ref('sample invoice')
 
 const { data: listData, refresh: refreshList } = useFetch<{ items: TemplateListItem[] }>(
   '/api/invoice-templates',
-  { server: false, lazy: true, immediate: canRead },
-)
-
-const { data: previewInvoiceData } = useFetch<{ preview: PreviewInvoiceApiRow | null }>(
-  '/api/invoice-templates/preview-invoice',
-  { server: false, lazy: true, immediate: canRead },
+  { server: false, lazy: true, immediate: false },
 )
 
 const { data, refresh, pending, error } = useFetch<TemplateDetailResponse>(
@@ -81,9 +94,28 @@ const { data, refresh, pending, error } = useFetch<TemplateDetailResponse>(
     watch: [selectedTemplateId],
     server: false,
     lazy: true,
-    immediate: canRead,
+    immediate: false,
   },
 )
+
+const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ preview: { invoiceNumberFormatted: string } | null }>(
+  '/api/invoice-templates/preview-invoice',
+  { server: false, lazy: true, immediate: false },
+)
+
+watch(canRead, (allowed) => {
+  if (allowed) {
+    refreshList()
+    refresh()
+    refreshPreviewInvoice()
+  }
+}, { immediate: true })
+
+watch(previewInvoiceData, (row) => {
+  if (row?.preview?.invoiceNumberFormatted) {
+    previewInvoiceLabel.value = row.preview.invoiceNumberFormatted
+  }
+}, { immediate: true })
 
 watch(listData, (list) => {
   if (!list?.items.length) return
@@ -109,74 +141,26 @@ const template = computed(() => data.value?.template ?? null)
 const activeVersion = computed(() => data.value?.publishedVersion ?? data.value?.latestVersion ?? null)
 const usageCount = computed(() => data.value?.usageCount ?? 0)
 
-const form = reactive({
-  pageSize: DEFAULT_INVOICE_TEMPLATE_DESIGN.pageSize,
-  marginInches: DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches,
-  accentColor: DEFAULT_INVOICE_TEMPLATE_DESIGN.accentColor,
-  accentColor2: DEFAULT_INVOICE_TEMPLATE_DESIGN.accentColor2,
-  fontPreset: 'system' as TemplateFontPreset,
-  logoFileId: null as string | null,
-  sections: sectionsFromSettings(),
-})
-
-const savedSnapshot = ref('')
-const dirty = ref(false)
-const publishBusy = ref(false)
-const publishError = ref('')
-const actionError = ref('')
-const actionMessage = ref('')
-const logoBusy = ref(false)
-const logoError = ref('')
-const logoInput = ref<HTMLInputElement | null>(null)
-const testPdfBusy = ref(false)
-const duplicateBusy = ref(false)
-
-function snapshotForm() {
-  return JSON.stringify({
-    pageSize: form.pageSize,
-    marginInches: form.marginInches,
-    accentColor: form.accentColor,
-    accentColor2: form.accentColor2,
-    fontPreset: form.fontPreset,
-    logoFileId: form.logoFileId,
-    sections: form.sections,
-  })
-}
-
-function loadVersionIntoForm(v: TemplateVersionRow) {
-  const s = v.designSettings
-  form.pageSize = s.pageSize
-  form.marginInches = s.marginInches
-  form.accentColor = s.accentColor
-  form.accentColor2 = s.accentColor2
-  form.fontPreset = detectFontPreset(s)
-  form.logoFileId = s.logoFileId ?? null
-  form.sections = sectionsFromSettings(s)
-  savedSnapshot.value = snapshotForm()
+function loadSourceFromVersion(v: TemplateVersionRow) {
+  sourceCode.value = v.htmlContent
+  savedSource.value = v.htmlContent
   dirty.value = false
 }
 
 watch(activeVersion, (v) => {
   if (!v) return
-  loadVersionIntoForm(v)
+  loadSourceFromVersion(v)
+  void refreshPreview()
 }, { immediate: true })
 
-watch(form, () => {
-  dirty.value = snapshotForm() !== savedSnapshot.value
-}, { deep: true })
-
-const previewVars = computed(() => previewStyleVars({
-  accentColor: form.accentColor,
-  fontSans: TEMPLATE_FONT_OPTIONS.find(o => o.key === form.fontPreset)?.fontSans
-    ?? DEFAULT_INVOICE_TEMPLATE_DESIGN.fontSans,
-}))
-
-const logoUrl = computed(() => logoPreviewUrl(form.logoFileId))
+watch(sourceCode, () => {
+  dirty.value = sourceCode.value !== savedSource.value
+})
 
 const statusText = computed(() => {
   const v = activeVersion.value
   if (!v) return 'Loading template…'
-  if (dirty.value) return 'Unsaved changes · preview only'
+  if (dirty.value) return 'Unsaved changes — refresh preview to validate'
   return publishStatusLabel(v.publishedAt, v.versionNumber, usageCount.value)
 })
 
@@ -186,19 +170,38 @@ const versionMeta = computed(() => {
   return versionStatusLabel(v.status, v.versionNumber)
 })
 
-const previewSample = computed(() => {
-  if (useRealPreview.value && previewInvoiceData.value?.preview) {
-    return previewSampleFromInvoice(previewInvoiceData.value.preview)
-  }
-  return TEMPLATE_PREVIEW_SAMPLE
+const loadErrorMessage = computed(() => {
+  if (!error.value) return 'Could not load the invoice template.'
+  const msg = (error.value as { data?: { message?: string } })?.data?.message
+  return msg ?? 'Could not load the invoice template.'
 })
 
-function isSectionVisible(key: InvoiceTemplateSectionKey) {
-  return sectionVisible(form.sections, key)
+function insertSnippet(snippet: string) {
+  const el = codeEditor.value
+  if (!el || !canManage.value) return
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const val = sourceCode.value
+  sourceCode.value = val.slice(0, start) + snippet + val.slice(end)
+  nextTick(() => {
+    el.selectionStart = el.selectionEnd = start + snippet.length
+    el.focus()
+  })
 }
 
-function sectionHeading(key: InvoiceTemplateSectionKey) {
-  return sectionLabel(form.sections, key)
+function formatSource() {
+  sourceCode.value = sourceCode.value
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim() + '\n'
+}
+
+function resetSource() {
+  if (!activeVersion.value) return
+  if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
+  loadSourceFromVersion(activeVersion.value)
 }
 
 async function onTemplateChange(ev: Event) {
@@ -209,71 +212,54 @@ async function onTemplateChange(ev: Event) {
   selectedTemplateId.value = id
 }
 
-function resetForm() {
-  if (!activeVersion.value) return
-  if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
-  loadVersionIntoForm(activeVersion.value)
-}
-
-function openLogoPicker() {
-  if (!canManage.value || !canUpload.value) return
-  logoInput.value?.click()
-}
-
-async function onLogoSelected(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !template.value) return
-
-  if (!file.type.startsWith('image/')) {
-    logoError.value = 'Logo must be a PNG or JPEG image'
-    return
-  }
-
-  logoBusy.value = true
-  logoError.value = ''
+async function refreshPreview() {
+  if (!canRead.value || !template.value || !sourceCode.value.trim()) return
+  previewBusy.value = true
+  previewError.value = ''
   try {
-    const body = new FormData()
-    body.append('file', file, file.name)
-    body.append('ownerEntityType', 'template')
-    body.append('ownerEntityId', template.value.id)
-    body.append('fileKind', 'attachment')
-    const { file: uploaded } = await $fetch<{ file: { id: string } }>('/api/files', {
+    const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
       method: 'POST',
-      body,
+      body: { htmlContent: sourceCode.value },
+      responseType: 'blob',
     })
-    form.logoFileId = uploaded.id
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = URL.createObjectURL(blob)
   }
   catch (e: unknown) {
-    logoError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Logo upload failed'
+    previewError.value = (e as { data?: { message?: string } })?.data?.message
+      ?? (e as Error)?.message
+      ?? 'Preview failed — check template HTML and PDF service'
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value)
+      previewUrl.value = ''
+    }
   }
   finally {
-    logoBusy.value = false
+    previewBusy.value = false
   }
-}
-
-function clearLogo() {
-  form.logoFileId = null
 }
 
 async function publishTemplate() {
-  if (!canManage.value || !template.value) return
+  if (!canManage.value || !template.value || !activeVersion.value) return
   publishBusy.value = true
   publishError.value = ''
   try {
     await $fetch(`/api/invoice-templates/${template.value.id}/publish`, {
       method: 'POST',
-      body: { designSettings: designSettingsFromForm(form) },
+      body: {
+        htmlContent: sourceCode.value,
+        designSettings: activeVersion.value.designSettings,
+      },
     })
-    savedSnapshot.value = snapshotForm()
+    savedSource.value = sourceCode.value
     dirty.value = false
     await refresh()
     await refreshList()
-    actionMessage.value = 'Template published'
+    actionMessage.value = 'Template saved and published'
+    await refreshPreview()
   }
   catch (e: unknown) {
-    publishError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Publish failed'
+    publishError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
   }
   finally {
     publishBusy.value = false
@@ -323,9 +309,9 @@ async function testRenderPdf() {
   testPdfBusy.value = true
   actionError.value = ''
   try {
-    await $fetch<{ job: { id: string, outputFileId: string | null } }>(
+    await $fetch<{ job: { id: string } }>(
       `/api/invoice-templates/${template.value.id}/test-pdf`,
-      { method: 'POST', body: { designSettings: designSettingsFromForm(form) } },
+      { method: 'POST', body: { htmlContent: sourceCode.value } },
     )
     actionMessage.value = 'Test PDF queued — it will appear in your downloads shortly.'
   }
@@ -336,6 +322,10 @@ async function testRenderPdf() {
     testPdfBusy.value = false
   }
 }
+
+onUnmounted(() => {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+})
 </script>
 
 <template>
@@ -345,7 +335,7 @@ async function testRenderPdf() {
 
   <div v-else-if="pending && !data" class="cp-state">Loading template designer…</div>
 
-  <div v-else-if="error || !template" class="cp-state">Could not load the invoice template.</div>
+  <div v-else-if="error || !template" class="cp-state">{{ loadErrorMessage }}</div>
 
   <div v-else>
     <div class="card" style="margin-bottom:16px;">
@@ -357,7 +347,7 @@ async function testRenderPdf() {
             <span v-if="template.isDefault" class="pill ok" style="vertical-align:3px;margin-left:6px;">Default</span>
           </h3>
           <p style="margin:6px 0 0;font-size:13px;color:#64748b;">
-            Logo, colors, fonts, page layout, section visibility — preview with sample or live invoice data.
+            Edit the full HTML layout — paste code, insert snippets, preview as PDF, and save.
           </p>
         </div>
         <div class="right" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -394,7 +384,7 @@ async function testRenderPdf() {
             :disabled="publishBusy || !dirty"
             @click="publishTemplate"
           >
-            {{ publishBusy ? 'Publishing…' : 'Publish template' }}
+            {{ publishBusy ? 'Saving…' : 'Save template' }}
           </button>
         </div>
       </div>
@@ -427,97 +417,32 @@ async function testRenderPdf() {
               <span class="badge">HTML</span>
             </div>
             <div style="display:flex; gap:8px;">
-              <button type="button" class="btn ghost sm" :disabled="!dirty" @click="resetForm">Reset</button>
+              <button type="button" class="btn ghost sm" :disabled="!canManage" @click="formatSource">Format</button>
+              <button type="button" class="btn ghost sm" :disabled="!dirty" @click="resetSource">Reset</button>
             </div>
           </div>
 
-          <div class="td-settings">
-            <div class="td-logo-block">
-              <div class="td-logo-preview" :style="{ background: form.accentColor }">
-                <img v-if="logoUrl" :src="logoUrl" alt="Logo preview">
-                <span v-else>DOR<br>INC</span>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  class="btn sm"
-                  :disabled="!canManage || !canUpload || logoBusy"
-                  @click="openLogoPicker"
-                >
-                  {{ logoBusy ? 'Uploading…' : 'Upload logo' }}
-                </button>
-                <button
-                  v-if="form.logoFileId && canManage"
-                  type="button"
-                  class="btn sm ghost"
-                  style="margin-left:6px;"
-                  @click="clearLogo"
-                >
-                  Remove
-                </button>
-                <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp" hidden @change="onLogoSelected">
-              </div>
-            </div>
+          <div class="td-snippets" aria-label="Insert HTML snippets">
+            <button
+              v-for="item in TD_SNIPPETS"
+              :key="item.label"
+              type="button"
+              :disabled="!canManage"
+              @click="insertSnippet(item.snippet)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
 
-            <label class="fld">
-              Accent color
-              <div class="td-color-row">
-                <input v-model="form.accentColor" type="color" :disabled="!canManage">
-                <input v-model="form.accentColor" type="text" maxlength="7" :disabled="!canManage">
-              </div>
-            </label>
-
-            <label class="fld">
-              Secondary accent
-              <div class="td-color-row">
-                <input v-model="form.accentColor2" type="color" :disabled="!canManage">
-                <input v-model="form.accentColor2" type="text" maxlength="7" :disabled="!canManage">
-              </div>
-            </label>
-
-            <label class="fld">
-              Font
-              <select v-model="form.fontPreset" :disabled="!canManage">
-                <option v-for="opt in TEMPLATE_FONT_OPTIONS" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
-              </select>
-            </label>
-
-            <label class="fld">
-              Page size
-              <select v-model="form.pageSize" :disabled="!canManage">
-                <option v-for="opt in TEMPLATE_PAGE_SIZE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </label>
-
-            <label class="fld">
-              Margins (inches)
-              <input v-model.number="form.marginInches" type="number" min="0.25" max="1.5" step="0.05" :disabled="!canManage">
-            </label>
-
-            <div class="fld" style="margin-top:8px;">
-              <strong style="font-size:13px;">Sections</strong>
-              <span class="help">Toggle visibility and customize headings (line items and totals always shown).</span>
-              <div class="td-sections">
-                <label
-                  v-for="def in TEMPLATE_SECTION_DEFS"
-                  :key="def.key"
-                  class="td-section-row"
-                >
-                  <input
-                    v-model="form.sections[def.key].visible"
-                    type="checkbox"
-                    :disabled="!canManage || def.required"
-                  >
-                  <input
-                    v-model="form.sections[def.key].label"
-                    type="text"
-                    class="fld"
-                    style="margin:0;"
-                    :disabled="!canManage"
-                  >
-                </label>
-              </div>
-            </div>
+          <div class="cbody">
+            <textarea
+              ref="codeEditor"
+              v-model="sourceCode"
+              class="td-code"
+              spellcheck="false"
+              aria-label="Invoice template HTML source"
+              :readonly="!canManage"
+            />
           </div>
           <div class="td-status" :class="{ dirty }">{{ statusText }}</div>
         </div>
@@ -527,92 +452,36 @@ async function testRenderPdf() {
         <div class="card">
           <div class="td-preview-head">
             <div>
-              <strong style="font-size:13px;">Live preview</strong>
-              <span>Sample invoice {{ previewSample.invoiceNumber }} · reflects design settings</span>
+              <strong style="font-size:13px;">PDF preview</strong>
+              <span>Renders via DomPDF · {{ previewInvoiceLabel }}</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <label class="help" style="display:flex;align-items:center;gap:6px;margin:0;">
-                <input v-model="useRealPreview" type="checkbox" :disabled="!previewInvoiceData?.preview">
-                Real invoice data
-              </label>
-            </div>
+            <button
+              type="button"
+              class="btn sm"
+              :disabled="previewBusy || !sourceCode.trim()"
+              @click="refreshPreview"
+            >
+              {{ previewBusy ? 'Rendering…' : 'Refresh preview' }}
+            </button>
           </div>
-          <div class="pvwrap">
-            <div class="pv" :style="previewVars">
-              <div v-if="isSectionVisible('company_info') || isSectionVisible('invoice_meta')" class="pvtop">
-                <div v-if="isSectionVisible('company_info')">
-                  <h4>{{ previewSample.businessName }}</h4>
-                  <div class="tag">{{ previewSample.tagline }}</div>
-                </div>
-                <div v-if="isSectionVisible('invoice_meta')" class="pvno">
-                  <div class="t">Invoice</div>
-                  <div class="n">{{ previewSample.invoiceNumber }}</div>
-                  <div style="color:#888; font-size:10px; margin-top:3px;">
-                    Issued {{ previewSample.issued }} · Due {{ previewSample.due }}
-                  </div>
-                </div>
-              </div>
-              <div v-if="isSectionVisible('customer') || isSectionVisible('vehicle')" class="pvmeta">
-                <div v-if="isSectionVisible('customer')">
-                  <div class="k">{{ sectionHeading('customer') }}</div>
-                  <div class="v">{{ previewSample.customer }}</div>
-                </div>
-                <div v-if="isSectionVisible('vehicle')">
-                  <div class="k">{{ sectionHeading('vehicle') }}</div>
-                  <div class="v">{{ previewSample.vehicle }}</div>
-                </div>
-                <div v-if="isSectionVisible('vehicle')">
-                  <div class="k">VIN</div>
-                  <div class="v mono" style="font-size:10px;">{{ previewSample.vin }}</div>
-                </div>
-                <div v-if="isSectionVisible('vehicle')">
-                  <div class="k">Odometer</div>
-                  <div class="v">{{ previewSample.odometer }}</div>
-                </div>
-              </div>
-              <table v-if="isSectionVisible('line_items')">
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th class="r">Qty</th>
-                    <th class="r">Rate</th>
-                    <th class="r">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(line, i) in previewSample.lines" :key="i">
-                    <td>
-                      {{ line.description }}
-                      <span v-if="line.sub" class="s">{{ line.sub }}</span>
-                    </td>
-                    <td class="r">{{ line.qty }}</td>
-                    <td class="r">{{ line.rate }}</td>
-                    <td class="r">{{ line.amount }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="isSectionVisible('totals')" class="pvsums">
-                <div class="r"><span>Subtotal</span><span>{{ previewSample.subtotal }}</span></div>
-                <div v-for="adj in previewSample.adjustments" :key="adj.label" class="r">
-                  <span>{{ adj.label }}</span><span>{{ adj.value }}</span>
-                </div>
-                <div class="r g"><span>Balance due</span><span>{{ previewSample.balanceDue }}</span></div>
-              </div>
-              <div v-if="isSectionVisible('symptoms')" class="pvnotes">
-                <b>{{ sectionHeading('symptoms') }}</b>
-                {{ previewSample.workNotes }}
-              </div>
-              <div v-if="isSectionVisible('payment') || isSectionVisible('terms')" class="pvterms">
-                <b v-if="isSectionVisible('payment')">{{ sectionHeading('payment') }}</b>
-                <template v-if="isSectionVisible('terms')">{{ previewSample.paymentTerms }}</template>
-              </div>
-              <div v-if="isSectionVisible('footer')" class="pvfoot" style="white-space:pre-line;">{{ previewSample.footer }}</div>
-            </div>
+
+          <div class="pvwrap td-pdf-wrap">
+            <p v-if="previewError" class="td-preview-error">{{ previewError }}</p>
+            <p v-else-if="!previewUrl && !previewBusy" class="td-preview-empty">
+              Click <strong>Refresh preview</strong> to render the current HTML as PDF.
+            </p>
+            <iframe
+              v-if="previewUrl"
+              :src="previewUrl"
+              class="td-pdf-frame"
+              title="Invoice template PDF preview"
+            />
           </div>
+
           <dl class="kv" style="margin:0; border-top:1px solid #f1f5f9;">
             <dt>Version</dt><dd>{{ versionMeta }}</dd>
             <dt>Used by</dt><dd>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</dd>
-            <dt>Paper</dt><dd>{{ form.pageSize }} · {{ form.marginInches }}in margins</dd>
+            <dt>Engine</dt><dd>Laravel DomPDF</dd>
           </dl>
         </div>
       </div>
@@ -621,7 +490,31 @@ async function testRenderPdf() {
 </template>
 
 <style scoped>
-.td-sections { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
-.td-section-row { display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:center; }
 .btn.sm { font-size:12px; padding:6px 10px; }
+.td-pdf-wrap {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  min-height:520px;
+  padding:12px;
+}
+.td-pdf-frame {
+  flex:1;
+  width:100%;
+  min-height:480px;
+  border:none;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 8px 32px -8px rgba(15,23,42,.25);
+}
+.td-preview-empty,
+.td-preview-error {
+  margin:auto;
+  max-width:360px;
+  text-align:center;
+  font-size:13px;
+  color:#64748b;
+  line-height:1.5;
+}
+.td-preview-error { color:#dc2626; }
 </style>
