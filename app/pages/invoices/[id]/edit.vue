@@ -99,7 +99,8 @@ const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
 const isDraft = computed(() => invoice.value?.status === 'draft')
 
-const activeTab = ref<'invoice' | 'servicelog'>('invoice')
+const activeTab = ref<'invoice' | 'servicelog' | 'pdf'>('invoice')
+const pdfPreviewRef = ref<{ refresh: () => Promise<void> } | null>(null)
 
 const vehicleId = ref('')
 const invoiceDate = ref('')
@@ -120,6 +121,7 @@ const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canDescribe = computed(() => auth.can('ai.describe.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
+const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
@@ -231,6 +233,7 @@ if (import.meta.client) {
 async function refreshInvoice() {
   await refresh()
   lastSavedAt.value = new Date()
+  await pdfPreviewRef.value?.refresh()
 }
 
 async function patchHeader() {
@@ -638,7 +641,7 @@ const aiPopStyle = computed(() => {
 
       <p v-if="saveError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ saveError }}</p>
 
-      <div v-if="invoice.serviceLogId" class="ed-tabs-wrap">
+      <div v-if="canGeneratePdf || invoice.serviceLogId" class="ed-tabs-wrap">
         <div class="ed-tabs" role="tablist" aria-label="Invoice editor views">
           <button
             type="button"
@@ -651,6 +654,7 @@ const aiPopStyle = computed(() => {
             Invoice
           </button>
           <button
+            v-if="invoice.serviceLogId"
             type="button"
             class="ed-tab"
             :class="{ on: activeTab === 'servicelog' }"
@@ -661,8 +665,19 @@ const aiPopStyle = computed(() => {
             Service log
             <span v-if="serviceLogData?.log" class="ed-tab-pill">{{ logNumberDisplay(serviceLogData?.log?.logNumber ?? 0) }}</span>
           </button>
+          <button
+            v-if="canGeneratePdf"
+            type="button"
+            class="ed-tab"
+            :class="{ on: activeTab === 'pdf' }"
+            role="tab"
+            :aria-selected="activeTab === 'pdf'"
+            @click="activeTab = 'pdf'"
+          >
+            PDF preview
+          </button>
         </div>
-        <p class="ed-tab-hint">Mechanic photos and field notes attach to this invoice — switch tabs to reference while building line items.</p>
+        <p v-if="invoice.serviceLogId" class="ed-tab-hint">Mechanic photos and field notes attach to this invoice — switch tabs to reference while building line items.</p>
       </div>
 
       <div v-show="activeTab === 'invoice'" class="ed-pane active">
@@ -933,6 +948,25 @@ const aiPopStyle = computed(() => {
                 </NuxtLink>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane active">
+        <div class="card">
+          <div class="chead">
+            <h3>PDF preview</h3>
+            <p class="sub" style="margin:0;">Live preview updates when you save draft changes</p>
+          </div>
+          <div class="cbody">
+            <InvoicePdfPreviewPane
+              ref="pdfPreviewRef"
+              :invoice-id="id"
+              :invoice-label="invoice.invoiceNumberFormatted"
+              :prefer-official="false"
+              :has-official-pdf="false"
+              :can-generate-pdf="canGeneratePdf"
+            />
           </div>
         </div>
       </div>
