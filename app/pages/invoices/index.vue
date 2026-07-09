@@ -43,9 +43,6 @@ const route = useRoute()
 const auth = useAuthStore()
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
-const canRemoveInvoice = computed(() =>
-  auth.can('deletion_requests.review.all') || auth.can('deletion_requests.submit.all'),
-)
 
 const q = ref('')
 const statusChip = ref<StatusChip>((route.query.status as StatusChip) || 'all')
@@ -149,10 +146,6 @@ function openInvoice(id: string) {
   navigateTo(`/invoices/${id}`)
 }
 
-function removableRow(row: InvoiceRow) {
-  return row.status !== 'void' && row.status !== 'paid'
-}
-
 async function retryLoad() {
   await Promise.all([refreshList(), refreshStats()])
 }
@@ -238,7 +231,6 @@ async function retryLoad() {
               <th class="col-due">Due</th>
               <th class="col-status">Status</th>
               <th class="num col-amt">Amount</th>
-              <th v-if="canRemoveInvoice" class="col-act">Actions</th>
             </tr>
           </thead>
           <tbody id="inv-rows">
@@ -261,16 +253,6 @@ async function retryLoad() {
                 </span>
               </td>
               <td class="num col-amt">{{ moneyDisplay(row.total) }}</td>
-              <td v-if="canRemoveInvoice" class="col-act" @click.stop>
-                <DeleteEntityButton
-                  v-if="removableRow(row)"
-                  entity-type="invoice"
-                  :entity-id="row.id"
-                  :entity-label="row.invoiceNumberFormatted"
-                  @deleted="retryLoad()"
-                  @submitted="retryLoad()"
-                />
-              </td>
             </tr>
           </tbody>
         </table>

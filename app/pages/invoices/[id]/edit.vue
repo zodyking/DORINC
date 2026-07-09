@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
+import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import {
+  applyCatalogItemToLineFields,
   autosavedLabel,
   catalogItemSub,
   catalogTypeToLineType,
   customerTermsHelp,
   editorSummaryRows,
   formatHistoryChange,
+  type CatalogQuickItem,
 } from '~/utils/invoice-editor-ui'
 import { dueDateFromTerms, LINE_TYPE_OPTIONS, previewLineAmount, previewLinesSubtotal } from '~/utils/invoice-creator-ui'
 import {
@@ -28,6 +31,7 @@ interface LineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  catalogItemId?: string | null
 }
 
 interface InvoicePayload {
@@ -263,7 +267,7 @@ async function patchHeader() {
   }
 }
 
-async function patchLine(line: LineItem) {
+async function patchLine(line: LineItem, opts: { catalogItemId?: string | null } = {}) {
   if (!editable.value || !line.description.trim()) return
   busy.value = true
   saveError.value = ''
@@ -275,6 +279,7 @@ async function patchLine(line: LineItem) {
         description: line.description.trim(),
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        ...(opts.catalogItemId !== undefined ? { catalogItemId: opts.catalogItemId } : {}),
       },
     })
     await refreshInvoice()
@@ -285,6 +290,17 @@ async function patchLine(line: LineItem) {
   finally {
     busy.value = false
   }
+}
+
+async function applyCatalogToExistingLine(line: LineItem, item: CatalogQuickItem) {
+  if (!editable.value) return
+  const fields = applyCatalogItemToLineFields(item)
+  line.lineType = fields.lineType
+  line.description = fields.description
+  line.quantity = fields.quantity
+  line.unitPrice = fields.unitPrice
+  line.catalogItemId = fields.catalogItemId
+  await patchLine(line, { catalogItemId: fields.catalogItemId })
 }
 
 async function addEmptyLine() {
@@ -781,13 +797,13 @@ const aiPopStyle = computed(() => {
                         </select>
                       </td>
                       <td>
-                        <input
+                        <CatalogLineAutocomplete
                           v-model="line.description"
-                          type="text"
                           :disabled="!editable"
                           @focus="selectedLineId = line.id"
                           @blur="patchLine(line)"
-                        >
+                          @select="applyCatalogToExistingLine(line, $event)"
+                        />
                       </td>
                       <td>
                         <input v-model="line.quantity" class="num" type="number" step="0.25" min="0" :disabled="!editable" @blur="patchLine(line)">

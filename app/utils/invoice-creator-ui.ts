@@ -31,6 +31,7 @@ export interface DraftLine {
   description: string
   quantity: string
   unitPrice: string
+  catalogItemId?: string | null
   serverId?: string
   lineAmount?: string
 }
@@ -60,6 +61,7 @@ export function createEmptyLine(): DraftLine {
     description: '',
     quantity: '1',
     unitPrice: '145.00',
+    catalogItemId: null,
   }
 }
 

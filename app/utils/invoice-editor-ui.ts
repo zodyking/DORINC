@@ -52,6 +52,23 @@ export function catalogTypeToLineType(itemType: string): InvoiceLineType {
   return 'service'
 }
 
+/** Fill type / description / qty / rate from a catalog pick (creator + editor autocomplete). */
+export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
+  lineType: InvoiceLineType
+  description: string
+  quantity: string
+  unitPrice: string
+  catalogItemId: string
+} {
+  return {
+    lineType: catalogTypeToLineType(item.itemType),
+    description: item.name,
+    quantity: '1',
+    unitPrice: item.defaultPrice ?? '0',
+    catalogItemId: item.id,
+  }
+}
+
 /** Server totals rows for editor sidebar — never computed client-side. */
 export function editorSummaryRows(inv: InvoiceTotalsShape): { label: string, value: string, grand?: boolean }[] {
   const rows: { label: string, value: string, grand?: boolean }[] = [
