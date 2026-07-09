@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Catalog list with search, type chips, add/edit modal (mockup: PAGE: CATALOG).
-import type { CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
+import CatalogItemForm, { type CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
+import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 
 definePageMeta({ layout: 'staff' })
@@ -362,7 +363,7 @@ function onRowClick(row: CatalogItemRow) {
           </div>
           <button type="button" class="close" aria-label="Close" @click="closeItemModal">✕</button>
         </div>
-        <CatalogCatalogItemForm
+        <CatalogItemForm
           v-model="form"
           :busy="formBusy"
           :error="formError"
