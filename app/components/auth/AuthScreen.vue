@@ -215,41 +215,39 @@ async function submitSignup() {
               </div>
             </div>
             <div class="fld">
-              <label for="signup-email">Work Email</label>
+              <label for="signup-email">Email</label>
               <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@dorinc.local" autocomplete="email" required>
             </div>
-            <div class="row2">
-              <div class="fld">
-                <label for="signup-password">Password</label>
-                <div class="secret-fld">
-                  <input
-                    id="signup-password"
-                    v-model="signupPass"
-                    :type="reveal.signupPass ? 'text' : 'password'"
-                    placeholder="Min. 12 characters"
-                    autocomplete="new-password"
-                    required
-                  >
-                  <button type="button" class="reveal" @click="reveal.signupPass = !reveal.signupPass">
-                    {{ reveal.signupPass ? 'Hide' : 'Show' }}
-                  </button>
-                </div>
+            <div class="fld">
+              <label for="signup-password">Password</label>
+              <div class="secret-fld">
+                <input
+                  id="signup-password"
+                  v-model="signupPass"
+                  :type="reveal.signupPass ? 'text' : 'password'"
+                  placeholder="Min. 12 characters"
+                  autocomplete="new-password"
+                  required
+                >
+                <button type="button" class="reveal" @click="reveal.signupPass = !reveal.signupPass">
+                  {{ reveal.signupPass ? 'Hide' : 'Show' }}
+                </button>
               </div>
-              <div class="fld">
-                <label for="signup-confirm">Confirm Password</label>
-                <div class="secret-fld">
-                  <input
-                    id="signup-confirm"
-                    v-model="signupConfirm"
-                    :type="reveal.signupConfirm ? 'text' : 'password'"
-                    placeholder="Repeat"
-                    autocomplete="new-password"
-                    required
-                  >
-                  <button type="button" class="reveal" @click="reveal.signupConfirm = !reveal.signupConfirm">
-                    {{ reveal.signupConfirm ? 'Hide' : 'Show' }}
-                  </button>
-                </div>
+            </div>
+            <div class="fld">
+              <label for="signup-confirm">Confirm Password</label>
+              <div class="secret-fld">
+                <input
+                  id="signup-confirm"
+                  v-model="signupConfirm"
+                  :type="reveal.signupConfirm ? 'text' : 'password'"
+                  placeholder="Repeat"
+                  autocomplete="new-password"
+                  required
+                >
+                <button type="button" class="reveal" @click="reveal.signupConfirm = !reveal.signupConfirm">
+                  {{ reveal.signupConfirm ? 'Hide' : 'Show' }}
+                </button>
               </div>
             </div>
             <div class="fld">
