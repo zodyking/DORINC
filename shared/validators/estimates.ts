@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LINE_ITEM_TYPES, normalizeLineType } from '../../line-item-types'
+import { LINE_ITEM_TYPES, normalizeLineType } from '#shared/line-item-types'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
 import { ESTIMATE_STATUSES } from '../../server/db/schema/estimates'
 

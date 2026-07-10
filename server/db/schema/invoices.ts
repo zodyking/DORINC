@@ -35,7 +35,7 @@ export const INVOICE_CREATION_SOURCES = [
 ] as const
 export type InvoiceCreationSource = (typeof INVOICE_CREATION_SOURCES)[number]
 
-import { LINE_ITEM_TYPES, type LineItemType, normalizeLineType } from '../../shared/line-item-types'
+import { LINE_ITEM_TYPES, type LineItemType, normalizeLineType } from '#shared/line-item-types'
 
 export const INVOICE_LINE_TYPES = LINE_ITEM_TYPES
 export type InvoiceLineType = LineItemType

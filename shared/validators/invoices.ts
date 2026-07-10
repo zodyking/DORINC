@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LINE_ITEM_TYPES } from '../../line-item-types'
+import { LINE_ITEM_TYPES } from '#shared/line-item-types'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
 
 export const invoiceStatusSchema = z.enum(['draft', 'pending_manager_approval', 'approved', 'sent', 'paid', 'void'])
@@ -14,8 +14,6 @@ export const invoiceCreationSourceSchema = z.enum([
   'duplicate',
   'revision',
 ])
-
-import { LINE_ITEM_TYPES } from '../../shared/line-item-types'
 
 export const invoiceLineTypeSchema = z.enum(LINE_ITEM_TYPES)
 

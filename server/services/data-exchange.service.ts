@@ -20,7 +20,7 @@ import {
 } from '../db/schema/invoices'
 import { lineAmount } from './invoice-totals.service'
 import { toTitleCase } from '#shared/format/title-case'
-import { normalizeLineType } from '../../shared/line-item-types'
+import { normalizeLineType } from '#shared/line-item-types'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   invoiceChangeRequests,

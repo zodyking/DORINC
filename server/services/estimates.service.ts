@@ -18,8 +18,8 @@ import {
   recalculateInvoiceTotals,
 } from './invoices.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
-import type { LineItemType } from '../../shared/line-item-types'
-import { normalizeLineType } from '../../shared/line-item-types'
+import type { LineItemType } from '#shared/line-item-types'
+import { normalizeLineType } from '#shared/line-item-types'
 import type { InvoiceTotalsResult } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 

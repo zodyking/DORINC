@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LINE_ITEM_TYPES, normalizeLineType } from '../../shared/line-item-types'
+import { LINE_ITEM_TYPES, normalizeLineType } from '#shared/line-item-types'
 
 describe('line item types', () => {
   it('exposes part, labor, and fee only', () => {

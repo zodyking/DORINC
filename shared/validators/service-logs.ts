@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LINE_ITEM_TYPES, normalizeLineType } from '../../line-item-types'
+import { LINE_ITEM_TYPES, normalizeLineType } from '#shared/line-item-types'
 import { uuidSchema } from './common'
 
 export const serviceLogWorkTypeSchema = z.enum([

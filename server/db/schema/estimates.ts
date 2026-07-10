@@ -31,7 +31,7 @@ export const ESTIMATE_CREATION_SOURCES = [
 ] as const
 export type EstimateCreationSource = (typeof ESTIMATE_CREATION_SOURCES)[number]
 
-import { LINE_ITEM_TYPES, type LineItemType } from '../../shared/line-item-types'
+import { LINE_ITEM_TYPES, type LineItemType } from '#shared/line-item-types'
 
 export const ESTIMATE_LINE_TYPES = LINE_ITEM_TYPES
 export type EstimateLineType = LineItemType
