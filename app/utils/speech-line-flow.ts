@@ -5,11 +5,23 @@ import {
   type WizardLineDraft,
   type WizardLineType,
 } from './line-item-wizard-ui'
+import { lineTypeLabel } from './invoices-ui'
 
-export type SpeechLineField = 'type' | 'description' | 'qty' | 'rate' | 'confirm'
+export type SpeechLineField = 'command' | 'type' | 'description' | 'qty' | 'rate' | 'confirm'
+
+export function promptForCommandMode(lineCount: number): string {
+  if (lineCount === 0) return promptForSpeechField('type', '')
+  return 'Say add line, or edit line item number.'
+}
+
+export function retryPromptForCommandMode(): string {
+  return 'Say add line, or edit line item number.'
+}
 
 export function promptForSpeechField(field: SpeechLineField, lineType: WizardLineType | ''): string {
   switch (field) {
+    case 'command':
+      return 'Say add line, or edit line item number.'
     case 'type':
       return 'Labor, part, service, or fee?'
     case 'description':
@@ -25,6 +37,8 @@ export function promptForSpeechField(field: SpeechLineField, lineType: WizardLin
 
 export function retryPromptForField(field: SpeechLineField): string {
   switch (field) {
+    case 'command':
+      return retryPromptForCommandMode()
     case 'type':
       return 'Say labor, part, service, or fee.'
     case 'description':
@@ -68,9 +82,65 @@ export function parseSpokenConfirm(spoken: string): 'save' | 'another' | null {
   return null
 }
 
+const SPOKEN_INDEX_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+}
+
+export function parseSpokenAddLineCommand(spoken: string): boolean {
+  const t = spoken.toLowerCase()
+  return /\b(add|new|another)\b/.test(t) && /\b(line|item|charge)\b/.test(t)
+    || /\badd\s+(a\s+)?(new\s+)?line\b/.test(t)
+}
+
+export function parseSpokenEditLineNumber(spoken: string, lineCount: number): number | null {
+  const t = spoken.toLowerCase()
+  if (!/\b(edit|audit|review|change|fix)\b/.test(t)) return null
+  const digitMatch = t.match(/(?:line\s*item|item|line)?\s*(?:number|#)?\s*(\d+)/)
+  if (digitMatch) {
+    const n = Number.parseInt(digitMatch[1]!, 10)
+    return n >= 1 && n <= lineCount ? n - 1 : null
+  }
+  for (const [word, n] of Object.entries(SPOKEN_INDEX_WORDS)) {
+    if (new RegExp(`\\b${word}\\b`).test(t)) {
+      return n >= 1 && n <= lineCount ? n - 1 : null
+    }
+  }
+  return null
+}
+
+export function parseKeepCurrent(spoken: string): boolean {
+  return /\b(same|keep|correct|skip|unchanged|leave)\b/i.test(spoken)
+}
+
+export function promptForEditField(
+  field: SpeechLineField,
+  draft: { lineType: WizardLineType | '', description: string, qty: string, rate: string },
+  lineNumber: number,
+): string {
+  const n = lineNumber + 1
+  switch (field) {
+    case 'type':
+      return `Line ${n}. Type is ${lineTypeLabel(draft.lineType as WizardLineType)}. Say labor, part, service, or fee to change.`
+    case 'description':
+      return `Description is ${draft.description}. Say the new description, or say keep.`
+    case 'qty':
+      return draft.lineType === 'labor'
+        ? `Hours are ${draft.qty}. Say the new hours, or say keep.`
+        : `Quantity is ${draft.qty}. Say the new quantity, or say keep.`
+    case 'rate':
+      return `Rate is ${draft.rate}. Say the new rate, or say keep.`
+    case 'confirm':
+      return 'Say save to keep changes, or add another for more lines.'
+    default:
+      return promptForSpeechField(field, draft.lineType)
+  }
+}
+
 export function fieldLabel(field: SpeechLineField, lineType: WizardLineType | ''): string {
   switch (field) {
-    case 'type': return 'Item type'
+    case 'command': return 'Command'
     case 'description': return 'Description'
     case 'qty': return lineType ? qtyLabelForLineType(lineType) : 'Quantity'
     case 'rate': return lineType ? rateLabelForLineType(lineType) : 'Rate'

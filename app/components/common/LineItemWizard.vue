@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { lineTypeLabel } from '~/utils/invoices-ui'
+import { catalogTypePill } from '~/utils/catalog-ui'
 import {
   calcLineAmount,
   emptyWizardLine,
@@ -25,19 +26,29 @@ const {
   status,
   prompt,
   error,
+  editingIndex,
   start,
   stop,
   retryListen,
-} = useSpeechLineFlow((line, addAnother) => {
-  lines.value = [...lines.value, line]
-  if (!addAnother) sessionOpen.value = false
+} = useSpeechLineFlow({
+  lineCount: () => lines.value.length,
+  getLine: index => lines.value[index],
+  onLineSaved: (line, addAnother) => {
+    lines.value = [...lines.value, line]
+    if (!addAnother) sessionOpen.value = false
+  },
+  onLineUpdated: (line, index) => {
+    const next = [...lines.value]
+    next[index] = line
+    lines.value = next
+  },
 })
 
 const feedback = computed(() => {
   if (error.value) return error.value
   if (!sessionOpen.value) {
     return lines.value.length
-      ? 'Tap the mic to add another line'
+      ? 'Tap the mic to add or edit a line'
       : 'Tap the mic to add your first line'
   }
   switch (status.value) {
@@ -48,7 +59,7 @@ const feedback = computed(() => {
     case 'processing':
       return 'Got it…'
     default:
-      return prompt.value || 'Ready when you are'
+      return prompt.value || 'Say add line, or edit line item number'
   }
 })
 
@@ -101,11 +112,8 @@ function saveManualLine(addAnother: boolean) {
   if (addAnother) nextTick(() => start())
 }
 
-function lineSummary(line: WizardLineDraft) {
-  const qtyLabel = line.lineType === 'labor' ? `${line.qty} hrs` : line.qty
-  const bits = [lineTypeLabel(line.lineType), line.description, `${qtyLabel} @ ${line.rate}`]
-  if (line.amount) bits.push(moneyDisplay(line.amount))
-  return bits.join(' · ')
+function displayAmount(line: WizardLineDraft) {
+  return line.amount || calcLineAmount(line.qty, line.rate)
 }
 
 onBeforeUnmount(() => stop())
@@ -117,12 +125,42 @@ defineExpose({ openWizard: openSession })
   <div class="li-wizard">
     <section v-if="lines.length" class="li-list" aria-label="Lines added">
       <p class="li-list-title">Your lines</p>
-      <ul class="li-list-rows">
-        <li v-for="(line, i) in lines" :key="i" class="li-list-row">
-          <span class="li-list-text">{{ lineSummary(line) }}</span>
-          <button type="button" class="li-list-rm" aria-label="Remove line" @click="removeLine(i)">×</button>
-        </li>
-      </ul>
+      <div class="tscroll li-table-wrap">
+        <table class="ed-lines li-lines-table">
+          <thead>
+            <tr>
+              <th class="col-num">#</th>
+              <th class="col-type">Type</th>
+              <th class="col-desc">Description</th>
+              <th class="col-qty">Qty / Hrs</th>
+              <th class="col-rate">Rate</th>
+              <th class="col-amt">Amount</th>
+              <th class="col-rm" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(line, i) in lines"
+              :key="i"
+              class="li-line-row"
+              :class="{ editing: sessionOpen && editingIndex === i }"
+            >
+              <td class="col-num">{{ i + 1 }}</td>
+              <td class="col-type">
+                <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
+              </td>
+              <td class="col-desc">{{ line.description }}</td>
+              <td class="col-qty">{{ line.qty }}</td>
+              <td class="col-rate">{{ line.rate }}</td>
+              <td class="col-amt">{{ displayAmount(line) ? moneyDisplay(displayAmount(line)) : '—' }}</td>
+              <td class="col-rm">
+                <button type="button" class="rm" aria-label="Remove line" @click="removeLine(i)">✕</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="li-list-hint">Say <b>edit line item number 1</b> to review a line</p>
     </section>
 
     <section class="li-voice" :class="{ active: sessionOpen }">
@@ -195,49 +233,50 @@ defineExpose({ openWizard: openSession })
   color: #64748b;
 }
 
-.li-list-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.li-list-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-}
-
-.li-list-text {
-  flex: 1;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #0f172a;
-}
-
-.li-list-rm {
-  flex-shrink: 0;
-  appearance: none;
-  border: none;
-  background: transparent;
+.li-list-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
   color: #94a3b8;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
+  line-height: 1.4;
 }
 
-.li-list-rm:hover {
-  background: #e2e8f0;
+.li-list-hint b {
   color: #64748b;
+  font-weight: 600;
+}
+
+.li-table-wrap {
+  margin: 0;
+}
+
+.li-lines-table {
+  min-width: 520px;
+}
+
+.li-lines-table .col-num {
+  width: 32px;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.li-lines-table .col-type { width: 88px; }
+.li-lines-table .col-qty { width: 72px; }
+.li-lines-table .col-rate { width: 80px; }
+.li-lines-table .col-amt {
+  width: 88px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.li-lines-table .col-rm { width: 36px; }
+
+.li-line-row.editing {
+  background: #eef2ff;
+}
+
+.li-line-row.editing td {
+  box-shadow: inset 0 0 0 2px #818cf8;
 }
 
 .li-voice {
@@ -305,11 +344,11 @@ defineExpose({ openWizard: openSession })
   font-size: 15px;
   line-height: 1.45;
   color: #475569;
-  max-width: 26ch;
+  max-width: 30ch;
 }
 
 .li-voice.active .li-feedback {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: #0f172a;
 }

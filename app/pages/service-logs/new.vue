@@ -87,7 +87,7 @@ const SERVICE_LOG_NARRATIONS: Record<number, string> = {
   2: 'Choose the vehicle.',
   3: 'Enter when and where the work happened.',
   4: 'Describe what you did.',
-  5: 'Upload your paper log or add digital line items.',
+  5: 'Upload a photo or use your voice for line items.',
   6: 'Double-check everything, then submit.',
 }
 
@@ -153,7 +153,7 @@ const logRecordSummary = computed(() => {
       : 'Paper sheet · no photos yet'
   }
   if (logRecordMode.value === 'digital') {
-    return wizardLinesSummary(digitalLineItems.value, 'Digital log')
+    return wizardLinesSummary(digitalLineItems.value, 'Voice lines')
   }
   return '—'
 })
@@ -345,23 +345,23 @@ onBeforeUnmount(() => {
     <div v-show="step === 5" class="sl-panel active">
       <h3>Service log</h3>
       <p v-if="!logRecordMode" class="sl-hint">
-        How did you record the work? Pick one — you can change it before continuing.
+        How did you record the work?
       </p>
 
       <div v-if="!logRecordMode" class="sl-picks sl-log-modes">
         <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('upload')">
           <span class="av indigo" aria-hidden="true">📷</span>
           <span class="nm">
-            <b>Photo of paper sheet</b>
-            <small>Snap the handwritten service log your tech filled out</small>
+            <b>{{ PHOTO_UPLOAD_PICK.title }}</b>
+            <small>{{ PHOTO_UPLOAD_PICK.serviceLogDescription }}</small>
           </span>
           <span class="chk" />
         </button>
         <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('digital')">
           <span class="av teal" aria-hidden="true">🎙️</span>
           <span class="nm">
-            <b>Digital log</b>
-            <small>Speak each line out loud — no forms to tap through</small>
+            <b>{{ VOICE_ENTRY_PICK.title }}</b>
+            <small>{{ VOICE_ENTRY_PICK.serviceLogDescription }}</small>
           </span>
           <span class="chk" />
         </button>

@@ -3,25 +3,41 @@ import { listenOnce, isSpeechAnswerSupported } from '~/composables/useSpeechAnsw
 import {
   buildLineFromDraft,
   fieldLabel,
+  parseKeepCurrent,
+  parseSpokenAddLineCommand,
   parseSpokenConfirm,
+  parseSpokenEditLineNumber,
   parseSpokenLineType,
   parseSpokenNumber,
+  promptForCommandMode,
+  promptForEditField,
   promptForSpeechField,
+  retryPromptForCommandMode,
   retryPromptForField,
   type SpeechLineField,
 } from '~/utils/speech-line-flow'
 import { emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
+import { lineTypeLabel } from '~/utils/invoices-ui'
 
-export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnother: boolean) => void) {
+export type SpeechFlowMode = 'command' | 'add' | 'edit'
+
+export function useSpeechLineFlow(handlers: {
+  onLineSaved: (line: WizardLineDraft, addAnother: boolean) => void
+  onLineUpdated: (line: WizardLineDraft, index: number) => void
+  lineCount: () => number
+  getLine: (index: number) => WizardLineDraft | undefined
+}) {
   const active = ref(false)
   const supported = ref(isSpeechAnswerSupported())
   const status = ref<'idle' | 'speaking' | 'listening' | 'processing'>('idle')
+  const flowMode = ref<SpeechFlowMode>('add')
   const field = ref<SpeechLineField>('type')
   const prompt = ref('')
   const lastHeard = ref('')
   const error = ref('')
   const draft = ref(emptyWizardLine())
   const captured = ref<Partial<Record<SpeechLineField, string>>>({})
+  const editingIndex = ref<number | null>(null)
 
   let aborted = false
   let listenGen = 0
@@ -36,6 +52,8 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
     field.value = 'type'
     lastHeard.value = ''
     error.value = ''
+    editingIndex.value = null
+    flowMode.value = 'add'
   }
 
   function stop() {
@@ -44,6 +62,8 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
     cancelSpeech()
     status.value = 'idle'
     active.value = false
+    editingIndex.value = null
+    flowMode.value = 'add'
   }
 
   function speakThenListen(text: string) {
@@ -83,9 +103,69 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
         speakThenListen(retryPromptForField(field.value))
         return
       }
-      error.value = 'Voice capture failed. Tap the button to try again.'
+      error.value = 'Voice capture failed. Tap the mic to try again.'
       status.value = 'idle'
     }
+  }
+
+  function startAddFlow() {
+    flowMode.value = 'add'
+    editingIndex.value = null
+    draft.value = emptyWizardLine()
+    captured.value = {}
+    field.value = 'type'
+    error.value = ''
+    prompt.value = promptForSpeechField('type', '')
+    speakThenListen(promptForSpeechField('type', ''))
+  }
+
+  function startCommandFlow() {
+    flowMode.value = 'command'
+    editingIndex.value = null
+    field.value = 'command'
+    error.value = ''
+    const text = promptForCommandMode(handlers.lineCount())
+    prompt.value = text
+    speakThenListen(text)
+  }
+
+  function startEditFlow(index: number) {
+    const line = handlers.getLine(index)
+    if (!line) {
+      error.value = `Line ${index + 1} was not found.`
+      startCommandFlow()
+      return
+    }
+    flowMode.value = 'edit'
+    editingIndex.value = index
+    draft.value = { ...line }
+    captured.value = {
+      type: line.lineType,
+      description: line.description,
+      qty: line.qty,
+      rate: line.rate,
+    }
+    field.value = 'type'
+    error.value = ''
+    const intro = `Line ${index + 1}. ${lineTypeLabel(line.lineType)}, ${line.description}.`
+    const text = `${intro} ${promptForEditField('type', draft.value, index)}`
+    prompt.value = text
+    speakThenListen(text)
+  }
+
+  function promptForCurrentField(): string {
+    if (flowMode.value === 'edit' && editingIndex.value !== null) {
+      return promptForEditField(field.value, draft.value, editingIndex.value)
+    }
+    return promptForSpeechField(field.value, draft.value.lineType)
+  }
+
+  function retryPromptForCurrentField(): string {
+    if (field.value === 'command') return retryPromptForCommandMode()
+    if (flowMode.value === 'edit' && editingIndex.value !== null) {
+      return promptForEditField(field.value, draft.value, editingIndex.value)
+    }
+    return retryPromptForField(field.value)
   }
 
   async function handleAnswer(spoken: string) {
@@ -94,51 +174,81 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
     lastHeard.value = spoken
     error.value = ''
 
+    if (field.value === 'command') {
+      if (parseSpokenAddLineCommand(spoken)) {
+        startAddFlow()
+        return
+      }
+      const editIndex = parseSpokenEditLineNumber(spoken, handlers.lineCount())
+      if (editIndex !== null) {
+        startEditFlow(editIndex)
+        return
+      }
+      error.value = 'Say add line, or edit line item number.'
+      speakThenListen(retryPromptForCommandMode())
+      return
+    }
+
     const f = field.value
+    const isEdit = flowMode.value === 'edit'
 
     if (f === 'type') {
-      const type = parseSpokenLineType(spoken)
+      const type = isEdit && parseKeepCurrent(spoken)
+        ? draft.value.lineType as typeof draft.value.lineType
+        : parseSpokenLineType(spoken)
       if (!type) {
-        speakThenListen(retryPromptForField('type'))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       draft.value.lineType = type
       captured.value = { ...captured.value, type }
       field.value = 'description'
-      speakThenListen(promptForSpeechField('description', type))
+      speakThenListen(isEdit && editingIndex.value !== null
+        ? promptForEditField('description', draft.value, editingIndex.value)
+        : promptForSpeechField('description', type))
       return
     }
 
     if (f === 'description') {
-      const desc = spoken.trim()
+      const desc = isEdit && parseKeepCurrent(spoken)
+        ? draft.value.description
+        : spoken.trim()
       if (!desc) {
-        speakThenListen(retryPromptForField('description'))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       draft.value.description = desc
       captured.value = { ...captured.value, description: desc }
       field.value = 'qty'
-      speakThenListen(promptForSpeechField('qty', draft.value.lineType))
+      speakThenListen(isEdit && editingIndex.value !== null
+        ? promptForEditField('qty', draft.value, editingIndex.value)
+        : promptForSpeechField('qty', draft.value.lineType))
       return
     }
 
     if (f === 'qty') {
-      const qty = parseSpokenNumber(spoken)
+      const qty = isEdit && parseKeepCurrent(spoken)
+        ? draft.value.qty
+        : parseSpokenNumber(spoken)
       if (!qty || Number.parseFloat(qty) <= 0) {
-        speakThenListen(retryPromptForField('qty'))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       draft.value.qty = qty
       captured.value = { ...captured.value, qty }
       field.value = 'rate'
-      speakThenListen(promptForSpeechField('rate', draft.value.lineType))
+      speakThenListen(isEdit && editingIndex.value !== null
+        ? promptForEditField('rate', draft.value, editingIndex.value)
+        : promptForSpeechField('rate', draft.value.lineType))
       return
     }
 
     if (f === 'rate') {
-      const rate = parseSpokenNumber(spoken)
+      const rate = isEdit && parseKeepCurrent(spoken)
+        ? draft.value.rate
+        : parseSpokenNumber(spoken)
       if (!rate || Number.parseFloat(rate) < 0) {
-        speakThenListen(retryPromptForField('rate'))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       draft.value.rate = rate
@@ -148,26 +258,41 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
       const summary = line
         ? `${line.description}. ${line.qty} at ${line.rate}.`
         : ''
-      speakThenListen(`${summary} ${promptForSpeechField('confirm', draft.value.lineType)}`)
+      const confirmPrompt = isEdit && editingIndex.value !== null
+        ? promptForEditField('confirm', draft.value, editingIndex.value)
+        : promptForSpeechField('confirm', draft.value.lineType)
+      speakThenListen(`${summary} ${confirmPrompt}`)
       return
     }
 
     if (f === 'confirm') {
       const action = parseSpokenConfirm(spoken)
       if (!action) {
-        speakThenListen(retryPromptForField('confirm'))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       const line = buildLineFromDraft(draft.value)
       if (!line) {
-        resetDraft()
-        start()
+        if (handlers.lineCount() > 0) startCommandFlow()
+        else startAddFlow()
         return
       }
-      onLineSaved(line, action === 'another')
+      if (flowMode.value === 'edit' && editingIndex.value !== null) {
+        handlers.onLineUpdated(line, editingIndex.value)
+        if (action === 'another') {
+          if (handlers.lineCount() > 0) startCommandFlow()
+          else startAddFlow()
+        }
+        else {
+          active.value = false
+          stop()
+        }
+        return
+      }
+      handlers.onLineSaved(line, action === 'another')
       if (action === 'another') {
-        resetDraft()
-        start()
+        if (handlers.lineCount() > 0) startCommandFlow()
+        else startAddFlow()
       }
       else {
         active.value = false
@@ -187,9 +312,8 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
       status.value = 'idle'
       return
     }
-    error.value = ''
-    prompt.value = promptForSpeechField('type', '')
-    speakThenListen(promptForSpeechField('type', ''))
+    if (handlers.lineCount() > 0) startCommandFlow()
+    else startAddFlow()
   }
 
   function retryListen() {
@@ -208,11 +332,13 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
     active,
     supported,
     status,
+    flowMode,
     field,
     prompt,
     lastHeard,
     error,
     captured,
+    editingIndex,
     fieldLabel: (f: SpeechLineField) => fieldLabel(f, draft.value.lineType),
     start,
     stop,

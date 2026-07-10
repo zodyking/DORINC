@@ -629,23 +629,23 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         </div>
         <div class="cbody">
           <p v-if="!lineEntryMode" class="sl-hint" style="margin-top:0;">
-            How do you want to add charges? Voice lines or the manual table.
+            How do you want to add charges?
           </p>
 
           <div v-if="!lineEntryMode" class="sl-picks sl-log-modes" style="margin-bottom:0;">
             <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
               <span class="av teal" aria-hidden="true">🎙️</span>
               <span class="nm">
-                <b>Voice lines</b>
-                <small>Speak each charge — labor, parts, services, fees</small>
+                <b>{{ VOICE_ENTRY_PICK.title }}</b>
+                <small>{{ VOICE_ENTRY_PICK.invoiceDescription }}</small>
               </span>
               <span class="chk" />
             </button>
             <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('manual')">
               <span class="av indigo" aria-hidden="true">✏️</span>
               <span class="nm">
-                <b>Manual table</b>
-                <small>Type in the grid or pick from catalog</small>
+                <b>{{ MANUAL_ENTRY_PICK.title }}</b>
+                <small>{{ MANUAL_ENTRY_PICK.description }}</small>
               </span>
               <span class="chk" />
             </button>
