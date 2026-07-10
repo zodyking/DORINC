@@ -5,6 +5,12 @@ const CONSENT_KEY = 'dorincWizardSpeechEnabled'
 let gestureEvaluated = false
 /** On touch-primary devices, false until unlockSpeechFromUserGesture runs in a click handler. */
 let gestureUnlocked = true
+/** Set when the user explicitly unlocks speech from a tap (create button, mic orb, etc.). */
+let gestureExplicitlyUnlocked = false
+/** Timestamp of the most recent gesture unlock — used to defer the first post-nav speak. */
+let speechArmedAt = 0
+
+let voicesReady: Promise<void> | null = null
 
 export function isMobileSpeechTarget(): boolean {
   if (typeof window === 'undefined') return false
@@ -41,13 +47,15 @@ export function setSpeechConsentEnabled(enabled: boolean): void {
 /** Call synchronously from a create-button click before navigating to a wizard form. */
 export function armWizardSpeechFromCreateClick(): void {
   setSpeechConsentEnabled(true)
-  unlockSpeechFromUserGesture({ silent: true })
+  unlockSpeechFromUserGesture({ forcePrime: true })
 }
 
 function evaluateGestureGate(): void {
   if (gestureEvaluated || typeof window === 'undefined') return
   gestureEvaluated = true
-  if (likelyNeedsUserGesture()) gestureUnlocked = false
+  if (likelyNeedsUserGesture() && !gestureExplicitlyUnlocked) {
+    gestureUnlocked = false
+  }
 }
 
 function likelyNeedsUserGesture(): boolean {
@@ -62,17 +70,20 @@ function likelyNeedsUserGesture(): boolean {
   }
 }
 
+function isWithinSpeechArmWindow(): boolean {
+  return speechArmedAt > 0 && Date.now() - speechArmedAt < 5000
+}
+
 export function isSpeechGestureUnlocked(): boolean {
   if (typeof window === 'undefined') return true
   evaluateGestureGate()
-  return gestureUnlocked
+  return gestureUnlocked || isWithinSpeechArmWindow()
 }
 
 /** Minimal in-gesture speak for iOS — unlocks speech without a long audible phrase. */
 function primeSpeechSynthesisFromGesture(): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   try {
-    window.speechSynthesis.cancel()
     const u = new SpeechSynthesisUtterance('\u200b')
     u.volume = 0.01
     u.rate = 2
@@ -86,13 +97,31 @@ function primeSpeechSynthesisFromGesture(): void {
 /**
  * Call synchronously from a click / pointer handler so speech can play on iOS / Android.
  */
-export function unlockSpeechFromUserGesture(opts: { silent?: boolean } = {}): void {
+export function unlockSpeechFromUserGesture(opts: { silent?: boolean, forcePrime?: boolean } = {}): void {
   if (typeof window === 'undefined') return
   const wasUnlocked = gestureUnlocked
+  gestureExplicitlyUnlocked = true
   gestureUnlocked = true
-  if (opts.silent) {
-    if (!wasUnlocked) primeSpeechSynthesisFromGesture()
+  speechArmedAt = Date.now()
+  if (opts.forcePrime || (opts.silent && !wasUnlocked)) {
+    primeSpeechSynthesisFromGesture()
   }
+}
+
+function ensureVoicesReady(): Promise<void> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve()
+  if (voicesReady) return voicesReady
+  voicesReady = new Promise((resolve) => {
+    const synth = window.speechSynthesis
+    const finish = () => resolve()
+    if (synth.getVoices().length > 0) {
+      finish()
+      return
+    }
+    synth.addEventListener('voiceschanged', finish, { once: true })
+    window.setTimeout(finish, 600)
+  })
+  return voicesReady
 }
 
 function toSpeechPhrase(text: string): string {
@@ -107,6 +136,26 @@ export function cancelSpeech(): void {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     window.speechSynthesis.cancel()
   }
+}
+
+function delayBeforeSpeakMs(): number {
+  if (!speechArmedAt) return 0
+  const elapsed = Date.now() - speechArmedAt
+  if (elapsed > 2000) return 0
+  return Math.max(80, 280 - elapsed)
+}
+
+function speakNow(spoken: string, onEnd?: () => void): void {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  cancelSpeech()
+  const u = new SpeechSynthesisUtterance(spoken)
+  u.rate = 1.05
+  u.pitch = 1
+  u.volume = 1
+  const finish = () => onEnd?.()
+  u.onend = finish
+  u.onerror = finish
+  window.speechSynthesis.speak(u)
 }
 
 export function speakWizardText(
@@ -124,7 +173,8 @@ export function speakWizardText(
   }
 
   evaluateGestureGate()
-  if (!gestureUnlocked && !opts.fromGesture) {
+  const gestureOk = gestureUnlocked || opts.fromGesture || isWithinSpeechArmWindow()
+  if (!gestureOk) {
     opts.onEnd?.()
     return
   }
@@ -135,19 +185,23 @@ export function speakWizardText(
     return
   }
 
-  cancelSpeech()
+  const delay = delayBeforeSpeakMs()
+  void ensureVoicesReady().then(() => {
+    if (delay > 0) {
+      window.setTimeout(() => speakNow(spoken, opts.onEnd), delay)
+    }
+    else {
+      speakNow(spoken, opts.onEnd)
+    }
+  })
+}
 
-  const u = new SpeechSynthesisUtterance(spoken)
-  u.rate = 1.05
-  u.pitch = 1
-  u.volume = 1
-
-  const finish = () => {
-    opts.onEnd?.()
-  }
-
-  u.onend = finish
-  u.onerror = finish
-
-  window.speechSynthesis.speak(u)
+/** Run the first wizard narration after mount (post-nav iOS needs a short settle). */
+export function scheduleInitialWizardSpeech(speak: () => void): void {
+  if (typeof window === 'undefined') return
+  if (!isMobileSpeechTarget() || !isSpeechConsentEnabled()) return
+  const delay = Math.max(80, delayBeforeSpeakMs())
+  window.setTimeout(() => {
+    void ensureVoicesReady().then(speak)
+  }, delay)
 }

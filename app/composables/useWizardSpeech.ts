@@ -2,8 +2,8 @@ import {
   cancelSpeech,
   isMobileSpeechTarget,
   isSpeechConsentEnabled,
+  scheduleInitialWizardSpeech,
   speakWizardText,
-  unlockSpeechFromUserGesture,
 } from '~/utils/wizard-speech'
 
 export interface FormSpeechSection {
@@ -16,7 +16,7 @@ export function useWizardStepNarration(
   step: Ref<number>,
   narrations: Record<number, string>,
 ) {
-  const enabled = ref(isSpeechConsentEnabled())
+  const enabled = ref(false)
 
   function narrateCurrentStep() {
     if (!enabled.value || !isMobileSpeechTarget()) return
@@ -24,19 +24,14 @@ export function useWizardStepNarration(
     if (text) speakWizardText(text, { fromGesture: true })
   }
 
-  function autoStartIfConsented() {
-    if (!isMobileSpeechTarget() || !isSpeechConsentEnabled()) return
-    enabled.value = true
-    unlockSpeechFromUserGesture({ silent: true })
-    nextTick(() => narrateCurrentStep())
-  }
-
   watch(step, () => {
     if (enabled.value) narrateCurrentStep()
   })
 
   onMounted(() => {
-    autoStartIfConsented()
+    if (!isSpeechConsentEnabled()) return
+    enabled.value = true
+    scheduleInitialWizardSpeech(narrateCurrentStep)
   })
 
   onBeforeUnmount(() => {
@@ -53,7 +48,7 @@ export function useFormSectionSpeech(
   root: Ref<HTMLElement | null | undefined>,
   sections: FormSpeechSection[],
 ) {
-  const enabled = ref(isSpeechConsentEnabled())
+  const enabled = ref(false)
   let observer: IntersectionObserver | null = null
   let activeKey = ''
 
@@ -61,12 +56,6 @@ export function useFormSectionSpeech(
     if (!enabled.value || !isMobileSpeechTarget()) return
     activeKey = key
     speakWizardText(text, { fromGesture: true })
-  }
-
-  function autoStartIfConsented() {
-    if (!isMobileSpeechTarget() || !isSpeechConsentEnabled()) return
-    enabled.value = true
-    unlockSpeechFromUserGesture({ silent: true })
   }
 
   function setupObserver() {
@@ -99,18 +88,21 @@ export function useFormSectionSpeech(
 
   watch([enabled, root], () => {
     if (enabled.value) {
-      nextTick(() => {
-        setupObserver()
-        if (sections[0] && !activeKey) {
-          narrateSection(sections[0].selector, sections[0].narration)
-        }
-      })
+      nextTick(() => setupObserver())
     }
     else observer?.disconnect()
   }, { immediate: true })
 
   onMounted(() => {
-    autoStartIfConsented()
+    if (!isSpeechConsentEnabled()) return
+    enabled.value = true
+    scheduleInitialWizardSpeech(() => {
+      nextTick(() => {
+        setupObserver()
+        const first = sections[0]
+        if (first && !activeKey) narrateSection(first.selector, first.narration)
+      })
+    })
   })
 
   onBeforeUnmount(() => {
