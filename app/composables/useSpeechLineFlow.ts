@@ -16,6 +16,7 @@ import {
   retryPromptForField,
   type SpeechLineField,
 } from '~/utils/speech-line-flow'
+import { formatFieldText } from '#shared/format/prose-field'
 import { emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
 import { lineTypeLabel } from '~/utils/invoices-ui'
 
@@ -212,7 +213,7 @@ export function useSpeechLineFlow(handlers: {
     if (f === 'description') {
       const desc = isEdit && parseKeepCurrent(spoken)
         ? draft.value.description
-        : spoken.trim()
+        : formatFieldText(spoken.trim(), 'prose')
       if (!desc) {
         speakThenListen(retryPromptForCurrentField())
         return

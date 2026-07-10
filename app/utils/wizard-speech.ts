@@ -124,8 +124,10 @@ function ensureVoicesReady(): Promise<void> {
   return voicesReady
 }
 
+import { expandForSpeech } from '#shared/format/abbreviations'
+
 function toSpeechPhrase(text: string): string {
-  return String(text)
+  return expandForSpeech(String(text))
     .replace(/·/g, ', ')
     .replace(/&amp;/g, 'and')
     .replace(/\s+/g, ' ')

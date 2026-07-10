@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { toTitleCase } from '#shared/format/title-case'
-
 // Vehicle create/edit form with VIN decode (mockup: Add vehicle modal fields + PAGE: VEHICLES).
 export interface VehicleFormValue {
   customerId: string
@@ -156,14 +154,14 @@ async function decodeVin() {
             </label>
             <div class="row3">
               <label class="fld">Year <input v-model="model.year" type="number" min="1900" max="2100" placeholder="2022"></label>
-              <label class="fld">Make <input v-model="model.make" type="text" placeholder="Freightliner" @blur="model.make = toTitleCase(model.make)"></label>
-              <label class="fld">Model <input v-model="model.model" type="text" placeholder="Cascadia" @blur="model.model = toTitleCase(model.model)"></label>
+              <label class="fld">Make <input v-model="model.make" type="text" placeholder="Freightliner"></label>
+              <label class="fld">Model <input v-model="model.model" type="text" placeholder="Cascadia"></label>
             </div>
             <div class="row3">
-              <label class="fld">Trim <input v-model="model.trim" type="text" @blur="model.trim = toTitleCase(model.trim)"></label>
-              <label class="fld">Plate <input v-model="model.plate" type="text" placeholder="DE 12345"></label>
+              <label class="fld">Trim <input v-model="model.trim" type="text"></label>
+              <label class="fld">Plate <input v-model="model.plate" class="no-prose" type="text" placeholder="DE 12345"></label>
               <label class="fld">Color
-                <input v-model="model.color" type="text" :placeholder="model.unitType === 'bus' ? 'YW' : 'White'" @blur="model.color = toTitleCase(model.color)">
+                <input v-model="model.color" type="text" :placeholder="model.unitType === 'bus' ? 'YW' : 'White'">
                 <span v-if="model.unitType === 'bus'" class="help">School buses default to YW</span>
               </label>
             </div>

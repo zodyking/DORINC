@@ -198,7 +198,7 @@ defineExpose({ openWizard: openSession })
         </label>
         <label class="fld">
           <span>Description</span>
-          <input v-model="manualDraft.description" type="text" placeholder="What was done?">
+          <input v-model="manualDraft.description" data-prose="prose" type="text" placeholder="What was done?">
         </label>
         <label class="fld">
           <span>{{ manualDraft.lineType === 'labor' ? 'Hours' : 'Quantity' }}</span>

@@ -1,4 +1,6 @@
 // Web Speech API dictation for mobile form fields.
+import type { ProseFieldMode } from '#shared/format/prose-field'
+import { formatVoiceText } from '#shared/format/prose-field'
 
 interface SpeechRecognitionResultLike {
   isFinal: boolean
@@ -33,7 +35,10 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
-export function useVoiceDictation(onFinalText: (text: string) => void) {
+export function useVoiceDictation(
+  onFinalText: (text: string) => void,
+  opts: { mode?: ProseFieldMode } = {},
+) {
   const listening = ref(false)
   const supported = ref(false)
   const error = ref('')
@@ -71,7 +76,7 @@ export function useVoiceDictation(onFinalText: (text: string) => void) {
         const result = event.results[i]
         if (result?.isFinal) chunk += result[0].transcript
       }
-      const text = chunk.trim()
+      const text = formatVoiceText(chunk.trim(), opts.mode ?? 'prose')
       if (text) onFinalText(text)
     }
 

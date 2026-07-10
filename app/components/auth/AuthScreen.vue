@@ -194,11 +194,11 @@ async function submitSignup() {
                 <input
                   id="signup-first-name"
                   v-model="signupFirstName"
+                  data-prose="name"
                   type="text"
                   placeholder="Jordan"
                   autocomplete="given-name"
                   required
-                  @blur="titleCaseNameField(signupFirstName)"
                 >
               </div>
               <div class="fld">
@@ -206,11 +206,11 @@ async function submitSignup() {
                 <input
                   id="signup-last-name"
                   v-model="signupLastName"
+                  data-prose="name"
                   type="text"
                   placeholder="Taylor"
                   autocomplete="family-name"
                   required
-                  @blur="titleCaseNameField(signupLastName)"
                 >
               </div>
             </div>

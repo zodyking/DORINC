@@ -4,7 +4,7 @@ import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
 import { invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
-import { toTitleCase } from '#shared/format/title-case'
+import { formatFieldText } from '#shared/format/prose-field'
 
 export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED'
 
@@ -27,7 +27,7 @@ export interface CustomerInput {
 }
 
 export async function createCustomer(db: Db, input: CustomerInput, createdBy: string) {
-  const displayName = toTitleCase(input.displayName.trim())
+  const displayName = formatFieldText(input.displayName.trim(), 'name')
   const [row] = await db.insert(customers).values({
     displayName,
     accountKind: input.accountKind,
@@ -65,7 +65,7 @@ export async function updateCustomer(db: Db, id: string, patch: Partial<Customer
 
   const normalizedPatch = { ...patch }
   if (normalizedPatch.displayName !== undefined) {
-    normalizedPatch.displayName = toTitleCase(normalizedPatch.displayName.trim())
+    normalizedPatch.displayName = formatFieldText(normalizedPatch.displayName.trim(), 'name')
   }
 
   const changes: Record<string, unknown> = { updatedAt: new Date() }
