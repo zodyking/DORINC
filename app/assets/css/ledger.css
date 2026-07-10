@@ -790,6 +790,26 @@ label.fld .fld-badge{ display:inline-block; margin-left:6px; font-size:10px; fon
 .sl-foot .btn{ flex:1; justify-content:center; padding:12px 16px; min-height:48px; }
 .sl-foot .btn.primary{ flex:1.4; }
 .sl-empty-veh{ padding:20px; text-align:center; color:#94a3b8; font-size:13px; background:#f8fafc; border-radius:12px; border:1px dashed #e2e8f0; }
+.sl-log-modes .sl-log-mode .av{ display:grid; place-items:center; font-size:20px; }
+.sl-change-mode{ margin-top:14px; width:100%; justify-content:center; }
+.sl-digital-editor{ display:flex; flex-direction:column; gap:12px; }
+.sl-digital-text{
+  width:100%; box-sizing:border-box; min-height:180px; padding:14px 16px;
+  border:1.5px solid #e2e8f0; border-radius:12px; background:#fff;
+  font:inherit; font-size:16px; line-height:1.5; resize:vertical;
+}
+.sl-digital-text:focus{ outline:none; border-color:#818cf8; box-shadow:0 0 0 3px rgba(79,70,229,.12); }
+.sl-voice-btn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  width:100%; min-height:52px; padding:12px 16px; border-radius:12px;
+  border:1.5px solid #c7d2fe; background:#eef2ff; color:#4338ca;
+  font:inherit; font-size:15px; font-weight:700; cursor:pointer;
+  transition:background .15s, border-color .15s, transform .1s;
+}
+.sl-voice-btn:hover{ background:#e0e7ff; }
+.sl-voice-btn.on{ background:#4f46e5; border-color:#4f46e5; color:#fff; }
+.sl-voice-btn.on .sl-voice-ico{ font-size:14px; }
+.sl-voice-ico{ font-size:18px; line-height:1; }
 
 /* ---------- Invoice editor tabs (invoice ↔ service log) ---------- */
 .ed-tabs-wrap{ margin-bottom:20px; }
