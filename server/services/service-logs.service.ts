@@ -62,6 +62,7 @@ export interface ServiceLogInput {
   workType?: ServiceLogWorkType
   complaint?: string | null
   internalNotes?: string | null
+  draftLineItems?: unknown
 }
 
 export async function createServiceLog(db: Db, input: ServiceLogInput, submittedBy: string) {
@@ -86,6 +87,7 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     workType: input.workType ?? 'repair',
     complaint: input.complaint ?? null,
     internalNotes: input.internalNotes ?? null,
+    draftLineItems: input.draftLineItems ?? null,
     customerSnapshot: buildCustomerSnapshot(customer),
     vehicleSnapshot: buildVehicleSnapshot(vehicle),
   }).returning()

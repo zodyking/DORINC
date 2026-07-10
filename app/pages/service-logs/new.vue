@@ -37,26 +37,17 @@ const location = ref('')
 const workType = ref('repair')
 const complaint = ref('')
 const internalNotes = ref('')
+import {
+  digitalLinesSummary,
+  digitalLinesToNotes,
+  toApiDraftLine,
+  type DigitalLineDraft,
+} from '~/utils/service-log-digital-lines'
+
 const photos = ref<{ file: File, preview: string }[]>([])
 type LogRecordMode = 'upload' | 'digital' | null
 const logRecordMode = ref<LogRecordMode>(null)
-const digitalWorkLog = ref('')
-
-const digitalLogRef = ref<HTMLTextAreaElement | null>(null)
-
-const voiceDictation = useVoiceDictation((text) => {
-  const sep = digitalWorkLog.value.trim() ? ' ' : ''
-  digitalWorkLog.value += `${sep}${text}`
-  nextTick(() => {
-    const el = digitalLogRef.value
-    if (el) {
-      el.focus()
-      el.selectionStart = el.selectionEnd = el.value.length
-    }
-  })
-})
-
-const { listening: voiceListening, supported: voiceSupported, error: voiceError, toggle: toggleVoice } = voiceDictation
+const digitalLineItems = ref<DigitalLineDraft[]>([])
 
 const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -95,7 +86,7 @@ const SERVICE_LOG_NARRATIONS: Record<number, string> = {
   2: 'Choose the vehicle.',
   3: 'Enter when and where the work happened.',
   4: 'Describe what you did.',
-  5: 'Upload your paper log or create a digital one.',
+  5: 'Upload your paper log or add digital line items.',
   6: 'Double-check everything, then submit.',
 }
 
@@ -122,21 +113,16 @@ function removePhoto(index: number) {
 function selectLogMode(mode: Exclude<LogRecordMode, null>) {
   logRecordMode.value = mode
   if (mode === 'digital') {
-    digitalWorkLog.value = internalNotes.value
     unlockSpeechFromUserGesture({ silent: true })
   }
 }
 
 function clearLogMode() {
-  if (logRecordMode.value === 'digital') {
-    internalNotes.value = digitalWorkLog.value.trim() || internalNotes.value
-  }
   logRecordMode.value = null
 }
 
 function prevFromLogStep() {
   if (logRecordMode.value) {
-    voiceDictation.stop()
     clearLogMode()
     return
   }
@@ -145,9 +131,11 @@ function prevFromLogStep() {
 
 function continueFromLogStep() {
   if (!logRecordMode.value) return
-  voiceDictation.stop()
-  if (logRecordMode.value === 'digital') {
-    internalNotes.value = digitalWorkLog.value.trim() || internalNotes.value
+  if (logRecordMode.value === 'digital' && digitalLineItems.value.length) {
+    const notesFromLines = digitalLinesToNotes(digitalLineItems.value)
+    internalNotes.value = internalNotes.value.trim()
+      ? `${internalNotes.value.trim()}\n\n${notesFromLines}`
+      : notesFromLines
   }
   nextStep()
 }
@@ -159,7 +147,7 @@ const logRecordSummary = computed(() => {
       : 'Paper sheet · no photos yet'
   }
   if (logRecordMode.value === 'digital') {
-    return digitalWorkLog.value.trim() ? 'Digital log' : 'Digital log · empty'
+    return digitalLinesSummary(digitalLineItems.value)
   }
   return '—'
 })
@@ -202,6 +190,9 @@ async function submitLog() {
         workType: workType.value,
         complaint: complaint.value || null,
         internalNotes: internalNotes.value || null,
+        draftLineItems: logRecordMode.value === 'digital' && digitalLineItems.value.length
+          ? digitalLineItems.value.map(toApiDraftLine)
+          : undefined,
       },
     })
 
@@ -223,7 +214,6 @@ async function submitLog() {
 }
 
 onBeforeUnmount(() => {
-  voiceDictation.stop()
   for (const p of photos.value) URL.revokeObjectURL(p.preview)
 })
 </script>
@@ -365,7 +355,7 @@ onBeforeUnmount(() => {
           <span class="av teal" aria-hidden="true">🎙️</span>
           <span class="nm">
             <b>Digital log</b>
-            <small>Speak or type what was done — edit anytime</small>
+            <small>Add line items by voice — labor, parts, services, fees</small>
           </span>
           <span class="chk" />
         </button>
@@ -393,32 +383,10 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else class="sl-log-digital">
-        <p class="sl-hint">
-          Describe the work performed — like you would on a paper service log. Tap the mic to dictate, then edit the text.
+        <p v-if="!digitalLineItems.length" class="sl-hint">
+          Add each charge one at a time — type, description, quantity or hours, and rate.
         </p>
-        <div class="sl-digital-editor">
-          <textarea
-            ref="digitalLogRef"
-            v-model="digitalWorkLog"
-            class="sl-digital-text"
-            rows="8"
-            placeholder="Example: Replaced front brake pads, bled lines, road tested OK…"
-          />
-          <button
-            v-if="voiceSupported"
-            type="button"
-            class="sl-voice-btn"
-            :class="{ on: voiceListening }"
-            :aria-pressed="voiceListening"
-            :aria-label="voiceListening ? 'Stop dictation' : 'Start dictation'"
-            @click="toggleVoice"
-          >
-            <span class="sl-voice-ico" aria-hidden="true">{{ voiceListening ? '■' : '🎙️' }}</span>
-            <span>{{ voiceListening ? 'Listening… tap to stop' : 'Tap to speak' }}</span>
-          </button>
-          <p v-else class="help">Voice input is not available here — type your notes instead.</p>
-          <p v-if="voiceError" class="help" style="color:#dc2626;">{{ voiceError }}</p>
-        </div>
+        <ServiceLogsDigitalLineItemWizard v-model:lines="digitalLineItems" />
         <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>
 
@@ -450,6 +418,12 @@ onBeforeUnmount(() => {
         <div class="r stack"><span class="k">Customer complaint</span><span class="v">{{ complaint || '—' }}</span></div>
         <div class="r stack"><span class="k">Internal notes</span><span class="v">{{ internalNotes || '—' }}</span></div>
         <div class="r"><span class="k">Service log</span><span class="v">{{ logRecordSummary }}</span></div>
+        <div v-if="logRecordMode === 'digital' && digitalLineItems.length" class="sl-review-lines">
+          <div v-for="(line, i) in digitalLineItems" :key="i" class="sl-review-line">
+            <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
+            <span>{{ line.description }} · {{ line.qty }} × {{ line.rate }}<template v-if="line.amount"> = {{ moneyDisplay(line.amount) }}</template></span>
+          </div>
+        </div>
       </div>
       <p v-if="submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>
       <div class="sl-foot">

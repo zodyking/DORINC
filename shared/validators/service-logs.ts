@@ -22,6 +22,14 @@ export const serviceLogStatusSchema = z.enum([
   'archived',
 ])
 
+export const serviceLogDraftLineSchema = z.object({
+  lineType: z.enum(['part', 'service', 'fee', 'labor']).optional(),
+  description: z.string().max(500),
+  qty: z.string().max(30).nullish(),
+  rate: z.string().max(30).nullish(),
+  amount: z.string().max(30).nullish(),
+})
+
 export const serviceLogCreateSchema = z.object({
   customerId: uuidSchema,
   vehicleId: uuidSchema,
@@ -31,18 +39,11 @@ export const serviceLogCreateSchema = z.object({
   workType: serviceLogWorkTypeSchema.optional(),
   complaint: z.string().max(10000).nullish(),
   internalNotes: z.string().max(10000).nullish(),
+  draftLineItems: z.array(serviceLogDraftLineSchema).nullish(),
 })
 
 export const serviceLogUpdateSchema = serviceLogCreateSchema
   .omit({ customerId: true, vehicleId: true })
-  .extend({
-    draftLineItems: z.array(z.object({
-      description: z.string().max(500),
-      qty: z.string().max(30).nullish(),
-      rate: z.string().max(30).nullish(),
-      amount: z.string().max(30).nullish(),
-    })).nullish(),
-  })
   .partial()
 
 export const serviceLogStatusChangeSchema = z.object({

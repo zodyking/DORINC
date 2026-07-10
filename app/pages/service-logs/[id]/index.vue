@@ -15,6 +15,7 @@ interface VehicleBits {
 }
 
 interface DraftLine {
+  lineType?: string | null
   description: string
   qty?: string | null
   rate?: string | null
@@ -515,10 +516,11 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           <div class="tscroll">
             <table class="tbl">
               <thead>
-                <tr><th>Description</th><th>Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+                <tr><th>Type</th><th>Description</th><th>Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
               </thead>
               <tbody>
                 <tr v-for="(line, i) in draftLines" :key="i">
+                  <td>{{ line.lineType ? lineTypeLabel(line.lineType as InvoiceLineType) : '—' }}</td>
                   <td>{{ line.description }}</td>
                   <td>{{ line.qty ?? '—' }}</td>
                   <td class="num">{{ line.rate ?? '—' }}</td>
