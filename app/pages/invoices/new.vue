@@ -90,6 +90,7 @@ const lines = ref<DraftLine[]>([])
 type LineEntryMode = 'guided' | 'manual' | null
 const lineEntryMode = ref<LineEntryMode>(null)
 const wizardLines = ref<WizardLineDraft[]>([])
+const lineWizardRef = ref<{ openWizard: () => void } | null>(null)
 
 watch(wizardLines, (wl) => {
   if (lineEntryMode.value === 'guided') {
@@ -238,13 +239,20 @@ function addLine() {
   lines.value.push(createEmptyLine())
 }
 
+async function openLineWizardFromGesture() {
+  unlockSpeechFromUserGesture({ silent: true })
+  await nextTick()
+  await nextTick()
+  lineWizardRef.value?.openWizard()
+}
+
 function selectLineEntryMode(mode: Exclude<LineEntryMode, null>) {
   lineEntryMode.value = mode
   if (mode === 'guided') {
     wizardLines.value = lines.value
       .filter(isDraftLineValid)
       .map(draftLineToWizard)
-    unlockSpeechFromUserGesture({ silent: true })
+    void openLineWizardFromGesture()
   }
   else if (!lines.value.length) {
     lines.value = [createEmptyLine()]
@@ -645,6 +653,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
 
           <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
             <CommonLineItemWizard
+              ref="lineWizardRef"
               v-model:lines="wizardLines"
               list-hint="Charges saved. Tap below to add more by voice."
             />

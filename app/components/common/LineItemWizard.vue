@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { lineTypeLabel } from '~/utils/invoices-ui'
 import { catalogTypePill } from '~/utils/catalog-ui'
-import type { WizardLineDraft } from '~/utils/line-item-wizard-ui'
+import {
+  calcLineAmount,
+  emptyWizardLine,
+  WIZARD_LINE_TYPES,
+  type WizardLineDraft,
+  type WizardLineType,
+} from '~/utils/line-item-wizard-ui'
 import type { SpeechLineField } from '~/utils/speech-line-flow'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
@@ -11,48 +17,58 @@ withDefaults(defineProps<{
   autoOpen?: boolean
 }>(), {
   listHint: 'Lines saved. Tap below to add more by voice.',
-  autoOpen: true,
+  autoOpen: false,
 })
 
 const sessionOpen = ref(false)
+const manualDraft = ref(emptyWizardLine())
 
-const speech = useSpeechLineFlow((line, addAnother) => {
+const {
+  supported,
+  status,
+  prompt,
+  lastHeard,
+  error,
+  captured,
+  fieldLabel,
+  start,
+  stop,
+  retryListen,
+} = useSpeechLineFlow((line, addAnother) => {
   lines.value = [...lines.value, line]
-  if (!addAnother) {
-    sessionOpen.value = false
-  }
+  if (!addAnother) sessionOpen.value = false
 })
 
 const statusLabel = computed(() => {
-  switch (speech.status.value) {
+  switch (status.value) {
     case 'speaking': return 'Listen…'
     case 'listening': return 'Your turn — speak now'
     case 'processing': return 'Got it…'
-    default: return 'Ready'
+    default: return sessionOpen.value ? 'Ready' : ''
   }
 })
 
 const capturedEntries = computed(() => {
   const fields: SpeechLineField[] = ['type', 'description', 'qty', 'rate']
   return fields
-    .filter(f => speech.captured.value[f])
+    .filter(f => captured.value[f])
     .map(f => ({
       key: f,
-      label: speech.fieldLabel(f),
+      label: fieldLabel(f),
       value: f === 'type'
-        ? lineTypeLabel(speech.captured.value[f] as 'labor')
-        : speech.captured.value[f]!,
+        ? lineTypeLabel(captured.value[f] as WizardLineType)
+        : captured.value[f]!,
     }))
 })
 
 function openSession() {
   sessionOpen.value = true
   unlockSpeechFromUserGesture({ silent: true })
-  speech.start()
+  nextTick(() => start())
 }
 
 function cancelSession() {
-  speech.stop()
+  stop()
   sessionOpen.value = false
 }
 
@@ -60,17 +76,34 @@ function removeLine(index: number) {
   lines.value = lines.value.filter((_, i) => i !== index)
 }
 
-onMounted(() => {
-  if (autoOpen && !lines.value.length) openSession()
-})
+function saveManualLine(addAnother: boolean) {
+  const d = manualDraft.value
+  if (!d.lineType || !d.description.trim() || !d.qty.trim() || !d.rate.trim()) return
+  const amount = calcLineAmount(d.qty, d.rate)
+  lines.value = [...lines.value, {
+    lineType: d.lineType as WizardLineType,
+    description: d.description.trim(),
+    qty: d.qty.trim(),
+    rate: d.rate.trim(),
+    amount,
+  }]
+  manualDraft.value = emptyWizardLine()
+  if (addAnother) {
+    sessionOpen.value = true
+  }
+  else {
+    sessionOpen.value = false
+  }
+}
 
-onBeforeUnmount(() => speech.stop())
+onBeforeUnmount(() => stop())
 
 defineExpose({ openWizard: openSession })
 </script>
 
 <template>
   <div class="li-wizard-root">
+    <!-- Saved lines -->
     <div v-if="lines.length && !sessionOpen" class="li-lines-list">
       <p class="sl-hint">{{ listHint }}</p>
       <div class="li-lines-cards">
@@ -86,34 +119,39 @@ defineExpose({ openWizard: openSession })
           </span>
         </div>
       </div>
-      <button
-        v-if="speech.supported"
-        type="button"
-        class="btn primary li-add-line-btn"
-        @click="openSession"
-      >
+      <button type="button" class="btn primary li-add-line-btn" @click="openSession">
         + Add another line by voice
       </button>
     </div>
 
-    <div v-if="sessionOpen" class="li-speech-flow">
+    <!-- Start CTA — always visible when no session and no saved lines -->
+    <div v-else-if="!sessionOpen" class="li-start-cta">
+      <button type="button" class="sl-voice-btn li-start-btn" @click="openSession">
+        <span class="sl-voice-ico" aria-hidden="true">🎙️</span>
+        <span>Tap to start — add lines by voice</span>
+      </button>
+      <p class="help">The app will ask each question out loud. You answer by speaking.</p>
+    </div>
+
+    <!-- Active voice session -->
+    <div v-else class="li-speech-flow">
       <div
         class="li-speech-orb"
         :class="{
-          speaking: speech.status === 'speaking',
-          listening: speech.status === 'listening',
-          processing: speech.status === 'processing',
+          speaking: status === 'speaking',
+          listening: status === 'listening',
+          processing: status === 'processing',
         }"
         aria-hidden="true"
       >
         🎙️
       </div>
 
-      <p class="li-speech-status">{{ statusLabel }}</p>
-      <p class="li-speech-prompt">{{ speech.prompt }}</p>
+      <p v-if="statusLabel" class="li-speech-status">{{ statusLabel }}</p>
+      <p class="li-speech-prompt">{{ prompt || 'Labor, part, service, or fee?' }}</p>
 
-      <p v-if="speech.lastHeard" class="li-speech-heard">
-        You said: “{{ speech.lastHeard }}”
+      <p v-if="lastHeard" class="li-speech-heard">
+        You said: “{{ lastHeard }}”
       </p>
 
       <div v-if="capturedEntries.length" class="li-speech-captured">
@@ -123,28 +161,64 @@ defineExpose({ openWizard: openSession })
         </div>
       </div>
 
-      <p v-if="speech.error" class="help" style="color:#dc2626;">{{ speech.error }}</p>
+      <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
 
-      <div v-if="!speech.supported" class="li-speech-fallback">
-        Voice is not supported in this browser. Use manual entry instead.
-      </div>
-
-      <div v-else class="li-speech-actions">
+      <div v-if="supported" class="li-speech-actions">
         <button
-          v-if="speech.status === 'listening' || speech.status === 'idle'"
           type="button"
           class="sl-voice-btn"
-          @click="speech.retryListen"
+          :class="{ on: status === 'listening' }"
+          @click="retryListen"
         >
-          Tap to speak again
+          <span class="sl-voice-ico" aria-hidden="true">{{ status === 'listening' ? '■' : '🎙️' }}</span>
+          <span>{{ status === 'listening' ? 'Listening… tap to stop' : 'Tap to speak' }}</span>
         </button>
-        <button type="button" class="btn ghost sm" @click="cancelSession">Cancel</button>
       </div>
+
+      <!-- Manual fallback when voice unavailable or user prefers typing -->
+      <div v-if="!supported || error" class="li-manual-fallback">
+        <p class="sl-hint">Or type the line manually:</p>
+        <label class="fld">
+          <span>Type</span>
+          <select v-model="manualDraft.lineType">
+            <option value="">Select…</option>
+            <option v-for="t in WIZARD_LINE_TYPES" :key="t" :value="t">{{ lineTypeLabel(t) }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          <span>Description</span>
+          <input v-model="manualDraft.description" type="text" placeholder="What was done?">
+        </label>
+        <label class="fld">
+          <span>{{ manualDraft.lineType === 'labor' ? 'Hours' : 'Quantity' }}</span>
+          <input v-model="manualDraft.qty" type="text" inputmode="decimal">
+        </label>
+        <label class="fld">
+          <span>Rate</span>
+          <input v-model="manualDraft.rate" type="text" inputmode="decimal">
+        </label>
+        <div class="li-line-save-actions">
+          <button type="button" class="btn primary" @click="saveManualLine(true)">Save &amp; add another</button>
+          <button type="button" class="btn" @click="saveManualLine(false)">Save &amp; finish</button>
+        </div>
+      </div>
+
+      <button type="button" class="btn ghost sm" style="margin-top:12px;" @click="cancelSession">Cancel</button>
     </div>
   </div>
 </template>
 
 <style scoped>
+.li-start-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+.li-start-btn {
+  min-height: 56px;
+  font-size: 16px;
+}
 .li-lines-cards {
   display: flex;
   flex-direction: column;
@@ -195,6 +269,7 @@ defineExpose({ openWizard: openSession })
   align-items: center;
   text-align: center;
   padding: 8px 0 4px;
+  width: 100%;
 }
 .li-speech-orb {
   width: 88px;
@@ -287,10 +362,22 @@ defineExpose({ openWizard: openSession })
   flex-direction: column;
   gap: 10px;
 }
-.li-speech-fallback {
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.5;
-  padding: 12px;
+.li-manual-fallback {
+  width: 100%;
+  text-align: left;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+.li-line-save-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.li-line-save-actions .btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
 }
 </style>

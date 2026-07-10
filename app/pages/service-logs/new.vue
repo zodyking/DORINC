@@ -48,6 +48,7 @@ const photos = ref<{ file: File, preview: string }[]>([])
 type LogRecordMode = 'upload' | 'digital' | null
 const logRecordMode = ref<LogRecordMode>(null)
 const digitalLineItems = ref<WizardLineDraft[]>([])
+const lineWizardRef = ref<{ openWizard: () => void } | null>(null)
 
 const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -110,11 +111,16 @@ function removePhoto(index: number) {
   photos.value.splice(index, 1)
 }
 
+async function openLineWizardFromGesture() {
+  unlockSpeechFromUserGesture({ silent: true })
+  await nextTick()
+  await nextTick()
+  lineWizardRef.value?.openWizard()
+}
+
 function selectLogMode(mode: Exclude<LogRecordMode, null>) {
   logRecordMode.value = mode
-  if (mode === 'digital') {
-    unlockSpeechFromUserGesture({ silent: true })
-  }
+  if (mode === 'digital') void openLineWizardFromGesture()
 }
 
 function clearLogMode() {
@@ -383,10 +389,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else class="sl-log-digital">
-        <p v-if="!digitalLineItems.length" class="sl-hint">
-          Listen and answer out loud — the app will walk you through each line.
-        </p>
         <CommonLineItemWizard
+          ref="lineWizardRef"
           v-model:lines="digitalLineItems"
           list-hint="Lines saved. Tap below to add more by voice."
         />

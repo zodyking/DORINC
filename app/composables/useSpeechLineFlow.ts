@@ -14,7 +14,7 @@ import { emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-
 
 export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnother: boolean) => void) {
   const active = ref(false)
-  const supported = ref(false)
+  const supported = ref(isSpeechAnswerSupported())
   const status = ref<'idle' | 'speaking' | 'listening' | 'processing'>('idle')
   const field = ref<SpeechLineField>('type')
   const prompt = ref('')
@@ -26,9 +26,9 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
   let aborted = false
   let listenGen = 0
 
-  onMounted(() => {
+  if (import.meta.client) {
     supported.value = isSpeechAnswerSupported()
-  })
+  }
 
   function resetDraft() {
     draft.value = emptyWizardLine()
@@ -53,15 +53,21 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
     cancelSpeech()
     speakWizardText(text, {
       fromGesture: true,
+      skipConsentCheck: true,
       onEnd: () => {
         if (aborted) return
-        window.setTimeout(() => void beginListen(), 450)
+        window.setTimeout(() => void beginListen(), 500)
       },
     })
   }
 
   async function beginListen() {
     if (aborted) return
+    if (!supported.value) {
+      error.value = 'Microphone is not available in this browser.'
+      status.value = 'idle'
+      return
+    }
     const gen = ++listenGen
     status.value = 'listening'
     try {
@@ -73,11 +79,11 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
       if (aborted || gen !== listenGen) return
       const code = (e as Error).message
       if (code === 'no-speech') {
-        error.value = 'Did not catch that. Listening again…'
+        error.value = 'Did not catch that. Trying again…'
         speakThenListen(retryPromptForField(field.value))
         return
       }
-      error.value = 'Voice capture failed. Tap the mic to try again.'
+      error.value = 'Voice capture failed. Tap the button to try again.'
       status.value = 'idle'
     }
   }
@@ -97,7 +103,7 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
         return
       }
       draft.value.lineType = type
-      captured.value.type = type
+      captured.value = { ...captured.value, type }
       field.value = 'description'
       speakThenListen(promptForSpeechField('description', type))
       return
@@ -110,7 +116,7 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
         return
       }
       draft.value.description = desc
-      captured.value.description = desc
+      captured.value = { ...captured.value, description: desc }
       field.value = 'qty'
       speakThenListen(promptForSpeechField('qty', draft.value.lineType))
       return
@@ -123,7 +129,7 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
         return
       }
       draft.value.qty = qty
-      captured.value.qty = qty
+      captured.value = { ...captured.value, qty }
       field.value = 'rate'
       speakThenListen(promptForSpeechField('rate', draft.value.lineType))
       return
@@ -136,7 +142,7 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
         return
       }
       draft.value.rate = rate
-      captured.value.rate = rate
+      captured.value = { ...captured.value, rate }
       field.value = 'confirm'
       const line = buildLineFromDraft(draft.value)
       const summary = line
@@ -171,31 +177,42 @@ export function useSpeechLineFlow(onLineSaved: (line: WizardLineDraft, addAnothe
   }
 
   function start() {
-    if (!supported.value) return
+    supported.value = isSpeechAnswerSupported()
     aborted = false
     active.value = true
     resetDraft()
     unlockSpeechFromUserGesture({ silent: true })
+    if (!supported.value) {
+      prompt.value = 'Voice is not available here. Use the manual fields below.'
+      status.value = 'idle'
+      return
+    }
+    error.value = ''
+    prompt.value = promptForSpeechField('type', '')
     speakThenListen(promptForSpeechField('type', ''))
   }
 
   function retryListen() {
-    if (!supported.value || aborted) return
+    if (aborted) return
     unlockSpeechFromUserGesture({ silent: true })
+    if (!supported.value) {
+      error.value = 'Voice is not available in this browser.'
+      return
+    }
     void beginListen()
   }
 
   onBeforeUnmount(() => stop())
 
   return {
-    active: readonly(active),
-    supported: readonly(supported),
-    status: readonly(status),
-    field: readonly(field),
-    prompt: readonly(prompt),
-    lastHeard: readonly(lastHeard),
-    error: readonly(error),
-    captured: readonly(captured),
+    active,
+    supported,
+    status,
+    field,
+    prompt,
+    lastHeard,
+    error,
+    captured,
     fieldLabel: (f: SpeechLineField) => fieldLabel(f, draft.value.lineType),
     start,
     stop,
