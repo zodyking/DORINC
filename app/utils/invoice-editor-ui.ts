@@ -1,6 +1,7 @@
 // Invoice editor helpers (mockup: PAGE: INVOICE EDITOR / P1-24).
 
 import { normalizeLineType } from '#shared/line-item-types'
+import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
 import type { InvoiceLineType } from './invoices-ui'
 import { moneyDisplay, paymentTermsLabel } from './invoices-ui'
 import type { LineTypeBreakdown } from './invoice-creator-ui'
@@ -62,7 +63,10 @@ export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
   catalogItemId: string
 } {
   return {
-    lineType: catalogTypeToLineType(item.itemType),
+    lineType: (() => {
+      const fromCatalog = catalogTypeToLineType(item.itemType)
+      return inferLineTypeFromDescription(item.name) ?? fromCatalog
+    })(),
     description: item.name,
     quantity: '1',
     unitPrice: item.defaultPrice ?? '0',

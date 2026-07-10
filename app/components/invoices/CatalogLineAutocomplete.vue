@@ -3,8 +3,11 @@
 import { catalogItemSub, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import { catalogTypeLabel, type CatalogItemType } from '~/utils/catalog-ui'
 import { useProseField } from '~/composables/useProseField'
+import type { LineItemType } from '#shared/line-item-types'
+import { applyInferredLineType } from '~/utils/line-item-wizard-ui'
 
 const model = defineModel<string>({ required: true })
+const lineType = defineModel<LineItemType | ''>('lineType')
 
 const props = withDefaults(defineProps<{
   disabled?: boolean
@@ -127,8 +130,15 @@ function pick(item: CatalogQuickItem) {
   items.value = []
 }
 
+function syncInferredLineType() {
+  const draft = { lineType: lineType.value ?? '', description: model.value }
+  applyInferredLineType(draft)
+  lineType.value = draft.lineType
+}
+
 function onInput(event: Event) {
   proseOnInput(event)
+  syncInferredLineType()
   open.value = true
   updatePanelPosition()
   scheduleSearch(model.value)

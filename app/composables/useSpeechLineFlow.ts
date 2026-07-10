@@ -21,7 +21,7 @@ import {
   type SpeechLineField,
 } from '~/utils/speech-line-flow'
 import { formatFieldText } from '#shared/format/prose-field'
-import { emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
+import { applyInferredLineType, emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
 
 export type SpeechFlowMode = 'command' | 'add' | 'edit'
 
@@ -322,6 +322,7 @@ export function useSpeechLineFlow(handlers: {
         return
       }
       draft.value.description = desc
+      applyInferredLineType(draft.value)
       captured.value = { ...captured.value, description: desc }
       if (isEdit) {
         goToEditPick()

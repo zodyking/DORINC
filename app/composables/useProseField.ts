@@ -4,7 +4,6 @@ import {
   autocapitalizeForMode,
   formatFieldText,
   formatLiveFieldText,
-  spellcheckForMode,
 } from '#shared/format/prose-field'
 
 export function parseProseFieldMode(value: unknown): ProseFieldMode {
@@ -23,7 +22,6 @@ const SKIP_INPUT_TYPES = new Set([
 
 function applyElementAttrs(el: ProseElement, mode: ProseFieldMode) {
   el.autocapitalize = autocapitalizeForMode(mode)
-  el.spellcheck = spellcheckForMode(mode)
 }
 
 function applyLiveFormatToElement(el: ProseElement, mode: ProseFieldMode) {
@@ -130,7 +128,6 @@ export function useProseField(
 
   const inputAttrs = computed(() => ({
     autocapitalize: autocapitalizeForMode(mode),
-    spellcheck: spellcheckForMode(mode),
   }))
 
   return {

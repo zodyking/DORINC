@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   calcLineAmount,
+  applyInferredLineType,
   emptyWizardLine,
   WIZARD_LINE_TYPES,
   type WizardLineDraft,
@@ -20,6 +21,10 @@ withDefaults(defineProps<{
 const sessionOpen = ref(false)
 const manualOpen = ref(false)
 const manualDraft = ref(emptyWizardLine())
+
+watch(() => manualDraft.value.description, () => {
+  applyInferredLineType(manualDraft.value)
+})
 
 const {
   supported,

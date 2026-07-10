@@ -689,6 +689,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                       <CatalogLineAutocomplete
                         :ref="(el) => setLineAcRef(line.localId, el)"
                         v-model="line.description"
+                        v-model:line-type="line.lineType"
                         @typed="onLineDescriptionTyped(line)"
                         @select="applyCatalogToLine(line, $event)"
                       />

@@ -807,6 +807,7 @@ const aiPopStyle = computed(() => {
                       <td>
                         <CatalogLineAutocomplete
                           v-model="line.description"
+                          v-model:line-type="line.lineType"
                           :disabled="!editable"
                           @focus="selectedLineId = line.id"
                           @blur="patchLine(line)"

@@ -38,10 +38,6 @@ export function formatVoiceText(value: string, mode: ProseFieldMode = 'prose'): 
   return formatFieldText(value, mode)
 }
 
-export function spellcheckForMode(mode: ProseFieldMode): boolean {
-  return mode === 'prose'
-}
-
 export function autocapitalizeForMode(mode: ProseFieldMode): string {
   if (mode === 'prose' || mode === 'name') return 'words'
   return 'off'
