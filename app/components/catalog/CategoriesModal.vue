@@ -66,7 +66,7 @@ function onScrimClick(e: MouseEvent) {
       <div class="mhead">
         <div>
           <h3 id="cat-cat-title">Manage categories</h3>
-          <p>Group parts, services, and fees for faster invoice building</p>
+          <p>Group parts, labor, and fees for faster invoice building</p>
         </div>
         <button type="button" class="close" aria-label="Close" @click="close">✕</button>
       </div>

@@ -20,6 +20,7 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
   it('maps catalog types to invoice line types', () => {
     expect(catalogTypeToLineType('part')).toBe('part')
     expect(catalogTypeToLineType('fee')).toBe('fee')
+    expect(catalogTypeToLineType('labor')).toBe('labor')
     expect(catalogTypeToLineType('service')).toBe('labor')
     expect(catalogTypeToLineType('unknown')).toBe('labor')
   })
@@ -27,7 +28,7 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
   it('applies catalog picks onto line fields', () => {
     expect(applyCatalogItemToLineFields({
       id: 'cat-1',
-      itemType: 'service',
+      itemType: 'labor',
       sku: null,
       name: 'Diesel tech labor',
       defaultPrice: '145.00',

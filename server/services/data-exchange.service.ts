@@ -517,7 +517,7 @@ async function importCatalogItems(
 
     const id = typeof row.id === 'string' ? row.id : undefined
     const patch = {
-      itemType: (row.itemType as 'part' | 'service' | 'fee') ?? 'service',
+      itemType: (row.itemType as 'part' | 'labor' | 'fee') ?? 'labor',
       sku: row.sku ? String(row.sku) : null,
       name,
       description: row.description ? String(row.description) : null,

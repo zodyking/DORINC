@@ -25,7 +25,7 @@ interface CatalogItemRow {
   createdAt: string
 }
 
-type TypeChip = 'all' | 'part' | 'service' | 'fee'
+type TypeChip = 'all' | 'part' | 'labor' | 'fee'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.can('catalog.manage.all'))
@@ -53,7 +53,7 @@ const { data, refresh, pending, error: listError } = await useFetch<{ items: Cat
 
 const { data: allCount, refresh: refreshAllCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
 const { data: partCount, refresh: refreshPartCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
-const { data: serviceCount, refresh: refreshServiceCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'service', pageSize: 1 } })
+const { data: laborCount, refresh: refreshLaborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
 const { data: feeCount, refresh: refreshFeeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
 
 const { data: categoriesData, refresh: refreshCategories } = await useFetch<{ items: { id: string, name: string }[] }>(
@@ -81,7 +81,7 @@ const listCountLabel = computed(() => {
 const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: allCount.value?.total ?? 0 },
   { key: 'part' as const, label: 'Parts', count: partCount.value?.total ?? 0 },
-  { key: 'service' as const, label: 'Services', count: serviceCount.value?.total ?? 0 },
+  { key: 'labor' as const, label: 'Labor', count: laborCount.value?.total ?? 0 },
   { key: 'fee' as const, label: 'Fees', count: feeCount.value?.total ?? 0 },
 ])
 
@@ -89,7 +89,7 @@ async function refreshCounts() {
   await Promise.all([
     refreshAllCount(),
     refreshPartCount(),
-    refreshServiceCount(),
+    refreshLaborCount(),
     refreshFeeCount(),
   ])
 }
@@ -246,7 +246,7 @@ function onRowClick(row: CatalogItemRow) {
     <div class="pagehead">
       <div>
         <h2>Catalog</h2>
-        <p>Parts, services, and fees for invoice lines</p>
+        <p>Parts, labor, and fees for invoice lines</p>
       </div>
       <div class="actions">
         <button

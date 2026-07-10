@@ -46,7 +46,7 @@ function setType(type: CatalogItemType) {
 const priceLabel = computed(() => {
   switch (model.value.itemType) {
     case 'part': return 'Unit price'
-    case 'service': return 'Rate per hour'
+    case 'labor': return 'Rate per hour'
     case 'fee': return 'Fee amount'
   }
 })
@@ -54,7 +54,7 @@ const priceLabel = computed(() => {
 const pricePlaceholder = computed(() => {
   switch (model.value.itemType) {
     case 'part': return 'e.g. 48.20'
-    case 'service': return 'e.g. 125.00'
+    case 'labor': return 'e.g. 125.00'
     case 'fee': return 'e.g. 3.5 for %'
   }
 })

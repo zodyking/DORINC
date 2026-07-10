@@ -1,23 +1,24 @@
 // Catalog list/modal presentation helpers (mockup: PAGE: CATALOG).
 
-export type CatalogItemType = 'part' | 'service' | 'fee'
+export type CatalogItemType = 'part' | 'labor' | 'fee'
 
 export const CATALOG_ITEM_TYPE_OPTIONS: { value: CatalogItemType, label: string }[] = [
   { value: 'part', label: 'Part' },
-  { value: 'service', label: 'Service' },
+  { value: 'labor', label: 'Labor' },
   { value: 'fee', label: 'Fee' },
 ]
 
-/** Normalize legacy catalog rows that still store labor. */
+/** Normalize legacy catalog rows that still store service (pre-0033). */
 export function normalizeCatalogItemType(type: string): CatalogItemType {
-  if (type === 'part' || type === 'fee') return type
-  return 'service'
+  if (type === 'part' || type === 'labor' || type === 'fee') return type
+  if (type === 'service') return 'labor'
+  return 'labor'
 }
 
 export function catalogTypeLabel(type: string): string {
   switch (normalizeCatalogItemType(type)) {
     case 'part': return 'Part'
-    case 'service': return 'Service'
+    case 'labor': return 'Labor'
     case 'fee': return 'Fee'
   }
 }
@@ -25,7 +26,7 @@ export function catalogTypeLabel(type: string): string {
 export function catalogTypePill(type: string): string {
   switch (normalizeCatalogItemType(type)) {
     case 'part': return 'pill ok'
-    case 'service': return 'pill info'
+    case 'labor': return 'pill info'
     case 'fee': return 'pill gray'
   }
 }
@@ -45,7 +46,7 @@ export function catalogPriceDisplay(
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num)
     : price
 
-  if (type === 'service' && uom === 'hr') return `${formatted} / hr`
+  if (type === 'labor' && uom === 'hr') return `${formatted} / hr`
   if (uom === 'flat') return `${formatted} flat`
   return formatted
 }
@@ -60,7 +61,7 @@ export const CATALOG_UOM_OPTIONS = [
 export function defaultUomForCatalogType(type: CatalogItemType): string {
   switch (type) {
     case 'part': return 'each'
-    case 'service': return 'hr'
+    case 'labor': return 'hr'
     case 'fee': return 'pct'
   }
 }

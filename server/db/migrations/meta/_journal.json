@@ -218,6 +218,20 @@
       "when": 1783571000000,
       "tag": "0031_convert_service_line_items_to_labor",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1783572000000,
+      "tag": "0032_convert_catalog_labor_to_service",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1783573000000,
+      "tag": "0033_convert_catalog_service_to_labor",
+      "breakpoints": true
     }
   ]
 }
