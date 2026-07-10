@@ -163,7 +163,7 @@ const settingsNavGroups = [
   {
     label: 'Workspace',
     items: [
-      { id: 'business' as const, label: 'Business name', icon: '🏢' },
+      { id: 'business' as const, label: 'Business', icon: '🏢' },
       { id: 'email' as const, label: 'Email (SMTP)', icon: '✉️' },
       { id: 'invoice' as const, label: 'Invoices', icon: '🧾' },
       { id: 'catalog' as const, label: 'Catalog detection', icon: '📦' },

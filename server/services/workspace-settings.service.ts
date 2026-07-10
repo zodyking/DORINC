@@ -64,7 +64,7 @@ export async function getBusinessProfile(db: Db): Promise<BusinessProfile> {
   const businessName = typeof raw?.businessName === 'string' && raw.businessName.trim()
     ? raw.businessName.trim()
     : legacyName
-  return businessProfileSchema.parse({ ...DEFAULT_BUSINESS_PROFILE, businessName })
+  return businessProfileSchema.parse({ ...DEFAULT_BUSINESS_PROFILE, ...raw, businessName })
 }
 
 export async function saveBusinessProfile(db: Db, input: BusinessProfile, updatedBy: string) {
