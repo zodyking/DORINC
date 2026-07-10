@@ -5,6 +5,7 @@ import {
   previewInvoicePdf,
 } from '../../../services/invoice-pdf.service'
 import { apiError } from '../../../utils/api-error'
+import { throwPdfRenderApiError } from '../../../utils/pdf-api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
@@ -29,8 +30,6 @@ export default defineEventHandler(async (event) => {
         throw apiError(event, 'INTERNAL_ERROR', 'No published invoice template is configured')
       }
     }
-    const message = err instanceof Error ? err.message : 'PDF preview failed'
-    const code = message.includes('Laravel PDF service failed') ? 'UPSTREAM_ERROR' : 'INTERNAL_ERROR'
-    throw apiError(event, code, message)
+    throwPdfRenderApiError(event, err)
   }
 })

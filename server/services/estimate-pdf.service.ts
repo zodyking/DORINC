@@ -8,6 +8,7 @@ import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getFileWithData } from './files.service'
 import { getEstimateDetail, EstimatesServiceError } from './estimates.service'
 import { buildInvoiceRenderHtml } from './invoice-pdf.service'
+import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
 
 export type EstimatePdfServiceErrorCode
   = 'NOT_FOUND'
@@ -143,7 +144,12 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
   }
 
   const { version } = await getDefaultPublishedTemplateVersion(db)
-  const htmlContent = buildEstimateRenderHtml(version.htmlContent, detail)
+  const templateHtml = applyDesignSettingsToHtml(
+    version.htmlContent,
+    version.designSettings,
+    version.designSettings.logoFileId ? `/api/files/${version.designSettings.logoFileId}/preview` : null,
+  )
+  const htmlContent = buildEstimateRenderHtml(templateHtml, detail)
   const filename = `${detail.estimateNumberFormatted}.pdf`
 
   const job = await enqueuePdfRenderJob(db, {

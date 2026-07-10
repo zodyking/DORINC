@@ -50,8 +50,14 @@ if (!is_string($html) || trim($html) === '') {
     exit;
 }
 
-$paper = is_string($payload['paper'] ?? null) ? strtolower($payload['paper']) : 'letter';
+$paper = normalizePaper(is_string($payload['paper'] ?? null) ? $payload['paper'] : 'letter');
 $margins = is_array($payload['margins'] ?? null) ? $payload['margins'] : [];
+$marginTop = isset($margins['top']) ? (float) $margins['top'] : 0.5;
+$marginRight = isset($margins['right']) ? (float) $margins['right'] : 0.5;
+$marginBottom = isset($margins['bottom']) ? (float) $margins['bottom'] : 0.5;
+$marginLeft = isset($margins['left']) ? (float) $margins['left'] : 0.5;
+
+$html = injectPageMargins($html, $paper, $marginTop, $marginRight, $marginBottom, $marginLeft);
 
 $options = new Options();
 $options->set('isRemoteEnabled', true);
@@ -61,18 +67,6 @@ $options->set('defaultFont', 'DejaVu Sans');
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html);
 $dompdf->setPaper($paper, 'portrait');
-
-$marginTop = isset($margins['top']) ? (float) $margins['top'] : 0.5;
-$marginRight = isset($margins['right']) ? (float) $margins['right'] : 0.5;
-$marginBottom = isset($margins['bottom']) ? (float) $margins['bottom'] : 0.5;
-$marginLeft = isset($margins['left']) ? (float) $margins['left'] : 0.5;
-
-$dompdf->set_option('defaultPaperMargins', [
-    'top' => $marginTop,
-    'right' => $marginRight,
-    'bottom' => $marginBottom,
-    'left' => $marginLeft,
-]);
 
 try {
     $dompdf->render();
@@ -86,3 +80,43 @@ try {
 header('Content-Type: application/pdf');
 header('Content-Disposition: inline; filename="document.pdf"');
 echo $dompdf->output();
+
+function normalizePaper(string $paper): string
+{
+    $value = strtolower(trim($paper));
+    return $value === 'a4' ? 'a4' : 'letter';
+}
+
+function pageSizeCss(string $paper): string
+{
+    return $paper === 'a4' ? 'A4' : 'Letter';
+}
+
+function injectPageMargins(
+    string $html,
+    string $paper,
+    float $top,
+    float $right,
+    float $bottom,
+    float $left,
+): string {
+    $rule = sprintf(
+        '@page { size: %s; margin: %.4fin %.4fin %.4fin %.4fin; }',
+        pageSizeCss($paper),
+        $top,
+        $right,
+        $bottom,
+        $left,
+    );
+
+    if (preg_match('/@page\s*\{[^}]*\}/i', $html) === 1) {
+        return (string) preg_replace('/@page\s*\{[^}]*\}/i', $rule, $html, 1);
+    }
+
+    $style = "<style data-pdf-page=\"true\">\n{$rule}\n</style>\n";
+    if (stripos($html, '</head>') !== false) {
+        return (string) preg_replace('/<\/head>/i', $style . '</head>', $html, 1);
+    }
+
+    return $style . $html;
+}

@@ -1,6 +1,16 @@
+import {
+  injectPdfPageMargins,
+  isPdfUpstreamFailureMessage,
+  normalizePdfPaper,
+  pdfRenderServiceBaseUrl,
+  resolvePdfMargins,
+  type PdfPaper,
+} from '../../shared/pdf-render'
+
 export interface RenderPdfOptions {
-  paper?: 'letter' | 'a4'
+  paper?: PdfPaper | 'Letter' | 'A4' | string
   marginInches?: number
+  margins?: Partial<{ top: number, right: number, bottom: number, left: number }>
 }
 
 /** Render HTML to PDF via the Laravel DomPDF sidecar (same contract as pdf-render worker). */
@@ -8,20 +18,28 @@ export async function renderHtmlToPdfBuffer(
   html: string,
   options: RenderPdfOptions = {},
 ): Promise<Buffer> {
-  const margin = options.marginInches ?? 0.5
-  const paper = options.paper ?? 'letter'
-  const base = (process.env.PDF_RENDER_URL?.trim() || 'http://laravel-pdf:8080').replace(/\/$/, '')
+  const paper = normalizePdfPaper(options.paper)
+  const margins = resolvePdfMargins(options)
+  const base = pdfRenderServiceBaseUrl()
+  const preparedHtml = injectPdfPageMargins(html, { paper, margins })
 
-  const res = await fetch(`${base}/render`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      html,
-      paper,
-      margins: { top: margin, right: margin, bottom: margin, left: margin },
-    }),
-    signal: AbortSignal.timeout(60_000),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${base}/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        html: preparedHtml,
+        paper,
+        margins,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
+  }
+  catch (err) {
+    const cause = err instanceof Error ? err.message : String(err)
+    throw new Error(`Laravel PDF service failed: ${cause}`, { cause: err })
+  }
 
   if (!res.ok) {
     let detail = res.statusText
@@ -37,3 +55,5 @@ export async function renderHtmlToPdfBuffer(
 
   return Buffer.from(await res.arrayBuffer())
 }
+
+export { isPdfUpstreamFailureMessage }
