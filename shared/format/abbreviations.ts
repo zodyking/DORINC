@@ -1,51 +1,54 @@
-/** Vehicle / location shorthand → full phrase (stored and displayed expanded). */
+/** Vehicle / location phrases stored as shorthand; speech reads the full phrase aloud. */
 
 export interface AbbreviationEntry {
-  /** Canonical full phrase. */
+  /** Stored shorthand (e.g. F/R). */
+  abbr: string
+  /** Spoken / typed full phrase (e.g. Front Right). */
   full: string
-  /** Patterns matched case-insensitively (slashes, spaces, hyphens flexible). */
-  patterns: RegExp[]
 }
 
 export const LOCATION_ABBREVIATIONS: AbbreviationEntry[] = [
-  {
-    full: 'Front Right',
-    patterns: [/\bF\s*[\/\-]\s*R\b/gi],
-  },
-  {
-    full: 'Front Left',
-    patterns: [/\bF\s*[\/\-]\s*L\b/gi],
-  },
-  {
-    full: 'Right Side',
-    patterns: [/\bR\s*[\/\-]\s*S\b/gi],
-  },
-  {
-    full: 'Left Side',
-    patterns: [/\bL\s*[\/\-]\s*S\b/gi],
-  },
-  {
-    full: 'Rear Right',
-    patterns: [/\bR\s*[\/\-]\s*R\b/gi],
-  },
-  {
-    full: 'Rear Left',
-    patterns: [/\bR\s*[\/\-]\s*L\b/gi],
-  },
+  { abbr: 'F/R', full: 'Front Right' },
+  { abbr: 'F/L', full: 'Front Left' },
+  { abbr: 'R/S', full: 'Right Side' },
+  { abbr: 'L/S', full: 'Left Side' },
+  { abbr: 'R/R', full: 'Rear Right' },
+  { abbr: 'R/L', full: 'Rear Left' },
 ]
 
-/** Expand location abbreviations in prose (typed or dictated). */
-export function expandAbbreviations(value: string): string {
+function phrasePattern(full: string): RegExp {
+  const words = full.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return new RegExp(`\\b${words.join('\\s+')}\\b`, 'gi')
+}
+
+function abbrPattern(abbr: string): RegExp {
+  const [a, b] = abbr.split('/')
+  return new RegExp(`\\b${a}\\s*[\\/\\-]\\s*${b}\\b`, 'gi')
+}
+
+/** Compress full phrases to shorthand for storage (typed or dictated). */
+export function abbreviatePhrases(value: string): string {
   let out = value
-  for (const { full, patterns } of LOCATION_ABBREVIATIONS) {
-    for (const pattern of patterns) {
-      out = out.replace(pattern, full)
-    }
+  const sorted = [...LOCATION_ABBREVIATIONS].sort((a, b) => b.full.length - a.full.length)
+  for (const { abbr, full } of sorted) {
+    out = out.replace(phrasePattern(full), abbr)
+  }
+  for (const { abbr } of LOCATION_ABBREVIATIONS) {
+    out = out.replace(abbrPattern(abbr), abbr)
   }
   return out
 }
 
-/** Prepare text for speech synthesis — abbreviations always read as full phrases. */
+/** Expand shorthand for speech synthesis only — never shown in stored text. */
 export function expandForSpeech(value: string): string {
-  return expandAbbreviations(value)
+  let out = value
+  for (const { abbr, full } of LOCATION_ABBREVIATIONS) {
+    out = out.replace(abbrPattern(abbr), full)
+  }
+  return out
+}
+
+/** @deprecated Use expandForSpeech — kept for TTS call sites. */
+export function expandAbbreviations(value: string): string {
+  return expandForSpeech(value)
 }

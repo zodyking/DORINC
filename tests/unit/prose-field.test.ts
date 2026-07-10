@@ -11,20 +11,21 @@ describe('prose field formatting', () => {
     expect(applyLiveTitleCase('hello WORLD')).toBe('Hello WORLD')
   })
 
-  it('formats prose with abbreviations and title case on blur', () => {
-    expect(formatFieldText('replaced f/r tire', 'prose')).toBe('Replaced Front Right Tire')
+  it('title-cases and stores location shorthand on blur', () => {
+    expect(formatFieldText('replaced front right tire', 'prose')).toBe('Replaced F/R Tire')
+    expect(formatFieldText('replaced f/r tire', 'prose')).toBe('Replaced F/R Tire')
     expect(formatFieldText('bias brocho LLC', 'prose')).toBe('Bias Brocho LLC')
   })
 
-  it('formats names without abbrev expansion priority issues', () => {
+  it('formats names without abbreviation compression', () => {
     expect(formatFieldText('john smith', 'name')).toBe('John Smith')
   })
 
   it('leaves addresses unchanged', () => {
-    expect(formatFieldText('123 main st f/r', 'address')).toBe('123 main st f/r')
+    expect(formatFieldText('123 main st front right', 'address')).toBe('123 main st front right')
   })
 
-  it('formats voice dictation like blur', () => {
-    expect(formatVoiceText('install stop arm r/r', 'prose')).toBe('Install Stop Arm Rear Right')
+  it('compresses voice dictation to shorthand like blur', () => {
+    expect(formatVoiceText('install stop arm rear right', 'prose')).toBe('Install Stop Arm R/R')
   })
 })

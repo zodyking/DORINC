@@ -1,4 +1,4 @@
-import { expandAbbreviations } from './abbreviations'
+import { abbreviatePhrases } from './abbreviations'
 import { toTitleCase } from './title-case'
 
 export type ProseFieldMode = 'prose' | 'name' | 'address' | 'none'
@@ -28,8 +28,8 @@ export function formatFieldText(value: string, mode: ProseFieldMode = 'prose'): 
 
   if (mode === 'name') return toTitleCase(trimmed)
 
-  const expanded = expandAbbreviations(trimmed)
-  return toTitleCase(expanded)
+  const titled = toTitleCase(trimmed)
+  return abbreviatePhrases(titled)
 }
 
 /** Format dictated or pasted text before writing to a model. */
