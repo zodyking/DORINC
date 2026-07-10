@@ -14,7 +14,13 @@ export default defineEventHandler(async (event) => {
   await writeAudit(event, {
     entityType: 'system',
     action: 'settings.business.update',
-    afterData: { businessName: profile.businessName },
+    afterData: {
+      businessName: profile.businessName,
+      phone: profile.phone,
+      email: profile.email,
+      city: profile.city,
+      state: profile.state,
+    },
     permissionKey: 'system.admin.all',
   })
 

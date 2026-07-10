@@ -8,10 +8,28 @@ import {
 
 export interface BusinessProfile {
   businessName: string
+  phone: string
+  email: string
+  website: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
 }
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
   businessName: '',
+  phone: '',
+  email: '',
+  website: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  country: 'US',
 }
 
 export interface LineTypeVerbSettings {
