@@ -380,6 +380,7 @@ function onRowClick(row: CatalogItemRow) {
           <button type="button" class="close" aria-label="Close" @click="closeItemModal">✕</button>
         </div>
         <CatalogItemForm
+          :key="editingId ?? 'new'"
           v-model="form"
           :busy="formBusy"
           :error="formError"

@@ -10,6 +10,7 @@ import {
   createCatalogItem,
   createCategory,
   createLaborRate,
+  deleteCategory,
   listCatalogItems,
 } from '../../server/services/catalog.service'
 import { catalogCategories, catalogItems, catalogLaborRates } from '../../server/db/schema/catalog'
@@ -92,6 +93,24 @@ describe('P1-18 catalog items', () => {
 
     const nontax = await listCatalogItems(db, { taxable: false, page: 1, pageSize: 50 })
     expect(nontax.items.every(i => i.taxable === false)).toBe(true)
+  })
+})
+
+describe('P1-18 catalog categories', () => {
+  it('deletes a category and unassigns items', async () => {
+    const tempCategory = await createCategory(db, { name: `CatTest-${stamp}-DeleteMe`, sortOrder: 99 })
+    const item = await createCatalogItem(db, {
+      itemType: 'part',
+      name: `CatTest-${stamp} Temp part`,
+      categoryId: tempCategory.id,
+      defaultPrice: '10.00',
+    }, ACTOR)
+
+    await deleteCategory(db, tempCategory.id)
+
+    const updated = await listCatalogItems(db, { q: `CatTest-${stamp} Temp part`, page: 1, pageSize: 10 })
+    const row = updated.items.find(i => i.id === item.id)
+    expect(row?.categoryId).toBeNull()
   })
 })
 

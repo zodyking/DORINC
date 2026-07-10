@@ -12,6 +12,7 @@ import {
 import type { PermissionKey } from '../../shared/permissions/keys'
 import { accountTypePermissions, accountTypes, permissions } from './schema/auth'
 import { seedInvoiceTemplates } from './seed-invoice-templates'
+import { seedCatalogCategories } from './seed-catalog-categories'
 
 config()
 
@@ -87,7 +88,10 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
     const templateSeed = await seedInvoiceTemplates(db)
     console.log(`[seed] invoice_template=${templateSeed.template.slug} version=${templateSeed.publishedVersion.versionNumber} status=${templateSeed.publishedVersion.status}`)
 
-    return { ...counts, invoiceTemplate: templateSeed.template.slug }
+    const catalogSeed = await seedCatalogCategories(db)
+    console.log(`[seed] catalog_categories inserted=${catalogSeed.inserted} total_defaults=${catalogSeed.total}`)
+
+    return { ...counts, invoiceTemplate: templateSeed.template.slug, catalogCategories: catalogSeed }
   }
   finally {
     await pool.end()

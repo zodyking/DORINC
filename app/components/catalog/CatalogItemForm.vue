@@ -4,6 +4,7 @@ import {
   defaultUomForCatalogType,
   type CatalogItemType,
 } from '~/utils/catalog-ui'
+import { inferCatalogCategory } from '#shared/catalog-category-inference'
 
 export interface CatalogItemFormValue {
   itemType: CatalogItemType
@@ -32,10 +33,38 @@ const props = defineProps<{
 const emit = defineEmits<{ submit: [], cancel: [], archive: [] }>()
 
 const showMore = ref(false)
+const categoryTouched = ref(false)
+const suggestedCategory = ref<string | null>(null)
 
 watch(() => model.value.itemType, (type) => {
   if (props.editing) return
   model.value.uom = defaultUomForCatalogType(type)
+})
+
+watch(
+  () => [model.value.name, model.value.description, props.categories, props.editing] as const,
+  ([name, description, categories, editing]) => {
+    if (editing || categoryTouched.value) {
+      suggestedCategory.value = null
+      return
+    }
+    const text = [name, description].filter(Boolean).join(' ')
+    const match = inferCatalogCategory(text, categories)
+    suggestedCategory.value = match?.categoryName ?? null
+    if (match) model.value.categoryId = match.categoryId
+  },
+)
+
+function onCategoryChange() {
+  categoryTouched.value = true
+  suggestedCategory.value = null
+}
+
+watch(() => props.editing, (editing) => {
+  if (!editing) {
+    categoryTouched.value = false
+    suggestedCategory.value = null
+  }
 })
 
 function setType(type: CatalogItemType) {
@@ -94,10 +123,13 @@ const pricePlaceholder = computed(() => {
         </label>
         <label class="fld">
           <span>Category</span>
-          <select v-model="model.categoryId">
+          <select v-model="model.categoryId" @change="onCategoryChange">
             <option value="">Uncategorized</option>
             <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
+          <span v-if="suggestedCategory && !categoryTouched" class="cat-hint">
+            Suggested: {{ suggestedCategory }}
+          </span>
         </label>
       </div>
 
@@ -256,6 +288,14 @@ const pricePlaceholder = computed(() => {
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+
+.cat-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6366f1;
+  font-weight: 500;
 }
 
 .mfoot {

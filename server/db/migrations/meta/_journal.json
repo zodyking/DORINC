@@ -232,6 +232,13 @@
       "when": 1783573000000,
       "tag": "0033_convert_catalog_service_to_labor",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783574000000,
+      "tag": "0034_seed_default_catalog_categories",
+      "breakpoints": true
     }
   ]
 }

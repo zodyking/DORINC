@@ -1,0 +1,31 @@
+/** Default shop catalog categories — seeded on setup / migration. */
+export const DEFAULT_CATALOG_CATEGORIES = [
+  'Lighting',
+  'Electrical',
+  'Battery & Charging',
+  'Starting System',
+  'Engine',
+  'Fuel System',
+  'Cooling System',
+  'Air Intake',
+  'Exhaust',
+  'Transmission',
+  'Driveline',
+  'Suspension',
+  'Steering',
+  'Brakes',
+  'Wheels & Tires',
+  'HVAC',
+  'Hydraulic',
+  'Air System',
+  'Trailer Components',
+  'Body & Exterior',
+  'Interior',
+  'Safety Equipment',
+  'Fluids & Chemicals',
+  'Fasteners & Hardware',
+  'Shop Supplies',
+  'Accessories',
+] as const
+
+export type DefaultCatalogCategory = (typeof DEFAULT_CATALOG_CATEGORIES)[number]

@@ -38,6 +38,23 @@ export async function getCategory(db: Db, id: string) {
   return row
 }
 
+/** Delete a category and unassign catalog items / labor rates (they become uncategorized). */
+export async function deleteCategory(db: Db, id: string) {
+  const category = await getCategory(db, id)
+
+  await db.update(catalogItems)
+    .set({ categoryId: null, updatedAt: new Date() })
+    .where(eq(catalogItems.categoryId, id))
+
+  await db.update(catalogLaborRates)
+    .set({ categoryId: null, updatedAt: new Date() })
+    .where(eq(catalogLaborRates.categoryId, id))
+
+  await db.delete(catalogCategories).where(eq(catalogCategories.id, id))
+
+  return category
+}
+
 export interface CatalogItemInput {
   itemType: CatalogItemType
   sku?: string | null

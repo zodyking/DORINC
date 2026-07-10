@@ -17,6 +17,7 @@ const categories = computed(() => data.value?.items ?? [])
 
 const newName = ref('')
 const busy = ref(false)
+const deletingId = ref<string | null>(null)
 const error = ref('')
 
 function close() {
@@ -46,6 +47,27 @@ async function addCategory() {
   }
   finally {
     busy.value = false
+  }
+}
+
+async function removeCategory(category: CategoryRow) {
+  const ok = window.confirm(
+    `Delete "${category.name}"?\n\nCatalog items in this category will stay — they become uncategorized.`,
+  )
+  if (!ok) return
+
+  deletingId.value = category.id
+  error.value = ''
+  try {
+    await $fetch(`/api/catalog/categories/${category.id}`, { method: 'DELETE' })
+    await refresh()
+    emit('changed')
+  }
+  catch (err) {
+    error.value = apiErrorMessage(err, 'Could not delete category')
+  }
+  finally {
+    deletingId.value = null
   }
 }
 
@@ -80,7 +102,18 @@ function onScrimClick(e: MouseEvent) {
           <button type="submit" class="btn primary" :disabled="busy || !newName.trim()">Add</button>
         </form>
         <ul v-if="categories.length" class="cat-list">
-          <li v-for="c in categories" :key="c.id">{{ c.name }}</li>
+          <li v-for="c in categories" :key="c.id">
+            <span class="cat-name">{{ c.name }}</span>
+            <button
+              type="button"
+              class="btn danger sm"
+              :disabled="!!deletingId || busy"
+              :aria-label="`Delete ${c.name}`"
+              @click="removeCategory(c)"
+            >
+              {{ deletingId === c.id ? 'Deleting…' : 'Delete' }}
+            </button>
+          </li>
         </ul>
         <div v-else class="empty" style="display:block; margin-top:12px;">No categories yet — add one above.</div>
       </div>
@@ -107,11 +140,33 @@ function onScrimClick(e: MouseEvent) {
   overflow: auto;
 }
 .cat-list li {
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
   border-bottom: 1px solid #f1f5f9;
   font-size: 13.5px;
 }
 .cat-list li:last-child { border-bottom: none; }
+.cat-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn.danger.sm {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-color: #fecaca;
+  color: #dc2626;
+  background: #fff;
+}
+.btn.danger.sm:hover:not(:disabled) {
+  background: #fef2f2;
+}
 .err {
   margin: 0 0 12px;
   padding: 10px 12px;
