@@ -125,6 +125,47 @@ const subtitle = computed(() => {
       </div>
     </div>
 
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search system events, users, actions…"
+      search-aria-label="Search system logs"
+      :filters-active="filtersDirty"
+      filter-title="Filter logs"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Entity
+          <select v-model="entityType" aria-label="Filter by entity type">
+            <option value="">All entities</option>
+            <option v-for="et in entityOptions" :key="et" :value="et">{{ entityTypeLabel(et) }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          Action
+          <select v-model="action" aria-label="Filter by action">
+            <option value="">All actions</option>
+            <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </label>
+        <label v-if="userOptions.length" class="fld">
+          User
+          <select v-model="actorUserId" aria-label="Filter by user">
+            <option value="">All users</option>
+            <option v-for="u in userOptions" :key="u.id" :value="u.id">{{ u.name }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          From
+          <input v-model="dateFrom" type="date" aria-label="Filter from date">
+        </label>
+        <label class="fld">
+          To
+          <input v-model="dateTo" type="date" aria-label="Filter to date">
+        </label>
+      </template>
+    </ListFilterBar>
+
     <div class="card">
       <div class="chead">
         <button
@@ -138,47 +179,6 @@ const subtitle = computed(() => {
           {{ chip.label }}
         </button>
       </div>
-
-      <ListFilterBar
-        v-model:search="q"
-        search-placeholder="Search system events, users, actions…"
-        search-aria-label="Search system logs"
-        :filters-active="filtersDirty"
-        filter-title="Filter logs"
-        @clear-filters="clearFilters"
-      >
-        <template #filters>
-          <label class="fld">
-            Entity
-            <select v-model="entityType" aria-label="Filter by entity type">
-              <option value="">All entities</option>
-              <option v-for="et in entityOptions" :key="et" :value="et">{{ entityTypeLabel(et) }}</option>
-            </select>
-          </label>
-          <label class="fld">
-            Action
-            <select v-model="action" aria-label="Filter by action">
-              <option value="">All actions</option>
-              <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
-            </select>
-          </label>
-          <label v-if="userOptions.length" class="fld">
-            User
-            <select v-model="actorUserId" aria-label="Filter by user">
-              <option value="">All users</option>
-              <option v-for="u in userOptions" :key="u.id" :value="u.id">{{ u.name }}</option>
-            </select>
-          </label>
-          <label class="fld">
-            From
-            <input v-model="dateFrom" type="date" aria-label="Filter from date">
-          </label>
-          <label class="fld">
-            To
-            <input v-model="dateTo" type="date" aria-label="Filter to date">
-          </label>
-        </template>
-      </ListFilterBar>
 
       <div class="tscroll">
         <table v-if="items.length" id="audit-rows" class="tbl audit-tbl">

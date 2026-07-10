@@ -82,6 +82,13 @@ function openLog(id: string) {
       </div>
     </div>
 
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search service logs…"
+      search-aria-label="Search service logs"
+      :has-filters="false"
+    />
+
     <div class="card">
       <div class="chead">
         <h3>{{ queueTitle }}</h3>
@@ -104,13 +111,6 @@ function openLog(id: string) {
           </button>
         </div>
       </div>
-
-      <ListFilterBar
-        v-model:search="q"
-        search-placeholder="Search service logs…"
-        search-aria-label="Search service logs"
-        :has-filters="false"
-      />
 
       <div v-if="items.length" id="log-queue">
         <div

@@ -196,6 +196,13 @@ async function retryLoad() {
       </div>
     </div>
 
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search invoices, customers…"
+      search-aria-label="Search invoices"
+      :has-filters="false"
+    />
+
     <div class="card">
       <div class="chead">
         <button
@@ -209,13 +216,6 @@ async function retryLoad() {
           {{ chip.label }} · {{ chip.count }}
         </button>
       </div>
-
-      <ListFilterBar
-        v-model:search="q"
-        search-placeholder="Search invoices, customers…"
-        search-aria-label="Search invoices"
-        :has-filters="false"
-      />
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl inv-tbl">

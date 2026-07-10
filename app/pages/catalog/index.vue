@@ -257,6 +257,13 @@ function onRowClick(row: CatalogItemRow) {
       </div>
     </div>
 
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search items, SKUs, categories…"
+      search-aria-label="Search catalog items"
+      :has-filters="false"
+    />
+
     <div class="card">
       <div class="chead">
         <button
@@ -270,13 +277,6 @@ function onRowClick(row: CatalogItemRow) {
           {{ chip.label }} · {{ chip.count }}
         </button>
       </div>
-
-      <ListFilterBar
-        v-model:search="q"
-        search-placeholder="Search items, SKUs, categories…"
-        search-aria-label="Search catalog items"
-        :has-filters="false"
-      />
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl cat-tbl">

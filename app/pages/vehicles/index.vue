@@ -145,53 +145,53 @@ const rangeLabel = computed(() => {
     <p v-if="bulkDecodeMessage" class="help" style="color:#059669; margin:0 0 12px;">{{ bulkDecodeMessage }}</p>
     <p v-if="bulkDecodeError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ bulkDecodeError }}</p>
 
-    <div class="card">
-      <ListFilterBar
-        v-model:search="q"
-        search-placeholder="Search tag, VIN, plate, make, customer…"
-        search-aria-label="Search vehicles"
-        :filters-active="filtersDirty"
-        @clear-filters="clearFilters"
-      >
-        <template #filters>
-          <label class="fld">
-            Unit type
-            <select id="veh-f-type" v-model="fType">
-              <option value="all">All types</option>
-              <option value="truck">Trucks</option>
-              <option value="bus">Buses</option>
-              <option value="equipment">Equipment</option>
-              <option value="tractor">Ag / tractors</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          <label class="fld">
-            Customer
-            <select id="veh-f-customer" v-model="fCustomer">
-              <option value="all">All customers</option>
-              <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
-            </select>
-          </label>
-          <label class="fld">
-            Sort by
-            <select id="veh-f-sort" v-model="fSort">
-              <option value="tag-asc">Tag A → Z</option>
-              <option value="tag-desc">Tag Z → A</option>
-              <option value="customer-asc">Customer A → Z</option>
-              <option value="odo-desc">Odometer / hours high → low</option>
-              <option value="newest">Newest first</option>
-            </select>
-          </label>
-          <label class="fld">
-            Archived
-            <select id="veh-f-archived" v-model="showArchived">
-              <option :value="false">Hidden</option>
-              <option :value="true">Shown</option>
-            </select>
-          </label>
-        </template>
-      </ListFilterBar>
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search tag, VIN, plate, make, customer…"
+      search-aria-label="Search vehicles"
+      :filters-active="filtersDirty"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Unit type
+          <select id="veh-f-type" v-model="fType">
+            <option value="all">All types</option>
+            <option value="truck">Trucks</option>
+            <option value="bus">Buses</option>
+            <option value="equipment">Equipment</option>
+            <option value="tractor">Ag / tractors</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label class="fld">
+          Customer
+          <select id="veh-f-customer" v-model="fCustomer">
+            <option value="all">All customers</option>
+            <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select id="veh-f-sort" v-model="fSort">
+            <option value="tag-asc">Tag A → Z</option>
+            <option value="tag-desc">Tag Z → A</option>
+            <option value="customer-asc">Customer A → Z</option>
+            <option value="odo-desc">Odometer / hours high → low</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </label>
+        <label class="fld">
+          Archived
+          <select id="veh-f-archived" v-model="showArchived">
+            <option :value="false">Hidden</option>
+            <option :value="true">Shown</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
+    <div class="card">
       <div class="tscroll">
         <table v-if="items.length" class="tbl veh-tbl">
           <thead>

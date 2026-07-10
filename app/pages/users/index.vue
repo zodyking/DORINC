@@ -153,57 +153,57 @@ async function reject(u: UserRow) {
       </div>
     </div>
 
-    <div class="card">
-      <ListFilterBar
-        :show-search="false"
-        :filters-active="filtersDirty"
-        :count-label="`${filtered.length} user${filtered.length === 1 ? '' : 's'}`"
-        @clear-filters="clearFilters"
-      >
-        <template #filters>
-          <label class="fld">
-            Account type
-            <select id="users-f-account" v-model="fAccount">
-              <option value="all">All accounts</option>
-              <option value="internal">Internal staff</option>
-              <option value="portal">Customer portal</option>
-            </select>
-          </label>
-          <label class="fld">
-            Status
-            <select id="users-f-status" v-model="fStatus">
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="pending">Pending</option>
-            </select>
-          </label>
-          <label class="fld">
-            Role
-            <select id="users-f-role" v-model="fType">
-              <option value="all">All roles</option>
-              <option value="super_admin">Super Admin</option>
-              <option value="admin">Admin</option>
-              <option value="manager">Manager</option>
-              <option value="accountant">Accountant</option>
-              <option value="mechanic">Mechanic</option>
-              <option value="viewer">Viewer</option>
-              <option value="external_auditor">External Auditor</option>
-              <option value="customer">Customer</option>
-            </select>
-          </label>
-          <label class="fld">
-            Sort by
-            <select id="users-f-sort" v-model="fSort">
-              <option value="name-asc">Name A → Z</option>
-              <option value="name-desc">Name Z → A</option>
-              <option value="role-asc">Role A → Z</option>
-              <option value="created-desc">Newest first</option>
-            </select>
-          </label>
-        </template>
-      </ListFilterBar>
+    <ListFilterBar
+      :show-search="false"
+      :filters-active="filtersDirty"
+      :count-label="`${filtered.length} user${filtered.length === 1 ? '' : 's'}`"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Account type
+          <select id="users-f-account" v-model="fAccount">
+            <option value="all">All accounts</option>
+            <option value="internal">Internal staff</option>
+            <option value="portal">Customer portal</option>
+          </select>
+        </label>
+        <label class="fld">
+          Status
+          <select id="users-f-status" v-model="fStatus">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending</option>
+          </select>
+        </label>
+        <label class="fld">
+          Role
+          <select id="users-f-role" v-model="fType">
+            <option value="all">All roles</option>
+            <option value="super_admin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="accountant">Accountant</option>
+            <option value="mechanic">Mechanic</option>
+            <option value="viewer">Viewer</option>
+            <option value="external_auditor">External Auditor</option>
+            <option value="customer">Customer</option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select id="users-f-sort" v-model="fSort">
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+            <option value="role-asc">Role A → Z</option>
+            <option value="created-desc">Newest first</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
+    <div class="card">
       <div v-if="filtered.length">
         <NuxtLink
           v-for="u in filtered"

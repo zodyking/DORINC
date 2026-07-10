@@ -195,17 +195,21 @@ textarea {
 .list-toolbar {
   padding: 10px 14px;
   background: #fff;
-  border-bottom: 1px solid #f1f5f9;
-}
-.card > .list-toolbar,
-.page > .list-toolbar {
-  border: none;
-  border-bottom: 1px solid #f1f5f9;
-}
-.page > .list-toolbar {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   margin-bottom: 16px;
+}
+.card > .list-toolbar {
+  border-radius: 0;
+  margin-bottom: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+.list-toolbar .search {
+  max-width: none !important;
+  width: 100%;
+  min-width: 0;
 }
 .list-toolbar-row {
   display: flex;
