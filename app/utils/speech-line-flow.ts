@@ -93,43 +93,73 @@ const SPOKEN_INDEX_WORDS: Record<string, number> = {
   first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
 }
 
+const EDIT_VERBS = /\b(edit(?:ed|ing)?|audit(?:ing)?|review(?:ing)?|change(?:d|ing)?|fix(?:ed|ing)?|modify(?:ing)?|update(?:d|ing)?|open|select|go\s+to)\b/
+
 export function parseSpokenAddLineCommand(spoken: string): boolean {
   const t = spoken.toLowerCase()
-  return /\b(add|new|another)\b/.test(t) && /\b(line|item|charge)\b/.test(t)
-    || /\badd\s+(a\s+)?(new\s+)?line\b/.test(t)
+  return (
+    /\b(add|new|another|more)\b/.test(t) && /\b(line|item|charge)\b/.test(t)
+  ) || /\badd\s+(a\s+)?(new\s+)?(line|item)\b/.test(t)
+    || /\banother\s+(line|item)\b/.test(t)
 }
 
 export function parseSpokenEditLineNumber(spoken: string, lineCount: number): number | null {
-  const t = spoken.toLowerCase()
-  if (!/\b(edit|audit|review|change|fix)\b/.test(t)) return null
-  const digitMatch = t.match(/(?:line\s*item|item|line)?\s*(?:number|#)?\s*(\d+)/)
-  if (digitMatch) {
-    const n = Number.parseInt(digitMatch[1]!, 10)
-    return n >= 1 && n <= lineCount ? n - 1 : null
+  if (lineCount < 1) return null
+  const t = spoken.toLowerCase().replace(/['']/g, '').trim()
+
+  const hasEditVerb = EDIT_VERBS.test(t)
+  const hasLineRef = /\b(line|item)\b/.test(t)
+    || /\b(number|#|no\.?)\s*(\d+|one|two|three|four|five|first|second|third)\b/.test(t)
+    || /\b(one|two|three|four|five|first|second|third)\b/.test(t)
+
+  if (!hasEditVerb && !hasLineRef) return null
+  if (/\b(add|new|another|more)\b/.test(t) && !hasEditVerb) return null
+
+  const digitPatterns = [
+    /(?:line\s*item|item|line)\s*(?:number|#|no\.?)?\s*(\d+)/,
+    /(?:number|#|no\.?)\s*(\d+)/,
+    /\bline\s*(\d+)\b/,
+    /\bitem\s*(\d+)\b/,
+    /\b(\d+)\b/,
+  ]
+  for (const pat of digitPatterns) {
+    const m = t.match(pat)
+    if (m) {
+      const n = Number.parseInt(m[1]!, 10)
+      if (n >= 1 && n <= lineCount) return n - 1
+    }
   }
+
   for (const [word, n] of Object.entries(SPOKEN_INDEX_WORDS)) {
     if (new RegExp(`\\b${word}\\b`).test(t)) {
       return n >= 1 && n <= lineCount ? n - 1 : null
     }
   }
+
+  // "edit the line" / "edit line item" with no number → only line when count is 1
+  if (hasEditVerb && lineCount === 1 && hasLineRef) return 0
+
   return null
 }
 
 export function parseSpokenCancel(spoken: string): boolean {
-  const t = spoken.toLowerCase()
-  return /\b(cancel|never\s*mind|nevermind|go\s*back|stop\s*edit|abort|exit|quit)\b/.test(t)
-    || t === 'stop' || t === 'back'
+  const t = spoken.toLowerCase().trim().replace(/['']/g, '')
+  return /\b(cancel(?:led|ed|ing)?|never\s*mind|nevermind|go\s*back|stop\s*edit(?:ing)?|abort|exit|quit|forget\s*it|scratch\s*that|start\s*over|undo|back\s*out)\b/.test(t)
+    || /^(stop|back|cancel|nevermind|never mind|abort|quit)$/.test(t)
 }
 
 /** In edit mode: jump to a field, or save. */
 export function parseSpokenEditField(spoken: string): 'type' | 'description' | 'qty' | 'rate' | 'confirm' | null {
-  const t = spoken.toLowerCase().trim()
-  if (/\b(save|done|finish|keep\s*changes)\b/.test(t)) return 'confirm'
-  if (/\b(edit|change|update)\s+(type|item\s*type)\b/.test(t) || /\b(item\s*type|line\s*type)\b/.test(t)) return 'type'
-  if (/\b(edit|change|update)\s+(description|desc)\b/.test(t) || /\b(description|what\s*was\s*done)\b/.test(t)) return 'description'
-  if (/\b(edit|change|update)\s+(quantity|qty|hours|hour)\b/.test(t) || /\b(quantity|qty|hours)\b/.test(t)) return 'qty'
-  if (/\b(edit|change|update)\s+(rate|price)\b/.test(t) || /\b(rate|price)\b/.test(t)) return 'rate'
-  if (t === 'type') return 'type'
+  const t = spoken.toLowerCase().trim().replace(/['']/g, '')
+  if (/\b(save|done|finish|keep\s*changes|that'?s?\s*good|looks\s*good|all\s*set)\b/.test(t)) return 'confirm'
+  if (/\b(edit|change|update)\s+(the\s+)?(type|item\s*type|line\s*type)\b/.test(t)) return 'type'
+  if (/\b(edit|change|update)\s+(the\s+)?(description|desc)\b/.test(t)) return 'description'
+  if (/\b(edit|change|update)\s+(the\s+)?(quantity|qty|hours|hour)\b/.test(t)) return 'qty'
+  if (/\b(edit|change|update)\s+(the\s+)?(rate|price|cost|charge)\b/.test(t)) return 'rate'
+  if (/\b(item\s*type|line\s*type)\b/.test(t) || t === 'type') return 'type'
+  if (/\b(description|desc|what\s*(was|is)\s*done)\b/.test(t)) return 'description'
+  if (/\b(quantity|qty|quantities|hours|hour)\b/.test(t)) return 'qty'
+  if (/\b(rate|price|cost|charge|amount)\b/.test(t)) return 'rate'
   return null
 }
 

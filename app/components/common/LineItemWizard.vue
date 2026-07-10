@@ -27,12 +27,14 @@ watch(() => manualDraft.value.description, () => {
 })
 
 const {
+  active,
   supported,
   status,
   prompt,
   error,
   editingIndex,
   start,
+  resume,
   stop,
   retryListen,
 } = useSpeechLineFlow({
@@ -85,10 +87,20 @@ function finishSession() {
   sessionOpen.value = false
 }
 
+const editHint = computed(() => {
+  const n = lines.value.length
+  if (n <= 1) return '1'
+  return `1 to ${n}`
+})
+
 function onOrbTap() {
   unlockSpeechFromUserGesture({ silent: true })
   if (!sessionOpen.value) {
     openSession()
+    return
+  }
+  if (!active.value) {
+    resume()
     return
   }
   if (supported.value && (status.value === 'listening' || status.value === 'idle')) {
@@ -133,7 +145,10 @@ defineExpose({ openWizard: openSession })
         :session-open="sessionOpen"
         @remove="removeLine"
       />
-      <p class="li-list-hint">Say <b>edit line item number 2</b> to change a line. While editing, say <b>description</b>, <b>rate</b>, or <b>cancel</b>.</p>
+      <p class="li-list-hint">
+        Say <b>edit line 1</b> or <b>edit line item number {{ editHint }}</b> to change a line.
+        While editing, say <b>description</b>, <b>rate</b>, or <b>cancel</b>.
+      </p>
     </section>
 
     <section class="li-voice" :class="{ active: sessionOpen }">

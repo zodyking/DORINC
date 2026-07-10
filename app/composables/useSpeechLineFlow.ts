@@ -133,6 +133,19 @@ export function useSpeechLineFlow(handlers: {
     speakThenListen(text)
   }
 
+  function cancelAddFlow() {
+    draft.value = emptyWizardLine()
+    captured.value = {}
+    field.value = 'type'
+    lastHeard.value = ''
+    error.value = ''
+    if (handlers.lineCount() > 0) startCommandFlow()
+    else {
+      active.value = false
+      stop()
+    }
+  }
+
   function cancelEditFlow() {
     editingIndex.value = null
     draft.value = emptyWizardLine()
@@ -158,6 +171,18 @@ export function useSpeechLineFlow(handlers: {
     const text = promptForEditField(target, draft.value, editingIndex.value)
     prompt.value = text
     speakThenListen(text)
+  }
+
+  function idleAfterSave() {
+    listenGen += 1
+    cancelSpeech()
+    status.value = 'idle'
+    active.value = false
+    flowMode.value = 'command'
+    field.value = 'command'
+    editingIndex.value = null
+    draft.value = emptyWizardLine()
+    captured.value = {}
   }
 
   function saveEditedLine(andContinue: boolean) {
@@ -252,12 +277,24 @@ export function useSpeechLineFlow(handlers: {
     lastHeard.value = spoken
     error.value = ''
 
+    if (parseSpokenCancel(spoken)) {
+      if (flowMode.value === 'edit') cancelEditFlow()
+      else if (flowMode.value === 'add') cancelAddFlow()
+      else stop()
+      return
+    }
+
+    const editIndex = parseSpokenEditLineNumber(spoken, handlers.lineCount())
+    if (editIndex !== null && (field.value === 'command' || flowMode.value === 'add')) {
+      startEditFlow(editIndex)
+      return
+    }
+
     if (field.value === 'command') {
       if (parseSpokenAddLineCommand(spoken)) {
         startAddFlow()
         return
       }
-      const editIndex = parseSpokenEditLineNumber(spoken, handlers.lineCount())
       if (editIndex !== null) {
         startEditFlow(editIndex)
         return
@@ -270,11 +307,6 @@ export function useSpeechLineFlow(handlers: {
     if (flowMode.value === 'edit') {
       if (field.value === 'pick') {
         await handleEditPick(spoken)
-        return
-      }
-
-      if (parseSpokenCancel(spoken)) {
-        cancelEditFlow()
         return
       }
 
@@ -393,10 +425,17 @@ export function useSpeechLineFlow(handlers: {
         else startAddFlow()
       }
       else {
-        active.value = false
-        stop()
+        idleAfterSave()
       }
     }
+  }
+
+  function resume() {
+    aborted = false
+    active.value = true
+    error.value = ''
+    if (handlers.lineCount() > 0) startCommandFlow()
+    else startAddFlow()
   }
 
   function start() {
@@ -439,6 +478,7 @@ export function useSpeechLineFlow(handlers: {
     editingIndex,
     fieldLabel: (f: SpeechLineField) => fieldLabel(f, draft.value.lineType),
     start,
+    resume,
     stop,
     retryListen,
   }
