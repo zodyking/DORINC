@@ -8,6 +8,7 @@ import {
   type WizardLineDraft,
   type WizardLineType,
 } from '~/utils/line-item-wizard-ui'
+import { formatFieldText } from '#shared/format/prose-field'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
 
@@ -101,7 +102,7 @@ function saveManualLine(addAnother: boolean) {
   const amount = calcLineAmount(d.qty, d.rate)
   lines.value = [...lines.value, {
     lineType: d.lineType as WizardLineType,
-    description: d.description.trim(),
+    description: formatFieldText(d.description.trim(), 'prose'),
     qty: d.qty.trim(),
     rate: d.rate.trim(),
     amount,

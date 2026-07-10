@@ -2,6 +2,7 @@
 // Catalog typeahead for invoice line descriptions — Arrow keys + Enter to fill the row.
 import { catalogItemSub, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import { catalogTypeLabel, type CatalogItemType } from '~/utils/catalog-ui'
+import { useProseField } from '~/composables/useProseField'
 
 const model = defineModel<string>({ required: true })
 
@@ -19,6 +20,8 @@ const emit = defineEmits<{
   blur: []
   focus: []
 }>()
+
+const { inputAttrs, onInput: proseOnInput, onFocus: proseOnFocus, onBlur: proseOnBlur } = useProseField(model, ref('prose'))
 
 const open = ref(false)
 const activeIndex = ref(0)
@@ -124,7 +127,8 @@ function pick(item: CatalogQuickItem) {
   items.value = []
 }
 
-function onInput() {
+function onInput(event: Event) {
+  proseOnInput(event)
   open.value = true
   updatePanelPosition()
   scheduleSearch(model.value)
@@ -132,6 +136,7 @@ function onInput() {
 }
 
 function onFocus() {
+  proseOnFocus()
   if (blurTimer) {
     clearTimeout(blurTimer)
     blurTimer = null
@@ -141,6 +146,7 @@ function onFocus() {
 }
 
 function onBlur() {
+  proseOnBlur()
   blurTimer = setTimeout(() => {
     closeSuggestions()
     emit('blur')
@@ -217,7 +223,8 @@ onBeforeUnmount(() => {
   <div class="cat-ac">
     <input
       ref="inputEl"
-      v-model="model"
+      :value="model"
+      v-bind="inputAttrs"
       type="text"
       role="combobox"
       :placeholder="placeholder"
