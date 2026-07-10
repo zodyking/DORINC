@@ -8,7 +8,7 @@ import {
 import { normalizeLineType } from '#shared/line-item-types'
 import { lineTypeLabel } from './invoices-ui'
 
-export type SpeechLineField = 'command' | 'type' | 'description' | 'qty' | 'rate' | 'confirm'
+export type SpeechLineField = 'command' | 'pick' | 'type' | 'description' | 'qty' | 'rate' | 'confirm'
 
 export function promptForCommandMode(lineCount: number): string {
   if (lineCount === 0) return promptForSpeechField('type', '')
@@ -23,6 +23,8 @@ export function promptForSpeechField(field: SpeechLineField, lineType: WizardLin
   switch (field) {
     case 'command':
       return 'Say add line, or edit line item number.'
+    case 'pick':
+      return 'Say type, description, quantity, rate, save, or cancel.'
     case 'type':
       return 'Labor, part, or fee?'
     case 'description':
@@ -40,16 +42,18 @@ export function retryPromptForField(field: SpeechLineField): string {
   switch (field) {
     case 'command':
       return retryPromptForCommandMode()
+    case 'pick':
+      return retryPromptForEditPick()
     case 'type':
-      return 'Say labor, part, or fee.'
+      return 'Say labor, part, or fee. Say cancel to go back.'
     case 'description':
-      return 'Tell me what was done.'
+      return 'Tell me what was done, or say keep. Say cancel to go back.'
     case 'qty':
-      return 'Give me the number of hours or quantity.'
+      return 'Give me the number of hours or quantity, or say keep. Say cancel to go back.'
     case 'rate':
-      return 'Give me the rate or price.'
+      return 'Give me the rate or price, or say keep. Say cancel to go back.'
     case 'confirm':
-      return 'Say save, or add another.'
+      return 'Say save, or cancel to go back.'
   }
 }
 
@@ -111,6 +115,37 @@ export function parseSpokenEditLineNumber(spoken: string, lineCount: number): nu
   return null
 }
 
+export function parseSpokenCancel(spoken: string): boolean {
+  const t = spoken.toLowerCase()
+  return /\b(cancel|never\s*mind|nevermind|go\s*back|stop\s*edit|abort|exit|quit)\b/.test(t)
+    || t === 'stop' || t === 'back'
+}
+
+/** In edit mode: jump to a field, or save. */
+export function parseSpokenEditField(spoken: string): 'type' | 'description' | 'qty' | 'rate' | 'confirm' | null {
+  const t = spoken.toLowerCase().trim()
+  if (/\b(save|done|finish|keep\s*changes)\b/.test(t)) return 'confirm'
+  if (/\b(edit|change|update)\s+(type|item\s*type)\b/.test(t) || /\b(item\s*type|line\s*type)\b/.test(t)) return 'type'
+  if (/\b(edit|change|update)\s+(description|desc)\b/.test(t) || /\b(description|what\s*was\s*done)\b/.test(t)) return 'description'
+  if (/\b(edit|change|update)\s+(quantity|qty|hours|hour)\b/.test(t) || /\b(quantity|qty|hours)\b/.test(t)) return 'qty'
+  if (/\b(edit|change|update)\s+(rate|price)\b/.test(t) || /\b(rate|price)\b/.test(t)) return 'rate'
+  if (t === 'type') return 'type'
+  return null
+}
+
+export function promptForEditPick(
+  draft: { lineType: WizardLineType | '', description: string, qty: string, rate: string },
+  lineNumber: number,
+): string {
+  const n = lineNumber + 1
+  const qtyLabel = draft.lineType === 'labor' ? 'hours' : 'quantity'
+  return `Line ${n}: ${lineTypeLabel(normalizeLineType(draft.lineType))}, ${draft.description}, ${qtyLabel} ${draft.qty}, rate ${draft.rate}. Say type, description, ${qtyLabel}, or rate to edit. Say save when done, or cancel to go back.`
+}
+
+export function retryPromptForEditPick(): string {
+  return 'Say type, description, quantity, rate, save, or cancel.'
+}
+
 export function parseKeepCurrent(spoken: string): boolean {
   return /\b(same|keep|correct|skip|unchanged|leave)\b/i.test(spoken)
 }
@@ -122,18 +157,20 @@ export function promptForEditField(
 ): string {
   const n = lineNumber + 1
   switch (field) {
+    case 'pick':
+      return promptForEditPick(draft, lineNumber)
     case 'type':
-      return `Line ${n}. Type is ${lineTypeLabel(normalizeLineType(draft.lineType))}. Say labor, part, or fee to change.`
+      return `Type is ${lineTypeLabel(normalizeLineType(draft.lineType))}. Say labor, part, or fee to change. Say cancel to go back.`
     case 'description':
-      return `Description is ${draft.description}. Say the new description, or say keep.`
+      return `Description is ${draft.description}. Say the new description, or say keep. Say cancel to go back.`
     case 'qty':
       return draft.lineType === 'labor'
-        ? `Hours are ${draft.qty}. Say the new hours, or say keep.`
-        : `Quantity is ${draft.qty}. Say the new quantity, or say keep.`
+        ? `Hours are ${draft.qty}. Say the new hours, or say keep. Say cancel to go back.`
+        : `Quantity is ${draft.qty}. Say the new quantity, or say keep. Say cancel to go back.`
     case 'rate':
-      return `Rate is ${draft.rate}. Say the new rate, or say keep.`
+      return `Rate is ${draft.rate}. Say the new rate, or say keep. Say cancel to go back.`
     case 'confirm':
-      return 'Say save to keep changes, or add another for more lines.'
+      return 'Say save to keep changes, or cancel to go back.'
     default:
       return promptForSpeechField(field, draft.lineType)
   }
@@ -142,6 +179,8 @@ export function promptForEditField(
 export function fieldLabel(field: SpeechLineField, lineType: WizardLineType | ''): string {
   switch (field) {
     case 'command': return 'Command'
+    case 'pick': return 'Edit menu'
+    case 'type': return 'Type'
     case 'description': return 'Description'
     case 'qty': return lineType ? qtyLabelForLineType(lineType) : 'Quantity'
     case 'rate': return lineType ? rateLabelForLineType(lineType) : 'Rate'

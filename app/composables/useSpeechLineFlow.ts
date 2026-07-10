@@ -5,20 +5,23 @@ import {
   fieldLabel,
   parseKeepCurrent,
   parseSpokenAddLineCommand,
+  parseSpokenCancel,
   parseSpokenConfirm,
+  parseSpokenEditField,
   parseSpokenEditLineNumber,
   parseSpokenLineType,
   parseSpokenNumber,
   promptForCommandMode,
   promptForEditField,
+  promptForEditPick,
   promptForSpeechField,
   retryPromptForCommandMode,
+  retryPromptForEditPick,
   retryPromptForField,
   type SpeechLineField,
 } from '~/utils/speech-line-flow'
 import { formatFieldText } from '#shared/format/prose-field'
 import { emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
-import { lineTypeLabel } from '~/utils/invoices-ui'
 
 export type SpeechFlowMode = 'command' | 'add' | 'edit'
 
@@ -101,7 +104,7 @@ export function useSpeechLineFlow(handlers: {
       const code = (e as Error).message
       if (code === 'no-speech') {
         error.value = 'Did not catch that. Trying again…'
-        speakThenListen(retryPromptForField(field.value))
+        speakThenListen(retryPromptForCurrentField())
         return
       }
       error.value = 'Voice capture failed. Tap the mic to try again.'
@@ -130,6 +133,54 @@ export function useSpeechLineFlow(handlers: {
     speakThenListen(text)
   }
 
+  function cancelEditFlow() {
+    editingIndex.value = null
+    draft.value = emptyWizardLine()
+    captured.value = {}
+    error.value = ''
+    startCommandFlow()
+  }
+
+  function goToEditPick() {
+    if (editingIndex.value === null) {
+      startCommandFlow()
+      return
+    }
+    field.value = 'pick'
+    const text = promptForEditPick(draft.value, editingIndex.value)
+    prompt.value = text
+    speakThenListen(text)
+  }
+
+  function goToEditField(target: Exclude<SpeechLineField, 'command' | 'pick' | 'confirm'>) {
+    if (editingIndex.value === null) return
+    field.value = target
+    const text = promptForEditField(target, draft.value, editingIndex.value)
+    prompt.value = text
+    speakThenListen(text)
+  }
+
+  function saveEditedLine(andContinue: boolean) {
+    if (editingIndex.value === null) return
+    const line = buildLineFromDraft(draft.value)
+    if (!line) {
+      startCommandFlow()
+      return
+    }
+    handlers.onLineUpdated(line, editingIndex.value)
+    editingIndex.value = null
+    draft.value = emptyWizardLine()
+    captured.value = {}
+    if (andContinue) {
+      if (handlers.lineCount() > 0) startCommandFlow()
+      else startAddFlow()
+    }
+    else {
+      active.value = false
+      stop()
+    }
+  }
+
   function startEditFlow(index: number) {
     const line = handlers.getLine(index)
     if (!line) {
@@ -146,16 +197,16 @@ export function useSpeechLineFlow(handlers: {
       qty: line.qty,
       rate: line.rate,
     }
-    field.value = 'type'
+    field.value = 'pick'
     error.value = ''
-    const intro = `Line ${index + 1}. ${lineTypeLabel(line.lineType)}, ${line.description}.`
-    const text = `${intro} ${promptForEditField('type', draft.value, index)}`
+    const text = promptForEditPick(draft.value, index)
     prompt.value = text
     speakThenListen(text)
   }
 
   function promptForCurrentField(): string {
     if (flowMode.value === 'edit' && editingIndex.value !== null) {
+      if (field.value === 'pick') return promptForEditPick(draft.value, editingIndex.value)
       return promptForEditField(field.value, draft.value, editingIndex.value)
     }
     return promptForSpeechField(field.value, draft.value.lineType)
@@ -164,9 +215,35 @@ export function useSpeechLineFlow(handlers: {
   function retryPromptForCurrentField(): string {
     if (field.value === 'command') return retryPromptForCommandMode()
     if (flowMode.value === 'edit' && editingIndex.value !== null) {
+      if (field.value === 'pick') return retryPromptForEditPick()
       return promptForEditField(field.value, draft.value, editingIndex.value)
     }
     return retryPromptForField(field.value)
+  }
+
+  function tryEditFieldJump(spoken: string): boolean {
+    const target = parseSpokenEditField(spoken)
+    if (!target || target === 'confirm') return false
+    goToEditField(target)
+    return true
+  }
+
+  async function handleEditPick(spoken: string) {
+    if (parseSpokenCancel(spoken)) {
+      cancelEditFlow()
+      return
+    }
+    if (parseSpokenConfirm(spoken) === 'save' || parseSpokenEditField(spoken) === 'confirm') {
+      saveEditedLine(false)
+      return
+    }
+    const target = parseSpokenEditField(spoken)
+    if (target && target !== 'confirm') {
+      goToEditField(target)
+      return
+    }
+    error.value = 'Say type, description, quantity, rate, save, or cancel.'
+    speakThenListen(retryPromptForEditPick())
   }
 
   async function handleAnswer(spoken: string) {
@@ -190,6 +267,30 @@ export function useSpeechLineFlow(handlers: {
       return
     }
 
+    if (flowMode.value === 'edit') {
+      if (field.value === 'pick') {
+        await handleEditPick(spoken)
+        return
+      }
+
+      if (parseSpokenCancel(spoken)) {
+        cancelEditFlow()
+        return
+      }
+
+      if (tryEditFieldJump(spoken)) return
+
+      if (field.value === 'confirm') {
+        const action = parseSpokenConfirm(spoken)
+        if (action === 'save') {
+          saveEditedLine(false)
+          return
+        }
+        speakThenListen(retryPromptForCurrentField())
+        return
+      }
+    }
+
     const f = field.value
     const isEdit = flowMode.value === 'edit'
 
@@ -203,10 +304,12 @@ export function useSpeechLineFlow(handlers: {
       }
       draft.value.lineType = type
       captured.value = { ...captured.value, type }
+      if (isEdit) {
+        goToEditPick()
+        return
+      }
       field.value = 'description'
-      speakThenListen(isEdit && editingIndex.value !== null
-        ? promptForEditField('description', draft.value, editingIndex.value)
-        : promptForSpeechField('description', type))
+      speakThenListen(promptForSpeechField('description', type))
       return
     }
 
@@ -220,10 +323,12 @@ export function useSpeechLineFlow(handlers: {
       }
       draft.value.description = desc
       captured.value = { ...captured.value, description: desc }
+      if (isEdit) {
+        goToEditPick()
+        return
+      }
       field.value = 'qty'
-      speakThenListen(isEdit && editingIndex.value !== null
-        ? promptForEditField('qty', draft.value, editingIndex.value)
-        : promptForSpeechField('qty', draft.value.lineType))
+      speakThenListen(promptForSpeechField('qty', draft.value.lineType))
       return
     }
 
@@ -237,10 +342,12 @@ export function useSpeechLineFlow(handlers: {
       }
       draft.value.qty = qty
       captured.value = { ...captured.value, qty }
+      if (isEdit) {
+        goToEditPick()
+        return
+      }
       field.value = 'rate'
-      speakThenListen(isEdit && editingIndex.value !== null
-        ? promptForEditField('rate', draft.value, editingIndex.value)
-        : promptForSpeechField('rate', draft.value.lineType))
+      speakThenListen(promptForSpeechField('rate', draft.value.lineType))
       return
     }
 
@@ -254,15 +361,16 @@ export function useSpeechLineFlow(handlers: {
       }
       draft.value.rate = rate
       captured.value = { ...captured.value, rate }
+      if (isEdit) {
+        goToEditPick()
+        return
+      }
       field.value = 'confirm'
       const line = buildLineFromDraft(draft.value)
       const summary = line
         ? `${line.description}. ${line.qty} at ${line.rate}.`
         : ''
-      const confirmPrompt = isEdit && editingIndex.value !== null
-        ? promptForEditField('confirm', draft.value, editingIndex.value)
-        : promptForSpeechField('confirm', draft.value.lineType)
-      speakThenListen(`${summary} ${confirmPrompt}`)
+      speakThenListen(`${summary} ${promptForSpeechField('confirm', draft.value.lineType)}`)
       return
     }
 
@@ -276,18 +384,6 @@ export function useSpeechLineFlow(handlers: {
       if (!line) {
         if (handlers.lineCount() > 0) startCommandFlow()
         else startAddFlow()
-        return
-      }
-      if (flowMode.value === 'edit' && editingIndex.value !== null) {
-        handlers.onLineUpdated(line, editingIndex.value)
-        if (action === 'another') {
-          if (handlers.lineCount() > 0) startCommandFlow()
-          else startAddFlow()
-        }
-        else {
-          active.value = false
-          stop()
-        }
         return
       }
       handlers.onLineSaved(line, action === 'another')

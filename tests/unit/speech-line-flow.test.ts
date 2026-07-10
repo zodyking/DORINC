@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseSpokenAddLineCommand,
+  parseSpokenCancel,
+  parseSpokenEditField,
   parseSpokenEditLineNumber,
   parseSpokenLineType,
   parseKeepCurrent,
@@ -28,5 +30,21 @@ describe('speech line flow commands', () => {
     expect(parseKeepCurrent('keep')).toBe(true)
     expect(parseKeepCurrent('same as before')).toBe(true)
     expect(parseKeepCurrent('labor')).toBe(false)
+  })
+
+  it('detects cancel while editing', () => {
+    expect(parseSpokenCancel('cancel')).toBe(true)
+    expect(parseSpokenCancel('never mind')).toBe(true)
+    expect(parseSpokenCancel('go back')).toBe(true)
+    expect(parseSpokenCancel('labor')).toBe(false)
+  })
+
+  it('parses edit field navigation', () => {
+    expect(parseSpokenEditField('description')).toBe('description')
+    expect(parseSpokenEditField('edit rate')).toBe('rate')
+    expect(parseSpokenEditField('change quantity')).toBe('qty')
+    expect(parseSpokenEditField('edit type')).toBe('type')
+    expect(parseSpokenEditField('save')).toBe('confirm')
+    expect(parseSpokenEditField('labor')).toBeNull()
   })
 })

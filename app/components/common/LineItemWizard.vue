@@ -160,7 +160,7 @@ defineExpose({ openWizard: openSession })
           </tbody>
         </table>
       </div>
-      <p class="li-list-hint">Say <b>edit line item number 1</b> to review a line</p>
+      <p class="li-list-hint">Say <b>edit line item number 2</b> to change a line. While editing, say <b>description</b>, <b>rate</b>, or <b>cancel</b>.</p>
     </section>
 
     <section class="li-voice" :class="{ active: sessionOpen }">
