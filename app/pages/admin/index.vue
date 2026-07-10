@@ -1,8 +1,14 @@
 <script setup lang="ts">
-// Control Panel — system health, import/export, backups, and configuration.
+// Control Panel — workspace settings, system health, and configuration.
 import ControlPanelBackupRestore from '~/components/admin/ControlPanelBackupRestore.vue'
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelTemplateDesigner from '~/components/admin/ControlPanelTemplateDesigner.vue'
+import SettingsShell, { type SettingsSection } from '~/components/admin/settings/SettingsShell.vue'
+import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
+import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
+import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
+import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
+import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
@@ -145,27 +151,49 @@ const dismissAlertBusy = ref<string | null>(null)
 const route = useRoute()
 const router = useRouter()
 
-type ControlPanelTab = 'overview' | 'designer' | 'import' | 'backup' | 'email-ai' | 'security'
-const controlPanelTabs: { id: ControlPanelTab, label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'designer', label: 'Template Designer' },
-  { id: 'import', label: 'Import / Export' },
-  { id: 'backup', label: 'Backup & Restore' },
-  { id: 'email-ai', label: 'Email & AI' },
-  { id: 'security', label: 'Security' },
+type ControlPanelTab = SettingsSection
+
+const settingsNavGroups = [
+  {
+    label: 'General',
+    items: [
+      { id: 'overview' as const, label: 'Overview', icon: '📊' },
+    ],
+  },
+  {
+    label: 'Workspace',
+    items: [
+      { id: 'business' as const, label: 'Business', icon: '🏢' },
+      { id: 'email' as const, label: 'Email (SMTP)', icon: '✉️' },
+      { id: 'invoice' as const, label: 'Invoices', icon: '🧾' },
+      { id: 'catalog' as const, label: 'Catalog detection', icon: '📦' },
+      { id: 'line-detection' as const, label: 'Line detection', icon: '🔤' },
+      { id: 'designer' as const, label: 'Template designer', icon: '🎨' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { id: 'import' as const, label: 'Import / Export', icon: '⇅' },
+      { id: 'backup' as const, label: 'Backup & Restore', icon: '☁️' },
+      { id: 'ai' as const, label: 'AI', icon: '✦' },
+      { id: 'security' as const, label: 'Security', icon: '🔒' },
+    ],
+  },
 ]
+
 const activeTab = ref<ControlPanelTab>('overview')
 
 watch(() => route.query.tab, (tab) => {
-  if (tab === 'overview' || tab === 'designer' || tab === 'import' || tab === 'backup' || tab === 'email-ai' || tab === 'security') {
-    activeTab.value = tab
+  const valid = settingsNavGroups.flatMap(g => g.items).map(i => i.id)
+  if (tab && valid.includes(tab as ControlPanelTab)) {
+    activeTab.value = tab as ControlPanelTab
   }
 }, { immediate: true })
 
 function setControlPanelTab(tab: ControlPanelTab) {
   activeTab.value = tab
-  const query = { ...route.query, tab }
-  router.replace({ query })
+  router.replace({ query: { ...route.query, tab } })
 }
 
 function formatBackupWhen(iso: string | null | undefined): string {
@@ -282,61 +310,18 @@ async function testAiConnection() {
   }
 }
 
-const smtpTestTo = ref('')
-const smtpBusy = ref(false)
-const smtpMessage = ref('')
-const smtpError = ref('')
-
-watch(() => auth.user?.email, (email) => {
-  if (email && !smtpTestTo.value) smtpTestTo.value = email
-}, { immediate: true })
-
-async function runSmtpTest() {
-  smtpBusy.value = true
-  smtpMessage.value = ''
-  smtpError.value = ''
-  try {
-    const res = await $fetch<{ message: string, delivered: boolean }>('/api/admin/system/smtp-test', {
-      method: 'POST',
-      body: { to: smtpTestTo.value.trim() || undefined },
-    })
-    smtpMessage.value = res.message
-    await refresh()
-  }
-  catch (e: unknown) {
-    smtpError.value = (e as { data?: { message?: string } })?.data?.message ?? 'SMTP test failed'
-  }
-  finally {
-    smtpBusy.value = false
-  }
-}
 </script>
 
 <template>
   <section class="page active">
     <div class="pagehead">
       <div>
-        <h2>Control Panel</h2>
-        <p>System health, data management, backups, and workspace configuration</p>
+        <h2>Settings</h2>
+        <p>Business profile, email, invoices, detection rules, backups, and system health</p>
       </div>
       <div class="actions">
         <NuxtLink to="/setup" class="btn primary">Server Setup Wizard</NuxtLink>
       </div>
-    </div>
-
-    <div v-if="!error && status" class="subtabs" role="tablist" aria-label="Control panel sections">
-      <button
-        v-for="tab in controlPanelTabs"
-        :key="tab.id"
-        type="button"
-        class="chip"
-        :class="{ on: activeTab === tab.id }"
-        role="tab"
-        :aria-selected="activeTab === tab.id"
-        @click="setControlPanelTab(tab.id)"
-      >
-        {{ tab.label }}
-      </button>
     </div>
 
     <div v-if="error" class="card" style="padding:24px; margin-bottom:16px;">
@@ -344,7 +329,12 @@ async function runSmtpTest() {
       <NuxtLink to="/dashboard" class="btn">Back to dashboard</NuxtLink>
     </div>
 
-    <template v-else-if="status">
+    <SettingsShell
+      v-else-if="status"
+      :groups="settingsNavGroups"
+      :active="activeTab"
+      @navigate="setControlPanelTab"
+    >
       <div v-show="activeTab === 'overview'">
       <div class="admin-banner" style="margin-bottom:16px;">
         <span class="ico">🔐</span>
@@ -450,6 +440,12 @@ async function runSmtpTest() {
       </div>
       </div>
 
+      <SettingsBusinessPanel v-if="activeTab === 'business'" @saved="refresh()" />
+      <SettingsEmailPanel v-if="activeTab === 'email'" @saved="refresh()" />
+      <SettingsInvoicePanel v-if="activeTab === 'invoice'" @saved="refresh()" />
+      <SettingsCatalogPanel v-if="activeTab === 'catalog'" />
+      <SettingsLineDetectionPanel v-if="activeTab === 'line-detection'" />
+
       <div v-if="activeTab === 'designer'">
         <ControlPanelTemplateDesigner />
       </div>
@@ -458,28 +454,7 @@ async function runSmtpTest() {
         <ControlPanelImportExport />
       </div>
 
-      <div v-show="activeTab === 'email-ai'" class="cols">
-        <div class="stack">
-          <div class="card">
-            <div class="chead">
-              <h3>SMTP Test</h3>
-            </div>
-            <div class="cbody">
-              <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-                SMTP is configured in the setup wizard and stored encrypted in PostgreSQL. Send a test message to verify outbound email.
-              </p>
-              <label class="fld">
-                Send test to
-                <input v-model="smtpTestTo" type="email" placeholder="you@example.com">
-              </label>
-              <p v-if="smtpMessage" style="color:#059669; font-size:13px; margin:0 0 10px;">{{ smtpMessage }}</p>
-              <p v-if="smtpError" style="color:#dc2626; font-size:13px; margin:0 0 10px;">{{ smtpError }}</p>
-              <button class="btn primary" :disabled="smtpBusy" @click="runSmtpTest">
-                {{ smtpBusy ? 'Sending…' : 'Send test email' }}
-              </button>
-            </div>
-          </div>
-
+      <div v-show="activeTab === 'ai'" class="stack">
           <div v-if="canManageAi && aiData" class="card">
             <div class="chead">
               <h3>AI settings</h3>
@@ -591,7 +566,6 @@ async function runSmtpTest() {
               </table>
             </div>
           </div>
-        </div>
       </div>
 
       <div v-if="activeTab === 'backup'">
@@ -682,7 +656,7 @@ async function runSmtpTest() {
             </div>
           </div>
       </div>
-    </template>
+    </SettingsShell>
 
   </section>
 </template>

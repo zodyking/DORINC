@@ -5,6 +5,7 @@ import {
   type CatalogItemType,
 } from '~/utils/catalog-ui'
 import { inferCatalogCategory } from '#shared/catalog-category-inference'
+import { useDetectionSettings } from '~/composables/useDetectionSettings'
 
 export interface CatalogItemFormValue {
   itemType: CatalogItemType
@@ -41,15 +42,19 @@ watch(() => model.value.itemType, (type) => {
   model.value.uom = defaultUomForCatalogType(type)
 })
 
+const { catalogKeywords, load: loadDetection } = useDetectionSettings()
+
+onMounted(() => { void loadDetection() })
+
 watch(
-  () => [model.value.name, model.value.description, props.categories, props.editing] as const,
-  ([name, description, categories, editing]) => {
+  () => [model.value.name, model.value.description, props.categories, props.editing, catalogKeywords.value] as const,
+  ([name, description, categories, editing, keywords]) => {
     if (editing || categoryTouched.value) {
       suggestedCategory.value = null
       return
     }
     const text = [name, description].filter(Boolean).join(' ')
-    const match = inferCatalogCategory(text, categories)
+    const match = inferCatalogCategory(text, categories, keywords ?? undefined)
     suggestedCategory.value = match?.categoryName ?? null
     if (match) model.value.categoryId = match.categoryId
   },

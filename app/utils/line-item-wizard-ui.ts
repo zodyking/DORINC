@@ -2,6 +2,8 @@ import type { DraftLine } from './invoice-creator-ui'
 import { previewLineAmount } from './invoice-creator-ui'
 import { LINE_ITEM_TYPES, type LineItemType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
+import type { LineTypeVerbConfig } from '#shared/line-item-type-from-description'
+import { getLineTypeVerbsCache } from './detection-settings-store'
 import { lineTypeLabel, moneyDisplay } from './invoices-ui'
 
 export type WizardLineType = LineItemType
@@ -48,8 +50,12 @@ export function emptyWizardLine(): Omit<WizardLineDraft, 'lineType'> & { lineTyp
 }
 
 /** Set line type from the first word of the description when it matches a known verb. */
-export function applyInferredLineType(line: { lineType: LineItemType | '', description: string }): void {
-  const inferred = inferLineTypeFromDescription(line.description)
+export function applyInferredLineType(
+  line: { lineType: LineItemType | '', description: string },
+  verbs?: LineTypeVerbConfig,
+): void {
+  const resolved = verbs ?? getLineTypeVerbsCache() ?? undefined
+  const inferred = inferLineTypeFromDescription(line.description, resolved)
   if (inferred) line.lineType = inferred
 }
 

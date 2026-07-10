@@ -2,6 +2,7 @@
 
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
+import { getLineTypeVerbsCache } from './detection-settings-store'
 import type { InvoiceLineType } from './invoices-ui'
 import { moneyDisplay, paymentTermsLabel } from './invoices-ui'
 import type { LineTypeBreakdown } from './invoice-creator-ui'
@@ -63,7 +64,8 @@ export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
   return {
     lineType: (() => {
       const fromCatalog = catalogTypeToLineType(item.itemType)
-      return inferLineTypeFromDescription(item.name) ?? fromCatalog
+      const verbs = getLineTypeVerbsCache() ?? undefined
+      return inferLineTypeFromDescription(item.name, verbs) ?? fromCatalog
     })(),
     description: item.name,
     quantity: '1',

@@ -1,0 +1,50 @@
+.settings-panel-head {
+  margin-bottom: 16px;
+}
+.settings-panel-head h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.settings-panel-head p {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.45;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-form .row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .settings-form .row2 { grid-template-columns: 1fr; }
+}
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.settings-ok {
+  margin: 0;
+  color: #059669;
+  font-size: 13px;
+}
+.settings-err {
+  margin: 0;
+  color: #dc2626;
+  font-size: 13px;
+}
+.settings-help {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+}
