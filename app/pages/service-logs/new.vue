@@ -392,7 +392,6 @@ onBeforeUnmount(() => {
         <CommonLineItemWizard
           ref="lineWizardRef"
           v-model:lines="digitalLineItems"
-          list-hint="Lines saved. Tap below to add more by voice."
         />
         <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>

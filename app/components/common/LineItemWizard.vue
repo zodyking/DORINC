@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { lineTypeLabel } from '~/utils/invoices-ui'
-import { catalogTypePill } from '~/utils/catalog-ui'
 import {
   calcLineAmount,
   emptyWizardLine,
@@ -8,29 +7,24 @@ import {
   type WizardLineDraft,
   type WizardLineType,
 } from '~/utils/line-item-wizard-ui'
-import type { SpeechLineField } from '~/utils/speech-line-flow'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
 
 withDefaults(defineProps<{
-  listHint?: string
   autoOpen?: boolean
 }>(), {
-  listHint: 'Lines saved. Tap below to add more by voice.',
   autoOpen: false,
 })
 
 const sessionOpen = ref(false)
+const manualOpen = ref(false)
 const manualDraft = ref(emptyWizardLine())
 
 const {
   supported,
   status,
   prompt,
-  lastHeard,
   error,
-  captured,
-  fieldLabel,
   start,
   stop,
   retryListen,
@@ -39,37 +33,51 @@ const {
   if (!addAnother) sessionOpen.value = false
 })
 
-const statusLabel = computed(() => {
+const feedback = computed(() => {
+  if (error.value) return error.value
+  if (!sessionOpen.value) {
+    return lines.value.length
+      ? 'Tap the mic to add another line'
+      : 'Tap the mic to add your first line'
+  }
   switch (status.value) {
-    case 'speaking': return 'Listen…'
-    case 'listening': return 'Your turn — speak now'
-    case 'processing': return 'Got it…'
-    default: return sessionOpen.value ? 'Ready' : ''
+    case 'speaking':
+      return prompt.value || 'Listen…'
+    case 'listening':
+      return 'Speak now'
+    case 'processing':
+      return 'Got it…'
+    default:
+      return prompt.value || 'Ready when you are'
   }
 })
 
-const capturedEntries = computed(() => {
-  const fields: SpeechLineField[] = ['type', 'description', 'qty', 'rate']
-  return fields
-    .filter(f => captured.value[f])
-    .map(f => ({
-      key: f,
-      label: fieldLabel(f),
-      value: f === 'type'
-        ? lineTypeLabel(captured.value[f] as WizardLineType)
-        : captured.value[f]!,
-    }))
+const orbState = computed(() => {
+  if (!sessionOpen.value) return 'idle'
+  return status.value === 'idle' ? 'ready' : status.value
 })
 
 function openSession() {
   sessionOpen.value = true
+  manualOpen.value = false
   unlockSpeechFromUserGesture({ silent: true })
   nextTick(() => start())
 }
 
-function cancelSession() {
+function finishSession() {
   stop()
   sessionOpen.value = false
+}
+
+function onOrbTap() {
+  unlockSpeechFromUserGesture({ silent: true })
+  if (!sessionOpen.value) {
+    openSession()
+    return
+  }
+  if (supported.value && (status.value === 'listening' || status.value === 'idle')) {
+    retryListen()
+  }
 }
 
 function removeLine(index: number) {
@@ -88,12 +96,16 @@ function saveManualLine(addAnother: boolean) {
     amount,
   }]
   manualDraft.value = emptyWizardLine()
-  if (addAnother) {
-    sessionOpen.value = true
-  }
-  else {
-    sessionOpen.value = false
-  }
+  manualOpen.value = false
+  sessionOpen.value = addAnother
+  if (addAnother) nextTick(() => start())
+}
+
+function lineSummary(line: WizardLineDraft) {
+  const qtyLabel = line.lineType === 'labor' ? `${line.qty} hrs` : line.qty
+  const bits = [lineTypeLabel(line.lineType), line.description, `${qtyLabel} @ ${line.rate}`]
+  if (line.amount) bits.push(moneyDisplay(line.amount))
+  return bits.join(' · ')
 }
 
 onBeforeUnmount(() => stop())
@@ -102,82 +114,43 @@ defineExpose({ openWizard: openSession })
 </script>
 
 <template>
-  <div class="li-wizard-root">
-    <!-- Saved lines -->
-    <div v-if="lines.length && !sessionOpen" class="li-lines-list">
-      <p class="sl-hint">{{ listHint }}</p>
-      <div class="li-lines-cards">
-        <div v-for="(line, i) in lines" :key="i" class="li-line-card">
-          <div class="li-line-card-top">
-            <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
-            <button type="button" class="li-line-rm" aria-label="Remove line" @click="removeLine(i)">×</button>
-          </div>
-          <b class="li-line-desc">{{ line.description }}</b>
-          <span class="li-line-meta">
-            {{ line.qty }} × {{ line.rate }}
-            <template v-if="line.amount"> · {{ moneyDisplay(line.amount) }}</template>
-          </span>
-        </div>
-      </div>
-      <button type="button" class="btn primary li-add-line-btn" @click="openSession">
-        + Add another line by voice
-      </button>
-    </div>
+  <div class="li-wizard">
+    <section v-if="lines.length" class="li-list" aria-label="Lines added">
+      <p class="li-list-title">Your lines</p>
+      <ul class="li-list-rows">
+        <li v-for="(line, i) in lines" :key="i" class="li-list-row">
+          <span class="li-list-text">{{ lineSummary(line) }}</span>
+          <button type="button" class="li-list-rm" aria-label="Remove line" @click="removeLine(i)">×</button>
+        </li>
+      </ul>
+    </section>
 
-    <!-- Start CTA — always visible when no session and no saved lines -->
-    <div v-else-if="!sessionOpen" class="li-start-cta">
-      <button type="button" class="sl-voice-btn li-start-btn" @click="openSession">
-        <span class="sl-voice-ico" aria-hidden="true">🎙️</span>
-        <span>Tap to start — add lines by voice</span>
-      </button>
-      <p class="help">The app will ask each question out loud. You answer by speaking.</p>
-    </div>
-
-    <!-- Active voice session -->
-    <div v-else class="li-speech-flow">
-      <div
-        class="li-speech-orb"
-        :class="{
-          speaking: status === 'speaking',
-          listening: status === 'listening',
-          processing: status === 'processing',
-        }"
-        aria-hidden="true"
+    <section class="li-voice" :class="{ active: sessionOpen }">
+      <button
+        type="button"
+        class="li-orb"
+        :class="orbState"
+        :aria-label="sessionOpen ? 'Voice assistant' : 'Start voice entry'"
+        @click="onOrbTap"
       >
-        🎙️
-      </div>
+        <span class="li-orb-icon" aria-hidden="true">🎙️</span>
+      </button>
 
-      <p v-if="statusLabel" class="li-speech-status">{{ statusLabel }}</p>
-      <p class="li-speech-prompt">{{ prompt || 'Labor, part, service, or fee?' }}</p>
+      <p class="li-feedback" :class="{ error: !!error }">{{ feedback }}</p>
 
-      <p v-if="lastHeard" class="li-speech-heard">
-        You said: “{{ lastHeard }}”
-      </p>
+      <button
+        v-if="sessionOpen"
+        type="button"
+        class="li-done"
+        @click="finishSession"
+      >
+        Done adding lines
+      </button>
+    </section>
 
-      <div v-if="capturedEntries.length" class="li-speech-captured">
-        <div v-for="entry in capturedEntries" :key="entry.key" class="li-speech-cap-row">
-          <span class="k">{{ entry.label }}</span>
-          <span class="v">{{ entry.value }}</span>
-        </div>
-      </div>
-
-      <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
-
-      <div v-if="supported" class="li-speech-actions">
-        <button
-          type="button"
-          class="sl-voice-btn"
-          :class="{ on: status === 'listening' }"
-          @click="retryListen"
-        >
-          <span class="sl-voice-ico" aria-hidden="true">{{ status === 'listening' ? '■' : '🎙️' }}</span>
-          <span>{{ status === 'listening' ? 'Listening… tap to stop' : 'Tap to speak' }}</span>
-        </button>
-      </div>
-
-      <!-- Manual fallback when voice unavailable or user prefers typing -->
-      <div v-if="!supported || error" class="li-manual-fallback">
-        <p class="sl-hint">Or type the line manually:</p>
+    <details v-if="!supported" class="li-manual" :open="manualOpen">
+      <summary @click.prevent="manualOpen = !manualOpen">Type a line instead</summary>
+      <div class="li-manual-body">
         <label class="fld">
           <span>Type</span>
           <select v-model="manualDraft.lineType">
@@ -197,185 +170,197 @@ defineExpose({ openWizard: openSession })
           <span>Rate</span>
           <input v-model="manualDraft.rate" type="text" inputmode="decimal">
         </label>
-        <div class="li-line-save-actions">
+        <div class="li-manual-actions">
           <button type="button" class="btn primary" @click="saveManualLine(true)">Save &amp; add another</button>
-          <button type="button" class="btn" @click="saveManualLine(false)">Save &amp; finish</button>
+          <button type="button" class="btn" @click="saveManualLine(false)">Save line</button>
         </div>
       </div>
-
-      <button type="button" class="btn ghost sm" style="margin-top:12px;" @click="cancelSession">Cancel</button>
-    </div>
+    </details>
   </div>
 </template>
 
 <style scoped>
-.li-start-cta {
+.li-wizard {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 8px 0 4px;
+  gap: 20px;
 }
-.li-start-btn {
-  min-height: 56px;
-  font-size: 16px;
+
+.li-list-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
 }
-.li-lines-cards {
+
+.li-list-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
 }
-.li-line-card {
-  padding: 12px 14px;
+
+.li-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 10px;
 }
-.li-line-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+
+.li-list-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #0f172a;
 }
-.li-line-rm {
+
+.li-list-rm {
+  flex-shrink: 0;
   appearance: none;
   border: none;
-  background: #f1f5f9;
-  color: #64748b;
+  background: transparent;
+  color: #94a3b8;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  font-size: 18px;
+  border-radius: 6px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
 }
-.li-line-desc {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-.li-line-meta {
-  font-size: 12px;
+
+.li-list-rm:hover {
+  background: #e2e8f0;
   color: #64748b;
 }
-.li-add-line-btn {
-  width: 100%;
-  justify-content: center;
-  min-height: 48px;
-}
-.li-speech-flow {
+
+.li-voice {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   padding: 8px 0 4px;
-  width: 100%;
 }
-.li-speech-orb {
-  width: 88px;
-  height: 88px;
+
+.li-orb {
+  appearance: none;
+  border: none;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 36px;
   background: #eef2ff;
   border: 2px solid #c7d2fe;
-  margin-bottom: 16px;
-  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
 }
-.li-speech-orb.speaking {
+
+.li-orb-icon {
+  font-size: 38px;
+  line-height: 1;
+}
+
+.li-orb.idle {
   background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.li-orb.idle:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.li-orb.speaking,
+.li-orb.processing {
+  background: #f1f5f9;
   border-color: #cbd5e1;
   transform: scale(0.96);
 }
-.li-speech-orb.listening {
+
+.li-orb.listening,
+.li-orb.ready {
   background: #4f46e5;
   border-color: #4f46e5;
-  box-shadow: 0 0 0 8px rgba(79, 70, 229, 0.18);
-  animation: li-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 0 8px rgba(79, 70, 229, 0.15);
 }
-.li-speech-orb.processing {
-  background: #eef2ff;
-  border-color: #818cf8;
+
+.li-orb.listening {
+  animation: li-orb-pulse 1.4s ease-in-out infinite;
 }
-@keyframes li-pulse {
-  0%, 100% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12); }
-  50% { box-shadow: 0 0 0 14px rgba(79, 70, 229, 0.22); }
+
+@keyframes li-orb-pulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.1); }
+  50% { box-shadow: 0 0 0 14px rgba(79, 70, 229, 0.2); }
 }
-.li-speech-status {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6366f1;
+
+.li-feedback {
+  margin: 14px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #475569;
+  max-width: 26ch;
 }
-.li-speech-prompt {
-  margin: 0 0 12px;
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.3;
-  color: #0f172a;
-  max-width: 28ch;
-}
-.li-speech-heard {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: #64748b;
-  font-style: italic;
-  max-width: 100%;
-  word-break: break-word;
-}
-.li-speech-captured {
-  width: 100%;
-  text-align: left;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-}
-.li-speech-cap-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.li-speech-cap-row:last-child { border-bottom: none; }
-.li-speech-cap-row .k {
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.li-speech-cap-row .v {
-  color: #0f172a;
+
+.li-voice.active .li-feedback {
+  font-size: 17px;
   font-weight: 600;
-  text-align: right;
+  color: #0f172a;
 }
-.li-speech-actions {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+
+.li-feedback.error {
+  color: #dc2626;
+  font-weight: 500;
 }
-.li-manual-fallback {
-  width: 100%;
-  text-align: left;
-  margin-top: 16px;
-  padding-top: 16px;
+
+.li-done {
+  margin-top: 12px;
+  appearance: none;
+  border: none;
+  background: none;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+}
+
+.li-manual {
   border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
 }
-.li-line-save-actions {
+
+.li-manual summary {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  list-style: none;
+}
+
+.li-manual summary::-webkit-details-marker {
+  display: none;
+}
+
+.li-manual-body {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.li-manual-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 8px;
 }
-.li-line-save-actions .btn {
+
+.li-manual-actions .btn {
   width: 100%;
   justify-content: center;
   min-height: 48px;

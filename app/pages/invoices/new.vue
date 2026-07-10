@@ -655,7 +655,6 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
             <CommonLineItemWizard
               ref="lineWizardRef"
               v-model:lines="wizardLines"
-              list-hint="Charges saved. Tap below to add more by voice."
             />
             <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
           </div>
