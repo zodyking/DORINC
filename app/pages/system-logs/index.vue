@@ -84,7 +84,8 @@ const filtersDirty = computed(() =>
   || !!action.value
   || !!actorUserId.value
   || !!dateFrom.value
-  || !!dateTo.value,
+  || !!dateTo.value
+  || !!q.value,
 )
 
 function clearFilters() {
@@ -94,6 +95,7 @@ function clearFilters() {
   actorUserId.value = ''
   dateFrom.value = ''
   dateTo.value = ''
+  q.value = ''
 }
 
 const rangeLabel = computed(() => {
@@ -103,9 +105,9 @@ const rangeLabel = computed(() => {
   return `Showing ${from}—${to} of ${total.value.toLocaleString()}`
 })
 
-const subtitle = computed(() => {
-  const n = total.value
-  return `${n.toLocaleString()} event${n === 1 ? '' : 's'}`
+const listCountLabel = computed(() => {
+  if (!total.value) return 'No log entries'
+  return rangeLabel.value
 })
 </script>
 
@@ -129,11 +131,20 @@ const subtitle = computed(() => {
       v-model:search="q"
       search-placeholder="Search system events, users, actions…"
       search-aria-label="Search system logs"
+      :count-label="listCountLabel"
       :filters-active="filtersDirty"
       filter-title="Filter logs"
       @clear-filters="clearFilters"
     >
       <template #filters>
+        <label class="fld">
+          Category
+          <select v-model="category" aria-label="Log category">
+            <option v-for="chip in AUDIT_CATEGORY_CHIPS" :key="chip.key" :value="chip.key">
+              {{ chip.label }}
+            </option>
+          </select>
+        </label>
         <label class="fld">
           Entity
           <select v-model="entityType" aria-label="Filter by entity type">
@@ -167,19 +178,6 @@ const subtitle = computed(() => {
     </ListFilterBar>
 
     <div class="card">
-      <div class="chead">
-        <button
-          v-for="chip in AUDIT_CATEGORY_CHIPS"
-          :key="chip.key"
-          type="button"
-          class="chip"
-          :class="{ on: category === chip.key }"
-          @click="category = chip.key"
-        >
-          {{ chip.label }}
-        </button>
-      </div>
-
       <div class="tscroll">
         <table v-if="items.length" id="audit-rows" class="tbl audit-tbl">
           <thead>

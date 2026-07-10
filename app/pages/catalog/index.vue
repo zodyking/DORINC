@@ -30,18 +30,19 @@ const auth = useAuthStore()
 const canManage = computed(() => auth.can('catalog.manage.all'))
 
 const q = ref('')
-const typeChip = ref<TypeChip>('all')
+const fType = ref<TypeChip>('all')
+const fSort = ref<'name-asc' | 'name-desc' | 'sku-asc' | 'newest'>('name-asc')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, typeChip], () => { page.value = 1 })
+watch([q, fType, fSort], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
-  itemType: typeChip.value === 'all' ? undefined : typeChip.value,
-  sort: 'name-asc' as const,
+  itemType: fType.value === 'all' ? undefined : fType.value,
+  sort: fSort.value,
 }))
 
 const { data, refresh, pending, error: listError } = await useFetch<{ items: CatalogItemRow[], total: number }>(
@@ -63,7 +64,19 @@ const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const categories = computed(() => categoriesData.value?.items ?? [])
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
-const hasActiveFilter = computed(() => !!q.value.trim() || typeChip.value !== 'all')
+const filtersDirty = computed(() => !!q.value.trim() || fType.value !== 'all' || fSort.value !== 'name-asc')
+
+function clearFilters() {
+  q.value = ''
+  fType.value = 'all'
+  fSort.value = 'name-asc'
+}
+
+const listCountLabel = computed(() => {
+  if (pending.value) return 'Loading…'
+  if (!total.value) return 'No items'
+  return rangeLabel.value
+})
 
 const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: allCount.value?.total ?? 0 },
@@ -261,23 +274,32 @@ function onRowClick(row: CatalogItemRow) {
       v-model:search="q"
       search-placeholder="Search items, SKUs, categories…"
       search-aria-label="Search catalog items"
-      :has-filters="false"
-    />
+      :count-label="listCountLabel"
+      :filters-active="filtersDirty"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Item type
+          <select v-model="fType" aria-label="Catalog item type">
+            <option v-for="chip in chips" :key="chip.key" :value="chip.key">
+              {{ chip.label }} · {{ chip.count }}
+            </option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select v-model="fSort" aria-label="Sort catalog items">
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+            <option value="sku-asc">SKU A → Z</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
     <div class="card">
-      <div class="chead">
-        <button
-          v-for="chip in chips"
-          :key="chip.key"
-          type="button"
-          class="chip"
-          :class="{ on: typeChip === chip.key }"
-          @click="typeChip = chip.key"
-        >
-          {{ chip.label }} · {{ chip.count }}
-        </button>
-      </div>
-
       <div class="tscroll">
         <table v-if="items.length" class="tbl cat-tbl">
           <thead>
@@ -319,7 +341,7 @@ function onRowClick(row: CatalogItemRow) {
           Loading catalog…
         </div>
         <div v-else id="cat-rows-empty" class="empty" style="display:block;">
-          <template v-if="hasActiveFilter">No catalog items match your search.</template>
+          <template v-if="filtersDirty">No catalog items match your search.</template>
           <template v-else-if="canManage">No catalog items yet — create one with <b>+ New Item</b>, or import from Control Panel.</template>
           <template v-else>No catalog items yet.</template>
         </div>
@@ -376,10 +398,6 @@ function onRowClick(row: CatalogItemRow) {
 </template>
 
 <style scoped>
-.chead {
-  flex-wrap: wrap;
-  gap: 8px;
-}
 tr.archived .lead {
   opacity: 0.65;
 }

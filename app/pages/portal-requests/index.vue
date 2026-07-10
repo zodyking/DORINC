@@ -67,11 +67,19 @@ const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pendingCount = computed(() => data.value?.pending ?? 0)
 
-const filtersDirty = computed(() => status.value !== 'pending')
+const filtersDirty = computed(() => tab.value !== 'all' || status.value !== 'pending' || !!q.value)
 
 function clearFilters() {
+  tab.value = 'all'
   status.value = 'pending'
+  q.value = ''
 }
+
+const listCountLabel = computed(() => {
+  if (loading.value && !items.length) return 'Loading…'
+  const prefix = status.value === 'pending' ? 'Pending requests' : 'Request history'
+  return `${prefix} · ${total.value}`
+})
 
 const busyKey = ref('')
 const modalOpen = ref(false)
@@ -157,50 +165,42 @@ async function submitModal() {
     </div>
 
     <template v-else>
-      <div class="card" style="margin-bottom:16px;">
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search customer, vehicle, invoice…"
+        search-aria-label="Search requests"
+        :count-label="listCountLabel"
+        :filters-active="filtersDirty"
+        filter-title="Filter requests"
+        @clear-filters="clearFilters"
+      >
+        <template #filters>
+          <label class="fld">
+            Request type
+            <select v-model="tab" aria-label="Request type filter">
+              <option v-for="t in STAFF_REQUEST_TABS" :key="t.key" :value="t.key">
+                {{ t.label }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Status
+            <select v-model="status" aria-label="Request status filter">
+              <option value="pending">Pending only</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="all">All statuses</option>
+            </select>
+          </label>
+        </template>
+      </ListFilterBar>
+
+      <div class="card">
         <div class="chead">
           <h3>Review queue</h3>
           <div class="right">
             <span v-if="pendingCount" class="pill warn">{{ pendingCount }} pending</span>
           </div>
-        </div>
-        <div class="chiprow" role="tablist" aria-label="Request type">
-          <button
-            v-for="t in STAFF_REQUEST_TABS"
-            :key="t.key"
-            type="button"
-            class="chip"
-            :class="{ on: tab === t.key }"
-            @click="tab = t.key"
-          >
-            {{ t.label }}
-          </button>
-        </div>
-        <ListFilterBar
-          v-model:search="q"
-          search-placeholder="Search customer, vehicle, invoice…"
-          search-aria-label="Search requests"
-          :filters-active="filtersDirty"
-          filter-title="Filter requests"
-          @clear-filters="clearFilters"
-        >
-          <template #filters>
-            <label class="fld">
-              Status
-              <select v-model="status" aria-label="Request status filter">
-                <option value="pending">Pending only</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="all">All statuses</option>
-              </select>
-            </label>
-          </template>
-        </ListFilterBar>
-      </div>
-
-      <div class="card">
-        <div class="chead">
-          <h3>{{ status === 'pending' ? 'Pending requests' : 'Request history' }} · {{ total }}</h3>
         </div>
 
         <div v-if="loading && !items.length" class="cbody" style="color:#94a3b8; font-size:13px;">Loading…</div>

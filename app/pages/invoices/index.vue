@@ -45,21 +45,22 @@ const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 
 const q = ref('')
-const statusChip = ref<StatusChip>((route.query.status as StatusChip) || 'all')
+const fStatus = ref<StatusChip>((route.query.status as StatusChip) || 'all')
+const fSort = ref<'newest' | 'oldest' | 'invoice_date' | 'status'>('newest')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, statusChip], () => { page.value = 1 })
+watch([q, fStatus, fSort], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
-  status: statusChip.value === 'all' || statusChip.value === 'overdue'
+  status: fStatus.value === 'all' || fStatus.value === 'overdue'
     ? undefined
-    : statusChip.value,
-  overdue: statusChip.value === 'overdue' ? true : undefined,
-  sort: 'newest' as const,
+    : fStatus.value,
+  overdue: fStatus.value === 'overdue' ? true : undefined,
+  sort: fSort.value,
 }))
 
 // Client-only fetches — do not await (Suspense blank) and do not refresh during SSR
@@ -128,6 +129,22 @@ const chips = computed(() => [
   { key: 'overdue' as const, label: 'Overdue', count: stats.value?.overdueCount ?? 0 },
   { key: 'paid' as const, label: 'Paid', count: stats.value?.paidCount ?? 0 },
 ])
+
+const filtersDirty = computed(() =>
+  fStatus.value !== 'all' || fSort.value !== 'newest' || !!q.value,
+)
+
+function clearFilters() {
+  q.value = ''
+  fStatus.value = 'all'
+  fSort.value = 'newest'
+}
+
+const listCountLabel = computed(() => {
+  if (listPending.value || statsPending.value) return 'Loading…'
+  if (!total.value) return 'No invoices'
+  return rangeLabel.value
+})
 
 const rangeLabel = computed(() => {
   if (!total.value) return 'No invoices'
@@ -200,23 +217,32 @@ async function retryLoad() {
       v-model:search="q"
       search-placeholder="Search invoices, customers…"
       search-aria-label="Search invoices"
-      :has-filters="false"
-    />
+      :count-label="listCountLabel"
+      :filters-active="filtersDirty"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Status
+          <select v-model="fStatus" aria-label="Invoice status">
+            <option v-for="chip in chips" :key="chip.key" :value="chip.key">
+              {{ chip.label }} · {{ chip.count }}
+            </option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select v-model="fSort" aria-label="Sort invoices">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="invoice_date">Invoice date</option>
+            <option value="status">Status</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
     <div class="card">
-      <div class="chead">
-        <button
-          v-for="chip in chips"
-          :key="chip.key"
-          type="button"
-          class="chip"
-          :class="{ on: statusChip === chip.key }"
-          @click="statusChip = chip.key"
-        >
-          {{ chip.label }} · {{ chip.count }}
-        </button>
-      </div>
-
       <div class="tscroll">
         <table v-if="items.length" class="tbl inv-tbl">
           <thead>
@@ -276,10 +302,3 @@ async function retryLoad() {
     </div>
   </section>
 </template>
-
-<style scoped>
-.chead {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-</style>

@@ -30,19 +30,19 @@ const canReview = computed(() => auth.can('service_logs.review.all'))
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
 
 const q = ref('')
+const fView = ref<'all' | 'review'>('all')
+const fSort = ref<'newest' | 'oldest' | 'status'>('newest')
 const page = ref(1)
 const PAGE_SIZE = 25
-const viewMode = ref<'all' | 'review'>('all')
 
-watch(q, () => { page.value = 1 })
-watch(viewMode, () => { page.value = 1 })
+watch([q, fView, fSort], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
-  queue: canReview.value && viewMode.value === 'review' ? 'review' as const : undefined,
-  sort: 'newest' as const,
+  queue: canReview.value && fView.value === 'review' ? 'review' as const : undefined,
+  sort: fSort.value,
 }))
 
 const { data } = await useFetch<{ items: ServiceLogRow[], total: number }>(
@@ -53,10 +53,31 @@ const { data } = await useFetch<{ items: ServiceLogRow[], total: number }>(
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Service Logs')
-const queueTitle = computed(() => {
-  if (isMechanicScope.value) return `My logs · ${total.value}`
-  if (viewMode.value === 'review') return `Review queue · ${total.value}`
-  return `All logs · ${total.value}`
+
+const filtersDirty = computed(() =>
+  fView.value !== 'all' || fSort.value !== 'newest' || !!q.value,
+)
+
+function clearFilters() {
+  q.value = ''
+  fView.value = 'all'
+  fSort.value = 'newest'
+}
+
+const listCountLabel = computed(() => {
+  if (!total.value) return 'No service logs'
+  const prefix = isMechanicScope.value
+    ? 'My logs'
+    : fView.value === 'review'
+      ? 'Review queue'
+      : 'All logs'
+  return `${prefix} · ${total.value}`
+})
+
+const pageSubtitle = computed(() => {
+  if (isMechanicScope.value) return 'Your field uploads and their review status'
+  if (fView.value === 'review') return 'Logs awaiting accountant review before invoicing'
+  return 'All field service logs — including those already linked to invoices'
 })
 
 function openLog(id: string) {
@@ -69,13 +90,7 @@ function openLog(id: string) {
     <div class="pagehead">
       <div>
         <h2>{{ pageTitle }}</h2>
-        <p id="sl-page-sub">
-          {{ isMechanicScope
-            ? 'Your field uploads and their review status'
-            : viewMode === 'review'
-              ? 'Logs awaiting accountant review before invoicing'
-              : 'All field service logs — including those already linked to invoices' }}
-        </p>
+        <p id="sl-page-sub">{{ pageSubtitle }}</p>
       </div>
       <div class="actions">
         <NuxtLink v-if="canUpload" to="/service-logs/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New service log</NuxtLink>
@@ -86,32 +101,30 @@ function openLog(id: string) {
       v-model:search="q"
       search-placeholder="Search service logs…"
       search-aria-label="Search service logs"
-      :has-filters="false"
-    />
+      :count-label="listCountLabel"
+      :filters-active="filtersDirty"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label v-if="canReview && !isMechanicScope" class="fld">
+          View
+          <select v-model="fView" aria-label="Service log view">
+            <option value="all">All logs</option>
+            <option value="review">Review queue</option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select v-model="fSort" aria-label="Sort service logs">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="status">Status</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
     <div class="card">
-      <div class="chead">
-        <h3>{{ queueTitle }}</h3>
-        <div v-if="canReview" class="chiprow" role="tablist" aria-label="Service log view" style="margin:0;">
-          <button
-            type="button"
-            class="chip"
-            :class="{ on: viewMode === 'all' }"
-            @click="viewMode = 'all'"
-          >
-            All logs
-          </button>
-          <button
-            type="button"
-            class="chip"
-            :class="{ on: viewMode === 'review' }"
-            @click="viewMode = 'review'"
-          >
-            Review queue
-          </button>
-        </div>
-      </div>
-
       <div v-if="items.length" id="log-queue">
         <div
           v-for="log in items"
