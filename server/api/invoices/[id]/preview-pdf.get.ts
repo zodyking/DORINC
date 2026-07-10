@@ -21,9 +21,10 @@ export default defineEventHandler(async (event) => {
     setResponseHeader(event, 'Content-Type', 'application/pdf')
     setResponseHeader(event, 'Content-Disposition', `inline; filename="${filename}"`)
     setResponseHeader(event, 'Cache-Control', 'no-store')
-    return pdf
+    return new Uint8Array(pdf)
   }
   catch (err) {
+    console.error('[preview-pdf]', id, err)
     if (err instanceof InvoicePdfServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
       if (err.code === 'TEMPLATE_NOT_FOUND') {

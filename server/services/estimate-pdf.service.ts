@@ -144,10 +144,14 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
   }
 
   const { version } = await getDefaultPublishedTemplateVersion(db)
+  const logoBase = process.env.APP_URL?.trim().replace(/\/$/, '')
+  const logoPath = version.designSettings.logoFileId
+    ? (logoBase ? `${logoBase}/api/files/${version.designSettings.logoFileId}/preview` : `/api/files/${version.designSettings.logoFileId}/preview`)
+    : null
   const templateHtml = applyDesignSettingsToHtml(
     version.htmlContent,
     version.designSettings,
-    version.designSettings.logoFileId ? `/api/files/${version.designSettings.logoFileId}/preview` : null,
+    logoPath,
   )
   const htmlContent = buildEstimateRenderHtml(templateHtml, detail)
   const filename = `${detail.estimateNumberFormatted}.pdf`

@@ -38,6 +38,7 @@ export async function renderHtmlToPdfBuffer(
   }
   catch (err) {
     const cause = err instanceof Error ? err.message : String(err)
+    console.error('[laravel-pdf] fetch failed', { base, cause })
     throw new Error(`Laravel PDF service failed: ${cause}`, { cause: err })
   }
 

@@ -43,14 +43,18 @@ const PAYMENT_TERMS_LABELS: Record<string, string> = {
 
 const STATUS_PDF_LABELS: Record<InvoiceStatus, string> = {
   draft: 'DRAFT',
+  pending_manager_approval: 'PENDING APPROVAL',
   approved: 'APPROVED',
   sent: 'SENT',
   paid: 'PAID',
   void: 'VOID',
 }
 
-function logoPreviewPath(fileId: string | null | undefined) {
-  return fileId ? `/api/files/${fileId}/preview` : null
+function logoPreviewPath(fileId: string | null | undefined): string | null {
+  if (!fileId) return null
+  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
+  const path = `/api/files/${fileId}/preview`
+  return base ? `${base}${path}` : path
 }
 
 function templateHtmlForRender(
@@ -71,8 +75,8 @@ function pdfOptionsFromTemplateVersion(
   return { paper, marginInches }
 }
 
-function escapeHtml(value: string): string {
-  return value
+function escapeHtml(value: string | null | undefined): string {
+  return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -126,8 +130,48 @@ export async function getDefaultPublishedTemplateVersion(db: Db) {
     .orderBy(desc(invoiceTemplateVersions.versionNumber))
     .limit(1)
 
-  if (!row) throw new InvoicePdfServiceError('TEMPLATE_NOT_FOUND')
-  return row
+  if (row) return row
+
+  // Fallback: any published template (default flag may be missing in older data).
+  const [fallback] = await db.select({
+    version: invoiceTemplateVersions,
+    template: invoiceTemplates,
+  })
+    .from(invoiceTemplates)
+    .innerJoin(
+      invoiceTemplateVersions,
+      and(
+        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
+        eq(invoiceTemplateVersions.status, 'published'),
+      ),
+    )
+    .orderBy(desc(invoiceTemplateVersions.versionNumber))
+    .limit(1)
+
+  if (fallback) return fallback
+
+  // Last resort: seed default template on demand.
+  const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
+  await seedInvoiceTemplates(db)
+
+  const [seeded] = await db.select({
+    version: invoiceTemplateVersions,
+    template: invoiceTemplates,
+  })
+    .from(invoiceTemplates)
+    .innerJoin(
+      invoiceTemplateVersions,
+      and(
+        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
+        eq(invoiceTemplateVersions.status, 'published'),
+      ),
+    )
+    .where(eq(invoiceTemplates.isDefault, true))
+    .orderBy(desc(invoiceTemplateVersions.versionNumber))
+    .limit(1)
+
+  if (!seeded) throw new InvoicePdfServiceError('TEMPLATE_NOT_FOUND')
+  return seeded
 }
 
 export async function getInvoicePdfRecord(db: Db, invoiceId: string) {
@@ -153,8 +197,9 @@ export function buildInvoiceRenderHtml(
   detail: Awaited<ReturnType<typeof getInvoiceDetail>>,
 ): string {
   const invNum = detail.invoiceNumberFormatted
-  const statusLabel = STATUS_PDF_LABELS[detail.status]
+  const statusLabel = STATUS_PDF_LABELS[detail.status] ?? String(detail.status).toUpperCase()
   const customer = detail.customerSnapshot
+  const customerName = customer?.displayName ?? detail.customerName ?? 'Customer'
   const vehicle = detail.vehicleSnapshot
   const generatedAt = formatGeneratedAt()
 
@@ -185,10 +230,10 @@ export function buildInvoiceRenderHtml(
     .replace(/11\/27\/2025/g, formatDisplayDate(detail.invoiceDate))
     .replace(/Upon Receipt/g, paymentTermsLabel(detail.paymentTerms))
     .replace(/CREATED • NOT SENT/g, statusLabel)
-    .replace(/Brandon Kadeem King/g, escapeHtml(customer.displayName))
-    .replace(/387 Van Siclen Ave<br\/>\s*Brooklyn, NY 11207/g, formatAddress(customer.billingAddress ?? customer.serviceAddress))
-    .replace(/\(212\) 203-7678/g, escapeHtml(customer.phone ?? '—'))
-    .replace(/zodykinginbox@gmail.com/g, escapeHtml(customer.email ?? '—'))
+    .replace(/Brandon Kadeem King/g, escapeHtml(customerName))
+    .replace(/387 Van Siclen Ave<br\/>\s*Brooklyn, NY 11207/g, formatAddress(customer?.billingAddress ?? customer?.serviceAddress ?? null))
+    .replace(/\(212\) 203-7678/g, escapeHtml(customer?.phone ?? '—'))
+    .replace(/zodykinginbox@gmail.com/g, escapeHtml(customer?.email ?? '—'))
     .replace(
       /<tbody>[\s\S]*?<\/tbody>/,
       `<tbody>\n${lineRows}\n          </tbody>`,

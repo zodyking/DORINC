@@ -18,6 +18,15 @@ describe('fetchErrorMessage', () => {
     await expect(fetchErrorMessage(err, 'fallback')).resolves.toBe('PDF render service is unavailable')
   })
 
+  it('parses JSON embedded in FetchError data Blob', async () => {
+    const blob = new Blob(
+      [JSON.stringify({ message: 'No published invoice template is configured' })],
+      { type: 'application/json' },
+    )
+    const err = { data: blob, statusCode: 500, message: '[GET] "/api/invoices/x/preview-pdf": 500' }
+    await expect(fetchErrorMessage(err, 'fallback')).resolves.toBe('No published invoice template is configured')
+  })
+
   it('maps generic 500 fetch errors to a helpful message', async () => {
     const err = { statusCode: 500, message: '[GET] "/api/invoices/x/preview-pdf": 500' }
     await expect(fetchErrorMessage(err, 'fallback')).resolves.toContain('PDF generation failed')
