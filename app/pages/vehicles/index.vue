@@ -146,59 +146,51 @@ const rangeLabel = computed(() => {
     <p v-if="bulkDecodeError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ bulkDecodeError }}</p>
 
     <div class="card">
-      <div class="fsbar">
-        <div class="fs-group" style="flex:1; min-width:180px;">
-          <div class="search" style="width:100%; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search tag, VIN, plate, make, customer…"
-              aria-label="Search vehicles"
-            >
-          </div>
-        </div>
-        <div class="fs-group">
-          <label for="veh-f-type">Unit type</label>
-          <select id="veh-f-type" v-model="fType">
-            <option value="all">All types</option>
-            <option value="truck">Trucks</option>
-            <option value="bus">Buses</option>
-            <option value="equipment">Equipment</option>
-            <option value="tractor">Ag / tractors</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="fs-group">
-          <label for="veh-f-customer">Customer</label>
-          <select id="veh-f-customer" v-model="fCustomer">
-            <option value="all">All customers</option>
-            <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
-          </select>
-        </div>
-        <span class="fs-sep" aria-hidden="true" />
-        <div class="fs-group">
-          <label for="veh-f-sort">Sort by</label>
-          <select id="veh-f-sort" v-model="fSort">
-            <option value="tag-asc">Tag A → Z</option>
-            <option value="tag-desc">Tag Z → A</option>
-            <option value="customer-asc">Customer A → Z</option>
-            <option value="odo-desc">Odometer / hours high → low</option>
-            <option value="newest">Newest first</option>
-          </select>
-        </div>
-        <div class="fs-group">
-          <label for="veh-f-archived">Archived</label>
-          <select id="veh-f-archived" v-model="showArchived">
-            <option :value="false">Hidden</option>
-            <option :value="true">Shown</option>
-          </select>
-        </div>
-        <div class="fs-meta">
-          <span class="fs-count">{{ items.length }} of {{ total }} vehicle{{ total === 1 ? '' : 's' }}</span>
-          <button type="button" class="fs-clear" :disabled="!filtersDirty" @click="clearFilters">Clear filters</button>
-        </div>
-      </div>
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search tag, VIN, plate, make, customer…"
+        search-aria-label="Search vehicles"
+        :filters-active="filtersDirty"
+        @clear-filters="clearFilters"
+      >
+        <template #filters>
+          <label class="fld">
+            Unit type
+            <select id="veh-f-type" v-model="fType">
+              <option value="all">All types</option>
+              <option value="truck">Trucks</option>
+              <option value="bus">Buses</option>
+              <option value="equipment">Equipment</option>
+              <option value="tractor">Ag / tractors</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label class="fld">
+            Customer
+            <select id="veh-f-customer" v-model="fCustomer">
+              <option value="all">All customers</option>
+              <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+            </select>
+          </label>
+          <label class="fld">
+            Sort by
+            <select id="veh-f-sort" v-model="fSort">
+              <option value="tag-asc">Tag A → Z</option>
+              <option value="tag-desc">Tag Z → A</option>
+              <option value="customer-asc">Customer A → Z</option>
+              <option value="odo-desc">Odometer / hours high → low</option>
+              <option value="newest">Newest first</option>
+            </select>
+          </label>
+          <label class="fld">
+            Archived
+            <select id="veh-f-archived" v-model="showArchived">
+              <option :value="false">Hidden</option>
+              <option :value="true">Shown</option>
+            </select>
+          </label>
+        </template>
+      </ListFilterBar>
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl veh-tbl">

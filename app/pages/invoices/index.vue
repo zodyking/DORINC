@@ -208,18 +208,14 @@ async function retryLoad() {
         >
           {{ chip.label }} · {{ chip.count }}
         </button>
-        <div class="right">
-          <div class="search" style="width:220px; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search invoices, customers…"
-              aria-label="Search invoices"
-            >
-          </div>
-        </div>
       </div>
+
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search invoices, customers…"
+        search-aria-label="Search invoices"
+        :has-filters="false"
+      />
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl inv-tbl">
@@ -285,8 +281,5 @@ async function retryLoad() {
 .chead {
   flex-wrap: wrap;
   gap: 8px;
-}
-.chead .right {
-  margin-left: auto;
 }
 </style>

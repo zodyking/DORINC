@@ -137,51 +137,48 @@ const subtitle = computed(() => {
         >
           {{ chip.label }}
         </button>
-        <div class="right">
-          <div class="search" style="width:240px; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search system events, users, actions…"
-              aria-label="Search system logs"
-            >
-          </div>
-        </div>
       </div>
 
-      <div class="filterbar">
-        <label class="flt">
-          <span>Entity</span>
-          <select v-model="entityType" aria-label="Filter by entity type">
-            <option value="">All entities</option>
-            <option v-for="et in entityOptions" :key="et" :value="et">{{ entityTypeLabel(et) }}</option>
-          </select>
-        </label>
-        <label class="flt">
-          <span>Action</span>
-          <select v-model="action" aria-label="Filter by action">
-            <option value="">All actions</option>
-            <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
-          </select>
-        </label>
-        <label v-if="userOptions.length" class="flt">
-          <span>User</span>
-          <select v-model="actorUserId" aria-label="Filter by user">
-            <option value="">All users</option>
-            <option v-for="u in userOptions" :key="u.id" :value="u.id">{{ u.name }}</option>
-          </select>
-        </label>
-        <label class="flt">
-          <span>From</span>
-          <input v-model="dateFrom" type="date" aria-label="Filter from date">
-        </label>
-        <label class="flt">
-          <span>To</span>
-          <input v-model="dateTo" type="date" aria-label="Filter to date">
-        </label>
-        <button v-if="filtersDirty" type="button" class="btn sm" @click="clearFilters">Clear filters</button>
-      </div>
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search system events, users, actions…"
+        search-aria-label="Search system logs"
+        :filters-active="filtersDirty"
+        filter-title="Filter logs"
+        @clear-filters="clearFilters"
+      >
+        <template #filters>
+          <label class="fld">
+            Entity
+            <select v-model="entityType" aria-label="Filter by entity type">
+              <option value="">All entities</option>
+              <option v-for="et in entityOptions" :key="et" :value="et">{{ entityTypeLabel(et) }}</option>
+            </select>
+          </label>
+          <label class="fld">
+            Action
+            <select v-model="action" aria-label="Filter by action">
+              <option value="">All actions</option>
+              <option v-for="a in actionOptions" :key="a" :value="a">{{ a }}</option>
+            </select>
+          </label>
+          <label v-if="userOptions.length" class="fld">
+            User
+            <select v-model="actorUserId" aria-label="Filter by user">
+              <option value="">All users</option>
+              <option v-for="u in userOptions" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </label>
+          <label class="fld">
+            From
+            <input v-model="dateFrom" type="date" aria-label="Filter from date">
+          </label>
+          <label class="fld">
+            To
+            <input v-model="dateTo" type="date" aria-label="Filter to date">
+          </label>
+        </template>
+      </ListFilterBar>
 
       <div class="tscroll">
         <table v-if="items.length" id="audit-rows" class="tbl audit-tbl">
@@ -237,44 +234,6 @@ const subtitle = computed(() => {
 .chead {
   flex-wrap: wrap;
   gap: 8px;
-}
-.chead .right {
-  margin-left: auto;
-}
-
-.filterbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  align-items: flex-end;
-  padding: 0 18px 14px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.flt {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-
-.flt select,
-.flt input[type='date'] {
-  min-width: 140px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #334155;
-  text-transform: none;
-  letter-spacing: normal;
-  background: #fff;
 }
 
 .mono {

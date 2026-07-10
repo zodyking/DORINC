@@ -85,36 +85,32 @@ function openLog(id: string) {
     <div class="card">
       <div class="chead">
         <h3>{{ queueTitle }}</h3>
-        <div class="right" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <div v-if="canReview" class="chiprow" role="tablist" aria-label="Service log view" style="margin:0;">
-            <button
-              type="button"
-              class="chip"
-              :class="{ on: viewMode === 'all' }"
-              @click="viewMode = 'all'"
-            >
-              All logs
-            </button>
-            <button
-              type="button"
-              class="chip"
-              :class="{ on: viewMode === 'review' }"
-              @click="viewMode = 'review'"
-            >
-              Review queue
-            </button>
-          </div>
-          <div class="search" style="width:220px; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search service logs…"
-              aria-label="Search service logs"
-            >
-          </div>
+        <div v-if="canReview" class="chiprow" role="tablist" aria-label="Service log view" style="margin:0;">
+          <button
+            type="button"
+            class="chip"
+            :class="{ on: viewMode === 'all' }"
+            @click="viewMode = 'all'"
+          >
+            All logs
+          </button>
+          <button
+            type="button"
+            class="chip"
+            :class="{ on: viewMode === 'review' }"
+            @click="viewMode = 'review'"
+          >
+            Review queue
+          </button>
         </div>
       </div>
+
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search service logs…"
+        search-aria-label="Search service logs"
+        :has-filters="false"
+      />
 
       <div v-if="items.length" id="log-queue">
         <div

@@ -55,6 +55,12 @@ const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pendingCount = computed(() => data.value?.pending ?? 0)
 
+const filtersDirty = computed(() => status.value !== 'pending')
+
+function clearFilters() {
+  status.value = 'pending'
+}
+
 const busyId = ref('')
 const modalOpen = ref(false)
 const modalMode = ref<'approve' | 'reject'>('approve')
@@ -148,18 +154,26 @@ async function submitModal() {
             {{ t.label }}
           </button>
         </div>
-        <div class="cbody" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding-top:0;">
-          <select v-model="status" aria-label="Request status filter" style="min-width:160px;">
-            <option value="pending">Pending only</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="all">All statuses</option>
-          </select>
-          <div class="search" style="flex:1; min-width:220px; height:36px;">
-            <span class="gl">⌕</span>
-            <input v-model="q" type="search" placeholder="Search record, reason, or submitter…" aria-label="Search deletion requests">
-          </div>
-        </div>
+        <ListFilterBar
+          v-model:search="q"
+          search-placeholder="Search record, reason, or submitter…"
+          search-aria-label="Search deletion requests"
+          :filters-active="filtersDirty"
+          filter-title="Filter requests"
+          @clear-filters="clearFilters"
+        >
+          <template #filters>
+            <label class="fld">
+              Status
+              <select v-model="status" aria-label="Request status filter">
+                <option value="pending">Pending only</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="all">All statuses</option>
+              </select>
+            </label>
+          </template>
+        </ListFilterBar>
       </div>
 
       <div class="card">
