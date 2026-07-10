@@ -208,18 +208,14 @@ async function retryLoad() {
         >
           {{ chip.label }} · {{ chip.count }}
         </button>
-        <div class="right">
-          <div class="search" style="width:220px; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search invoices, customers…"
-              aria-label="Search invoices"
-            >
-          </div>
-        </div>
       </div>
+
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search invoices, customers…"
+        search-aria-label="Search invoices"
+        :has-filters="false"
+      />
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl inv-tbl">
@@ -285,45 +281,5 @@ async function retryLoad() {
 .chead {
   flex-wrap: wrap;
   gap: 8px;
-}
-.chead .right {
-  margin-left: auto;
-}
-
-/* Mobile: single-line rows — hide issued/due, truncate customer */
-@media (max-width: 720px) {
-  .inv-tbl .col-issued,
-  .inv-tbl .col-due {
-    display: none;
-  }
-  .inv-tbl {
-    display: table;
-    table-layout: fixed;
-    width: 100%;
-  }
-  .inv-tbl .col-inv {
-    width: 28%;
-  }
-  .inv-tbl .col-cust {
-    width: 34%;
-    max-width: 0;
-  }
-  .inv-tbl .col-cust {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .inv-tbl .col-cust .sub {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .inv-tbl .col-status {
-    width: 18%;
-  }
-  .inv-tbl .col-amt {
-    width: 20%;
-  }
 }
 </style>

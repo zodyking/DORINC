@@ -89,55 +89,48 @@ function subtitleFor(c: CustomerRow): string {
       </div>
     </div>
 
-    <div class="fsbar">
-      <div class="fs-group" style="flex:1; min-width:180px;">
-        <div class="search" style="width:100%; height:32px;">
-          <span class="gl">⌕</span>
-          <input
-            v-model="q"
-            type="search"
-            placeholder="Search name, contact, bus #, VIN, plate…"
-            aria-label="Search customers"
-          >
-        </div>
-      </div>
-      <div class="fs-group">
-        <label for="cust-f-type">Account type</label>
-        <select id="cust-f-type" v-model="fKind">
-          <option value="all">All types</option>
-          <option value="fleet">Fleet</option>
-          <option value="individual">Individual</option>
-        </select>
-      </div>
-      <div class="fs-group">
-        <label for="cust-f-portal">Portal</label>
-        <select id="cust-f-portal" v-model="fPortal">
-          <option value="all">All statuses</option>
-          <option value="on">Enabled</option>
-          <option value="off">Disabled</option>
-        </select>
-      </div>
-      <span class="fs-sep" aria-hidden="true" />
-      <div class="fs-group">
-        <label for="cust-f-sort">Sort by</label>
-        <select id="cust-f-sort" v-model="fSort">
-          <option value="name-asc">Name A → Z</option>
-          <option value="name-desc">Name Z → A</option>
-          <option value="newest">Newest first</option>
-        </select>
-      </div>
-      <div class="fs-group">
-        <label for="cust-f-archived">Archived</label>
-        <select id="cust-f-archived" v-model="showArchived">
-          <option :value="false">Hidden</option>
-          <option :value="true">Shown</option>
-        </select>
-      </div>
-      <div class="fs-meta">
-        <span class="fs-count">{{ items.length }} customer{{ items.length === 1 ? '' : 's' }}</span>
-        <button type="button" class="fs-clear" :disabled="!filtersDirty" @click="clearFilters">Clear filters</button>
-      </div>
-    </div>
+    <ListFilterBar
+      v-model:search="q"
+      search-placeholder="Search name, contact, bus #, VIN, plate…"
+      search-aria-label="Search customers"
+      :filters-active="filtersDirty"
+      :count-label="`${items.length} customer${items.length === 1 ? '' : 's'}`"
+      @clear-filters="clearFilters"
+    >
+      <template #filters>
+        <label class="fld">
+          Account type
+          <select id="cust-f-type" v-model="fKind">
+            <option value="all">All types</option>
+            <option value="fleet">Fleet</option>
+            <option value="individual">Individual</option>
+          </select>
+        </label>
+        <label class="fld">
+          Portal
+          <select id="cust-f-portal" v-model="fPortal">
+            <option value="all">All statuses</option>
+            <option value="on">Enabled</option>
+            <option value="off">Disabled</option>
+          </select>
+        </label>
+        <label class="fld">
+          Sort by
+          <select id="cust-f-sort" v-model="fSort">
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </label>
+        <label class="fld">
+          Archived
+          <select id="cust-f-archived" v-model="showArchived">
+            <option :value="false">Hidden</option>
+            <option :value="true">Shown</option>
+          </select>
+        </label>
+      </template>
+    </ListFilterBar>
 
     <div v-if="items.length" class="grid3">
       <NuxtLink

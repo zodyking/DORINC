@@ -269,18 +269,14 @@ function onRowClick(row: CatalogItemRow) {
         >
           {{ chip.label }} · {{ chip.count }}
         </button>
-        <div class="right">
-          <div class="search" style="width:220px; height:32px;">
-            <span class="gl">⌕</span>
-            <input
-              v-model="q"
-              type="search"
-              placeholder="Search items, SKUs, categories…"
-              aria-label="Search catalog items"
-            >
-          </div>
-        </div>
       </div>
+
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search items, SKUs, categories…"
+        search-aria-label="Search catalog items"
+        :has-filters="false"
+      />
 
       <div class="tscroll">
         <table v-if="items.length" class="tbl cat-tbl">
@@ -384,49 +380,7 @@ function onRowClick(row: CatalogItemRow) {
   flex-wrap: wrap;
   gap: 8px;
 }
-.chead .right {
-  margin-left: auto;
-}
 tr.archived .lead {
   opacity: 0.65;
-}
-
-/* Mobile: single-line rows — hide SKU/category, truncate item + price */
-@media (max-width: 720px) {
-  .cat-tbl .col-sku,
-  .cat-tbl .col-cat {
-    display: none;
-  }
-  .cat-tbl {
-    display: table;
-    table-layout: fixed;
-    width: 100%;
-  }
-  .cat-tbl .cell-item {
-    width: 52%;
-  }
-  .cat-tbl .col-type {
-    width: 22%;
-  }
-  .cat-tbl .col-price {
-    width: 26%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .cat-tbl .cell-item .lead,
-  .cat-tbl .cell-item .sub {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-  }
-  .chead .right {
-    width: 100%;
-    margin-left: 0;
-  }
-  .chead .search {
-    width: 100% !important;
-  }
 }
 </style>
