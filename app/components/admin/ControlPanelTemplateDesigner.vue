@@ -493,7 +493,7 @@ onUnmounted(() => {
           <dl class="kv" style="margin:0; border-top:1px solid #f1f5f9;">
             <dt>Version</dt><dd>{{ versionMeta }}</dd>
             <dt>Used by</dt><dd>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</dd>
-            <dt>Engine</dt><dd>Laravel DomPDF</dd>
+            <dt>Engine</dt><dd>Laravel Blade + DomPDF</dd>
           </dl>
         </div>
       </div>

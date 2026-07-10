@@ -146,7 +146,7 @@ defineExpose({
       <div class="chead">
         <h3>{{ mode === 'download' ? 'PDF download' : 'PDF preview' }} · {{ invoiceLabel }}</h3>
         <div class="right" style="display:flex;gap:8px;align-items:center;">
-          <span class="pill indigo">Laravel DomPDF</span>
+          <span class="pill indigo">Laravel Blade PDF</span>
           <button type="button" class="btn sm" :disabled="previewBusy" @click="openPreview">
             {{ previewBusy ? 'Rendering…' : 'Refresh' }}
           </button>

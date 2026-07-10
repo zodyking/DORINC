@@ -3,11 +3,19 @@ import type { Db } from '../db/client'
 import type { EstimateStatus } from '../db/schema/estimates'
 import { estimateFiles } from '../db/schema/estimates'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
+import {
+  buildDocumentPdfRenderPayload,
+  buildEstimatePdfData,
+  serializePdfRenderPayload,
+} from '../../shared/document-pdf-payload'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getFileWithData } from './files.service'
 import { getEstimateDetail, EstimatesServiceError } from './estimates.service'
-import { buildInvoiceRenderHtml } from './invoice-pdf.service'
-import { prepareInvoiceTemplateHtml, resolveInvoicePdfTemplate } from './invoice-template-source.service'
+import {
+  pdfRenderOptionsFromTemplate,
+  resolveInvoicePdfTemplate,
+} from './invoice-template-source.service'
+import { getBusinessProfile } from './workspace-settings.service'
 
 export type EstimatePdfServiceErrorCode
   = 'NOT_FOUND'
@@ -23,14 +31,11 @@ export class EstimatePdfServiceError extends Error {
 /** Sent/approved estimates eligible for official PDF generation (SPEC §9). */
 export const ESTIMATE_PDF_ELIGIBLE_STATUSES: EstimateStatus[] = ['sent', 'approved']
 
-const STATUS_PDF_LABELS: Record<EstimateStatus, string> = {
-  draft: 'DRAFT',
-  sent: 'SENT',
-  approved: 'APPROVED',
-  rejected: 'REJECTED',
-  converted: 'CONVERTED',
-  expired: 'EXPIRED',
-  void: 'VOID',
+function logoPreviewPath(fileId: string | null | undefined): string | null {
+  if (!fileId) return null
+  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
+  const path = `/api/files/${fileId}/preview`
+  return base ? `${base}${path}` : path
 }
 
 export async function getEstimatePdfRecord(db: Db, estimateId: string) {
@@ -48,32 +53,6 @@ export async function getPendingEstimatePdfRenderJob(db: Db, estimateId: string)
     .orderBy(desc(pdfRenderJobs.createdAt))
     .limit(1)
   return row ?? null
-}
-
-/** Build render HTML from published template + frozen estimate snapshots (SPEC §9). */
-export function buildEstimateRenderHtml(
-  templateHtml: string,
-  detail: Awaited<ReturnType<typeof getEstimateDetail>>,
-): string {
-  let html = buildInvoiceRenderHtml(templateHtml, {
-    ...detail,
-    invoiceNumber: detail.estimateNumber,
-    invoiceNumberFormatted: detail.estimateNumberFormatted,
-    invoiceDate: detail.estimateDate,
-    dueDate: detail.validUntil,
-    status: detail.status as 'draft' | 'approved' | 'sent' | 'paid' | 'void',
-    paymentTerms: 'due_on_receipt',
-    amountPaid: '0',
-    balanceDue: detail.total,
-  })
-
-  html = html
-    .replace(/Invoice /g, 'Estimate ')
-    .replace(/INV-/g, 'EST-')
-    .replace(/CREATED • NOT SENT/g, STATUS_PDF_LABELS[detail.status])
-    .replace(/Due on receipt/g, detail.validUntil ? `Valid until ${detail.validUntil}` : 'Subject to approval')
-
-  return html
 }
 
 export interface GenerateEstimatePdfResult {
@@ -121,14 +100,28 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
   }
 
   const template = await resolveInvoicePdfTemplate(db)
-  const templateHtml = prepareInvoiceTemplateHtml(template)
-  const htmlContent = buildEstimateRenderHtml(templateHtml, detail)
+  const business = await getBusinessProfile(db)
+  const data = buildEstimatePdfData({
+    ...detail,
+    invoiceNumberFormatted: detail.estimateNumberFormatted,
+    invoiceDate: detail.estimateDate,
+    status: detail.status,
+    paymentTerms: 'due_on_receipt',
+    amountPaid: '0',
+    balanceDue: detail.total,
+    validUntil: detail.validUntil,
+  }, {
+    company: { name: business.businessName || undefined },
+    design: template.designSettings,
+    logoUrl: logoPreviewPath(template.designSettings.logoFileId),
+  })
+  const payload = buildDocumentPdfRenderPayload(data, pdfRenderOptionsFromTemplate(template))
   const filename = `${detail.estimateNumberFormatted}.pdf`
 
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'estimate',
     entityId: estimateId,
-    htmlContent,
+    htmlContent: serializePdfRenderPayload(payload),
     originalFilename: filename,
     templateVersionId: template.templateVersionId,
     createdBy: actorId,

@@ -11,7 +11,7 @@ export type PdfRenderStatus = (typeof PDF_RENDER_STATUSES)[number]
 
 /**
  * PDF render queue polled by the pdf-worker container (SPEC §9, §18).
- * HTML is rendered with DomPDF (laravel-pdf service) and stored in app_files.
+ * Stores a JSON Blade render payload; Laravel + barryvdh/laravel-dompdf produces the PDF.
  */
 export const pdfRenderJobs = pgTable('pdf_render_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -1,4 +1,4 @@
-# DORINC Suite — pdf-worker polls pdf_render_jobs and calls laravel-pdf (DomPDF).
+# DORINC Suite — pdf-worker polls pdf_render_jobs and calls laravel-pdf (Laravel Blade + DomPDF).
 FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./

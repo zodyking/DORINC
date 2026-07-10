@@ -1,11 +1,11 @@
 import {
-  injectPdfPageMargins,
   isPdfUpstreamFailureMessage,
   normalizePdfPaper,
   pdfRenderServiceBaseUrl,
   resolvePdfMargins,
   type PdfPaper,
 } from '../../shared/pdf-render'
+import type { DocumentPdfRenderPayload } from '../../shared/document-pdf-payload'
 
 export interface RenderPdfOptions {
   paper?: PdfPaper | 'Letter' | 'A4' | string
@@ -13,32 +13,27 @@ export interface RenderPdfOptions {
   margins?: Partial<{ top: number, right: number, bottom: number, left: number }>
 }
 
-/** Render HTML to PDF via the Laravel DomPDF sidecar (same contract as pdf-render worker). */
-export async function renderHtmlToPdfBuffer(
-  html: string,
-  options: RenderPdfOptions = {},
+/** Render invoice/estimate PDF via Laravel Blade + barryvdh/laravel-dompdf. */
+export async function renderDocumentPdfBuffer(
+  payload: DocumentPdfRenderPayload,
 ): Promise<Buffer> {
-  const paper = normalizePdfPaper(options.paper)
-  const margins = resolvePdfMargins(options)
   const base = pdfRenderServiceBaseUrl()
-  const preparedHtml = injectPdfPageMargins(html, { paper, margins })
+  const path = payload.documentType === 'estimate'
+    ? '/api/render/estimate'
+    : '/api/render/invoice'
 
   let res: Response
   try {
-    res = await fetch(`${base}/render`, {
+    res = await fetch(`${base}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        html: preparedHtml,
-        paper,
-        margins,
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(60_000),
     })
   }
   catch (err) {
     const cause = err instanceof Error ? err.message : String(err)
-    console.error('[laravel-pdf] fetch failed', { base, cause })
+    console.error('[laravel-pdf] fetch failed', { base, path, cause })
     throw new Error(`Laravel PDF service failed: ${cause}`, { cause: err })
   }
 
@@ -57,4 +52,12 @@ export async function renderHtmlToPdfBuffer(
   return Buffer.from(await res.arrayBuffer())
 }
 
-export { isPdfUpstreamFailureMessage }
+/** @deprecated HTML render path removed — use renderDocumentPdfBuffer. */
+export async function renderHtmlToPdfBuffer(
+  _html: string,
+  _options: RenderPdfOptions = {},
+): Promise<Buffer> {
+  throw new Error('HTML PDF rendering was removed. Use renderDocumentPdfBuffer with a Blade payload.')
+}
+
+export { isPdfUpstreamFailureMessage, normalizePdfPaper, resolvePdfMargins }
