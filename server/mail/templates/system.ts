@@ -5,4 +5,5 @@ export {
   buildPortalCredentialEmail,
   buildBackupNotificationEmail,
   buildInvoiceAttachedEmail,
+  buildLoginNotificationEmail,
 } from './system.mjs'

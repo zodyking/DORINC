@@ -4,6 +4,7 @@
 import {
   EMAIL_BRAND_NAME,
   buildStyledEmail,
+  emailBadge,
   emailButton,
   emailMuted,
   emailPanel,
@@ -178,6 +179,58 @@ export function buildInvoiceAttachedEmail({
       emailParagraph(`Invoice <strong>${escapeHtml(invoiceNumber)}</strong> is attached to this email as a PDF.`),
       metaBits,
       emailMuted('If you have questions, reply to this email or submit a request through your customer portal.'),
+    ].join(''),
+    appUrl,
+  })
+}
+
+export function buildLoginNotificationEmail({
+  name,
+  portal = 'staff',
+  signedInAt,
+  ipAddress,
+  userAgent,
+  appUrl,
+  brandName = EMAIL_BRAND_NAME,
+}) {
+  const portalLabel = portal === 'customer' ? 'Customer portal' : 'Staff account'
+  const when = signedInAt
+    ? new Date(signedInAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+  const subject = `New sign-in to ${brandName}`
+  const text = [
+    `Hi ${name},`,
+    '',
+    `Your ${portalLabel.toLowerCase()} was used to sign in to ${brandName}.`,
+    '',
+    `When: ${when}`,
+    ipAddress ? `IP address: ${ipAddress}` : '',
+    userAgent ? `Device: ${userAgent}` : '',
+    '',
+    'If this was not you, contact your administrator immediately and change your password.',
+  ].filter(Boolean).join('\n')
+
+  const loginUrl = `${String(appUrl).replace(/\/$/, '')}${portal === 'customer' ? '/auth/login?portal=customer' : '/auth/login'}`
+
+  const details = [
+    `<strong>When:</strong> ${escapeHtml(when)}`,
+    `<strong>Account:</strong> ${escapeHtml(portalLabel)}`,
+    ipAddress ? `<strong>IP address:</strong> ${escapeHtml(ipAddress)}` : '',
+    userAgent ? `<strong>Device:</strong> ${escapeHtml(userAgent)}` : '',
+  ].filter(Boolean).join('<br>')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    title: 'New sign-in',
+    preheader: `Sign-in to your ${brandName} ${portalLabel.toLowerCase()}`,
+    bodyHtml: [
+      emailBadge('Sign-in alert', 'warn'),
+      emailParagraph(`Hi ${escapeHtml(name)},`),
+      emailParagraph(`Your <strong>${escapeHtml(portalLabel.toLowerCase())}</strong> was used to sign in to <strong>${escapeHtml(brandName)}</strong>.`),
+      emailPanel('Sign-in details', details),
+      emailButton(loginUrl, portal === 'customer' ? 'Open customer portal' : 'Open DORINC'),
+      emailMuted('If this was not you, contact your administrator immediately and change your password.'),
     ].join(''),
     appUrl,
   })

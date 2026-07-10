@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBackupNotificationEmail,
   buildInvoiceAttachedEmail,
+  buildLoginNotificationEmail,
   buildPortalCredentialEmail,
   buildSignupVerificationEmail,
   buildSmtpTestEmail,
@@ -75,5 +76,21 @@ describe('system email templates', () => {
     expect(mail.html).toContain('INV-000001')
     expect(mail.html).toContain('Due date')
     expect(mail.text).toContain('attached')
+  })
+
+  it('builds login notification with sign-in details', () => {
+    const mail = buildLoginNotificationEmail({
+      name: 'Alex',
+      portal: 'staff',
+      signedInAt: '2026-07-10T20:00:00.000Z',
+      ipAddress: '203.0.113.10',
+      userAgent: 'Mozilla/5.0',
+      appUrl,
+    })
+    expect(mail.subject).toContain('New sign-in')
+    expect(mail.html).toContain('Sign-in alert')
+    expect(mail.html).toContain('Alex')
+    expect(mail.html).toContain('203.0.113.10')
+    expect(mail.text).toContain('If this was not you')
   })
 })

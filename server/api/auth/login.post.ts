@@ -49,6 +49,18 @@ export default defineEventHandler(async (event) => {
       riskLevel: 'sensitive',
     })
 
+    void import('../../services/login-notification.service')
+      .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail({
+        to: result.user.email,
+        name: result.user.name,
+        portal: body.portal,
+        ipAddress: getRequestIP(event, { xForwardedFor: true }),
+        userAgent: getHeader(event, 'user-agent'),
+      }))
+      .catch((err) => {
+        console.warn('[mail] login notification failed:', (err as Error).message)
+      })
+
     return {
       user: {
         id: result.user.id,
