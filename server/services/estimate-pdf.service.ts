@@ -2,19 +2,17 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { EstimateStatus } from '../db/schema/estimates'
 import { estimateFiles } from '../db/schema/estimates'
-import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getFileWithData } from './files.service'
 import { getEstimateDetail, EstimatesServiceError } from './estimates.service'
 import { buildInvoiceRenderHtml } from './invoice-pdf.service'
-import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
+import { prepareInvoiceTemplateHtml, resolveInvoicePdfTemplate } from './invoice-template-source.service'
 
 export type EstimatePdfServiceErrorCode
   = 'NOT_FOUND'
     | 'NOT_FINALIZED'
     | 'NO_PDF'
-    | 'TEMPLATE_NOT_FOUND'
 
 export class EstimatePdfServiceError extends Error {
   constructor(public readonly code: EstimatePdfServiceErrorCode) {
@@ -33,27 +31,6 @@ const STATUS_PDF_LABELS: Record<EstimateStatus, string> = {
   converted: 'CONVERTED',
   expired: 'EXPIRED',
   void: 'VOID',
-}
-
-export async function getDefaultPublishedTemplateVersion(db: Db) {
-  const [row] = await db.select({
-    version: invoiceTemplateVersions,
-    template: invoiceTemplates,
-  })
-    .from(invoiceTemplates)
-    .innerJoin(
-      invoiceTemplateVersions,
-      and(
-        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
-        eq(invoiceTemplateVersions.status, 'published'),
-      ),
-    )
-    .where(eq(invoiceTemplates.isDefault, true))
-    .orderBy(desc(invoiceTemplateVersions.versionNumber))
-    .limit(1)
-
-  if (!row) throw new EstimatePdfServiceError('TEMPLATE_NOT_FOUND')
-  return row
 }
 
 export async function getEstimatePdfRecord(db: Db, estimateId: string) {
@@ -103,7 +80,7 @@ export interface GenerateEstimatePdfResult {
   job: typeof pdfRenderJobs.$inferSelect | null
   estimateFile: typeof estimateFiles.$inferSelect | null
   alreadyExists: boolean
-  templateVersionId: string
+  templateVersionId: string | null
 }
 
 /** Enqueue PDF render for a sent/approved estimate — immutable once stored (SPEC §9). */
@@ -139,20 +116,12 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
       job: pending,
       estimateFile: null,
       alreadyExists: false,
-      templateVersionId: pending.templateVersionId!,
+      templateVersionId: pending.templateVersionId,
     }
   }
 
-  const { version } = await getDefaultPublishedTemplateVersion(db)
-  const logoBase = process.env.APP_URL?.trim().replace(/\/$/, '')
-  const logoPath = version.designSettings.logoFileId
-    ? (logoBase ? `${logoBase}/api/files/${version.designSettings.logoFileId}/preview` : `/api/files/${version.designSettings.logoFileId}/preview`)
-    : null
-  const templateHtml = applyDesignSettingsToHtml(
-    version.htmlContent,
-    version.designSettings,
-    logoPath,
-  )
+  const template = await resolveInvoicePdfTemplate(db)
+  const templateHtml = prepareInvoiceTemplateHtml(template)
   const htmlContent = buildEstimateRenderHtml(templateHtml, detail)
   const filename = `${detail.estimateNumberFormatted}.pdf`
 
@@ -161,7 +130,7 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
     entityId: estimateId,
     htmlContent,
     originalFilename: filename,
-    templateVersionId: version.id,
+    templateVersionId: template.templateVersionId,
     createdBy: actorId,
   })
 
@@ -169,7 +138,7 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
     job,
     estimateFile: null,
     alreadyExists: false,
-    templateVersionId: version.id,
+    templateVersionId: template.templateVersionId,
   }
 }
 

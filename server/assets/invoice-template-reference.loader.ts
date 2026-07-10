@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const FALLBACK_INVOICE_TEMPLATE_HTML = `<!doctype html>
+const BUILT_IN_INVOICE_TEMPLATE_HTML = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -43,8 +43,8 @@ export function loadInvoiceTemplateReferenceHtml(): string {
   for (const path of referenceHtmlCandidates()) {
     if (existsSync(path)) return readFileSync(path, 'utf8')
   }
-  console.warn('[invoice-templates] reference HTML missing on disk — using built-in fallback')
-  return FALLBACK_INVOICE_TEMPLATE_HTML
+  console.warn('[invoice-templates] reference HTML missing on disk — using built-in default template')
+  return BUILT_IN_INVOICE_TEMPLATE_HTML
 }
 
 /** @deprecated Use loadInvoiceTemplateReferenceHtml — kept for tests. */

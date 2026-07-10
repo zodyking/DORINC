@@ -10,7 +10,7 @@ import { renderHtmlToPdfBuffer, shouldUsePdfRenderService } from '../../lib/lara
 async function finalizePdfRenderJob(pool, job) {
   const fileId = await renderHtmlToAppFile(pool, job)
 
-  if (job.entity_type === 'invoice' && job.template_version_id) {
+  if (job.entity_type === 'invoice') {
     const { rows: fileRows } = await pool.query(
       `SELECT sha256_hash FROM app_files WHERE id = $1`,
       [fileId],
@@ -31,7 +31,7 @@ async function finalizePdfRenderJob(pool, job) {
     )
   }
 
-  if (job.entity_type === 'estimate' && job.template_version_id) {
+  if (job.entity_type === 'estimate') {
     const { rows: fileRows } = await pool.query(
       `SELECT sha256_hash FROM app_files WHERE id = $1`,
       [fileId],

@@ -27,9 +27,6 @@ export default defineEventHandler(async (event) => {
     console.error('[preview-pdf]', id, err)
     if (err instanceof InvoicePdfServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
-      if (err.code === 'TEMPLATE_NOT_FOUND') {
-        throw apiError(event, 'INTERNAL_ERROR', 'No published invoice template is configured')
-      }
     }
     throwPdfRenderApiError(event, err)
   }

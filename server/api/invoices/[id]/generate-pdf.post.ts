@@ -46,9 +46,6 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_FINALIZED') {
         throw apiError(event, 'CONFLICT', 'Official PDFs can only be generated for approved, sent, or paid invoices')
       }
-      if (err.code === 'TEMPLATE_NOT_FOUND') {
-        throw apiError(event, 'INTERNAL_ERROR', 'No published invoice template is configured')
-      }
     }
     throw err
   }

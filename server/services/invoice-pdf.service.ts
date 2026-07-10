@@ -2,21 +2,24 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { InvoiceStatus } from '../db/schema/invoices'
 import { invoiceFiles } from '../db/schema/invoices'
-import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { formatMoney, parseMoney } from '../../shared/money'
 import { normalizeLineType } from '#shared/line-item-types'
-import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
 import { getFileWithData } from './files.service'
 import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getInvoiceDetail, InvoicesServiceError } from './invoices.service'
+import {
+  type InvoicePdfTemplateSource,
+  pdfRenderOptionsFromTemplate,
+  prepareInvoiceTemplateHtml,
+  resolveInvoicePdfTemplate,
+} from './invoice-template-source.service'
 
 export type InvoicePdfServiceErrorCode
   = 'NOT_FOUND'
     | 'NOT_FINALIZED'
     | 'NO_PDF'
-    | 'TEMPLATE_NOT_FOUND'
 
 export class InvoicePdfServiceError extends Error {
   constructor(public readonly code: InvoicePdfServiceErrorCode) {
@@ -50,29 +53,12 @@ const STATUS_PDF_LABELS: Record<InvoiceStatus, string> = {
   void: 'VOID',
 }
 
-function logoPreviewPath(fileId: string | null | undefined): string | null {
-  if (!fileId) return null
-  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
-  const path = `/api/files/${fileId}/preview`
-  return base ? `${base}${path}` : path
+function templateHtmlForRender(template: InvoicePdfTemplateSource) {
+  return prepareInvoiceTemplateHtml(template)
 }
 
-function templateHtmlForRender(
-  version: Awaited<ReturnType<typeof getDefaultPublishedTemplateVersion>>['version'],
-) {
-  return applyDesignSettingsToHtml(
-    version.htmlContent,
-    version.designSettings,
-    logoPreviewPath(version.designSettings.logoFileId),
-  )
-}
-
-function pdfOptionsFromTemplateVersion(
-  version: Awaited<ReturnType<typeof getDefaultPublishedTemplateVersion>>['version'],
-) {
-  const marginInches = version.designSettings?.marginInches ?? 0.5
-  const paper = version.designSettings?.pageSize === 'A4' ? 'a4' as const : 'letter' as const
-  return { paper, marginInches }
+function pdfOptionsFromTemplate(template: InvoicePdfTemplateSource) {
+  return pdfRenderOptionsFromTemplate(template)
 }
 
 function escapeHtml(value: string | null | undefined): string {
@@ -114,64 +100,15 @@ function formatAddress(addr: { line1: string, line2?: string | null, city: strin
 }
 
 export async function getDefaultPublishedTemplateVersion(db: Db) {
-  const [row] = await db.select({
-    version: invoiceTemplateVersions,
-    template: invoiceTemplates,
-  })
-    .from(invoiceTemplates)
-    .innerJoin(
-      invoiceTemplateVersions,
-      and(
-        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
-        eq(invoiceTemplateVersions.status, 'published'),
-      ),
-    )
-    .where(eq(invoiceTemplates.isDefault, true))
-    .orderBy(desc(invoiceTemplateVersions.versionNumber))
-    .limit(1)
-
-  if (row) return row
-
-  // Fallback: any published template (default flag may be missing in older data).
-  const [fallback] = await db.select({
-    version: invoiceTemplateVersions,
-    template: invoiceTemplates,
-  })
-    .from(invoiceTemplates)
-    .innerJoin(
-      invoiceTemplateVersions,
-      and(
-        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
-        eq(invoiceTemplateVersions.status, 'published'),
-      ),
-    )
-    .orderBy(desc(invoiceTemplateVersions.versionNumber))
-    .limit(1)
-
-  if (fallback) return fallback
-
-  // Last resort: seed default template on demand.
-  const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
-  await seedInvoiceTemplates(db)
-
-  const [seeded] = await db.select({
-    version: invoiceTemplateVersions,
-    template: invoiceTemplates,
-  })
-    .from(invoiceTemplates)
-    .innerJoin(
-      invoiceTemplateVersions,
-      and(
-        eq(invoiceTemplateVersions.templateId, invoiceTemplates.id),
-        eq(invoiceTemplateVersions.status, 'published'),
-      ),
-    )
-    .where(eq(invoiceTemplates.isDefault, true))
-    .orderBy(desc(invoiceTemplateVersions.versionNumber))
-    .limit(1)
-
-  if (!seeded) throw new InvoicePdfServiceError('TEMPLATE_NOT_FOUND')
-  return seeded
+  const template = await resolveInvoicePdfTemplate(db)
+  return {
+    version: {
+      id: template.templateVersionId,
+      htmlContent: template.htmlContent,
+      designSettings: template.designSettings,
+    },
+    isBuiltIn: template.isBuiltIn,
+  }
 }
 
 export async function getInvoicePdfRecord(db: Db, invoiceId: string) {
@@ -281,7 +218,7 @@ export interface GenerateInvoicePdfResult {
   job: typeof pdfRenderJobs.$inferSelect | null
   invoiceFile: typeof invoiceFiles.$inferSelect | null
   alreadyExists: boolean
-  templateVersionId: string
+  templateVersionId: string | null
 }
 
 /** Enqueue PDF render for a finalized invoice — immutable once stored (SPEC §9). */
@@ -317,12 +254,12 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
       job: pending,
       invoiceFile: null,
       alreadyExists: false,
-      templateVersionId: pending.templateVersionId!,
+      templateVersionId: pending.templateVersionId,
     }
   }
 
-  const { version } = await getDefaultPublishedTemplateVersion(db)
-  const templateHtml = templateHtmlForRender(version)
+  const template = await resolveInvoicePdfTemplate(db)
+  const templateHtml = templateHtmlForRender(template)
   const htmlContent = buildInvoiceRenderHtml(templateHtml, detail)
   const filename = `${detail.invoiceNumberFormatted}.pdf`
 
@@ -331,7 +268,7 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
     entityId: invoiceId,
     htmlContent,
     originalFilename: filename,
-    templateVersionId: version.id,
+    templateVersionId: template.templateVersionId,
     createdBy: actorId,
   })
 
@@ -339,7 +276,7 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
     job,
     invoiceFile: null,
     alreadyExists: false,
-    templateVersionId: version.id,
+    templateVersionId: template.templateVersionId,
   }
 }
 
@@ -368,20 +305,10 @@ export async function previewInvoicePdf(db: Db, invoiceId: string) {
     throw err
   }
 
-  let version
-  try {
-    ;({ version } = await getDefaultPublishedTemplateVersion(db))
-  }
-  catch (err) {
-    if (err instanceof InvoicePdfServiceError && err.code === 'TEMPLATE_NOT_FOUND') {
-      throw err
-    }
-    throw err
-  }
-
-  const templateHtml = templateHtmlForRender(version)
+  const template = await resolveInvoicePdfTemplate(db)
+  const templateHtml = templateHtmlForRender(template)
   const htmlContent = buildInvoiceRenderHtml(templateHtml, detail)
-  const pdfOptions = pdfOptionsFromTemplateVersion(version)
+  const pdfOptions = pdfOptionsFromTemplate(template)
   const pdf = await renderHtmlToPdfBuffer(htmlContent, pdfOptions)
 
   return {

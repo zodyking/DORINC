@@ -181,7 +181,7 @@ export const invoiceFiles = pgTable('invoice_files', {
   id: uuid('id').primaryKey().defaultRandom(),
   invoiceId: uuid('invoice_id').notNull().references(() => invoices.id, { onDelete: 'cascade' }),
   fileId: uuid('file_id').notNull().references(() => appFiles.id),
-  templateVersionId: uuid('template_version_id').notNull().references(() => invoiceTemplateVersions.id),
+  templateVersionId: uuid('template_version_id').references(() => invoiceTemplateVersions.id),
   sha256Hash: text('sha256_hash').notNull(),
   pdfRenderJobId: uuid('pdf_render_job_id').references(() => pdfRenderJobs.id),
   createdBy: uuid('created_by').references(() => users.id),
