@@ -5,6 +5,7 @@ import {
   previewTemplatePdf,
 } from '../../../services/invoice-templates.service'
 import { apiError } from '../../../utils/api-error'
+import { throwPdfRenderApiError } from '../../../utils/pdf-api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
@@ -30,8 +31,6 @@ export default defineEventHandler(async (event) => {
         throw apiError(event, 'CONFLICT', 'No finalized invoice available for preview')
       }
     }
-    const message = err instanceof Error ? err.message : 'PDF preview failed'
-    const code = message.includes('Laravel PDF service failed') ? 'UPSTREAM_ERROR' : 'INTERNAL_ERROR'
-    throw apiError(event, code, message)
+    throwPdfRenderApiError(event, err)
   }
 })

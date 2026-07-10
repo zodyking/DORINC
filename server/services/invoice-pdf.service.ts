@@ -6,6 +6,7 @@ import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { formatMoney, parseMoney } from '../../shared/money'
 import { normalizeLineType } from '#shared/line-item-types'
+import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
 import { getFileWithData } from './files.service'
 import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
@@ -46,6 +47,28 @@ const STATUS_PDF_LABELS: Record<InvoiceStatus, string> = {
   sent: 'SENT',
   paid: 'PAID',
   void: 'VOID',
+}
+
+function logoPreviewPath(fileId: string | null | undefined) {
+  return fileId ? `/api/files/${fileId}/preview` : null
+}
+
+function templateHtmlForRender(
+  version: Awaited<ReturnType<typeof getDefaultPublishedTemplateVersion>>['version'],
+) {
+  return applyDesignSettingsToHtml(
+    version.htmlContent,
+    version.designSettings,
+    logoPreviewPath(version.designSettings.logoFileId),
+  )
+}
+
+function pdfOptionsFromTemplateVersion(
+  version: Awaited<ReturnType<typeof getDefaultPublishedTemplateVersion>>['version'],
+) {
+  const marginInches = version.designSettings?.marginInches ?? 0.5
+  const paper = version.designSettings?.pageSize === 'A4' ? 'a4' as const : 'letter' as const
+  return { paper, marginInches }
 }
 
 function escapeHtml(value: string): string {
@@ -254,7 +277,8 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
   }
 
   const { version } = await getDefaultPublishedTemplateVersion(db)
-  const htmlContent = buildInvoiceRenderHtml(version.htmlContent, detail)
+  const templateHtml = templateHtmlForRender(version)
+  const htmlContent = buildInvoiceRenderHtml(templateHtml, detail)
   const filename = `${detail.invoiceNumberFormatted}.pdf`
 
   const job = await enqueuePdfRenderJob(db, {
@@ -310,10 +334,10 @@ export async function previewInvoicePdf(db: Db, invoiceId: string) {
     throw err
   }
 
-  const htmlContent = buildInvoiceRenderHtml(version.htmlContent, detail)
-  const marginInches = version.designSettings.marginInches ?? 0.5
-  const paper = version.designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
-  const pdf = await renderHtmlToPdfBuffer(htmlContent, { paper, marginInches })
+  const templateHtml = templateHtmlForRender(version)
+  const htmlContent = buildInvoiceRenderHtml(templateHtml, detail)
+  const pdfOptions = pdfOptionsFromTemplateVersion(version)
+  const pdf = await renderHtmlToPdfBuffer(htmlContent, pdfOptions)
 
   return {
     pdf,

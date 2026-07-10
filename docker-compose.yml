@@ -30,6 +30,9 @@ services:
       PDF_RENDER_URL: ${PDF_RENDER_URL:-http://laravel-pdf:8080}
     networks:
       - dokploy-network
+    depends_on:
+      laravel-pdf:
+        condition: service_healthy
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- "http://127.0.0.1:$$PORT/api/health" || exit 1']
       interval: 30s

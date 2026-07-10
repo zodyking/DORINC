@@ -1,6 +1,7 @@
 // pdf_render handler — HTML → PDF via Laravel PDF (DomPDF) service, Playwright fallback for local dev.
 import { createHash } from 'node:crypto'
 import { chromium } from 'playwright'
+import { renderHtmlToPdfBuffer, shouldUsePdfRenderService } from '../../lib/laravel-pdf-client.mjs'
 
 /**
  * @param {import('pg').Pool} pool
@@ -223,33 +224,6 @@ export async function renderHtmlToAppFile(pool, job) {
 }
 
 /** @param {string} html */
-async function htmlToPdfViaService(html) {
-  const base = (process.env.PDF_RENDER_URL ?? 'http://laravel-pdf:8080').replace(/\/$/, '')
-  const res = await fetch(`${base}/render`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      html,
-      paper: 'letter',
-      margins: { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 },
-    }),
-    signal: AbortSignal.timeout(60_000),
-  })
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      if (body?.message) detail = body.message
-    }
-    catch {
-      // ignore
-    }
-    throw new Error(`Laravel PDF service failed (${res.status}): ${detail}`)
-  }
-  return Buffer.from(await res.arrayBuffer())
-}
-
-/** @param {string} html */
 async function htmlToPdfPlaywright(html) {
   const browser = await chromium.launch({ headless: true })
   try {
@@ -270,9 +244,8 @@ async function htmlToPdfPlaywright(html) {
 
 /** @param {string} html */
 export async function htmlToPdf(html) {
-  const useService = process.env.PDF_RENDER_URL?.trim() || process.env.NODE_ENV === 'production'
-  if (useService) {
-    return htmlToPdfViaService(html)
+  if (shouldUsePdfRenderService()) {
+    return renderHtmlToPdfBuffer(html)
   }
   return htmlToPdfPlaywright(html)
 }

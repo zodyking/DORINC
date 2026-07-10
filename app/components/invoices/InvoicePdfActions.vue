@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fetchErrorMessage } from '~/utils/fetch-blob-error'
+
 const props = defineProps<{
   invoiceId: string
   invoiceLabel: string
@@ -46,9 +48,7 @@ async function openPreview() {
     previewUrl.value = URL.createObjectURL(blob)
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message
-      ?? (e as Error)?.message
-      ?? 'Could not render PDF preview'
+    error.value = await fetchErrorMessage(e, 'Could not render PDF preview')
   }
   finally {
     previewBusy.value = false
@@ -83,9 +83,7 @@ async function downloadOfficialOrPreview() {
     triggerBrowserDownload(blob, `${props.invoiceLabel}.pdf`)
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message
-      ?? (e as Error)?.message
-      ?? 'PDF download failed'
+    error.value = await fetchErrorMessage(e, 'PDF download failed')
     open.value = true
     mode.value = 'download'
   }

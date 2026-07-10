@@ -3,6 +3,7 @@ import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { workerJobs } from '../db/schema/jobs'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
+import { pdfRenderServiceBaseUrl, shouldUsePdfRenderService } from '../../shared/pdf-render'
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000
 const BACKLOG_QUEUED_MS = 5 * 60 * 1000
@@ -110,18 +111,17 @@ function isHeartbeatFresh(at: Date | null): boolean {
 }
 
 function pdfEngineLabel(): string {
-  const url = process.env.PDF_RENDER_URL?.trim()
-  if (url || process.env.NODE_ENV === 'production') {
+  if (shouldUsePdfRenderService()) {
     return 'DomPDF · Laravel PDF service'
   }
   return 'DomPDF · local Playwright fallback'
 }
 
 async function probePdfRenderService(): Promise<boolean> {
-  const base = (process.env.PDF_RENDER_URL?.trim() || 'http://laravel-pdf:8080').replace(/\/$/, '')
-  if (process.env.NODE_ENV !== 'production' && !process.env.PDF_RENDER_URL?.trim()) {
+  if (!shouldUsePdfRenderService()) {
     return false
   }
+  const base = pdfRenderServiceBaseUrl()
   try {
     const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) })
     if (!res.ok) return false

@@ -5,6 +5,7 @@ import {
   versionStatusLabel,
   type InvoiceTemplateDesignSettings,
 } from '~/utils/invoice-template-designer-ui'
+import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 
 interface TemplateListItem {
   id: string
@@ -231,9 +232,7 @@ async function refreshPreview() {
     previewUrl.value = URL.createObjectURL(blob)
   }
   catch (e: unknown) {
-    previewError.value = (e as { data?: { message?: string } })?.data?.message
-      ?? (e as Error)?.message
-      ?? 'Preview failed — check template HTML and PDF service'
+    previewError.value = await fetchErrorMessage(e, 'Preview failed — check template HTML and PDF service')
     if (previewUrl.value) {
       URL.revokeObjectURL(previewUrl.value)
       previewUrl.value = ''
