@@ -1,6 +1,6 @@
-import { useDb } from '../../../db/client'
-import { getDetectionSettings } from '../../../services/workspace-settings.service'
-import { apiError } from '../../../utils/api-error'
+import { useDb } from '../../db/client'
+import { getDetectionSettings } from '../../services/workspace-settings.service'
+import { apiError } from '../../utils/api-error'
 
 /** Staff read — powers client-side line/catalog auto-detection. */
 export default defineEventHandler(async (event) => {
