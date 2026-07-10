@@ -27,5 +27,12 @@ async function resolveMigrationsFolder(): Promise<string> {
 
 export async function applyPendingMigrations(db: Db): Promise<void> {
   const migrationsFolder = await resolveMigrationsFolder()
-  await migrate(db, { migrationsFolder })
+  try {
+    await migrate(db, { migrationsFolder })
+    console.log(`[migrate] migrations applied from ${migrationsFolder}`)
+  }
+  catch (err) {
+    console.error(`[migrate] failed applying migrations from ${migrationsFolder}`, err)
+    throw err
+  }
 }

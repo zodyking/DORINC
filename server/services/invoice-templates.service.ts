@@ -85,10 +85,18 @@ export async function countTemplateUsage(db: Db, templateId: string) {
   const versionIds = versionRows.map(r => r.id)
   if (!versionIds.length) return 0
 
-  const [row] = await db.select({ value: count() })
-    .from(invoiceFiles)
-    .where(inArray(invoiceFiles.templateVersionId, versionIds))
-  return Number(row?.value ?? 0)
+  try {
+    const [row] = await db.select({ value: count() })
+      .from(invoiceFiles)
+      .where(inArray(invoiceFiles.templateVersionId, versionIds))
+    return Number(row?.value ?? 0)
+  }
+  catch (err) {
+    // Production DBs mid-migration may not have invoice_files yet (0013 / 0036 repair).
+    const code = (err as { cause?: { code?: string } })?.cause?.code
+    if (code === '42P01') return 0
+    throw err
+  }
 }
 
 export async function getInvoiceTemplateById(db: Db, id: string) {
