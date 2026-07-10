@@ -1,8 +1,9 @@
 # DORINC Laravel PDF — Blade + barryvdh/laravel-dompdf
 FROM composer:2 AS vendor
 WORKDIR /app
-COPY services/laravel-pdf/composer.json services/laravel-pdf/composer.lock* ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+COPY services/laravel-pdf ./
+# Laravel 11 is blocked by Composer advisory policy (EOL). Resolve Laravel 12 here.
+RUN composer update --no-dev --optimize-autoloader --no-interaction --prefer-stable
 
 FROM php:8.4-cli-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -11,8 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-install -j$(nproc) gd \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=vendor /app/vendor ./vendor
-COPY services/laravel-pdf ./
+COPY --from=vendor /app ./
 RUN mkdir -p bootstrap/cache storage/framework/{cache,views} storage/logs \
     && chmod -R 775 bootstrap/cache storage
 ENV APP_ENV=production \
