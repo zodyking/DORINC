@@ -3,7 +3,7 @@
 export const VOICE_ENTRY_PICK = {
   title: 'Use your voice',
   serviceLogDescription: 'Say each line — what was done, hours, and rate',
-  invoiceDescription: 'Say each charge — labor, parts, services, and fees',
+  invoiceDescription: 'Say each charge — labor, parts, and fees',
 } as const
 
 export const PHOTO_UPLOAD_PICK = {

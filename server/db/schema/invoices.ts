@@ -35,8 +35,11 @@ export const INVOICE_CREATION_SOURCES = [
 ] as const
 export type InvoiceCreationSource = (typeof INVOICE_CREATION_SOURCES)[number]
 
-export const INVOICE_LINE_TYPES = ['part', 'service', 'fee', 'labor'] as const
-export type InvoiceLineType = (typeof INVOICE_LINE_TYPES)[number]
+import { LINE_ITEM_TYPES, type LineItemType, normalizeLineType } from '../../shared/line-item-types'
+
+export const INVOICE_LINE_TYPES = LINE_ITEM_TYPES
+export type InvoiceLineType = LineItemType
+export { normalizeLineType }
 
 /** Human-facing numbers — displayed as "INV-000092". */
 export const invoiceNumberSeq = pgSequence('invoice_number_seq', { startWith: 93 })

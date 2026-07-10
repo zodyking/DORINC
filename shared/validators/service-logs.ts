@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LINE_ITEM_TYPES, normalizeLineType } from '../../line-item-types'
 import { uuidSchema } from './common'
 
 export const serviceLogWorkTypeSchema = z.enum([
@@ -23,7 +24,10 @@ export const serviceLogStatusSchema = z.enum([
 ])
 
 export const serviceLogDraftLineSchema = z.object({
-  lineType: z.enum(['part', 'service', 'fee', 'labor']).optional(),
+  lineType: z.preprocess(
+    v => v == null || v === '' ? undefined : normalizeLineType(String(v)),
+    z.enum(LINE_ITEM_TYPES).optional(),
+  ),
   description: z.string().max(500),
   qty: z.string().max(30).nullish(),
   rate: z.string().max(30).nullish(),

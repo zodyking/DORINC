@@ -5,6 +5,7 @@ import {
   type WizardLineDraft,
   type WizardLineType,
 } from './line-item-wizard-ui'
+import { normalizeLineType } from '#shared/line-item-types'
 import { lineTypeLabel } from './invoices-ui'
 
 export type SpeechLineField = 'command' | 'type' | 'description' | 'qty' | 'rate' | 'confirm'
@@ -23,7 +24,7 @@ export function promptForSpeechField(field: SpeechLineField, lineType: WizardLin
     case 'command':
       return 'Say add line, or edit line item number.'
     case 'type':
-      return 'Labor, part, service, or fee?'
+      return 'Labor, part, or fee?'
     case 'description':
       return 'What was done?'
     case 'qty':
@@ -40,7 +41,7 @@ export function retryPromptForField(field: SpeechLineField): string {
     case 'command':
       return retryPromptForCommandMode()
     case 'type':
-      return 'Say labor, part, service, or fee.'
+      return 'Say labor, part, or fee.'
     case 'description':
       return 'Tell me what was done.'
     case 'qty':
@@ -56,8 +57,8 @@ export function parseSpokenLineType(spoken: string): WizardLineType | null {
   const t = spoken.toLowerCase()
   if (/\blabor\b/.test(t)) return 'labor'
   if (/\bparts?\b/.test(t)) return 'part'
-  if (/\bservices?\b/.test(t)) return 'service'
   if (/\bfees?\b/.test(t)) return 'fee'
+  if (/\bservices?\b/.test(t)) return 'labor'
   return null
 }
 
@@ -122,7 +123,7 @@ export function promptForEditField(
   const n = lineNumber + 1
   switch (field) {
     case 'type':
-      return `Line ${n}. Type is ${lineTypeLabel(draft.lineType as WizardLineType)}. Say labor, part, service, or fee to change.`
+      return `Line ${n}. Type is ${lineTypeLabel(normalizeLineType(draft.lineType))}. Say labor, part, or fee to change.`
     case 'description':
       return `Description is ${draft.description}. Say the new description, or say keep.`
     case 'qty':

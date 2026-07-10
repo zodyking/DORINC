@@ -20,6 +20,7 @@ import {
 } from '../db/schema/invoices'
 import { lineAmount } from './invoice-totals.service'
 import { toTitleCase } from '#shared/format/title-case'
+import { normalizeLineType } from '../../shared/line-item-types'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   invoiceChangeRequests,
@@ -630,10 +631,7 @@ function parseImportLineItems(
       continue
     }
 
-    const lineTypeRaw = String(item.lineType ?? item.type ?? 'service').toLowerCase()
-    const lineType = (INVOICE_LINE_TYPES as readonly string[]).includes(lineTypeRaw)
-      ? lineTypeRaw as InvoiceLineType
-      : 'service'
+    const lineType = normalizeLineType(String(item.lineType ?? item.type ?? 'labor'))
 
     // Legacy aliases: qty / hours / hrs → quantity; rate → unitPrice; amount → lineAmount
     // Prefer a non-zero hours/qty alias when quantity is missing or zero (common legacy export bug).

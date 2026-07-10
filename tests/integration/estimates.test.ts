@@ -133,7 +133,7 @@ describe('P3-01 estimates schema + API', () => {
     }, ACTOR)
 
     await addEstimateLineItem(db, estimate.id, {
-      lineType: 'service',
+      lineType: 'labor',
       description: 'Diagnostic',
       quantity: '1',
       unitPrice: '75.00',

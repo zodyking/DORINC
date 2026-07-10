@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LINE_ITEM_TYPES, normalizeLineType } from '../../line-item-types'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
 import { ESTIMATE_STATUSES } from '../../server/db/schema/estimates'
 
@@ -41,7 +42,7 @@ export const estimateUpdateSchema = z.object({
 }).partial()
 
 export const estimateAddLineSchema = z.object({
-  lineType: z.enum(['part', 'service', 'fee', 'labor']),
+  lineType: z.preprocess(v => normalizeLineType(String(v)), z.enum(LINE_ITEM_TYPES)),
   catalogItemId: uuidSchema.nullish(),
   description: z.string().trim().min(1).max(500),
   quantity: moneySchema,
@@ -52,7 +53,12 @@ export const estimateAddLineSchema = z.object({
 
 export const estimateLineUpdateSchema = estimateAddLineSchema
   .omit({ lineType: true })
-  .extend({ lineType: z.enum(['part', 'service', 'fee', 'labor']).optional() })
+  .extend({
+    lineType: z.preprocess(
+      v => (v == null || v === '' ? undefined : normalizeLineType(String(v))),
+      z.enum(LINE_ITEM_TYPES).optional(),
+    ),
+  })
   .partial()
 
 export const estimateListQuerySchema = paginationSchema.extend({

@@ -1,5 +1,6 @@
 // Invoice editor helpers (mockup: PAGE: INVOICE EDITOR / P1-24).
 
+import { normalizeLineType } from '#shared/line-item-types'
 import type { InvoiceLineType } from './invoices-ui'
 import { moneyDisplay, paymentTermsLabel } from './invoices-ui'
 import type { LineTypeBreakdown } from './invoice-creator-ui'
@@ -47,10 +48,9 @@ export function catalogItemSub(item: CatalogQuickItem): string {
 }
 
 export function catalogTypeToLineType(itemType: string): InvoiceLineType {
-  if (itemType === 'part' || itemType === 'service' || itemType === 'fee' || itemType === 'labor') {
-    return itemType
-  }
-  return 'service'
+  if (itemType === 'part' || itemType === 'fee' || itemType === 'labor') return itemType
+  if (itemType === 'service') return 'labor'
+  return 'labor'
 }
 
 /** Fill type / description / qty / rate from a catalog pick (creator + editor autocomplete). */

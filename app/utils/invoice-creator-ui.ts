@@ -13,7 +13,6 @@ export const INVOICE_WIZARD_STEPS = [
 export const LINE_TYPE_OPTIONS: { value: InvoiceLineType, label: string }[] = [
   { value: 'labor', label: 'Labor' },
   { value: 'part', label: 'Part' },
-  { value: 'service', label: 'Service' },
   { value: 'fee', label: 'Fee' },
 ]
 
@@ -130,7 +129,7 @@ function lineAmountForBreakdown(line: LineForBreakdown): string {
   return previewLineAmount(line.quantity, line.unitPrice)
 }
 
-/** Sum line amounts by parts, labor (+ service), and fees for summary breakdowns. */
+/** Sum line amounts by parts, labor, and fees for summary breakdowns. */
 export function previewLineTypeBreakdown(lines: LineForBreakdown[]): LineTypeBreakdown {
   const sumTypes = (types: InvoiceLineType[]) => {
     const amounts = lines
@@ -148,7 +147,7 @@ export function previewLineTypeBreakdown(lines: LineForBreakdown[]): LineTypeBre
 
   return {
     parts: sumTypes(['part']),
-    labor: sumTypes(['labor', 'service']),
+    labor: sumTypes(['labor']),
     fees: sumTypes(['fee']),
   }
 }

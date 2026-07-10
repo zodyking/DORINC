@@ -105,7 +105,7 @@ async function seedApprovedEstimate() {
   }, ACTOR)
 
   await addEstimateLineItem(db, estimate.id, {
-    lineType: 'service',
+    lineType: 'labor',
     description: 'Oil change — fleet unit',
     quantity: '1',
     unitPrice: '89.00',

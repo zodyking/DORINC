@@ -5,6 +5,7 @@ import { invoiceFiles } from '../db/schema/invoices'
 import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { formatMoney, parseMoney } from '../../shared/money'
+import { normalizeLineType } from '../../shared/line-item-types'
 import { getFileWithData } from './files.service'
 import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
@@ -27,7 +28,6 @@ export const PDF_ELIGIBLE_STATUSES: InvoiceStatus[] = ['approved', 'sent', 'paid
 
 const LINE_TYPE_BADGE: Record<string, string> = {
   part: 'P',
-  service: 'S',
   labor: 'L',
   fee: 'F',
 }
@@ -136,7 +136,7 @@ export function buildInvoiceRenderHtml(
   const generatedAt = formatGeneratedAt()
 
   const lineRows = detail.lineItems.map((line) => {
-    const badge = LINE_TYPE_BADGE[line.lineType] ?? 'S'
+    const badge = LINE_TYPE_BADGE[normalizeLineType(line.lineType)] ?? 'L'
     return `<tr>
               <td><div class="desc">${escapeHtml(line.description)}</div></td>
               <td class="center"><span class="type-badge">${badge}</span></td>

@@ -20,7 +20,8 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
   it('maps catalog types to invoice line types', () => {
     expect(catalogTypeToLineType('part')).toBe('part')
     expect(catalogTypeToLineType('labor')).toBe('labor')
-    expect(catalogTypeToLineType('unknown')).toBe('service')
+    expect(catalogTypeToLineType('unknown')).toBe('labor')
+    expect(catalogTypeToLineType('service')).toBe('labor')
   })
 
   it('applies catalog picks onto line fields', () => {

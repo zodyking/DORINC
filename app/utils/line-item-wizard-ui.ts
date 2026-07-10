@@ -1,9 +1,9 @@
 import type { DraftLine } from './invoice-creator-ui'
 import { previewLineAmount } from './invoice-creator-ui'
-import type { InvoiceLineType } from './invoices-ui'
+import { LINE_ITEM_TYPES, type LineItemType } from '#shared/line-item-types'
 import { lineTypeLabel, moneyDisplay } from './invoices-ui'
 
-export type WizardLineType = InvoiceLineType
+export type WizardLineType = LineItemType
 
 export interface WizardLineDraft {
   lineType: WizardLineType
@@ -13,7 +13,7 @@ export interface WizardLineDraft {
   amount: string
 }
 
-export const WIZARD_LINE_TYPES: WizardLineType[] = ['labor', 'part', 'service', 'fee']
+export const WIZARD_LINE_TYPES: WizardLineType[] = [...LINE_ITEM_TYPES]
 
 export function qtyLabelForLineType(type: WizardLineType): string {
   return type === 'labor' ? 'Hours' : 'Quantity'
@@ -23,7 +23,6 @@ export function rateLabelForLineType(type: WizardLineType): string {
   switch (type) {
     case 'labor': return 'Rate per hour'
     case 'part': return 'Unit price'
-    case 'service': return 'Service price'
     case 'fee': return 'Fee amount'
   }
 }

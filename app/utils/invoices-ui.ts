@@ -1,5 +1,7 @@
 // Invoice list/detail presentation helpers (mockup: PAGE: INVOICES / INVOICE DETAIL).
 
+import type { LineItemType } from '#shared/line-item-types'
+import { normalizeLineType } from '#shared/line-item-types'
 import { vehicleSub, type VehicleDisplay } from './vehicles-ui'
 
 export interface InvoiceVehicleSnapshotDisplay extends VehicleDisplay {
@@ -9,7 +11,7 @@ export interface InvoiceVehicleSnapshotDisplay extends VehicleDisplay {
 }
 
 export type InvoiceStatus = 'draft' | 'pending_manager_approval' | 'approved' | 'sent' | 'paid' | 'void'
-export type InvoiceLineType = 'part' | 'service' | 'fee' | 'labor'
+export type InvoiceLineType = LineItemType
 
 export const PAYMENT_TERMS_LABELS: Record<string, string> = {
   due_on_receipt: 'Due on receipt',
@@ -91,20 +93,18 @@ export function invoiceStatusHeadline(
   return pill.label
 }
 
-export function lineTypeLabel(type: InvoiceLineType): string {
-  switch (type) {
+export function lineTypeLabel(type: InvoiceLineType | string): string {
+  switch (normalizeLineType(type)) {
     case 'part': return 'Part'
     case 'labor': return 'Labor'
-    case 'service': return 'Service'
     case 'fee': return 'Fee'
   }
 }
 
-export function lineTypePill(type: InvoiceLineType): string {
-  switch (type) {
+export function lineTypePill(type: InvoiceLineType | string): string {
+  switch (normalizeLineType(type)) {
     case 'part': return 'pill ok'
     case 'labor': return 'pill info'
-    case 'service': return 'pill info'
     case 'fee': return 'pill gray'
   }
 }

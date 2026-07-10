@@ -13,6 +13,8 @@ import { vehicles } from '../db/schema/vehicles'
 import { getCatalogItem } from './catalog.service'
 import { getCustomer } from './customers.service'
 import { addMoney, compareMoney, isZeroMoney, subtractMoney } from '../../shared/money'
+import type { LineItemType } from '../../shared/line-item-types'
+import { normalizeLineType } from '../../shared/line-item-types'
 import type { AccountType } from '../../shared/permissions/keys'
 import { getManagerApprovalThreshold } from './billing-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
@@ -86,7 +88,7 @@ export interface InvoicePatch {
 }
 
 export interface AddInvoiceLineInput {
-  lineType: 'part' | 'service' | 'fee' | 'labor'
+  lineType: LineItemType
   catalogItemId?: string | null
   description: string
   quantity: string
@@ -669,7 +671,7 @@ export async function addInvoiceLineItem(
 
   const [row] = await db.insert(invoiceLineItems).values({
     invoiceId,
-    lineType: input.lineType,
+    lineType: normalizeLineType(input.lineType),
     catalogItemId: input.catalogItemId ?? null,
     catalogSnapshot,
     description: input.description.trim(),
@@ -728,7 +730,11 @@ export async function updateInvoiceLineItem(
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(existing[key])) {
-      changes[key] = key === 'description' && typeof value === 'string' ? value.trim() : value
+      changes[key] = key === 'lineType'
+        ? normalizeLineType(String(value))
+        : key === 'description' && typeof value === 'string'
+          ? value.trim()
+          : value
       changedFields.push(key)
     }
   }

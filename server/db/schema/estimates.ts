@@ -31,8 +31,10 @@ export const ESTIMATE_CREATION_SOURCES = [
 ] as const
 export type EstimateCreationSource = (typeof ESTIMATE_CREATION_SOURCES)[number]
 
-export const ESTIMATE_LINE_TYPES = ['part', 'service', 'fee', 'labor'] as const
-export type EstimateLineType = (typeof ESTIMATE_LINE_TYPES)[number]
+import { LINE_ITEM_TYPES, type LineItemType } from '../../shared/line-item-types'
+
+export const ESTIMATE_LINE_TYPES = LINE_ITEM_TYPES
+export type EstimateLineType = LineItemType
 
 export const estimateNumberSeq = pgSequence('estimate_number_seq', { startWith: 1 })
 

@@ -18,6 +18,8 @@ import {
   recalculateInvoiceTotals,
 } from './invoices.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
+import type { LineItemType } from '../../shared/line-item-types'
+import { normalizeLineType } from '../../shared/line-item-types'
 import type { InvoiceTotalsResult } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 
@@ -81,7 +83,7 @@ export interface EstimatePatch {
 }
 
 export interface AddEstimateLineInput {
-  lineType: 'part' | 'service' | 'fee' | 'labor'
+  lineType: LineItemType
   catalogItemId?: string | null
   description: string
   quantity: string
@@ -483,7 +485,7 @@ export async function addEstimateLineItem(
 
   const [row] = await db.insert(estimateLineItems).values({
     estimateId,
-    lineType: input.lineType,
+    lineType: normalizeLineType(input.lineType),
     catalogItemId: input.catalogItemId ?? null,
     catalogSnapshot,
     description: input.description.trim(),
@@ -537,7 +539,11 @@ export async function updateEstimateLineItem(
   for (const key of ['lineType', 'description', 'quantity', 'unitPrice', 'taxable', 'sortOrder'] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(existing[key])) {
-      changes[key] = key === 'description' && typeof value === 'string' ? value.trim() : value
+      changes[key] = key === 'lineType'
+        ? normalizeLineType(String(value))
+        : key === 'description' && typeof value === 'string'
+          ? value.trim()
+          : value
       changedFields.push(key)
     }
   }

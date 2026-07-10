@@ -49,7 +49,7 @@ async function highValueDraft() {
   }, ACTOR)
 
   await addInvoiceLineItem(db, invoice.id, {
-    lineType: 'service',
+    lineType: 'labor',
     description: 'Major engine overhaul',
     quantity: '1',
     unitPrice: '6000.00',
