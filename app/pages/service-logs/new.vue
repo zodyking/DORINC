@@ -38,6 +38,25 @@ const workType = ref('repair')
 const complaint = ref('')
 const internalNotes = ref('')
 const photos = ref<{ file: File, preview: string }[]>([])
+type LogRecordMode = 'upload' | 'digital' | null
+const logRecordMode = ref<LogRecordMode>(null)
+const digitalWorkLog = ref('')
+
+const digitalLogRef = ref<HTMLTextAreaElement | null>(null)
+
+const voiceDictation = useVoiceDictation((text) => {
+  const sep = digitalWorkLog.value.trim() ? ' ' : ''
+  digitalWorkLog.value += `${sep}${text}`
+  nextTick(() => {
+    const el = digitalLogRef.value
+    if (el) {
+      el.focus()
+      el.selectionStart = el.selectionEnd = el.value.length
+    }
+  })
+})
+
+const { listening: voiceListening, supported: voiceSupported, error: voiceError, toggle: toggleVoice } = voiceDictation
 
 const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -67,7 +86,7 @@ const steps = [
   { n: 2, label: 'Vehicle' },
   { n: 3, label: 'When' },
   { n: 4, label: 'Work' },
-  { n: 5, label: 'Photos' },
+  { n: 5, label: 'Log' },
   { n: 6, label: 'Submit' },
 ]
 
@@ -76,7 +95,7 @@ const SERVICE_LOG_NARRATIONS: Record<number, string> = {
   2: 'Choose the vehicle.',
   3: 'Enter when and where the work happened.',
   4: 'Describe what you did.',
-  5: 'Add photos if you have them.',
+  5: 'Upload your paper log or create a digital one.',
   6: 'Double-check everything, then submit.',
 }
 
@@ -99,6 +118,51 @@ function removePhoto(index: number) {
   URL.revokeObjectURL(photos.value[index]!.preview)
   photos.value.splice(index, 1)
 }
+
+function selectLogMode(mode: Exclude<LogRecordMode, null>) {
+  logRecordMode.value = mode
+  if (mode === 'digital') {
+    digitalWorkLog.value = internalNotes.value
+    unlockSpeechFromUserGesture({ silent: true })
+  }
+}
+
+function clearLogMode() {
+  if (logRecordMode.value === 'digital') {
+    internalNotes.value = digitalWorkLog.value.trim() || internalNotes.value
+  }
+  logRecordMode.value = null
+}
+
+function prevFromLogStep() {
+  if (logRecordMode.value) {
+    voiceDictation.stop()
+    clearLogMode()
+    return
+  }
+  prevStep()
+}
+
+function continueFromLogStep() {
+  if (!logRecordMode.value) return
+  voiceDictation.stop()
+  if (logRecordMode.value === 'digital') {
+    internalNotes.value = digitalWorkLog.value.trim() || internalNotes.value
+  }
+  nextStep()
+}
+
+const logRecordSummary = computed(() => {
+  if (logRecordMode.value === 'upload') {
+    return photos.value.length
+      ? `Paper sheet · ${photos.value.length} photo${photos.value.length === 1 ? '' : 's'}`
+      : 'Paper sheet · no photos yet'
+  }
+  if (logRecordMode.value === 'digital') {
+    return digitalWorkLog.value.trim() ? 'Digital log' : 'Digital log · empty'
+  }
+  return '—'
+})
 
 function nextStep() {
   if (step.value < 6) step.value += 1
@@ -159,6 +223,7 @@ async function submitLog() {
 }
 
 onBeforeUnmount(() => {
+  voiceDictation.stop()
   for (const p of photos.value) URL.revokeObjectURL(p.preview)
 })
 </script>
@@ -282,25 +347,91 @@ onBeforeUnmount(() => {
 
     <!-- Step 5 -->
     <div v-show="step === 5" class="sl-panel active">
-      <h3>Add photos</h3>
-      <p class="sl-hint">Upload worksheets, damage, odometer, and parts.</p>
-      <label class="sl-photo-zone">
-        <input type="file" accept="image/*" capture="environment" multiple @change="onPhotoPick">
-        <div class="sl-photo-inner">
-          <span class="ico" aria-hidden="true">📷</span>
-          <b>Tap to add photos</b>
-          <span>JPG, PNG · multiple files OK</span>
-        </div>
-      </label>
-      <div v-if="photos.length" class="sl-photo-grid">
-        <div v-for="(p, i) in photos" :key="i" class="sl-photo-item">
-          <img :src="p.preview" alt="">
-          <button type="button" class="rm" aria-label="Remove photo" @click="removePhoto(i)">×</button>
-        </div>
+      <h3>Service log</h3>
+      <p v-if="!logRecordMode" class="sl-hint">
+        How did you record the work? Pick one — you can change it before continuing.
+      </p>
+
+      <div v-if="!logRecordMode" class="sl-picks sl-log-modes">
+        <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('upload')">
+          <span class="av indigo" aria-hidden="true">📷</span>
+          <span class="nm">
+            <b>Photo of paper sheet</b>
+            <small>Snap the handwritten service log your tech filled out</small>
+          </span>
+          <span class="chk" />
+        </button>
+        <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('digital')">
+          <span class="av teal" aria-hidden="true">🎙️</span>
+          <span class="nm">
+            <b>Digital log</b>
+            <small>Speak or type what was done — edit anytime</small>
+          </span>
+          <span class="chk" />
+        </button>
       </div>
+
+      <div v-else-if="logRecordMode === 'upload'" class="sl-log-upload">
+        <p class="sl-hint">
+          Photograph the paper service log sheet only — the form where the mechanic wrote down the work.
+        </p>
+        <label class="sl-photo-zone">
+          <input type="file" accept="image/*" capture="environment" multiple @change="onPhotoPick">
+          <div class="sl-photo-inner">
+            <span class="ico" aria-hidden="true">📄</span>
+            <b>Tap to photograph the sheet</b>
+            <span>JPG, PNG · multiple pages OK</span>
+          </div>
+        </label>
+        <div v-if="photos.length" class="sl-photo-grid">
+          <div v-for="(p, i) in photos" :key="i" class="sl-photo-item">
+            <img :src="p.preview" alt="Service log sheet">
+            <button type="button" class="rm" aria-label="Remove photo" @click="removePhoto(i)">×</button>
+          </div>
+        </div>
+        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
+      </div>
+
+      <div v-else class="sl-log-digital">
+        <p class="sl-hint">
+          Describe the work performed — like you would on a paper service log. Tap the mic to dictate, then edit the text.
+        </p>
+        <div class="sl-digital-editor">
+          <textarea
+            ref="digitalLogRef"
+            v-model="digitalWorkLog"
+            class="sl-digital-text"
+            rows="8"
+            placeholder="Example: Replaced front brake pads, bled lines, road tested OK…"
+          />
+          <button
+            v-if="voiceSupported"
+            type="button"
+            class="sl-voice-btn"
+            :class="{ on: voiceListening }"
+            :aria-pressed="voiceListening"
+            :aria-label="voiceListening ? 'Stop dictation' : 'Start dictation'"
+            @click="toggleVoice"
+          >
+            <span class="sl-voice-ico" aria-hidden="true">{{ voiceListening ? '■' : '🎙️' }}</span>
+            <span>{{ voiceListening ? 'Listening… tap to stop' : 'Tap to speak' }}</span>
+          </button>
+          <p v-else class="help">Voice input is not available here — type your notes instead.</p>
+          <p v-if="voiceError" class="help" style="color:#dc2626;">{{ voiceError }}</p>
+        </div>
+        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
+      </div>
+
       <div class="sl-foot">
-        <button type="button" class="btn" @click="prevStep">Back</button>
-        <button type="button" class="btn primary" @click="nextStep">Continue</button>
+        <button type="button" class="btn" @click="prevFromLogStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="!logRecordMode"
+          @click="continueFromLogStep"
+        >
+          Continue
+        </button>
       </div>
     </div>
 
@@ -318,7 +449,7 @@ onBeforeUnmount(() => {
         <div class="r"><span class="k">Work type</span><span class="v">{{ workTypeLabel(workType) }}</span></div>
         <div class="r stack"><span class="k">Customer complaint</span><span class="v">{{ complaint || '—' }}</span></div>
         <div class="r stack"><span class="k">Internal notes</span><span class="v">{{ internalNotes || '—' }}</span></div>
-        <div class="r"><span class="k">Photos</span><span class="v">{{ photos.length }}</span></div>
+        <div class="r"><span class="k">Service log</span><span class="v">{{ logRecordSummary }}</span></div>
       </div>
       <p v-if="submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>
       <div class="sl-foot">
