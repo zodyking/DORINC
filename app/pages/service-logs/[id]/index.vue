@@ -650,13 +650,13 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
 .sl-ai-field {
   width: 100%;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 16px;
   padding: 8px 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   resize: vertical;
   color: #334155;
 }
-.sl-ai-field.mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+.sl-ai-field.mono { font-family: "IBM Plex Mono", monospace; }
 .sl-ai-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 </style>

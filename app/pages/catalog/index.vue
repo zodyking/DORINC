@@ -390,43 +390,4 @@ function onRowClick(row: CatalogItemRow) {
 tr.archived .lead {
   opacity: 0.65;
 }
-
-/* Mobile: single-line rows — hide SKU/category, truncate item + price */
-@media (max-width: 720px) {
-  .cat-tbl .col-sku,
-  .cat-tbl .col-cat {
-    display: none;
-  }
-  .cat-tbl {
-    display: table;
-    table-layout: fixed;
-    width: 100%;
-  }
-  .cat-tbl .cell-item {
-    width: 52%;
-  }
-  .cat-tbl .col-type {
-    width: 22%;
-  }
-  .cat-tbl .col-price {
-    width: 26%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .cat-tbl .cell-item .lead,
-  .cat-tbl .cell-item .sub {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-  }
-  .chead .right {
-    width: 100%;
-    margin-left: 0;
-  }
-  .chead .search {
-    width: 100% !important;
-  }
-}
 </style>

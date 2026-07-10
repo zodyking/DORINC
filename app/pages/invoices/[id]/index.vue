@@ -611,31 +611,3 @@ const summaryRows = computed(() => {
     </div>
   </section>
 </template>
-
-<style scoped>
-/* Mobile: single-line line-item rows */
-@media (max-width: 720px) {
-  .inv-detail-tbl .col-rate {
-    display: none;
-  }
-  .inv-detail-tbl {
-    table-layout: fixed;
-    width: 100%;
-  }
-  .inv-detail-tbl .col-desc {
-    max-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .inv-detail-tbl .col-desc .sub {
-    display: none;
-  }
-  .inv-detail-tbl .col-qty {
-    width: 22%;
-  }
-  .inv-detail-tbl .col-line {
-    width: 28%;
-  }
-}
-</style>

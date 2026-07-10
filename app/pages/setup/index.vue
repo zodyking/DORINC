@@ -714,7 +714,7 @@ async function next() {
                   placeholder="postgresql://postgres:password@host:5432/postgres"
                   autocomplete="off"
                   spellcheck="false"
-                  style="font-family:'IBM Plex Mono',monospace;font-size:12px;"
+                  style="font-family:'IBM Plex Mono',monospace;"
                 >
                 <span class="help">Copy the full URI from your Dockploy PostgreSQL app — do not paste it into Host.</span>
               </label>
@@ -773,7 +773,7 @@ async function next() {
                 :value="reveal.key ? security.masterKey : security.masterKey.replace(/[0-9a-f]/g, '•')"
                 type="text"
                 readonly
-                style="font-family:'IBM Plex Mono',monospace;font-size:12px;"
+                style="font-family:'IBM Plex Mono',monospace;"
               >
               <button type="button" class="reveal" @click="reveal.key = !reveal.key">{{ reveal.key ? 'Hide' : 'Show' }}</button>
             </label>

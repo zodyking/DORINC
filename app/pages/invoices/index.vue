@@ -289,41 +289,4 @@ async function retryLoad() {
 .chead .right {
   margin-left: auto;
 }
-
-/* Mobile: single-line rows — hide issued/due, truncate customer */
-@media (max-width: 720px) {
-  .inv-tbl .col-issued,
-  .inv-tbl .col-due {
-    display: none;
-  }
-  .inv-tbl {
-    display: table;
-    table-layout: fixed;
-    width: 100%;
-  }
-  .inv-tbl .col-inv {
-    width: 28%;
-  }
-  .inv-tbl .col-cust {
-    width: 34%;
-    max-width: 0;
-  }
-  .inv-tbl .col-cust {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .inv-tbl .col-cust .sub {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .inv-tbl .col-status {
-    width: 18%;
-  }
-  .inv-tbl .col-amt {
-    width: 20%;
-  }
-}
 </style>

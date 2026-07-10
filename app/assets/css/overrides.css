@@ -93,13 +93,42 @@
 .stack > * {
   min-width: 0;
 }
-@media (max-width: 720px) {
-  .card .histtable,
-  .card table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+/* Tables: preserve desktop single-row layout on all breakpoints.
+   Scroll horizontally inside .tscroll (or card wrappers) — no visible scrollbars. */
+.tscroll,
+.card .histtable {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tscroll::-webkit-scrollbar,
+.card .histtable::-webkit-scrollbar {
+  display: none;
+}
+.tbl,
+.hist-log,
+.ed-lines {
+  width: max-content;
+  min-width: 100%;
+}
+.tbl th,
+.tbl td,
+.hist-log th,
+.hist-log td,
+.ed-lines th,
+.ed-lines td {
+  white-space: nowrap;
+}
+.hist-log .chg {
+  white-space: nowrap;
+  line-height: inherit;
+}
+
+/* iOS Safari auto-zooms focused inputs below 16px — keep all fields at 16px. */
+input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not([type='color']):not([type='range']):not([type='button']):not([type='submit']):not([type='reset']),
+select,
+textarea {
+  font-size: 16px;
 }
 
 /* Portal header: at phone widths the mockup header overflows.

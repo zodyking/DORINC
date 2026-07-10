@@ -269,7 +269,7 @@ const subtitle = computed(() => {
   padding: 0 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   color: #334155;
   text-transform: none;
@@ -290,44 +290,5 @@ const subtitle = computed(() => {
   margin: 12px 2px 0;
   font-size: 12px;
   color: #94a3b8;
-}
-
-@media (max-width: 720px) {
-  .audit-tbl .col-detail,
-  .audit-tbl .col-ip {
-    display: none;
-  }
-  .audit-tbl {
-    display: table;
-    table-layout: fixed;
-    width: 100%;
-  }
-  .audit-tbl .col-time {
-    width: 26%;
-  }
-  .audit-tbl .col-user {
-    width: 24%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .audit-tbl .col-action {
-    width: 50%;
-  }
-  .audit-tbl .col-action .pill {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: inline-block;
-    vertical-align: middle;
-  }
-  .filterbar {
-    padding: 0 12px 12px;
-  }
-  .flt select,
-  .flt input[type='date'] {
-    min-width: 120px;
-  }
 }
 </style>

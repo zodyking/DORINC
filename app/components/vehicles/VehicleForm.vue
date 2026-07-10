@@ -145,7 +145,7 @@ async function decodeVin() {
           <div class="cbody">
             <label class="fld">VIN
               <div class="vin-row">
-                <input v-model="model.vin" type="text" maxlength="17" placeholder="17-character VIN" class="mono" style="font-size:13px;">
+                <input v-model="model.vin" type="text" maxlength="17" placeholder="17-character VIN" class="mono">
                 <button type="button" class="btn" :disabled="decoding || !model.vin" @click="decodeVin">
                   {{ decoding ? 'Decoding…' : 'Decode' }}
                 </button>

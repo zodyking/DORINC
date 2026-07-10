@@ -57,7 +57,7 @@ watch(() => model.value.itemType, (type) => {
       </label>
 
       <label class="fld">SKU
-        <input v-model="model.sku" type="text" maxlength="40" placeholder="e.g. PART-0287" class="mono" style="font-size:13px">
+        <input v-model="model.sku" type="text" maxlength="40" placeholder="e.g. PART-0287" class="mono">
       </label>
 
       <label class="fld">Description
