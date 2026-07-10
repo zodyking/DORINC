@@ -55,8 +55,16 @@ async function writeJson(db: Db, key: string, value: unknown, updatedBy?: string
 }
 
 export async function getBusinessProfile(db: Db): Promise<BusinessProfile> {
-  const raw = await readJson<BusinessProfile>(db, WORKSPACE_SETTING_KEYS.business)
-  return businessProfileSchema.parse({ ...DEFAULT_BUSINESS_PROFILE, ...raw })
+  const raw = await readJson<Record<string, unknown>>(db, WORKSPACE_SETTING_KEYS.business)
+  const legacyName = typeof raw?.tradeName === 'string' && raw.tradeName.trim()
+    ? raw.tradeName.trim()
+    : typeof raw?.legalName === 'string' && raw.legalName.trim()
+      ? raw.legalName.trim()
+      : ''
+  const businessName = typeof raw?.businessName === 'string' && raw.businessName.trim()
+    ? raw.businessName.trim()
+    : legacyName
+  return businessProfileSchema.parse({ ...DEFAULT_BUSINESS_PROFILE, businessName })
 }
 
 export async function saveBusinessProfile(db: Db, input: BusinessProfile, updatedBy: string) {

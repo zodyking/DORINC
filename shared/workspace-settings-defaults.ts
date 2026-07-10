@@ -7,33 +7,11 @@ import {
 } from './line-item-type-from-description'
 
 export interface BusinessProfile {
-  legalName: string
-  tradeName: string
-  tagline: string
-  phone: string
-  email: string
-  website: string
-  addressLine1: string
-  addressLine2: string
-  city: string
-  state: string
-  postalCode: string
-  country: string
+  businessName: string
 }
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
-  legalName: '',
-  tradeName: '',
-  tagline: '',
-  phone: '',
-  email: '',
-  website: '',
-  addressLine1: '',
-  addressLine2: '',
-  city: '',
-  state: '',
-  postalCode: '',
-  country: 'US',
+  businessName: '',
 }
 
 export interface LineTypeVerbSettings {
