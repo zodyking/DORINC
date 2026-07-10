@@ -24,15 +24,31 @@ const open = ref(false)
 const activeIndex = ref(0)
 const searching = ref(false)
 const items = ref<CatalogQuickItem[]>([])
+const fetchError = ref('')
+const hasSearched = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
 const listId = useId()
 const panelStyle = ref<Record<string, string>>({})
+
+const requestFetch = useRequestFetch()
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let blurTimer: ReturnType<typeof setTimeout> | null = null
 let searchSeq = 0
 
-const showList = computed(() => open.value && !props.disabled && (items.value.length > 0 || searching.value))
+const emptyMessage = computed(() => {
+  if (searching.value) return ''
+  if (fetchError.value) return fetchError.value
+  if (!hasSearched.value) return ''
+  if (!model.value.trim()) return 'No catalog items yet — add items in Catalog or import from Control Panel.'
+  return `No catalog items match “${model.value.trim()}”.`
+})
+
+const showList = computed(() =>
+  open.value
+  && !props.disabled
+  && (searching.value || items.value.length > 0 || !!emptyMessage.value),
+)
 
 function updatePanelPosition() {
   const el = inputEl.value
@@ -51,22 +67,27 @@ function updatePanelPosition() {
 async function runSearch(q: string) {
   const seq = ++searchSeq
   searching.value = true
+  fetchError.value = ''
   try {
-    const res = await $fetch<{ items: CatalogQuickItem[] }>('/api/catalog/items', {
+    const res = await requestFetch<{ items: CatalogQuickItem[], total?: number }>('/api/catalog/items', {
       query: {
         q: q.trim() || undefined,
-        pageSize: 8,
+        pageSize: 12,
         sort: 'name-asc',
       },
     })
     if (seq !== searchSeq) return
     items.value = res.items ?? []
-    activeIndex.value = 0
+    activeIndex.value = items.value.length ? 0 : -1
+    hasSearched.value = true
     updatePanelPosition()
   }
-  catch {
+  catch (err: unknown) {
     if (seq !== searchSeq) return
     items.value = []
+    hasSearched.value = true
+    fetchError.value = (err as { data?: { message?: string } })?.data?.message
+      ?? 'Could not load catalog items. Refresh and try again.'
   }
   finally {
     if (seq === searchSeq) searching.value = false
@@ -103,12 +124,10 @@ function pick(item: CatalogQuickItem) {
   items.value = []
 }
 
-function onInput(e: Event) {
-  const value = (e.target as HTMLInputElement).value
-  model.value = value
+function onInput() {
   open.value = true
   updatePanelPosition()
-  scheduleSearch(value)
+  scheduleSearch(model.value)
   emit('typed')
 }
 
@@ -198,7 +217,7 @@ onBeforeUnmount(() => {
   <div class="cat-ac">
     <input
       ref="inputEl"
-      :value="model"
+      v-model="model"
       type="text"
       role="combobox"
       :placeholder="placeholder"
@@ -224,6 +243,9 @@ onBeforeUnmount(() => {
       >
         <li v-if="searching && !items.length" class="cat-ac-empty" role="presentation">
           Searching…
+        </li>
+        <li v-else-if="emptyMessage" class="cat-ac-empty" role="presentation">
+          {{ emptyMessage }}
         </li>
         <li
           v-for="(item, i) in items"
@@ -271,7 +293,7 @@ onBeforeUnmount(() => {
 
 <style>
 .cat-ac-list {
-  z-index: 1200;
+  z-index: 10050;
   margin: 0;
   padding: 6px;
   list-style: none;

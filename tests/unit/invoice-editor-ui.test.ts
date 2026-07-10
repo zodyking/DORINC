@@ -81,6 +81,30 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(rows.find(r => r.grand)?.value).toBe('$952.39')
   })
 
+  it('includes parts, labor, and fees before subtotal when breakdown is provided', () => {
+    const rows = editorSummaryRows({
+      subtotal: '360.00',
+      taxAmount: '0',
+      taxExempt: false,
+      feesAmount: '0',
+      shopSuppliesPercent: null,
+      discountAmount: '0',
+      total: '360.00',
+    }, {
+      breakdown: { parts: '0.00', labor: '360.00', fees: '0.00' },
+      grandLabel: 'Estimated total',
+    })
+    expect(rows.map(r => r.label)).toEqual([
+      'Parts',
+      'Labor',
+      'Fees',
+      'Subtotal',
+      'Tax',
+      'Estimated total',
+    ])
+    expect(rows.find(r => r.label === 'Labor')?.value).toBe('$360.00')
+  })
+
   it('formats audit history rows', () => {
     expect(formatHistoryChange('invoices.line_items.create', { description: 'NOx sensor' }))
       .toBe('Added line · NOx sensor')

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
-import { applyCatalogItemToLineFields, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -53,6 +53,20 @@ const canSend = computed(() => auth.can('invoices.send.all'))
 
 const step = ref(1)
 const busy = ref(false)
+
+const INVOICE_NARRATIONS: Record<number, string> = {
+  1: 'Step 1 of 4, Customer. Who is this invoice for? Select the billing account.',
+  2: 'Step 2 of 4, Vehicle. Choose the vehicle, invoice dates, and optional service log.',
+  3: 'Step 3 of 4, Line items. Add labor, parts, services, and fees.',
+  4: 'Step 4 of 4, Review. Confirm totals, save, and finalize the invoice.',
+}
+
+const {
+  enabled: speechEnabled,
+  showControl: showSpeechControl,
+  enableFromGesture: enableSpeechGuide,
+  disableSpeech: disableSpeechGuide,
+} = useWizardStepNarration(step, INVOICE_NARRATIONS)
 const submitError = ref('')
 const dirty = ref(false)
 const lastSavedAt = ref<Date | null>(null)
@@ -153,26 +167,10 @@ const summaryRows = computed(() => {
   const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
     taxExempt: selectedCustomer.value?.taxExempt,
   })
-  const rows: { label: string, value: string, grand?: boolean }[] = [
-    { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
-  ]
-  if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
-    rows.push({ label: 'Fees & surcharges', value: moneyDisplay(inv.feesAmount) })
-  }
-  if (inv.shopSuppliesPercent && Number.parseFloat(inv.shopSuppliesPercent) > 0) {
-    rows.push({ label: `Shop supplies (${inv.shopSuppliesPercent}%)`, value: 'Included in fees' })
-  }
-  const taxLabel = inv.taxExempt ? 'Tax (exempt)' : 'Tax'
-  rows.push({ label: taxLabel, value: moneyDisplay(inv.taxAmount) })
-  if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
-    rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
-  }
-  rows.push({
-    label: savedInvoice.value ? 'Total' : 'Estimated total',
-    value: moneyDisplay(inv.total),
-    grand: true,
+  return editorSummaryRows(inv, {
+    breakdown: previewLineTypeBreakdown(lines.value),
+    grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
   })
-  return rows
 })
 
 function invoiceErrorMessage(err: unknown, fallback: string): string {
@@ -433,6 +431,13 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <NuxtLink to="/invoices" class="btn">Cancel</NuxtLink>
       </div>
     </div>
+
+    <CommonWizardSpeechControl
+      :show-control="showSpeechControl"
+      :enabled="speechEnabled"
+      @enable="enableSpeechGuide"
+      @disable="disableSpeechGuide"
+    />
 
     <div class="wizbar">
       <span class="state">Workflow: <b>{{ wizardStateLabel(step) }}</b></span>

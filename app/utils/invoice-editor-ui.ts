@@ -2,6 +2,7 @@
 
 import type { InvoiceLineType } from './invoices-ui'
 import { moneyDisplay, paymentTermsLabel } from './invoices-ui'
+import type { LineTypeBreakdown } from './invoice-creator-ui'
 
 /** Heartbeat interval — SPEC §12: 15–30s. */
 export const EDIT_SESSION_HEARTBEAT_MS = 20_000
@@ -70,10 +71,19 @@ export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
 }
 
 /** Server totals rows for editor sidebar — never computed client-side. */
-export function editorSummaryRows(inv: InvoiceTotalsShape): { label: string, value: string, grand?: boolean }[] {
-  const rows: { label: string, value: string, grand?: boolean }[] = [
-    { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
-  ]
+export function editorSummaryRows(
+  inv: InvoiceTotalsShape,
+  opts: { breakdown?: LineTypeBreakdown, grandLabel?: string } = {},
+): { label: string, value: string, grand?: boolean }[] {
+  const rows: { label: string, value: string, grand?: boolean }[] = []
+  if (opts.breakdown) {
+    rows.push(
+      { label: 'Parts', value: moneyDisplay(opts.breakdown.parts) },
+      { label: 'Labor', value: moneyDisplay(opts.breakdown.labor) },
+      { label: 'Fees', value: moneyDisplay(opts.breakdown.fees) },
+    )
+  }
+  rows.push({ label: 'Subtotal', value: moneyDisplay(inv.subtotal) })
   if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
     rows.push({ label: 'Shop supplies & fees', value: moneyDisplay(inv.feesAmount) })
   }
@@ -85,7 +95,7 @@ export function editorSummaryRows(inv: InvoiceTotalsShape): { label: string, val
   if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
     rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
   }
-  rows.push({ label: 'Total', value: moneyDisplay(inv.total), grand: true })
+  rows.push({ label: opts.grandLabel ?? 'Total', value: moneyDisplay(inv.total), grand: true })
   return rows
 }
 

@@ -19,6 +19,7 @@ import {
   type InvoiceVehicleSnapshot,
 } from '../db/schema/invoices'
 import { lineAmount } from './invoice-totals.service'
+import { toTitleCase } from '#shared/format/title-case'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   invoiceChangeRequests,
@@ -312,7 +313,7 @@ async function importCustomers(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!
-    const displayName = String(row.displayName ?? '').trim()
+    const displayName = toTitleCase(String(row.displayName ?? '').trim())
     if (!displayName) {
       errors.push(`Row ${i + 1}: displayName is required`)
       continue

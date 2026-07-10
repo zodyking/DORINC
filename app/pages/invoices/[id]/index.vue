@@ -235,7 +235,17 @@ async function runAction(path: string) {
 const summaryRows = computed(() => {
   if (!invoice.value) return []
   const inv = invoice.value
+  const breakdown = previewLineTypeBreakdown(inv.lineItems.map(line => ({
+    lineType: line.lineType,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    lineAmount: line.lineAmount,
+  })))
   const rows: { label: string, value: string, grand?: boolean }[] = [
+    { label: 'Parts', value: moneyDisplay(breakdown.parts) },
+    { label: 'Labor', value: moneyDisplay(breakdown.labor) },
+    { label: 'Fees', value: moneyDisplay(breakdown.fees) },
     { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
   ]
   if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {

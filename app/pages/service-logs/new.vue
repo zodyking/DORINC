@@ -71,6 +71,22 @@ const steps = [
   { n: 6, label: 'Submit' },
 ]
 
+const SERVICE_LOG_NARRATIONS: Record<number, string> = {
+  1: 'Step 1, Customer. Which customer? Select the account this service was performed for.',
+  2: 'Step 2, Vehicle. Which vehicle? Pick the fleet unit that was serviced.',
+  3: 'Step 3, When and where. Enter the service date, odometer or hours, and job location.',
+  4: 'Step 4, Work. What was done? Choose work type and enter the customer complaint and internal notes.',
+  5: 'Step 5, Photos. Add photos. Upload worksheets, damage, odometer, and parts.',
+  6: 'Step 6, Review and submit. Confirm details before sending to the review queue.',
+}
+
+const {
+  enabled: speechEnabled,
+  showControl: showSpeechControl,
+  enableFromGesture: enableSpeechGuide,
+  disableSpeech: disableSpeechGuide,
+} = useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)
+
 function initials(name: string): string {
   return name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
@@ -163,6 +179,13 @@ onBeforeUnmount(() => {
         <NuxtLink to="/service-logs" class="btn">Cancel</NuxtLink>
       </div>
     </div>
+
+    <CommonWizardSpeechControl
+      :show-control="showSpeechControl"
+      :enabled="speechEnabled"
+      @enable="enableSpeechGuide"
+      @disable="disableSpeechGuide"
+    />
 
     <div class="sl-progress" aria-label="Progress">
       <div

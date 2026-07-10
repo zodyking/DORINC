@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { toTitleCase } from '#shared/format/title-case'
+
 export interface CustomerFormValue {
   displayName: string
   accountKind: 'fleet' | 'individual'
@@ -26,10 +28,10 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
   <form @submit.prevent="emit('submit')">
     <div class="cols">
       <div class="stack">
-        <div class="card">
+        <div class="card" data-speech-section="account">
           <div class="chead"><h3>Account</h3></div>
           <div class="cbody">
-            <label class="fld">Display name <input v-model="model.displayName" type="text" required placeholder="Company or person name"></label>
+            <label class="fld">Display name <input v-model="model.displayName" type="text" required placeholder="Company or person name" @blur="model.displayName = toTitleCase(model.displayName)"></label>
             <label class="fld">Account type
               <select v-model="model.accountKind">
                 <option value="individual">Individual</option>
@@ -50,7 +52,7 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
             <div class="tglrow">Tax exempt <span class="tgl"><input v-model="model.taxExempt" type="checkbox"><span class="tr" /></span></div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-speech-section="notes">
           <div class="chead"><h3>Notes</h3></div>
           <div class="cbody">
             <label class="fld">Internal notes <textarea v-model="model.notes" placeholder="Billing preferences, site access, reminders…" /></label>
@@ -58,7 +60,7 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
         </div>
       </div>
       <div class="stack">
-        <div class="card">
+        <div class="card" data-speech-section="billing">
           <div class="chead"><h3>Billing address</h3></div>
           <div class="cbody">
             <label class="fld">Street <input v-model="model.billingAddress.line1" type="text"></label>
@@ -67,7 +69,7 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
             <label class="fld">ZIP <input v-model="model.billingAddress.zip" type="text"></label>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-speech-section="service">
           <div class="chead"><h3>Service address</h3></div>
           <div class="cbody">
             <label class="fld">Street <input v-model="model.serviceAddress.line1" type="text"></label>

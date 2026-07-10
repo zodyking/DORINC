@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   previewLineAmount,
   previewLinesSubtotal,
+  previewLineTypeBreakdown,
   canProceedWizardStep,
   createEmptyLine,
   dueDateFromTerms,
@@ -43,5 +44,31 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     line.unitPrice = '145.00'
     expect(previewLineAmount('2', '145.00')).toBe('290.00')
     expect(previewLinesSubtotal([line])).toBe('290.00')
+  })
+
+  it('breaks subtotals down by parts, labor, and fees', () => {
+    const labor = createEmptyLine()
+    labor.description = 'Diagnostic labor'
+    labor.lineType = 'labor'
+    labor.quantity = '1'
+    labor.unitPrice = '145.00'
+
+    const part = createEmptyLine()
+    part.description = 'Oil filter'
+    part.lineType = 'part'
+    part.quantity = '2'
+    part.unitPrice = '18.40'
+
+    const fee = createEmptyLine()
+    fee.description = 'Shop supplies'
+    fee.lineType = 'fee'
+    fee.quantity = '1'
+    fee.unitPrice = '12.00'
+
+    expect(previewLineTypeBreakdown([labor, part, fee])).toEqual({
+      parts: '36.80',
+      labor: '145.00',
+      fees: '12.00',
+    })
   })
 })

@@ -32,6 +32,33 @@ const customers = computed(() => customersData.value?.items ?? [])
 
 const busy = ref(false)
 const error = ref('')
+const formRoot = ref<HTMLElement | null>(null)
+
+const VEHICLE_SPEECH_SECTIONS = [
+  {
+    selector: '[data-speech-section="unit"]',
+    narration: 'Unit. Select the customer, fleet tag, unit type, and status.',
+  },
+  {
+    selector: '[data-speech-section="identification"]',
+    narration: 'Identification. Enter VIN, decode for year make and model, plus plate and color.',
+  },
+  {
+    selector: '[data-speech-section="meter"]',
+    narration: 'Meter. Enter odometer or hours and choose miles or hours.',
+  },
+  {
+    selector: '[data-speech-section="notes"]',
+    narration: 'Notes. Add internal notes about drivers, equipment, or known issues.',
+  },
+]
+
+const {
+  enabled: speechEnabled,
+  showControl: showSpeechControl,
+  enableFromGesture: enableSpeechGuide,
+  disableSpeech: disableSpeechGuide,
+} = useFormSectionSpeech(formRoot, VEHICLE_SPEECH_SECTIONS)
 
 async function submit() {
   busy.value = true
@@ -78,14 +105,22 @@ async function submit() {
         <p><NuxtLink to="/vehicles">Vehicles</NuxtLink> / Register unit</p>
       </div>
     </div>
-    <VehiclesVehicleForm
-      v-model="form"
-      :busy="busy"
-      :error="error"
-      :customers="customers"
-      submit-label="Add to fleet"
-      @submit="submit"
-      @cancel="navigateTo('/vehicles')"
+    <CommonWizardSpeechControl
+      :show-control="showSpeechControl"
+      :enabled="speechEnabled"
+      @enable="enableSpeechGuide"
+      @disable="disableSpeechGuide"
     />
+    <div ref="formRoot">
+      <VehiclesVehicleForm
+        v-model="form"
+        :busy="busy"
+        :error="error"
+        :customers="customers"
+        submit-label="Add to fleet"
+        @submit="submit"
+        @cancel="navigateTo('/vehicles')"
+      />
+    </div>
   </section>
 </template>

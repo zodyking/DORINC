@@ -17,6 +17,33 @@ const form = reactive<CustomerFormValue>({
 
 const busy = ref(false)
 const error = ref('')
+const formRoot = ref<HTMLElement | null>(null)
+
+const CUSTOMER_SPEECH_SECTIONS = [
+  {
+    selector: '[data-speech-section="account"]',
+    narration: 'Account. Enter display name, account type, email, phone, payment terms, and tax exempt status.',
+  },
+  {
+    selector: '[data-speech-section="billing"]',
+    narration: 'Billing address. Enter street, city, state, and ZIP for billing.',
+  },
+  {
+    selector: '[data-speech-section="service"]',
+    narration: 'Service address. Enter where work is performed if different from billing.',
+  },
+  {
+    selector: '[data-speech-section="notes"]',
+    narration: 'Notes. Add internal billing preferences, site access, and reminders.',
+  },
+]
+
+const {
+  enabled: speechEnabled,
+  showControl: showSpeechControl,
+  enableFromGesture: enableSpeechGuide,
+  disableSpeech: disableSpeechGuide,
+} = useFormSectionSpeech(formRoot, CUSTOMER_SPEECH_SECTIONS)
 
 function cleanAddress(a: { line1: string, city: string, state: string, zip: string }) {
   return (a.line1 || a.city || a.state || a.zip) ? a : null
@@ -60,13 +87,21 @@ async function submit() {
         <p><NuxtLink to="/customers">Customers</NuxtLink> / Create account</p>
       </div>
     </div>
-    <CustomersCustomerForm
-      v-model="form"
-      :busy="busy"
-      :error="error"
-      submit-label="Create customer"
-      @submit="submit"
-      @cancel="navigateTo('/customers')"
+    <CommonWizardSpeechControl
+      :show-control="showSpeechControl"
+      :enabled="speechEnabled"
+      @enable="enableSpeechGuide"
+      @disable="disableSpeechGuide"
     />
+    <div ref="formRoot">
+      <CustomersCustomerForm
+        v-model="form"
+        :busy="busy"
+        :error="error"
+        submit-label="Create customer"
+        @submit="submit"
+        @cancel="navigateTo('/customers')"
+      />
+    </div>
   </section>
 </template>

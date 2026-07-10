@@ -103,13 +103,16 @@ export async function listCatalogItems(db: Db, filter: ListCatalogItemsFilter) {
   if (filter.taxable !== undefined) conditions.push(eq(catalogItems.taxable, filter.taxable))
 
   if (filter.q) {
-    const term = `%${filter.q}%`
-    conditions.push(or(
-      ilike(catalogItems.name, term),
-      ilike(catalogItems.sku, term),
-      ilike(catalogItems.description, term),
-      ilike(catalogCategories.name, term),
-    ))
+    const words = filter.q.trim().split(/\s+/).filter(Boolean)
+    for (const word of words) {
+      const term = `%${word}%`
+      conditions.push(or(
+        ilike(catalogItems.name, term),
+        ilike(catalogItems.sku, term),
+        ilike(catalogItems.description, term),
+        ilike(catalogCategories.name, term),
+      ))
+    }
   }
 
   const where = conditions.length ? and(...conditions) : undefined

@@ -108,6 +108,51 @@ export function previewLinesSubtotal(lines: DraftLine[]): string {
   }
 }
 
+export interface LineTypeBreakdown {
+  parts: string
+  labor: string
+  fees: string
+}
+
+export interface LineForBreakdown {
+  lineType: InvoiceLineType
+  description: string
+  quantity: string
+  unitPrice: string
+  lineAmount?: string
+}
+
+function lineAmountForBreakdown(line: LineForBreakdown): string {
+  if (line.lineAmount?.trim()) return line.lineAmount
+  if (!line.description.trim()) return ''
+  if (Number.parseFloat(line.quantity) <= 0) return ''
+  if (Number.parseFloat(line.unitPrice) < 0) return ''
+  return previewLineAmount(line.quantity, line.unitPrice)
+}
+
+/** Sum line amounts by parts, labor (+ service), and fees for summary breakdowns. */
+export function previewLineTypeBreakdown(lines: LineForBreakdown[]): LineTypeBreakdown {
+  const sumTypes = (types: InvoiceLineType[]) => {
+    const amounts = lines
+      .filter(line => types.includes(line.lineType))
+      .map(lineAmountForBreakdown)
+      .filter(Boolean)
+    if (!amounts.length) return '0.00'
+    try {
+      return addMoney(...amounts)
+    }
+    catch {
+      return '0.00'
+    }
+  }
+
+  return {
+    parts: sumTypes(['part']),
+    labor: sumTypes(['labor', 'service']),
+    fees: sumTypes(['fee']),
+  }
+}
+
 export interface DraftTotalsPreview {
   subtotal: string
   taxAmount: string

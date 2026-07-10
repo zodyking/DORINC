@@ -11,7 +11,7 @@ import {
   formatHistoryChange,
   type CatalogQuickItem,
 } from '~/utils/invoice-editor-ui'
-import { dueDateFromTerms, LINE_TYPE_OPTIONS, previewLineAmount, previewLinesSubtotal } from '~/utils/invoice-creator-ui'
+import { dueDateFromTerms, LINE_TYPE_OPTIONS, previewLineAmount, previewLinesSubtotal, previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
 import {
   auditWhenDisplay,
   invoiceDateDisplay,
@@ -138,6 +138,14 @@ const pill = computed(() => {
 
 const summaryRows = computed(() => {
   if (!invoice.value) return []
+  const lineInputs = lines.value.map(line => ({
+    lineType: line.lineType,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    lineAmount: line.lineAmount,
+  }))
+  const breakdown = previewLineTypeBreakdown(lineInputs)
   const liveSubtotal = previewLinesSubtotal(lines.value.map(line => ({
     localId: line.id,
     lineType: line.lineType,
@@ -146,13 +154,13 @@ const summaryRows = computed(() => {
     unitPrice: line.unitPrice,
   })))
   if (liveSubtotal === invoice.value.subtotal) {
-    return editorSummaryRows(invoice.value)
+    return editorSummaryRows(invoice.value, { breakdown })
   }
   return editorSummaryRows({
     ...invoice.value,
     subtotal: liveSubtotal,
     total: liveSubtotal,
-  })
+  }, { breakdown })
 })
 
 const autosaveText = computed(() => {

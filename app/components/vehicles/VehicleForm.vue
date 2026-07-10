@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { toTitleCase } from '#shared/format/title-case'
+
 // Vehicle create/edit form with VIN decode (mockup: Add vehicle modal fields + PAGE: VEHICLES).
 export interface VehicleFormValue {
   customerId: string
@@ -99,7 +101,7 @@ async function decodeVin() {
   <form @submit.prevent="emit('submit')">
     <div class="cols">
       <div class="stack">
-        <div class="card">
+        <div class="card" data-speech-section="unit">
           <div class="chead"><h3>Unit</h3></div>
           <div class="cbody">
             <label v-if="props.customers" class="fld">Customer <span style="color:#dc2626">*</span>
@@ -130,7 +132,7 @@ async function decodeVin() {
             </label>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-speech-section="notes">
           <div class="chead"><h3>Notes</h3></div>
           <div class="cbody">
             <label class="fld">Internal notes <textarea v-model="model.notes" placeholder="Assigned driver, special equipment, known issues…" /></label>
@@ -138,7 +140,7 @@ async function decodeVin() {
         </div>
       </div>
       <div class="stack">
-        <div class="card">
+        <div class="card" data-speech-section="identification">
           <div class="chead"><h3>Identification</h3></div>
           <div class="cbody">
             <label class="fld">VIN
@@ -154,20 +156,20 @@ async function decodeVin() {
             </label>
             <div class="row3">
               <label class="fld">Year <input v-model="model.year" type="number" min="1900" max="2100" placeholder="2022"></label>
-              <label class="fld">Make <input v-model="model.make" type="text" placeholder="Freightliner"></label>
-              <label class="fld">Model <input v-model="model.model" type="text" placeholder="Cascadia"></label>
+              <label class="fld">Make <input v-model="model.make" type="text" placeholder="Freightliner" @blur="model.make = toTitleCase(model.make)"></label>
+              <label class="fld">Model <input v-model="model.model" type="text" placeholder="Cascadia" @blur="model.model = toTitleCase(model.model)"></label>
             </div>
             <div class="row3">
-              <label class="fld">Trim <input v-model="model.trim" type="text"></label>
+              <label class="fld">Trim <input v-model="model.trim" type="text" @blur="model.trim = toTitleCase(model.trim)"></label>
               <label class="fld">Plate <input v-model="model.plate" type="text" placeholder="DE 12345"></label>
               <label class="fld">Color
-                <input v-model="model.color" type="text" :placeholder="model.unitType === 'bus' ? 'YW' : 'White'">
+                <input v-model="model.color" type="text" :placeholder="model.unitType === 'bus' ? 'YW' : 'White'" @blur="model.color = toTitleCase(model.color)">
                 <span v-if="model.unitType === 'bus'" class="help">School buses default to YW</span>
               </label>
             </div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-speech-section="meter">
           <div class="chead"><h3>Meter</h3></div>
           <div class="cbody">
             <div class="row2odo">

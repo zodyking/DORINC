@@ -4,6 +4,7 @@ import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
 import { invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
+import { toTitleCase } from '#shared/format/title-case'
 
 export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED'
 
@@ -26,8 +27,9 @@ export interface CustomerInput {
 }
 
 export async function createCustomer(db: Db, input: CustomerInput, createdBy: string) {
+  const displayName = toTitleCase(input.displayName.trim())
   const [row] = await db.insert(customers).values({
-    displayName: input.displayName.trim(),
+    displayName,
     accountKind: input.accountKind,
     email: input.email ?? null,
     phone: input.phone ?? null,
@@ -42,7 +44,7 @@ export async function createCustomer(db: Db, input: CustomerInput, createdBy: st
   const accountEmail = input.email?.trim()
   if (accountEmail) {
     await addContact(db, row!.id, {
-      name: input.displayName.trim(),
+      name: displayName,
       email: accountEmail,
       phone: input.phone ?? null,
       isPrimary: true,
@@ -61,9 +63,14 @@ export async function getCustomer(db: Db, id: string) {
 export async function updateCustomer(db: Db, id: string, patch: Partial<CustomerInput>) {
   const before = await getCustomer(db, id)
 
+  const normalizedPatch = { ...patch }
+  if (normalizedPatch.displayName !== undefined) {
+    normalizedPatch.displayName = toTitleCase(normalizedPatch.displayName.trim())
+  }
+
   const changes: Record<string, unknown> = { updatedAt: new Date() }
   const changedFields: string[] = []
-  for (const [key, value] of Object.entries(patch)) {
+  for (const [key, value] of Object.entries(normalizedPatch)) {
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key as keyof typeof before])) {
       changes[key] = value
       changedFields.push(key)
