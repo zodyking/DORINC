@@ -80,12 +80,7 @@ const SERVICE_LOG_NARRATIONS: Record<number, string> = {
   6: 'Step 6, Review and submit. Confirm details before sending to the review queue.',
 }
 
-const {
-  enabled: speechEnabled,
-  showControl: showSpeechControl,
-  enableFromGesture: enableSpeechGuide,
-  disableSpeech: disableSpeechGuide,
-} = useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)
+useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)
 
 function initials(name: string): string {
   return name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -180,12 +175,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <CommonWizardSpeechControl
-      :show-control="showSpeechControl"
-      :enabled="speechEnabled"
-      @enable="enableSpeechGuide"
-      @disable="disableSpeechGuide"
-    />
+    <CommonWizardSpeechControl />
 
     <div class="sl-progress" aria-label="Progress">
       <div

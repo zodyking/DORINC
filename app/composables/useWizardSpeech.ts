@@ -2,7 +2,6 @@ import {
   cancelSpeech,
   isMobileSpeechTarget,
   isSpeechConsentEnabled,
-  setSpeechConsentEnabled,
   speakWizardText,
   unlockSpeechFromUserGesture,
   type SpeechSubtitleHandlers,
@@ -48,27 +47,19 @@ export function useWizardStepNarration(
   narrations: Record<number, string>,
 ) {
   const enabled = ref(isSpeechConsentEnabled())
-  const showControl = computed(() => import.meta.client && isMobileSpeechTarget())
   const handlers = makeSubtitleHandlers()
 
   function narrateCurrentStep() {
     if (!enabled.value || !isMobileSpeechTarget()) return
     const text = narrations[step.value]
-    if (text) speakWizardText(text, handlers)
+    if (text) speakWizardText(text, handlers, { fromGesture: true })
   }
 
-  function enableFromGesture() {
-    setSpeechConsentEnabled(true)
+  function autoStartIfConsented() {
+    if (!isMobileSpeechTarget() || !isSpeechConsentEnabled()) return
     enabled.value = true
     unlockSpeechFromUserGesture({ silent: true })
-    narrateCurrentStep()
-  }
-
-  function disableSpeech() {
-    setSpeechConsentEnabled(false)
-    enabled.value = false
-    cancelSpeech()
-    handlers.onEnd()
+    nextTick(() => narrateCurrentStep())
   }
 
   watch(step, () => {
@@ -76,7 +67,7 @@ export function useWizardStepNarration(
   })
 
   onMounted(() => {
-    if (enabled.value) narrateCurrentStep()
+    autoStartIfConsented()
   })
 
   onBeforeUnmount(() => {
@@ -85,10 +76,6 @@ export function useWizardStepNarration(
   })
 
   return {
-    enabled,
-    showControl,
-    enableFromGesture,
-    disableSpeech,
     narrateCurrentStep,
   }
 }
@@ -99,7 +86,6 @@ export function useFormSectionSpeech(
   sections: FormSpeechSection[],
 ) {
   const enabled = ref(isSpeechConsentEnabled())
-  const showControl = computed(() => import.meta.client && isMobileSpeechTarget())
   const handlers = makeSubtitleHandlers()
   let observer: IntersectionObserver | null = null
   let activeKey = ''
@@ -107,23 +93,13 @@ export function useFormSectionSpeech(
   function narrateSection(key: string, text: string) {
     if (!enabled.value || !isMobileSpeechTarget()) return
     activeKey = key
-    speakWizardText(text, handlers)
+    speakWizardText(text, handlers, { fromGesture: true })
   }
 
-  function enableFromGesture() {
-    setSpeechConsentEnabled(true)
+  function autoStartIfConsented() {
+    if (!isMobileSpeechTarget() || !isSpeechConsentEnabled()) return
     enabled.value = true
     unlockSpeechFromUserGesture({ silent: true })
-    const first = sections[0]
-    if (first) narrateSection(first.selector, first.narration)
-  }
-
-  function disableSpeech() {
-    setSpeechConsentEnabled(false)
-    enabled.value = false
-    cancelSpeech()
-    handlers.onEnd()
-    activeKey = ''
   }
 
   function setupObserver() {
@@ -166,16 +142,13 @@ export function useFormSectionSpeech(
     else observer?.disconnect()
   }, { immediate: true })
 
+  onMounted(() => {
+    autoStartIfConsented()
+  })
+
   onBeforeUnmount(() => {
     observer?.disconnect()
     cancelSpeech()
     handlers.onEnd()
   })
-
-  return {
-    enabled,
-    showControl,
-    enableFromGesture,
-    disableSpeech,
-  }
 }

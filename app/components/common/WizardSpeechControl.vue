@@ -2,16 +2,6 @@
 import { useSpeechSubtitle } from '~/composables/useWizardSpeech'
 import { tokenizeSpeechWords } from '~/utils/wizard-speech'
 
-const props = defineProps<{
-  showControl: boolean
-  enabled: boolean
-}>()
-
-const emit = defineEmits<{
-  enable: []
-  disable: []
-}>()
-
 const { subtitleText, subtitleWordIndex, subtitleOpen } = useSpeechSubtitle()
 
 const words = computed(() => tokenizeSpeechWords(subtitleText.value))
@@ -26,27 +16,6 @@ const subtitleSizeClass = computed(() => {
 </script>
 
 <template>
-  <div v-if="props.showControl" class="wiz-speech-bar">
-    <button
-      v-if="!props.enabled"
-      type="button"
-      class="btn wiz-speech-btn"
-      aria-label="Enable voice guide for this form"
-      @click="emit('enable')"
-    >
-      Enable voice guide
-    </button>
-    <button
-      v-else
-      type="button"
-      class="btn wiz-speech-btn is-on"
-      aria-label="Voice guide is on. Tap to turn off."
-      @click="emit('disable')"
-    >
-      Voice guide on — tap to mute
-    </button>
-  </div>
-
   <Teleport to="body">
     <div
       v-if="subtitleOpen && words.length"
@@ -68,23 +37,6 @@ const subtitleSizeClass = computed(() => {
 </template>
 
 <style scoped>
-.wiz-speech-bar {
-  margin: 0 0 14px;
-}
-
-.wiz-speech-btn {
-  width: 100%;
-  justify-content: center;
-  font-size: 13px;
-  border-style: dashed;
-}
-
-.wiz-speech-btn.is-on {
-  border-color: #059669;
-  color: #047857;
-  background: #ecfdf5;
-}
-
 .speech-subtitle-wrap {
   position: fixed;
   left: 0;

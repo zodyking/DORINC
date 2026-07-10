@@ -78,7 +78,7 @@ function openLog(id: string) {
         </p>
       </div>
       <div class="actions">
-        <NuxtLink v-if="canUpload" to="/service-logs/new" class="btn primary">+ New service log</NuxtLink>
+        <NuxtLink v-if="canUpload" to="/service-logs/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New service log</NuxtLink>
       </div>
     </div>
 

@@ -61,12 +61,7 @@ const INVOICE_NARRATIONS: Record<number, string> = {
   4: 'Step 4 of 4, Review. Confirm totals, save, and finalize the invoice.',
 }
 
-const {
-  enabled: speechEnabled,
-  showControl: showSpeechControl,
-  enableFromGesture: enableSpeechGuide,
-  disableSpeech: disableSpeechGuide,
-} = useWizardStepNarration(step, INVOICE_NARRATIONS)
+useWizardStepNarration(step, INVOICE_NARRATIONS)
 const submitError = ref('')
 const dirty = ref(false)
 const lastSavedAt = ref<Date | null>(null)
@@ -432,12 +427,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       </div>
     </div>
 
-    <CommonWizardSpeechControl
-      :show-control="showSpeechControl"
-      :enabled="speechEnabled"
-      @enable="enableSpeechGuide"
-      @disable="disableSpeechGuide"
-    />
+    <CommonWizardSpeechControl />
 
     <div class="wizbar">
       <span class="state">Workflow: <b>{{ wizardStateLabel(step) }}</b></span>

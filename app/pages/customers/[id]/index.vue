@@ -348,6 +348,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
             v-if="canCreateInvoice"
             :to="`/invoices/new?customerId=${customer.id}`"
             class="btn primary"
+            @click="armWizardSpeechFromCreateClick"
           >
             + New Invoice
           </NuxtLink>
@@ -468,7 +469,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
             <div class="chead">
               <h3>Vehicles · {{ vehicles.length }}</h3>
               <div class="right">
-                <NuxtLink v-if="canUpdate" :to="`/vehicles/new?customerId=${customer.id}`" class="btn sm">+ Add vehicle</NuxtLink>
+                <NuxtLink v-if="canUpdate" :to="`/vehicles/new?customerId=${customer.id}`" class="btn sm" @click="armWizardSpeechFromCreateClick">+ Add vehicle</NuxtLink>
               </div>
             </div>
             <div v-if="vehicles.length" class="tscroll">

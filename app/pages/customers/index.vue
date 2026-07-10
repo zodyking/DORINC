@@ -85,7 +85,7 @@ function subtitleFor(c: CustomerRow): string {
         >
           Import
         </NuxtLink>
-        <NuxtLink to="/customers/new" class="btn primary">+ New Customer</NuxtLink>
+        <NuxtLink to="/customers/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Customer</NuxtLink>
       </div>
     </div>
 

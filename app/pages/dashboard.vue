@@ -128,6 +128,7 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
             v-if="(dash.view === 'billing' && canCreateInvoice) || (dash.view === 'mechanic' && canCreateLog)"
             :to="dash.primaryCta.href"
             class="btn primary"
+            @click="armWizardSpeechFromCreateClick"
           >
             {{ dash.primaryCta.label }}
           </NuxtLink>

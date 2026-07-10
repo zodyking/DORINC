@@ -38,6 +38,12 @@ export function setSpeechConsentEnabled(enabled: boolean): void {
   window.localStorage.setItem(CONSENT_KEY, enabled ? 'true' : 'false')
 }
 
+/** Call synchronously from a create-button click before navigating to a wizard form. */
+export function armWizardSpeechFromCreateClick(): void {
+  setSpeechConsentEnabled(true)
+  unlockSpeechFromUserGesture({ silent: true })
+}
+
 function evaluateGestureGate(): void {
   if (gestureEvaluated || typeof window === 'undefined') return
   gestureEvaluated = true

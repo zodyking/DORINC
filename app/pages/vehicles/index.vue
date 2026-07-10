@@ -138,7 +138,7 @@ const rangeLabel = computed(() => {
         >
           {{ bulkDecodeBusy ? 'Decoding VINs…' : 'Decode missing VINs' }}
         </button>
-        <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn primary">+ Add Vehicle</NuxtLink>
+        <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ Add Vehicle</NuxtLink>
       </div>
     </div>
 

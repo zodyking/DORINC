@@ -38,12 +38,7 @@ const CUSTOMER_SPEECH_SECTIONS = [
   },
 ]
 
-const {
-  enabled: speechEnabled,
-  showControl: showSpeechControl,
-  enableFromGesture: enableSpeechGuide,
-  disableSpeech: disableSpeechGuide,
-} = useFormSectionSpeech(formRoot, CUSTOMER_SPEECH_SECTIONS)
+useFormSectionSpeech(formRoot, CUSTOMER_SPEECH_SECTIONS)
 
 function cleanAddress(a: { line1: string, city: string, state: string, zip: string }) {
   return (a.line1 || a.city || a.state || a.zip) ? a : null
@@ -87,12 +82,7 @@ async function submit() {
         <p><NuxtLink to="/customers">Customers</NuxtLink> / Create account</p>
       </div>
     </div>
-    <CommonWizardSpeechControl
-      :show-control="showSpeechControl"
-      :enabled="speechEnabled"
-      @enable="enableSpeechGuide"
-      @disable="disableSpeechGuide"
-    />
+    <CommonWizardSpeechControl />
     <div ref="formRoot">
       <CustomersCustomerForm
         v-model="form"

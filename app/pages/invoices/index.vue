@@ -164,7 +164,7 @@ async function retryLoad() {
       </div>
       <div class="actions">
         <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
-        <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary">+ New Invoice</NuxtLink>
+        <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
       </div>
     </div>
 

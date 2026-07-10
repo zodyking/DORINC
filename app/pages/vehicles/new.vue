@@ -53,12 +53,7 @@ const VEHICLE_SPEECH_SECTIONS = [
   },
 ]
 
-const {
-  enabled: speechEnabled,
-  showControl: showSpeechControl,
-  enableFromGesture: enableSpeechGuide,
-  disableSpeech: disableSpeechGuide,
-} = useFormSectionSpeech(formRoot, VEHICLE_SPEECH_SECTIONS)
+useFormSectionSpeech(formRoot, VEHICLE_SPEECH_SECTIONS)
 
 async function submit() {
   busy.value = true
@@ -105,12 +100,7 @@ async function submit() {
         <p><NuxtLink to="/vehicles">Vehicles</NuxtLink> / Register unit</p>
       </div>
     </div>
-    <CommonWizardSpeechControl
-      :show-control="showSpeechControl"
-      :enabled="speechEnabled"
-      @enable="enableSpeechGuide"
-      @disable="disableSpeechGuide"
-    />
+    <CommonWizardSpeechControl />
     <div ref="formRoot">
       <VehiclesVehicleForm
         v-model="form"
