@@ -4,7 +4,7 @@ import type { LineItemType } from './line-item-types'
 export const PART_DESCRIPTION_VERBS = [
   'Install', 'Replace', 'Exchange', 'Swap', 'Upgrade', 'Fit', 'Mount', 'Add',
   'Convert', 'Equip', 'Supply', 'Furnish', 'Provide', 'Update', 'Integrate',
-  'Assemble', 'Deploy', 'Attach', 'Insert', 'Bolt', 'Secure', 'Wire', 'Connect',
+  'Assemble', 'Deploy', 'Attach', 'Insert', 'Bolt', 'Wire', 'Connect',
   'Populate', 'Outfit',
 ] as const
 
