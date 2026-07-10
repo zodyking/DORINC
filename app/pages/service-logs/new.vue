@@ -40,7 +40,6 @@ const internalNotes = ref('')
 import {
   toApiDraftLine,
   wizardLinesSummary,
-  wizardLinesToNotes,
   type WizardLineDraft,
 } from '~/utils/line-item-wizard-ui'
 
@@ -137,12 +136,6 @@ function prevFromLogStep() {
 
 function continueFromLogStep() {
   if (!logRecordMode.value) return
-  if (logRecordMode.value === 'digital' && digitalLineItems.value.length) {
-    const notesFromLines = wizardLinesToNotes(digitalLineItems.value)
-    internalNotes.value = internalNotes.value.trim()
-      ? `${internalNotes.value.trim()}\n\n${notesFromLines}`
-      : notesFromLines
-  }
   nextStep()
 }
 
@@ -425,10 +418,7 @@ onBeforeUnmount(() => {
         <div class="r stack"><span class="k">Internal notes</span><span class="v">{{ internalNotes || '—' }}</span></div>
         <div class="r"><span class="k">Service log</span><span class="v">{{ logRecordSummary }}</span></div>
         <div v-if="logRecordMode === 'digital' && digitalLineItems.length" class="sl-review-lines">
-          <div v-for="(line, i) in digitalLineItems" :key="i" class="sl-review-line">
-            <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
-            <span>{{ line.description }} · {{ line.qty }} × {{ line.rate }}<template v-if="line.amount"> = {{ moneyDisplay(line.amount) }}</template></span>
-          </div>
+          <CommonLineItemsTable :lines="digitalLineItems" title="Line items" />
         </div>
       </div>
       <p v-if="submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>

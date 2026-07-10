@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { lineTypeLabel } from '~/utils/invoices-ui'
-import { catalogTypePill } from '~/utils/catalog-ui'
 import {
   calcLineAmount,
   emptyWizardLine,
@@ -8,6 +6,7 @@ import {
   type WizardLineDraft,
   type WizardLineType,
 } from '~/utils/line-item-wizard-ui'
+import { lineTypeLabel } from '~/utils/invoices-ui'
 import { formatFieldText } from '#shared/format/prose-field'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
@@ -113,10 +112,6 @@ function saveManualLine(addAnother: boolean) {
   if (addAnother) nextTick(() => start())
 }
 
-function displayAmount(line: WizardLineDraft) {
-  return line.amount || calcLineAmount(line.qty, line.rate)
-}
-
 onBeforeUnmount(() => stop())
 
 defineExpose({ openWizard: openSession })
@@ -125,42 +120,14 @@ defineExpose({ openWizard: openSession })
 <template>
   <div class="li-wizard">
     <section v-if="lines.length" class="li-list" aria-label="Lines added">
-      <p class="li-list-title">Your lines</p>
-      <div class="tscroll li-table-wrap">
-        <table class="ed-lines li-lines-table">
-          <thead>
-            <tr>
-              <th class="col-num">#</th>
-              <th class="col-type">Type</th>
-              <th class="col-desc">Description</th>
-              <th class="col-qty">Qty / Hrs</th>
-              <th class="col-rate">Rate</th>
-              <th class="col-amt">Amount</th>
-              <th class="col-rm" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(line, i) in lines"
-              :key="i"
-              class="li-line-row"
-              :class="{ editing: sessionOpen && editingIndex === i }"
-            >
-              <td class="col-num">{{ i + 1 }}</td>
-              <td class="col-type">
-                <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
-              </td>
-              <td class="col-desc">{{ line.description }}</td>
-              <td class="col-qty">{{ line.qty }}</td>
-              <td class="col-rate">{{ line.rate }}</td>
-              <td class="col-amt">{{ displayAmount(line) ? moneyDisplay(displayAmount(line)) : '—' }}</td>
-              <td class="col-rm">
-                <button type="button" class="rm" aria-label="Remove line" @click="removeLine(i)">✕</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <CommonLineItemsTable
+        :lines="lines"
+        title="Your lines"
+        removable
+        :editing-index="editingIndex"
+        :session-open="sessionOpen"
+        @remove="removeLine"
+      />
       <p class="li-list-hint">Say <b>edit line item number 2</b> to change a line. While editing, say <b>description</b>, <b>rate</b>, or <b>cancel</b>.</p>
     </section>
 
@@ -244,40 +211,6 @@ defineExpose({ openWizard: openSession })
 .li-list-hint b {
   color: #64748b;
   font-weight: 600;
-}
-
-.li-table-wrap {
-  margin: 0;
-}
-
-.li-lines-table {
-  min-width: 520px;
-}
-
-.li-lines-table .col-num {
-  width: 32px;
-  color: #94a3b8;
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.li-lines-table .col-type { width: 88px; }
-.li-lines-table .col-qty { width: 72px; }
-.li-lines-table .col-rate { width: 80px; }
-.li-lines-table .col-amt {
-  width: 88px;
-  text-align: right;
-  font-weight: 600;
-}
-
-.li-lines-table .col-rm { width: 36px; }
-
-.li-line-row.editing {
-  background: #eef2ff;
-}
-
-.li-line-row.editing td {
-  box-shadow: inset 0 0 0 2px #818cf8;
 }
 
 .li-voice {
