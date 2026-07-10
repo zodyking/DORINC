@@ -817,6 +817,7 @@ label.fld .fld-badge{ display:inline-block; margin-left:6px; font-size:10px; fon
 .sl-review-line{
   display:flex; flex-direction:column; gap:4px; font-size:12px; color:#475569; line-height:1.45;
 }
+.inv-guided-lines{ margin-top:4px; }
 
 /* ---------- Invoice editor tabs (invoice ↔ service log) ---------- */
 .ed-tabs-wrap{ margin-bottom:20px; }

@@ -2,6 +2,11 @@
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import {
+  draftLineToWizard,
+  wizardLinesToDraftLines,
+  type WizardLineDraft,
+} from '~/utils/line-item-wizard-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -81,7 +86,16 @@ const dueDateManual = ref(false)
 const paymentTerms = ref('net_30')
 const poNumber = ref('')
 
-const lines = ref<DraftLine[]>([createEmptyLine()])
+const lines = ref<DraftLine[]>([])
+type LineEntryMode = 'guided' | 'manual' | null
+const lineEntryMode = ref<LineEntryMode>(null)
+const wizardLines = ref<WizardLineDraft[]>([])
+
+watch(wizardLines, (wl) => {
+  if (lineEntryMode.value === 'guided') {
+    lines.value = wizardLinesToDraftLines(wl)
+  }
+}, { deep: true })
 
 const route = useRoute()
 if (typeof route.query.customerId === 'string' && route.query.customerId) {
@@ -222,6 +236,47 @@ const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
 
 function addLine() {
   lines.value.push(createEmptyLine())
+}
+
+function selectLineEntryMode(mode: Exclude<LineEntryMode, null>) {
+  lineEntryMode.value = mode
+  if (mode === 'guided') {
+    wizardLines.value = lines.value
+      .filter(isDraftLineValid)
+      .map(draftLineToWizard)
+    unlockSpeechFromUserGesture({ silent: true })
+  }
+  else if (!lines.value.length) {
+    lines.value = [createEmptyLine()]
+  }
+}
+
+function clearLineEntryMode() {
+  if (lineEntryMode.value === 'guided') {
+    lines.value = wizardLinesToDraftLines(wizardLines.value)
+  }
+  lineEntryMode.value = null
+}
+
+function prevFromLinesStep() {
+  if (lineEntryMode.value) {
+    clearLineEntryMode()
+    return
+  }
+  prevStep()
+}
+
+async function continueToReview() {
+  if (lineEntryMode.value === 'guided') {
+    lines.value = wizardLinesToDraftLines(wizardLines.value)
+  }
+  if (!canProceedWizardStep(3, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
+    submitError.value = 'Add at least one complete line item.'
+    return
+  }
+  submitError.value = ''
+  const ok = await saveDraft()
+  if (ok) nextStep()
 }
 
 function removeLine(localId: string) {
@@ -374,15 +429,6 @@ async function saveDraft(): Promise<boolean> {
 async function continueToLines() {
   if (!canProceedWizardStep(2, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) return
   nextStep()
-}
-
-async function continueToReview() {
-  if (!canProceedWizardStep(3, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
-    submitError.value = 'Add at least one line item with a description'
-    return
-  }
-  const ok = await saveDraft()
-  if (ok) nextStep()
 }
 
 async function saveAndContinueEditing() {
@@ -572,49 +618,87 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       <div class="card">
         <div class="chead">
           <h3>Line items</h3>
-          <div class="right">
-            <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
-            <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
+        </div>
+        <div class="cbody">
+          <p v-if="!lineEntryMode" class="sl-hint" style="margin-top:0;">
+            How do you want to add charges? Pick guided voice entry or the manual table.
+          </p>
+
+          <div v-if="!lineEntryMode" class="sl-picks sl-log-modes" style="margin-bottom:0;">
+            <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
+              <span class="av teal" aria-hidden="true">🎙️</span>
+              <span class="nm">
+                <b>Guided add</b>
+                <small>Voice or step-by-step — labor, parts, services, fees</small>
+              </span>
+              <span class="chk" />
+            </button>
+            <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('manual')">
+              <span class="av indigo" aria-hidden="true">✏️</span>
+              <span class="nm">
+                <b>Manual table</b>
+                <small>Type in the grid or pick from catalog</small>
+              </span>
+              <span class="chk" />
+            </button>
           </div>
+
+          <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
+            <CommonLineItemWizard
+              v-model:lines="wizardLines"
+              list-hint="Charges saved. Add more lines or review when ready."
+            />
+            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          </div>
+
+          <template v-else>
+            <div class="chead" style="padding:0; margin-bottom:12px;">
+              <div class="right" style="width:100%; display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+                <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
+              </div>
+            </div>
+            <div class="tscroll">
+              <table class="ed-lines">
+                <thead>
+                  <tr>
+                    <th style="width:110px">Type</th>
+                    <th>Description</th>
+                    <th style="width:90px">Qty / Hrs</th>
+                    <th style="width:110px">Rate</th>
+                    <th style="width:110px; text-align:right">Amount</th>
+                    <th style="width:36px" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="line in lines" :key="line.localId">
+                    <td>
+                      <select v-model="line.lineType">
+                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <CatalogLineAutocomplete
+                        :ref="(el) => setLineAcRef(line.localId, el)"
+                        v-model="line.description"
+                        @typed="onLineDescriptionTyped(line)"
+                        @select="applyCatalogToLine(line, $event)"
+                      />
+                    </td>
+                    <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
+                    <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
+                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
+                    <td>
+                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          </template>
         </div>
-        <div class="tscroll">
-          <table class="ed-lines">
-            <thead>
-              <tr>
-                <th style="width:110px">Type</th>
-                <th>Description</th>
-                <th style="width:90px">Qty / Hrs</th>
-                <th style="width:110px">Rate</th>
-                <th style="width:110px; text-align:right">Amount</th>
-                <th style="width:36px" />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in lines" :key="line.localId">
-                <td>
-                  <select v-model="line.lineType">
-                    <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                  </select>
-                </td>
-                <td>
-                  <CatalogLineAutocomplete
-                    :ref="(el) => setLineAcRef(line.localId, el)"
-                    v-model="line.description"
-                    @typed="onLineDescriptionTyped(line)"
-                    @select="applyCatalogToLine(line, $event)"
-                  />
-                </td>
-                <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
-                <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
-                <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
-                <td>
-                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="ed-sums">
+        <div v-if="lineEntryMode" class="ed-sums">
           <div
             v-for="(row, i) in summaryRows"
             :key="i"
@@ -626,14 +710,15 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
           </div>
         </div>
       </div>
+      <p v-if="submitError && step === 3" class="help" style="color:#dc2626; margin-top:8px;">{{ submitError }}</p>
       <div class="wiz-foot">
-        <button type="button" class="btn" @click="prevStep">← Back</button>
+        <button type="button" class="btn" @click="prevFromLinesStep">← Back</button>
         <div class="wiz-foot-right">
           <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
           <button
             type="button"
             class="btn primary"
-            :disabled="busy || !canProceedWizardStep(3, { customerId, vehicleId, lines })"
+            :disabled="busy || !lineEntryMode || !canProceedWizardStep(3, { customerId, vehicleId, lines })"
             @click="continueToReview"
           >
             Review invoice →

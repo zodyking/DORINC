@@ -38,16 +38,16 @@ const workType = ref('repair')
 const complaint = ref('')
 const internalNotes = ref('')
 import {
-  digitalLinesSummary,
-  digitalLinesToNotes,
   toApiDraftLine,
-  type DigitalLineDraft,
-} from '~/utils/service-log-digital-lines'
+  wizardLinesSummary,
+  wizardLinesToNotes,
+  type WizardLineDraft,
+} from '~/utils/line-item-wizard-ui'
 
 const photos = ref<{ file: File, preview: string }[]>([])
 type LogRecordMode = 'upload' | 'digital' | null
 const logRecordMode = ref<LogRecordMode>(null)
-const digitalLineItems = ref<DigitalLineDraft[]>([])
+const digitalLineItems = ref<WizardLineDraft[]>([])
 
 const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -132,7 +132,7 @@ function prevFromLogStep() {
 function continueFromLogStep() {
   if (!logRecordMode.value) return
   if (logRecordMode.value === 'digital' && digitalLineItems.value.length) {
-    const notesFromLines = digitalLinesToNotes(digitalLineItems.value)
+    const notesFromLines = wizardLinesToNotes(digitalLineItems.value)
     internalNotes.value = internalNotes.value.trim()
       ? `${internalNotes.value.trim()}\n\n${notesFromLines}`
       : notesFromLines
@@ -147,7 +147,7 @@ const logRecordSummary = computed(() => {
       : 'Paper sheet · no photos yet'
   }
   if (logRecordMode.value === 'digital') {
-    return digitalLinesSummary(digitalLineItems.value)
+    return wizardLinesSummary(digitalLineItems.value, 'Digital log')
   }
   return '—'
 })
@@ -386,7 +386,10 @@ onBeforeUnmount(() => {
         <p v-if="!digitalLineItems.length" class="sl-hint">
           Add each charge one at a time — type, description, quantity or hours, and rate.
         </p>
-        <ServiceLogsDigitalLineItemWizard v-model:lines="digitalLineItems" />
+        <CommonLineItemWizard
+          v-model:lines="digitalLineItems"
+          list-hint="Line items saved. Add more or continue when ready."
+        />
         <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>
 

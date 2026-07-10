@@ -1,23 +1,31 @@
 <script setup lang="ts">
 import {
   calcLineAmount,
-  DIGITAL_LINE_TYPES,
-  emptyDigitalLine,
+  emptyWizardLine,
   qtyLabelForLineType,
   qtyPlaceholderForLineType,
   rateLabelForLineType,
   ratePlaceholderForLineType,
-  type DigitalLineDraft,
-  type DigitalLineType,
-} from '~/utils/service-log-digital-lines'
+  WIZARD_LINE_TYPES,
+  type WizardLineDraft,
+  type WizardLineType,
+} from '~/utils/line-item-wizard-ui'
 import { lineTypeLabel } from '~/utils/invoices-ui'
 import { catalogTypePill } from '~/utils/catalog-ui'
 
-const lines = defineModel<DigitalLineDraft[]>('lines', { default: () => [] })
+const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
+
+withDefaults(defineProps<{
+  listHint?: string
+  autoOpen?: boolean
+}>(), {
+  listHint: 'Line items saved. Add more or continue when ready.',
+  autoOpen: true,
+})
 
 const wizardOpen = ref(false)
 const wizardStep = ref(1)
-const draft = ref(emptyDigitalLine())
+const draft = ref(emptyWizardLine())
 const descRef = ref<HTMLInputElement | null>(null)
 
 const voiceDictation = useVoiceDictation((text) => {
@@ -40,7 +48,7 @@ const canNext = computed(() => {
 
 function openWizard() {
   voiceDictation.stop()
-  draft.value = emptyDigitalLine()
+  draft.value = emptyWizardLine()
   wizardStep.value = 1
   wizardOpen.value = true
   unlockSpeechFromUserGesture({ silent: true })
@@ -51,7 +59,7 @@ function closeWizard() {
   wizardOpen.value = false
 }
 
-function selectType(type: DigitalLineType) {
+function selectType(type: WizardLineType) {
   draft.value.lineType = type
   wizardStep.value = 2
 }
@@ -72,14 +80,14 @@ function saveLine(addAnother: boolean) {
   if (!draft.value.lineType || !draft.value.description.trim()) return
   const amount = calcLineAmount(draft.value.qty, draft.value.rate)
   lines.value = [...lines.value, {
-    lineType: draft.value.lineType as DigitalLineType,
+    lineType: draft.value.lineType as WizardLineType,
     description: draft.value.description.trim(),
     qty: draft.value.qty.trim(),
     rate: draft.value.rate.trim(),
     amount,
   }]
   if (addAnother) {
-    draft.value = emptyDigitalLine()
+    draft.value = emptyWizardLine()
     wizardStep.value = 1
   }
   else {
@@ -92,7 +100,7 @@ function removeLine(index: number) {
 }
 
 onMounted(() => {
-  if (!lines.value.length) openWizard()
+  if (autoOpen && !lines.value.length) openWizard()
 })
 
 onBeforeUnmount(() => voiceDictation.stop())
@@ -101,35 +109,35 @@ defineExpose({ openWizard })
 </script>
 
 <template>
-  <div class="sl-digital-lines">
-    <div v-if="lines.length && !wizardOpen" class="sl-lines-list">
-      <p class="sl-hint">Line items saved. Add more or continue when ready.</p>
-      <div class="sl-lines-cards">
-        <div v-for="(line, i) in lines" :key="i" class="sl-line-card">
-          <div class="sl-line-card-top">
+  <div class="li-wizard-root">
+    <div v-if="lines.length && !wizardOpen" class="li-lines-list">
+      <p class="sl-hint">{{ listHint }}</p>
+      <div class="li-lines-cards">
+        <div v-for="(line, i) in lines" :key="i" class="li-line-card">
+          <div class="li-line-card-top">
             <span :class="catalogTypePill(line.lineType)">{{ lineTypeLabel(line.lineType) }}</span>
-            <button type="button" class="sl-line-rm" aria-label="Remove line" @click="removeLine(i)">×</button>
+            <button type="button" class="li-line-rm" aria-label="Remove line" @click="removeLine(i)">×</button>
           </div>
-          <b class="sl-line-desc">{{ line.description }}</b>
-          <span class="sl-line-meta">
+          <b class="li-line-desc">{{ line.description }}</b>
+          <span class="li-line-meta">
             {{ qtyLabelForLineType(line.lineType) }} {{ line.qty }}
             · {{ rateLabelForLineType(line.lineType) }} {{ line.rate }}
             <template v-if="line.amount"> · {{ moneyDisplay(line.amount) }}</template>
           </span>
         </div>
       </div>
-      <button type="button" class="btn sl-add-line-btn" @click="openWizard">+ Add another line</button>
+      <button type="button" class="btn li-add-line-btn" @click="openWizard">+ Add another line</button>
     </div>
 
-    <div v-if="wizardOpen" class="sl-line-wizard">
-      <p class="sl-wizard-progress">Line item · step {{ wizardStep }} of 5</p>
+    <div v-if="wizardOpen" class="li-line-wizard">
+      <p class="li-wizard-progress">Line item · step {{ wizardStep }} of 5</p>
 
-      <div v-if="wizardStep === 1" class="sl-wizard-panel">
+      <div v-if="wizardStep === 1" class="li-wizard-panel">
         <h4>What type of item?</h4>
         <p class="sl-hint">Pick labor, part, service, or fee.</p>
         <div class="sl-picks sl-type-picks">
           <button
-            v-for="type in DIGITAL_LINE_TYPES"
+            v-for="type in WIZARD_LINE_TYPES"
             :key="type"
             type="button"
             class="sl-pick"
@@ -145,7 +153,7 @@ defineExpose({ openWizard })
         </div>
       </div>
 
-      <div v-else-if="wizardStep === 2" class="sl-wizard-panel">
+      <div v-else-if="wizardStep === 2" class="li-wizard-panel">
         <h4>What was done?</h4>
         <p class="sl-hint">Describe the work or item — tap the mic to speak it.</p>
         <label class="fld">
@@ -171,56 +179,56 @@ defineExpose({ openWizard })
         <p v-if="voiceError" class="help" style="color:#dc2626;">{{ voiceError }}</p>
       </div>
 
-      <div v-else-if="wizardStep === 3" class="sl-wizard-panel">
-        <h4>{{ qtyLabelForLineType(draft.lineType as DigitalLineType) }}</h4>
+      <div v-else-if="wizardStep === 3" class="li-wizard-panel">
+        <h4>{{ qtyLabelForLineType(draft.lineType as WizardLineType) }}</h4>
         <p class="sl-hint">
           {{ draft.lineType === 'labor' ? 'How many hours?' : 'How many units?' }}
         </p>
         <label class="fld">
-          <span>{{ qtyLabelForLineType(draft.lineType as DigitalLineType) }}</span>
+          <span>{{ qtyLabelForLineType(draft.lineType as WizardLineType) }}</span>
           <input
             v-model="draft.qty"
             type="text"
             inputmode="decimal"
-            :placeholder="qtyPlaceholderForLineType(draft.lineType as DigitalLineType)"
+            :placeholder="qtyPlaceholderForLineType(draft.lineType as WizardLineType)"
           >
         </label>
       </div>
 
-      <div v-else-if="wizardStep === 4" class="sl-wizard-panel">
-        <h4>{{ rateLabelForLineType(draft.lineType as DigitalLineType) }}</h4>
+      <div v-else-if="wizardStep === 4" class="li-wizard-panel">
+        <h4>{{ rateLabelForLineType(draft.lineType as WizardLineType) }}</h4>
         <p class="sl-hint">Enter the price before tax.</p>
         <label class="fld">
-          <span>{{ rateLabelForLineType(draft.lineType as DigitalLineType) }}</span>
+          <span>{{ rateLabelForLineType(draft.lineType as WizardLineType) }}</span>
           <input
             v-model="draft.rate"
             type="text"
             inputmode="decimal"
-            :placeholder="ratePlaceholderForLineType(draft.lineType as DigitalLineType)"
+            :placeholder="ratePlaceholderForLineType(draft.lineType as WizardLineType)"
           >
         </label>
         <p v-if="previewAmount" class="help">Line total: {{ moneyDisplay(previewAmount) }}</p>
       </div>
 
-      <div v-else class="sl-wizard-panel">
+      <div v-else class="li-wizard-panel">
         <h4>Save this line?</h4>
-        <div class="sl-line-preview">
-          <span :class="catalogTypePill(draft.lineType as DigitalLineType)">{{ lineTypeLabel(draft.lineType as DigitalLineType) }}</span>
+        <div class="li-line-preview">
+          <span :class="catalogTypePill(draft.lineType as WizardLineType)">{{ lineTypeLabel(draft.lineType as WizardLineType) }}</span>
           <b>{{ draft.description }}</b>
-          <span>{{ qtyLabelForLineType(draft.lineType as DigitalLineType) }} {{ draft.qty }} · {{ moneyDisplay(draft.rate) }} each</span>
-          <span v-if="previewAmount" class="sl-line-preview-amt">Total {{ moneyDisplay(previewAmount) }}</span>
+          <span>{{ qtyLabelForLineType(draft.lineType as WizardLineType) }} {{ draft.qty }} · {{ moneyDisplay(draft.rate) }} each</span>
+          <span v-if="previewAmount" class="li-line-preview-amt">Total {{ moneyDisplay(previewAmount) }}</span>
         </div>
-        <div class="sl-line-save-actions">
+        <div class="li-line-save-actions">
           <button type="button" class="btn primary" @click="saveLine(true)">Save &amp; add another</button>
           <button type="button" class="btn" @click="saveLine(false)">Save &amp; finish</button>
         </div>
       </div>
 
-      <div v-if="wizardStep > 1 && wizardStep < 5" class="sl-wizard-nav">
+      <div v-if="wizardStep > 1 && wizardStep < 5" class="li-wizard-nav">
         <button type="button" class="btn" @click="prevStep">Back</button>
         <button type="button" class="btn primary" :disabled="!canNext" @click="nextStep">Next</button>
       </div>
-      <div v-else-if="wizardStep === 1 && lines.length" class="sl-wizard-nav">
+      <div v-else-if="wizardStep === 1 && lines.length" class="li-wizard-nav">
         <button type="button" class="btn" @click="closeWizard">Cancel</button>
       </div>
     </div>
@@ -228,25 +236,25 @@ defineExpose({ openWizard })
 </template>
 
 <style scoped>
-.sl-lines-cards {
+.li-lines-cards {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 14px;
 }
-.sl-line-card {
+.li-line-card {
   padding: 12px 14px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
 }
-.sl-line-card-top {
+.li-line-card-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
 }
-.sl-line-rm {
+.li-line-rm {
   appearance: none;
   border: none;
   background: #f1f5f9;
@@ -258,20 +266,20 @@ defineExpose({ openWizard })
   line-height: 1;
   cursor: pointer;
 }
-.sl-line-desc {
+.li-line-desc {
   display: block;
   font-size: 14px;
   margin-bottom: 4px;
 }
-.sl-line-meta {
+.li-line-meta {
   font-size: 12px;
   color: #64748b;
 }
-.sl-add-line-btn {
+.li-add-line-btn {
   width: 100%;
   justify-content: center;
 }
-.sl-wizard-progress {
+.li-wizard-progress {
   margin: 0 0 12px;
   font-size: 11px;
   font-weight: 700;
@@ -279,7 +287,7 @@ defineExpose({ openWizard })
   letter-spacing: 0.05em;
   color: #6366f1;
 }
-.sl-wizard-panel h4 {
+.li-wizard-panel h4 {
   margin: 0 0 4px;
   font-size: 16px;
   font-weight: 800;
@@ -288,7 +296,7 @@ defineExpose({ openWizard })
   display: block;
   margin-top: 2px;
 }
-.sl-line-preview {
+.li-line-preview {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -300,30 +308,30 @@ defineExpose({ openWizard })
   font-size: 13px;
   color: #475569;
 }
-.sl-line-preview b {
+.li-line-preview b {
   color: #0f172a;
   font-size: 15px;
 }
-.sl-line-preview-amt {
+.li-line-preview-amt {
   font-weight: 700;
   color: #4f46e5;
 }
-.sl-line-save-actions {
+.li-line-save-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.sl-line-save-actions .btn {
+.li-line-save-actions .btn {
   width: 100%;
   justify-content: center;
   min-height: 48px;
 }
-.sl-wizard-nav {
+.li-wizard-nav {
   display: flex;
   gap: 10px;
   margin-top: 18px;
 }
-.sl-wizard-nav .btn {
+.li-wizard-nav .btn {
   flex: 1;
   justify-content: center;
   min-height: 48px;
