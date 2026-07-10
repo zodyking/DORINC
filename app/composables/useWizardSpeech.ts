@@ -4,41 +4,11 @@ import {
   isSpeechConsentEnabled,
   speakWizardText,
   unlockSpeechFromUserGesture,
-  type SpeechSubtitleHandlers,
 } from '~/utils/wizard-speech'
 
 export interface FormSpeechSection {
   selector: string
   narration: string
-}
-
-const subtitleText = ref('')
-const subtitleWordIndex = ref(-1)
-const subtitleOpen = ref(false)
-
-function makeSubtitleHandlers(): SpeechSubtitleHandlers {
-  return {
-    onStart(text) {
-      subtitleText.value = text
-      subtitleWordIndex.value = -1
-      subtitleOpen.value = true
-    },
-    onWord(index) {
-      subtitleWordIndex.value = index
-    },
-    onEnd() {
-      subtitleOpen.value = false
-      subtitleWordIndex.value = -1
-    },
-  }
-}
-
-export function useSpeechSubtitle() {
-  return {
-    subtitleText: readonly(subtitleText),
-    subtitleWordIndex: readonly(subtitleWordIndex),
-    subtitleOpen: readonly(subtitleOpen),
-  }
 }
 
 /** Step-based wizard narration (service log, invoice). */
@@ -47,12 +17,11 @@ export function useWizardStepNarration(
   narrations: Record<number, string>,
 ) {
   const enabled = ref(isSpeechConsentEnabled())
-  const handlers = makeSubtitleHandlers()
 
   function narrateCurrentStep() {
     if (!enabled.value || !isMobileSpeechTarget()) return
     const text = narrations[step.value]
-    if (text) speakWizardText(text, handlers, { fromGesture: true })
+    if (text) speakWizardText(text, { fromGesture: true })
   }
 
   function autoStartIfConsented() {
@@ -72,7 +41,6 @@ export function useWizardStepNarration(
 
   onBeforeUnmount(() => {
     cancelSpeech()
-    handlers.onEnd()
   })
 
   return {
@@ -86,14 +54,13 @@ export function useFormSectionSpeech(
   sections: FormSpeechSection[],
 ) {
   const enabled = ref(isSpeechConsentEnabled())
-  const handlers = makeSubtitleHandlers()
   let observer: IntersectionObserver | null = null
   let activeKey = ''
 
   function narrateSection(key: string, text: string) {
     if (!enabled.value || !isMobileSpeechTarget()) return
     activeKey = key
-    speakWizardText(text, handlers, { fromGesture: true })
+    speakWizardText(text, { fromGesture: true })
   }
 
   function autoStartIfConsented() {
@@ -149,6 +116,5 @@ export function useFormSectionSpeech(
   onBeforeUnmount(() => {
     observer?.disconnect()
     cancelSpeech()
-    handlers.onEnd()
   })
 }

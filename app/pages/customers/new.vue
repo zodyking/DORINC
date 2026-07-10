@@ -22,19 +22,19 @@ const formRoot = ref<HTMLElement | null>(null)
 const CUSTOMER_SPEECH_SECTIONS = [
   {
     selector: '[data-speech-section="account"]',
-    narration: 'Account. Enter display name, account type, email, phone, payment terms, and tax exempt status.',
+    narration: 'Name the account and how they pay.',
   },
   {
     selector: '[data-speech-section="billing"]',
-    narration: 'Billing address. Enter street, city, state, and ZIP for billing.',
+    narration: 'Where do bills go?',
   },
   {
     selector: '[data-speech-section="service"]',
-    narration: 'Service address. Enter where work is performed if different from billing.',
+    narration: 'Where is work performed, if different?',
   },
   {
     selector: '[data-speech-section="notes"]',
-    narration: 'Notes. Add internal billing preferences, site access, and reminders.',
+    narration: 'Add any internal notes.',
   },
 ]
 
@@ -82,7 +82,6 @@ async function submit() {
         <p><NuxtLink to="/customers">Customers</NuxtLink> / Create account</p>
       </div>
     </div>
-    <CommonWizardSpeechControl />
     <div ref="formRoot">
       <CustomersCustomerForm
         v-model="form"

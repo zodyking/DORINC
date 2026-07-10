@@ -72,12 +72,12 @@ const steps = [
 ]
 
 const SERVICE_LOG_NARRATIONS: Record<number, string> = {
-  1: 'Step 1, Customer. Which customer? Select the account this service was performed for.',
-  2: 'Step 2, Vehicle. Which vehicle? Pick the fleet unit that was serviced.',
-  3: 'Step 3, When and where. Enter the service date, odometer or hours, and job location.',
-  4: 'Step 4, Work. What was done? Choose work type and enter the customer complaint and internal notes.',
-  5: 'Step 5, Photos. Add photos. Upload worksheets, damage, odometer, and parts.',
-  6: 'Step 6, Review and submit. Confirm details before sending to the review queue.',
+  1: 'Pick the customer.',
+  2: 'Choose the vehicle.',
+  3: 'Enter when and where the work happened.',
+  4: 'Describe what you did.',
+  5: 'Add photos if you have them.',
+  6: 'Double-check everything, then submit.',
 }
 
 useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)
@@ -174,8 +174,6 @@ onBeforeUnmount(() => {
         <NuxtLink to="/service-logs" class="btn">Cancel</NuxtLink>
       </div>
     </div>
-
-    <CommonWizardSpeechControl />
 
     <div class="sl-progress" aria-label="Progress">
       <div

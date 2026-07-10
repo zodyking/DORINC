@@ -37,19 +37,19 @@ const formRoot = ref<HTMLElement | null>(null)
 const VEHICLE_SPEECH_SECTIONS = [
   {
     selector: '[data-speech-section="unit"]',
-    narration: 'Unit. Select the customer, fleet tag, unit type, and status.',
+    narration: 'Pick the customer and unit type.',
   },
   {
     selector: '[data-speech-section="identification"]',
-    narration: 'Identification. Enter VIN, decode for year make and model, plus plate and color.',
+    narration: 'Enter the VIN and basic vehicle info.',
   },
   {
     selector: '[data-speech-section="meter"]',
-    narration: 'Meter. Enter odometer or hours and choose miles or hours.',
+    narration: 'Update mileage or hours.',
   },
   {
     selector: '[data-speech-section="notes"]',
-    narration: 'Notes. Add internal notes about drivers, equipment, or known issues.',
+    narration: 'Anything else we should know?',
   },
 ]
 
@@ -100,7 +100,6 @@ async function submit() {
         <p><NuxtLink to="/vehicles">Vehicles</NuxtLink> / Register unit</p>
       </div>
     </div>
-    <CommonWizardSpeechControl />
     <div ref="formRoot">
       <VehiclesVehicleForm
         v-model="form"

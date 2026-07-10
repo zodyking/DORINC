@@ -95,42 +95,12 @@ export function unlockSpeechFromUserGesture(opts: { silent?: boolean } = {}): vo
   }
 }
 
-export function tokenizeSpeechWords(text: string): string[] {
-  return String(text || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-}
-
-export function wordIndexFromCharIndex(text: string, charIndex: number): number {
-  const body = String(text || '')
-  const words = tokenizeSpeechWords(body)
-  if (!words.length || charIndex < 0) return -1
-  let pos = 0
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i]!
-    const idx = body.indexOf(w, pos)
-    if (idx < 0) continue
-    const end = idx + w.length
-    if (charIndex >= idx && charIndex <= end) return i
-    pos = end
-  }
-  const ratio = charIndex / Math.max(1, body.length)
-  return Math.min(words.length - 1, Math.floor(ratio * words.length))
-}
-
 function toSpeechPhrase(text: string): string {
   return String(text)
     .replace(/·/g, ', ')
     .replace(/&amp;/g, 'and')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-export interface SpeechSubtitleHandlers {
-  onStart: (text: string) => void
-  onWord: (index: number) => void
-  onEnd: () => void
 }
 
 export function cancelSpeech(): void {
@@ -141,7 +111,6 @@ export function cancelSpeech(): void {
 
 export function speakWizardText(
   text: string,
-  handlers: SpeechSubtitleHandlers,
   opts: { fromGesture?: boolean, skipConsentCheck?: boolean } = {},
 ): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
@@ -155,25 +124,11 @@ export function speakWizardText(
   if (!spoken) return
 
   cancelSpeech()
-  handlers.onStart(spoken)
 
   const u = new SpeechSynthesisUtterance(spoken)
   u.rate = 1.05
   u.pitch = 1
   u.volume = 1
-
-  u.onboundary = (e) => {
-    if (e.name !== 'word' || e.charIndex == null) return
-    const idx = wordIndexFromCharIndex(spoken, e.charIndex)
-    if (idx >= 0) handlers.onWord(idx)
-  }
-
-  const finish = () => {
-    handlers.onEnd()
-  }
-
-  u.onend = finish
-  u.onerror = finish
 
   window.speechSynthesis.speak(u)
 }

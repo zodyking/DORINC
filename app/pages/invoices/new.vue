@@ -55,10 +55,10 @@ const step = ref(1)
 const busy = ref(false)
 
 const INVOICE_NARRATIONS: Record<number, string> = {
-  1: 'Step 1 of 4, Customer. Who is this invoice for? Select the billing account.',
-  2: 'Step 2 of 4, Vehicle. Choose the vehicle, invoice dates, and optional service log.',
-  3: 'Step 3 of 4, Line items. Add labor, parts, services, and fees.',
-  4: 'Step 4 of 4, Review. Confirm totals, save, and finalize the invoice.',
+  1: 'Pick who you are billing.',
+  2: 'Choose the vehicle and invoice dates.',
+  3: 'Add your line items and charges.',
+  4: 'Review totals, then save or send.',
 }
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
@@ -426,9 +426,6 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <NuxtLink to="/invoices" class="btn">Cancel</NuxtLink>
       </div>
     </div>
-
-    <CommonWizardSpeechControl />
-
     <div class="wizbar">
       <span class="state">Workflow: <b>{{ wizardStateLabel(step) }}</b></span>
       <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
