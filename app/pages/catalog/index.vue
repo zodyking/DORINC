@@ -3,6 +3,7 @@
 import CatalogItemForm, { type CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
 import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
+import { normalizeCatalogItemType } from '~/utils/catalog-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -24,7 +25,7 @@ interface CatalogItemRow {
   createdAt: string
 }
 
-type TypeChip = 'all' | 'part' | 'service' | 'labor' | 'fee'
+type TypeChip = 'all' | 'part' | 'service' | 'fee'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.can('catalog.manage.all'))
@@ -53,7 +54,6 @@ const { data, refresh, pending, error: listError } = await useFetch<{ items: Cat
 const { data: allCount, refresh: refreshAllCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
 const { data: partCount, refresh: refreshPartCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
 const { data: serviceCount, refresh: refreshServiceCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'service', pageSize: 1 } })
-const { data: laborCount, refresh: refreshLaborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
 const { data: feeCount, refresh: refreshFeeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
 
 const { data: categoriesData, refresh: refreshCategories } = await useFetch<{ items: { id: string, name: string }[] }>(
@@ -82,7 +82,6 @@ const chips = computed(() => [
   { key: 'all' as const, label: 'All', count: allCount.value?.total ?? 0 },
   { key: 'part' as const, label: 'Parts', count: partCount.value?.total ?? 0 },
   { key: 'service' as const, label: 'Services', count: serviceCount.value?.total ?? 0 },
-  { key: 'labor' as const, label: 'Labor', count: laborCount.value?.total ?? 0 },
   { key: 'fee' as const, label: 'Fees', count: feeCount.value?.total ?? 0 },
 ])
 
@@ -91,7 +90,6 @@ async function refreshCounts() {
     refreshAllCount(),
     refreshPartCount(),
     refreshServiceCount(),
-    refreshLaborCount(),
     refreshFeeCount(),
   ])
 }
@@ -138,7 +136,7 @@ function openEditItem(row: CatalogItemRow) {
   if (!canManage.value) return
   editingId.value = row.id
   Object.assign(form, {
-    itemType: row.itemType,
+    itemType: normalizeCatalogItemType(row.itemType),
     sku: row.sku ?? '',
     name: row.name,
     description: row.description ?? '',
@@ -248,7 +246,7 @@ function onRowClick(row: CatalogItemRow) {
     <div class="pagehead">
       <div>
         <h2>Catalog</h2>
-        <p>Parts, labor rates and fees used to build invoice lines</p>
+        <p>Parts, services, and fees for invoice lines</p>
       </div>
       <div class="actions">
         <button
@@ -377,7 +375,7 @@ function onRowClick(row: CatalogItemRow) {
         <div class="mhead">
           <div>
             <h3 id="cat-item-title">{{ editingId ? 'Edit catalog item' : 'New catalog item' }}</h3>
-            <p>Default pricing and metadata copied into invoice line snapshots</p>
+            <p>Used when adding lines to invoices and service logs</p>
           </div>
           <button type="button" class="close" aria-label="Close" @click="closeItemModal">✕</button>
         </div>

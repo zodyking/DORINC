@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { uuidSchema } from './common'
 
-export const catalogItemTypeSchema = z.enum(['part', 'service', 'fee', 'labor'])
+export const catalogItemTypeSchema = z.enum(['part', 'service', 'fee'])
 
 export const catalogCategoryCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),

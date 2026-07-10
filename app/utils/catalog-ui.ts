@@ -1,40 +1,51 @@
 // Catalog list/modal presentation helpers (mockup: PAGE: CATALOG).
 
-export type CatalogItemType = 'part' | 'service' | 'fee' | 'labor'
+export type CatalogItemType = 'part' | 'service' | 'fee'
 
-export function catalogTypeLabel(type: CatalogItemType): string {
-  switch (type) {
+export const CATALOG_ITEM_TYPE_OPTIONS: { value: CatalogItemType, label: string }[] = [
+  { value: 'part', label: 'Part' },
+  { value: 'service', label: 'Service' },
+  { value: 'fee', label: 'Fee' },
+]
+
+/** Normalize legacy catalog rows that still store labor. */
+export function normalizeCatalogItemType(type: string): CatalogItemType {
+  if (type === 'part' || type === 'fee') return type
+  return 'service'
+}
+
+export function catalogTypeLabel(type: string): string {
+  switch (normalizeCatalogItemType(type)) {
     case 'part': return 'Part'
     case 'service': return 'Service'
     case 'fee': return 'Fee'
-    case 'labor': return 'Labor'
   }
 }
 
-export function catalogTypePill(type: CatalogItemType): string {
-  switch (type) {
+export function catalogTypePill(type: string): string {
+  switch (normalizeCatalogItemType(type)) {
     case 'part': return 'pill ok'
     case 'service': return 'pill info'
     case 'fee': return 'pill gray'
-    case 'labor': return 'pill info'
   }
 }
 
-/** Format default price for table cells (mockup: $145.00 / hr, 3.5%, $412.68). */
+/** Format default price for table cells. */
 export function catalogPriceDisplay(
   price: string | null | undefined,
   uom: string,
-  itemType: CatalogItemType,
+  itemType: string,
 ): string {
   if (!price) return '—'
-  if (itemType === 'fee' && uom === 'pct') return `${price}%`
+  const type = normalizeCatalogItemType(itemType)
+  if (type === 'fee' && uom === 'pct') return `${price}%`
 
   const num = Number.parseFloat(price)
   const formatted = Number.isFinite(num)
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num)
     : price
 
-  if (itemType === 'labor' && uom === 'hr') return `${formatted} / hr`
+  if (type === 'service' && uom === 'hr') return `${formatted} / hr`
   if (uom === 'flat') return `${formatted} flat`
   return formatted
 }
@@ -44,6 +55,12 @@ export const CATALOG_UOM_OPTIONS = [
   { value: 'hr', label: 'Per hour' },
   { value: 'flat', label: 'Flat rate' },
   { value: 'pct', label: 'Percent (%)' },
-  { value: 'gal', label: 'Per gallon' },
-  { value: 'lb', label: 'Per pound' },
 ] as const
+
+export function defaultUomForCatalogType(type: CatalogItemType): string {
+  switch (type) {
+    case 'part': return 'each'
+    case 'service': return 'hr'
+    case 'fee': return 'pct'
+  }
+}

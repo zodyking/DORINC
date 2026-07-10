@@ -79,7 +79,7 @@ describe('P1-18 catalog items', () => {
 
   it('filters by item type and taxable flag', async () => {
     await createCatalogItem(db, {
-      itemType: 'labor',
+      itemType: 'service',
       sku: `LAB-${stamp}`,
       name: `CatTest-${stamp} Diesel tech`,
       defaultPrice: '145.00',
@@ -87,8 +87,8 @@ describe('P1-18 catalog items', () => {
       taxable: true,
     }, ACTOR)
 
-    const labor = await listCatalogItems(db, { itemType: 'labor', page: 1, pageSize: 50 })
-    expect(labor.items.every(i => i.itemType === 'labor')).toBe(true)
+    const services = await listCatalogItems(db, { itemType: 'service', page: 1, pageSize: 50 })
+    expect(services.items.every(i => i.itemType === 'service')).toBe(true)
 
     const nontax = await listCatalogItems(db, { taxable: false, page: 1, pageSize: 50 })
     expect(nontax.items.every(i => i.taxable === false)).toBe(true)

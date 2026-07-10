@@ -49,8 +49,7 @@ export function catalogItemSub(item: CatalogQuickItem): string {
 }
 
 export function catalogTypeToLineType(itemType: string): InvoiceLineType {
-  if (itemType === 'part' || itemType === 'fee' || itemType === 'labor') return itemType
-  if (itemType === 'service') return 'labor'
+  if (itemType === 'part' || itemType === 'fee') return itemType
   return 'labor'
 }
 

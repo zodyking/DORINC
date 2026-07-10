@@ -1,7 +1,7 @@
 import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
 
-export const CATALOG_ITEM_TYPES = ['part', 'service', 'fee', 'labor'] as const
+export const CATALOG_ITEM_TYPES = ['part', 'service', 'fee'] as const
 export type CatalogItemType = (typeof CATALOG_ITEM_TYPES)[number]
 
 /** Grouping for catalog items (mockup: Aftertreatment, Fluids, Labor rates, …). */
@@ -16,7 +16,7 @@ export const catalogCategories = pgTable('catalog_categories', {
   index('catalog_categories_name_idx').on(table.name),
 ])
 
-/** Parts, services, fees, and labor rates (SPEC §6.3). */
+/** Parts, services, and fees (SPEC §6.3). */
 export const catalogItems = pgTable('catalog_items', {
   id: uuid('id').primaryKey().defaultRandom(),
 
