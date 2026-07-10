@@ -111,17 +111,29 @@ export function cancelSpeech(): void {
 
 export function speakWizardText(
   text: string,
-  opts: { fromGesture?: boolean, skipConsentCheck?: boolean } = {},
+  opts: { fromGesture?: boolean, skipConsentCheck?: boolean, onEnd?: () => void } = {},
 ): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
-  if (prefersReducedSpeech()) return
-  if (!opts.skipConsentCheck && !opts.fromGesture && !isSpeechConsentEnabled()) return
+  if (prefersReducedSpeech()) {
+    opts.onEnd?.()
+    return
+  }
+  if (!opts.skipConsentCheck && !opts.fromGesture && !isSpeechConsentEnabled()) {
+    opts.onEnd?.()
+    return
+  }
 
   evaluateGestureGate()
-  if (!gestureUnlocked && !opts.fromGesture) return
+  if (!gestureUnlocked && !opts.fromGesture) {
+    opts.onEnd?.()
+    return
+  }
 
   const spoken = toSpeechPhrase(text)
-  if (!spoken) return
+  if (!spoken) {
+    opts.onEnd?.()
+    return
+  }
 
   cancelSpeech()
 
@@ -129,6 +141,13 @@ export function speakWizardText(
   u.rate = 1.05
   u.pitch = 1
   u.volume = 1
+
+  const finish = () => {
+    opts.onEnd?.()
+  }
+
+  u.onend = finish
+  u.onerror = finish
 
   window.speechSynthesis.speak(u)
 }

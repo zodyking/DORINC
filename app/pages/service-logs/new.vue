@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
           <span class="av teal" aria-hidden="true">🎙️</span>
           <span class="nm">
             <b>Digital log</b>
-            <small>Add line items by voice — labor, parts, services, fees</small>
+            <small>Speak each line out loud — no forms to tap through</small>
           </span>
           <span class="chk" />
         </button>
@@ -384,11 +384,11 @@ onBeforeUnmount(() => {
 
       <div v-else class="sl-log-digital">
         <p v-if="!digitalLineItems.length" class="sl-hint">
-          Add each charge one at a time — type, description, quantity or hours, and rate.
+          Listen and answer out loud — the app will walk you through each line.
         </p>
         <CommonLineItemWizard
           v-model:lines="digitalLineItems"
-          list-hint="Line items saved. Add more or continue when ready."
+          list-hint="Lines saved. Tap below to add more by voice."
         />
         <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>

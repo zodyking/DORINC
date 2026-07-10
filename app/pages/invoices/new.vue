@@ -621,15 +621,15 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         </div>
         <div class="cbody">
           <p v-if="!lineEntryMode" class="sl-hint" style="margin-top:0;">
-            How do you want to add charges? Pick guided voice entry or the manual table.
+            How do you want to add charges? Voice lines or the manual table.
           </p>
 
           <div v-if="!lineEntryMode" class="sl-picks sl-log-modes" style="margin-bottom:0;">
             <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
               <span class="av teal" aria-hidden="true">🎙️</span>
               <span class="nm">
-                <b>Guided add</b>
-                <small>Voice or step-by-step — labor, parts, services, fees</small>
+                <b>Voice lines</b>
+                <small>Speak each charge — labor, parts, services, fees</small>
               </span>
               <span class="chk" />
             </button>
@@ -646,7 +646,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
           <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
             <CommonLineItemWizard
               v-model:lines="wizardLines"
-              list-hint="Charges saved. Add more lines or review when ready."
+              list-hint="Charges saved. Tap below to add more by voice."
             />
             <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
           </div>
