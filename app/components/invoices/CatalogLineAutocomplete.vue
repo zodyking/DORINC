@@ -21,7 +21,7 @@ const emit = defineEmits<{
   focus: []
 }>()
 
-const { inputAttrs, onInput: proseOnInput, onFocus: proseOnFocus, onBlur: proseOnBlur } = useProseField(model, ref('prose'))
+const { inputAttrs, onInput: proseOnInput, onBlur: proseOnBlur } = useProseField(model, ref('prose'))
 
 const open = ref(false)
 const activeIndex = ref(0)
@@ -136,7 +136,6 @@ function onInput(event: Event) {
 }
 
 function onFocus() {
-  proseOnFocus()
   if (blurTimer) {
     clearTimeout(blurTimer)
     blurTimer = null

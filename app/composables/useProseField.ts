@@ -1,8 +1,9 @@
 import type { ProseFieldMode } from '#shared/format/prose-field'
 import {
-  applyLiveTitleCase,
+  adjustCursorAfterFormat,
   autocapitalizeForMode,
   formatFieldText,
+  formatLiveFieldText,
   spellcheckForMode,
 } from '#shared/format/prose-field'
 
@@ -20,31 +21,28 @@ const SKIP_INPUT_TYPES = new Set([
   'email', 'password', 'number', 'date', 'tel', 'search', 'url', 'time', 'datetime-local',
 ])
 
-function applyElementAttrs(el: ProseElement, mode: ProseFieldMode, spellcheckOn: boolean) {
+function applyElementAttrs(el: ProseElement, mode: ProseFieldMode) {
   el.autocapitalize = autocapitalizeForMode(mode)
-  el.spellcheck = spellcheckOn && spellcheckForMode(mode)
+  el.spellcheck = spellcheckForMode(mode)
+}
+
+function applyLiveFormatToElement(el: ProseElement, mode: ProseFieldMode) {
+  if (mode === 'none' || mode === 'address') return
+  const oldVal = el.value
+  const pos = el.selectionStart ?? oldVal.length
+  const formatted = formatLiveFieldText(oldVal, mode)
+  if (formatted === oldVal) return
+  el.value = formatted
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  const nextPos = adjustCursorAfterFormat(oldVal, formatted, pos)
+  el.setSelectionRange(nextPos, nextPos)
 }
 
 export function bindProseField(el: ProseElement, mode: ProseFieldMode) {
   if (mode === 'none') return () => {}
 
-  let spellcheckOn = false
-
   const onInput = () => {
-    if (mode === 'prose' || mode === 'name') {
-      const pos = el.selectionStart ?? el.value.length
-      const formatted = applyLiveTitleCase(el.value)
-      if (formatted !== el.value) {
-        el.value = formatted
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-        el.setSelectionRange(pos, pos)
-      }
-    }
-  }
-
-  const onFocus = () => {
-    spellcheckOn = false
-    applyElementAttrs(el, mode, false)
+    applyLiveFormatToElement(el, mode)
   }
 
   const onBlur = () => {
@@ -53,19 +51,15 @@ export function bindProseField(el: ProseElement, mode: ProseFieldMode) {
       el.value = formatted
       el.dispatchEvent(new Event('input', { bubbles: true }))
     }
-    spellcheckOn = true
-    applyElementAttrs(el, mode, true)
   }
 
   el.addEventListener('input', onInput)
-  el.addEventListener('focus', onFocus)
   el.addEventListener('blur', onBlur)
 
-  applyElementAttrs(el, mode, false)
+  applyElementAttrs(el, mode)
 
   return () => {
     el.removeEventListener('input', onInput)
-    el.removeEventListener('focus', onFocus)
     el.removeEventListener('blur', onBlur)
   }
 }
@@ -113,30 +107,21 @@ export function useProseField(
   model: Ref<string>,
   mode: ProseFieldMode = 'prose',
 ) {
-  const spellcheckActive = ref(false)
-
   function onInput(event: Event) {
     const el = event.target as ProseElement
-    let val = el.value
-    if (mode === 'prose' || mode === 'name') {
-      const formatted = applyLiveTitleCase(val)
-      if (formatted !== val) {
-        const pos = el.selectionStart ?? formatted.length
-        el.value = formatted
-        val = formatted
-        el.setSelectionRange(pos, pos)
-      }
+    const oldVal = el.value
+    const pos = el.selectionStart ?? oldVal.length
+    const formatted = formatLiveFieldText(oldVal, mode)
+    if (formatted !== oldVal) {
+      el.value = formatted
+      const nextPos = adjustCursorAfterFormat(oldVal, formatted, pos)
+      el.setSelectionRange(nextPos, nextPos)
     }
-    model.value = val
-  }
-
-  function onFocus() {
-    spellcheckActive.value = false
+    model.value = el.value
   }
 
   function onBlur() {
     model.value = formatFieldText(model.value, mode)
-    spellcheckActive.value = spellcheckForMode(mode)
   }
 
   function applyVoiceText(spoken: string) {
@@ -145,14 +130,12 @@ export function useProseField(
 
   const inputAttrs = computed(() => ({
     autocapitalize: autocapitalizeForMode(mode),
-    spellcheck: spellcheckActive.value && spellcheckForMode(mode),
+    spellcheck: spellcheckForMode(mode),
   }))
 
   return {
-    spellcheckActive,
     inputAttrs,
     onInput,
-    onFocus,
     onBlur,
     applyVoiceText,
   }

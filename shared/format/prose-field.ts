@@ -3,22 +3,24 @@ import { toTitleCase } from './title-case'
 
 export type ProseFieldMode = 'prose' | 'name' | 'address' | 'none'
 
-/** Live typing: capitalize first character and first character after each space. */
+/** Live typing: title case + abbreviations (prose) without trimming trailing spaces. */
+export function formatLiveFieldText(value: string, mode: ProseFieldMode = 'prose'): string {
+  if (!value || mode === 'none' || mode === 'address') return value
+  const trailing = value.match(/\s+$/)?.[0] ?? ''
+  const core = value.trimEnd()
+  if (!core) return value
+  if (mode === 'name') return toTitleCase(core) + trailing
+  return abbreviatePhrases(toTitleCase(core)) + trailing
+}
+
+export function adjustCursorAfterFormat(oldVal: string, newVal: string, cursor: number): number {
+  if (oldVal === newVal) return cursor
+  return Math.max(0, Math.min(newVal.length, cursor + (newVal.length - oldVal.length)))
+}
+
+/** @deprecated Use formatLiveFieldText — kept for callers not yet migrated. */
 export function applyLiveTitleCase(value: string): string {
-  if (!value) return value
-  let result = ''
-  let capitalizeNext = true
-  for (const ch of value) {
-    if (capitalizeNext && /[a-z]/.test(ch)) {
-      result += ch.toLocaleUpperCase('en-US')
-      capitalizeNext = false
-    }
-    else {
-      result += ch
-      capitalizeNext = ch === ' '
-    }
-  }
-  return result
+  return formatLiveFieldText(value, 'prose')
 }
 
 /** Final format on blur / voice capture / server persist. */
@@ -28,8 +30,7 @@ export function formatFieldText(value: string, mode: ProseFieldMode = 'prose'): 
 
   if (mode === 'name') return toTitleCase(trimmed)
 
-  const titled = toTitleCase(trimmed)
-  return abbreviatePhrases(titled)
+  return formatLiveFieldText(trimmed, 'prose')
 }
 
 /** Format dictated or pasted text before writing to a model. */

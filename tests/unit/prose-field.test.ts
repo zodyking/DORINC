@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyLiveTitleCase,
   formatFieldText,
+  formatLiveFieldText,
   formatVoiceText,
 } from '../../shared/format/prose-field'
 
 describe('prose field formatting', () => {
-  it('applies live title case after spaces', () => {
-    expect(applyLiveTitleCase('hello world')).toBe('Hello World')
-    expect(applyLiveTitleCase('hello WORLD')).toBe('Hello WORLD')
+  it('applies live title case and abbreviations while typing', () => {
+    expect(formatLiveFieldText('hello world')).toBe('Hello World')
+    expect(formatLiveFieldText('replace right side mirror')).toBe('Replace R/S Mirror')
+    expect(formatLiveFieldText('replaced f/r tire')).toBe('Replaced F/R Tire')
+  })
+
+  it('preserves trailing space during live formatting', () => {
+    expect(formatLiveFieldText('replace right ')).toBe('Replace Right ')
   })
 
   it('title-cases and stores location shorthand on blur', () => {

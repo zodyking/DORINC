@@ -22,7 +22,7 @@ const props = withDefaults(defineProps<{
 })
 
 const inputRef = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
-const { inputAttrs, onInput, onFocus, onBlur } = useProseField(model, toRef(props, 'mode'))
+const { inputAttrs, onInput, onBlur } = useProseField(model, toRef(props, 'mode'))
 </script>
 
 <template>
@@ -37,7 +37,6 @@ const { inputAttrs, onInput, onFocus, onBlur } = useProseField(model, toRef(prop
       :placeholder="placeholder"
       :required="required"
       @input="onInput"
-      @focus="onFocus"
       @blur="onBlur"
     >
     <textarea
@@ -49,7 +48,6 @@ const { inputAttrs, onInput, onFocus, onBlur } = useProseField(model, toRef(prop
       :placeholder="placeholder"
       :required="required"
       @input="onInput"
-      @focus="onFocus"
       @blur="onBlur"
     />
   </label>
@@ -64,7 +62,6 @@ const { inputAttrs, onInput, onFocus, onBlur } = useProseField(model, toRef(prop
       :required="required"
       class="fld-input-bare"
       @input="onInput"
-      @focus="onFocus"
       @blur="onBlur"
     >
     <textarea
@@ -77,7 +74,6 @@ const { inputAttrs, onInput, onFocus, onBlur } = useProseField(model, toRef(prop
       :required="required"
       class="fld-input-bare"
       @input="onInput"
-      @focus="onFocus"
       @blur="onBlur"
     />
   </template>
