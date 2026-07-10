@@ -1,14 +1,17 @@
-// pdf_render handler — HTML → PDF via Laravel PDF (DomPDF) service, Playwright fallback for local dev.
+// pdf_render handler — Blade payload → PDF via Laravel + barryvdh/laravel-dompdf.
 import { createHash } from 'node:crypto'
-import { chromium } from 'playwright'
-import { renderHtmlToPdfBuffer, shouldUsePdfRenderService } from '../../lib/laravel-pdf-client.mjs'
+import {
+  parsePdfRenderPayload,
+  renderDocumentPdfBuffer,
+  shouldUsePdfRenderService,
+} from '../../lib/laravel-pdf-client.mjs'
 
 /**
  * @param {import('pg').Pool} pool
  * @param {object} job
  */
 async function finalizePdfRenderJob(pool, job) {
-  const fileId = await renderHtmlToAppFile(pool, job)
+  const fileId = await renderPayloadToAppFile(pool, job)
 
   if (job.entity_type === 'invoice') {
     const { rows: fileRows } = await pool.query(
@@ -194,14 +197,14 @@ export async function processPdfRenderJobs(pool, batch = 3) {
 }
 
 /**
- * Render HTML to PDF bytes and persist in app_files.
+ * Render Blade payload to PDF bytes and persist in app_files.
  *
  * @param {import('pg').Pool} pool
  * @param {object} job
  * @returns {Promise<string>} app_files.id
  */
-export async function renderHtmlToAppFile(pool, job) {
-  const pdfBuffer = await htmlToPdf(job.html_content)
+export async function renderPayloadToAppFile(pool, job) {
+  const pdfBuffer = await payloadToPdf(job.html_content)
 
   const sha256 = createHash('sha256').update(pdfBuffer).digest('hex')
   const { rows } = await pool.query(
@@ -223,29 +226,19 @@ export async function renderHtmlToAppFile(pool, job) {
   return rows[0].id
 }
 
-/** @param {string} html */
-async function htmlToPdfPlaywright(html) {
-  const browser = await chromium.launch({ headless: true })
-  try {
-    const page = await browser.newPage()
-    page.setDefaultTimeout(30_000)
-    await page.setContent(html, { waitUntil: 'load' })
-    const pdf = await page.pdf({
-      format: 'Letter',
-      printBackground: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
-    })
-    return Buffer.from(pdf)
+/** @param {string} storedContent */
+export async function payloadToPdf(storedContent) {
+  const payload = parsePdfRenderPayload(storedContent)
+  if (!payload) {
+    throw new Error('Legacy HTML PDF jobs are no longer supported. Re-queue the document to use Laravel Blade rendering.')
   }
-  finally {
-    await browser.close()
+  if (!shouldUsePdfRenderService()) {
+    throw new Error('PDF_RENDER_URL is required for Blade PDF rendering (laravel-pdf service).')
   }
+  return renderDocumentPdfBuffer(payload)
 }
 
-/** @param {string} html */
-export async function htmlToPdf(html) {
-  if (shouldUsePdfRenderService()) {
-    return renderHtmlToPdfBuffer(html)
-  }
-  return htmlToPdfPlaywright(html)
+/** @deprecated Use renderPayloadToAppFile */
+export async function renderHtmlToAppFile(pool, job) {
+  return renderPayloadToAppFile(pool, job)
 }

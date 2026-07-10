@@ -105,8 +105,8 @@ describe('P1-29 invoice PDF generate + download', () => {
   })
 
   it('enqueues render job, stores immutable invoice_files, and downloads PDF', async () => {
-    if (!chromiumAvailable) {
-      console.warn('[invoice-pdf.test] Skipping — Playwright Chromium not installed')
+    if (!process.env.PDF_RENDER_URL?.trim()) {
+      console.warn('[invoice-pdf.test] Skipping — PDF_RENDER_URL not set (laravel-pdf service required)')
       return
     }
 

@@ -8,11 +8,16 @@ import {
 import { invoiceFiles, invoices } from '../db/schema/invoices'
 import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
 import { mergeTemplateSections } from '../../shared/invoice-template-design'
+import {
+  buildDocumentPdfRenderPayload,
+  buildInvoicePdfData,
+  serializePdfRenderPayload,
+} from '../../shared/document-pdf-payload'
 import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
-import { buildInvoiceRenderHtml } from './invoice-pdf.service'
 import { getInvoiceDetail } from './invoices.service'
-import { renderHtmlToPdfBuffer } from './laravel-pdf.service'
+import { renderDocumentPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
+import { getBusinessProfile } from './workspace-settings.service'
 
 export type InvoiceTemplatesServiceErrorCode
   = 'NOT_FOUND'
@@ -325,7 +330,7 @@ export interface TestRenderTemplatePdfInput {
 export async function previewTemplatePdf(
   db: Db,
   templateId: string,
-  htmlContent: string,
+  _htmlContent: string,
 ) {
   const detail = await getInvoiceTemplateDetail(db, templateId)
   if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
@@ -334,10 +339,17 @@ export async function previewTemplatePdf(
   if (!preview) throw new InvoiceTemplatesServiceError('NO_PREVIEW_INVOICE')
 
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
-  const renderHtml = buildInvoiceRenderHtml(htmlContent, invoiceDetail)
-  const marginInches = detail.latestVersion.designSettings.marginInches
-  const paper = detail.latestVersion.designSettings.pageSize === 'A4' ? 'a4' : 'letter'
-  const pdf = await renderHtmlToPdfBuffer(renderHtml, { paper, marginInches })
+  const business = await getBusinessProfile(db)
+  const designSettings = detail.latestVersion.designSettings
+  const data = buildInvoicePdfData(invoiceDetail, {
+    company: { name: business.businessName || undefined },
+    design: designSettings,
+    logoUrl: logoPreviewPath(designSettings.logoFileId),
+  })
+  const marginInches = designSettings.marginInches
+  const paper = designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
+  const payload = buildDocumentPdfRenderPayload(data, { paper, marginInches })
+  const pdf = await renderDocumentPdfBuffer(payload)
 
   return {
     pdf,
@@ -358,34 +370,34 @@ export async function testRenderTemplatePdf(
   if (!preview) throw new InvoiceTemplatesServiceError('NO_PREVIEW_INVOICE')
 
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
+  const business = await getBusinessProfile(db)
 
-  let htmlContent: string
-  if (input.htmlContent?.trim()) {
-    htmlContent = buildInvoiceRenderHtml(input.htmlContent.trim(), invoiceDetail)
-  }
-  else {
-    const mergedSettings: InvoiceTemplateDesignSettings = {
-      ...detail.latestVersion.designSettings,
-      ...input.designSettings!,
-      sections: mergeTemplateSections({
-        ...detail.latestVersion.designSettings.sections,
-        ...input.designSettings!.sections,
-      }),
-    }
+  const mergedSettings: InvoiceTemplateDesignSettings = input.designSettings
+    ? {
+        ...detail.latestVersion.designSettings,
+        ...input.designSettings,
+        sections: mergeTemplateSections({
+          ...detail.latestVersion.designSettings.sections,
+          ...input.designSettings.sections,
+        }),
+      }
+    : detail.latestVersion.designSettings
 
-    const baseHtml = detail.publishedVersion?.htmlContent ?? detail.latestVersion.htmlContent
-    const styledHtml = applyDesignSettingsToHtml(
-      baseHtml,
-      mergedSettings,
-      logoPreviewPath(mergedSettings.logoFileId),
-    )
-    htmlContent = buildInvoiceRenderHtml(styledHtml, invoiceDetail)
-  }
+  const data = buildInvoicePdfData(invoiceDetail, {
+    company: { name: business.businessName || undefined },
+    design: mergedSettings,
+    logoUrl: logoPreviewPath(mergedSettings.logoFileId),
+  })
+  const paper = mergedSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
+  const payload = buildDocumentPdfRenderPayload(data, {
+    paper,
+    marginInches: mergedSettings.marginInches,
+  })
 
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'invoice',
     entityId: preview.id,
-    htmlContent,
+    htmlContent: serializePdfRenderPayload(payload),
     originalFilename: `template-test-${detail.template.slug}.pdf`,
     templateVersionId: null,
     createdBy: actorId,

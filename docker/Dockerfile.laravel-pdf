@@ -1,13 +1,24 @@
-# DORINC Laravel PDF — DomPDF HTML→PDF (barryvdh/laravel-dompdf engine, InvoiceShelf-style)
+# DORINC Laravel PDF — Blade + barryvdh/laravel-dompdf
 FROM composer:2 AS vendor
 WORKDIR /app
-COPY services/laravel-pdf/composer.json ./
+COPY services/laravel-pdf/composer.json services/laravel-pdf/composer.lock* ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 FROM php:8.4-cli-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=vendor /app/vendor ./vendor
-COPY services/laravel-pdf/public ./public
+COPY services/laravel-pdf ./
+RUN mkdir -p bootstrap/cache storage/framework/{cache,views} storage/logs \
+    && chmod -R 775 bootstrap/cache storage
+ENV APP_ENV=production \
+    APP_DEBUG=false \
+    APP_KEY=base64:ZG9yaW5jLXBkZi1zZXJ2aWNlLWtleS0zMmJ5dGVzISE= \
+    LOG_CHANNEL=stderr
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD php -r "exit(@file_get_contents('http://127.0.0.1:8080/health') ? 0 : 1);"

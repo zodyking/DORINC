@@ -128,7 +128,7 @@ defineExpose({ refresh: loadPreview })
   </div>
   <div v-else class="invoice-pdf-pane">
     <div class="invoice-pdf-pane-toolbar">
-      <span class="pill indigo">Laravel DomPDF</span>
+      <span class="pill indigo">Laravel Blade PDF</span>
       <div style="display:flex; gap:8px; margin-left:auto;">
         <button type="button" class="btn sm" :disabled="busy" @click="loadPreview">
           {{ busy ? 'Rendering…' : 'Refresh' }}

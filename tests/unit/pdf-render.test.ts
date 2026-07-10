@@ -1,31 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
-  injectPdfPageMargins,
+  buildDocumentPdfRenderPayload,
+  buildInvoicePdfData,
+  parsePdfRenderPayload,
+  serializePdfRenderPayload,
+} from '../../shared/document-pdf-payload'
+import {
   isPdfUpstreamFailureMessage,
   normalizePdfPaper,
   pdfUpstreamUnavailableMessage,
 } from '../../shared/pdf-render'
-
-const SAMPLE_HTML = `<!doctype html>
-<html><head><style>@page { size: Letter; margin: 0.5in; }</style></head>
-<body><h1>Invoice</h1></body></html>`
 
 describe('pdf-render helpers', () => {
   it('normalizes paper sizes', () => {
     expect(normalizePdfPaper('A4')).toBe('a4')
     expect(normalizePdfPaper('letter')).toBe('letter')
     expect(normalizePdfPaper('Letter')).toBe('letter')
-  })
-
-  it('replaces @page margins in template HTML', () => {
-    const out = injectPdfPageMargins(SAMPLE_HTML, { paper: 'A4', marginInches: 0.75 })
-    expect(out).toContain('size: A4; margin: 0.75in 0.75in 0.75in 0.75in')
-    expect(out).not.toContain('size: Letter')
-  })
-
-  it('injects @page when missing', () => {
-    const out = injectPdfPageMargins('<html><head></head><body>x</body></html>', { paper: 'letter', marginInches: 0.5 })
-    expect(out).toContain('@page { size: Letter; margin: 0.5in 0.5in 0.5in 0.5in; }')
   })
 
   it('detects upstream PDF failures', () => {
@@ -38,5 +28,50 @@ describe('pdf-render helpers', () => {
     const msg = pdfUpstreamUnavailableMessage('fetch failed')
     expect(msg).toContain('laravel-pdf')
     expect(msg).toContain('fetch failed')
+  })
+})
+
+describe('document PDF payload', () => {
+  const sampleDetail = {
+    invoiceNumberFormatted: 'INV-000081',
+    invoiceDate: '2026-07-08',
+    paymentTerms: 'due_on_receipt',
+    status: 'approved',
+    complaint: 'Engine noise',
+    customerName: 'Jane Doe',
+    customerSnapshot: {
+      displayName: 'Jane Doe',
+      phone: '555-0100',
+      email: 'jane@example.com',
+      billingAddress: {
+        line1: '1 Main St',
+        city: 'Brooklyn',
+        state: 'NY',
+        postalCode: '11207',
+      },
+    },
+    vehicleSnapshot: null,
+    lineItems: [{
+      description: 'Diagnostic',
+      lineType: 'labor',
+      quantity: '1',
+      unitPrice: '100.00',
+      lineAmount: '100.00',
+    }],
+    feesAmount: '0',
+    discountAmount: '0',
+    taxAmount: '0',
+    total: '100.00',
+    balanceDue: '100.00',
+  }
+
+  it('serializes and parses Blade render payloads', () => {
+    const data = buildInvoicePdfData(sampleDetail)
+    const payload = buildDocumentPdfRenderPayload(data, { paper: 'letter', marginInches: 0.5 })
+    const raw = serializePdfRenderPayload(payload)
+    const parsed = parsePdfRenderPayload(raw)
+    expect(parsed?.documentType).toBe('invoice')
+    expect(parsed?.data.number).toBe('INV-000081')
+    expect(parsed?.options.paper).toBe('letter')
   })
 })

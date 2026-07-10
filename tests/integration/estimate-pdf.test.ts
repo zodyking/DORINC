@@ -105,8 +105,8 @@ describe('P3-02 estimate PDF generate + download', () => {
   })
 
   it('enqueues render job, stores immutable estimate_files, and downloads PDF', async () => {
-    if (!chromiumAvailable) {
-      console.warn('[estimate-pdf.test] Skipping — Playwright Chromium not installed')
+    if (!process.env.PDF_RENDER_URL?.trim()) {
+      console.warn('[estimate-pdf.test] Skipping — PDF_RENDER_URL not set (laravel-pdf service required)')
       return
     }
 

@@ -1,9 +1,14 @@
-// Integration smoke test for pdf-worker HTML → PDF → app_files pipeline (P1-28).
+// Integration smoke test for pdf-worker Blade payload → PDF → app_files pipeline (P1-28).
 import { config } from 'dotenv'
 import { eq, notLike } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
+import {
+  buildDocumentPdfRenderPayload,
+  buildInvoicePdfData,
+  serializePdfRenderPayload,
+} from '../../shared/document-pdf-payload'
 import { waitForPdfJobDone } from '../helpers/pdf-render'
 import { createCustomer } from '../../server/services/customers.service'
 import { enqueuePdfRenderJob, getPdfRenderJob } from '../../server/services/pdf-render.service'
@@ -18,19 +23,6 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const db = drizzle({ client: pool })
 
 const stamp = Date.now()
-let chromiumAvailable = false
-
-beforeAll(async () => {
-  try {
-    const { chromium } = await import('playwright')
-    const browser = await chromium.launch({ headless: true })
-    await browser.close()
-    chromiumAvailable = true
-  }
-  catch {
-    chromiumAvailable = false
-  }
-})
 
 const [stableUser] = await db.select({ id: users.id }).from(users)
   .where(notLike(users.email, 'authtest-%'))
@@ -52,21 +44,45 @@ afterAll(async () => {
   await pool.end()
 })
 
-const SMOKE_HTML = `<!doctype html>
-<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:24px;}</style></head>
-<body><h1>DORINC PDF Smoke Test</h1><p>Generated ${stamp}</p></body></html>`
-
 describe('P1-28 pdf render pipeline', () => {
-  it('renders HTML to PDF bytes stored in app_files', async () => {
-    if (!chromiumAvailable) {
-      console.warn('[pdf-render.test] Skipping — Playwright Chromium not installed (run: npx playwright install chromium)')
+  it('renders Blade payload to PDF bytes stored in app_files', async () => {
+    if (!process.env.PDF_RENDER_URL?.trim()) {
+      console.warn('[pdf-render.test] Skipping — PDF_RENDER_URL not set (laravel-pdf service required)')
       return
     }
+
+    const data = buildInvoicePdfData({
+      invoiceNumberFormatted: `INV-SMOKE-${stamp}`,
+      invoiceDate: '2026-07-08',
+      paymentTerms: 'due_on_receipt',
+      status: 'approved',
+      complaint: `Smoke test ${stamp}`,
+      customerName: owner.displayName,
+      customerSnapshot: {
+        displayName: owner.displayName,
+        phone: '555-0100',
+        email: `smoke-${stamp}@example.com`,
+      },
+      vehicleSnapshot: null,
+      lineItems: [{
+        description: 'PDF pipeline smoke test',
+        lineType: 'labor',
+        quantity: '1',
+        unitPrice: '25.00',
+        lineAmount: '25.00',
+      }],
+      feesAmount: '0',
+      discountAmount: '0',
+      taxAmount: '0',
+      total: '25.00',
+      balanceDue: '25.00',
+    })
+    const payload = buildDocumentPdfRenderPayload(data, { paper: 'letter', marginInches: 0.5 })
 
     const job = await enqueuePdfRenderJob(db, {
       entityType: 'invoice',
       entityId: owner.id,
-      htmlContent: SMOKE_HTML,
+      htmlContent: serializePdfRenderPayload(payload),
       originalFilename: `smoke-${stamp}.pdf`,
       createdBy: CREATOR,
     })
