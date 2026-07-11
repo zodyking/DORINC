@@ -5,6 +5,7 @@ import {
   helpContextLabel,
   helpPageKeyFromRoute,
   helpSuggestionsForPage,
+  isPlatformHelpWidgetVisible,
 } from '~/utils/platform-help-ui'
 
 const route = useRoute()
@@ -30,8 +31,12 @@ const { data: helpStatus } = await useFetch<{ enabled: boolean, aiAvailable: boo
 )
 
 const widgetVisible = computed(() =>
-  canUseHelp.value && (helpStatus.value?.enabled ?? true),
+  isPlatformHelpWidgetVisible(canUseHelp.value, helpStatus.value),
 )
+
+watch(widgetVisible, (visible) => {
+  if (!visible) closePanel()
+})
 
 watch(pageKey, () => {
   if (panelOpen.value && booted.value) {

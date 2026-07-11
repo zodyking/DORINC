@@ -22,3 +22,11 @@ export function helpPageKeyFromRoute(path: string, query?: Record<string, unknow
   if (path.startsWith('/account')) return 'account'
   return 'default'
 }
+
+/** Floating helper is shown only when the user may use help and admin enabled it. */
+export function isPlatformHelpWidgetVisible(
+  canUseHelp: boolean,
+  helpStatus: { enabled: boolean } | null | undefined,
+): boolean {
+  return canUseHelp && helpStatus?.enabled === true
+}

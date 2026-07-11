@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { matchPlatformHelpAnswer } from '../../shared/platform-help'
-import { helpPageKeyFromRoute } from '../../app/utils/platform-help-ui'
+import { helpPageKeyFromRoute, isPlatformHelpWidgetVisible } from '../../app/utils/platform-help-ui'
 
 describe('platform-help (P2-15)', () => {
   it('matches keyword answers for invoice questions', () => {
@@ -20,5 +20,13 @@ describe('platform-help (P2-15)', () => {
     expect(helpPageKeyFromRoute('/invoices/abc-123')).toBe('invoice-detail')
     expect(helpPageKeyFromRoute('/admin')).toBe('admin')
     expect(helpPageKeyFromRoute('/admin', { tab: 'designer' })).toBe('designer')
+  })
+
+  it('hides the floating helper unless platform help is explicitly enabled', () => {
+    expect(isPlatformHelpWidgetVisible(true, { enabled: true })).toBe(true)
+    expect(isPlatformHelpWidgetVisible(true, { enabled: false })).toBe(false)
+    expect(isPlatformHelpWidgetVisible(true, null)).toBe(false)
+    expect(isPlatformHelpWidgetVisible(true, undefined)).toBe(false)
+    expect(isPlatformHelpWidgetVisible(false, { enabled: true })).toBe(false)
   })
 })
