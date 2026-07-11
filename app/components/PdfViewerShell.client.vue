@@ -304,7 +304,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #1e293b;
+  background: #525659;
 }
 
 .pdf-shell--fill .pdf-shell__frame {
@@ -320,8 +320,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #94a3b8;
-  background: #1e293b;
+  color: #d1d5db;
+  background: #525659;
 }
 
 @media (max-width: 640px) {
