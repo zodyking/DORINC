@@ -12,8 +12,14 @@ export async function fetchInvoiceOfficialPdf(invoiceId: string): Promise<Blob> 
   })
 }
 
-export async function queueInvoicePdfGeneration(invoiceId: string): Promise<void> {
-  await $fetch(`/api/invoices/${invoiceId}/generate-pdf`, { method: 'POST' })
+export async function queueInvoicePdfGeneration(
+  invoiceId: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
+  await $fetch(`/api/invoices/${invoiceId}/generate-pdf`, {
+    method: 'POST',
+    body: options.force ? { force: true } : undefined,
+  })
 }
 
 export function downloadPdfBlob(blob: Blob, filename: string): void {

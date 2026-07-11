@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addressLines,
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
 } from '../../shared/document-pdf-payload'
@@ -61,9 +62,60 @@ describe('document-pdf-payload', () => {
     expect(data.totals.total).toBe('$430.00')
     expect(data.lineItems).toHaveLength(2)
     expect(data.lineItems[0]?.typeBadge).toBe('P')
+    expect(data.customer.addressLines).toEqual(['100 Industrial Way', 'Newark, NJ 07102'])
 
     const payload = buildDocumentPdfRenderPayload(data, { paper: 'a4', marginInches: 0.75 })
     expect(payload.options.paper).toBe('a4')
     expect(payload.options.margins.top).toBe(0.75)
+  })
+
+  it('formats customer zip addresses without printing undefined', () => {
+    expect(addressLines({
+      line1: '739 E New York Ave',
+      city: 'Brooklyn',
+      state: 'NY',
+      zip: '11207',
+    })).toEqual(['739 E New York Ave', 'Brooklyn, NY 11207'])
+
+    expect(addressLines({
+      line1: '739 E New York Ave',
+      city: 'Brooklyn',
+      state: 'NY',
+      zip: undefined,
+    })).toEqual(['739 E New York Ave', 'Brooklyn, NY'])
+
+    expect(addressLines({
+      line1: '100 Main',
+      city: 'Staten Island',
+      state: 'NY',
+    })).toEqual(['100 Main', 'Staten Island, NY'])
+
+    const data = buildInvoicePdfData({
+      invoiceNumberFormatted: 'INV-000697',
+      invoiceDate: '2026-07-02',
+      paymentTerms: 'due_on_receipt',
+      status: 'sent',
+      customerSnapshot: {
+        displayName: 'Bnos Menachem Inc',
+        billingAddress: {
+          line1: '739 E New York Ave',
+          city: 'Brooklyn',
+          state: 'NY',
+          zip: '11213',
+        },
+      },
+      lineItems: [],
+      feesAmount: '0',
+      discountAmount: '0',
+      taxAmount: '0',
+      total: '0',
+      balanceDue: '0',
+    })
+
+    expect(data.customer.addressLines.join(' ')).not.toContain('undefined')
+    expect(data.customer.addressLines).toEqual([
+      '739 E New York Ave',
+      'Brooklyn, NY 11213',
+    ])
   })
 })

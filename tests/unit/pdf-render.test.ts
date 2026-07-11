@@ -47,7 +47,7 @@ describe('document PDF payload', () => {
         line1: '1 Main St',
         city: 'Brooklyn',
         state: 'NY',
-        postalCode: '11207',
+        zip: '11207',
       },
     },
     vehicleSnapshot: null,

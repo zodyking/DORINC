@@ -51,10 +51,9 @@ async function downloadOfficialOrPreview() {
   error.value = ''
   try {
     if (props.allowOfficialDownload) {
-      if (!props.hasOfficialPdf) {
-        await queueInvoicePdfGeneration(props.invoiceId)
-        emit('refreshed')
-      }
+      // Refresh official PDF when missing or built on a stale template version.
+      await queueInvoicePdfGeneration(props.invoiceId)
+      emit('refreshed')
 
       try {
         downloadPdfBlob(
