@@ -31,9 +31,13 @@ export default defineEventHandler(async (event) => {
     })
     resetMailTransport()
 
+    const { resolveEmailBrand } = await import('../../services/email-branding.service')
+    const brand = await resolveEmailBrand(db)
     const mail = buildSmtpTestEmail({
-      brandName: BRAND_NAME,
+      brandName: brand.brandName || BRAND_NAME,
       source: 'setup wizard',
+      appUrl: brand.appUrl,
+      brand,
     })
     const result = await sendMail({ to: body.to, ...mail })
 

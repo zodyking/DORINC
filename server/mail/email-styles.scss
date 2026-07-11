@@ -1,25 +1,27 @@
 // DORINC transactional email design tokens
-// Source of truth for the modern white-background email system.
+// Source of truth for the flat white notification email system.
 // Values are inlined into email-layout.mjs (email clients require inline CSS).
 
-$bg: #f8fafc;
+$bg: #ffffff;
 $surface: #ffffff;
-$ink: #0f172a;
-$muted: #64748b;
-$faint: #94a3b8;
-$accent: #4f46e5;
-$accent-strong: #4338ca;
-$accent-soft: #eef2ff;
-$line: #e2e8f0;
-$radius: 14px;
-$radius-btn: 10px;
-$font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+$ink: #111827;
+$muted: #6b7280;
+$faint: #9ca3af;
+$accent: #2563eb;
+$accent-strong: #1d4ed8;
+$accent-soft: #dbe3ee;
+$line: #eef0f3;
+$border: #e5e7eb;
+$button-bg: #111827;
+$radius: 8px;
+$radius-btn: 7px;
+$font: Arial, Helvetica, sans-serif;
 
 .email-body {
   margin: 0;
   padding: 0;
   background: $bg;
-  color: $ink;
+  color: #1f2937;
   font-family: $font;
   -webkit-font-smoothing: antialiased;
 }
@@ -27,91 +29,46 @@ $font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helveti
 .email-shell {
   width: 100%;
   background: $bg;
-  padding: 32px 16px;
 }
 
-.email-card {
-  max-width: 560px;
+.email-container {
+  max-width: 620px;
   margin: 0 auto;
-  background: $surface;
-  border: 1px solid $line;
-  border-radius: $radius;
-  overflow: hidden;
+  width: 100%;
 }
 
-.email-header {
-  padding: 24px 28px 16px;
-  border-bottom: 1px solid $line;
+.mobile-padding {
+  padding-left: 28px;
+  padding-right: 28px;
 }
 
-.email-brand {
+.button {
   display: inline-block;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: $ink;
+  padding: 13px 20px;
+  background: $button-bg;
+  color: #ffffff !important;
+  border-radius: $radius-btn;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
   text-decoration: none;
 }
 
-.email-content {
-  padding: 28px;
-  font-size: 15px;
-  line-height: 1.55;
-  color: $ink;
+.secondary-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
 }
 
-.email-title {
-  margin: 0 0 12px;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: $ink;
-}
-
-.email-p {
-  margin: 0 0 14px;
-  color: $ink;
-}
-
-.email-muted {
+.data-label {
   color: $muted;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.email-panel {
-  margin: 18px 0;
-  padding: 14px 16px;
-  background: $accent-soft;
-  border: 1px solid lighten($accent, 32%);
-  border-radius: $radius-btn;
-}
-
-.email-panel-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: $accent;
-  margin-bottom: 6px;
-}
-
-.email-btn {
-  display: inline-block;
-  margin: 8px 0 4px;
-  padding: 12px 18px;
-  background: $accent;
-  color: #ffffff !important;
+.data-value {
+  color: $ink;
   font-size: 14px;
   font-weight: 600;
-  text-decoration: none;
-  border-radius: $radius-btn;
-}
-
-.email-footer {
-  padding: 18px 28px 24px;
-  border-top: 1px solid $line;
-  font-size: 12px;
-  line-height: 1.5;
-  color: $faint;
+  line-height: 20px;
 }

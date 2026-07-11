@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   try {
     const { user, verificationToken } = await resendVerificationEmail(useDb(), body.email, body.password)
 
-    await sendVerificationEmail({
+    await sendVerificationEmail(useDb(), {
       to: user.email,
       name: user.name,
       verificationToken,

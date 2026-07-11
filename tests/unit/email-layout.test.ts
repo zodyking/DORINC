@@ -15,21 +15,39 @@ describe('email layout', () => {
     )
   })
 
-  it('wraps content in a modern white card layout', () => {
+  it('wraps content in the flat white notification layout', () => {
     const html = wrapEmailHtml({
       title: 'Portal access',
       preheader: 'Your password is ready',
+      eyebrow: 'Portal access',
+      headline: 'Portal access',
+      lead: 'Your temporary password is ready.',
       bodyHtml: '<p>Hello</p>',
       appUrl: 'https://app.example.com',
+      brand: {
+        brandName: 'Acme Shop',
+        brandLegal: 'Acme Shop LLC',
+        brandTagline: 'Accounting workspace',
+        logoUrl: 'https://app.example.com/images/dorinc-icon-trans.png',
+        logoInitial: 'A',
+        addressLines: ['123 Main St', 'Austin, TX 78701'],
+        phone: '555-0100',
+        email: 'billing@acme.test',
+        appUrl: 'https://app.example.com',
+        settingsUrl: 'https://app.example.com/admin?tab=notifications',
+        helpUrl: 'https://app.example.com/help',
+        signInUrl: 'https://app.example.com/auth/login',
+      },
     })
 
-    expect(html).toContain('<!DOCTYPE html>')
-    expect(html).toContain('background:#ffffff')
-    expect(html).toContain(EMAIL_TOKENS.bg)
-    expect(html).toContain(EMAIL_TOKENS.accent)
+    expect(html).toContain('<!doctype html>')
+    expect(html).toContain('background: #ffffff')
+    expect(html).toContain(EMAIL_TOKENS.ink)
     expect(html).toContain('Portal access')
     expect(html).toContain('Your password is ready')
-    expect(html).toContain('DORINC')
+    expect(html).toContain('Acme Shop')
+    expect(html).toContain('123 Main St')
+    expect(html).toContain('Notification settings')
     expect(html).toContain('https://app.example.com')
   })
 
@@ -37,12 +55,14 @@ describe('email layout', () => {
     const mail = buildStyledEmail({
       subject: 'Test subject',
       text: 'Plain text body',
-      title: 'Test title',
-      bodyHtml: [
-        emailButton('https://example.com/login', 'Sign in'),
-        emailPanel('Details', '<strong>Email:</strong> a@b.com'),
-      ].join(''),
+      eyebrow: 'Test',
+      headline: 'Test title',
+      lead: 'Supporting copy',
+      details: [{ label: 'Email', value: 'a@b.com' }],
+      primaryAction: { href: 'https://example.com/login', label: 'Sign in' },
+      note: { title: 'Details', body: 'More info' },
       appUrl: 'https://example.com',
+      brand: { brandName: 'DORINC', appUrl: 'https://example.com' },
     })
 
     expect(mail.subject).toBe('Test subject')
@@ -51,6 +71,15 @@ describe('email layout', () => {
     expect(mail.html).toContain('https://example.com/login')
     expect(mail.html).toContain('Details')
     expect(mail.html).toContain('a@b.com')
-    expect(mail.html).toContain('border-radius:14px')
+    expect(mail.html).toContain('class="button"')
+  })
+
+  it('still supports legacy body helpers', () => {
+    const html = [
+      emailButton('https://example.com', 'Go'),
+      emailPanel('Panel', '<strong>OK</strong>'),
+    ].join('')
+    expect(html).toContain('Go')
+    expect(html).toContain('Panel')
   })
 })

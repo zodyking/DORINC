@@ -1,3 +1,4 @@
+import { useDb } from '../../../db/client'
 import { sendSmtpTest } from '../../../services/system-admin.service'
 import { writeAudit } from '../../../services/audit.service'
 import { requirePermission } from '../../../utils/require-permission'
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, smtpTestSchema)
   const to = body.to ?? auth.user.email
 
-  const status = await sendSmtpTest(to, auth.user.name)
+  const status = await sendSmtpTest(useDb(), to, auth.user.name)
 
   await writeAudit(event, {
     entityType: 'system',

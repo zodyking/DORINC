@@ -882,7 +882,15 @@ export async function approveInvoice(
   const requiresManager = compareMoney(before.total, threshold) >= 0
 
   if (requiresManager && !canManagerApproveInvoices(actorAccountType)) {
-    return transitionInvoice(db, id, 'pending_manager_approval', actorId)
+    const result = await transitionInvoice(db, id, 'pending_manager_approval', actorId)
+    try {
+      const { notifyInvoicePendingApproval } = await import('./staff-notifications.service')
+      await notifyInvoicePendingApproval(db, id, actorId)
+    }
+    catch (err) {
+      console.warn('[mail] invoice pending approval notification failed:', (err as Error).message)
+    }
+    return result
   }
 
   return transitionInvoice(db, id, 'approved', actorId)

@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
     })
 
     void import('../../services/login-notification.service')
-      .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail({
+      .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
         to: result.user.email,
         name: result.user.name,
         portal: body.portal,

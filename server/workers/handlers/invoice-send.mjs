@@ -7,6 +7,68 @@ function workerAppUrl() {
   return process.env.APP_URL?.trim() || 'http://localhost:3000'
 }
 
+async function loadEmailBrand(pool) {
+  const appUrl = workerAppUrl().replace(/\/$/, '')
+  let businessName = 'DORINC'
+  let addressLines = []
+  let phone = ''
+  let email = ''
+  let logoFileId = null
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'workspace.business_profile' LIMIT 1`,
+    )
+    const profile = rows[0]?.value ?? {}
+    if (profile.businessName?.trim()) businessName = profile.businessName.trim()
+    if (profile.addressLine1?.trim()) addressLines.push(profile.addressLine1.trim())
+    if (profile.addressLine2?.trim()) addressLines.push(profile.addressLine2.trim())
+    const cityLine = [
+      profile.city?.trim(),
+      [profile.state?.trim(), profile.postalCode?.trim()].filter(Boolean).join(' '),
+    ].filter(Boolean).join(', ')
+    if (cityLine) addressLines.push(cityLine)
+    phone = profile.phone?.trim() || ''
+    email = profile.email?.trim() || ''
+  }
+  catch {
+    // fall back to defaults
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.design_settings->>'logoFileId' AS logo_file_id
+       FROM invoice_templates t
+       INNER JOIN invoice_template_versions v
+         ON v.template_id = t.id AND v.status = 'published'
+       WHERE t.is_default = true
+       ORDER BY v.version_number DESC
+       LIMIT 1`,
+    )
+    logoFileId = rows[0]?.logo_file_id || null
+  }
+  catch {
+    // fall back to static logo
+  }
+
+  return {
+    brandName: businessName,
+    brandLegal: businessName,
+    brandTagline: 'Accounting workspace',
+    logoUrl: logoFileId
+      ? `${appUrl}/api/files/${logoFileId}/preview`
+      : `${appUrl}/images/dorinc-icon-trans.png`,
+    logoInitial: (businessName.charAt(0) || 'D').toUpperCase(),
+    addressLines,
+    phone,
+    email,
+    appUrl,
+    settingsUrl: `${appUrl}/admin?tab=notifications`,
+    helpUrl: `${appUrl}/help`,
+    signInUrl: `${appUrl}/auth/login`,
+  }
+}
+
 let _transport
 let _transportKey
 
@@ -198,12 +260,14 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       if (!payload.subject) {
         const invNum = `INV-${String(invoice.invoice_number).padStart(6, '0')}`
         const recipientName = payload.recipientName ?? 'there'
+        const brand = await loadEmailBrand(pool)
         const mail = buildInvoiceAttachedEmail({
           recipientName,
           invoiceNumber: invNum,
           dueDate: invoice.due_date ?? null,
           total: invoice.total ?? null,
-          appUrl: workerAppUrl(),
+          appUrl: brand.appUrl,
+          brand,
         })
         payload.subject = mail.subject
         payload.text = mail.text

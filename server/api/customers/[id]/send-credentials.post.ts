@@ -23,6 +23,8 @@ function mapPortalError(event: Parameters<typeof apiError>[0], err: PortalAccess
       throw apiError(event, 'CONFLICT', 'That email is already linked to another customer portal account')
     case 'PORTAL_DISABLED':
       throw apiError(event, 'VALIDATION_ERROR', 'Enable portal access before sending credentials')
+    case 'NOTIFICATION_DISABLED':
+      throw apiError(event, 'VALIDATION_ERROR', 'Portal credential emails are disabled in Control Panel → Notifications')
     default:
       throw err
   }

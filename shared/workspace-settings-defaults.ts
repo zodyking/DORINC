@@ -66,3 +66,117 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   shopSuppliesPercent: '3.5',
   managerApprovalThreshold: '5000.00',
 }
+
+/** App-wide email notification toggles (Control Panel → Notifications). */
+export interface NotificationSettings {
+  /** Email the signed-in staff user when their account is used to sign in. */
+  staffLoginAlert: boolean
+  /** Email the customer portal user when their portal account is used to sign in. */
+  customerLoginAlert: boolean
+  /** Email deletion reviewers when a new deletion request is submitted. */
+  deletionRequestSubmitted: boolean
+  /** Email the requestor when their deletion request is approved or denied. */
+  deletionRequestResult: boolean
+  /** Send invoice PDF / portal invoice-ready emails to customers. */
+  invoiceEmail: boolean
+  /** Send estimate-ready emails to customers. */
+  estimateEmail: boolean
+  /** Notify customers when portal requests are approved or rejected. */
+  portalRequestStatus: boolean
+  /** Send portal credential emails when staff issues access. */
+  portalCredentials: boolean
+  /** Email backup success/failure alerts to the configured notify address. */
+  backupResult: boolean
+  /** Notify user managers when a new staff signup is awaiting approval. */
+  userSignupPendingApproval: boolean
+  /** Notify invoice approvers when an invoice needs manager approval. */
+  invoicePendingApproval: boolean
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  staffLoginAlert: true,
+  customerLoginAlert: true,
+  deletionRequestSubmitted: true,
+  deletionRequestResult: true,
+  invoiceEmail: true,
+  estimateEmail: true,
+  portalRequestStatus: true,
+  portalCredentials: true,
+  backupResult: true,
+  userSignupPendingApproval: true,
+  invoicePendingApproval: true,
+}
+
+export const NOTIFICATION_SETTING_META: Array<{
+  key: keyof NotificationSettings
+  label: string
+  description: string
+  group: 'security' | 'workflow' | 'customer' | 'system'
+}> = [
+  {
+    key: 'staffLoginAlert',
+    label: 'Staff sign-in alerts',
+    description: 'Email staff when their account signs in.',
+    group: 'security',
+  },
+  {
+    key: 'customerLoginAlert',
+    label: 'Customer portal sign-in alerts',
+    description: 'Email portal users when their account signs in.',
+    group: 'security',
+  },
+  {
+    key: 'userSignupPendingApproval',
+    label: 'New user awaiting approval',
+    description: 'Notify user managers when a staff signup finishes email verification.',
+    group: 'security',
+  },
+  {
+    key: 'deletionRequestSubmitted',
+    label: 'Deletion request submitted',
+    description: 'Notify reviewers when someone requests a record deletion.',
+    group: 'workflow',
+  },
+  {
+    key: 'deletionRequestResult',
+    label: 'Deletion request result',
+    description: 'Email the requestor when a deletion request is approved or denied.',
+    group: 'workflow',
+  },
+  {
+    key: 'invoicePendingApproval',
+    label: 'Invoice pending approval',
+    description: 'Notify approvers when an invoice needs manager approval.',
+    group: 'workflow',
+  },
+  {
+    key: 'invoiceEmail',
+    label: 'Invoice emails',
+    description: 'Send invoice PDFs and portal invoice-ready notices to customers.',
+    group: 'customer',
+  },
+  {
+    key: 'estimateEmail',
+    label: 'Estimate emails',
+    description: 'Send estimate-ready notices to customers.',
+    group: 'customer',
+  },
+  {
+    key: 'portalRequestStatus',
+    label: 'Portal request status',
+    description: 'Notify customers when portal requests are approved or rejected.',
+    group: 'customer',
+  },
+  {
+    key: 'portalCredentials',
+    label: 'Portal credentials',
+    description: 'Allow sending portal username and temporary password emails.',
+    group: 'customer',
+  },
+  {
+    key: 'backupResult',
+    label: 'Backup results',
+    description: 'Email backup success and failure alerts to the configured address.',
+    group: 'system',
+  },
+]

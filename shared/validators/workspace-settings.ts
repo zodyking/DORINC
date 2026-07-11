@@ -29,3 +29,17 @@ export const invoiceWorkspaceSettingsSchema = z.object({
   shopSuppliesPercent: z.string().regex(/^\d+(\.\d{1,2})?$/).default('3.5'),
   managerApprovalThreshold: z.string().regex(/^\d+(\.\d{1,2})?$/).default('5000.00'),
 })
+
+export const notificationSettingsSchema = z.object({
+  staffLoginAlert: z.boolean().default(true),
+  customerLoginAlert: z.boolean().default(true),
+  deletionRequestSubmitted: z.boolean().default(true),
+  deletionRequestResult: z.boolean().default(true),
+  invoiceEmail: z.boolean().default(true),
+  estimateEmail: z.boolean().default(true),
+  portalRequestStatus: z.boolean().default(true),
+  portalCredentials: z.boolean().default(true),
+  backupResult: z.boolean().default(true),
+  userSignupPendingApproval: z.boolean().default(true),
+  invoicePendingApproval: z.boolean().default(true),
+})
