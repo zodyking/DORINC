@@ -98,12 +98,16 @@ export async function getSystemStatus(db: Db): Promise<SystemStatus> {
   }
 }
 
-export async function sendSmtpTest(to: string, actorName: string): Promise<{ delivered: boolean }> {
+export async function sendSmtpTest(db: Db, to: string, actorName: string): Promise<{ delivered: boolean }> {
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const brand = await resolveEmailBrand(db)
   const mail = buildSmtpTestEmail({
-    brandName: BRAND_NAME,
+    brandName: brand.brandName || BRAND_NAME,
     source: 'Super Admin control panel',
     actorName,
     sentAt: new Date().toISOString(),
+    appUrl: brand.appUrl,
+    brand,
   })
   return sendMail({ to, ...mail })
 }

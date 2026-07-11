@@ -12,6 +12,13 @@ export {
   emailPanel,
   emailParagraph,
   emailMuted,
+  emailEyebrow,
+  emailHighlight,
+  emailDetails,
+  emailNote,
+  emailActions,
+  emailSecondaryLink,
+  normalizeEmailBrand,
   wrapEmailHtml,
   buildStyledEmail,
 } from './email-layout.mjs'

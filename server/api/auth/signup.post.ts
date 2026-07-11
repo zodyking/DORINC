@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
       requestedAccountType: body.accountType,
     })
 
-    await sendVerificationEmail({
+    await sendVerificationEmail(db, {
       to: user.email,
       name: user.name,
       verificationToken,

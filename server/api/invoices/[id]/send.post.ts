@@ -19,6 +19,8 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
       throw apiError(event, 'VALIDATION_ERROR', 'No billing email is on file for this customer')
     case 'ALREADY_QUEUED':
       throw apiError(event, 'CONFLICT', 'This invoice is already queued for delivery')
+    case 'NOTIFICATION_DISABLED':
+      throw apiError(event, 'VALIDATION_ERROR', 'Invoice emails are disabled in Control Panel → Notifications')
     default:
       throw err
   }

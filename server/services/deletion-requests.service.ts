@@ -237,6 +237,24 @@ export async function createDeletionRequest(
     submittedBy,
   }).returning()
 
+  try {
+    const submitter = await db.select({
+      name: users.name,
+    }).from(users).where(eq(users.id, submittedBy)).limit(1)
+    const { notifyDeletionRequestSubmitted } = await import('./staff-notifications.service')
+    await notifyDeletionRequestSubmitted(db, {
+      submitterName: submitter[0]?.name || 'A staff member',
+      submitterId: submittedBy,
+      entityType,
+      entityLabel,
+      reason: reason.trim(),
+      requestId: row!.id,
+    })
+  }
+  catch (err) {
+    console.warn('[mail] deletion request submitted notification failed:', (err as Error).message)
+  }
+
   return row!
 }
 
@@ -340,7 +358,26 @@ export async function approveDeletionRequest(db: Db, id: string, actorId: string
     throw err
   }
 
-  return { request: mapRow(await getRequestById(db, id)) }
+  const mapped = mapRow(await getRequestById(db, id))
+  try {
+    const { notifyDeletionRequestResult } = await import('./staff-notifications.service')
+    await notifyDeletionRequestResult(db, {
+      requestorEmail: mapped.submittedByEmail,
+      requestorName: mapped.submittedByName,
+      requestorId: mapped.submittedBy,
+      status: 'approved',
+      entityType: mapped.entityType,
+      entityLabel: mapped.entityLabel,
+      reviewReason: mapped.reviewReason,
+      reviewedByName: mapped.reviewedByName,
+      requestId: mapped.id,
+    })
+  }
+  catch (err) {
+    console.warn('[mail] deletion request approved notification failed:', (err as Error).message)
+  }
+
+  return { request: mapped }
 }
 
 export async function directDeleteEntity(
@@ -375,5 +412,24 @@ export async function rejectDeletionRequest(db: Db, id: string, actorId: string,
 
   if (!updated) throw new DeletionRequestsServiceError('NOT_PENDING')
 
-  return { request: mapRow(await getRequestById(db, id)) }
+  const mapped = mapRow(await getRequestById(db, id))
+  try {
+    const { notifyDeletionRequestResult } = await import('./staff-notifications.service')
+    await notifyDeletionRequestResult(db, {
+      requestorEmail: mapped.submittedByEmail,
+      requestorName: mapped.submittedByName,
+      requestorId: mapped.submittedBy,
+      status: 'rejected',
+      entityType: mapped.entityType,
+      entityLabel: mapped.entityLabel,
+      reviewReason: mapped.reviewReason,
+      reviewedByName: mapped.reviewedByName,
+      requestId: mapped.id,
+    })
+  }
+  catch (err) {
+    console.warn('[mail] deletion request rejected notification failed:', (err as Error).message)
+  }
+
+  return { request: mapped }
 }

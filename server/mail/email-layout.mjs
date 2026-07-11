@@ -1,6 +1,7 @@
 /**
- * Shared DORINC transactional email layout.
- * Tokens mirror server/mail/email-styles.scss (inline CSS required for email clients).
+ * Shared transactional email layout.
+ * Flat white shell matching the app notification template.
+ * Branding comes from business settings + invoice logo when provided.
  * Usable from Nuxt (TS) and Node workers (.mjs).
  */
 
@@ -9,19 +10,21 @@ export const EMAIL_BRAND_LEGAL = 'Devon On Site Repairs Inc.'
 
 /** Design tokens — keep in sync with email-styles.scss */
 export const EMAIL_TOKENS = {
-  bg: '#f8fafc',
+  bg: '#ffffff',
   surface: '#ffffff',
-  ink: '#0f172a',
-  muted: '#64748b',
-  faint: '#94a3b8',
-  accent: '#4f46e5',
-  accentStrong: '#4338ca',
-  accentSoft: '#eef2ff',
-  accentLine: '#c7d2fe',
-  line: '#e2e8f0',
-  radius: '14px',
-  radiusBtn: '10px',
-  font: "'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif",
+  ink: '#111827',
+  muted: '#6b7280',
+  faint: '#9ca3af',
+  accent: '#2563eb',
+  accentStrong: '#1d4ed8',
+  accentSoft: '#dbe3ee',
+  accentLine: '#e5e7eb',
+  line: '#eef0f3',
+  border: '#e5e7eb',
+  buttonBg: '#111827',
+  radius: '8px',
+  radiusBtn: '7px',
+  font: 'Arial, Helvetica, sans-serif',
 }
 
 /**
@@ -38,18 +41,64 @@ export function escapeHtml(value) {
 }
 
 /**
+ * @typedef {{
+ *   brandName?: string,
+ *   brandLegal?: string,
+ *   brandTagline?: string,
+ *   logoUrl?: string | null,
+ *   logoInitial?: string,
+ *   addressLines?: string[],
+ *   phone?: string,
+ *   email?: string,
+ *   website?: string,
+ *   appUrl?: string,
+ *   settingsUrl?: string,
+ *   helpUrl?: string,
+ *   signInUrl?: string,
+ * }} EmailBrandOpts
+ */
+
+/**
+ * @param {EmailBrandOpts | null | undefined} brand
+ * @param {string} [appUrl]
+ * @returns {Required<Pick<EmailBrandOpts, 'brandName' | 'brandLegal' | 'brandTagline' | 'logoInitial' | 'appUrl'>> & EmailBrandOpts}
+ */
+export function normalizeEmailBrand(brand, appUrl = '') {
+  const base = String(brand?.appUrl || appUrl || '').replace(/\/$/, '')
+  const brandName = brand?.brandName?.trim() || EMAIL_BRAND_NAME
+  return {
+    brandName,
+    brandLegal: brand?.brandLegal?.trim() || EMAIL_BRAND_LEGAL,
+    brandTagline: brand?.brandTagline?.trim() || 'Accounting workspace',
+    logoUrl: brand?.logoUrl ?? (base ? `${base}/images/dorinc-icon-trans.png` : null),
+    logoInitial: brand?.logoInitial?.trim() || brandName.charAt(0).toUpperCase() || 'D',
+    addressLines: Array.isArray(brand?.addressLines) ? brand.addressLines.filter(Boolean) : [],
+    phone: brand?.phone?.trim() || '',
+    email: brand?.email?.trim() || '',
+    website: brand?.website?.trim() || '',
+    appUrl: base,
+    settingsUrl: brand?.settingsUrl || (base ? `${base}/admin?tab=notifications` : '#'),
+    helpUrl: brand?.helpUrl || (base ? `${base}/help` : '#'),
+    signInUrl: brand?.signInUrl || (base ? `${base}/auth/login` : '#'),
+  }
+}
+
+/**
  * @param {string} href
  * @param {string} label
  * @returns {string}
  */
 export function emailButton(href, label) {
-  const t = EMAIL_TOKENS
-  return [
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 8px;">`,
-    `<tr><td align="left">`,
-    `<a href="${escapeHtml(href)}" style="display:inline-block;padding:12px 18px;background:${t.accent};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:${t.radiusBtn};font-family:${t.font};">${escapeHtml(label)}</a>`,
-    `</td></tr></table>`,
-  ].join('')
+  return `<a href="${escapeHtml(href)}" class="button" style="display:inline-block;padding:13px 20px;background:${EMAIL_TOKENS.buttonBg};color:#ffffff !important;border-radius:${EMAIL_TOKENS.radiusBtn};font-size:14px;font-weight:700;line-height:18px;text-decoration:none;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</a>`
+}
+
+/**
+ * @param {string} href
+ * @param {string} label
+ * @returns {string}
+ */
+export function emailSecondaryLink(href, label) {
+  return `<a href="${escapeHtml(href)}" class="secondary-link" style="font-size:13px;font-weight:600;color:#4b5563;text-decoration:none;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</a>`
 }
 
 /**
@@ -58,12 +107,12 @@ export function emailButton(href, label) {
  * @returns {string}
  */
 export function emailPanel(label, innerHtml) {
-  const t = EMAIL_TOKENS
   return [
-    `<div style="margin:18px 0;padding:14px 16px;background:${t.accentSoft};border:1px solid ${t.accentLine};border-radius:${t.radiusBtn};">`,
-    `<span style="display:block;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${t.accent};margin-bottom:6px;">${escapeHtml(label)}</span>`,
-    `<div style="font-size:14px;line-height:1.5;color:${t.ink};">${innerHtml}</div>`,
-    `</div>`,
+    `<table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:${EMAIL_TOKENS.radius};margin:0 0 14px;">`,
+    `<tr><td style="padding:18px 20px;">`,
+    `<div style="color:#374151;font-size:13px;font-weight:700;padding-bottom:5px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</div>`,
+    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${innerHtml}</div>`,
+    `</td></tr></table>`,
   ].join('')
 }
 
@@ -72,8 +121,7 @@ export function emailPanel(label, innerHtml) {
  * @returns {string}
  */
 export function emailParagraph(text) {
-  const t = EMAIL_TOKENS
-  return `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:${t.ink};font-family:${t.font};">${text}</p>`
+  return `<p style="margin:0 0 14px;color:${EMAIL_TOKENS.muted};font-size:15px;line-height:24px;font-family:${EMAIL_TOKENS.font};">${text}</p>`
 }
 
 /**
@@ -81,137 +129,400 @@ export function emailParagraph(text) {
  * @returns {string}
  */
 export function emailMuted(text) {
-  const t = EMAIL_TOKENS
-  return `<p style="margin:0 0 14px;font-size:14px;line-height:1.5;color:${t.muted};font-family:${t.font};">${text}</p>`
+  return `<p style="margin:0 0 14px;color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${text}</p>`
 }
 
 /**
  * @param {string} label
- * @param {'ok'|'warn'|'error'} [tone]
+ * @param {'ok'|'warn'|'error'|'neutral'} [tone]
  * @returns {string}
  */
-export function emailBadge(label, tone = 'ok') {
+export function emailBadge(label, tone = 'neutral') {
   const colors = {
-    ok: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
-    warn: { bg: '#fffbeb', fg: '#b45309', border: '#fcd34d' },
-    error: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
+    ok: { fg: '#15803d', border: '#bbf7d0' },
+    warn: { fg: '#b45309', border: '#fde68a' },
+    error: { fg: '#b91c1c', border: '#fecaca' },
+    neutral: { fg: '#475569', border: '#dbe3ee' },
   }
-  const c = colors[tone] ?? colors.ok
-  return `<span style="display:inline-block;margin:0 0 14px;padding:4px 10px;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${c.fg};background:${c.bg};border:1px solid ${c.border};border-radius:999px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</span>`
+  const c = colors[tone] ?? colors.neutral
+  return `<div style="display:inline-block;padding:5px 9px;border:1px solid ${c.border};border-radius:999px;color:${c.fg};font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</div>`
 }
 
 /**
- * Wrap body HTML in the shared modern white-card layout.
+ * @param {string} label
+ * @returns {string}
+ */
+export function emailEyebrow(label) {
+  return emailBadge(label, 'neutral')
+}
+
+/**
+ * @param {{ label: string, value: string, status?: string, statusTone?: 'ok'|'warn'|'error'|'neutral' }} highlight
+ * @returns {string}
+ */
+export function emailHighlight(highlight) {
+  const statusHtml = highlight.status
+    ? (() => {
+        const tone = highlight.statusTone ?? 'ok'
+        const colors = {
+          ok: { fg: '#15803d', border: '#bbf7d0' },
+          warn: { fg: '#b45309', border: '#fde68a' },
+          error: { fg: '#b91c1c', border: '#fecaca' },
+          neutral: { fg: '#475569', border: '#dbe3ee' },
+        }
+        const c = colors[tone] ?? colors.ok
+        return `<div style="display:inline-block;padding:7px 10px;border:1px solid ${c.border};border-radius:6px;color:${c.fg};font-size:12px;font-weight:700;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.status)}</div>`
+      })()
+    : ''
+
+  return [
+    `<table role="presentation" width="100%" style="border-top:1px solid ${EMAIL_TOKENS.border};border-bottom:1px solid ${EMAIL_TOKENS.border};">`,
+    `<tr>`,
+    `<td style="padding:24px 0;">`,
+    `<div style="font-size:12px;color:${EMAIL_TOKENS.muted};padding-bottom:7px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.label)}</div>`,
+    `<div style="color:${EMAIL_TOKENS.ink};font-size:34px;line-height:40px;font-weight:750;letter-spacing:-0.6px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.value)}</div>`,
+    `</td>`,
+    statusHtml ? `<td align="right" valign="middle">${statusHtml}</td>` : '',
+    `</tr></table>`,
+  ].join('')
+}
+
+/**
+ * @param {Array<{ label: string, value: string }>} rows
+ * @returns {string}
+ */
+export function emailDetails(rows) {
+  if (!rows?.length) return ''
+  const pairs = []
+  for (let i = 0; i < rows.length; i += 2) {
+    const left = rows[i]
+    const right = rows[i + 1]
+    const isLast = i + 2 >= rows.length
+    const pad = isLast ? '0' : '20px'
+    pairs.push([
+      `<tr>`,
+      `<td width="50%" style="padding:0 12px ${pad} 0;" class="mobile-block">`,
+      `<div class="data-label" style="color:${EMAIL_TOKENS.muted};font-size:12px;line-height:18px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(left.label)}</div>`,
+      `<div class="data-value" style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:600;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(left.value)}</div>`,
+      `</td>`,
+      right
+        ? `<td width="50%" style="padding:0 0 ${pad} 12px;" class="mobile-block mobile-top-space">
+            <div class="data-label" style="color:${EMAIL_TOKENS.muted};font-size:12px;line-height:18px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(right.label)}</div>
+            <div class="data-value" style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:600;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(right.value)}</div>
+          </td>`
+        : `<td width="50%" style="padding:0 0 ${pad} 12px;"></td>`,
+      `</tr>`,
+    ].join(''))
+  }
+
+  return [
+    `<div style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:700;padding-bottom:16px;font-family:${EMAIL_TOKENS.font};">Details</div>`,
+    `<table role="presentation" width="100%">${pairs.join('')}</table>`,
+  ].join('')
+}
+
+/**
+ * @param {{ title: string, body: string }} note
+ * @returns {string}
+ */
+export function emailNote(note) {
+  return [
+    `<table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:${EMAIL_TOKENS.radius};">`,
+    `<tr><td style="padding:18px 20px;">`,
+    `<div style="color:#374151;font-size:13px;font-weight:700;padding-bottom:5px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.title)}</div>`,
+    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.body)}</div>`,
+    `</td></tr></table>`,
+  ].join('')
+}
+
+/**
+ * @param {{ primary?: { href: string, label: string }, secondary?: { href: string, label: string } }} actions
+ * @returns {string}
+ */
+export function emailActions(actions) {
+  if (!actions?.primary && !actions?.secondary) return ''
+  return [
+    `<table role="presentation"><tr>`,
+    actions.primary
+      ? `<td>${emailButton(actions.primary.href, actions.primary.label)}</td>`
+      : '',
+    actions.secondary
+      ? `<td style="padding-left:18px;">${emailSecondaryLink(actions.secondary.href, actions.secondary.label)}</td>`
+      : '',
+    `</tr></table>`,
+  ].join('')
+}
+
+/**
+ * Wrap body HTML in the shared flat white notification layout.
  *
  * @param {{
  *   title?: string,
  *   preheader?: string,
- *   bodyHtml: string,
+ *   eyebrow?: string,
+ *   headline?: string,
+ *   lead?: string,
+ *   bodyHtml?: string,
+ *   highlightHtml?: string,
+ *   detailsHtml?: string,
+ *   noteHtml?: string,
+ *   actionsHtml?: string,
  *   footerNote?: string,
  *   appUrl?: string,
+ *   brand?: EmailBrandOpts,
+ *   logoUrl?: string | null,
  * }} opts
  * @returns {string}
  */
 export function wrapEmailHtml(opts) {
   const t = EMAIL_TOKENS
-  const brand = EMAIL_BRAND_NAME
-  const title = opts.title ? escapeHtml(opts.title) : ''
+  const brand = normalizeEmailBrand(opts.brand, opts.appUrl)
+  const brandName = brand.brandName
+  const title = opts.title ? escapeHtml(opts.title) : escapeHtml(brandName)
   const preheader = opts.preheader ? escapeHtml(opts.preheader) : ''
+  const headline = opts.headline ? escapeHtml(opts.headline) : (opts.title ? escapeHtml(opts.title) : '')
+  const lead = opts.lead ? escapeHtml(opts.lead) : ''
+  const logoUrl = opts.logoUrl !== undefined ? opts.logoUrl : brand.logoUrl
+
+  const addressBlock = [
+    brand.brandLegal,
+    ...brand.addressLines,
+    brand.phone,
+    brand.email,
+  ].filter(Boolean).map(line => escapeHtml(line)).join('<br>')
+
   const footerNote = opts.footerNote
     ? escapeHtml(opts.footerNote)
-    : `© ${new Date().getFullYear()} ${EMAIL_BRAND_LEGAL}. All rights reserved.`
-  const appUrl = opts.appUrl ? String(opts.appUrl).replace(/\/$/, '') : ''
-  const logoUrl = opts.logoUrl ?? (appUrl ? `${appUrl}/images/dorinc-icon-trans.png` : null)
+    : `This notification was sent because activity occurred in your ${brandName} accounting workspace.`
 
-  const brandBlock = appUrl
-    ? `<a href="${escapeHtml(appUrl)}" style="display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-family:${t.font};">`
-      + (logoUrl
-        ? `<img src="${escapeHtml(logoUrl)}" width="32" height="32" alt="" style="display:block;border-radius:8px;">`
-        : '')
-      + `<span style="font-size:16px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};">${brand}</span></a>`
-    : `<span style="display:inline-block;font-size:16px;font-weight:800;letter-spacing:-0.02em;color:${t.ink};font-family:${t.font};">${brand}</span>`
+  const mainIntro = [
+    opts.eyebrow ? `<div style="margin-bottom:0;">${emailEyebrow(opts.eyebrow)}</div>` : '',
+    headline
+      ? `<h1 style="margin:18px 0 0;color:${t.ink};font-size:28px;line-height:36px;letter-spacing:-0.5px;font-weight:750;font-family:${t.font};">${headline}</h1>`
+      : '',
+    lead
+      ? `<p style="margin:14px 0 0;color:${t.muted};font-size:15px;line-height:24px;font-family:${t.font};">${lead}</p>`
+      : '',
+  ].filter(Boolean).join('')
 
-  const titleBlock = title
-    ? `<h1 style="margin:0 0 16px;font-size:20px;font-weight:700;letter-spacing:-0.02em;color:${t.ink};font-family:${t.font};line-height:1.3;">${title}</h1>`
-    : ''
-
-  return `<!DOCTYPE html>
+  return `<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>${title || brand}</title>
-<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
-<style type="text/css">
-  body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
-  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-  img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
-  body { margin: 0 !important; padding: 0 !important; width: 100% !important; background: ${t.bg}; }
-  a { color: ${t.accent}; }
-  @media only screen and (max-width: 620px) {
-    .email-card { width: 100% !important; }
-    .email-pad { padding-left: 20px !important; padding-right: 20px !important; }
-  }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <title>${title}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      background: ${t.bg};
+      color: #1f2937;
+      font-family: ${t.font};
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
+    }
+    table { border-spacing: 0; border-collapse: collapse; }
+    img { display: block; border: 0; max-width: 100%; }
+    a { color: ${t.accent}; text-decoration: none; }
+    .email-shell { width: 100%; background: ${t.bg}; }
+    .email-container { width: 100%; max-width: 620px; margin: 0 auto; }
+    .mobile-padding { padding-left: 28px; padding-right: 28px; }
+    .button {
+      display: inline-block;
+      padding: 13px 20px;
+      background: ${t.buttonBg};
+      color: #ffffff !important;
+      border-radius: ${t.radiusBtn};
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 18px;
+    }
+    .secondary-link { font-size: 13px; font-weight: 600; color: #4b5563; }
+    .data-label { color: ${t.muted}; font-size: 12px; line-height: 18px; }
+    .data-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; }
+    @media screen and (max-width: 620px) {
+      .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .mobile-block { display: block !important; width: 100% !important; }
+      .mobile-align-left { text-align: left !important; }
+      .mobile-top-space { padding-top: 14px !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:${t.bg};color:${t.ink};font-family:${t.font};">
-${preheader ? `<div style="display:none;font-size:1px;color:${t.bg};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>` : ''}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${t.bg};">
-  <tr>
-    <td align="center" style="padding:32px 16px;">
-      <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;width:100%;background:${t.surface};border:1px solid ${t.line};border-radius:${t.radius};overflow:hidden;">
-        <tr>
-          <td style="height:4px;background:linear-gradient(90deg,${t.accent} 0%,${t.accentStrong} 100%);font-size:0;line-height:0;">&nbsp;</td>
-        </tr>
-        <tr>
-          <td class="email-pad" style="padding:22px 28px 16px;border-bottom:1px solid ${t.line};">
-            ${brandBlock}
-          </td>
-        </tr>
-        <tr>
-          <td class="email-pad" style="padding:28px;font-size:15px;line-height:1.55;color:${t.ink};font-family:${t.font};">
-            ${titleBlock}
-            ${opts.bodyHtml}
-          </td>
-        </tr>
-        <tr>
-          <td class="email-pad" style="padding:18px 28px 24px;border-top:1px solid ${t.line};font-size:12px;line-height:1.5;color:${t.faint};font-family:${t.font};">
-            ${footerNote}${appUrl ? `<br><a href="${escapeHtml(appUrl)}" style="color:${t.muted};text-decoration:none;">${escapeHtml(appUrl.replace(/^https?:\/\//, ''))}</a>` : ''}
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
+<body>
+  ${preheader ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0;">${preheader}</div>` : ''}
+
+  <table role="presentation" width="100%" class="email-shell">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" class="email-container">
+
+          <!-- Header -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:32px; padding-bottom:24px;">
+              <table role="presentation" width="100%">
+                <tr>
+                  <td valign="middle">
+                    <table role="presentation">
+                      <tr>
+                        <td valign="middle" style="width:38px;height:38px;">
+                          ${logoUrl
+                            ? `<img src="${escapeHtml(logoUrl)}" width="38" height="38" alt="${escapeHtml(brandName)}" style="display:block;border:1px solid ${t.border};border-radius:10px;width:38px;height:38px;">`
+                            : `<div style="width:38px;height:38px;border:1px solid ${t.border};border-radius:10px;color:${t.ink};font-size:17px;font-weight:800;line-height:38px;text-align:center;font-family:${t.font};">${escapeHtml(brand.logoInitial)}</div>`}
+                        </td>
+                        <td style="padding-left:12px;">
+                          <div style="font-size:15px; font-weight:700; color:${t.ink}; font-family:${t.font};">${escapeHtml(brandName)}</div>
+                          <div style="font-size:12px; color:${t.faint}; padding-top:2px; font-family:${t.font};">${escapeHtml(brand.brandTagline)}</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right" valign="middle" style="font-size:12px; color:${t.faint}; font-family:${t.font};">
+                    Notification
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td class="mobile-padding">
+              <div style="height:1px; background:${t.line};"></div>
+            </td>
+          </tr>
+
+          ${mainIntro
+            ? `<!-- Main content -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:42px; padding-bottom:10px;">
+              ${mainIntro}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.highlightHtml
+            ? `<!-- Highlight -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:28px;">
+              ${opts.highlightHtml}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.detailsHtml
+            ? `<!-- Details -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:30px;">
+              ${opts.detailsHtml}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.bodyHtml
+            ? `<!-- Body -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:24px;">
+              ${opts.bodyHtml}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.noteHtml
+            ? `<!-- Note -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:30px;">
+              ${opts.noteHtml}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.actionsHtml
+            ? `<!-- Actions -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:30px; padding-bottom:38px;">
+              ${opts.actionsHtml}
+            </td>
+          </tr>`
+            : `<tr><td style="padding-bottom:38px;"></td></tr>`}
+
+          <!-- Footer divider -->
+          <tr>
+            <td class="mobile-padding">
+              <div style="height:1px; background:${t.line};"></div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="mobile-padding" style="padding-top:24px; padding-bottom:36px; color:${t.faint}; font-size:11px; line-height:18px; font-family:${t.font};">
+              <p style="margin:0;">${footerNote}</p>
+              <p style="margin:10px 0 0;">
+                <a href="${escapeHtml(brand.settingsUrl)}" style="color:#6b7280;">Notification settings</a>
+                &nbsp;&nbsp;·&nbsp;&nbsp;
+                <a href="${escapeHtml(brand.helpUrl)}" style="color:#6b7280;">Help center</a>
+                &nbsp;&nbsp;·&nbsp;&nbsp;
+                <a href="${escapeHtml(brand.signInUrl)}" style="color:#6b7280;">Sign in</a>
+              </p>
+              ${addressBlock ? `<p style="margin:16px 0 0;">${addressBlock}</p>` : ''}
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`
 }
 
 /**
- * Build a complete email payload with shared layout.
+ * Build a complete email payload with the shared notification layout.
  *
  * @param {{
  *   subject: string,
  *   text: string,
  *   title?: string,
  *   preheader?: string,
- *   bodyHtml: string,
+ *   eyebrow?: string,
+ *   headline?: string,
+ *   lead?: string,
+ *   bodyHtml?: string,
+ *   highlight?: { label: string, value: string, status?: string, statusTone?: 'ok'|'warn'|'error'|'neutral' },
+ *   details?: Array<{ label: string, value: string }>,
+ *   note?: { title: string, body: string },
+ *   primaryAction?: { href: string, label: string },
+ *   secondaryAction?: { href: string, label: string },
  *   footerNote?: string,
  *   appUrl?: string,
+ *   brand?: EmailBrandOpts,
  * }} opts
  * @returns {{ subject: string, text: string, html: string }}
  */
 export function buildStyledEmail(opts) {
+  const brand = normalizeEmailBrand(opts.brand, opts.appUrl)
   return {
     subject: opts.subject,
     text: opts.text,
     html: wrapEmailHtml({
-      title: opts.title,
+      title: opts.title ?? opts.headline,
       preheader: opts.preheader ?? opts.subject,
+      eyebrow: opts.eyebrow,
+      headline: opts.headline ?? opts.title,
+      lead: opts.lead,
       bodyHtml: opts.bodyHtml,
+      highlightHtml: opts.highlight ? emailHighlight(opts.highlight) : undefined,
+      detailsHtml: opts.details?.length ? emailDetails(opts.details) : undefined,
+      noteHtml: opts.note ? emailNote(opts.note) : undefined,
+      actionsHtml: emailActions({
+        primary: opts.primaryAction,
+        secondary: opts.secondaryAction,
+      }) || undefined,
       footerNote: opts.footerNote,
-      appUrl: opts.appUrl,
+      appUrl: brand.appUrl,
+      brand,
     }),
   }
 }

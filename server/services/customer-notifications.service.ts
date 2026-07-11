@@ -15,6 +15,8 @@ import { listContacts } from './customers.service'
 import { enqueueJob } from './jobs.service'
 import { getInvoice } from './invoices.service'
 import { getEstimate } from './estimates.service'
+import { resolveEmailBrand } from './email-branding.service'
+import { isNotificationEnabled } from './workspace-settings.service'
 
 export interface NotificationRecipient {
   email: string
@@ -90,6 +92,10 @@ export async function enqueueCustomerNotification(
 }
 
 export async function notifyInvoiceSent(db: Db, invoiceId: string) {
+  if (!(await isNotificationEnabled(db, 'invoiceEmail'))) {
+    return { queued: false as const, reason: 'disabled' }
+  }
+
   const invoice = await getInvoice(db, invoiceId)
   if (!(await shouldNotifyCustomer(db, invoice.customerId))) {
     return { queued: false as const, reason: 'portal_disabled' }
@@ -98,12 +104,14 @@ export async function notifyInvoiceSent(db: Db, invoiceId: string) {
   const recipient = await resolvePortalRecipient(db, invoice.customerId)
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
+  const brand = await resolveEmailBrand(db)
   const mail = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
     invoiceId: invoice.id,
     dueDate: invoice.dueDate,
     total: invoice.total,
+    brand,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {
@@ -146,6 +154,10 @@ export async function notifyPortalRequestStatus(
   },
   status: 'approved' | 'rejected',
 ) {
+  if (!(await isNotificationEnabled(db, 'portalRequestStatus'))) {
+    return { queued: false as const, reason: 'disabled' }
+  }
+
   if (!(await shouldNotifyCustomer(db, request.customerId))) {
     return { queued: false as const, reason: 'portal_disabled' }
   }
@@ -153,12 +165,14 @@ export async function notifyPortalRequestStatus(
   const recipient = await resolvePortalRecipient(db, request.customerId, request.submittedBy)
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
+  const brand = await resolveEmailBrand(db)
   const mail = buildRequestStatusEmail({
     recipientName: recipient.name,
     requestKind: requestKindLabel(kind),
     requestTitle: requestTitle(kind, request),
     status,
     reviewReason: request.reviewReason,
+    brand,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {
@@ -173,6 +187,10 @@ export async function notifyPortalRequestStatus(
 
 /** Queue estimate-sent notification when estimate is sent to customer portal. */
 export async function notifyEstimateSent(db: Db, estimateId: string) {
+  if (!(await isNotificationEnabled(db, 'estimateEmail'))) {
+    return { queued: false as const, reason: 'disabled' }
+  }
+
   const estimate = await getEstimate(db, estimateId)
   if (!(await shouldNotifyCustomer(db, estimate.customerId))) {
     return { queued: false as const, reason: 'portal_disabled' }
@@ -181,10 +199,12 @@ export async function notifyEstimateSent(db: Db, estimateId: string) {
   const recipient = await resolvePortalRecipient(db, estimate.customerId)
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
+  const brand = await resolveEmailBrand(db)
   const mail = buildEstimateSentEmail({
     recipientName: recipient.name,
     estimateNumber: formatEstimateNumber(estimate.estimateNumber),
     estimateId: estimate.id,
+    brand,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {

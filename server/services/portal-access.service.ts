@@ -19,6 +19,7 @@ export const TEMP_PASSWORD_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export type PortalAccessServiceErrorCode
   = | 'NOT_FOUND'
     | 'PORTAL_DISABLED'
+    | 'NOTIFICATION_DISABLED'
     | 'NO_EMAIL'
     | 'EMAIL_IN_USE'
     | 'ALREADY_ENABLED'
@@ -243,12 +244,18 @@ async function ensurePortalUser(
   return portalUserId
 }
 
-function buildCredentialEmail(name: string, username: string, tempPassword: string) {
+function buildCredentialEmail(
+  name: string,
+  username: string,
+  tempPassword: string,
+  brand?: Awaited<ReturnType<typeof import('./email-branding.service').resolveEmailBrand>>,
+) {
   return buildPortalCredentialEmail({
     name,
     username,
     tempPassword,
-    appUrl: getAppUrl(),
+    appUrl: brand?.appUrl || getAppUrl(),
+    brand,
   })
 }
 
@@ -258,6 +265,11 @@ export async function sendPortalCredentials(
   sentBy: string,
   contactId?: string,
 ) {
+  const { isNotificationEnabled } = await import('./workspace-settings.service')
+  if (!(await isNotificationEnabled(db, 'portalCredentials'))) {
+    throw new PortalAccessServiceError('NOTIFICATION_DISABLED')
+  }
+
   const customer = await getCustomer(db, customerId)
   if (!customer.portalEnabled) throw new PortalAccessServiceError('PORTAL_DISABLED')
 
@@ -296,7 +308,9 @@ export async function sendPortalCredentials(
     .limit(1)
 
   const sendType = priorSends.length ? 'resend' as const : 'initial' as const
-  const mail = buildCredentialEmail(contact.name, username, tempPassword)
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const brand = await resolveEmailBrand(db)
+  const mail = buildCredentialEmail(contact.name, username, tempPassword, brand)
 
   const [log] = await db.insert(customerCredentialEmailLogs).values({
     customerId,

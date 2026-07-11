@@ -5,17 +5,20 @@ import {
   DEFAULT_BUSINESS_PROFILE,
   DEFAULT_INVOICE_SETTINGS,
   DEFAULT_LINE_TYPE_VERBS,
+  DEFAULT_NOTIFICATION_SETTINGS,
   defaultCatalogKeywordMap,
   type BusinessProfile,
   type CatalogKeywordMap,
   type InvoiceWorkspaceSettings,
   type LineTypeVerbSettings,
+  type NotificationSettings,
 } from '../../shared/workspace-settings-defaults'
 import {
   businessProfileSchema,
   catalogKeywordMapSchema,
   invoiceWorkspaceSettingsSchema,
   lineTypeVerbsSchema,
+  notificationSettingsSchema,
 } from '../../shared/validators/workspace-settings'
 import { MANAGER_APPROVAL_THRESHOLD_KEY } from './billing-settings.service'
 
@@ -24,6 +27,7 @@ export const WORKSPACE_SETTING_KEYS = {
   catalogKeywords: 'workspace.catalog_keywords',
   lineTypeVerbs: 'workspace.line_type_verbs',
   invoice: 'workspace.invoice_settings',
+  notifications: 'workspace.notification_settings',
 } as const
 
 async function readJson<T>(db: Db, key: string): Promise<T | null> {
@@ -146,4 +150,27 @@ export async function getDetectionSettings(db: Db) {
 
 export async function getPublicBusinessProfile(db: Db): Promise<BusinessProfile> {
   return getBusinessProfile(db)
+}
+
+export async function getNotificationSettings(db: Db): Promise<NotificationSettings> {
+  const raw = await readJson<Partial<NotificationSettings>>(db, WORKSPACE_SETTING_KEYS.notifications)
+  return notificationSettingsSchema.parse({ ...DEFAULT_NOTIFICATION_SETTINGS, ...raw })
+}
+
+export async function saveNotificationSettings(
+  db: Db,
+  input: NotificationSettings,
+  updatedBy: string,
+) {
+  const settings = notificationSettingsSchema.parse(input)
+  await writeJson(db, WORKSPACE_SETTING_KEYS.notifications, settings, updatedBy)
+  return settings
+}
+
+export async function isNotificationEnabled(
+  db: Db,
+  key: keyof NotificationSettings,
+): Promise<boolean> {
+  const settings = await getNotificationSettings(db)
+  return settings[key] !== false
 }

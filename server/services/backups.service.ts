@@ -249,17 +249,23 @@ async function queueBackupNotification(
   db: Db,
   opts: { success: boolean, filename: string, trigger: string, error?: string, driveFileId?: string | null },
 ) {
+  const { isNotificationEnabled } = await import('./workspace-settings.service')
+  if (!(await isNotificationEnabled(db, 'backupResult'))) return
+
   const settings = await ensureBackupSettings(db)
   const to = settings.notifyEmail?.trim() || defaultNotifyEmail()
   if (!to) return
 
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const brand = await resolveEmailBrand(db)
   const mail = buildBackupNotificationEmail({
     success: opts.success,
     filename: opts.filename,
     trigger: opts.trigger,
     driveFileId: opts.driveFileId,
     error: opts.error,
-    appUrl: getAppUrl(),
+    appUrl: brand.appUrl || getAppUrl(),
+    brand,
   })
 
   await enqueueJob(db, 'email_send', {
@@ -267,6 +273,7 @@ async function queueBackupNotification(
     subject: mail.subject,
     text: mail.text,
     html: mail.html,
+    notificationKind: 'backup_result',
   })
 }
 

@@ -22,6 +22,18 @@ export default defineEventHandler(async (event) => {
       riskLevel: 'sensitive',
     })
 
+    if (!user.approvedAt) {
+      void import('../../services/staff-notifications.service')
+        .then(({ notifyUserSignupPendingApproval }) => notifyUserSignupPendingApproval(useDb(), {
+          userId: user.id,
+          userName: user.name,
+          userEmail: user.email,
+        }))
+        .catch((err) => {
+          console.warn('[mail] signup pending approval notification failed:', (err as Error).message)
+        })
+    }
+
     return {
       status: user.approvedAt ? 'verified' : 'pending_approval',
       message: user.approvedAt

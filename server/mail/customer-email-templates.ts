@@ -1,16 +1,12 @@
-/** Customer-facing SMTP templates (SPEC §18) — unified modern white layout. */
+/** Customer-facing SMTP templates — unified notification layout. */
 import { getAppUrl } from '../services/app-config.service'
+import type { EmailBrandContext } from '../services/email-branding.service'
 import {
   buildStyledEmail,
-  emailBadge,
-  emailButton,
-  emailMuted,
-  emailParagraph,
-  escapeHtml,
 } from './email-layout'
 
-function portalUrl(path = ''): string {
-  const base = getAppUrl().replace(/\/$/, '')
+function portalUrl(path = '', appUrl?: string): string {
+  const base = (appUrl || getAppUrl()).replace(/\/$/, '')
   return `${base}/portal${path}`
 }
 
@@ -37,43 +33,56 @@ export interface InvoiceSentTemplateInput {
   invoiceId: string
   dueDate?: string | null
   total?: string | null
+  brand?: EmailBrandContext
+  appUrl?: string
 }
 
 export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
-  const appUrl = getAppUrl()
-  const detailUrl = portalUrl(`/invoices/${input.invoiceId}`)
-  const dueLine = input.dueDate ? `Due date: ${input.dueDate}` : null
-  const totalLine = input.total ? `Total: ${input.total}` : null
+  const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
+  const detailUrl = portalUrl(`/invoices/${input.invoiceId}`, appUrl)
+  const dueLine = input.dueDate || null
+  const totalLine = input.total || null
   const subject = `Invoice ${input.invoiceNumber} is ready`
   const text = [
     `Hello ${input.recipientName},`,
     '',
     `Invoice ${input.invoiceNumber} has been sent and is available in your customer portal.`,
-    dueLine,
-    totalLine,
+    dueLine ? `Due date: ${dueLine}` : '',
+    totalLine ? `Total: ${totalLine}` : '',
     '',
     `View invoice: ${detailUrl}`,
     '',
     'If you have questions, reply to this email or submit a request through the portal.',
   ].filter(Boolean).join('\n')
 
-  const metaBits = [dueLine, totalLine].filter(Boolean).map(line => emailMuted(escapeHtml(line!))).join('')
-  const bodyHtml = [
-    emailParagraph(`Hello ${escapeHtml(input.recipientName)},`),
-    emailParagraph(`Invoice <strong>${escapeHtml(input.invoiceNumber)}</strong> has been sent and is available in your customer portal.`),
-    metaBits,
-    emailButton(detailUrl, 'View invoice in the portal'),
-    emailMuted('If you have questions, reply to this email or submit a request through the portal.'),
-  ].join('')
-
   return {
     ...buildStyledEmail({
       subject,
       text,
-      title: `Invoice ${input.invoiceNumber}`,
-      preheader: `Invoice ${input.invoiceNumber} is ready in your portal`,
-      bodyHtml,
+      eyebrow: 'Invoice',
+      headline: `Invoice ${input.invoiceNumber}`,
+      lead: `Invoice ${input.invoiceNumber} has been sent and is available in your customer portal.`,
+      highlight: totalLine
+        ? {
+            label: 'Invoice total',
+            value: totalLine,
+            status: 'Ready',
+            statusTone: 'ok',
+          }
+        : undefined,
+      details: [
+        { label: 'Customer', value: input.recipientName },
+        { label: 'Invoice', value: input.invoiceNumber },
+        dueLine ? { label: 'Due date', value: dueLine } : null,
+        { label: 'Portal', value: 'Available now' },
+      ].filter(Boolean) as Array<{ label: string, value: string }>,
+      note: {
+        title: 'Need help?',
+        body: 'If you have questions, reply to this email or submit a request through the portal.',
+      },
+      primaryAction: { href: detailUrl, label: 'View invoice in the portal' },
       appUrl,
+      brand: input.brand,
     }),
     notificationKind: 'invoice_sent' as const,
   }
@@ -85,57 +94,67 @@ export interface RequestStatusTemplateInput {
   requestTitle: string
   status: 'approved' | 'rejected'
   reviewReason?: string | null
+  brand?: EmailBrandContext
+  appUrl?: string
 }
 
 export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
-  const appUrl = getAppUrl()
+  const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
   const kindLabel = REQUEST_KIND_LABELS[input.requestKind]
   const statusLabel = input.status === 'approved' ? 'approved' : 'rejected'
   const subject = `${kindLabel} ${statusLabel}`
-  const reasonLine = input.reviewReason?.trim()
-    ? `Staff note: ${input.reviewReason.trim()}`
-    : null
-  const requestsUrl = portalUrl('/requests')
+  const reasonLine = input.reviewReason?.trim() || null
+  const requestsUrl = portalUrl('/requests', appUrl)
   const text = [
     `Hello ${input.recipientName},`,
     '',
     `Your ${kindLabel.toLowerCase()} "${input.requestTitle}" has been ${statusLabel}.`,
-    reasonLine,
+    reasonLine ? `Staff note: ${reasonLine}` : '',
     '',
     `Track requests: ${requestsUrl}`,
   ].filter(Boolean).join('\n')
-
-  const bodyHtml = [
-    emailBadge(statusLabel, input.status === 'approved' ? 'ok' : 'error'),
-    emailParagraph(`Hello ${escapeHtml(input.recipientName)},`),
-    emailParagraph(`Your <strong>${escapeHtml(kindLabel.toLowerCase())}</strong> &ldquo;${escapeHtml(input.requestTitle)}&rdquo; has been <strong>${statusLabel}</strong>.`),
-    reasonLine ? emailMuted(escapeHtml(reasonLine)) : '',
-    emailButton(requestsUrl, 'View your requests'),
-  ].filter(Boolean).join('')
 
   return {
     ...buildStyledEmail({
       subject,
       text,
-      title: subject,
-      preheader: `Your ${kindLabel.toLowerCase()} was ${statusLabel}`,
-      bodyHtml,
+      eyebrow: 'Portal request',
+      headline: `Request ${statusLabel}`,
+      lead: `Your ${kindLabel.toLowerCase()} "${input.requestTitle}" has been ${statusLabel}.`,
+      highlight: {
+        label: 'Decision',
+        value: input.status === 'approved' ? 'Approved' : 'Rejected',
+        status: input.status === 'approved' ? 'Completed' : 'Closed',
+        statusTone: input.status === 'approved' ? 'ok' : 'error',
+      },
+      details: [
+        { label: 'Request', value: input.requestTitle },
+        { label: 'Type', value: kindLabel },
+        { label: 'Customer', value: input.recipientName },
+        { label: 'Status', value: statusLabel },
+      ],
+      note: reasonLine
+        ? { title: 'Staff note', body: reasonLine }
+        : undefined,
+      primaryAction: { href: requestsUrl, label: 'View your requests' },
       appUrl,
+      brand: input.brand,
     }),
     notificationKind: 'request_status' as const,
   }
 }
 
-/** Phase 3 stub — template ready for estimate delivery notifications. */
 export interface EstimateSentTemplateInput {
   recipientName: string
   estimateNumber: string
   estimateId: string
+  brand?: EmailBrandContext
+  appUrl?: string
 }
 
 export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
-  const appUrl = getAppUrl()
-  const detailUrl = portalUrl(`/estimates/${input.estimateId}`)
+  const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
+  const detailUrl = portalUrl(`/estimates/${input.estimateId}`, appUrl)
   const subject = `Estimate ${input.estimateNumber} is ready for review`
   const text = [
     `Hello ${input.recipientName},`,
@@ -145,20 +164,21 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
     `View estimate: ${detailUrl}`,
   ].join('\n')
 
-  const bodyHtml = [
-    emailParagraph(`Hello ${escapeHtml(input.recipientName)},`),
-    emailParagraph(`Estimate <strong>${escapeHtml(input.estimateNumber)}</strong> is ready for your review in the customer portal.`),
-    emailButton(detailUrl, 'View estimate in the portal'),
-  ].join('')
-
   return {
     ...buildStyledEmail({
       subject,
       text,
-      title: `Estimate ${input.estimateNumber}`,
-      preheader: `Estimate ${input.estimateNumber} is ready for review`,
-      bodyHtml,
+      eyebrow: 'Estimate',
+      headline: `Estimate ${input.estimateNumber}`,
+      lead: `Estimate ${input.estimateNumber} is ready for your review in the customer portal.`,
+      details: [
+        { label: 'Estimate', value: input.estimateNumber },
+        { label: 'Customer', value: input.recipientName },
+        { label: 'Status', value: 'Ready for review' },
+      ],
+      primaryAction: { href: detailUrl, label: 'View estimate in the portal' },
       appUrl,
+      brand: input.brand,
     }),
     notificationKind: 'estimate_sent' as const,
   }

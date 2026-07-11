@@ -20,6 +20,7 @@ export type InvoiceSendServiceErrorCode
     | 'ALREADY_QUEUED'
     | 'PDF_FAILED'
     | 'EMAIL_FAILED'
+    | 'NOTIFICATION_DISABLED'
 
 export class InvoiceSendServiceError extends Error {
   constructor(public readonly code: InvoiceSendServiceErrorCode) {
@@ -100,6 +101,11 @@ export interface QueueInvoiceSendResult {
 
 /** Queue PDF generation + email delivery. Invoice stays approved until email succeeds. */
 export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: string): Promise<QueueInvoiceSendResult> {
+  const { isNotificationEnabled } = await import('./workspace-settings.service')
+  if (!(await isNotificationEnabled(db, 'invoiceEmail'))) {
+    throw new InvoiceSendServiceError('NOTIFICATION_DISABLED')
+  }
+
   let invoice
   try {
     invoice = await getInvoice(db, invoiceId)
@@ -132,13 +138,14 @@ export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: strin
   }
 
   const pdfResult = await generateInvoicePdf(db, invoiceId, actorId)
+  const mailPayload = await buildInvoiceSendMail(db, recipient, invoice, `${formatInvoiceNumber(invoice.invoiceNumber)}.pdf`)
   const job = await enqueueJob(db, 'invoice_send', {
     invoiceId,
     actorId,
     recipientEmail: recipient.email,
     recipientName: recipient.name,
     pdfJobId: pdfResult.job?.id ?? null,
-    ...buildInvoiceSendMail(recipient, invoice, `${formatInvoiceNumber(invoice.invoiceNumber)}.pdf`),
+    ...mailPayload,
   }, 5)
 
   return {
@@ -163,17 +170,21 @@ export async function markInvoiceSentAfterDelivery(db: Db, invoiceId: string, ac
   return { invoice, before, alreadySent: false as const }
 }
 
-export function buildInvoiceSendMail(
+export async function buildInvoiceSendMail(
+  db: Db,
   recipient: InvoiceSendRecipient,
   invoice: Awaited<ReturnType<typeof getInvoice>>,
   pdfFilename: string,
 ) {
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const brand = await resolveEmailBrand(db)
   const base = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
     invoiceId: invoice.id,
     dueDate: invoice.dueDate,
     total: invoice.total,
+    brand,
   })
   return {
     ...base,

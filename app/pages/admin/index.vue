@@ -8,6 +8,7 @@ import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMoni
 import OpenRouterModelSelector from '~/components/admin/OpenRouterModelSelector.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
+import SettingsNotificationsPanel from '~/components/admin/settings/SettingsNotificationsPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
 import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
@@ -145,6 +146,7 @@ const dismissAlertBusy = ref<string | null>(null)
 type ControlPanelSectionId
   = | 'business'
     | 'email'
+    | 'notifications'
     | 'invoice'
     | 'catalog'
     | 'line-detection'
@@ -156,6 +158,7 @@ type ControlPanelSectionId
 const openSections = reactive<Record<ControlPanelSectionId, boolean>>({
   business: false,
   email: false,
+  notifications: false,
   invoice: false,
   catalog: false,
   'line-detection': false,
@@ -181,7 +184,7 @@ function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
 
 watch(() => route.query.tab, (tab) => {
   const valid: ControlPanelSectionId[] = [
-    'business', 'email', 'invoice', 'catalog', 'line-detection',
+    'business', 'email', 'notifications', 'invoice', 'catalog', 'line-detection',
     'import', 'backup', 'ai', 'security',
   ]
   if (typeof tab === 'string' && valid.includes(tab as ControlPanelSectionId)) {
@@ -384,6 +387,17 @@ async function testAiConnection() {
           @update:open="setSectionOpen('email', $event)"
         >
           <SettingsEmailPanel @saved="refresh()" />
+        </ControlPanelSection>
+
+        <ControlPanelSection
+          id="notifications"
+          title="Notifications"
+          icon="🔔"
+          subtitle="Toggle app-wide email alerts"
+          :open="openSections.notifications"
+          @update:open="setSectionOpen('notifications', $event)"
+        >
+          <SettingsNotificationsPanel @saved="refresh()" />
         </ControlPanelSection>
 
         <ControlPanelSection
