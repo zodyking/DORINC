@@ -82,6 +82,7 @@ export function auditActionLabel(action: string): string {
     'auth.login': 'Staff login',
     'auth.signup': 'User signup',
     'auth.verify_email': 'Email verified',
+    'auth.resend_verification': 'Verification email resent',
     'users.approve': 'User approved',
     'users.reject': 'User rejected',
     'users.update': 'User updated',

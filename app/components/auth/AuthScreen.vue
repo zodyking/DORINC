@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
+import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -11,6 +12,7 @@ const card = ref<'customer' | 'staff'>(props.initialCard ?? 'customer')
 const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
 const auth = useAuthStore()
+const { busy: resendBusy, message: resendMessage, error: resendError, resend, reset: resetResend } = useResendVerification()
 
 const { data: publicBusiness } = await useFetch<{ businessName: string }>('/api/public/business')
 const displayBusinessName = computed(() => {
@@ -39,39 +41,55 @@ const reveal = reactive({
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
-
-interface FetchError {
-  data?: { data?: { message?: string }, message?: string }
-}
+const loginBlockedReason = ref<string | null>(null)
+const signupSubmittedEmail = ref('')
 
 function messageFrom(err: unknown): string {
-  const fe = err as FetchError
-  return fe.data?.data?.message ?? fe.data?.message ?? 'Something went wrong — try again'
+  return authErrorMessage(err)
 }
 
 function titleCaseNameField(field: Ref<string>) {
   field.value = toTitleCase(field.value)
 }
 
+const resendVerificationLink = computed(() => {
+  const email = loginEmail.value.trim() || signupSubmittedEmail.value.trim()
+  return email
+    ? `/auth/resend-verification?email=${encodeURIComponent(email)}`
+    : '/auth/resend-verification'
+})
+
 async function submitLogin(identifier: string, password: string) {
   busy.value = true
   error.value = ''
+  loginBlockedReason.value = null
+  resetResend()
   try {
     const user = await auth.login(identifier, password, card.value)
     await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
   }
   catch (err) {
     error.value = messageFrom(err)
+    loginBlockedReason.value = authErrorReason(err)
+    const hintedEmail = authErrorEmail(err)
+    if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
   }
   finally {
     busy.value = false
   }
 }
 
+async function submitResendFromLogin() {
+  resetResend()
+  await resend(loginEmail.value, loginPass.value)
+}
+
 async function submitSignup() {
   busy.value = true
   error.value = ''
   notice.value = ''
+  signupSubmittedEmail.value = ''
+  resetResend()
   if (signupPass.value !== signupConfirm.value) {
     error.value = 'Passwords do not match'
     busy.value = false
@@ -91,6 +109,10 @@ async function submitSignup() {
       },
     })
     notice.value = res.message
+    signupSubmittedEmail.value = signupEmail.value.trim()
+    tab.value = 'login'
+    loginEmail.value = signupSubmittedEmail.value
+    loginPass.value = signupPass.value
   }
   catch (err) {
     error.value = messageFrom(err)
@@ -186,6 +208,36 @@ async function submitSignup() {
               </div>
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
+
+            <div v-if="loginBlockedReason === 'not_verified'" class="auth-callout">
+              <p class="auth-hint">Your account exists but email is not verified yet.</p>
+              <p v-if="resendMessage" class="auth-hint auth-success" role="status">{{ resendMessage }}</p>
+              <p v-if="resendError" class="auth-hint auth-error" role="alert">{{ resendError }}</p>
+              <button
+                type="button"
+                class="btn sm"
+                :disabled="resendBusy || !loginEmail || !loginPass"
+                @click="submitResendFromLogin"
+              >
+                {{ resendBusy ? 'Sending…' : 'Resend verification email' }}
+              </button>
+              <NuxtLink :to="resendVerificationLink" class="auth-link auth-callout-link">
+                Open resend page
+              </NuxtLink>
+            </div>
+
+            <div v-else-if="loginBlockedReason === 'not_approved'" class="auth-callout">
+              <p class="auth-hint">Your email is verified. An administrator still needs to approve your account.</p>
+            </div>
+
+            <p v-if="notice" class="auth-hint auth-success" role="status">{{ notice }}</p>
+            <div v-if="notice" class="auth-callout">
+              <p class="auth-hint">Did not get the verification email?</p>
+              <NuxtLink :to="resendVerificationLink" class="auth-link auth-callout-link">
+                Resend verification email
+              </NuxtLink>
+            </div>
+
             <div class="auth-foot"><button type="button" class="auth-link">Forgot password?</button></div>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
               {{ busy ? 'Signing in…' : 'Sign in' }}

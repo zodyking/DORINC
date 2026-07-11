@@ -94,9 +94,15 @@ export default defineEventHandler(async (event) => {
       }
       switch (err.code) {
         case 'NOT_VERIFIED':
-          throw apiError(event, 'FORBIDDEN', 'Verify your email before signing in', { reason: 'not_verified' })
+          throw apiError(event, 'FORBIDDEN', 'Verify your email before signing in', {
+            reason: 'not_verified',
+            email: body.portal === 'staff' ? body.email : undefined,
+          })
         case 'NOT_APPROVED':
-          throw apiError(event, 'FORBIDDEN', 'Your account is awaiting admin approval', { reason: 'not_approved' })
+          throw apiError(event, 'FORBIDDEN', 'Your account is awaiting admin approval', {
+            reason: 'not_approved',
+            email: body.portal === 'staff' ? body.email : undefined,
+          })
         case 'DISABLED':
           throw apiError(event, 'FORBIDDEN', 'This account has been disabled', { reason: 'disabled' })
         case 'TEMP_PASSWORD_EXPIRED':

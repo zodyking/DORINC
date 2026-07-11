@@ -9,6 +9,7 @@ import {
   AuthError,
   login,
   logout,
+  resendVerificationEmail,
   resolveSession,
   signup,
   verifyEmail,
@@ -63,6 +64,27 @@ describe('P1-02 signup + email verification', () => {
     expect(verified.emailVerifiedAt).not.toBeNull()
 
     await expect(verifyEmail(db, verificationToken)).rejects.toThrow('INVALID_TOKEN')
+  })
+
+  it('resends verification email for unverified staff users', async () => {
+    const email = emailFor('resend')
+    const password = 'a-long-password-123'
+    const { user, verificationToken: firstToken } = await signup(db, {
+      name: 'Resend Me',
+      email,
+      password,
+      requestedAccountType: 'viewer',
+    })
+
+    const { verificationToken: secondToken } = await resendVerificationEmail(db, email, password)
+    expect(secondToken).not.toBe(firstToken)
+    expect(secondToken.length).toBeGreaterThan(20)
+
+    await verifyEmail(db, secondToken)
+    const [updated] = await db.select().from(users).where(eq(users.id, user.id))
+    expect(updated?.emailVerifiedAt).not.toBeNull()
+
+    await expect(resendVerificationEmail(db, email, password)).rejects.toThrow('ALREADY_VERIFIED')
   })
 
   it('rejects expired tokens', async () => {

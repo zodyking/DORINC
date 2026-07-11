@@ -48,7 +48,7 @@ onMounted(() => {
 
   if (!token) {
     state.value = 'error'
-    message.value = 'This verification link is missing a token. Open the link from your email again or request a new account.'
+    message.value = 'This verification link is missing or invalid. Resend a fresh verification email using your account email and password.'
     return
   }
 
@@ -99,7 +99,10 @@ onMounted(() => {
           <template v-else>
             <p class="auth-hint auth-error" role="alert">{{ message }}</p>
             <div class="verify-email-actions">
-              <NuxtLink to="/auth/login?card=staff" class="btn primary verify-email-btn">
+              <NuxtLink to="/auth/resend-verification" class="btn primary verify-email-btn">
+                Resend verification email
+              </NuxtLink>
+              <NuxtLink to="/auth/login?card=staff" class="btn verify-email-btn">
                 Sign in
               </NuxtLink>
               <NuxtLink to="/auth/signup" class="btn verify-email-btn">

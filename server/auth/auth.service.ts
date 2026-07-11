@@ -26,6 +26,7 @@ export type AuthServiceError
     | 'INVALID_CREDENTIALS'
     | 'NOT_VERIFIED'
     | 'NOT_APPROVED'
+    | 'ALREADY_VERIFIED'
     | 'DISABLED'
     | 'PORTAL_NOT_LINKED'
     | 'PORTAL_DISABLED'
@@ -74,14 +75,50 @@ export async function signup(db: Db, input: SignupInput) {
     // Pending state: not verified, not approved
   }).returning()
 
+  const verificationToken = await issueVerificationToken(db, user!.id)
+
+  return { user: user!, verificationToken }
+}
+
+/** Invalidate prior unused tokens and mint a fresh verification link. */
+export async function issueVerificationToken(db: Db, userId: string): Promise<string> {
+  await db.update(emailVerificationTokens)
+    .set({ usedAt: new Date() })
+    .where(and(
+      eq(emailVerificationTokens.userId, userId),
+      isNull(emailVerificationTokens.usedAt),
+    ))
+
   const { token, tokenHash } = generateToken()
   await db.insert(emailVerificationTokens).values({
-    userId: user!.id,
+    userId,
     tokenHash,
     expiresAt: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
   })
+  return token
+}
 
-  return { user: user!, verificationToken: token }
+export async function resendVerificationEmail(db: Db, email: string, password: string) {
+  const normalized = email.trim().toLowerCase()
+
+  const [row] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.email, normalized))
+
+  if (!row) throw new AuthError('INVALID_CREDENTIALS')
+
+  const ok = await verifyPassword(row.user.passwordHash, password)
+  if (!ok) throw new AuthError('INVALID_CREDENTIALS')
+
+  if (row.accountTypeKey === 'customer') throw new AuthError('INVALID_ACCOUNT_TYPE')
+  if (!row.user.isActive) throw new AuthError('DISABLED')
+  if (row.user.rejectedAt) throw new AuthError('NOT_APPROVED')
+  if (row.user.emailVerifiedAt) throw new AuthError('ALREADY_VERIFIED')
+
+  const verificationToken = await issueVerificationToken(db, row.user.id)
+  return { user: row.user, verificationToken }
 }
 
 export async function verifyEmail(db: Db, token: string) {

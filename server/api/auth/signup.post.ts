@@ -1,15 +1,12 @@
 import { z } from 'zod'
 import { AuthError, signup } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
-import { sendMail } from '../../mail/mailer'
-import { buildSignupVerificationEmail } from '../../mail/templates/system'
+import { sendVerificationEmail } from '../../services/verification-email.service'
 import { writeAudit } from '../../services/audit.service'
-import { getAppUrl } from '../../services/app-config.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
 import { formatPersonName } from '../../../shared/format/person-name'
 import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
-import { BRAND_NAME } from '../../../shared/brand'
 
 const signupSchema = z.object({
   firstName: nonEmptyString.max(60),
@@ -31,15 +28,11 @@ export default defineEventHandler(async (event) => {
       requestedAccountType: body.accountType,
     })
 
-    const appUrl = getAppUrl()
-    const verifyUrl = `${appUrl}/auth/verify-email?token=${encodeURIComponent(verificationToken)}`
-    const mail = buildSignupVerificationEmail({
+    await sendVerificationEmail({
+      to: user.email,
       name: user.name,
-      verifyUrl,
-      brandName: BRAND_NAME,
-      appUrl,
+      verificationToken,
     })
-    await sendMail({ to: user.email, ...mail })
 
     await writeAudit(event, {
       entityType: 'user',

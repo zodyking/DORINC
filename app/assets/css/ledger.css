@@ -81,6 +81,13 @@ a{ color:#4f46e5; }
 .auth-hint{ font-size:11.5px; color:#64748b; text-align:center; margin:12px 0 0; }
 .auth-hint.auth-error{ color:#dc2626; }
 .auth-hint.auth-success{ color:#059669; }
+.auth-callout{
+  margin-top:12px; padding:12px 14px; border-radius:10px;
+  background:#f8fafc; border:1px solid #e2e8f0; text-align:center;
+}
+.auth-callout .auth-hint{ margin:0 0 8px; }
+.auth-callout .auth-hint:last-child{ margin-bottom:0; }
+.auth-callout-link{ display:inline-block; margin-top:8px; font-size:12px; }
 .auth-switch{
   text-align:center; margin-top:16px; font-size:12.5px; color:#64748b;
 }
