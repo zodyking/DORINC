@@ -24,6 +24,7 @@ const dialogOpen = ref(false)
 const previewBusy = ref(false)
 const downloadBusy = ref(false)
 const error = ref('')
+const previewBlob = ref<Blob | null>(null)
 const { url: previewUrl, setFromBlob, revoke: revokePreview } = usePdfBlobUrl()
 
 const canUse = computed(() => props.canGeneratePdf !== false)
@@ -33,8 +34,11 @@ async function openPreview() {
   previewBusy.value = true
   error.value = ''
   revokePreview()
+  previewBlob.value = null
   try {
-    setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
+    const blob = await fetchInvoicePreviewPdf(props.invoiceId)
+    previewBlob.value = blob
+    setFromBlob(blob)
     dialogOpen.value = true
   }
   catch (e: unknown) {
@@ -83,6 +87,7 @@ async function downloadOfficialOrPreview() {
 function closeDialog() {
   dialogOpen.value = false
   error.value = ''
+  previewBlob.value = null
   revokePreview()
 }
 
@@ -118,6 +123,7 @@ defineExpose({
   <PdfViewerDialog
     v-model:open="dialogOpen"
     :src="previewUrl"
+    :blob="previewBlob"
     :title="`${invoiceLabel} PDF`"
     :download-href="previewUrl || undefined"
     :download-filename="`${invoiceLabel}.pdf`"

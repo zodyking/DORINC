@@ -7,8 +7,10 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ensureWorker, pdfjs, renderPdfPageToCanvas } from '~/utils/pdf-js-render'
 
 const props = defineProps<{
-  /** Blob object URL — bytes are copied on load so the URL can be revoked. */
-  src: string
+  /** Blob object URL — used for download links; optional when `blob` is set. */
+  src?: string
+  /** PDF bytes — preferred; avoids re-fetching blob URLs. */
+  blob?: Blob | null
 }>()
 
 const emit = defineEmits<{ 'load-error': [unknown] }>()
@@ -57,6 +59,15 @@ async function waitForMainWrap(maxTries = 48) {
     await new Promise<void>(r => requestAnimationFrame(() => r()))
   }
   return mainWrapRef.value
+}
+
+async function waitForCanvas(maxTries = 60) {
+  for (let i = 0; i < maxTries; i++) {
+    if (mainCanvasRef.value) return mainCanvasRef.value
+    await nextTick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+  }
+  return mainCanvasRef.value
 }
 
 async function measureFitScale() {
@@ -132,7 +143,7 @@ function cleanupDoc() {
   renderToken++
 }
 
-async function loadFromUrl(url: string) {
+async function loadFromBytes(buf: ArrayBuffer) {
   ensureWorker()
   fetchAbort?.abort()
   fetchAbort = new AbortController()
@@ -140,10 +151,7 @@ async function loadFromUrl(url: string) {
   loadError.value = ''
   loading.value = true
   try {
-    const res = await fetch(url, { signal: fetchAbort.signal })
-    if (!res.ok) throw new Error(`Could not load PDF (${res.status})`)
-    const buf = await res.arrayBuffer()
-    const doc = await pdfjs.getDocument({ data: buf }).promise
+    const doc = await pdfjs.getDocument({ data: buf.slice(0) }).promise
     pdf.value = doc
     numPages.value = doc.numPages
     currentPage.value = 1
@@ -170,9 +178,9 @@ async function loadFromUrl(url: string) {
   try {
     await measureFitScale()
     setupResizeObserver()
+    await waitForCanvas()
     await nextTick()
     await renderThumbnails()
-    await nextTick()
     await renderCurrentPage()
   }
   catch (e: unknown) {
@@ -183,8 +191,39 @@ async function loadFromUrl(url: string) {
   }
 }
 
-watch(() => props.src, (url) => {
-  if (url) void loadFromUrl(url)
+async function loadFromUrl(url: string) {
+  fetchAbort?.abort()
+  fetchAbort = new AbortController()
+  try {
+    const res = await fetch(url, { signal: fetchAbort.signal })
+    if (!res.ok) throw new Error(`Could not load PDF (${res.status})`)
+    await loadFromBytes(await res.arrayBuffer())
+  }
+  catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      loading.value = false
+      return
+    }
+    const msg = e instanceof Error ? e.message : 'Could not load PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
+    loading.value = false
+  }
+}
+
+async function loadSource() {
+  if (props.blob) {
+    await loadFromBytes(await props.blob.arrayBuffer())
+    return
+  }
+  if (props.src) {
+    await loadFromUrl(props.src)
+  }
+}
+
+watch(() => [props.src, props.blob] as const, () => {
+  if (props.blob || props.src) void loadSource()
   else {
     fetchAbort?.abort()
     cleanupDoc()
@@ -204,7 +243,7 @@ onUnmounted(() => {
   cleanupDoc()
 })
 
-defineExpose({ currentPage, numPages, reload: () => props.src && loadFromUrl(props.src) })
+defineExpose({ currentPage, numPages, reload: () => void loadSource() })
 </script>
 
 <template>
@@ -217,11 +256,15 @@ defineExpose({ currentPage, numPages, reload: () => props.src && loadFromUrl(pro
         <div v-if="loading" class="pdf-js-viewer__loading" role="status" aria-live="polite">
           Loading PDF…
         </div>
-        <template v-else-if="numPages > 0">
-          <div class="pdf-js-viewer__page-shell">
-            <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
-          </div>
-        </template>
+        <div class="pdf-js-viewer__page-shell" :class="{ 'is-hidden': loading || numPages < 1 }">
+          <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
+        </div>
+        <p
+          v-if="!loading && !loadError && numPages === 0"
+          class="pdf-js-viewer__state"
+        >
+          No pages in this document.
+        </p>
       </div>
       <div
         v-if="!loading && numPages > 1"
@@ -250,8 +293,8 @@ defineExpose({ currentPage, numPages, reload: () => props.src && loadFromUrl(pro
 
 <style scoped>
 .pdf-js-viewer {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: min(68vh, 780px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -307,6 +350,12 @@ defineExpose({ currentPage, numPages, reload: () => props.src && loadFromUrl(pro
   overflow: hidden;
   line-height: 0;
   flex-shrink: 0;
+}
+
+.pdf-js-viewer__page-shell.is-hidden {
+  visibility: hidden;
+  position: absolute;
+  pointer-events: none;
 }
 
 .pdf-js-viewer__canvas {

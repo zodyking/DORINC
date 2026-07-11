@@ -3,14 +3,11 @@
  * TripBuddy-style PDF chrome — title, zoom controls, download, optional close.
  * Wraps the shared PdfViewer canvas component so every surface looks identical.
  */
-import { defineAsyncComponent } from 'vue'
-
-const PdfViewerCore = defineAsyncComponent(
-  () => import('~/components/PdfViewer.client.vue'),
-)
+import PdfViewerCore from '~/components/PdfViewer.client.vue'
 
 const props = withDefaults(defineProps<{
-  src: string
+  src?: string
+  blob?: Blob | null
   title?: string
   showDownload?: boolean
   downloadHref?: string
@@ -52,8 +49,8 @@ function updateLayoutNarrow() {
     && window.matchMedia('(max-width: 640px)').matches
 }
 
-watch(() => props.src, (url) => {
-  if (url) {
+watch(() => [props.src, props.blob] as const, ([url, blob]) => {
+  if (url || blob) {
     resetZoom()
     updateLayoutNarrow()
   }
@@ -132,19 +129,14 @@ onUnmounted(() => {
       </div>
     </header>
     <div class="pdf-shell__frame">
-      <Suspense>
-        <template #default>
-          <PdfViewerCore
-            v-if="src"
-            :src="src"
-            v-model:zoom-mult="zoomMult"
-            @load-error="emit('load-error', $event)"
-          />
-        </template>
-        <template #fallback>
-          <p class="pdf-shell__fallback" role="status">Loading PDF viewer…</p>
-        </template>
-      </Suspense>
+      <PdfViewerCore
+        v-if="src || blob"
+        :src="src"
+        :blob="blob"
+        v-model:zoom-mult="zoomMult"
+        @load-error="emit('load-error', $event)"
+      />
+      <p v-else class="pdf-shell__fallback" role="status">No PDF loaded</p>
     </div>
   </div>
 </template>
@@ -162,8 +154,7 @@ onUnmounted(() => {
 
 .pdf-shell--fill {
   flex: 1;
-  min-height: 0;
-  height: 100%;
+  min-height: min(72vh, 820px);
 }
 
 .pdf-shell__head {
@@ -308,15 +299,17 @@ onUnmounted(() => {
 }
 
 .pdf-shell__frame {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: min(72vh, 820px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #1e293b;
 }
 
 .pdf-shell--fill .pdf-shell__frame {
-  min-height: 0;
+  flex: 1;
+  min-height: min(60vh, 720px);
 }
 
 .pdf-shell__fallback {
