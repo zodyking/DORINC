@@ -3,7 +3,6 @@ import { PdfViewerShell } from '~/utils/pdf-viewer'
 import {
   designSettingsFromForm,
   detectFontPreset,
-  logoPreviewUrl,
   publishStatusLabel,
   sectionsFromSettings,
   TEMPLATE_FONT_OPTIONS,
@@ -71,7 +70,6 @@ const form = reactive({
   accentColor: '#2563eb',
   accentColor2: '#1e293b',
   fontPreset: 'system' as TemplateFontPreset,
-  logoFileId: null as string | null,
   sections: sectionsFromSettings() as Record<InvoiceTemplateSectionKey, { visible: boolean, label: string }>,
 })
 
@@ -82,7 +80,6 @@ const actionError = ref('')
 const actionMessage = ref('')
 const testPdfBusy = ref(false)
 const duplicateBusy = ref(false)
-const logoUploadBusy = ref(false)
 
 const previewBusy = ref(false)
 const previewError = ref('')
@@ -119,8 +116,6 @@ const dirty = computed(() => {
   if (!savedSettings.value) return false
   return JSON.stringify(currentDesignSettings.value) !== JSON.stringify(savedSettings.value)
 })
-
-const logoUrl = computed(() => logoPreviewUrl(form.logoFileId))
 
 watch(canRead, (allowed) => {
   if (allowed) {
@@ -165,7 +160,6 @@ function loadSettingsFromVersion(settings: InvoiceTemplateDesignSettings) {
   form.accentColor = settings.accentColor
   form.accentColor2 = settings.accentColor2
   form.fontPreset = detectFontPreset(settings)
-  form.logoFileId = settings.logoFileId ?? null
   form.sections = sectionsFromSettings(settings)
   savedSettings.value = designSettingsFromForm(form)
   jsonText.value = JSON.stringify(savedSettings.value, null, 2)
@@ -244,7 +238,6 @@ function applyJsonSettings() {
     form.accentColor = parsed.accentColor
     form.accentColor2 = parsed.accentColor2
     form.fontPreset = detectFontPreset(parsed)
-    form.logoFileId = parsed.logoFileId ?? null
     form.sections = sectionsFromSettings(parsed)
     jsonText.value = JSON.stringify(designSettingsFromForm(form), null, 2)
     actionMessage.value = 'JSON applied to editor'
@@ -384,35 +377,6 @@ async function testRenderPdf() {
   finally {
     testPdfBusy.value = false
   }
-}
-
-async function onLogoPick(ev: Event) {
-  if (!canManage.value || !template.value) return
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  logoUploadBusy.value = true
-  actionError.value = ''
-  try {
-    const body = new FormData()
-    body.append('file', file)
-    body.append('ownerEntityType', 'template')
-    body.append('ownerEntityId', template.value.id)
-    body.append('fileKind', 'attachment')
-    const res = await $fetch<{ file: { id: string } }>('/api/files', { method: 'POST', body })
-    form.logoFileId = res.file.id
-  }
-  catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Logo upload failed'
-  }
-  finally {
-    logoUploadBusy.value = false
-  }
-}
-
-function clearLogo() {
-  form.logoFileId = null
 }
 
 onUnmounted(() => {
@@ -591,24 +555,10 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="fld">
-              <span>Logo</span>
-              <div class="td-logo-block">
-                <div class="td-logo-preview" :style="{ '--pv-accent': form.accentColor }">
-                  <img v-if="logoUrl" :src="logoUrl" alt="Logo preview">
-                  <span v-else>DOR<br>INC</span>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                  <label v-if="canManage" class="btn sm" style="cursor:pointer;">
-                    {{ logoUploadBusy ? 'Uploading…' : 'Upload logo' }}
-                    <input type="file" accept="image/*" hidden :disabled="logoUploadBusy" @change="onLogoPick">
-                  </label>
-                  <button v-if="canManage && form.logoFileId" type="button" class="btn ghost sm" @click="clearLogo">
-                    Remove logo
-                  </button>
-                </div>
-              </div>
-            </div>
+            <p class="muted" style="font-size:12px; margin:8px 0 0;">
+              Company name, address, phone, email, and website on PDFs come from
+              <NuxtLink to="/admin?tab=business">Business settings</NuxtLink>.
+            </p>
 
             <fieldset class="fld" style="border:none; padding:0; margin:12px 0 0;">
               <legend style="font-size:12px; font-weight:600; color:#475569; margin-bottom:8px;">Sections</legend>

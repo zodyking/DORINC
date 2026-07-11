@@ -10,6 +10,7 @@ import { mergeTemplateSections, BLADE_INVOICE_TEMPLATE_MARKER } from '../../shar
 import {
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
+  businessProfileToDocumentPdfCompany,
   serializePdfRenderPayload,
 } from '../../shared/document-pdf-payload'
 import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
@@ -152,10 +153,6 @@ export async function getInvoiceTemplateDetail(db: Db, templateId: string) {
     publishedVersion,
     usageCount,
   }
-}
-
-function logoPreviewPath(fileId: string | null | undefined) {
-  return fileId ? `/api/files/${fileId}/preview` : null
 }
 
 export async function publishInvoiceTemplateVersion(
@@ -370,9 +367,8 @@ export async function previewTemplatePdf(
       }
     : baseSettings
   const data = buildInvoicePdfData(invoiceDetail, {
-    company: { name: business.businessName || undefined },
+    company: businessProfileToDocumentPdfCompany(business),
     design: designSettings,
-    logoUrl: logoPreviewPath(designSettings.logoFileId),
   })
   const marginInches = designSettings.marginInches
   const paper = designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
@@ -412,9 +408,8 @@ export async function testRenderTemplatePdf(
     : detail.latestVersion.designSettings
 
   const data = buildInvoicePdfData(invoiceDetail, {
-    company: { name: business.businessName || undefined },
+    company: businessProfileToDocumentPdfCompany(business),
     design: mergedSettings,
-    logoUrl: logoPreviewPath(mergedSettings.logoFileId),
   })
   const paper = mergedSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
   const payload = buildDocumentPdfRenderPayload(data, {

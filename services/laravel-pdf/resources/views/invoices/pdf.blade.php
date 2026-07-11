@@ -166,18 +166,14 @@
       <tr>
         @if($sectionVisible('company_info'))
           <td width="{{ $sectionVisible('invoice_meta') ? '55%' : '100%' }}" valign="top">
-            @if(!empty($company['logoUrl']))
-              <img src="{{ $company['logoUrl'] }}" alt="" style="max-height:48px; max-width:160px; margin-bottom:10px;" />
-            @elseif(!empty($company['logoText']))
-              <div style="display:inline-block; margin-bottom:10px; padding:8px 10px; background:{{ $accent }}; color:#0f172a; font-size:9pt; font-weight:700; line-height:1.15; letter-spacing:0.04em; text-align:center;">{!! $company['logoText'] !!}</div>
-            @endif
             <h1 class="company-name">{{ $company['name'] ?? 'Business Name' }}</h1>
             <div class="company-meta">
-              @if(!empty($company['tagline']))<div>{{ $company['tagline'] }}</div>@endif
-              <div>{{ $company['addressLine1'] ?? '' }}</div>
-              <div>{{ $company['addressLine2'] ?? '' }}</div>
-              <div>{{ $company['phone'] ?? '' }}@if(!empty($company['email'])) · {{ $company['email'] }}@endif</div>
-              @if(!empty($company['hours']))<div>{{ $company['hours'] }}</div>@endif
+              @if(!empty($company['addressLine1']))<div>{{ $company['addressLine1'] }}</div>@endif
+              @if(!empty($company['addressLine2']))<div>{{ $company['addressLine2'] }}</div>@endif
+              @if(!empty($company['phone']) || !empty($company['email']))
+                <div>{{ $company['phone'] ?? '' }}@if(!empty($company['phone']) && !empty($company['email'])) · @endif{{ $company['email'] ?? '' }}</div>
+              @endif
+              @if(!empty($company['website']))<div>{{ $company['website'] }}</div>@endif
             </div>
           </td>
         @endif

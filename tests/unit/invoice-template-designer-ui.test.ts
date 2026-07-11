@@ -18,7 +18,6 @@ describe('invoice-template-designer-ui helpers (P1-30)', () => {
       accentColor: '#ffd400',
       accentColor2: '#0b0f1a',
       fontPreset: 'inter',
-      logoFileId: null,
       sections: sectionsFromSettings(),
     })
     expect(settings.fontSans).toContain('Inter')

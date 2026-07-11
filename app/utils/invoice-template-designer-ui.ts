@@ -93,17 +93,12 @@ export function publishStatusLabel(
   return `Published v${versionNumber} · ${stamp}${usage}`
 }
 
-export function logoPreviewUrl(fileId: string | null | undefined): string | null {
-  return fileId ? `/api/files/${fileId}/preview` : null
-}
-
 export function designSettingsFromForm(form: {
   pageSize: 'Letter' | 'A4'
   marginInches: number
   accentColor: string
   accentColor2: string
   fontPreset: TemplateFontPreset
-  logoFileId: string | null
   sections: Record<InvoiceTemplateSectionKey, { visible: boolean, label: string }>
 }): InvoiceTemplateDesignSettings {
   const fonts = TEMPLATE_FONT_OPTIONS.find(o => o.key === form.fontPreset) ?? TEMPLATE_FONT_OPTIONS[0]!
@@ -114,7 +109,6 @@ export function designSettingsFromForm(form: {
     accentColor2: form.accentColor2,
     fontSans: fonts.fontSans,
     fontMono: fonts.fontMono,
-    logoFileId: form.logoFileId,
     sections: form.sections,
   }
 }
