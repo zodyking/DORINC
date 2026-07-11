@@ -345,37 +345,86 @@ textarea {
   }
 }
 
-/* Staff page actions: hamburger menu on mobile, inline buttons on desktop. */
-@media (max-width: 767px) {
-  .page-actions:not(.desktop) .page-actions__panel:not(.open) {
-    display: none !important;
-  }
-  .page-actions:not(.desktop) .page-actions__trigger {
-    display: grid !important;
-  }
+/* Staff page actions — mobile-first: hamburger menu; desktop: inline buttons. */
+.page-actions {
+  position: relative;
+  flex: none;
+}
+.page-actions__trigger {
+  display: grid;
+}
+.page-actions__panel {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  min-width: 220px;
+  max-width: min(92vw, 280px);
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.18);
+}
+.page-actions__panel.open {
+  display: block;
+}
+.page-actions__panel .btn,
+.page-actions__panel a.btn,
+.page-actions__panel button.btn {
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
+  background: transparent;
+}
+.page-actions__panel .btn:hover,
+.page-actions__panel a.btn:hover,
+.page-actions__panel button.btn:hover {
+  background: #f1f5f9;
+}
+.page-actions__panel .btn.primary,
+.page-actions__panel a.btn.primary {
+  color: #4f46e5;
+  background: transparent;
+  border: none;
+}
+.page-actions__panel .btn.primary:hover,
+.page-actions__panel a.btn.primary:hover {
+  background: #eef2ff;
+}
+.page-actions__panel .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.page-actions__panel .invoice-pdf-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 4px;
+}
+
+@media (max-width: 1023px) {
   .pagehead__title-row {
     align-items: flex-start;
   }
   .pagehead__title-row h2 {
     font-size: 20px;
     line-height: 1.2;
-  }
-  .page-actions__panel .invoice-pdf-actions,
-  .page-actions__panel :deep(.invoice-pdf-actions) {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    gap: 4px;
+    padding-right: 4px;
   }
 }
 
-@media (min-width: 768px) {
-  .page-actions.desktop .page-actions__trigger {
+@media (min-width: 1024px) {
+  .page-actions__trigger {
     display: none !important;
   }
-  .page-actions.desktop .page-actions__panel {
-    position: static;
+  .page-actions__panel,
+  .page-actions__panel.open {
     display: flex !important;
+    position: static;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -389,22 +438,28 @@ textarea {
     background: transparent;
     box-shadow: none;
   }
-  .page-actions.desktop .page-actions__panel .btn,
-  .page-actions.desktop .page-actions__panel a.btn,
-  .page-actions.desktop .page-actions__panel button.btn {
+  .page-actions__panel .btn,
+  .page-actions__panel a.btn,
+  .page-actions__panel button.btn {
     width: auto;
     justify-content: center;
     border: 1px solid #e2e8f0;
     background: #fff;
   }
-  .page-actions.desktop .page-actions__panel .btn.primary,
-  .page-actions.desktop .page-actions__panel a.btn.primary {
+  .page-actions__panel .btn.primary,
+  .page-actions__panel a.btn.primary {
     background: #4f46e5;
     border-color: #4f46e5;
     color: #fff;
   }
-  .page-actions.desktop .page-actions__panel .btn.primary:hover,
-  .page-actions.desktop .page-actions__panel a.btn.primary:hover {
+  .page-actions__panel .btn.primary:hover,
+  .page-actions__panel a.btn.primary:hover {
     background: #4338ca;
+  }
+  .page-actions__panel .invoice-pdf-actions {
+    display: inline-flex;
+    flex-direction: row;
+    width: auto;
+    gap: 8px;
   }
 }
