@@ -57,15 +57,29 @@ async function loadDocument(url: string) {
 async function renderPage() {
   if (!doc || !canvasHost.value) return
   const page = await doc.getPage(pageNum.value)
+  const outputScale = window.devicePixelRatio || 1
   const viewport = page.getViewport({ scale: scale.value })
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   if (!ctx) return
-  canvas.width = viewport.width
-  canvas.height = viewport.height
+
+  canvas.width = Math.floor(viewport.width * outputScale)
+  canvas.height = Math.floor(viewport.height * outputScale)
+  canvas.style.width = `${Math.floor(viewport.width)}px`
+  canvas.style.height = `${Math.floor(viewport.height)}px`
   canvas.className = 'pdf-viewer__canvas'
+
   canvasHost.value.replaceChildren(canvas)
-  await page.render({ canvasContext: ctx, viewport }).promise
+
+  const transform = outputScale !== 1
+    ? [outputScale, 0, 0, outputScale, 0, 0] as [number, number, number, number, number, number]
+    : undefined
+
+  await page.render({
+    canvasContext: ctx,
+    viewport,
+    transform,
+  }).promise
 }
 
 function zoomIn() {
@@ -83,7 +97,7 @@ function fitWidth() {
   void doc.getPage(pageNum.value).then((page) => {
     const base = page.getViewport({ scale: 1 })
     const width = canvasHost.value?.clientWidth ?? base.width
-    scale.value = Math.max(0.4, Math.min(3, (width - 24) / base.width))
+    scale.value = Math.max(0.5, Math.min(3, (width - 24) / base.width))
     void renderPage()
   })
 }
@@ -180,6 +194,7 @@ defineExpose({ fitWidth, reload: () => loadDocument(props.src) })
   overflow: auto;
   padding: 16px;
   min-height: 420px;
+  -webkit-overflow-scrolling: touch;
 }
 .pdf-viewer__canvas-host {
   display: flex;
@@ -188,10 +203,9 @@ defineExpose({ fitWidth, reload: () => loadDocument(props.src) })
 }
 .pdf-viewer__canvas-host :deep(.pdf-viewer__canvas) {
   display: block;
-  max-width: 100%;
-  height: auto;
   background: #fff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  image-rendering: auto;
 }
 .pdf-viewer__message {
   margin: auto;
