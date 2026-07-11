@@ -1282,6 +1282,51 @@ body.help-chat-open{ overflow:hidden; }
 .cp-quicklinks{
   display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;
 }
+.admin-overview{ margin-bottom:4px; }
+.cp-sections{ display:flex; flex-direction:column; gap:10px; }
+.cp-sections-label{
+  margin:18px 0 4px; font-size:11px; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; color:#94a3b8;
+}
+.cp-sections-label:first-child{ margin-top:0; }
+.cp-section{
+  background:#fff; border:1px solid #e2e8f0; border-radius:14px;
+  overflow:hidden; transition:border-color .15s, box-shadow .15s;
+}
+.cp-section.open{
+  border-color:#c7d2fe; box-shadow:0 4px 18px rgba(79,70,229,.06);
+}
+.cp-section__head{
+  appearance:none; width:100%; border:none; background:transparent; cursor:pointer;
+  display:flex; align-items:center; gap:12px; padding:16px 18px; text-align:left;
+  font-family:inherit; color:inherit;
+}
+.cp-section__head:hover{ background:#fafbfe; }
+.cp-section__head:focus-visible{
+  outline:2px solid #818cf8; outline-offset:-2px;
+}
+.cp-section__icon{
+  width:40px; height:40px; border-radius:10px; background:#f1f5f9; border:1px solid #e2e8f0;
+  display:grid; place-items:center; font-size:18px; flex:none;
+}
+.cp-section.open .cp-section__icon{
+  background:#eef2ff; border-color:#c7d2fe;
+}
+.cp-section__text{ flex:1; min-width:0; }
+.cp-section__text b{ display:block; font-size:13.5px; color:#0f172a; }
+.cp-section__text small{
+  display:block; margin-top:2px; font-size:12px; color:#94a3b8; line-height:1.35;
+}
+.cp-section__chev{
+  flex:none; font-size:14px; color:#94a3b8; line-height:1; transition:transform .15s;
+}
+.cp-section.open .cp-section__chev{ color:#4f46e5; transform:rotate(90deg); }
+.cp-section__body{
+  padding:0 18px 18px; border-top:1px solid #f1f5f9;
+}
+.cp-section__body > .stack{ gap:14px; }
+.cp-section__body .settings-panel-head{ display:none; }
+.cp-section__body > .card:first-child{ margin-top:14px; }
 .edit-lock-banner{
   display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
   margin-bottom:16px; padding:12px 16px; border-radius:12px;

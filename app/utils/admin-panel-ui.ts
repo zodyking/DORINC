@@ -54,6 +54,19 @@ export function formatBackupSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
+export function formatDatabaseSizeGb(bytes: number): string {
+  if (bytes <= 0) return '0.00 GB'
+  return `${(bytes / (1024 ** 3)).toFixed(2)} GB`
+}
+
+export function formatDatabaseSizeDelta(bytes: number, percent: number | null): string {
+  const sign = bytes > 0 ? '+' : ''
+  const gb = formatDatabaseSizeGb(Math.abs(bytes)).replace(' GB', '')
+  const pct = percent != null ? ` (${sign}${percent.toFixed(1)}%)` : ''
+  if (bytes === 0) return 'No change'
+  return `${sign}${gb} GB${pct}`
+}
+
 export function backupRunStatusClass(status: string): string {
   if (status === 'completed') return 'ok'
   if (status === 'failed') return 'over'

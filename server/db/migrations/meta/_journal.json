@@ -253,6 +253,13 @@
       "when": 1783576000000,
       "tag": "0036_repair_invoice_files",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1783577000000,
+      "tag": "0037_db_size_snapshots",
+      "breakpoints": true
     }
   ]
 }
