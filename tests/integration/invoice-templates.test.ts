@@ -17,6 +17,7 @@ import {
   invoiceTemplateVersions,
   invoiceTemplates,
 } from '../../server/db/schema/invoice-templates'
+import { readBuiltInInvoiceBladeSource } from '../../server/utils/invoice-blade-baseline'
 import { publishInvoiceTemplateVersion, getLatestTemplateVersion } from '../../server/services/invoice-templates.service'
 import { users } from '../../server/db/schema/auth'
 
@@ -60,8 +61,10 @@ describe('P1-27 invoice template seed', () => {
     const { template } = await seedInvoiceTemplates(db)
     const [actor] = await db.select({ id: users.id }).from(users).limit(1)
     const beforeLatest = await getLatestTemplateVersion(db, template.id)
+    const bladeSource = await readBuiltInInvoiceBladeSource()
 
     const version = await publishInvoiceTemplateVersion(db, template.id, {
+      bladeSource,
       designSettings: {
         pageSize: 'A4',
         marginInches: 0.75,
@@ -77,7 +80,7 @@ describe('P1-27 invoice template seed', () => {
     expect(version.status).toBe('published')
     expect(version.designSettings.pageSize).toBe('A4')
     expect(version.designSettings.accentColor).toBe('#4f46e5')
-    expect(version.layoutMarker).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
+    expect(version.layoutMarker).toContain('@php')
     expect(mergeTemplateSections(version.designSettings.sections).vehicle.visible).toBe(true)
 
     const [priorPublished] = await db.select().from(invoiceTemplateVersions)

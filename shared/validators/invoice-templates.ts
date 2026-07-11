@@ -18,10 +18,12 @@ export const invoiceTemplateDesignSettingsSchema = z.object({
 })
 
 export const publishInvoiceTemplateSchema = z.object({
-  designSettings: invoiceTemplateDesignSettingsSchema,
+  bladeSource: z.string().min(20).max(500_000),
+  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
 })
 
 export const previewTemplatePdfSchema = z.object({
+  bladeSource: z.string().min(20).max(500_000).optional(),
   designSettings: invoiceTemplateDesignSettingsSchema.optional(),
 })
 
@@ -34,6 +36,11 @@ export const patchInvoiceTemplateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
 }).refine(v => v.isDefault === true || v.name !== undefined, { message: 'No supported patch fields' })
 
+export const previewTemplateHtmlSchema = z.object({
+  bladeSource: z.string().min(20).max(500_000),
+})
+
 export const testTemplatePdfSchema = z.object({
+  bladeSource: z.string().min(20).max(500_000).optional(),
   designSettings: invoiceTemplateDesignSettingsSchema.optional(),
 })

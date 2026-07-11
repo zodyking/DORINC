@@ -1,3 +1,4 @@
+import { formatSmtpFromHeader } from '../../../shared/format/smtp-from'
 import { useDb } from '../../../db/client'
 import { getSmtpConfig, saveSmtpConfig } from '../../../services/app-config.service'
 import { resetMailTransport } from '../../../mail/mailer'
@@ -14,6 +15,7 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   const existing = getSmtpConfig()
+  const from = formatSmtpFromHeader(body.fromName, body.fromAddress)
 
   try {
     await saveSmtpConfig(db, {
@@ -21,14 +23,14 @@ export default defineEventHandler(async (event) => {
       port: body.port,
       user: body.username,
       pass: body.password ?? existing?.pass ?? '',
-      from: body.from,
+      from,
     }, auth.user.id)
     resetMailTransport()
 
     await writeAudit(event, {
       entityType: 'system',
       action: 'settings.smtp.update',
-      afterData: { host: body.host, port: body.port, from: body.from },
+      afterData: { host: body.host, port: body.port, from },
       permissionKey: 'system.admin.all',
       riskLevel: 'high',
     })

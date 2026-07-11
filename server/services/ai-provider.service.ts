@@ -194,6 +194,7 @@ export interface OpenRouterTestResult {
 export interface OpenRouterModelOption {
   id: string
   name: string
+  maker: string
   /** Display label: `Model Name - $in/$out per 1M` */
   label: string
   promptPerMillion: number | null
@@ -227,6 +228,14 @@ function isTextCapableModel(row: OpenRouterModelRow): boolean {
   return !row.architecture
 }
 
+function modelMaker(id: string): string {
+  const slash = id.indexOf('/')
+  if (slash <= 0) return 'Other'
+  const maker = id.slice(0, slash).trim()
+  if (!maker) return 'Other'
+  return maker.charAt(0).toUpperCase() + maker.slice(1)
+}
+
 function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
   const id = row.id?.trim()
   if (!id) return null
@@ -240,7 +249,8 @@ function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
   return {
     id,
     name,
-    label: `${name} - ${cost}`,
+    maker: modelMaker(id),
+    label: `${name} — ${cost}`,
     promptPerMillion: prompt.perMillion,
     completionPerMillion: completion.perMillion,
   }

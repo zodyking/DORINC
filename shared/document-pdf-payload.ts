@@ -76,6 +76,7 @@ export interface DocumentPdfRenderPayload {
   options: {
     paper: 'letter' | 'a4'
     margins: { top: number, right: number, bottom: number, left: number }
+    bladeSource?: string
   }
 }
 
@@ -345,7 +346,7 @@ export function buildEstimatePdfData(
 
 export function buildDocumentPdfRenderPayload(
   data: DocumentPdfData,
-  renderOptions: { paper?: 'letter' | 'a4', marginInches?: number },
+  renderOptions: { paper?: 'letter' | 'a4', marginInches?: number, bladeSource?: string },
 ): DocumentPdfRenderPayload {
   const margin = renderOptions.marginInches ?? 0.5
   return {
@@ -354,6 +355,7 @@ export function buildDocumentPdfRenderPayload(
     options: {
       paper: renderOptions.paper ?? 'letter',
       margins: { top: margin, right: margin, bottom: margin, left: margin },
+      bladeSource: renderOptions.bladeSource,
     },
   }
 }

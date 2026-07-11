@@ -21,338 +21,181 @@ interface DatabaseSizeMetrics {
 
 const { data, pending, error, refresh } = await useFetch<DatabaseSizeMetrics>('/api/admin/system/database-size')
 
-const hoveredIndex = ref<number | null>(null)
-
 const chart = computed(() => {
   const points = data.value?.history ?? []
   if (points.length < 2) return null
 
   const width = 720
-  const height = 260
-  const padLeft = 52
-  const padRight = 16
-  const padTop = 18
-  const padBottom = 28
-  const innerW = width - padLeft - padRight
-  const innerH = height - padTop - padBottom
+  const height = 120
+  const padX = 12
+  const padY = 10
+  const innerW = width - padX * 2
+  const innerH = height - padY * 2
 
   const values = points.map(p => p.databaseBytes)
   const rawMin = Math.min(...values)
   const rawMax = Math.max(...values)
-  const padding = Math.max((rawMax - rawMin) * 0.12, rawMax * 0.02, 1024 * 1024)
+  const flat = rawMax - rawMin < Math.max(rawMax * 0.002, 64 * 1024)
+  const padding = flat ? Math.max(rawMax * 0.08, 256 * 1024) : Math.max((rawMax - rawMin) * 0.15, 128 * 1024)
   const min = Math.max(0, rawMin - padding)
   const max = rawMax + padding
   const range = Math.max(max - min, 1)
 
-  const yFor = (bytes: number) => padTop + innerH - ((bytes - min) / range) * innerH
-
   const coords = points.map((point, index) => {
-    const x = padLeft + (index / (points.length - 1)) * innerW
-    const y = yFor(point.databaseBytes)
+    const x = padX + (index / (points.length - 1)) * innerW
+    const y = padY + innerH - ((point.databaseBytes - min) / range) * innerH
     return { x, y, point, index }
   })
 
   const line = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ')
-  const area = `${line} L ${coords[coords.length - 1]!.x.toFixed(1)} ${(padTop + innerH).toFixed(1)} L ${coords[0]!.x.toFixed(1)} ${(padTop + innerH).toFixed(1)} Z`
+  const area = `${line} L ${coords[coords.length - 1]!.x.toFixed(1)} ${(padY + innerH).toFixed(1)} L ${coords[0]!.x.toFixed(1)} ${(padY + innerH).toFixed(1)} Z`
 
-  const gridLines = Array.from({ length: 5 }, (_, i) => {
-    const value = min + (range * i) / 4
-    const y = yFor(value)
-    return {
-      y,
-      label: formatDatabaseSizeGb(value),
-    }
-  })
-
-  const xLabels = [
-    { x: coords[0]!.x, label: formatChartDate(points[0]!.recordedAt) },
-    { x: coords[Math.floor(coords.length / 2)]!.x, label: formatChartDate(points[Math.floor(points.length / 2)]!.recordedAt) },
-    { x: coords[coords.length - 1]!.x, label: formatChartDate(points[points.length - 1]!.recordedAt) },
-  ]
-
-  return {
-    width,
-    height,
-    padLeft,
-    padTop,
-    innerW,
-    innerH,
-    line,
-    area,
-    coords,
-    gridLines,
-    xLabels,
-    minLabel: formatDatabaseSizeGb(rawMin),
-    maxLabel: formatDatabaseSizeGb(rawMax),
-  }
+  return { width, height, line, area, coords, flat }
 })
 
-function formatChartDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-function formatPointLabel(iso: string, bytes: number): string {
-  return `${formatChartDate(iso)} · ${formatDatabaseSizeGb(bytes)}`
-}
+const changeClass = computed(() => {
+  const bytes = data.value?.change7dBytes
+  if (bytes == null || bytes === 0) return 'flat'
+  return bytes > 0 ? 'up' : 'down'
+})
 </script>
 
 <template>
-  <div
-    :class="[
-      hero ? 'card cp-db-chart cp-db-chart--hero' : embedded ? 'cp-db-chart cp-db-chart--embedded' : 'card cp-db-chart',
-    ]"
-  >
-    <div :class="embedded && !hero ? 'cp-db-chart__head' : 'chead'">
+  <div :class="hero ? 'card cp-storage-hero' : embedded ? 'cp-db-chart cp-db-chart--embedded' : 'card cp-db-chart'">
+    <div class="cp-storage-hero__head">
       <div>
-        <h3>Database storage</h3>
-        <p v-if="hero" class="cp-db-chart__lead">
-          PostgreSQL footprint over time — snapshots every ~6 hours.
-        </p>
-      </div>
-      <div class="right">
-        <button type="button" class="btn sm" :disabled="pending" @click="refresh()">
-          {{ pending ? 'Refreshing…' : 'Refresh' }}
-        </button>
-      </div>
-    </div>
-    <div :class="embedded && !hero ? 'cp-db-chart__body' : 'cbody'">
-      <p v-if="error" class="settings-err">Could not load database size metrics.</p>
-      <template v-else-if="data">
-        <div class="cp-db-chart__stats">
-          <div class="cp-db-chart__stat">
-            <div class="cp-db-chart__label">Current size</div>
-            <div class="cp-db-chart__value">{{ formatDatabaseSizeGb(data.currentBytes) }}</div>
-          </div>
-          <div v-if="data.change7dBytes != null" class="cp-db-chart__stat">
-            <div class="cp-db-chart__label">7-day change</div>
-            <div
-              class="cp-db-chart__value"
-              :class="data.change7dBytes > 0 ? 'up' : data.change7dBytes < 0 ? 'down' : 'flat'"
-            >
-              {{ formatDatabaseSizeDelta(data.change7dBytes, data.change7dPercent) }}
-            </div>
-          </div>
-          <div class="cp-db-chart__stat">
-            <div class="cp-db-chart__label">Snapshots</div>
-            <div class="cp-db-chart__value sm">{{ data.history.length }}</div>
-          </div>
-          <div v-if="chart" class="cp-db-chart__stat cp-db-chart__stat--range">
-            <div class="cp-db-chart__label">Chart range</div>
-            <div class="cp-db-chart__value sm">{{ chart.minLabel }} – {{ chart.maxLabel }}</div>
-          </div>
-        </div>
-
-        <div v-if="chart" class="cp-db-chart__plot-wrap cp-db-chart__plot-wrap--rich">
-          <svg
-            class="cp-db-chart__plot"
-            :viewBox="`0 0 ${chart.width} ${chart.height}`"
-            role="img"
-            aria-label="Database size over time"
-            @mouseleave="hoveredIndex = null"
+        <p class="cp-storage-hero__eyebrow">PostgreSQL storage</p>
+        <div class="cp-storage-hero__metric-row">
+          <strong class="cp-storage-hero__size">{{ data ? formatDatabaseSizeGb(data.currentBytes) : '—' }}</strong>
+          <span
+            v-if="data?.change7dBytes != null"
+            class="cp-storage-hero__delta"
+            :class="changeClass"
           >
-            <defs>
-              <linearGradient id="cp-db-fill-rich" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.28" />
-                <stop offset="55%" stop-color="#6366f1" stop-opacity="0.12" />
-                <stop offset="100%" stop-color="#818cf8" stop-opacity="0.02" />
-              </linearGradient>
-              <linearGradient id="cp-db-line-rich" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#4338ca" />
-                <stop offset="100%" stop-color="#6366f1" />
-              </linearGradient>
-            </defs>
-
-            <rect
-              :x="chart.padLeft"
-              :y="chart.padTop"
-              :width="chart.innerW"
-              :height="chart.innerH"
-              fill="#fafbff"
-              rx="8"
-            />
-
-            <g class="cp-db-chart__grid">
-              <line
-                v-for="(grid, i) in chart.gridLines"
-                :key="`grid-${i}`"
-                :x1="chart.padLeft"
-                :x2="chart.padLeft + chart.innerW"
-                :y1="grid.y"
-                :y2="grid.y"
-              />
-              <text
-                v-for="(grid, i) in chart.gridLines"
-                :key="`label-${i}`"
-                :x="chart.padLeft - 8"
-                :y="grid.y + 4"
-                text-anchor="end"
-              >
-                {{ grid.label }}
-              </text>
-            </g>
-
-            <path :d="chart.area" fill="url(#cp-db-fill-rich)" />
-            <path :d="chart.line" fill="none" stroke="url(#cp-db-line-rich)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-
-            <g class="cp-db-chart__points">
-              <circle
-                v-for="coord in chart.coords"
-                :key="coord.index"
-                :cx="coord.x"
-                :cy="coord.y"
-                :r="hoveredIndex === coord.index ? 6 : 4"
-                :class="{ active: hoveredIndex === coord.index }"
-                :aria-label="formatPointLabel(coord.point.recordedAt, coord.point.databaseBytes)"
-                @mouseenter="hoveredIndex = coord.index"
-              />
-            </g>
-
-            <g class="cp-db-chart__xlabels">
-              <text
-                v-for="(item, i) in chart.xLabels"
-                :key="`x-${i}`"
-                :x="item.x"
-                :y="chart.height - 8"
-                text-anchor="middle"
-              >
-                {{ item.label }}
-              </text>
-            </g>
-          </svg>
-
-          <div v-if="hoveredIndex != null && chart.coords[hoveredIndex]" class="cp-db-chart__tooltip">
-            {{ formatPointLabel(chart.coords[hoveredIndex]!.point.recordedAt, chart.coords[hoveredIndex]!.point.databaseBytes) }}
-          </div>
+            {{ formatDatabaseSizeDelta(data.change7dBytes, data.change7dPercent) }}
+          </span>
         </div>
-        <p v-else class="cp-db-chart__empty">
-          Size history builds automatically — a snapshot is recorded about every 6 hours.
-          Check back after the next snapshot for a growth chart.
+        <p class="cp-storage-hero__sub">
+          {{ data?.history.length ?? 0 }} snapshots
+          <template v-if="data?.lastSnapshotAt"> · last {{ new Date(data.lastSnapshotAt).toLocaleString() }}</template>
         </p>
-        <p v-if="data.lastSnapshotAt" class="cp-db-chart__meta">
-          Last snapshot {{ new Date(data.lastSnapshotAt).toLocaleString() }}
+      </div>
+      <button type="button" class="btn sm" :disabled="pending" @click="refresh()">
+        {{ pending ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
+
+    <div v-if="error" class="cp-storage-hero__body">
+      <p class="settings-err">Could not load database size metrics.</p>
+    </div>
+    <div v-else-if="pending && !data" class="cp-storage-hero__body">
+      <p class="cp-storage-hero__empty">Loading database metrics…</p>
+    </div>
+    <div v-else-if="data" class="cp-storage-hero__body">
+      <div v-if="chart" class="cp-storage-hero__chart">
+        <svg
+          class="cp-storage-hero__plot"
+          :viewBox="`0 0 ${chart.width} ${chart.height}`"
+          role="img"
+          aria-label="Database size trend"
+        >
+          <defs>
+            <linearGradient id="cp-storage-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#6366f1" stop-opacity="0.35" />
+              <stop offset="100%" stop-color="#6366f1" stop-opacity="0.02" />
+            </linearGradient>
+          </defs>
+          <path :d="chart.area" fill="url(#cp-storage-fill)" />
+          <path :d="chart.line" fill="none" stroke="#4f46e5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          <circle
+            v-for="coord in chart.coords"
+            :key="coord.index"
+            :cx="coord.x"
+            :cy="coord.y"
+            r="4"
+            fill="#fff"
+            stroke="#4f46e5"
+            stroke-width="2"
+          />
+        </svg>
+        <p v-if="chart.flat" class="cp-storage-hero__note">
+          Growth is minimal so far — the chart will expand automatically as more snapshots accumulate.
         </p>
-      </template>
-      <p v-else-if="pending" class="cp-db-chart__empty">Loading database metrics…</p>
+      </div>
+      <p v-else class="cp-storage-hero__empty">
+        Size history builds automatically every ~6 hours. Check back after the next snapshot for a trend line.
+      </p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.cp-db-chart__lead {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.45;
-  font-weight: 400;
+.cp-storage-hero {
+  padding: 18px 20px 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8faff 52%, #f5f3ff 100%);
+  border-color: #dbeafe;
 }
-.cp-db-chart__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 16px;
+.cp-storage-hero__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
-.cp-db-chart__stat {
-  padding: 12px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-}
-.cp-db-chart__label {
+.cp-storage-hero__eyebrow {
+  margin: 0;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #64748b;
+}
+.cp-storage-hero__metric-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.cp-storage-hero__size {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.cp-storage-hero__delta {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+.cp-storage-hero__delta.up { background: #ecfdf5; color: #059669; }
+.cp-storage-hero__delta.down { background: #eff6ff; color: #2563eb; }
+.cp-storage-hero__delta.flat { background: #f8fafc; color: #64748b; }
+.cp-storage-hero__sub {
+  margin: 8px 0 0;
+  font-size: 12px;
   color: #94a3b8;
 }
-.cp-db-chart__value {
-  margin-top: 4px;
-  font-size: 22px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: #0f172a;
-}
-.cp-db-chart__value.sm {
-  font-size: 16px;
-}
-.cp-db-chart__value.up { color: #059669; }
-.cp-db-chart__value.down { color: #2563eb; }
-.cp-db-chart__value.flat { color: #64748b; }
-.cp-db-chart__plot-wrap {
-  border: 1px solid #e2e8f0;
+.cp-storage-hero__body { margin-top: 16px; }
+.cp-storage-hero__chart {
+  border: 1px solid #e0e7ff;
   border-radius: 14px;
-  background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
-  padding: 12px 12px 8px;
-  position: relative;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px 12px 8px;
 }
-.cp-db-chart__plot-wrap--rich {
-  padding: 14px 14px 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-.cp-db-chart__plot {
+.cp-storage-hero__plot {
   width: 100%;
   height: auto;
   display: block;
 }
-.cp-db-chart__grid line {
-  stroke: #e2e8f0;
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
-}
-.cp-db-chart__grid text {
-  fill: #94a3b8;
-  font-size: 10px;
-  font-weight: 600;
-}
-.cp-db-chart__points circle {
-  fill: #fff;
-  stroke: #4f46e5;
-  stroke-width: 2.5;
-  cursor: pointer;
-  transition: r 0.12s ease;
-}
-.cp-db-chart__points circle.active {
-  fill: #4f46e5;
-  stroke: #312e81;
-}
-.cp-db-chart__xlabels text {
-  fill: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-}
-.cp-db-chart__tooltip {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.92);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.cp-db-chart__empty,
-.cp-db-chart__meta {
-  margin: 0;
+.cp-storage-hero__note,
+.cp-storage-hero__empty {
+  margin: 10px 0 0;
   font-size: 13px;
   color: #64748b;
   line-height: 1.45;
-}
-.cp-db-chart__meta {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-@media (max-width: 900px) {
-  .cp-db-chart__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 640px) {
-  .cp-db-chart__stats {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

@@ -5,6 +5,7 @@ import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseCh
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelSection from '~/components/admin/ControlPanelSection.vue'
 import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMonitor.vue'
+import OpenRouterModelSelector from '~/components/admin/OpenRouterModelSelector.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
@@ -462,14 +463,13 @@ async function testAiConnection() {
                 <div class="right"><span class="pill indigo">Human approval required</span></div>
               </div>
               <div class="cbody">
-                <label class="fld">
-                  Provider
-                  <select disabled><option>OpenRouter</option></select>
-                </label>
-                <label class="fld">
-                  Default model
-                  <input v-model="aiForm.defaultModel" type="text" placeholder="anthropic/claude-3.5-sonnet">
-                </label>
+                <p class="help" style="margin:0 0 14px;">
+                  OpenRouter is the sole AI provider. Models and pricing are loaded live from OpenRouter.
+                </p>
+                <OpenRouterModelSelector
+                  v-model="aiForm.defaultModel"
+                  :api-key="aiForm.apiKey"
+                />
                 <label class="fld secret-fld">
                   OpenRouter API key
                   <input

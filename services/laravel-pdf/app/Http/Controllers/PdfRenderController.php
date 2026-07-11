@@ -5,23 +5,34 @@ namespace App\Http\Controllers;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Blade;
 
 class PdfRenderController extends Controller
 {
     public function invoice(Request $request): Response
     {
-        return $this->renderDocument($request, 'invoice');
+        return $this->renderDocument($request, 'invoice', 'pdf');
+    }
+
+    public function invoiceHtml(Request $request): Response
+    {
+        return $this->renderDocument($request, 'invoice', 'html');
     }
 
     public function estimate(Request $request): Response
     {
-        return $this->renderDocument($request, 'estimate');
+        return $this->renderDocument($request, 'estimate', 'pdf');
+    }
+
+    public function estimateHtml(Request $request): Response
+    {
+        return $this->renderDocument($request, 'estimate', 'html');
     }
 
     /**
      * @param  array<string, mixed>  $options
      */
-    private function renderDocument(Request $request, string $defaultType): Response
+    private function renderDocument(Request $request, string $defaultType, string $format): Response
     {
         $validated = $request->validate([
             'documentType' => 'sometimes|string|in:invoice,estimate',
@@ -33,6 +44,7 @@ class PdfRenderController extends Controller
             'options.margins.right' => 'sometimes|numeric',
             'options.margins.bottom' => 'sometimes|numeric',
             'options.margins.left' => 'sometimes|numeric',
+            'options.bladeSource' => 'sometimes|string|max:500000',
         ]);
 
         $documentType = $validated['documentType'] ?? $defaultType;
@@ -41,14 +53,34 @@ class PdfRenderController extends Controller
 
         $paper = $this->normalizePaper(is_string($options['paper'] ?? null) ? $options['paper'] : 'letter');
         $margins = $this->resolveMargins(is_array($options['margins'] ?? null) ? $options['margins'] : []);
+        $bladeSource = is_string($options['bladeSource'] ?? null) ? trim($options['bladeSource']) : '';
 
-        $view = $documentType === 'estimate' ? 'estimates.pdf' : 'invoices.pdf';
-
-        $pdf = Pdf::loadView($view, [
+        $viewData = [
             'doc' => $data,
             'margins' => $margins,
             'paper' => $paper,
-        ]);
+        ];
+
+        if ($format === 'html') {
+            $html = $bladeSource !== ''
+                ? Blade::render($bladeSource, $viewData)
+                : view($documentType === 'estimate' ? 'estimates.pdf' : 'invoices.pdf', $viewData)->render();
+
+            return response($html, 200, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+                'Cache-Control' => 'no-store',
+            ]);
+        }
+
+        if ($bladeSource !== '') {
+            $html = Blade::render($bladeSource, $viewData);
+            $pdf = Pdf::loadHTML($html);
+        }
+        else {
+            $view = $documentType === 'estimate' ? 'estimates.pdf' : 'invoices.pdf';
+            $pdf = Pdf::loadView($view, $viewData);
+        }
+
         $pdf->setPaper($paper, 'portrait');
 
         return response($pdf->output(), 200, [
