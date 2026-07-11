@@ -268,6 +268,37 @@ export async function setDefaultInvoiceTemplate(db: Db, templateId: string) {
   return getInvoiceTemplateById(db, templateId)
 }
 
+export async function renameInvoiceTemplate(db: Db, templateId: string, name: string) {
+  const template = await getInvoiceTemplateById(db, templateId)
+  if (!template || template.archivedAt) throw new InvoiceTemplatesServiceError('NOT_FOUND')
+
+  const trimmed = name.trim()
+  if (!trimmed) throw new InvoiceTemplatesServiceError('NOT_FOUND')
+
+  let slug = slugifyTemplateName(trimmed)
+  const [conflict] = await db.select({ id: invoiceTemplates.id })
+    .from(invoiceTemplates)
+    .where(and(eq(invoiceTemplates.slug, slug), ne(invoiceTemplates.id, templateId)))
+    .limit(1)
+  if (conflict) slug = `${slug}-${Date.now().toString(36)}`
+
+  await db.update(invoiceTemplates)
+    .set({ name: trimmed, slug, updatedAt: new Date() })
+    .where(eq(invoiceTemplates.id, templateId))
+
+  return getInvoiceTemplateById(db, templateId)
+}
+
+export async function patchInvoiceTemplate(
+  db: Db,
+  templateId: string,
+  input: { isDefault?: true, name?: string },
+) {
+  if (input.isDefault) return setDefaultInvoiceTemplate(db, templateId)
+  if (input.name !== undefined) return renameInvoiceTemplate(db, templateId, input.name)
+  throw new InvoiceTemplatesServiceError('NOT_FOUND')
+}
+
 export async function getTemplatePreviewInvoice(db: Db) {
   const [row] = await db.select({ id: invoices.id })
     .from(invoices)

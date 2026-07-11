@@ -1,17 +1,24 @@
 <script setup lang="ts">
+import TemplateEditorWorkbench from '~/components/admin/TemplateEditorWorkbench.vue'
+
 definePageMeta({ layout: 'staff' })
 
-const route = useRoute()
+const auth = useAuthStore()
 
-const query: Record<string, string> = { tab: 'designer' }
-const template = route.query.template
-if (typeof template === 'string' && template) {
-  query.template = template
+if (import.meta.client && auth.loaded && !auth.can('templates.read.all')) {
+  navigateTo('/dashboard')
 }
-
-await navigateTo({ path: '/admin', query }, { replace: true })
 </script>
 
 <template>
-  <div class="empty">Opening Control Panel…</div>
+  <section class="page active">
+    <StaffPageHead subtitle="Edit invoice PDF layout, preview live output, and publish templates app-wide">
+      <template #title>Template Editor</template>
+      <template #actions>
+        <NuxtLink to="/admin?tab=invoice" class="btn">Back to invoice settings</NuxtLink>
+      </template>
+    </StaffPageHead>
+
+    <TemplateEditorWorkbench />
+  </section>
 </template>

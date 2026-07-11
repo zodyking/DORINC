@@ -31,7 +31,8 @@ export const duplicateInvoiceTemplateSchema = z.object({
 
 export const patchInvoiceTemplateSchema = z.object({
   isDefault: z.literal(true).optional(),
-}).refine(v => v.isDefault === true, { message: 'No supported patch fields' })
+  name: z.string().trim().min(1).max(120).optional(),
+}).refine(v => v.isDefault === true || v.name !== undefined, { message: 'No supported patch fields' })
 
 export const testTemplatePdfSchema = z.object({
   designSettings: invoiceTemplateDesignSettingsSchema.optional(),

@@ -16,6 +16,7 @@ import {
   type TemplateFontPreset,
 } from '~/utils/invoice-template-designer-ui'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
+import { invoiceTemplateDesignSettingsSchema } from '#shared/validators/invoice-templates'
 
 interface TemplateListItem {
   id: string
@@ -46,6 +47,8 @@ interface TemplateDetailResponse {
   usageCount: number
 }
 
+type EditorTab = 'design' | 'json'
+
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -56,6 +59,11 @@ const canManage = computed(() => auth.loaded && auth.can('templates.manage.all')
 
 const selectedTemplateId = ref<string | null>(null)
 const savedSettings = ref<InvoiceTemplateDesignSettings | null>(null)
+const templateName = ref('')
+const savedTemplateName = ref('')
+const editorTab = ref<EditorTab>('design')
+const jsonText = ref('')
+const jsonError = ref('')
 
 const form = reactive({
   pageSize: 'Letter' as 'Letter' | 'A4',
@@ -68,6 +76,7 @@ const form = reactive({
 })
 
 const publishBusy = ref(false)
+const renameBusy = ref(false)
 const publishError = ref('')
 const actionError = ref('')
 const actionMessage = ref('')
@@ -103,6 +112,8 @@ const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ 
 )
 
 const currentDesignSettings = computed(() => designSettingsFromForm(form))
+
+const nameDirty = computed(() => templateName.value.trim() !== savedTemplateName.value)
 
 const dirty = computed(() => {
   if (!savedSettings.value) return false
@@ -140,7 +151,7 @@ watch(selectedTemplateId, async (id) => {
   if (!id) return
   await refresh()
   if (route.query.template !== id) {
-    await router.replace({ query: { ...route.query, tab: 'designer', template: id } })
+    await router.replace({ path: '/templates/designer', query: { template: id } })
   }
 })
 
@@ -157,17 +168,32 @@ function loadSettingsFromVersion(settings: InvoiceTemplateDesignSettings) {
   form.logoFileId = settings.logoFileId ?? null
   form.sections = sectionsFromSettings(settings)
   savedSettings.value = designSettingsFromForm(form)
+  jsonText.value = JSON.stringify(savedSettings.value, null, 2)
+  jsonError.value = ''
 }
+
+watch(template, (row) => {
+  if (!row) return
+  templateName.value = row.name
+  savedTemplateName.value = row.name
+}, { immediate: true })
 
 watch(activeVersion, (v) => {
   if (!v) return
   loadSettingsFromVersion(v.designSettings)
 }, { immediate: true })
 
+watch(editorTab, (tab) => {
+  if (tab === 'json') {
+    jsonText.value = JSON.stringify(currentDesignSettings.value, null, 2)
+    jsonError.value = ''
+  }
+})
+
 const statusText = computed(() => {
   const v = activeVersion.value
   if (!v) return 'Loading template…'
-  if (dirty.value) return 'Unsaved changes — refresh preview to validate'
+  if (dirty.value || nameDirty.value) return 'Unsaved changes — save or refresh preview'
   return publishStatusLabel(v.publishedAt, v.versionNumber, usageCount.value)
 })
 
@@ -193,20 +219,44 @@ const loadErrorMessage = computed(() => {
 
 function resetSettings() {
   if (!activeVersion.value) return
-  if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
+  if ((dirty.value || nameDirty.value) && !confirm('Reset all changes to the last loaded version?')) return
   loadSettingsFromVersion(activeVersion.value.designSettings)
+  if (template.value) {
+    templateName.value = template.value.name
+    savedTemplateName.value = template.value.name
+  }
 }
 
 async function onTemplateChange(ev: Event) {
   const id = (ev.target as HTMLSelectElement).value
-  if (dirty.value && !confirm('You have unsaved changes. Switch template anyway?')) {
+  if ((dirty.value || nameDirty.value) && !confirm('You have unsaved changes. Switch template anyway?')) {
     return
   }
   selectedTemplateId.value = id
 }
 
+function applyJsonSettings() {
+  jsonError.value = ''
+  try {
+    const parsed = invoiceTemplateDesignSettingsSchema.parse(JSON.parse(jsonText.value))
+    form.pageSize = parsed.pageSize
+    form.marginInches = parsed.marginInches
+    form.accentColor = parsed.accentColor
+    form.accentColor2 = parsed.accentColor2
+    form.fontPreset = detectFontPreset(parsed)
+    form.logoFileId = parsed.logoFileId ?? null
+    form.sections = sectionsFromSettings(parsed)
+    jsonText.value = JSON.stringify(designSettingsFromForm(form), null, 2)
+    actionMessage.value = 'JSON applied to editor'
+  }
+  catch (e: unknown) {
+    jsonError.value = e instanceof Error ? e.message : 'Invalid JSON or design settings'
+  }
+}
+
 async function refreshPreview() {
   if (!canRead.value || !template.value) return
+  if (editorTab.value === 'json') applyJsonSettings()
   previewBusy.value = true
   previewError.value = ''
   try {
@@ -230,11 +280,36 @@ async function refreshPreview() {
   }
 }
 
+async function saveTemplateName() {
+  if (!canManage.value || !template.value || !nameDirty.value) return
+  renameBusy.value = true
+  actionError.value = ''
+  try {
+    const res = await $fetch<{ template: { name: string } }>(`/api/invoice-templates/${template.value.id}`, {
+      method: 'PATCH',
+      body: { name: templateName.value.trim() },
+    })
+    savedTemplateName.value = res.template.name
+    templateName.value = res.template.name
+    await refreshList()
+    await refresh()
+    actionMessage.value = 'Template name saved'
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Rename failed'
+  }
+  finally {
+    renameBusy.value = false
+  }
+}
+
 async function publishTemplate() {
   if (!canManage.value || !template.value) return
+  if (editorTab.value === 'json') applyJsonSettings()
   publishBusy.value = true
   publishError.value = ''
   try {
+    if (nameDirty.value) await saveTemplateName()
     await $fetch(`/api/invoice-templates/${template.value.id}/publish`, {
       method: 'POST',
       body: { designSettings: currentDesignSettings.value },
@@ -293,6 +368,7 @@ async function setDefaultTemplate() {
 
 async function testRenderPdf() {
   if (!canManage.value || !template.value) return
+  if (editorTab.value === 'json') applyJsonSettings()
   testPdfBusy.value = true
   actionError.value = ''
   try {
@@ -345,11 +421,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="authPending" class="cp-state">Loading template designer…</div>
+  <div v-if="authPending" class="cp-state">Loading template editor…</div>
 
   <div v-else-if="!canRead" class="cp-state">You do not have permission to view invoice templates.</div>
 
-  <div v-else-if="listPending && !listData" class="cp-state">Loading template designer…</div>
+  <div v-else-if="listPending && !listData" class="cp-state">Loading template editor…</div>
 
   <div v-else-if="listError" class="cp-state">{{ loadErrorMessage }}</div>
 
@@ -357,95 +433,122 @@ onUnmounted(() => {
     No invoice templates found. Redeploy or seed the default template, then refresh.
   </div>
 
-  <div v-else-if="pending && !data" class="cp-state">Loading template designer…</div>
+  <div v-else-if="pending && !data" class="cp-state">Loading template editor…</div>
 
   <div v-else-if="error || !template" class="cp-state">{{ loadErrorMessage }}</div>
 
-  <div v-else>
-    <div class="card" style="margin-bottom:16px;">
-      <div class="chead">
-        <div>
-          <h3>
-            Template Designer
-            <span class="pill indigo" style="vertical-align:3px">{{ template.name }}</span>
-            <span v-if="template.isDefault" class="pill ok" style="vertical-align:3px;margin-left:6px;">Default</span>
-          </h3>
-          <p style="margin:6px 0 0;font-size:13px;color:#64748b;">
-            Customize the Laravel Blade invoice layout — colors, fonts, sections, and page setup.
-          </p>
+  <div v-else class="te-page">
+    <div class="card te-toolbar">
+      <div class="te-toolbar__main">
+        <label class="te-name-field">
+          <span>Template name</span>
+          <input
+            v-model="templateName"
+            type="text"
+            maxlength="120"
+            :disabled="!canManage"
+            placeholder="Professional Bill Matrix"
+          >
+        </label>
+        <label class="te-select-field">
+          <span>Template</span>
+          <select
+            :value="selectedTemplateId ?? ''"
+            @change="onTemplateChange"
+          >
+            <option
+              v-for="t in listData?.items ?? []"
+              :key="t.id"
+              :value="t.id"
+            >
+              {{ templateOptionLabel(t.name, t.isDefault, t.latestVersion?.status) }}
+            </option>
+          </select>
+        </label>
+        <div class="te-badges">
+          <span v-if="template.isDefault" class="pill ok">Default</span>
+          <span class="pill indigo">Blade</span>
         </div>
-        <div class="right" style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button
-            v-if="canManage"
-            type="button"
-            class="btn"
-            :disabled="duplicateBusy"
-            @click="duplicateTemplate"
-          >
-            {{ duplicateBusy ? 'Duplicating…' : 'Duplicate template' }}
-          </button>
-          <button
-            v-if="canManage"
-            type="button"
-            class="btn"
-            :disabled="testPdfBusy"
-            @click="testRenderPdf"
-          >
-            {{ testPdfBusy ? 'Queuing…' : 'Test render PDF' }}
-          </button>
-          <button
-            v-if="canManage && !template.isDefault"
-            type="button"
-            class="btn"
-            @click="setDefaultTemplate"
-          >
-            Set default
-          </button>
-          <button
-            v-if="canManage"
-            type="button"
-            class="btn primary"
-            :disabled="publishBusy || !dirty"
-            @click="publishTemplate"
-          >
-            {{ publishBusy ? 'Saving…' : 'Save template' }}
-          </button>
-        </div>
+      </div>
+      <div class="te-toolbar__actions">
+        <button
+          v-if="canManage && nameDirty"
+          type="button"
+          class="btn"
+          :disabled="renameBusy"
+          @click="saveTemplateName"
+        >
+          {{ renameBusy ? 'Saving name…' : 'Save name' }}
+        </button>
+        <button
+          v-if="canManage"
+          type="button"
+          class="btn"
+          :disabled="duplicateBusy"
+          @click="duplicateTemplate"
+        >
+          {{ duplicateBusy ? 'Duplicating…' : 'Duplicate' }}
+        </button>
+        <button
+          v-if="canManage"
+          type="button"
+          class="btn"
+          :disabled="testPdfBusy"
+          @click="testRenderPdf"
+        >
+          {{ testPdfBusy ? 'Queuing…' : 'Test PDF' }}
+        </button>
+        <button
+          v-if="canManage && !template.isDefault"
+          type="button"
+          class="btn"
+          @click="setDefaultTemplate"
+        >
+          Set default
+        </button>
+        <button
+          v-if="canManage"
+          type="button"
+          class="btn primary"
+          :disabled="publishBusy || (!dirty && !nameDirty)"
+          @click="publishTemplate"
+        >
+          {{ publishBusy ? 'Saving…' : 'Save template' }}
+        </button>
       </div>
     </div>
 
-    <p v-if="publishError" class="help" style="color:#dc2626; margin:-8px 0 8px;">{{ publishError }}</p>
-    <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 8px;">{{ actionError }}</p>
-    <p v-if="actionMessage" class="help" style="color:#059669; margin:-8px 0 8px;">{{ actionMessage }}</p>
+    <p v-if="publishError" class="te-msg te-msg--err">{{ publishError }}</p>
+    <p v-if="actionError" class="te-msg te-msg--err">{{ actionError }}</p>
+    <p v-if="actionMessage" class="te-msg te-msg--ok">{{ actionMessage }}</p>
 
-    <div class="td-layout">
+    <div class="td-layout te-layout">
       <div class="td-panel">
-        <div class="card">
-          <div class="td-toolbar">
-            <div class="left">
-              <label style="font-size:12px; font-weight:600; color:#475569;">Template</label>
-              <select
-                class="fld"
-                style="width:auto; min-width:200px; margin:0;"
-                :value="selectedTemplateId ?? ''"
-                @change="onTemplateChange"
-              >
-                <option
-                  v-for="t in listData?.items ?? []"
-                  :key="t.id"
-                  :value="t.id"
-                >
-                  {{ templateOptionLabel(t.name, t.isDefault, t.latestVersion?.status) }}
-                </option>
-              </select>
-              <span class="badge">Blade</span>
-            </div>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn ghost sm" :disabled="!dirty" @click="resetSettings">Reset</button>
-            </div>
+        <div class="card te-editor-card">
+          <div class="te-tabs" role="tablist" aria-label="Template editor tabs">
+            <button
+              type="button"
+              class="te-tab"
+              :class="{ active: editorTab === 'design' }"
+              role="tab"
+              :aria-selected="editorTab === 'design'"
+              @click="editorTab = 'design'"
+            >
+              Design
+            </button>
+            <button
+              type="button"
+              class="te-tab"
+              :class="{ active: editorTab === 'json' }"
+              role="tab"
+              :aria-selected="editorTab === 'json'"
+              @click="editorTab = 'json'"
+            >
+              JSON
+            </button>
           </div>
 
-          <div class="td-settings">
+          <div v-if="editorTab === 'design'" class="td-settings">
             <label class="fld">
               Page size
               <select v-model="form.pageSize" class="fld" :disabled="!canManage">
@@ -534,12 +637,27 @@ onUnmounted(() => {
             </fieldset>
           </div>
 
-          <div class="td-status" :class="{ dirty }">{{ statusText }}</div>
+          <div v-else class="te-json-pane">
+            <div class="te-json-actions">
+              <button type="button" class="btn sm" :disabled="!canManage" @click="applyJsonSettings">Apply JSON</button>
+              <button type="button" class="btn ghost sm" @click="jsonText = JSON.stringify(currentDesignSettings, null, 2)">Reset to form</button>
+            </div>
+            <textarea
+              v-model="jsonText"
+              class="td-code te-json-editor"
+              spellcheck="false"
+              :disabled="!canManage"
+              aria-label="Template design settings JSON"
+            />
+            <p v-if="jsonError" class="te-msg te-msg--err">{{ jsonError }}</p>
+          </div>
+
+          <div class="td-status" :class="{ dirty: dirty || nameDirty }">{{ statusText }}</div>
         </div>
       </div>
 
       <div class="td-panel">
-        <div class="card">
+        <div class="card te-preview-card">
           <div class="td-preview-head">
             <div>
               <strong style="font-size:13px;">PDF preview</strong>
@@ -555,7 +673,7 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div class="td-pdf-wrap">
+          <div class="td-pdf-wrap te-pdf-wrap">
             <p v-if="previewError" class="td-preview-error">{{ previewError }}</p>
             <p v-else-if="!previewUrl && !previewBusy" class="td-preview-empty">
               Click <strong>Refresh preview</strong> to render the current template settings as PDF.
@@ -564,7 +682,7 @@ onUnmounted(() => {
               <PdfViewerShell
                 :src="previewUrl"
                 title="Invoice template PDF preview"
-                :show-download="false"
+                :show-download="true"
               />
             </ClientOnly>
           </div>
@@ -581,27 +699,115 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.btn.sm { font-size:12px; padding:6px 10px; }
+.te-page { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.te-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  flex-wrap: wrap;
+}
+.te-toolbar__main {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.te-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.te-name-field,
+.te-select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+.te-name-field span,
+.te-select-field span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.te-name-field input,
+.te-select-field select {
+  margin: 0;
+}
+.te-badges { display: flex; gap: 6px; align-items: center; padding-bottom: 2px; }
+.te-msg { margin: 0; font-size: 13px; }
+.te-msg--err { color: #dc2626; }
+.te-msg--ok { color: #059669; }
+.te-layout { min-height: calc(100vh - 240px); }
+.te-editor-card,
+.te-preview-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.te-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 12px;
+}
+.te-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.te-tab.active {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+.te-json-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 0;
+}
+.te-json-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.te-json-editor {
+  flex: 1;
+  min-height: 420px;
+  resize: vertical;
+}
+.te-pdf-wrap { min-height: 560px; }
+.btn.sm { font-size: 12px; padding: 6px 10px; }
 .td-pdf-wrap {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  min-height: 520px;
   padding: 12px;
   background: #eef0f4;
   border: 1px solid #e2e8f0;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0;
   overflow: hidden;
   flex: 1;
 }
 .td-preview-empty,
 .td-preview-error {
-  margin:auto;
-  max-width:360px;
-  text-align:center;
-  font-size:13px;
-  color:#64748b;
-  line-height:1.5;
+  margin: auto;
+  max-width: 360px;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
 }
-.td-preview-error { color:#dc2626; }
+.td-preview-error { color: #dc2626; }
 </style>
