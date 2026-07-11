@@ -16,6 +16,5 @@ ENV NITRO_HOST=0.0.0.0
 COPY --from=build /src/.output ./.output
 # Setup wizard needs these on disk (not bundled into Nitro output).
 COPY --from=build /src/server/db/migrations ./server/db/migrations
-COPY --from=build /src/server/assets ./server/assets
 EXPOSE 38471
 CMD ["node", ".output/server/index.mjs"]
