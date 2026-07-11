@@ -292,13 +292,14 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
 </template>
 
 <style scoped>
+/* Chrome / Acrobat-style neutral gray stage */
 .pdf-js-viewer {
   flex: 1 1 auto;
   min-height: min(68vh, 780px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #1e293b;
+  background: #525659;
 }
 
 .pdf-js-viewer__state {
@@ -308,7 +309,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   justify-content: center;
   padding: 1rem;
   font-size: 13px;
-  color: #94a3b8;
+  color: #d1d5db;
 }
 
 .pdf-js-viewer__state--err {
@@ -339,8 +340,8 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   justify-content: center;
   z-index: 2;
   font-size: 13px;
-  color: #cbd5e1;
-  background: rgba(15, 23, 42, 0.55);
+  color: #e5e7eb;
+  background: rgba(64, 64, 64, 0.45);
   pointer-events: none;
 }
 
@@ -370,8 +371,8 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   padding: 0.35rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0));
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-top: 1px solid #334155;
-  background: #0f172a;
+  border-top: 1px solid #484848;
+  background: #404040;
 }
 
 .pdf-js-viewer__thumb {
@@ -380,7 +381,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   padding: 0.2rem;
   border-radius: 8px;
   border: 2px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
   touch-action: manipulation;
 }
