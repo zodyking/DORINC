@@ -2,15 +2,22 @@
 import * as pdfjs from 'pdfjs-dist'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { renderPdfPageToJpegDataUrl } from '~/utils/render-pdf-page-to-jpeg'
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   src: string
   title?: string
   showDownload?: boolean
   showToolbar?: boolean
-}>()
+  showThumbnails?: boolean
+  /** Fill the parent flex container (modals, split panels). */
+  fill?: boolean
+}>(), {
+  showThumbnails: true,
+  fill: false,
+})
 
 const emit = defineEmits<{
   download: []
@@ -29,6 +36,9 @@ const numPages = ref(0)
 const rotation = ref(0)
 const fitMode = ref<'page' | 'width' | null>('page')
 const isFullscreen = ref(false)
+const thumbsOpen = ref(true)
+const thumbnails = ref<string[]>([])
+const thumbsLoading = ref(false)
 
 let doc: PDFDocumentProxy | null = null
 let renderTask: RenderTask | null = null
@@ -36,6 +46,7 @@ let renderTask: RenderTask | null = null
 const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`)
 const displayTitle = computed(() => props.title ?? 'PDF document')
 const pageLabel = computed(() => (numPages.value ? `${pageNum.value} / ${numPages.value}` : '—'))
+const showThumbPanel = computed(() => props.showThumbnails && numPages.value > 1 && thumbsOpen.value)
 
 function syncPageInput() {
   pageInput.value = String(pageNum.value)
@@ -54,16 +65,37 @@ async function loadDocument(url: string) {
     numPages.value = doc.numPages
     pageNum.value = 1
     rotation.value = 0
+    thumbnails.value = []
     syncPageInput()
     await nextTick()
     applyFit()
     await renderPage()
+    void buildThumbnails()
   }
   catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Could not load PDF'
   }
   finally {
     loading.value = false
+  }
+}
+
+async function buildThumbnails() {
+  if (!doc || !props.showThumbnails || doc.numPages <= 1) return
+  thumbsLoading.value = true
+  const urls: string[] = []
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      urls.push(await renderPdfPageToJpegDataUrl(page))
+    }
+    thumbnails.value = urls
+  }
+  catch {
+    thumbnails.value = []
+  }
+  finally {
+    thumbsLoading.value = false
   }
 }
 
@@ -205,6 +237,11 @@ function printPdf() {
   document.body.appendChild(frame)
 }
 
+function toggleThumbnails() {
+  thumbsOpen.value = !thumbsOpen.value
+  if (fitMode.value) void nextTick(() => applyFit())
+}
+
 async function toggleFullscreen() {
   const el = shellEl.value
   if (!el) return
@@ -288,7 +325,10 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
   <div
     ref="shellEl"
     class="pdf-acrobat"
-    :class="{ 'pdf-acrobat--fullscreen': isFullscreen }"
+    :class="{
+      'pdf-acrobat--fullscreen': isFullscreen,
+      'pdf-acrobat--fill': fill,
+    }"
     @keydown="onKeydown"
   >
     <header
@@ -378,6 +418,18 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
           <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Rotate clockwise" title="Rotate" @click="rotateClockwise">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.55 5.55 14 4v7h7l-1.55-1.55A6.9 6.9 0 0 0 12 5c-3.31 0-6 2.46-6 5.75h2C8 8.57 9.79 7 12 7c1.66 0 3.14.69 4.22 1.8l-1.67 1.75H20V4l-1.55 1.55A8.9 8.9 0 0 0 12 3a8.96 8.96 0 0 0-6.45 2.75L7 7.14A6.97 6.97 0 0 1 12 5z" /></svg>
           </button>
+          <button
+            v-if="showThumbnails && numPages > 1"
+            type="button"
+            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
+            :class="{ 'is-active': thumbsOpen }"
+            :disabled="loading"
+            aria-label="Toggle page thumbnails"
+            title="Thumbnails"
+            @click="toggleThumbnails"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 5h7v7H4V5zm9 0h7v7h-7V5zM4 14h7v7H4v-7zm9 0h7v7h-7v-7z" /></svg>
+          </button>
           <span class="pdf-acrobat__divider" aria-hidden="true" />
           <button
             v-if="showDownload !== false"
@@ -407,19 +459,42 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
       </div>
     </header>
 
-    <div
-      ref="stageEl"
-      class="pdf-acrobat__stage"
-      tabindex="0"
-      :aria-label="displayTitle"
-      @wheel="onWheel"
-    >
-      <p v-if="error" class="pdf-acrobat__message pdf-acrobat__message--err">
-        {{ error }}
-        <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--text" @click="openDirect">Open PDF</button>
-      </p>
-      <p v-else-if="loading && !numPages" class="pdf-acrobat__message">Loading document…</p>
-      <div ref="canvasHost" class="pdf-acrobat__canvas-host" />
+    <div class="pdf-acrobat__workspace">
+      <aside
+        v-if="showThumbPanel"
+        class="pdf-acrobat__thumbs"
+        aria-label="Page thumbnails"
+      >
+        <p v-if="thumbsLoading" class="pdf-acrobat__thumbs-status">Loading…</p>
+        <button
+          v-for="(thumb, index) in thumbnails"
+          :key="index"
+          type="button"
+          class="pdf-acrobat__thumb"
+          :class="{ 'is-active': pageNum === index + 1 }"
+          :aria-label="`Page ${index + 1}`"
+          :aria-current="pageNum === index + 1 ? 'page' : undefined"
+          @click="goToPage(index + 1)"
+        >
+          <img :src="thumb" alt="" width="96" height="124">
+          <span>{{ index + 1 }}</span>
+        </button>
+      </aside>
+
+      <div
+        ref="stageEl"
+        class="pdf-acrobat__stage"
+        tabindex="0"
+        :aria-label="displayTitle"
+        @wheel="onWheel"
+      >
+        <p v-if="error" class="pdf-acrobat__message pdf-acrobat__message--err">
+          {{ error }}
+          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--text" @click="openDirect">Open PDF</button>
+        </p>
+        <p v-else-if="loading && !numPages" class="pdf-acrobat__message">Loading document…</p>
+        <div ref="canvasHost" class="pdf-acrobat__canvas-host" />
+      </div>
     </div>
   </div>
 </template>
@@ -447,6 +522,21 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
   background: #404040;
   color: #f1f3f4;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.pdf-acrobat--fill {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.pdf-acrobat--fill .pdf-acrobat__workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+.pdf-acrobat--fill .pdf-acrobat__stage {
+  min-height: 0;
 }
 
 .pdf-acrobat--fullscreen {
@@ -589,8 +679,66 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
   cursor: not-allowed;
 }
 
+.pdf-acrobat__workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.pdf-acrobat__thumbs {
+  flex: none;
+  width: 116px;
+  overflow-y: auto;
+  padding: 10px 8px;
+  background: #2b2b2b;
+  border-right: 1px solid #1f1f1f;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdf-acrobat__thumbs-status {
+  margin: 0;
+  font-size: 11px;
+  color: #9aa0a6;
+  text-align: center;
+}
+
+.pdf-acrobat__thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: #bdc1c6;
+  font-size: 10px;
+}
+
+.pdf-acrobat__thumb img {
+  display: block;
+  width: 96px;
+  height: auto;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.pdf-acrobat__thumb.is-active {
+  border-color: #8ab4f8;
+  background: rgba(138, 180, 248, 0.12);
+  color: #fff;
+}
+
+.pdf-acrobat__thumb:hover {
+  border-color: #5f6368;
+}
+
 .pdf-acrobat__stage {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 28px 20px;
   min-height: 480px;
@@ -639,6 +787,9 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
   }
   .pdf-acrobat__title {
     max-width: 70vw;
+  }
+  .pdf-acrobat__thumbs {
+    display: none;
   }
 }
 </style>

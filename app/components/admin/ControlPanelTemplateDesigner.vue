@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import PdfViewer from '~/components/PdfViewer.client.vue'
+import { PdfViewer } from '~/utils/pdf-viewer'
 import {
   designSettingsFromForm,
   detectFontPreset,
@@ -562,6 +562,7 @@ onUnmounted(() => {
             </p>
             <ClientOnly v-else-if="previewUrl">
               <PdfViewer
+                fill
                 :src="previewUrl"
                 title="Invoice template PDF preview"
                 :show-download="false"
@@ -591,12 +592,8 @@ onUnmounted(() => {
   background: #eef0f4;
   border: 1px solid #e2e8f0;
   border-radius: 0 0 14px 14px;
-  overflow: auto;
+  overflow: hidden;
   flex: 1;
-}
-.td-pdf-wrap :deep(.pdf-acrobat) {
-  flex:1;
-  min-height:480px;
 }
 .td-preview-empty,
 .td-preview-error {

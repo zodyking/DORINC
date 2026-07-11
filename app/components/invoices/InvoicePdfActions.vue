@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import PdfViewer from '~/components/PdfViewer.client.vue'
+import { PdfViewer } from '~/utils/pdf-viewer'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,
@@ -51,7 +51,6 @@ async function downloadOfficialOrPreview() {
   error.value = ''
   try {
     if (props.allowOfficialDownload) {
-      // Refresh official PDF when missing or built on a stale template version.
       await queueInvoicePdfGeneration(props.invoiceId)
       emit('refreshed')
 
@@ -128,6 +127,7 @@ defineExpose({
         <p v-else-if="previewBusy" class="invoice-pdf-empty">Rendering invoice PDF…</p>
         <ClientOnly v-else-if="previewUrl">
           <PdfViewer
+            fill
             :src="previewUrl"
             :title="`${invoiceLabel} PDF`"
             @download="downloadOfficialOrPreview"
@@ -156,10 +156,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   padding: 12px !important;
-}
-.invoice-pdf-body :deep(.pdf-acrobat) {
-  flex: 1;
-  min-height: 70vh;
 }
 .invoice-pdf-empty,
 .invoice-pdf-error {
