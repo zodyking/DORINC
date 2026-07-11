@@ -117,12 +117,9 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
     </div>
 
     <template v-else-if="dash">
-      <div class="pagehead">
-        <div>
-          <h2>{{ dash.greeting }}</h2>
-          <p>{{ dash.subtext }}</p>
-        </div>
-        <div class="actions">
+      <StaffPageHead :subtitle="dash.subtext">
+        <template #title>{{ dash.greeting }}</template>
+        <template #actions>
           <NuxtLink :to="dash.secondaryCta.href" class="btn">{{ dash.secondaryCta.label }}</NuxtLink>
           <NuxtLink
             v-if="(dash.view === 'billing' && canCreateInvoice) || (dash.view === 'mechanic' && canCreateLog)"
@@ -132,8 +129,8 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
           >
             {{ dash.primaryCta.label }}
           </NuxtLink>
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
 
       <div v-if="showBilling && dash.billing" id="dash-billing">
         <div class="kpis">

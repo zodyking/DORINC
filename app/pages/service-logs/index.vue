@@ -87,15 +87,12 @@ function openLog(id: string) {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>{{ pageTitle }}</h2>
-        <p id="sl-page-sub">{{ pageSubtitle }}</p>
-      </div>
-      <div class="actions">
-        <NuxtLink v-if="canUpload" to="/service-logs/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New service log</NuxtLink>
-      </div>
-    </div>
+    <StaffPageHead :subtitle="pageSubtitle">
+      <template #title>{{ pageTitle }}</template>
+      <template v-if="canUpload" #actions>
+        <NuxtLink to="/service-logs/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New service log</NuxtLink>
+      </template>
+    </StaffPageHead>
 
     <ListFilterBar
       v-model:search="q"

@@ -117,15 +117,12 @@ const listCountLabel = computed(() => {
   </section>
 
   <section v-else class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>System Logs</h2>
-        <p>Platform-wide events — settings, security, imports, backups, and jobs</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Platform-wide events — settings, security, imports, backups, and jobs">
+      <template #title>System Logs</template>
+      <template #actions>
         <button type="button" class="btn" disabled title="Coming soon">Export log</button>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <ListFilterBar
       v-model:search="q"

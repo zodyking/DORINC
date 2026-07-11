@@ -174,16 +174,13 @@ async function retryLoad() {
   </section>
 
   <section v-else class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Invoices</h2>
-        <p>{{ auth.loaded ? subtitle : 'Loading…' }}</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead :subtitle="auth.loaded ? subtitle : 'Loading…'">
+      <template #title>Invoices</template>
+      <template #actions>
         <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <div v-if="pageError" class="card" style="padding:20px; margin-bottom:16px;">
       <p style="margin:0 0 12px; color:#dc2626;">{{ pageError }}</p>

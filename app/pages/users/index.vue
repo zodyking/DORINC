@@ -113,16 +113,13 @@ async function reject(u: UserRow) {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Users</h2>
-        <p>{{ users.length }} accounts · {{ internalCount }} internal staff · {{ portalCount }} customer portal logins</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead :subtitle="`${users.length} accounts · ${internalCount} internal staff · ${portalCount} customer portal logins`">
+      <template #title>Users</template>
+      <template #actions>
         <button class="btn">Export</button>
         <button class="btn primary">+ Invite user</button>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <!-- Pending signups needing approval (SPEC §5) -->
     <div v-if="pending.length" class="card" style="margin-bottom:16px;">

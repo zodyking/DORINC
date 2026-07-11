@@ -243,14 +243,10 @@ function onRowClick(row: CatalogItemRow) {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Catalog</h2>
-        <p>Parts, labor, and fees for invoice lines</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Parts, labor, and fees for invoice lines">
+      <template #title>Catalog</template>
+      <template v-if="canManage" #actions>
         <button
-          v-if="canManage"
           type="button"
           class="btn"
           @click="categoriesOpen = true"
@@ -258,15 +254,14 @@ function onRowClick(row: CatalogItemRow) {
           Manage categories
         </button>
         <button
-          v-if="canManage"
           type="button"
           class="btn primary"
           @click="openNewItem"
         >
           + New Item
         </button>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <ListFilterBar
       v-model:search="q"

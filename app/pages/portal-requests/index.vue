@@ -148,15 +148,12 @@ async function submitModal() {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Portal requests</h2>
-        <p>Customer service, billing, vehicle, and general requests awaiting staff review</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Customer service, billing, vehicle, and general requests awaiting staff review">
+      <template #title>Portal requests</template>
+      <template #actions>
         <NuxtLink to="/dashboard" class="btn">Dashboard</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <div v-if="!canReview" class="card">
       <div class="cbody" style="color:#94a3b8; font-size:13px;">

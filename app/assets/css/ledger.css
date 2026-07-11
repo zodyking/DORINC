@@ -142,9 +142,38 @@ a{ color:#4f46e5; }
 
 .portal-shell .page{ display:none; padding:24px 28px 56px; flex:1; }
 .portal-shell .page.active{ display:block; }
-.pagehead{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+.pagehead{ margin-bottom:20px; }
+.pagehead__main{ min-width:0; }
+.pagehead__title-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.pagehead__title-row h2{ flex:1; min-width:0; margin:0; }
 .pagehead h2{ margin:0; font-size:22px; font-weight:800; letter-spacing:-.02em; }
 .pagehead p{ margin:4px 0 0; color:#64748b; font-size:13.5px; }
+.page-actions{ position:relative; flex:none; }
+.page-actions__panel{
+  position:absolute; right:0; top:calc(100% + 8px); min-width:220px; max-width:min(92vw, 280px);
+  background:#fff; border:1px solid #e2e8f0; border-radius:12px;
+  box-shadow:0 12px 32px -8px rgba(15,23,42,.18);
+  padding:6px; display:none; z-index:30;
+}
+.page-actions__panel.open{ display:block; }
+.page-actions__panel .btn,
+.page-actions__panel a.btn,
+.page-actions__panel button.btn{
+  width:100%; justify-content:flex-start; border:none; border-radius:8px;
+  box-shadow:none; background:transparent;
+}
+.page-actions__panel .btn:hover,
+.page-actions__panel a.btn:hover,
+.page-actions__panel button.btn:hover{ background:#f1f5f9; }
+.page-actions__panel .btn.primary,
+.page-actions__panel a.btn.primary{
+  color:#4f46e5; background:transparent; border:none;
+}
+.page-actions__panel .btn.primary:hover,
+.page-actions__panel a.btn.primary:hover{ background:#eef2ff; }
+.page-actions__panel .btn:disabled{ opacity:.55; cursor:not-allowed; }
 .actions{ display:flex; gap:10px; flex-wrap:wrap; }
 .btn{
   appearance:none; border:1px solid #e2e8f0; background:#fff; color:#0f172a;
@@ -871,10 +900,39 @@ label.fld .fld-badge{ display:inline-block; margin-left:6px; font-size:10px; fon
 /* ---------- Page container ---------- */
 .page{ display:none; padding:24px 28px 56px; }
 .page.active{ display:block; }
-.pagehead{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+.pagehead{ margin-bottom:20px; }
+.pagehead__main{ min-width:0; }
+.pagehead__title-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.pagehead__title-row h2{ flex:1; min-width:0; }
 h2{ margin:0; font-size:21px; font-weight:800; letter-spacing:-.02em; }
 .pagehead p{ margin:4px 0 0; color:#64748b; font-size:13.5px; }
-.pagehead .actions{ display:flex; gap:10px; flex-wrap:wrap; }
+.page-actions{ position:relative; flex:none; }
+.page-actions__panel{
+  position:absolute; right:0; top:calc(100% + 8px); min-width:220px; max-width:min(92vw, 280px);
+  background:#fff; border:1px solid #e2e8f0; border-radius:12px;
+  box-shadow:0 12px 32px -8px rgba(15,23,42,.18);
+  padding:6px; display:none; z-index:30;
+}
+.page-actions__panel.open{ display:block; }
+.page-actions__panel .btn,
+.page-actions__panel a.btn,
+.page-actions__panel button.btn{
+  width:100%; justify-content:flex-start; border:none; border-radius:8px;
+  box-shadow:none; background:transparent;
+}
+.page-actions__panel .btn:hover,
+.page-actions__panel a.btn:hover,
+.page-actions__panel button.btn:hover{ background:#f1f5f9; }
+.page-actions__panel .btn.primary,
+.page-actions__panel a.btn.primary{
+  color:#4f46e5; background:transparent; border:none;
+}
+.page-actions__panel .btn.primary:hover,
+.page-actions__panel a.btn.primary:hover{ background:#eef2ff; }
+.page-actions__panel .btn:disabled{ opacity:.55; cursor:not-allowed; }
+.pagehead .actions{ display:none; }
 
 /* ---------- Buttons / inputs / chips ---------- */
 .btn{

@@ -126,15 +126,12 @@ async function submitModal() {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Deletion requests</h2>
-        <p>Staff requests to permanently delete records — admin approval required</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Staff requests to permanently delete records — admin approval required">
+      <template #title>Deletion requests</template>
+      <template #actions>
         <NuxtLink to="/dashboard" class="btn">Dashboard</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <div v-if="!canReview" class="card">
       <div class="cbody" style="color:#94a3b8; font-size:13px;">

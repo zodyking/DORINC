@@ -314,15 +314,12 @@ async function testAiConnection() {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Settings</h2>
-        <p>Business profile, email, invoices, detection rules, backups, and system health</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Business profile, email, invoices, detection rules, backups, and system health">
+      <template #title>Settings</template>
+      <template #actions>
         <NuxtLink to="/setup" class="btn primary">Server Setup Wizard</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <div v-if="error" class="card" style="padding:24px; margin-bottom:16px;">
       <p>You do not have access to the control panel.</p>

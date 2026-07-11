@@ -123,12 +123,9 @@ const rangeLabel = computed(() => {
 
 <template>
   <section class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>Vehicles</h2>
-        <p>{{ total }} unit{{ total === 1 ? '' : 's' }} across {{ customerCount }} customer{{ customerCount === 1 ? '' : 's' }}</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead :subtitle="`${total} unit${total === 1 ? '' : 's'} across ${customerCount} customer${customerCount === 1 ? '' : 's'}`">
+      <template #title>Vehicles</template>
+      <template v-if="canBulkDecode || canCreate" #actions>
         <button
           v-if="canBulkDecode"
           type="button"
@@ -139,8 +136,8 @@ const rangeLabel = computed(() => {
           {{ bulkDecodeBusy ? 'Decoding VINs…' : 'Decode missing VINs' }}
         </button>
         <NuxtLink v-if="canCreate" to="/vehicles/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ Add Vehicle</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <p v-if="bulkDecodeMessage" class="help" style="color:#059669; margin:0 0 12px;">{{ bulkDecodeMessage }}</p>
     <p v-if="bulkDecodeError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ bulkDecodeError }}</p>
