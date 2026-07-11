@@ -1,22 +1,7 @@
 <script setup lang="ts">
-import { PdfViewerShell } from '~/utils/pdf-viewer'
-import {
-  designSettingsFromForm,
-  detectFontPreset,
-  logoPreviewUrl,
-  publishStatusLabel,
-  sectionsFromSettings,
-  TEMPLATE_FONT_OPTIONS,
-  TEMPLATE_PAGE_SIZE_OPTIONS,
-  TEMPLATE_SECTION_DEFS,
-  templateOptionLabel,
-  versionStatusLabel,
-  type InvoiceTemplateDesignSettings,
-  type InvoiceTemplateSectionKey,
-  type TemplateFontPreset,
-} from '~/utils/invoice-template-designer-ui'
+import { isBuiltInBladeMarker } from '#shared/invoice-template-blade'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
-import { invoiceTemplateDesignSettingsSchema } from '#shared/validators/invoice-templates'
+import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
 
 interface TemplateListItem {
   id: string
@@ -31,7 +16,7 @@ interface TemplateVersionRow {
   id: string
   versionNumber: number
   status: string
-  designSettings: InvoiceTemplateDesignSettings
+  layoutMarker: string
   publishedAt: string | null
 }
 
@@ -47,47 +32,33 @@ interface TemplateDetailResponse {
   usageCount: number
 }
 
-type EditorTab = 'design' | 'json'
+type EditorTab = 'code' | 'preview'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const authPending = computed(() => !auth.loaded)
 const canRead = computed(() => auth.loaded && auth.can('templates.read.all'))
 const canManage = computed(() => auth.loaded && auth.can('templates.manage.all'))
 
 const selectedTemplateId = ref<string | null>(null)
-const savedSettings = ref<InvoiceTemplateDesignSettings | null>(null)
+const savedBladeSource = ref('')
+const bladeSource = ref('')
 const templateName = ref('')
 const savedTemplateName = ref('')
-const editorTab = ref<EditorTab>('design')
-const jsonText = ref('')
-const jsonError = ref('')
-
-const form = reactive({
-  pageSize: 'Letter' as 'Letter' | 'A4',
-  marginInches: 0.5,
-  accentColor: '#2563eb',
-  accentColor2: '#1e293b',
-  fontPreset: 'system' as TemplateFontPreset,
-  logoFileId: null as string | null,
-  sections: sectionsFromSettings() as Record<InvoiceTemplateSectionKey, { visible: boolean, label: string }>,
-})
+const editorTab = ref<EditorTab>('code')
+const previewHtml = ref('')
+const previewInvoiceLabel = ref('sample invoice')
 
 const publishBusy = ref(false)
 const renameBusy = ref(false)
+const previewBusy = ref(false)
+const duplicateBusy = ref(false)
+const testPdfBusy = ref(false)
 const publishError = ref('')
+const previewError = ref('')
 const actionError = ref('')
 const actionMessage = ref('')
-const testPdfBusy = ref(false)
-const duplicateBusy = ref(false)
-const logoUploadBusy = ref(false)
-
-const previewBusy = ref(false)
-const previewError = ref('')
-const previewUrl = ref('')
-const previewInvoiceLabel = ref('sample invoice')
 
 const { data: listData, pending: listPending, error: listError, refresh: refreshList } = useFetch<{ items: TemplateListItem[] }>(
   '/api/invoice-templates',
@@ -95,15 +66,8 @@ const { data: listData, pending: listPending, error: listError, refresh: refresh
 )
 
 const { data, refresh, pending, error } = useFetch<TemplateDetailResponse>(
-  () => selectedTemplateId.value
-    ? `/api/invoice-templates/${selectedTemplateId.value}`
-    : null,
-  {
-    watch: [selectedTemplateId],
-    server: false,
-    lazy: true,
-    immediate: false,
-  },
+  () => selectedTemplateId.value ? `/api/invoice-templates/${selectedTemplateId.value}` : null,
+  { watch: [selectedTemplateId], server: false, lazy: true, immediate: false },
 )
 
 const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ preview: { invoiceNumberFormatted: string } | null }>(
@@ -111,16 +75,9 @@ const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ 
   { server: false, lazy: true, immediate: false },
 )
 
-const currentDesignSettings = computed(() => designSettingsFromForm(form))
-
+const bladeDirty = computed(() => bladeSource.value !== savedBladeSource.value)
 const nameDirty = computed(() => templateName.value.trim() !== savedTemplateName.value)
-
-const dirty = computed(() => {
-  if (!savedSettings.value) return false
-  return JSON.stringify(currentDesignSettings.value) !== JSON.stringify(savedSettings.value)
-})
-
-const logoUrl = computed(() => logoPreviewUrl(form.logoFileId))
+const dirty = computed(() => bladeDirty.value || nameDirty.value)
 
 watch(canRead, (allowed) => {
   if (allowed) {
@@ -142,8 +99,7 @@ watch(listData, (list) => {
     selectedTemplateId.value = fromQuery
   }
   else if (!selectedTemplateId.value) {
-    const def = list.items.find(t => t.isDefault) ?? list.items[0]
-    selectedTemplateId.value = def?.id ?? null
+    selectedTemplateId.value = (list.items.find(t => t.isDefault) ?? list.items[0])?.id ?? null
   }
 }, { immediate: true })
 
@@ -159,17 +115,10 @@ const template = computed(() => data.value?.template ?? null)
 const activeVersion = computed(() => data.value?.publishedVersion ?? data.value?.latestVersion ?? null)
 const usageCount = computed(() => data.value?.usageCount ?? 0)
 
-function loadSettingsFromVersion(settings: InvoiceTemplateDesignSettings) {
-  form.pageSize = settings.pageSize
-  form.marginInches = settings.marginInches
-  form.accentColor = settings.accentColor
-  form.accentColor2 = settings.accentColor2
-  form.fontPreset = detectFontPreset(settings)
-  form.logoFileId = settings.logoFileId ?? null
-  form.sections = sectionsFromSettings(settings)
-  savedSettings.value = designSettingsFromForm(form)
-  jsonText.value = JSON.stringify(savedSettings.value, null, 2)
-  jsonError.value = ''
+async function resolveBladeFromMarker(marker: string): Promise<string> {
+  if (!isBuiltInBladeMarker(marker)) return marker
+  const baseline = await $fetch<{ source: string }>('/api/invoice-templates/blade-baseline')
+  return baseline.source
 }
 
 watch(template, (row) => {
@@ -178,102 +127,45 @@ watch(template, (row) => {
   savedTemplateName.value = row.name
 }, { immediate: true })
 
-watch(activeVersion, (v) => {
+watch(activeVersion, async (v) => {
   if (!v) return
-  loadSettingsFromVersion(v.designSettings)
+  try {
+    const source = await resolveBladeFromMarker(v.layoutMarker)
+    bladeSource.value = source
+    savedBladeSource.value = source
+    previewHtml.value = ''
+  }
+  catch (e: unknown) {
+    actionError.value = fetchErrorMessage(e, 'Could not load Blade source')
+  }
 }, { immediate: true })
 
-watch(editorTab, (tab) => {
-  if (tab === 'json') {
-    jsonText.value = JSON.stringify(currentDesignSettings.value, null, 2)
-    jsonError.value = ''
-  }
-})
-
-const statusText = computed(() => {
-  const v = activeVersion.value
-  if (!v) return 'Loading template…'
-  if (dirty.value || nameDirty.value) return 'Unsaved changes — save or refresh preview'
-  return publishStatusLabel(v.publishedAt, v.versionNumber, usageCount.value)
-})
-
-const versionMeta = computed(() => {
-  const v = activeVersion.value
-  if (!v) return '—'
-  return versionStatusLabel(v.status, v.versionNumber)
-})
-
 const loadErrorMessage = computed(() => {
-  const err = (error.value ?? listError.value) as {
-    data?: { message?: string, data?: { message?: string } }
-    message?: string
-    statusMessage?: string
-  } | null
-  if (!err) return 'Could not load the invoice template.'
-  const nested = err.data?.data?.message ?? err.data?.message
-  if (nested) return nested
-  const generic = err.message ?? err.statusMessage
-  if (generic && generic !== 'Server Error') return generic
-  return 'Could not load the invoice template.'
+  const err = (error.value ?? listError.value) as { data?: { message?: string }, message?: string } | null
+  return err?.data?.message ?? err?.message ?? 'Could not load the invoice template.'
 })
-
-function resetSettings() {
-  if (!activeVersion.value) return
-  if ((dirty.value || nameDirty.value) && !confirm('Reset all changes to the last loaded version?')) return
-  loadSettingsFromVersion(activeVersion.value.designSettings)
-  if (template.value) {
-    templateName.value = template.value.name
-    savedTemplateName.value = template.value.name
-  }
-}
 
 async function onTemplateChange(ev: Event) {
   const id = (ev.target as HTMLSelectElement).value
-  if ((dirty.value || nameDirty.value) && !confirm('You have unsaved changes. Switch template anyway?')) {
-    return
-  }
+  if (dirty.value && !confirm('You have unsaved changes. Switch template anyway?')) return
   selectedTemplateId.value = id
-}
-
-function applyJsonSettings() {
-  jsonError.value = ''
-  try {
-    const parsed = invoiceTemplateDesignSettingsSchema.parse(JSON.parse(jsonText.value))
-    form.pageSize = parsed.pageSize
-    form.marginInches = parsed.marginInches
-    form.accentColor = parsed.accentColor
-    form.accentColor2 = parsed.accentColor2
-    form.fontPreset = detectFontPreset(parsed)
-    form.logoFileId = parsed.logoFileId ?? null
-    form.sections = sectionsFromSettings(parsed)
-    jsonText.value = JSON.stringify(designSettingsFromForm(form), null, 2)
-    actionMessage.value = 'JSON applied to editor'
-  }
-  catch (e: unknown) {
-    jsonError.value = e instanceof Error ? e.message : 'Invalid JSON or design settings'
-  }
 }
 
 async function refreshPreview() {
   if (!canRead.value || !template.value) return
-  if (editorTab.value === 'json') applyJsonSettings()
   previewBusy.value = true
   previewError.value = ''
   try {
-    const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
+    const html = await $fetch<string>(`/api/invoice-templates/${template.value.id}/preview-html`, {
       method: 'POST',
-      body: { designSettings: currentDesignSettings.value },
-      responseType: 'blob',
+      body: { bladeSource: bladeSource.value },
     })
-    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = URL.createObjectURL(blob)
+    previewHtml.value = html
+    editorTab.value = 'preview'
   }
   catch (e: unknown) {
-    previewError.value = await fetchErrorMessage(e, 'Preview failed — check PDF service')
-    if (previewUrl.value) {
-      URL.revokeObjectURL(previewUrl.value)
-      previewUrl.value = ''
-    }
+    previewError.value = await fetchErrorMessage(e, 'Preview failed — check Blade syntax and PDF service')
+    previewHtml.value = ''
   }
   finally {
     previewBusy.value = false
@@ -305,19 +197,18 @@ async function saveTemplateName() {
 
 async function publishTemplate() {
   if (!canManage.value || !template.value) return
-  if (editorTab.value === 'json') applyJsonSettings()
   publishBusy.value = true
   publishError.value = ''
   try {
     if (nameDirty.value) await saveTemplateName()
     await $fetch(`/api/invoice-templates/${template.value.id}/publish`, {
       method: 'POST',
-      body: { designSettings: currentDesignSettings.value },
+      body: { bladeSource: bladeSource.value },
     })
-    savedSettings.value = currentDesignSettings.value
+    savedBladeSource.value = bladeSource.value
     await refresh()
     await refreshList()
-    actionMessage.value = 'Template saved and published'
+    actionMessage.value = 'Template published'
     await refreshPreview()
   }
   catch (e: unknown) {
@@ -353,10 +244,7 @@ async function setDefaultTemplate() {
   if (!canManage.value || !template.value || template.value.isDefault) return
   actionError.value = ''
   try {
-    await $fetch(`/api/invoice-templates/${template.value.id}`, {
-      method: 'PATCH',
-      body: { isDefault: true },
-    })
+    await $fetch(`/api/invoice-templates/${template.value.id}`, { method: 'PATCH', body: { isDefault: true } })
     await refresh()
     await refreshList()
     actionMessage.value = 'Set as default template'
@@ -368,15 +256,14 @@ async function setDefaultTemplate() {
 
 async function testRenderPdf() {
   if (!canManage.value || !template.value) return
-  if (editorTab.value === 'json') applyJsonSettings()
   testPdfBusy.value = true
   actionError.value = ''
   try {
-    await $fetch<{ job: { id: string } }>(
-      `/api/invoice-templates/${template.value.id}/test-pdf`,
-      { method: 'POST', body: { designSettings: currentDesignSettings.value } },
-    )
-    actionMessage.value = 'Test PDF queued — it will appear in your downloads shortly.'
+    await $fetch(`/api/invoice-templates/${template.value.id}/test-pdf`, {
+      method: 'POST',
+      body: { bladeSource: bladeSource.value },
+    })
+    actionMessage.value = 'Test PDF queued — check downloads shortly.'
   }
   catch (e: unknown) {
     actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Test render failed'
@@ -386,428 +273,159 @@ async function testRenderPdf() {
   }
 }
 
-async function onLogoPick(ev: Event) {
-  if (!canManage.value || !template.value) return
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  logoUploadBusy.value = true
-  actionError.value = ''
-  try {
-    const body = new FormData()
-    body.append('file', file)
-    body.append('ownerEntityType', 'template')
-    body.append('ownerEntityId', template.value.id)
-    body.append('fileKind', 'attachment')
-    const res = await $fetch<{ file: { id: string } }>('/api/files', { method: 'POST', body })
-    form.logoFileId = res.file.id
-  }
-  catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Logo upload failed'
-  }
-  finally {
-    logoUploadBusy.value = false
-  }
+function resetBlade() {
+  if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
+  bladeSource.value = savedBladeSource.value
+  previewHtml.value = ''
 }
-
-function clearLogo() {
-  form.logoFileId = null
-}
-
-onUnmounted(() => {
-  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-})
 </script>
 
 <template>
-  <div v-if="authPending" class="cp-state">Loading template editor…</div>
-
+  <div v-if="!auth.loaded" class="cp-state">Loading template editor…</div>
   <div v-else-if="!canRead" class="cp-state">You do not have permission to view invoice templates.</div>
-
   <div v-else-if="listPending && !listData" class="cp-state">Loading template editor…</div>
-
   <div v-else-if="listError" class="cp-state">{{ loadErrorMessage }}</div>
-
-  <div v-else-if="!selectedTemplateId" class="cp-state">
-    No invoice templates found. Redeploy or seed the default template, then refresh.
-  </div>
-
+  <div v-else-if="!selectedTemplateId" class="cp-state">No invoice templates found.</div>
   <div v-else-if="pending && !data" class="cp-state">Loading template editor…</div>
-
   <div v-else-if="error || !template" class="cp-state">{{ loadErrorMessage }}</div>
 
   <div v-else class="te-page">
     <div class="card te-toolbar">
       <div class="te-toolbar__main">
-        <label class="te-name-field">
+        <label class="te-field">
           <span>Template name</span>
-          <input
-            v-model="templateName"
-            type="text"
-            maxlength="120"
-            :disabled="!canManage"
-            placeholder="Professional Bill Matrix"
-          >
+          <input v-model="templateName" type="text" maxlength="120" :disabled="!canManage">
         </label>
-        <label class="te-select-field">
+        <label class="te-field">
           <span>Template</span>
-          <select
-            :value="selectedTemplateId ?? ''"
-            @change="onTemplateChange"
-          >
-            <option
-              v-for="t in listData?.items ?? []"
-              :key="t.id"
-              :value="t.id"
-            >
+          <select :value="selectedTemplateId ?? ''" @change="onTemplateChange">
+            <option v-for="t in listData?.items ?? []" :key="t.id" :value="t.id">
               {{ templateOptionLabel(t.name, t.isDefault, t.latestVersion?.status) }}
             </option>
           </select>
         </label>
         <div class="te-badges">
           <span v-if="template.isDefault" class="pill ok">Default</span>
-          <span class="pill indigo">Blade</span>
+          <span class="pill indigo">Laravel Blade</span>
         </div>
       </div>
       <div class="te-toolbar__actions">
-        <button
-          v-if="canManage && nameDirty"
-          type="button"
-          class="btn"
-          :disabled="renameBusy"
-          @click="saveTemplateName"
-        >
-          {{ renameBusy ? 'Saving name…' : 'Save name' }}
+        <button v-if="canManage && nameDirty" type="button" class="btn" :disabled="renameBusy" @click="saveTemplateName">
+          {{ renameBusy ? 'Saving…' : 'Save name' }}
         </button>
-        <button
-          v-if="canManage"
-          type="button"
-          class="btn"
-          :disabled="duplicateBusy"
-          @click="duplicateTemplate"
-        >
+        <button v-if="canManage" type="button" class="btn" :disabled="duplicateBusy" @click="duplicateTemplate">
           {{ duplicateBusy ? 'Duplicating…' : 'Duplicate' }}
         </button>
-        <button
-          v-if="canManage"
-          type="button"
-          class="btn"
-          :disabled="testPdfBusy"
-          @click="testRenderPdf"
-        >
+        <button v-if="canManage" type="button" class="btn" :disabled="testPdfBusy" @click="testRenderPdf">
           {{ testPdfBusy ? 'Queuing…' : 'Test PDF' }}
         </button>
-        <button
-          v-if="canManage && !template.isDefault"
-          type="button"
-          class="btn"
-          @click="setDefaultTemplate"
-        >
+        <button v-if="canManage && !template.isDefault" type="button" class="btn" @click="setDefaultTemplate">
           Set default
         </button>
-        <button
-          v-if="canManage"
-          type="button"
-          class="btn primary"
-          :disabled="publishBusy || (!dirty && !nameDirty)"
-          @click="publishTemplate"
-        >
+        <button v-if="canManage" type="button" class="btn primary" :disabled="publishBusy || !dirty" @click="publishTemplate">
           {{ publishBusy ? 'Saving…' : 'Save template' }}
         </button>
       </div>
     </div>
 
     <p v-if="publishError" class="te-msg te-msg--err">{{ publishError }}</p>
+    <p v-if="previewError" class="te-msg te-msg--err">{{ previewError }}</p>
     <p v-if="actionError" class="te-msg te-msg--err">{{ actionError }}</p>
     <p v-if="actionMessage" class="te-msg te-msg--ok">{{ actionMessage }}</p>
 
-    <div class="td-layout te-layout">
-      <div class="td-panel">
-        <div class="card te-editor-card">
-          <div class="te-tabs" role="tablist" aria-label="Template editor tabs">
-            <button
-              type="button"
-              class="te-tab"
-              :class="{ active: editorTab === 'design' }"
-              role="tab"
-              :aria-selected="editorTab === 'design'"
-              @click="editorTab = 'design'"
-            >
-              Design
-            </button>
-            <button
-              type="button"
-              class="te-tab"
-              :class="{ active: editorTab === 'json' }"
-              role="tab"
-              :aria-selected="editorTab === 'json'"
-              @click="editorTab = 'json'"
-            >
-              JSON
-            </button>
-          </div>
-
-          <div v-if="editorTab === 'design'" class="td-settings">
-            <label class="fld">
-              Page size
-              <select v-model="form.pageSize" class="fld" :disabled="!canManage">
-                <option v-for="opt in TEMPLATE_PAGE_SIZE_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="fld">
-              Margins (inches)
-              <input
-                v-model.number="form.marginInches"
-                type="number"
-                min="0.25"
-                max="1.5"
-                step="0.05"
-                :disabled="!canManage"
-              >
-            </label>
-
-            <label class="fld">
-              Font family
-              <select v-model="form.fontPreset" class="fld" :disabled="!canManage">
-                <option v-for="opt in TEMPLATE_FONT_OPTIONS" :key="opt.key" :value="opt.key">
-                  {{ opt.label }}
-                </option>
-              </select>
-            </label>
-
-            <div class="fld">
-              <span>Accent colors</span>
-              <div class="td-color-row">
-                <input v-model="form.accentColor" type="color" :disabled="!canManage" aria-label="Primary accent">
-                <input v-model="form.accentColor" type="text" maxlength="7" :disabled="!canManage">
-              </div>
-              <div class="td-color-row">
-                <input v-model="form.accentColor2" type="color" :disabled="!canManage" aria-label="Secondary accent">
-                <input v-model="form.accentColor2" type="text" maxlength="7" :disabled="!canManage">
-              </div>
-            </div>
-
-            <div class="fld">
-              <span>Logo</span>
-              <div class="td-logo-block">
-                <div class="td-logo-preview" :style="{ '--pv-accent': form.accentColor }">
-                  <img v-if="logoUrl" :src="logoUrl" alt="Logo preview">
-                  <span v-else>DOR<br>INC</span>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                  <label v-if="canManage" class="btn sm" style="cursor:pointer;">
-                    {{ logoUploadBusy ? 'Uploading…' : 'Upload logo' }}
-                    <input type="file" accept="image/*" hidden :disabled="logoUploadBusy" @change="onLogoPick">
-                  </label>
-                  <button v-if="canManage && form.logoFileId" type="button" class="btn ghost sm" @click="clearLogo">
-                    Remove logo
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <fieldset class="fld" style="border:none; padding:0; margin:12px 0 0;">
-              <legend style="font-size:12px; font-weight:600; color:#475569; margin-bottom:8px;">Sections</legend>
-              <div
-                v-for="section in TEMPLATE_SECTION_DEFS"
-                :key="section.key"
-                style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;"
-              >
-                <label style="display:flex; align-items:center; gap:6px; min-width:180px;">
-                  <input
-                    v-model="form.sections[section.key].visible"
-                    type="checkbox"
-                    :disabled="!canManage || section.required"
-                  >
-                  <span style="font-size:13px;">{{ section.label }}</span>
-                </label>
-                <input
-                  v-model="form.sections[section.key].label"
-                  type="text"
-                  class="fld"
-                  style="flex:1; min-width:140px; margin:0;"
-                  :placeholder="section.label"
-                  :disabled="!canManage"
-                >
-              </div>
-            </fieldset>
-          </div>
-
-          <div v-else class="te-json-pane">
-            <div class="te-json-actions">
-              <button type="button" class="btn sm" :disabled="!canManage" @click="applyJsonSettings">Apply JSON</button>
-              <button type="button" class="btn ghost sm" @click="jsonText = JSON.stringify(currentDesignSettings, null, 2)">Reset to form</button>
-            </div>
-            <textarea
-              v-model="jsonText"
-              class="td-code te-json-editor"
-              spellcheck="false"
-              :disabled="!canManage"
-              aria-label="Template design settings JSON"
-            />
-            <p v-if="jsonError" class="te-msg te-msg--err">{{ jsonError }}</p>
-          </div>
-
-          <div class="td-status" :class="{ dirty: dirty || nameDirty }">{{ statusText }}</div>
+    <div class="card te-workspace">
+      <div class="te-workspace__head">
+        <div class="te-tabs" role="tablist">
+          <button type="button" class="te-tab" :class="{ active: editorTab === 'code' }" @click="editorTab = 'code'">
+            Blade code
+          </button>
+          <button type="button" class="te-tab" :class="{ active: editorTab === 'preview' }" @click="editorTab = 'preview'">
+            HTML preview
+          </button>
+        </div>
+        <div class="te-workspace__actions">
+          <button type="button" class="btn sm ghost" :disabled="!bladeDirty" @click="resetBlade">Reset</button>
+          <button type="button" class="btn sm" :disabled="previewBusy" @click="refreshPreview">
+            {{ previewBusy ? 'Rendering…' : 'Render preview' }}
+          </button>
         </div>
       </div>
 
-      <div class="td-panel">
-        <div class="card te-preview-card">
-          <div class="td-preview-head">
-            <div>
-              <strong style="font-size:13px;">PDF preview</strong>
-              <span>Laravel Blade + DomPDF · {{ previewInvoiceLabel }}</span>
-            </div>
-            <button
-              type="button"
-              class="btn sm"
-              :disabled="previewBusy"
-              @click="refreshPreview"
-            >
-              {{ previewBusy ? 'Rendering…' : 'Refresh preview' }}
-            </button>
-          </div>
+      <div v-show="editorTab === 'code'" class="te-pane te-pane--code">
+        <textarea
+          v-model="bladeSource"
+          class="td-code te-blade-editor"
+          spellcheck="false"
+          :disabled="!canManage"
+          aria-label="Invoice template Blade source"
+        />
+        <p class="te-pane__hint">
+          Invoice layout is controlled entirely by this Blade template. Sample data renders from {{ previewInvoiceLabel }}.
+          <span v-if="dirty" class="dirty">Unsaved changes.</span>
+        </p>
+      </div>
 
-          <div class="td-pdf-wrap te-pdf-wrap">
-            <p v-if="previewError" class="td-preview-error">{{ previewError }}</p>
-            <p v-else-if="!previewUrl && !previewBusy" class="td-preview-empty">
-              Click <strong>Refresh preview</strong> to render the current template settings as PDF.
-            </p>
-            <ClientOnly v-else-if="previewUrl">
-              <PdfViewerShell
-                :src="previewUrl"
-                title="Invoice template PDF preview"
-                :show-download="true"
-              />
-            </ClientOnly>
-          </div>
+      <div v-show="editorTab === 'preview'" class="te-pane te-pane--preview">
+        <iframe
+          v-if="previewHtml"
+          class="te-preview-frame"
+          :srcdoc="previewHtml"
+          title="Invoice HTML preview"
+          sandbox="allow-same-origin"
+        />
+        <p v-else class="te-preview-empty">
+          Switch to <strong>Blade code</strong>, edit the template, then click <strong>Render preview</strong> to see HTML output here.
+        </p>
+      </div>
 
-          <dl class="kv" style="margin:0; border-top:1px solid #f1f5f9;">
-            <dt>Version</dt><dd>{{ versionMeta }}</dd>
-            <dt>Used by</dt><dd>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</dd>
-            <dt>Engine</dt><dd>Laravel Blade (invoices/pdf)</dd>
-          </dl>
-        </div>
+      <div class="te-meta">
+        <span>Version {{ activeVersion?.versionNumber ?? '—' }} · {{ activeVersion?.status ?? '—' }}</span>
+        <span>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.te-page { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.te-page { display: flex; flex-direction: column; gap: 12px; }
 .te-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  flex-wrap: wrap;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px;
 }
-.te-toolbar__main {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
-}
-.te-toolbar__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.te-name-field,
-.te-select-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-}
-.te-name-field span,
-.te-select-field span {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #94a3b8;
-}
-.te-name-field input,
-.te-select-field select {
-  margin: 0;
+.te-toolbar__main { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; flex: 1; }
+.te-toolbar__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.te-field { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+.te-field span {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #94a3b8;
 }
 .te-badges { display: flex; gap: 6px; align-items: center; padding-bottom: 2px; }
 .te-msg { margin: 0; font-size: 13px; }
 .te-msg--err { color: #dc2626; }
 .te-msg--ok { color: #059669; }
-.te-layout { min-height: calc(100vh - 240px); }
-.te-editor-card,
-.te-preview-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.te-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0 12px;
+.te-workspace { overflow: hidden; }
+.te-workspace__head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 0 12px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap;
 }
+.te-workspace__actions { display: flex; gap: 8px; padding: 10px 0; }
+.te-tabs { display: flex; gap: 0; }
 .te-tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 12px 14px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  color: #64748b;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  appearance: none; border: none; background: transparent; padding: 14px 16px;
+  font: inherit; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
-.te-tab.active {
-  color: #4f46e5;
-  border-bottom-color: #4f46e5;
+.te-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+.te-pane { min-height: 520px; }
+.te-pane--code { padding: 12px 14px 0; display: flex; flex-direction: column; }
+.te-blade-editor { flex: 1; min-height: 480px; resize: vertical; }
+.te-pane__hint { margin: 10px 0 14px; font-size: 12px; color: #64748b; }
+.te-pane__hint .dirty { color: #d97706; font-weight: 700; }
+.te-pane--preview { background: #eef0f4; min-height: 560px; }
+.te-preview-frame { width: 100%; height: 560px; border: none; background: #fff; }
+.te-preview-empty {
+  margin: 0; padding: 48px 24px; text-align: center; color: #64748b; font-size: 14px; line-height: 1.5;
 }
-.te-json-pane {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  padding: 12px 14px 0;
+.te-meta {
+  display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px;
+  border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8;
 }
-.te-json-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.te-json-editor {
-  flex: 1;
-  min-height: 420px;
-  resize: vertical;
-}
-.te-pdf-wrap { min-height: 560px; }
-.btn.sm { font-size: 12px; padding: 6px 10px; }
-.td-pdf-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 12px;
-  background: #eef0f4;
-  border: 1px solid #e2e8f0;
-  border-radius: 0;
-  overflow: hidden;
-  flex: 1;
-}
-.td-preview-empty,
-.td-preview-error {
-  margin: auto;
-  max-width: 360px;
-  text-align: center;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.5;
-}
-.td-preview-error { color: #dc2626; }
 </style>

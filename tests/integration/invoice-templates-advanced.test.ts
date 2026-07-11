@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { mergeTemplateSections } from '../../shared/invoice-template-design'
 import { seedInvoiceTemplates } from '../../server/db/seed-invoice-templates'
 import { invoiceTemplates } from '../../server/db/schema/invoice-templates'
+import { readBuiltInInvoiceBladeSource } from '../../server/utils/invoice-blade-baseline'
 import {
   duplicateInvoiceTemplate,
   patchInvoiceTemplate,
@@ -51,7 +52,9 @@ describe('P3-05 advanced template designer', () => {
   it('publish stores section visibility in design settings', async () => {
     const { template } = await seedInvoiceTemplates(db)
     const [actor] = await db.select({ id: users.id }).from(users).limit(1)
+    const bladeSource = await readBuiltInInvoiceBladeSource()
     const published = await publishInvoiceTemplateVersion(db, template.id, {
+      bladeSource,
       designSettings: {
         pageSize: 'Letter',
         marginInches: 0.5,
@@ -112,7 +115,9 @@ describe('P3-05 advanced template designer', () => {
     await approveInvoice(db, inv.id, actor!.id)
 
     const { template } = await seedInvoiceTemplates(db)
+    const bladeSource = await readBuiltInInvoiceBladeSource()
     const { job } = await testRenderTemplatePdf(db, template.id, {
+      bladeSource,
       designSettings: {
         pageSize: 'Letter',
         marginInches: 0.5,

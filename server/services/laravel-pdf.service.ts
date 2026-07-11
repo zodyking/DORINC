@@ -5,10 +5,24 @@ import type { DocumentPdfRenderPayload } from '../../shared/document-pdf-payload
 export async function renderDocumentPdfBuffer(
   payload: DocumentPdfRenderPayload,
 ): Promise<Buffer> {
+  return renderDocumentBuffer(payload, 'pdf')
+}
+
+/** Render invoice/estimate HTML preview via Laravel Blade. */
+export async function renderDocumentHtmlBuffer(
+  payload: DocumentPdfRenderPayload,
+): Promise<Buffer> {
+  return renderDocumentBuffer(payload, 'html')
+}
+
+async function renderDocumentBuffer(
+  payload: DocumentPdfRenderPayload,
+  format: 'pdf' | 'html',
+): Promise<Buffer> {
   const base = pdfRenderServiceBaseUrl()
   const path = payload.documentType === 'estimate'
-    ? '/api/render/estimate'
-    : '/api/render/invoice'
+    ? `/api/render/estimate${format === 'html' ? '/html' : ''}`
+    : `/api/render/invoice${format === 'html' ? '/html' : ''}`
 
   let res: Response
   try {

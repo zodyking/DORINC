@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatSmtpFromHeader, parseSmtpFromHeader } from '#shared/format/smtp-from'
+
 const emit = defineEmits<{ saved: [] }>()
 
 interface SmtpView {
@@ -7,6 +9,8 @@ interface SmtpView {
   port: number
   username: string
   from: string
+  fromName: string
+  fromAddress: string
   envLocked: boolean
 }
 
@@ -17,7 +21,8 @@ const form = reactive({
   port: 587,
   username: '',
   password: '',
-  from: '',
+  fromName: '',
+  fromAddress: '',
 })
 
 watch(() => smtpData.value, (s) => {
@@ -25,9 +30,15 @@ watch(() => smtpData.value, (s) => {
   form.host = s.host
   form.port = s.port
   form.username = s.username
-  form.from = s.from
+  form.fromName = s.fromName || parseSmtpFromHeader(s.from).fromName
+  form.fromAddress = s.fromAddress || parseSmtpFromHeader(s.from).fromAddress
   form.password = ''
 }, { immediate: true })
+
+const fromPreview = computed(() =>
+  formatSmtpFromHeader(form.fromName, form.fromAddress)
+  || 'Your Shop <notifications@yourdomain.com>',
+)
 
 const auth = useAuthStore()
 const smtpTestTo = ref('')
@@ -49,7 +60,8 @@ async function save() {
       host: form.host.trim(),
       port: form.port,
       username: form.username.trim(),
-      from: form.from.trim(),
+      fromName: form.fromName.trim(),
+      fromAddress: form.fromAddress.trim(),
     }
     if (form.password.trim()) body.password = form.password.trim()
     await $fetch('/api/admin/system/smtp-settings', { method: 'PATCH', body })
@@ -117,10 +129,19 @@ async function runTest() {
           Password
           <input v-model="form.password" type="password" maxlength="500" :placeholder="smtpData?.configured ? 'Leave blank to keep current password' : 'App password'" :disabled="smtpData?.envLocked" autocomplete="off">
         </label>
-        <label class="fld">
-          From address
-          <input v-model="form.from" type="text" required maxlength="255" placeholder="Your Shop &lt;notifications@yourdomain.com&gt;" :disabled="smtpData?.envLocked">
-        </label>
+        <div class="row2">
+          <label class="fld">
+            From name
+            <input v-model="form.fromName" type="text" maxlength="120" placeholder="Devon Onsite Repairs Inc" :disabled="smtpData?.envLocked">
+          </label>
+          <label class="fld">
+            From address
+            <input v-model="form.fromAddress" type="email" required maxlength="255" placeholder="accounting@yourdomain.com" :disabled="smtpData?.envLocked">
+          </label>
+        </div>
+        <span class="help" style="display:block;margin:-6px 0 12px;">
+          Shown in inboxes as: {{ fromPreview }}
+        </span>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>
