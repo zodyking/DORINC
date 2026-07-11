@@ -1409,11 +1409,6 @@ body.help-chat-open{ overflow:hidden; }
   padding:10px 14px; border-bottom:1px solid #f1f5f9;
 }
 .td-preview-head span{ font-size:12px; color:#64748b; }
-.td-pdf-wrap{
-  display:flex; flex-direction:column; min-height:520px;
-  background:#eef0f4; border:1px solid #e2e8f0; border-radius:0 0 14px 14px;
-  padding:12px; overflow:auto; flex:1;
-}
 
 /* ---------- Cards grid (customers/vehicles) ---------- */
 .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }

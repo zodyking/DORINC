@@ -31,11 +31,6 @@ export class PortalAccessServiceError extends Error {
   }
 }
 
-/** @deprecated Use generatePortalTempPassword — kept as alias for existing imports/tests. */
-export function generateTempPassword(): string {
-  return generatePortalTempPassword()
-}
-
 async function getCustomerAccountTypeId(db: Db) {
   const [row] = await db.select({ id: accountTypes.id }).from(accountTypes).where(eq(accountTypes.key, 'customer'))
   if (!row) throw new Error('customer account type missing — run db:seed')

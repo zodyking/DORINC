@@ -1,4 +1,4 @@
-const SW_VERSION = 'v2'
+const SW_VERSION = 'v3'
 
 export default defineNuxtPlugin(() => {
   if (!('serviceWorker' in navigator)) return

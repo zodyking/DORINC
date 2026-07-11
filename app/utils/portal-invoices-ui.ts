@@ -52,5 +52,3 @@ export function portalInvoiceDetailStatus(
 export function portalInvoicePdfUrl(invoiceId: string): string {
   return `/api/portal/invoices/${invoiceId}/pdf`
 }
-
-export { portalInvoiceStatus }

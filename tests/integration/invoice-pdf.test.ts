@@ -28,18 +28,8 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const db = drizzle({ client: pool })
 
 const stamp = Date.now()
-let chromiumAvailable = false
 
 beforeAll(async () => {
-  try {
-    const { chromium } = await import('playwright')
-    const browser = await chromium.launch({ headless: true })
-    await browser.close()
-    chromiumAvailable = true
-  }
-  catch {
-    chromiumAvailable = false
-  }
   await seedInvoiceTemplates(db)
 })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Invoice detail — line items, API totals, status actions, PDF placeholder (mockup: PAGE: INVOICE DETAIL).
+// Invoice detail — line items, API totals, status actions, PDF preview.
 import {
   auditWhenDisplay,
   formatInvoiceAuditAction,
@@ -314,7 +314,6 @@ const summaryRows = computed(() => {
           :invoice-id="id"
           :invoice-label="invoice.invoiceNumberFormatted"
           :allow-official-download="isPdfEligible"
-          :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
           :can-generate-pdf="canGeneratePdf"
           @refreshed="refresh()"
         />
@@ -595,10 +594,7 @@ const summaryRows = computed(() => {
       v-if="viewTab === 'pdf' && canGeneratePdf"
       :invoice-id="id"
       :invoice-label="invoice.invoiceNumberFormatted"
-      :prefer-official="isPdfEligible"
-      :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
       :can-generate-pdf="canGeneratePdf"
-      @refreshed="refresh()"
     />
   </section>
 </template>

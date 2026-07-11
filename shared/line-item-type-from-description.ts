@@ -52,7 +52,3 @@ export function inferLineTypeFromDescription(
   if (feeSet.has(word)) return 'fee'
   return null
 }
-
-// Legacy exports
-export const PART_DESCRIPTION_VERBS = DEFAULT_PART_DESCRIPTION_VERBS
-export const LABOR_DESCRIPTION_VERBS = DEFAULT_LABOR_DESCRIPTION_VERBS

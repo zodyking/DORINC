@@ -1,22 +1,5 @@
 // Laravel Blade + barryvdh/laravel-dompdf client for pdf-worker and other Node runtimes.
 
-/** @param {string | undefined | null} paper */
-export function normalizePdfPaper(paper) {
-  const value = String(paper ?? 'letter').trim().toLowerCase()
-  return value === 'a4' ? 'a4' : 'letter'
-}
-
-/** @param {{ paper?: string, marginInches?: number, margins?: { top?: number, right?: number, bottom?: number, left?: number } }} [options] */
-export function resolvePdfMargins(options = {}) {
-  const fallback = options.marginInches ?? 0.5
-  return {
-    top: options.margins?.top ?? fallback,
-    right: options.margins?.right ?? fallback,
-    bottom: options.margins?.bottom ?? fallback,
-    left: options.margins?.left ?? fallback,
-  }
-}
-
 export function pdfRenderServiceBaseUrl() {
   return (process.env.PDF_RENDER_URL?.trim() || 'http://laravel-pdf:8080').replace(/\/$/, '')
 }

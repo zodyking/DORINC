@@ -19,11 +19,6 @@ export function normalizePdfPaper(paper?: string | null): PdfPaper {
   return value === 'a4' ? 'a4' : 'letter'
 }
 
-/** DomPDF @page size token (Letter vs A4). */
-export function pdfPageSizeCss(paper: PdfPaper): string {
-  return paper === 'a4' ? 'A4' : 'Letter'
-}
-
 export function resolvePdfMargins(options: PdfRenderOptions = {}): PdfPageMargins {
   const fallback = options.marginInches ?? 0.5
   return {

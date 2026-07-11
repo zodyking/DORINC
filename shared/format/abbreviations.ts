@@ -47,8 +47,3 @@ export function expandForSpeech(value: string): string {
   }
   return out
 }
-
-/** @deprecated Use expandForSpeech — kept for TTS call sites. */
-export function expandAbbreviations(value: string): string {
-  return expandForSpeech(value)
-}

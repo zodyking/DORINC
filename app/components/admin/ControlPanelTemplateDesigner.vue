@@ -583,11 +583,16 @@ onUnmounted(() => {
 <style scoped>
 .btn.sm { font-size:12px; padding:6px 10px; }
 .td-pdf-wrap {
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  min-height:520px;
-  padding:12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 520px;
+  padding: 12px;
+  background: #eef0f4;
+  border: 1px solid #e2e8f0;
+  border-radius: 0 0 14px 14px;
+  overflow: auto;
+  flex: 1;
 }
 .td-pdf-wrap :deep(.pdf-acrobat) {
   flex:1;

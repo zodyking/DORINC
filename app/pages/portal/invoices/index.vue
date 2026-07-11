@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // Customer portal invoices list — filters, PDF download (mockup: Portal Invoices / P2-05).
 import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
+import { portalInvoiceStatus } from '~/utils/portal-dashboard-ui'
 import {
   portalInvoiceFilterLabel,
   portalInvoiceListSublabel,
   portalInvoiceMatchesFilter,
   portalInvoicePdfUrl,
-  portalInvoiceStatus,
   type PortalInvoiceFilter,
 } from '~/utils/portal-invoices-ui'
 

@@ -18,11 +18,6 @@ export function adjustCursorAfterFormat(oldVal: string, newVal: string, cursor: 
   return Math.max(0, Math.min(newVal.length, cursor + (newVal.length - oldVal.length)))
 }
 
-/** @deprecated Use formatLiveFieldText — kept for callers not yet migrated. */
-export function applyLiveTitleCase(value: string): string {
-  return formatLiveFieldText(value, 'prose')
-}
-
 /** Final format on blur / voice capture / server persist. */
 export function formatFieldText(value: string, mode: ProseFieldMode = 'prose'): string {
   const trimmed = value.trim()

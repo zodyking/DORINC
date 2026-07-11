@@ -114,7 +114,7 @@ function pdfEngineLabel(): string {
   if (shouldUsePdfRenderService()) {
     return 'DomPDF · Laravel PDF service'
   }
-  return 'DomPDF · local Playwright fallback'
+  return 'DomPDF · local render unavailable'
 }
 
 async function probePdfRenderService(): Promise<boolean> {

@@ -1,6 +1,5 @@
-/* DORINC Suite service worker — shell cache + offline queue stub (P4-01). */
-const CACHE_NAME = 'dorinc-shell-v2'
-const OFFLINE_QUEUE_KEY = 'dorinc-offline-queue'
+/* DORINC Suite service worker — offline shell cache (P4-01). */
+const CACHE_NAME = 'dorinc-shell-v3'
 
 const SHELL_URLS = ['/', '/auth/login', '/manifest.webmanifest']
 
@@ -48,38 +47,3 @@ self.addEventListener('fetch', (event) => {
       }),
   )
 })
-
-self.addEventListener('message', (event) => {
-  if (event.data?.type === 'QUEUE_OFFLINE_ACTION') {
-    event.waitUntil(enqueueOfflineAction(event.data.payload))
-  }
-  if (event.data?.type === 'GET_OFFLINE_QUEUE') {
-    event.waitUntil(
-      readOfflineQueue().then(items => {
-        event.source?.postMessage({ type: 'OFFLINE_QUEUE', items })
-      }),
-    )
-  }
-})
-
-async function readOfflineQueue() {
-  const cache = await caches.open(CACHE_NAME)
-  const res = await cache.match(OFFLINE_QUEUE_KEY)
-  if (!res) return []
-  try {
-    return await res.json()
-  }
-  catch {
-    return []
-  }
-}
-
-async function enqueueOfflineAction(payload) {
-  const items = await readOfflineQueue()
-  items.push({ ...payload, queuedAt: new Date().toISOString() })
-  const cache = await caches.open(CACHE_NAME)
-  await cache.put(
-    OFFLINE_QUEUE_KEY,
-    new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } }),
-  )
-}

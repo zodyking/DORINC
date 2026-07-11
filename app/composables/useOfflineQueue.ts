@@ -53,18 +53,6 @@ export function useOfflineQueue() {
     queueCount.value = offlineQueueCount()
   }
 
-  function queueAction(input: Omit<OfflineQueueItem, 'id' | 'queuedAt'>) {
-    const count = enqueueOfflineAction(input)
-    queueCount.value = count
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'QUEUE_OFFLINE_ACTION',
-        payload: input,
-      })
-    }
-    return count
-  }
-
   onMounted(() => {
     online.value = navigator.onLine
     refreshCount()
@@ -73,5 +61,5 @@ export function useOfflineQueue() {
     window.addEventListener('offline', () => { online.value = false })
   })
 
-  return { online, queueCount, queueAction, refreshCount, clearOfflineQueue }
+  return { online, queueCount, refreshCount, clearOfflineQueue }
 }

@@ -13,7 +13,6 @@ const props = defineProps<{
   invoiceLabel: string
   /** When true, Download stores/queues the official PDF for finalized invoices. */
   allowOfficialDownload?: boolean
-  hasOfficialPdf?: boolean
   canGeneratePdf?: boolean
 }>()
 

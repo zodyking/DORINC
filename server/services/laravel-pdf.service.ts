@@ -1,9 +1,4 @@
-import {
-  isPdfUpstreamFailureMessage,
-  normalizePdfPaper,
-  pdfRenderServiceBaseUrl,
-  resolvePdfMargins,
-} from '../../shared/pdf-render'
+import { pdfRenderServiceBaseUrl } from '../../shared/pdf-render'
 import type { DocumentPdfRenderPayload } from '../../shared/document-pdf-payload'
 
 /** Render invoice/estimate PDF via Laravel Blade + barryvdh/laravel-dompdf. */
@@ -44,5 +39,3 @@ export async function renderDocumentPdfBuffer(
 
   return Buffer.from(await res.arrayBuffer())
 }
-
-export { isPdfUpstreamFailureMessage, normalizePdfPaper, resolvePdfMargins }

@@ -980,8 +980,6 @@ const aiPopStyle = computed(() => {
           ref="pdfPreviewRef"
           :invoice-id="id"
           :invoice-label="invoice.invoiceNumberFormatted"
-          :prefer-official="false"
-          :has-official-pdf="false"
           :can-generate-pdf="canGeneratePdf"
         />
       </div>
