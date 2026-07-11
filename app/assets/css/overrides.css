@@ -353,6 +353,13 @@ textarea {
 .page-actions__trigger {
   display: grid;
 }
+.page-actions__icon {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #475569;
+}
 .page-actions__panel {
   display: none;
   position: absolute;

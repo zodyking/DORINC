@@ -41,7 +41,7 @@ onUnmounted(() => {
       :aria-expanded="open"
       @click.stop="toggle"
     >
-      ☰
+      <span class="page-actions__icon" aria-hidden="true">⋮</span>
     </button>
     <div
       class="page-actions__panel"
