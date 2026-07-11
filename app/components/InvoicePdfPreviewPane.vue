@@ -97,12 +97,14 @@ defineExpose({ refresh: loadPreview })
   <div v-else-if="error" class="invoice-pdf-pane-empty invoice-pdf-pane-error">{{ error }}</div>
   <div v-else-if="busy && !previewUrl" class="invoice-pdf-pane-empty">Rendering PDF…</div>
   <ClientOnly v-else-if="previewUrl">
-    <PdfViewer
-      :src="previewUrl"
-      :title="`${invoiceLabel} PDF`"
-      :show-download="showDownload !== false"
-      @download="downloadPdf"
-    />
+    <div class="invoice-pdf-viewer-wrap">
+      <PdfViewer
+        :src="previewUrl"
+        :title="`${invoiceLabel} PDF`"
+        :show-download="showDownload !== false"
+        @download="downloadPdf"
+      />
+    </div>
     <template #fallback>
       <div class="invoice-pdf-pane-empty">Loading viewer…</div>
     </template>
@@ -122,5 +124,8 @@ defineExpose({ refresh: loadPreview })
 }
 .invoice-pdf-pane-error {
   color: #dc2626;
+}
+.invoice-pdf-viewer-wrap {
+  min-height: min(78vh, 920px);
 }
 </style>
