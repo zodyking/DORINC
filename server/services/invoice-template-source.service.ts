@@ -52,10 +52,11 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
 
   if (!row) return getBuiltInInvoicePdfTemplate()
 
-  const baseline = await readBuiltInInvoiceBladeSource()
-  const bladeSource = isBuiltInBladeMarker(row.version.layoutMarker)
-    ? null
-    : resolveTemplateBladeSource(row.version.layoutMarker, baseline)
+  let bladeSource: string | null = null
+  if (!isBuiltInBladeMarker(row.version.layoutMarker)) {
+    const baseline = await readBuiltInInvoiceBladeSource()
+    bladeSource = resolveTemplateBladeSource(row.version.layoutMarker, baseline)
+  }
 
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
