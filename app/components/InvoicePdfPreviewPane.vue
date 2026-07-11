@@ -18,6 +18,7 @@ const canUse = computed(() => props.canGeneratePdf !== false && auth.can('invoic
 
 const busy = ref(false)
 const error = ref('')
+const previewBlob = ref<Blob | null>(null)
 const { url: previewUrl, setFromBlob, revoke: revokePreview } = usePdfBlobUrl()
 
 async function loadPreview() {
@@ -25,8 +26,11 @@ async function loadPreview() {
   busy.value = true
   error.value = ''
   revokePreview()
+  previewBlob.value = null
   try {
-    setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
+    const blob = await fetchInvoicePreviewPdf(props.invoiceId)
+    previewBlob.value = blob
+    setFromBlob(blob)
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'Could not render PDF preview')
@@ -65,15 +69,17 @@ defineExpose({ refresh: loadPreview })
   <div v-else-if="error" class="invoice-pdf-pane-empty invoice-pdf-pane-error">{{ error }}</div>
   <div v-else-if="busy && !previewUrl" class="invoice-pdf-pane-empty">Rendering PDF…</div>
   <ClientOnly v-else-if="previewUrl">
-    <PdfViewerShell
-      fill
-      :src="previewUrl"
+    <div class="invoice-pdf-pane">
+      <PdfViewerShell
+        :src="previewUrl"
+        :blob="previewBlob"
       :title="`${invoiceLabel} PDF`"
       :show-download="showDownload !== false"
       :download-href="previewUrl"
       :download-filename="`${invoiceLabel}.pdf`"
       @download="downloadPdf"
-    />
+      />
+    </div>
     <template #fallback>
       <div class="invoice-pdf-pane-empty">Loading viewer…</div>
     </template>
@@ -93,5 +99,8 @@ defineExpose({ refresh: loadPreview })
 }
 .invoice-pdf-pane-error {
   color: #dc2626;
+}
+.invoice-pdf-pane {
+  min-height: min(78vh, 920px);
 }
 </style>

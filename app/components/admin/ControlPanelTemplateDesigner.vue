@@ -562,7 +562,6 @@ onUnmounted(() => {
             </p>
             <ClientOnly v-else-if="previewUrl">
               <PdfViewerShell
-                fill
                 :src="previewUrl"
                 title="Invoice template PDF preview"
                 :show-download="false"

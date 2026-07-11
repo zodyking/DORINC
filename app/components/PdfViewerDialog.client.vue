@@ -2,16 +2,13 @@
 /**
  * TripBuddy-style full-screen PDF dialog — overlay + PdfViewerShell.
  */
-import { defineAsyncComponent } from 'vue'
-
-const PdfViewerShell = defineAsyncComponent(
-  () => import('~/components/PdfViewerShell.client.vue'),
-)
+import PdfViewerShell from '~/components/PdfViewerShell.client.vue'
 
 const open = defineModel<boolean>('open', { default: false })
 
 defineProps<{
-  src: string
+  src?: string
+  blob?: Blob | null
   title?: string
   showDownload?: boolean
   downloadHref?: string
@@ -32,7 +29,7 @@ function close() {
 <template>
   <Teleport to="body">
     <div
-      v-if="open && src"
+      v-if="open && (src || blob)"
       class="pdf-dialog"
       role="dialog"
       aria-modal="true"
@@ -43,6 +40,7 @@ function close() {
         <PdfViewerShell
           fill
           :src="src"
+          :blob="blob"
           :title="title"
           :show-download="showDownload !== false"
           :download-href="downloadHref"
