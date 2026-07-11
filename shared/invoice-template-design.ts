@@ -74,10 +74,10 @@ export function mergeTemplateSections(
 
 export const DEFAULT_INVOICE_TEMPLATE_DESIGN: InvoiceTemplateDesignSettings = {
   pageSize: 'Letter',
-  marginInches: 0.5,
-  accentColor: '#ffd400',
-  accentColor2: '#0b0f1a',
-  fontSans: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-  fontMono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  marginInches: 0.4,
+  accentColor: '#000000',
+  accentColor2: '#000000',
+  fontSans: '"Courier New", Courier, "Liberation Mono", monospace',
+  fontMono: '"Courier New", Courier, "Liberation Mono", monospace',
   sections: defaultTemplateSections(),
 }

@@ -19,7 +19,6 @@ const previewBusy = ref(false)
 const downloadBusy = ref(false)
 const error = ref('')
 const previewUrl = ref('')
-const mode = ref<'preview' | 'download'>('preview')
 
 const canUse = computed(() => props.canGeneratePdf !== false)
 
@@ -38,7 +37,6 @@ async function fetchPreviewBlob() {
 
 async function openPreview() {
   if (!canUse.value) return
-  mode.value = 'preview'
   open.value = true
   previewBusy.value = true
   error.value = ''
@@ -85,7 +83,6 @@ async function downloadOfficialOrPreview() {
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'PDF download failed')
     open.value = true
-    mode.value = 'download'
   }
   finally {
     downloadBusy.value = false
@@ -144,25 +141,21 @@ defineExpose({
   <div v-if="open" class="modal-scrim open" @click.self="close">
     <div class="card modal-card invoice-pdf-modal">
       <div class="chead">
-        <h3>{{ mode === 'download' ? 'PDF download' : 'PDF preview' }} · {{ invoiceLabel }}</h3>
-        <div class="right" style="display:flex;gap:8px;align-items:center;">
-          <span class="pill indigo">Laravel Blade PDF</span>
-          <button type="button" class="btn sm" :disabled="previewBusy" @click="openPreview">
-            {{ previewBusy ? 'Rendering…' : 'Refresh' }}
-          </button>
+        <h3>{{ invoiceLabel }}</h3>
+        <div class="right">
           <button type="button" class="btn sm" @click="close">Close</button>
         </div>
       </div>
       <div class="cbody invoice-pdf-body">
         <p v-if="error" class="invoice-pdf-error">{{ error }}</p>
         <p v-else-if="previewBusy" class="invoice-pdf-empty">Rendering invoice PDF…</p>
-        <iframe
-          v-else-if="previewUrl"
-          :src="previewUrl"
-          class="invoice-pdf-frame"
-          :title="`${invoiceLabel} PDF preview`"
-        />
-        <p v-else class="invoice-pdf-empty">No preview available.</p>
+        <ClientOnly v-else-if="previewUrl">
+          <PdfViewer
+            :src="previewUrl"
+            :title="`${invoiceLabel} PDF`"
+            @download="downloadOfficialOrPreview"
+          />
+        </ClientOnly>
       </div>
     </div>
   </div>
@@ -187,13 +180,8 @@ defineExpose({
   flex-direction: column;
   padding: 12px !important;
 }
-.invoice-pdf-frame {
-  flex: 1;
-  width: 100%;
+.invoice-pdf-body :deep(.pdf-viewer) {
   min-height: 70vh;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #eef0f4;
 }
 .invoice-pdf-empty,
 .invoice-pdf-error {

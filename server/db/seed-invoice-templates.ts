@@ -7,8 +7,8 @@ import {
   invoiceTemplates,
 } from './schema/invoice-templates'
 
-export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'professional-bill-matrix'
-export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Professional Bill Matrix'
+export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'dot-matrix-ledger'
+export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Dot Matrix Ledger'
 
 export { resolveInvoiceTemplateReferencePath } from '../assets/invoice-template-reference.loader'
 

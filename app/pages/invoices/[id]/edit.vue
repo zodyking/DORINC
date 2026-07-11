@@ -976,22 +976,14 @@ const aiPopStyle = computed(() => {
       </div>
 
       <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane active">
-        <div class="card">
-          <div class="chead">
-            <h3>PDF preview</h3>
-            <p class="sub" style="margin:0;">Live preview updates when you save draft changes</p>
-          </div>
-          <div class="cbody">
-            <InvoicePdfPreviewPane
-              ref="pdfPreviewRef"
-              :invoice-id="id"
-              :invoice-label="invoice.invoiceNumberFormatted"
-              :prefer-official="false"
-              :has-official-pdf="false"
-              :can-generate-pdf="canGeneratePdf"
-            />
-          </div>
-        </div>
+        <InvoicePdfPreviewPane
+          ref="pdfPreviewRef"
+          :invoice-id="id"
+          :invoice-label="invoice.invoiceNumberFormatted"
+          :prefer-official="false"
+          :has-official-pdf="false"
+          :can-generate-pdf="canGeneratePdf"
+        />
       </div>
     </template>
 
