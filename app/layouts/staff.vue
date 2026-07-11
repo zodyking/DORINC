@@ -211,6 +211,8 @@ watch(() => route.path, () => {
       <main id="main-content" class="main-body">
         <slot />
       </main>
+
+      <SuiteFooter />
     </div>
 
     <HelpPlatformHelpWidget />

@@ -118,6 +118,16 @@ a{ color:#4f46e5; }
   border-top:1px solid #f1f5f9;
   background:#fff;
 }
+.suite-foot-credit{
+  color:inherit;
+  text-decoration:none;
+  font-weight:700;
+}
+.suite-foot-credit:hover,
+.suite-foot-credit:focus-visible{
+  color:inherit;
+  text-decoration:none;
+}
 .auth-body{ padding:0 24px 28px; }
 .auth-body .fld{ margin-bottom:12px; }
 .auth-head + .auth-body{ padding-top:4px; }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+import { BRAND_ICON } from '~/constants/brand'
 const route = useRoute()
 const auth = useAuthStore()
 
@@ -61,7 +61,7 @@ async function signOut() {
       <slot />
     </main>
 
-    <footer class="suite-foot">© 2015 {{ BRAND_NAME }}. All rights reserved.</footer>
+    <SuiteFooter />
   </div>
 </template>
 
