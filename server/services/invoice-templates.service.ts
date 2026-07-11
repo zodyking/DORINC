@@ -14,7 +14,7 @@ import {
 } from '../../shared/document-pdf-payload'
 import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
 import { getInvoiceDetail } from './invoices.service'
-import { renderDocumentPdfBuffer } from './laravel-pdf.service'
+import { renderDocumentHtml, renderDocumentPdfBuffer, readBuiltInInvoiceBladeSource } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getBusinessProfile } from './workspace-settings.service'
 
@@ -32,7 +32,25 @@ export class InvoiceTemplatesServiceError extends Error {
 }
 
 export interface PublishInvoiceTemplateInput {
-  designSettings: InvoiceTemplateDesignSettings
+  designSettings?: InvoiceTemplateDesignSettings
+  bladeSource?: string
+}
+
+export interface PreviewTemplateInput {
+  designSettings?: InvoiceTemplateDesignSettings
+  bladeSource?: string
+}
+
+export { readBuiltInInvoiceBladeSource }
+
+function resolveBladeSource(
+  override: string | undefined,
+  versionBladeSource: string | null | undefined,
+): string | null {
+  const fromOverride = override?.trim()
+  if (fromOverride) return fromOverride
+  const fromVersion = versionBladeSource?.trim()
+  return fromVersion || null
 }
 
 export async function ensureDefaultInvoiceTemplate(db: Db) {
@@ -170,20 +188,26 @@ export async function publishInvoiceTemplateVersion(
   const latest = await getLatestTemplateVersion(db, templateId)
   if (!latest) throw new InvoiceTemplatesServiceError('NO_VERSION')
 
-  const designSettings: InvoiceTemplateDesignSettings = {
-    ...latest.designSettings,
-    ...input.designSettings,
-    sections: mergeTemplateSections({
-      ...latest.designSettings.sections,
-      ...input.designSettings.sections,
-    }),
-  }
+  const baseSettings = latest.designSettings
+  const designSettings: InvoiceTemplateDesignSettings = input.designSettings
+    ? {
+        ...baseSettings,
+        ...input.designSettings,
+        sections: mergeTemplateSections({
+          ...baseSettings.sections,
+          ...input.designSettings.sections,
+        }),
+      }
+    : baseSettings
+
+  const bladeSource = resolveBladeSource(input.bladeSource, latest.bladeSource)
 
   const [version] = await db.insert(invoiceTemplateVersions).values({
     templateId,
     versionNumber: latest.versionNumber + 1,
     status: 'published',
     layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
+    bladeSource,
     designSettings,
     publishedAt: new Date(),
     publishedBy: actorId,
@@ -237,6 +261,7 @@ export async function duplicateInvoiceTemplate(
     versionNumber: 1,
     status: 'draft',
     layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
+    bladeSource: sourceVersion.bladeSource ?? null,
     designSettings: sourceVersion.designSettings,
     createdBy: actorId,
   })
@@ -312,12 +337,13 @@ export async function getTemplatePreviewInvoice(db: Db) {
 
 export interface TestRenderTemplatePdfInput {
   designSettings?: InvoiceTemplateDesignSettings
+  bladeSource?: string
 }
 
-export async function previewTemplatePdf(
+async function buildTemplatePreviewPayload(
   db: Db,
   templateId: string,
-  previewDesignSettings?: InvoiceTemplateDesignSettings,
+  input: PreviewTemplateInput = {},
 ) {
   const detail = await getInvoiceTemplateDetail(db, templateId)
   if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
@@ -327,17 +353,20 @@ export async function previewTemplatePdf(
 
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
   const business = await getBusinessProfile(db)
-  const baseSettings = detail.publishedVersion?.designSettings ?? detail.latestVersion.designSettings
-  const designSettings: InvoiceTemplateDesignSettings = previewDesignSettings
+  const baseVersion = detail.publishedVersion ?? detail.latestVersion
+  const baseSettings = baseVersion.designSettings
+  const designSettings: InvoiceTemplateDesignSettings = input.designSettings
     ? {
         ...baseSettings,
-        ...previewDesignSettings,
+        ...input.designSettings,
         sections: mergeTemplateSections({
           ...baseSettings.sections,
-          ...previewDesignSettings.sections,
+          ...input.designSettings.sections,
         }),
       }
     : baseSettings
+
+  const bladeSource = resolveBladeSource(input.bladeSource, baseVersion.bladeSource)
   const data = buildInvoicePdfData(invoiceDetail, {
     company: { name: business.businessName || undefined },
     design: designSettings,
@@ -345,12 +374,42 @@ export async function previewTemplatePdf(
   })
   const marginInches = designSettings.marginInches
   const paper = designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
-  const payload = buildDocumentPdfRenderPayload(data, { paper, marginInches })
+  const payload = buildDocumentPdfRenderPayload(data, { paper, marginInches, bladeSource })
+
+  return {
+    payload,
+    previewInvoiceNumber: preview.invoiceNumberFormatted,
+    previewInvoiceId: preview.id,
+    template: detail.template,
+    designSettings,
+  }
+}
+
+export async function previewTemplatePdf(
+  db: Db,
+  templateId: string,
+  input: PreviewTemplateInput = {},
+) {
+  const { payload, previewInvoiceNumber } = await buildTemplatePreviewPayload(db, templateId, input)
   const pdf = await renderDocumentPdfBuffer(payload)
 
   return {
     pdf,
-    previewInvoiceNumber: preview.invoiceNumberFormatted,
+    previewInvoiceNumber,
+  }
+}
+
+export async function previewTemplateHtml(
+  db: Db,
+  templateId: string,
+  input: PreviewTemplateInput = {},
+) {
+  const { payload, previewInvoiceNumber } = await buildTemplatePreviewPayload(db, templateId, input)
+  const html = await renderDocumentHtml(payload)
+
+  return {
+    html,
+    previewInvoiceNumber,
   }
 }
 
@@ -360,45 +419,16 @@ export async function testRenderTemplatePdf(
   input: TestRenderTemplatePdfInput,
   actorId: string,
 ) {
-  const detail = await getInvoiceTemplateDetail(db, templateId)
-  if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
-
-  const preview = await getTemplatePreviewInvoice(db)
-  if (!preview) throw new InvoiceTemplatesServiceError('NO_PREVIEW_INVOICE')
-
-  const invoiceDetail = await getInvoiceDetail(db, preview.id)
-  const business = await getBusinessProfile(db)
-
-  const mergedSettings: InvoiceTemplateDesignSettings = input.designSettings
-    ? {
-        ...detail.latestVersion.designSettings,
-        ...input.designSettings,
-        sections: mergeTemplateSections({
-          ...detail.latestVersion.designSettings.sections,
-          ...input.designSettings.sections,
-        }),
-      }
-    : detail.latestVersion.designSettings
-
-  const data = buildInvoicePdfData(invoiceDetail, {
-    company: { name: business.businessName || undefined },
-    design: mergedSettings,
-    logoUrl: logoPreviewPath(mergedSettings.logoFileId),
-  })
-  const paper = mergedSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
-  const payload = buildDocumentPdfRenderPayload(data, {
-    paper,
-    marginInches: mergedSettings.marginInches,
-  })
+  const { payload, previewInvoiceId, template } = await buildTemplatePreviewPayload(db, templateId, input)
 
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'invoice',
-    entityId: preview.id,
+    entityId: previewInvoiceId,
     renderPayload: serializePdfRenderPayload(payload),
-    originalFilename: `template-test-${detail.template.slug}.pdf`,
+    originalFilename: `template-test-${template.slug}.pdf`,
     templateVersionId: null,
     createdBy: actorId,
   })
 
-  return { job, previewInvoiceId: preview.id }
+  return { job, previewInvoiceId }
 }

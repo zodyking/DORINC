@@ -28,6 +28,8 @@ export default defineEventHandler(async (event) => {
         pageSize: version.designSettings.pageSize,
         accentColor: version.designSettings.accentColor,
         logoFileId: version.designSettings.logoFileId ?? null,
+        hasCustomBlade: Boolean(version.bladeSource),
+        bladeSourceLength: version.bladeSource?.length ?? 0,
       },
       permissionKey: 'templates.manage.all',
       riskLevel: 'sensitive',

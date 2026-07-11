@@ -2,27 +2,24 @@ import { setResponseHeader } from 'h3'
 import { useDb } from '../../../db/client'
 import {
   InvoiceTemplatesServiceError,
-  previewTemplatePdf,
+  previewTemplateHtml,
 } from '../../../services/invoice-templates.service'
 import { apiError } from '../../../utils/api-error'
 import { throwPdfRenderApiError } from '../../../utils/pdf-api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
-import { previewTemplatePdfSchema } from '../../../../shared/validators/invoice-templates'
+import { previewTemplateHtmlSchema } from '../../../../shared/validators/invoice-templates'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'templates.read.all')
   const { id } = validateParams(event, idParamSchema)
-  const body = await validateBody(event, previewTemplatePdfSchema)
+  const body = await validateBody(event, previewTemplateHtmlSchema)
 
   try {
-    const { pdf } = await previewTemplatePdf(useDb(), id, body)
-
-    setResponseHeader(event, 'Content-Type', 'application/pdf')
-    setResponseHeader(event, 'Content-Disposition', 'inline; filename="template-preview.pdf"')
+    const result = await previewTemplateHtml(useDb(), id, body)
     setResponseHeader(event, 'Cache-Control', 'no-store')
-    return pdf
+    return result
   }
   catch (err) {
     if (err instanceof InvoiceTemplatesServiceError) {

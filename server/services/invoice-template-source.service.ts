@@ -11,6 +11,8 @@ import {
 export interface InvoicePdfTemplateSource {
   bladeView: typeof BLADE_INVOICE_TEMPLATE_VIEW
   designSettings: InvoiceTemplateDesignSettings
+  /** Custom Blade body; null uses the built-in view file. */
+  bladeSource: string | null
   /** DB version id when a published designer template is active; null for built-in. */
   templateVersionId: string | null
   isBuiltIn: boolean
@@ -21,6 +23,7 @@ export function getBuiltInInvoicePdfTemplate(): InvoicePdfTemplateSource {
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
     designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
+    bladeSource: null,
     templateVersionId: null,
     isBuiltIn: true,
   }
@@ -51,6 +54,7 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
     designSettings: row.version.designSettings,
+    bladeSource: row.version.bladeSource?.trim() || null,
     templateVersionId: row.version.id,
     isBuiltIn: false,
   }
@@ -59,5 +63,9 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
 export function pdfRenderOptionsFromTemplate(template: InvoicePdfTemplateSource) {
   const marginInches = template.designSettings.marginInches ?? 0.5
   const paper = template.designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
-  return { paper, marginInches }
+  return {
+    paper,
+    marginInches,
+    bladeSource: template.bladeSource,
+  }
 }

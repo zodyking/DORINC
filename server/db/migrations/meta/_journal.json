@@ -260,6 +260,13 @@
       "when": 1783577000000,
       "tag": "0037_db_size_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1783802000000,
+      "tag": "0038_invoice_template_blade_source",
+      "breakpoints": true
     }
   ]
 }

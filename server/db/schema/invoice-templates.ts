@@ -32,6 +32,8 @@ export const invoiceTemplateVersions = pgTable('invoice_template_versions', {
   status: text('status', { enum: INVOICE_TEMPLATE_VERSION_STATUSES }).notNull().default('draft'),
   /** Blade view marker (column legacy name: html_content). */
   layoutMarker: text('html_content').notNull(),
+  /** Custom Blade source; null/empty uses the built-in invoices/pdf view. */
+  bladeSource: text('blade_source'),
   designSettings: jsonb('design_settings').$type<InvoiceTemplateDesignSettings>().notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
   publishedBy: uuid('published_by').references(() => users.id),

@@ -8,6 +8,7 @@ describe('built-in invoice PDF template', () => {
     expect(builtIn.isBuiltIn).toBe(true)
     expect(builtIn.templateVersionId).toBeNull()
     expect(builtIn.bladeView).toBe(BLADE_INVOICE_TEMPLATE_VIEW)
+    expect(builtIn.bladeSource).toBeNull()
     expect(builtIn.designSettings.pageSize).toBe('Letter')
     expect(builtIn.designSettings.marginInches).toBe(0.5)
   })

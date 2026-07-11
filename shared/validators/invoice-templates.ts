@@ -17,13 +17,21 @@ export const invoiceTemplateDesignSettingsSchema = z.object({
   })).optional(),
 })
 
+const bladeSourceSchema = z.string().min(1).max(500_000)
+
 export const publishInvoiceTemplateSchema = z.object({
-  designSettings: invoiceTemplateDesignSettingsSchema,
+  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  bladeSource: bladeSourceSchema.optional(),
+}).refine(v => v.designSettings != null || v.bladeSource != null, {
+  message: 'Provide bladeSource and/or designSettings',
 })
 
 export const previewTemplatePdfSchema = z.object({
   designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  bladeSource: bladeSourceSchema.optional(),
 })
+
+export const previewTemplateHtmlSchema = previewTemplatePdfSchema
 
 export const duplicateInvoiceTemplateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -35,4 +43,5 @@ export const patchInvoiceTemplateSchema = z.object({
 
 export const testTemplatePdfSchema = z.object({
   designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  bladeSource: bladeSourceSchema.optional(),
 })

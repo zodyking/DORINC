@@ -76,6 +76,8 @@ export interface DocumentPdfRenderPayload {
   options: {
     paper: 'letter' | 'a4'
     margins: { top: number, right: number, bottom: number, left: number }
+    /** Custom Blade source; when set, Laravel renders this instead of the built-in view. */
+    bladeSource?: string | null
   }
 }
 
@@ -336,15 +338,21 @@ export function buildEstimatePdfData(
 
 export function buildDocumentPdfRenderPayload(
   data: DocumentPdfData,
-  renderOptions: { paper?: 'letter' | 'a4', marginInches?: number },
+  renderOptions: {
+    paper?: 'letter' | 'a4'
+    marginInches?: number
+    bladeSource?: string | null
+  },
 ): DocumentPdfRenderPayload {
   const margin = renderOptions.marginInches ?? 0.5
+  const bladeSource = renderOptions.bladeSource?.trim() || null
   return {
     documentType: data.documentType,
     data,
     options: {
       paper: renderOptions.paper ?? 'letter',
       margins: { top: margin, right: margin, bottom: margin, left: margin },
+      ...(bladeSource ? { bladeSource } : {}),
     },
   }
 }

@@ -55,7 +55,8 @@ async function assertScreenLoaded(page: import('@playwright/test').Page, screen:
   }
 
   if (screen.id === 'template-designer') {
-    await expect(page.getByRole('combobox', { name: 'Font' })).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByRole('button', { name: /Open template editor/i })).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByRole('combobox', { name: /System template/i })).toBeVisible({ timeout: 25_000 })
     return
   }
   if (screen.id === 'invoice-editor') {
