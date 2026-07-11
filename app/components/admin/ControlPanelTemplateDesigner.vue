@@ -554,7 +554,7 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div class="pvwrap td-pdf-wrap">
+          <div class="td-pdf-wrap">
             <p v-if="previewError" class="td-preview-error">{{ previewError }}</p>
             <p v-else-if="!previewUrl && !previewBusy" class="td-preview-empty">
               Click <strong>Refresh preview</strong> to render the current template settings as PDF.
@@ -588,7 +588,7 @@ onUnmounted(() => {
   min-height:520px;
   padding:12px;
 }
-.td-pdf-wrap :deep(.pdf-native-viewer) {
+.td-pdf-wrap :deep(.pdf-viewer) {
   flex:1;
   min-height:480px;
 }

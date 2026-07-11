@@ -9,8 +9,8 @@ export const INVOICE_TEMPLATE_VERSION_STATUSES = ['draft', 'published', 'archive
 export type InvoiceTemplateVersionStatus = (typeof INVOICE_TEMPLATE_VERSION_STATUSES)[number]
 
 /**
- * Invoice PDF templates — default "Professional Bill Matrix" seeded in P1-27.
- * Versions hold immutable HTML + designer settings once published.
+ * Invoice PDF templates — Laravel Blade layout + designer settings.
+ * Versions hold immutable design settings once published.
  */
 export const invoiceTemplates = pgTable('invoice_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -30,7 +30,8 @@ export const invoiceTemplateVersions = pgTable('invoice_template_versions', {
   templateId: uuid('template_id').notNull().references(() => invoiceTemplates.id, { onDelete: 'cascade' }),
   versionNumber: integer('version_number').notNull(),
   status: text('status', { enum: INVOICE_TEMPLATE_VERSION_STATUSES }).notNull().default('draft'),
-  htmlContent: text('html_content').notNull(),
+  /** Blade view marker (column legacy name: html_content). */
+  layoutMarker: text('html_content').notNull(),
   designSettings: jsonb('design_settings').$type<InvoiceTemplateDesignSettings>().notNull(),
   publishedAt: timestamp('published_at', { withTimezone: true }),
   publishedBy: uuid('published_by').references(() => users.id),

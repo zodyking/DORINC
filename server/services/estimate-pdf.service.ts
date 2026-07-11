@@ -121,7 +121,7 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'estimate',
     entityId: estimateId,
-    htmlContent: serializePdfRenderPayload(payload),
+    renderPayload: serializePdfRenderPayload(payload),
     originalFilename: filename,
     templateVersionId: template.templateVersionId,
     createdBy: actorId,

@@ -139,7 +139,7 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'invoice',
     entityId: invoiceId,
-    htmlContent: serializePdfRenderPayload(payload),
+    renderPayload: serializePdfRenderPayload(payload),
     originalFilename: filename,
     templateVersionId: template.templateVersionId,
     createdBy: actorId,

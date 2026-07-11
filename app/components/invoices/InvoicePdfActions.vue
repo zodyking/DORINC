@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
+import {
+  downloadPdfBlob,
+  fetchInvoiceOfficialPdf,
+  fetchInvoicePreviewPdf,
+  queueInvoicePdfGeneration,
+} from '~/utils/invoice-pdf'
 
 const props = defineProps<{
   invoiceId: string
@@ -18,22 +24,9 @@ const open = ref(false)
 const previewBusy = ref(false)
 const downloadBusy = ref(false)
 const error = ref('')
-const previewUrl = ref('')
+const { url: previewUrl, setFromBlob, revoke: revokePreview } = usePdfBlobUrl()
 
 const canUse = computed(() => props.canGeneratePdf !== false)
-
-function revokePreview() {
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
-  }
-}
-
-async function fetchPreviewBlob() {
-  return await $fetch<Blob>(`/api/invoices/${props.invoiceId}/preview-pdf`, {
-    responseType: 'blob',
-  })
-}
 
 async function openPreview() {
   if (!canUse.value) return
@@ -42,8 +35,7 @@ async function openPreview() {
   error.value = ''
   revokePreview()
   try {
-    const blob = await fetchPreviewBlob()
-    previewUrl.value = URL.createObjectURL(blob)
+    setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'Could not render PDF preview')
@@ -60,25 +52,26 @@ async function downloadOfficialOrPreview() {
   try {
     if (props.allowOfficialDownload) {
       if (!props.hasOfficialPdf) {
-        await $fetch(`/api/invoices/${props.invoiceId}/generate-pdf`, { method: 'POST' })
+        await queueInvoicePdfGeneration(props.invoiceId)
         emit('refreshed')
       }
 
-      // Prefer stored official PDF; fall back to live preview if still generating.
       try {
-        const blob = await $fetch<Blob>(`/api/invoices/${props.invoiceId}/pdf`, {
-          responseType: 'blob',
-        })
-        triggerBrowserDownload(blob, `${props.invoiceLabel}.pdf`)
+        downloadPdfBlob(
+          await fetchInvoiceOfficialPdf(props.invoiceId),
+          `${props.invoiceLabel}.pdf`,
+        )
         return
       }
       catch {
-        // Official file may still be rendering — use live DomPDF preview.
+        // Official file may still be rendering — use live Blade preview.
       }
     }
 
-    const blob = await fetchPreviewBlob()
-    triggerBrowserDownload(blob, `${props.invoiceLabel}.pdf`)
+    downloadPdfBlob(
+      await fetchInvoicePreviewPdf(props.invoiceId),
+      `${props.invoiceLabel}.pdf`,
+    )
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'PDF download failed')
@@ -89,26 +82,11 @@ async function downloadOfficialOrPreview() {
   }
 }
 
-function triggerBrowserDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
 function close() {
   open.value = false
   error.value = ''
   revokePreview()
 }
-
-onUnmounted(() => {
-  revokePreview()
-})
 
 defineExpose({
   openPreview,
@@ -122,7 +100,7 @@ defineExpose({
       type="button"
       class="btn"
       :disabled="!canUse || previewBusy"
-      :title="canUse ? 'Preview PDF via DomPDF' : 'Requires generate PDF permission'"
+      :title="canUse ? 'Preview PDF (Laravel Blade)' : 'Requires generate PDF permission'"
       @click="openPreview"
     >
       {{ previewBusy && open ? 'Rendering…' : 'Preview PDF' }}
@@ -180,7 +158,7 @@ defineExpose({
   flex-direction: column;
   padding: 12px !important;
 }
-.invoice-pdf-body :deep(.pdf-native-viewer) {
+.invoice-pdf-body :deep(.pdf-viewer) {
   min-height: 70vh;
 }
 .invoice-pdf-empty,

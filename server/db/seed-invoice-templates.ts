@@ -42,7 +42,7 @@ export async function seedInvoiceTemplates(db: Db) {
         templateId: template!.id,
         versionNumber: 1,
         status: 'published',
-        htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
+        layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
         designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
         publishedAt: new Date(),
       })

@@ -96,7 +96,7 @@ export async function processPdfRenderJobById(pool, jobId) {
   try {
     await client.query('BEGIN')
     const { rows } = await client.query(
-      `SELECT id, entity_type, entity_id, html_content, original_filename,
+      `SELECT id, entity_type, entity_id, html_content AS render_payload, original_filename,
               attempts, max_attempts, created_by, template_version_id, status, run_after
        FROM pdf_render_jobs
        WHERE id = $1
@@ -153,7 +153,7 @@ export async function processPdfRenderJobs(pool, batch = 3) {
     try {
       await client.query('BEGIN')
       const { rows } = await client.query(
-        `SELECT id, entity_type, entity_id, html_content, original_filename,
+        `SELECT id, entity_type, entity_id, html_content AS render_payload, original_filename,
                 attempts, max_attempts, created_by, template_version_id
          FROM pdf_render_jobs
          WHERE status = 'queued' AND run_after <= now()
@@ -204,7 +204,7 @@ export async function processPdfRenderJobs(pool, batch = 3) {
  * @returns {Promise<string>} app_files.id
  */
 export async function renderPayloadToAppFile(pool, job) {
-  const pdfBuffer = await payloadToPdf(job.html_content)
+  const pdfBuffer = await payloadToPdf(job.render_payload)
 
   const sha256 = createHash('sha256').update(pdfBuffer).digest('hex')
   const { rows } = await pool.query(
@@ -236,9 +236,4 @@ export async function payloadToPdf(storedContent) {
     throw new Error('PDF_RENDER_URL is required for Blade PDF rendering (laravel-pdf service).')
   }
   return renderDocumentPdfBuffer(payload)
-}
-
-/** @deprecated Use renderPayloadToAppFile */
-export async function renderHtmlToAppFile(pool, job) {
-  return renderPayloadToAppFile(pool, job)
 }

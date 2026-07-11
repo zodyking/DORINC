@@ -183,7 +183,7 @@ export async function publishInvoiceTemplateVersion(
     templateId,
     versionNumber: latest.versionNumber + 1,
     status: 'published',
-    htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
+    layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
     designSettings,
     publishedAt: new Date(),
     publishedBy: actorId,
@@ -236,7 +236,7 @@ export async function duplicateInvoiceTemplate(
     templateId: template!.id,
     versionNumber: 1,
     status: 'draft',
-    htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
+    layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
     designSettings: sourceVersion.designSettings,
     createdBy: actorId,
   })
@@ -394,7 +394,7 @@ export async function testRenderTemplatePdf(
   const job = await enqueuePdfRenderJob(db, {
     entityType: 'invoice',
     entityId: preview.id,
-    htmlContent: serializePdfRenderPayload(payload),
+    renderPayload: serializePdfRenderPayload(payload),
     originalFilename: `template-test-${detail.template.slug}.pdf`,
     templateVersionId: null,
     createdBy: actorId,

@@ -82,7 +82,7 @@ describe('P1-28 pdf render pipeline', () => {
     const job = await enqueuePdfRenderJob(db, {
       entityType: 'invoice',
       entityId: owner.id,
-      htmlContent: serializePdfRenderPayload(payload),
+      renderPayload: serializePdfRenderPayload(payload),
       originalFilename: `smoke-${stamp}.pdf`,
       createdBy: CREATOR,
     })

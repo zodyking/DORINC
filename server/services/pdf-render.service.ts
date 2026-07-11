@@ -6,20 +6,20 @@ import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 export interface EnqueuePdfRenderJobInput {
   entityType: PdfRenderEntityType
   entityId: string
-  htmlContent: string
+  renderPayload: string
   originalFilename: string
   templateVersionId?: string | null
   createdBy?: string | null
   maxAttempts?: number
 }
 
-/** Queue HTML → PDF render for the pdf-worker container (SPEC §9). */
+/** Queue Blade payload → PDF render for the pdf-worker container (SPEC §9). */
 export async function enqueuePdfRenderJob(db: Db, input: EnqueuePdfRenderJobInput) {
   const [row] = await db.insert(pdfRenderJobs).values({
     entityType: input.entityType,
     entityId: input.entityId,
     templateVersionId: input.templateVersionId ?? null,
-    htmlContent: input.htmlContent,
+    renderPayload: input.renderPayload,
     originalFilename: input.originalFilename,
     createdBy: input.createdBy ?? null,
     maxAttempts: input.maxAttempts ?? 3,

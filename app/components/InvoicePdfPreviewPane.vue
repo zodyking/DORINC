@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
+import {
+  downloadPdfBlob,
+  fetchInvoiceOfficialPdf,
+  fetchInvoicePreviewPdf,
+  queueInvoicePdfGeneration,
+} from '~/utils/invoice-pdf'
 
 const props = defineProps<{
   invoiceId: string
@@ -18,26 +24,7 @@ const canUse = computed(() => props.canGeneratePdf !== false && auth.can('invoic
 const busy = ref(false)
 const downloadBusy = ref(false)
 const error = ref('')
-const previewUrl = ref('')
-
-function revokePreview() {
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
-  }
-}
-
-async function fetchPreviewBlob() {
-  return await $fetch<Blob>(`/api/invoices/${props.invoiceId}/preview-pdf`, {
-    responseType: 'blob',
-  })
-}
-
-async function fetchOfficialBlob() {
-  return await $fetch<Blob>(`/api/invoices/${props.invoiceId}/pdf`, {
-    responseType: 'blob',
-  })
-}
+const { url: previewUrl, setFromBlob, revoke: revokePreview } = usePdfBlobUrl()
 
 async function loadPreview() {
   if (!canUse.value) return
@@ -47,16 +34,14 @@ async function loadPreview() {
   try {
     if (props.preferOfficial && props.hasOfficialPdf) {
       try {
-        const blob = await fetchOfficialBlob()
-        previewUrl.value = URL.createObjectURL(blob)
+        setFromBlob(await fetchInvoiceOfficialPdf(props.invoiceId))
         return
       }
       catch {
-        // Fall back to live preview.
+        // Fall back to live Blade preview.
       }
     }
-    const blob = await fetchPreviewBlob()
-    previewUrl.value = URL.createObjectURL(blob)
+    setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'Could not render PDF preview')
@@ -73,20 +58,18 @@ async function downloadPdf() {
   try {
     if (props.preferOfficial) {
       if (!props.hasOfficialPdf) {
-        await $fetch(`/api/invoices/${props.invoiceId}/generate-pdf`, { method: 'POST' })
+        await queueInvoicePdfGeneration(props.invoiceId)
         emit('refreshed')
       }
       try {
-        const blob = await fetchOfficialBlob()
-        triggerBrowserDownload(blob, `${props.invoiceLabel}.pdf`)
+        downloadPdfBlob(await fetchInvoiceOfficialPdf(props.invoiceId), `${props.invoiceLabel}.pdf`)
         return
       }
       catch {
         // Official file may still be rendering.
       }
     }
-    const blob = await fetchPreviewBlob()
-    triggerBrowserDownload(blob, `${props.invoiceLabel}.pdf`)
+    downloadPdfBlob(await fetchInvoicePreviewPdf(props.invoiceId), `${props.invoiceLabel}.pdf`)
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'PDF download failed')
@@ -96,27 +79,12 @@ async function downloadPdf() {
   }
 }
 
-function triggerBrowserDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
 onMounted(() => {
   if (canUse.value) void loadPreview()
 })
 
 watch(() => [props.invoiceId, props.hasOfficialPdf, props.preferOfficial], () => {
   if (canUse.value) void loadPreview()
-})
-
-onUnmounted(() => {
-  revokePreview()
 })
 
 defineExpose({ refresh: loadPreview })

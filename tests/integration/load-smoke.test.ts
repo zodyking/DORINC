@@ -4,7 +4,7 @@ import { config } from 'dotenv'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { waitForPdfJobDone } from '../helpers/pdf-render'
 import { createCustomer } from '../../server/services/customers.service'
 import {
@@ -13,6 +13,11 @@ import {
   uploadFile,
 } from '../../server/services/files.service'
 import { enqueuePdfRenderJob } from '../../server/services/pdf-render.service'
+import {
+  buildDocumentPdfRenderPayload,
+  buildInvoicePdfData,
+  serializePdfRenderPayload,
+} from '../../shared/document-pdf-payload'
 import { appFiles } from '../../server/db/schema/files'
 import { pdfRenderJobs } from '../../server/db/schema/pdf-render-jobs'
 import { users } from '../../server/db/schema/auth'
@@ -25,19 +30,6 @@ const db = drizzle({ client: pool })
 
 const stamp = Date.now()
 const PDF_JOB_COUNT = Number(process.env.LOAD_SMOKE_PDF_JOBS ?? 5)
-let chromiumAvailable = false
-
-beforeAll(async () => {
-  try {
-    const { chromium } = await import('playwright')
-    const browser = await chromium.launch({ headless: true })
-    await browser.close()
-    chromiumAvailable = true
-  }
-  catch {
-    chromiumAvailable = false
-  }
-})
 
 const [stableUser] = await db.select({ id: users.id }).from(users).limit(1)
 const CREATOR = stableUser!.id
@@ -96,22 +88,37 @@ describe('P4-04 load smoke — upload boundary', () => {
 
 describe('P4-04 load smoke — pdf-worker concurrency', () => {
   it(`renders ${PDF_JOB_COUNT} queued PDF jobs`, async () => {
-    if (!chromiumAvailable) {
-      console.warn('[load-smoke] Skipping PDF concurrency — Playwright Chromium not installed')
-      return
-    }
-
-    const html = (n: number) => `<!doctype html><html><body><h1>Load smoke ${n}</h1><p>${stamp}</p></body></html>`
     const started = Date.now()
 
     const jobs = await Promise.all(
-      Array.from({ length: PDF_JOB_COUNT }, (_, i) => enqueuePdfRenderJob(db, {
-        entityType: 'invoice',
-        entityId: owner.id,
-        htmlContent: html(i + 1),
-        originalFilename: `load-smoke-${stamp}-${i + 1}.pdf`,
-        createdBy: CREATOR,
-      })),
+      Array.from({ length: PDF_JOB_COUNT }, (_, i) => {
+        const data = buildInvoicePdfData({
+          invoiceNumberFormatted: `LOAD-${stamp}-${i + 1}`,
+          invoiceDate: '2026-07-08',
+          paymentTerms: 'net_30',
+          status: 'approved',
+          lineItems: [{
+            description: `Load smoke line ${i + 1}`,
+            lineType: 'labor',
+            quantity: '1',
+            unitPrice: '25.00',
+            lineAmount: '25.00',
+          }],
+          feesAmount: '0',
+          discountAmount: '0',
+          taxAmount: '0',
+          total: '25.00',
+          balanceDue: '25.00',
+        })
+        const payload = buildDocumentPdfRenderPayload(data, { paper: 'letter', marginInches: 0.5 })
+        return enqueuePdfRenderJob(db, {
+          entityType: 'invoice',
+          entityId: owner.id,
+          renderPayload: serializePdfRenderPayload(payload),
+          originalFilename: `load-smoke-${stamp}-${i + 1}.pdf`,
+          createdBy: CREATOR,
+        })
+      }),
     )
 
     await Promise.all(jobs.map(job => waitForPdfJobDone(pool, job.id, 180_000)))

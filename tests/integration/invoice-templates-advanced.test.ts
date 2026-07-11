@@ -118,7 +118,7 @@ describe('P3-05 advanced template designer', () => {
 
     expect(job.entityType).toBe('invoice')
     expect(job.templateVersionId).toBeNull()
-    expect(job.htmlContent.length).toBeGreaterThan(500)
+    expect(job.renderPayload.length).toBeGreaterThan(500)
 
     await db.delete(invoices).where(eq(invoices.customerId, cust.id))
     await db.delete(vehicles).where(eq(vehicles.customerId, cust.id))

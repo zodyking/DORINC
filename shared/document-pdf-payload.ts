@@ -79,7 +79,7 @@ export interface DocumentPdfRenderPayload {
   }
 }
 
-/** Marker stored in pdf_render_jobs.html_content for Blade payload jobs. */
+/** Serialized Blade render payload stored in pdf_render_jobs.html_content. */
 export const PDF_RENDER_PAYLOAD_VERSION = 2 as const
 
 export interface StoredPdfRenderPayload extends DocumentPdfRenderPayload {

@@ -39,7 +39,7 @@ describe('P1-27 invoice template seed', () => {
 
     expect(publishedVersion.versionNumber).toBeGreaterThanOrEqual(1)
     expect(publishedVersion.status).toBe('published')
-    expect(publishedVersion.htmlContent).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
+    expect(publishedVersion.layoutMarker).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
     expect(baselineVersion.designSettings.pageSize).toBe('Letter')
 
     const [storedTemplate] = await db.select().from(invoiceTemplates)
@@ -77,7 +77,7 @@ describe('P1-27 invoice template seed', () => {
     expect(version.status).toBe('published')
     expect(version.designSettings.pageSize).toBe('A4')
     expect(version.designSettings.accentColor).toBe('#4f46e5')
-    expect(version.htmlContent).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
+    expect(version.layoutMarker).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
     expect(mergeTemplateSections(version.designSettings.sections).vehicle.visible).toBe(true)
 
     const [priorPublished] = await db.select().from(invoiceTemplateVersions)

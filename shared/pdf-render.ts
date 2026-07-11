@@ -7,7 +7,7 @@ export interface PdfPageMargins {
   left: number
 }
 
-export interface PrepareHtmlForPdfOptions {
+export interface PdfRenderOptions {
   paper?: PdfPaper | 'Letter' | 'A4' | string
   marginInches?: number
   margins?: Partial<PdfPageMargins>
@@ -24,7 +24,7 @@ export function pdfPageSizeCss(paper: PdfPaper): string {
   return paper === 'a4' ? 'A4' : 'Letter'
 }
 
-export function resolvePdfMargins(options: PrepareHtmlForPdfOptions = {}): PdfPageMargins {
+export function resolvePdfMargins(options: PdfRenderOptions = {}): PdfPageMargins {
   const fallback = options.marginInches ?? 0.5
   return {
     top: options.margins?.top ?? fallback,
@@ -32,21 +32,6 @@ export function resolvePdfMargins(options: PrepareHtmlForPdfOptions = {}): PdfPa
     bottom: options.margins?.bottom ?? fallback,
     left: options.margins?.left ?? fallback,
   }
-}
-
-/** Inject or replace @page margins before sending HTML to DomPDF. */
-export function injectPdfPageMargins(html: string, options: PrepareHtmlForPdfOptions = {}): string {
-  const paper = normalizePdfPaper(options.paper)
-  const margins = resolvePdfMargins(options)
-  const rule = `@page { size: ${pdfPageSizeCss(paper)}; margin: ${margins.top}in ${margins.right}in ${margins.bottom}in ${margins.left}in; }`
-
-  if (/@page\s*\{[^}]*\}/i.test(html)) {
-    return html.replace(/@page\s*\{[^}]*\}/i, rule)
-  }
-  if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `<style data-pdf-page="true">\n${rule}\n</style>\n</head>`)
-  }
-  return `<style data-pdf-page="true">\n${rule}\n</style>\n${html}`
 }
 
 export function pdfRenderServiceBaseUrl(): string {

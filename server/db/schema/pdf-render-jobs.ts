@@ -20,7 +20,8 @@ export const pdfRenderJobs = pgTable('pdf_render_jobs', {
   entityId: uuid('entity_id').notNull(),
   templateVersionId: uuid('template_version_id').references(() => invoiceTemplateVersions.id),
 
-  htmlContent: text('html_content').notNull(),
+  /** Serialized Blade render payload JSON (column legacy name: html_content). */
+  renderPayload: text('html_content').notNull(),
   originalFilename: text('original_filename').notNull(),
   outputFileId: uuid('output_file_id').references(() => appFiles.id),
 

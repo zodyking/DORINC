@@ -3,15 +3,8 @@ import {
   normalizePdfPaper,
   pdfRenderServiceBaseUrl,
   resolvePdfMargins,
-  type PdfPaper,
 } from '../../shared/pdf-render'
 import type { DocumentPdfRenderPayload } from '../../shared/document-pdf-payload'
-
-export interface RenderPdfOptions {
-  paper?: PdfPaper | 'Letter' | 'A4' | string
-  marginInches?: number
-  margins?: Partial<{ top: number, right: number, bottom: number, left: number }>
-}
 
 /** Render invoice/estimate PDF via Laravel Blade + barryvdh/laravel-dompdf. */
 export async function renderDocumentPdfBuffer(
@@ -50,14 +43,6 @@ export async function renderDocumentPdfBuffer(
   }
 
   return Buffer.from(await res.arrayBuffer())
-}
-
-/** @deprecated HTML render path removed — use renderDocumentPdfBuffer. */
-export async function renderHtmlToPdfBuffer(
-  _html: string,
-  _options: RenderPdfOptions = {},
-): Promise<Buffer> {
-  throw new Error('HTML PDF rendering was removed. Use renderDocumentPdfBuffer with a Blade payload.')
 }
 
 export { isPdfUpstreamFailureMessage, normalizePdfPaper, resolvePdfMargins }
