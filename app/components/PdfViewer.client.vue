@@ -34,6 +34,16 @@ let resizeObs: ResizeObserver | null = null
 let renderToken = 0
 
 const THUMB_MAX_W = 72
+const layoutNarrow = ref(false)
+
+function updateLayoutNarrow() {
+  layoutNarrow.value = typeof window !== 'undefined'
+    && window.matchMedia('(max-width: 640px)').matches
+}
+
+function horizontalPad() {
+  return layoutNarrow.value ? 4 : 12
+}
 
 function effectiveMainScale() {
   return fitScale.value * zoomMult.value
@@ -77,7 +87,7 @@ async function measureFitScale() {
   const p = Math.min(Math.max(1, currentPage.value), doc.numPages)
   const page = await doc.getPage(p)
   const vp = page.getViewport({ scale: 1 })
-  const pad = 12
+  const pad = horizontalPad()
   const w = Math.max(120, wrap.clientWidth - pad)
   fitScale.value = Math.max(0.2, Math.min(4, w / vp.width))
 }
@@ -238,7 +248,21 @@ watch(zoomMult, async () => {
   await renderCurrentPage()
 })
 
+watch(layoutNarrow, async (narrow) => {
+  if (narrow && zoomMult.value < 1) zoomMult.value = 1
+  if (!pdf.value || numPages.value < 1) return
+  await nextTick()
+  await measureFitScale()
+  await renderCurrentPage()
+})
+
+onMounted(() => {
+  updateLayoutNarrow()
+  window.addEventListener('resize', updateLayoutNarrow)
+})
+
 onUnmounted(() => {
+  window.removeEventListener('resize', updateLayoutNarrow)
   fetchAbort?.abort()
   cleanupDoc()
 })
@@ -267,7 +291,33 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
         </p>
       </div>
       <div
-        v-if="!loading && numPages > 1"
+        v-if="!loading && numPages > 1 && layoutNarrow"
+        class="pdf-js-viewer__pager"
+        role="navigation"
+        aria-label="PDF pages"
+      >
+        <button
+          type="button"
+          class="pdf-js-viewer__pager-btn"
+          :disabled="currentPage <= 1"
+          aria-label="Previous page"
+          @click="selectThumbPage(currentPage - 1)"
+        >
+          ‹
+        </button>
+        <span class="pdf-js-viewer__pager-label">{{ currentPage }} / {{ numPages }}</span>
+        <button
+          type="button"
+          class="pdf-js-viewer__pager-btn"
+          :disabled="currentPage >= numPages"
+          aria-label="Next page"
+          @click="selectThumbPage(currentPage + 1)"
+        >
+          ›
+        </button>
+      </div>
+      <div
+        v-if="!loading && numPages > 1 && !layoutNarrow"
         class="pdf-js-viewer__thumbs"
         role="tablist"
         aria-label="Pages"
@@ -414,5 +464,59 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   height: auto;
   border-radius: 4px;
   background: #fff;
+}
+
+.pdf-js-viewer__pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.65rem calc(0.5rem + env(safe-area-inset-bottom, 0));
+  border-top: 1px solid #484848;
+  background: #404040;
+}
+
+.pdf-js-viewer__pager-label {
+  min-width: 4.5rem;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f3f4f6;
+}
+
+.pdf-js-viewer__pager-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid #5c5c5c;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pdf-js-viewer__pager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pdf-js-viewer__pager-btn:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .pdf-js-viewer {
+    min-height: 0;
+  }
+
+  .pdf-js-viewer__main {
+    padding: 0.15rem 0.1rem 0.2rem;
+  }
 }
 </style>
