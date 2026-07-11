@@ -2,6 +2,7 @@ import { formatMoney, parseMoney } from './money'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from './invoice-template-design'
+import { normalizeInvoiceTemplateDesign } from './invoice-template-blade'
 import type { BusinessProfile } from './workspace-settings-defaults'
 
 export type DocumentPdfType = 'invoice' | 'estimate'
@@ -265,7 +266,7 @@ export function buildInvoicePdfData(
   const customerAddr = customer?.billingAddress ?? customer?.serviceAddress ?? null
   const vehicle = detail.vehicleSnapshot
 
-  const design = options.design ?? DEFAULT_INVOICE_TEMPLATE_DESIGN
+  const design = normalizeInvoiceTemplateDesign(options.design ?? DEFAULT_INVOICE_TEMPLATE_DESIGN)
   const company = options.company ?? emptyDocumentPdfCompany()
 
   let partsTotal = 0n

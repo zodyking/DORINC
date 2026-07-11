@@ -6,7 +6,14 @@ import {
   invoiceTemplates,
 } from '../db/schema/invoice-templates'
 import { invoiceFiles, invoices } from '../db/schema/invoices'
-import { mergeTemplateSections, BLADE_INVOICE_TEMPLATE_MARKER } from '../../shared/invoice-template-design'
+import {
+  mergeTemplateSections,
+} from '../../shared/invoice-template-design'
+import {
+  coerceLayoutMarkerForStorage,
+  normalizeInvoiceTemplateDesign,
+  resolveEffectiveBladeSource,
+} from '../../shared/invoice-template-blade'
 import {
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
@@ -17,7 +24,6 @@ import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
 import { getInvoiceDetail } from './invoices.service'
 import { renderDocumentHtmlBuffer, renderDocumentPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
-import { readBuiltInInvoiceBladeSource, resolveTemplateBladeSource } from '../utils/invoice-blade-baseline'
 import { getBusinessProfile } from './workspace-settings.service'
 
 export type InvoiceTemplatesServiceErrorCode
@@ -169,22 +175,26 @@ export async function publishInvoiceTemplateVersion(
   const latest = await getLatestTemplateVersion(db, templateId)
   if (!latest) throw new InvoiceTemplatesServiceError('NO_VERSION')
 
-  const designSettings: InvoiceTemplateDesignSettings = input.designSettings
-    ? {
-        ...latest.designSettings,
-        ...input.designSettings,
-        sections: mergeTemplateSections({
-          ...latest.designSettings.sections,
-          ...input.designSettings.sections,
-        }),
-      }
-    : latest.designSettings
+  const designSettings = normalizeInvoiceTemplateDesign(
+    input.designSettings
+      ? {
+          ...latest.designSettings,
+          ...input.designSettings,
+          sections: mergeTemplateSections({
+            ...latest.designSettings.sections,
+            ...input.designSettings.sections,
+          }),
+        }
+      : latest.designSettings,
+  )
+
+  const layoutMarker = coerceLayoutMarkerForStorage(input.bladeSource)
 
   const [version] = await db.insert(invoiceTemplateVersions).values({
     templateId,
     versionNumber: latest.versionNumber + 1,
     status: 'published',
-    layoutMarker: input.bladeSource.trim(),
+    layoutMarker,
     designSettings,
     publishedAt: new Date(),
     publishedBy: actorId,
@@ -237,8 +247,8 @@ export async function duplicateInvoiceTemplate(
     templateId: template!.id,
     versionNumber: 1,
     status: 'draft',
-    layoutMarker: BLADE_INVOICE_TEMPLATE_MARKER,
-    designSettings: sourceVersion.designSettings,
+    layoutMarker: coerceLayoutMarkerForStorage(sourceVersion.layoutMarker),
+    designSettings: normalizeInvoiceTemplateDesign(sourceVersion.designSettings),
     createdBy: actorId,
   })
 
@@ -361,20 +371,21 @@ async function buildTemplatePreviewPayload(
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
   const business = await getBusinessProfile(db)
   const baseSettings = detail.publishedVersion?.designSettings ?? detail.latestVersion.designSettings
-  const designSettings: InvoiceTemplateDesignSettings = input?.designSettings
-    ? {
-        ...baseSettings,
-        ...input.designSettings,
-        sections: mergeTemplateSections({
-          ...baseSettings.sections,
-          ...input.designSettings.sections,
-        }),
-      }
-    : baseSettings
+  const designSettings = normalizeInvoiceTemplateDesign(
+    input?.designSettings
+      ? {
+          ...baseSettings,
+          ...input.designSettings,
+          sections: mergeTemplateSections({
+            ...baseSettings.sections,
+            ...input.designSettings.sections,
+          }),
+        }
+      : baseSettings,
+  )
 
-  const baseline = await readBuiltInInvoiceBladeSource()
-  const bladeSource = input?.bladeSource?.trim()
-    || resolveTemplateBladeSource(detail.latestVersion.layoutMarker, baseline)
+  const layoutMarker = input?.bladeSource?.trim() || detail.latestVersion.layoutMarker
+  const bladeSource = resolveEffectiveBladeSource(layoutMarker) ?? undefined
 
   const data = buildInvoicePdfData(invoiceDetail, {
     company: businessProfileToDocumentPdfCompany(business),

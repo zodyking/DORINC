@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isBuiltInBladeMarker } from '#shared/invoice-template-blade'
+import { isBuiltInBladeMarker, isLegacyAccentBladeSource } from '#shared/invoice-template-blade'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
 
@@ -116,9 +116,11 @@ const activeVersion = computed(() => data.value?.publishedVersion ?? data.value?
 const usageCount = computed(() => data.value?.usageCount ?? 0)
 
 async function resolveBladeFromMarker(marker: string): Promise<string> {
-  if (!isBuiltInBladeMarker(marker)) return marker
-  const baseline = await $fetch<{ source: string }>('/api/invoice-templates/blade-baseline')
-  return baseline.source
+  if (isBuiltInBladeMarker(marker) || isLegacyAccentBladeSource(marker)) {
+    const baseline = await $fetch<{ source: string }>('/api/invoice-templates/blade-baseline')
+    return baseline.source
+  }
+  return marker
 }
 
 watch(template, (row) => {

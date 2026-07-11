@@ -6,8 +6,7 @@ import {
   BLADE_INVOICE_TEMPLATE_VIEW,
   DEFAULT_INVOICE_TEMPLATE_DESIGN,
 } from '../../shared/invoice-template-design'
-import { isBuiltInBladeMarker } from '../../shared/invoice-template-blade'
-import { readBuiltInInvoiceBladeSource, resolveTemplateBladeSource } from '../utils/invoice-blade-baseline'
+import { normalizeInvoiceTemplateDesign, resolveEffectiveBladeSource } from '../../shared/invoice-template-blade'
 
 /** Template source for invoice/estimate PDF rendering (Laravel Blade). */
 export interface InvoicePdfTemplateSource {
@@ -23,7 +22,7 @@ export interface InvoicePdfTemplateSource {
 export function getBuiltInInvoicePdfTemplate(): InvoicePdfTemplateSource {
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
-    designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
+    designSettings: normalizeInvoiceTemplateDesign(DEFAULT_INVOICE_TEMPLATE_DESIGN),
     bladeSource: null,
     templateVersionId: null,
     isBuiltIn: true,
@@ -52,15 +51,12 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
 
   if (!row) return getBuiltInInvoicePdfTemplate()
 
-  let bladeSource: string | null = null
-  if (!isBuiltInBladeMarker(row.version.layoutMarker)) {
-    const baseline = await readBuiltInInvoiceBladeSource()
-    bladeSource = resolveTemplateBladeSource(row.version.layoutMarker, baseline)
-  }
+  const designSettings = normalizeInvoiceTemplateDesign(row.version.designSettings)
+  const bladeSource = resolveEffectiveBladeSource(row.version.layoutMarker)
 
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
-    designSettings: row.version.designSettings,
+    designSettings,
     bladeSource,
     templateVersionId: row.version.id,
     isBuiltIn: false,
@@ -68,7 +64,7 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
 }
 
 export function pdfRenderOptionsFromTemplate(template: InvoicePdfTemplateSource) {
-  const marginInches = template.designSettings.marginInches ?? 0.5
+  const marginInches = template.designSettings.marginInches ?? DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches
   const paper = template.designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
   return {
     paper,
