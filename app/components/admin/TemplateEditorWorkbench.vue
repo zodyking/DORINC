@@ -151,8 +151,12 @@ async function onTemplateChange(ev: Event) {
   selectedTemplateId.value = id
 }
 
-async function refreshPreview() {
+let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let previewRequestId = 0
+
+async function refreshPreview(opts?: { switchToPreview?: boolean }) {
   if (!canRead.value || !template.value) return
+  const requestId = ++previewRequestId
   previewBusy.value = true
   previewError.value = ''
   try {
@@ -160,17 +164,35 @@ async function refreshPreview() {
       method: 'POST',
       body: { bladeSource: bladeSource.value },
     })
+    if (requestId !== previewRequestId) return
     previewHtml.value = html
-    editorTab.value = 'preview'
+    if (opts?.switchToPreview) editorTab.value = 'preview'
   }
   catch (e: unknown) {
+    if (requestId !== previewRequestId) return
     previewError.value = await fetchErrorMessage(e, 'Preview failed — check Blade syntax and PDF service')
     previewHtml.value = ''
   }
   finally {
-    previewBusy.value = false
+    if (requestId === previewRequestId) previewBusy.value = false
   }
 }
+
+function schedulePreviewRefresh() {
+  if (previewDebounceTimer) clearTimeout(previewDebounceTimer)
+  previewDebounceTimer = setTimeout(() => {
+    previewDebounceTimer = null
+    if (editorTab.value === 'preview') refreshPreview()
+  }, 500)
+}
+
+watch(editorTab, (tab) => {
+  if (tab === 'preview') refreshPreview()
+})
+
+watch(bladeSource, () => {
+  if (editorTab.value === 'preview') schedulePreviewRefresh()
+})
 
 async function saveTemplateName() {
   if (!canManage.value || !template.value || !nameDirty.value) return
@@ -209,7 +231,7 @@ async function publishTemplate() {
     await refresh()
     await refreshList()
     actionMessage.value = 'Template published'
-    await refreshPreview()
+    await refreshPreview({ switchToPreview: true })
   }
   catch (e: unknown) {
     publishError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
@@ -345,9 +367,6 @@ function resetBlade() {
         </div>
         <div class="te-workspace__actions">
           <button type="button" class="btn sm ghost" :disabled="!bladeDirty" @click="resetBlade">Reset</button>
-          <button type="button" class="btn sm" :disabled="previewBusy" @click="refreshPreview">
-            {{ previewBusy ? 'Rendering…' : 'Render preview' }}
-          </button>
         </div>
       </div>
 
@@ -366,6 +385,7 @@ function resetBlade() {
       </div>
 
       <div v-show="editorTab === 'preview'" class="te-pane te-pane--preview">
+        <div v-if="previewBusy" class="te-preview-loading">Rendering preview…</div>
         <iframe
           v-if="previewHtml"
           class="te-preview-frame"
@@ -373,8 +393,8 @@ function resetBlade() {
           title="Invoice HTML preview"
           sandbox="allow-same-origin"
         />
-        <p v-else class="te-preview-empty">
-          Switch to <strong>Blade code</strong>, edit the template, then click <strong>Render preview</strong> to see HTML output here.
+        <p v-else-if="!previewBusy" class="te-preview-empty">
+          Preview renders automatically when you open this tab.
         </p>
       </div>
 
@@ -419,7 +439,11 @@ function resetBlade() {
 .te-blade-editor { flex: 1; min-height: 480px; resize: vertical; }
 .te-pane__hint { margin: 10px 0 14px; font-size: 12px; color: #64748b; }
 .te-pane__hint .dirty { color: #d97706; font-weight: 700; }
-.te-pane--preview { background: #eef0f4; min-height: 560px; }
+.te-pane--preview { background: #eef0f4; min-height: 560px; position: relative; }
+.te-preview-loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(238, 240, 244, 0.92); color: #64748b; font-size: 14px; font-weight: 600; z-index: 1;
+}
 .te-preview-frame { width: 100%; height: 560px; border: none; background: #fff; }
 .te-preview-empty {
   margin: 0; padding: 48px 24px; text-align: center; color: #64748b; font-size: 14px; line-height: 1.5;
