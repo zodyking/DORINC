@@ -6,6 +6,7 @@ import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
+  businessProfileToDocumentPdfCompany,
   serializePdfRenderPayload,
 } from '../../shared/document-pdf-payload'
 import { archiveFile, getFileWithData } from './files.service'
@@ -33,13 +34,6 @@ export class InvoicePdfServiceError extends Error {
 /** Finalized invoices eligible for official PDF generation (SPEC §9). */
 export const PDF_ELIGIBLE_STATUSES: InvoiceStatus[] = ['approved', 'sent', 'paid']
 
-function logoPreviewPath(fileId: string | null | undefined): string | null {
-  if (!fileId) return null
-  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
-  const path = `/api/files/${fileId}/preview`
-  return base ? `${base}${path}` : path
-}
-
 function pdfOptionsFromTemplate(template: InvoicePdfTemplateSource) {
   return pdfRenderOptionsFromTemplate(template)
 }
@@ -51,9 +45,8 @@ async function buildInvoicePdfPayload(
 ) {
   const business = await getBusinessProfile(db)
   const data = buildInvoicePdfData(detail, {
-    company: { name: business.businessName || undefined },
+    company: businessProfileToDocumentPdfCompany(business),
     design: template.designSettings,
-    logoUrl: logoPreviewPath(template.designSettings.logoFileId),
   })
   const options = pdfOptionsFromTemplate(template)
   return buildDocumentPdfRenderPayload(data, options)

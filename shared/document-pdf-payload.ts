@@ -2,19 +2,17 @@ import { formatMoney, parseMoney } from './money'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from './invoice-template-design'
+import type { BusinessProfile } from './workspace-settings-defaults'
 
 export type DocumentPdfType = 'invoice' | 'estimate'
 
 export interface DocumentPdfCompany {
   name: string
-  tagline: string
   addressLine1: string
   addressLine2: string
   phone: string
   email: string
-  hours: string
-  logoUrl?: string | null
-  logoText?: string
+  website: string
 }
 
 export interface DocumentPdfCustomer {
@@ -179,17 +177,40 @@ export function addressLines(addr: DocumentPdfAddressInput): string[] {
   return lines
 }
 
-export function defaultDocumentPdfCompany(businessName?: string): DocumentPdfCompany {
+export function emptyDocumentPdfCompany(name?: string): DocumentPdfCompany {
   return {
-    name: businessName?.trim() || 'Devon Onsite Repairs',
-    tagline: 'Diesel • Fleet • On-Call Service',
-    addressLine1: '387 Van Siclen Ave',
-    addressLine2: 'Brooklyn, NY 11207',
-    phone: '(646) 731-7021',
-    email: 'devononsiterepairs@gmail.com',
-    hours: 'Mon–Sat 7:00AM–7:00PM',
-    logoText: 'DOR<br/>INC',
+    name: name?.trim() || 'Business Name',
+    addressLine1: '',
+    addressLine2: '',
+    phone: '',
+    email: '',
+    website: '',
   }
+}
+
+/** Map workspace business settings to PDF company block — no sample/hardcoded shop data. */
+export function businessProfileToDocumentPdfCompany(profile: BusinessProfile): DocumentPdfCompany {
+  const addrLines = addressLines({
+    line1: profile.addressLine1,
+    line2: profile.addressLine2,
+    city: profile.city,
+    state: profile.state,
+    postalCode: profile.postalCode,
+  })
+
+  return {
+    name: profile.businessName?.trim() || 'Business Name',
+    addressLine1: addrLines[0] ?? '',
+    addressLine2: addrLines.slice(1).join(', '),
+    phone: profile.phone?.trim() ?? '',
+    email: profile.email?.trim() ?? '',
+    website: profile.website?.trim() ?? '',
+  }
+}
+
+/** @deprecated Use businessProfileToDocumentPdfCompany or emptyDocumentPdfCompany */
+export function defaultDocumentPdfCompany(businessName?: string): DocumentPdfCompany {
+  return emptyDocumentPdfCompany(businessName)
 }
 
 export interface BuildInvoicePdfPayloadInput {
@@ -237,7 +258,6 @@ export function buildInvoicePdfData(
   options: {
     company?: DocumentPdfCompany
     design?: InvoiceTemplateDesignSettings
-    logoUrl?: string | null
   } = {},
 ): DocumentPdfData {
   const customer = detail.customerSnapshot
@@ -246,11 +266,7 @@ export function buildInvoicePdfData(
   const vehicle = detail.vehicleSnapshot
 
   const design = options.design ?? DEFAULT_INVOICE_TEMPLATE_DESIGN
-  const company = {
-    ...defaultDocumentPdfCompany(options.company?.name),
-    ...options.company,
-    logoUrl: options.logoUrl ?? options.company?.logoUrl ?? null,
-  }
+  const company = options.company ?? emptyDocumentPdfCompany()
 
   let partsTotal = 0n
   let laborTotal = 0n

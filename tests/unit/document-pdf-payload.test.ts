@@ -3,6 +3,7 @@ import {
   addressLines,
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
+  businessProfileToDocumentPdfCompany,
 } from '../../shared/document-pdf-payload'
 
 describe('document-pdf-payload', () => {
@@ -117,5 +118,29 @@ describe('document-pdf-payload', () => {
       '739 E New York Ave',
       'Brooklyn, NY 11213',
     ])
+  })
+
+  it('maps business profile settings to PDF company block', () => {
+    const company = businessProfileToDocumentPdfCompany({
+      businessName: 'Acme Fleet Service',
+      phone: '555-0100',
+      email: 'shop@acme.test',
+      website: 'https://acme.test',
+      addressLine1: '100 Industrial Way',
+      addressLine2: 'Suite 4',
+      city: 'Newark',
+      state: 'NJ',
+      postalCode: '07102',
+      country: 'US',
+    })
+
+    expect(company).toEqual({
+      name: 'Acme Fleet Service',
+      addressLine1: '100 Industrial Way',
+      addressLine2: 'Suite 4, Newark, NJ 07102',
+      phone: '555-0100',
+      email: 'shop@acme.test',
+      website: 'https://acme.test',
+    })
   })
 })

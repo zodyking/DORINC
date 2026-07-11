@@ -6,6 +6,7 @@ import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import {
   buildDocumentPdfRenderPayload,
   buildEstimatePdfData,
+  businessProfileToDocumentPdfCompany,
   serializePdfRenderPayload,
 } from '../../shared/document-pdf-payload'
 import { enqueuePdfRenderJob } from './pdf-render.service'
@@ -30,13 +31,6 @@ export class EstimatePdfServiceError extends Error {
 
 /** Sent/approved estimates eligible for official PDF generation (SPEC §9). */
 export const ESTIMATE_PDF_ELIGIBLE_STATUSES: EstimateStatus[] = ['sent', 'approved']
-
-function logoPreviewPath(fileId: string | null | undefined): string | null {
-  if (!fileId) return null
-  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
-  const path = `/api/files/${fileId}/preview`
-  return base ? `${base}${path}` : path
-}
 
 export async function getEstimatePdfRecord(db: Db, estimateId: string) {
   const [row] = await db.select().from(estimateFiles).where(eq(estimateFiles.estimateId, estimateId))
@@ -111,9 +105,8 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
     balanceDue: detail.total,
     validUntil: detail.validUntil,
   }, {
-    company: { name: business.businessName || undefined },
+    company: businessProfileToDocumentPdfCompany(business),
     design: template.designSettings,
-    logoUrl: logoPreviewPath(template.designSettings.logoFileId),
   })
   const payload = buildDocumentPdfRenderPayload(data, pdfRenderOptionsFromTemplate(template))
   const filename = `${detail.estimateNumberFormatted}.pdf`

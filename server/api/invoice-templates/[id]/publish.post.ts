@@ -27,7 +27,6 @@ export default defineEventHandler(async (event) => {
         versionNumber: version.versionNumber,
         pageSize: version.designSettings.pageSize,
         accentColor: version.designSettings.accentColor,
-        logoFileId: version.designSettings.logoFileId ?? null,
       },
       permissionKey: 'templates.manage.all',
       riskLevel: 'sensitive',

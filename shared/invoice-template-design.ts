@@ -38,7 +38,7 @@ export const TEMPLATE_SECTION_DEFS: Array<{
   label: string
   required?: boolean
 }> = [
-  { key: 'company_info', label: 'Company logo & contact' },
+  { key: 'company_info', label: 'Company contact' },
   { key: 'invoice_meta', label: 'Invoice number & dates' },
   { key: 'customer', label: 'Bill to / customer block' },
   { key: 'job_summary', label: 'Job summary & technician' },
