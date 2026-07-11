@@ -14,6 +14,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.app
+      args:
+        NUXT_PUBLIC_BUILD_ID: ${NUXT_PUBLIC_BUILD_ID:-}
     restart: unless-stopped
     # Internal only — Dokploy Domains / Traefik reach this port on the Docker network.
     expose:

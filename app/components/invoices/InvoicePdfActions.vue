@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PdfViewer from '~/components/PdfViewer.client.vue'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,
@@ -157,7 +158,8 @@ defineExpose({
   flex-direction: column;
   padding: 12px !important;
 }
-.invoice-pdf-body :deep(.pdf-viewer) {
+.invoice-pdf-body :deep(.pdf-acrobat) {
+  flex: 1;
   min-height: 70vh;
 }
 .invoice-pdf-empty,

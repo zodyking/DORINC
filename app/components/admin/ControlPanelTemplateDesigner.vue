@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PdfViewer from '~/components/PdfViewer.client.vue'
 import {
   designSettingsFromForm,
   detectFontPreset,
@@ -588,7 +589,7 @@ onUnmounted(() => {
   min-height:520px;
   padding:12px;
 }
-.td-pdf-wrap :deep(.pdf-viewer) {
+.td-pdf-wrap :deep(.pdf-acrobat) {
   flex:1;
   min-height:480px;
 }
