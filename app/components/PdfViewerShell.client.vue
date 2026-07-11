@@ -15,9 +15,12 @@ const props = withDefaults(defineProps<{
   showClose?: boolean
   /** Fill parent flex column (modals, panels). */
   fill?: boolean
+  /** Hide title row on narrow screens (e.g. when context already shows the label). */
+  compact?: boolean
 }>(), {
   showDownload: true,
   fill: false,
+  compact: false,
 })
 
 const emit = defineEmits<{
@@ -26,17 +29,20 @@ const emit = defineEmits<{
   'load-error': [unknown]
 }>()
 
-const ZOOM_MIN = 0.55
+const ZOOM_MIN_DESKTOP = 0.55
+const ZOOM_MIN_MOBILE = 0.85
 const ZOOM_MAX = 2.6
 const zoomMult = ref(1)
 const layoutNarrow = ref(false)
+
+const zoomMin = computed(() => layoutNarrow.value ? ZOOM_MIN_MOBILE : ZOOM_MIN_DESKTOP)
 
 const displayTitle = computed(() => props.title ?? 'PDF document')
 
 function bumpZoom(delta: number) {
   zoomMult.value = Math.min(
     ZOOM_MAX,
-    Math.max(ZOOM_MIN, Math.round((zoomMult.value + delta) * 100) / 100),
+    Math.max(zoomMin.value, Math.round((zoomMult.value + delta) * 100) / 100),
   )
 }
 
@@ -45,8 +51,12 @@ function resetZoom() {
 }
 
 function updateLayoutNarrow() {
-  layoutNarrow.value = typeof window !== 'undefined'
+  const narrow = typeof window !== 'undefined'
     && window.matchMedia('(max-width: 640px)').matches
+  if (narrow && !layoutNarrow.value && zoomMult.value < 1) {
+    zoomMult.value = 1
+  }
+  layoutNarrow.value = narrow
 }
 
 watch(() => [props.src, props.blob] as const, ([url, blob]) => {
@@ -75,9 +85,12 @@ onUnmounted(() => {
   >
     <header
       class="pdf-shell__head"
-      :class="{ 'pdf-shell__head--narrow': layoutNarrow }"
+      :class="{
+        'pdf-shell__head--narrow': layoutNarrow,
+        'pdf-shell__head--compact': layoutNarrow && compact,
+      }"
     >
-      <h3 class="pdf-shell__title">{{ displayTitle }}</h3>
+      <h3 v-if="!(layoutNarrow && compact)" class="pdf-shell__title">{{ displayTitle }}</h3>
       <div
         class="pdf-shell__controls"
         :class="{ 'pdf-shell__controls--narrow': layoutNarrow }"
@@ -101,7 +114,7 @@ onUnmounted(() => {
             +
           </button>
           <button type="button" class="pdf-shell__zfit" @click="resetZoom">
-            Fit width
+            {{ layoutNarrow ? 'Fit' : 'Fit width' }}
           </button>
         </div>
         <a
@@ -109,14 +122,14 @@ onUnmounted(() => {
           class="pdf-shell__download"
           :href="downloadHref"
           :download="downloadFilename"
-        >Download PDF</a>
+        >{{ layoutNarrow ? 'Download' : 'Download PDF' }}</a>
         <button
           v-else-if="showDownload"
           type="button"
           class="pdf-shell__download"
           @click="emit('download')"
         >
-          Download PDF
+          {{ layoutNarrow ? 'Download' : 'Download PDF' }}
         </button>
         <button
           v-if="showClose"
@@ -174,6 +187,15 @@ onUnmounted(() => {
 
 .pdf-shell__head--narrow .pdf-shell__title {
   flex-basis: 100%;
+}
+
+.pdf-shell__head--compact {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.pdf-shell__head--compact .pdf-shell__controls {
+  width: 100%;
 }
 
 .pdf-shell__title {
@@ -325,6 +347,23 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
+  .pdf-shell__head {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .pdf-shell__frame {
+    min-height: min(58dvh, 640px);
+  }
+
+  .pdf-shell--fill {
+    min-height: 0;
+  }
+
+  .pdf-shell--fill .pdf-shell__frame {
+    flex: 1;
+    min-height: 0;
+  }
+
   .pdf-shell__zbtn,
   .pdf-shell__zfit {
     min-width: 44px;
@@ -335,6 +374,7 @@ onUnmounted(() => {
   .pdf-shell__controls--narrow .pdf-shell__close {
     min-height: 44px;
     font-size: 12px;
+    padding-inline: 0.55rem;
   }
 }
 </style>

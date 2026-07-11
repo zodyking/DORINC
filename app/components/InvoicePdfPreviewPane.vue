@@ -71,13 +71,15 @@ defineExpose({ refresh: loadPreview })
   <ClientOnly v-else-if="previewUrl">
     <div class="invoice-pdf-pane">
       <PdfViewerShell
+        fill
+        compact
         :src="previewUrl"
         :blob="previewBlob"
-      :title="`${invoiceLabel} PDF`"
-      :show-download="showDownload !== false"
-      :download-href="previewUrl"
-      :download-filename="`${invoiceLabel}.pdf`"
-      @download="downloadPdf"
+        :title="`${invoiceLabel} PDF`"
+        :show-download="showDownload !== false"
+        :download-href="previewUrl"
+        :download-filename="`${invoiceLabel}.pdf`"
+        @download="downloadPdf"
       />
     </div>
     <template #fallback>
@@ -102,5 +104,23 @@ defineExpose({ refresh: loadPreview })
 }
 .invoice-pdf-pane {
   min-height: min(78vh, 920px);
+  display: flex;
+  flex-direction: column;
+}
+
+.invoice-pdf-pane :deep(.pdf-shell) {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 640px) {
+  .invoice-pdf-pane {
+    min-height: calc(100dvh - 13.5rem);
+    max-height: calc(100dvh - 10rem);
+  }
+
+  .invoice-pdf-pane :deep(.pdf-shell) {
+    border-radius: 10px;
+  }
 }
 </style>
