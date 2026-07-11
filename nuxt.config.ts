@@ -74,12 +74,18 @@ export default defineNuxtConfig({
     maxUploadMb: process.env.MAX_UPLOAD_MB ?? '25',
     public: {
       appUrl: process.env.APP_URL ?? 'http://localhost:3000',
+      buildId: process.env.NUXT_PUBLIC_BUILD_ID ?? 'dev',
     },
   },
 
   nitro: {
     experimental: {
       tasks: true,
+    },
+    routeRules: {
+      '/sw.js': { headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' } },
+      '/_nuxt/**': { headers: { 'Cache-Control': 'public, max-age=31536000, immutable' } },
+      '/**': { headers: { 'Cache-Control': 'no-store, must-revalidate' } },
     },
     esbuild: {
       options: {

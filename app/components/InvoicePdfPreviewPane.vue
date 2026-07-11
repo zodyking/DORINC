@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PdfViewer from '~/components/PdfViewer.client.vue'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,

@@ -36,6 +36,7 @@ let renderTask: RenderTask | null = null
 const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`)
 const displayTitle = computed(() => props.title ?? 'PDF document')
 const pageLabel = computed(() => (numPages.value ? `${pageNum.value} / ${numPages.value}` : '—'))
+const buildId = computed(() => useRuntimeConfig().public.buildId || '')
 
 function syncPageInput() {
   pageInput.value = String(pageNum.value)
@@ -404,6 +405,7 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
       <div class="pdf-acrobat__status" aria-live="polite">
         <span>{{ pageLabel }}</span>
         <span v-if="loading"> · Loading…</span>
+        <span v-if="buildId" class="pdf-acrobat__build" :title="`Build ${buildId}`"> · {{ buildId }}</span>
       </div>
     </header>
 
@@ -474,6 +476,12 @@ defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
   font-size: 11px;
   color: #9aa0a6;
   text-align: center;
+}
+
+.pdf-acrobat__build {
+  opacity: 0.65;
+  font-family: ui-monospace, 'IBM Plex Mono', monospace;
+  font-size: 10px;
 }
 
 .pdf-acrobat__cluster {

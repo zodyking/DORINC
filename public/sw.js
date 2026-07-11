@@ -1,8 +1,14 @@
 /* DORINC Suite service worker — shell cache + offline queue stub (P4-01). */
-const CACHE_NAME = 'dorinc-shell-v1'
+const CACHE_NAME = 'dorinc-shell-v2'
 const OFFLINE_QUEUE_KEY = 'dorinc-offline-queue'
 
 const SHELL_URLS = ['/', '/auth/login', '/manifest.webmanifest']
+
+function isHashedAsset(pathname) {
+  return pathname.startsWith('/_nuxt/')
+    || pathname.startsWith('/api/')
+    || pathname.endsWith('.mjs')
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,6 +28,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
+
+  const { pathname } = new URL(event.request.url)
+  if (isHashedAsset(pathname)) {
+    event.respondWith(fetch(event.request))
+    return
+  }
 
   event.respondWith(
     fetch(event.request)

@@ -5,7 +5,10 @@ COPY package.json package-lock.json ./
 # --ignore-scripts: postinstall runs `nuxt prepare`, which needs source not yet copied
 RUN npm ci --ignore-scripts
 COPY . .
-RUN npm run build
+ARG NUXT_PUBLIC_BUILD_ID=
+RUN if [ -z "$NUXT_PUBLIC_BUILD_ID" ]; then export NUXT_PUBLIC_BUILD_ID=$(date -u +%Y%m%d%H%M%S); fi \
+  && echo "Building with NUXT_PUBLIC_BUILD_ID=$NUXT_PUBLIC_BUILD_ID" \
+  && NUXT_PUBLIC_BUILD_ID="$NUXT_PUBLIC_BUILD_ID" npm run build
 
 FROM node:24-alpine
 WORKDIR /app
