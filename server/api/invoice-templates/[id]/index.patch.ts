@@ -1,7 +1,7 @@
 import { useDb } from '../../../db/client'
 import {
   InvoiceTemplatesServiceError,
-  setDefaultInvoiceTemplate,
+  patchInvoiceTemplate,
 } from '../../../services/invoice-templates.service'
 import { writeAudit } from '../../../services/audit.service'
 import { apiError } from '../../../utils/api-error'
@@ -13,16 +13,16 @@ import { patchInvoiceTemplateSchema } from '../../../../shared/validators/invoic
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'templates.manage.all')
   const { id } = validateParams(event, idParamSchema)
-  await validateBody(event, patchInvoiceTemplateSchema)
+  const body = await validateBody(event, patchInvoiceTemplateSchema)
 
   try {
-    const template = await setDefaultInvoiceTemplate(useDb(), id)
+    const template = await patchInvoiceTemplate(useDb(), id, body)
 
     await writeAudit(event, {
       entityType: 'invoice_template',
       entityId: id,
-      action: 'templates.set_default',
-      afterData: { name: template?.name, slug: template?.slug },
+      action: body.isDefault ? 'templates.set_default' : 'templates.renamed',
+      afterData: { name: template?.name, slug: template?.slug, isDefault: template?.isDefault },
       permissionKey: 'templates.manage.all',
       riskLevel: 'normal',
     })

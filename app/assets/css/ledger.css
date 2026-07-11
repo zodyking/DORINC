@@ -1293,6 +1293,12 @@ body.help-chat-open{ overflow:hidden; }
 .cp-monitor__intro{
   margin:4px 0 0; font-size:13px; color:#64748b; line-height:1.45; font-weight:400;
 }
+.cp-db-chart--hero .chead h3 {
+  font-size: 18px;
+}
+.cp-monitor--compact .cp-monitor__intro {
+  margin-top: 2px;
+}
 .cp-monitor__strip{
   display:flex; flex-wrap:wrap; gap:10px 14px; margin-bottom:16px;
   padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;

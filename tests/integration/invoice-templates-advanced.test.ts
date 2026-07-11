@@ -9,6 +9,7 @@ import { seedInvoiceTemplates } from '../../server/db/seed-invoice-templates'
 import { invoiceTemplates } from '../../server/db/schema/invoice-templates'
 import {
   duplicateInvoiceTemplate,
+  patchInvoiceTemplate,
   publishInvoiceTemplateVersion,
   setDefaultInvoiceTemplate,
   testRenderTemplatePdf,
@@ -82,6 +83,13 @@ describe('P3-05 advanced template designer', () => {
 
     await setDefaultInvoiceTemplate(db, template.id)
     await db.delete(invoiceTemplates).where(eq(invoiceTemplates.id, copy!.template.id))
+  })
+
+  it('renames a template via patchInvoiceTemplate', async () => {
+    const { template } = await seedInvoiceTemplates(db)
+    const renamed = await patchInvoiceTemplate(db, template.id, { name: 'Renamed Fleet Template' })
+    expect(renamed?.name).toBe('Renamed Fleet Template')
+    await patchInvoiceTemplate(db, template.id, { name: template.name })
   })
 
   it('test PDF enqueue skips invoice_files when templateVersionId is null', async () => {

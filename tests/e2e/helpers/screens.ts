@@ -17,7 +17,7 @@ export const MOCKUP_SCREENS: MockupScreen[] = [
   { id: 'invoice-creator', name: 'PAGE: INVOICE CREATOR', path: '/invoices/new', heading: /New Invoice/i, auth: 'staff' },
   { id: 'invoice-editor', name: 'PAGE: INVOICE EDITOR', path: '/invoices/{editorInvoiceId}/edit', heading: /Invoice Editor/i, auth: 'staff' },
   { id: 'invoice-payment', name: 'PAGE: RECORD PAYMENT', path: '/invoices/{invoiceId}/payment', heading: /Record payment/i, auth: 'staff' },
-  { id: 'template-designer', name: 'PAGE: TEMPLATE DESIGNER', path: '/admin?tab=designer', heading: /Template Designer/i, auth: 'staff' },
+  { id: 'template-designer', name: 'PAGE: TEMPLATE DESIGNER', path: '/templates/designer', heading: /Template Editor/i, auth: 'staff' },
   { id: 'customers', name: 'PAGE: CUSTOMERS', path: '/customers', heading: 'Customers', auth: 'staff' },
   { id: 'customer-detail', name: 'PAGE: CUSTOMER DETAIL', path: '/customers/{customerId}', heading: /.+/i, auth: 'staff' },
   { id: 'vehicles', name: 'PAGE: VEHICLES', path: '/vehicles', heading: 'Vehicles', auth: 'staff' },

@@ -86,6 +86,7 @@ interface VehiclePick extends VehicleDisplay {
 
 const route = useRoute()
 const auth = useAuthStore()
+const editorLink = { path: '/templates/designer' }
 const id = route.params.id as string
 
 const {
@@ -614,7 +615,7 @@ const aiPopStyle = computed(() => {
           · {{ autosaveText }}
         </template>
         <template #actions>
-          <NuxtLink to="/admin?tab=designer" class="btn">Template designer</NuxtLink>
+          <NuxtLink :to="editorLink" class="btn">Template editor</NuxtLink>
           <InvoicePdfActions
             :invoice-id="id"
             :invoice-label="invoice.invoiceNumberFormatted"

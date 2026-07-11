@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // Control Panel — workspace settings, system health, and configuration.
 import ControlPanelBackupRestore from '~/components/admin/ControlPanelBackupRestore.vue'
+import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseChart.vue'
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelSection from '~/components/admin/ControlPanelSection.vue'
 import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMonitor.vue'
-import ControlPanelTemplateDesigner from '~/components/admin/ControlPanelTemplateDesigner.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
@@ -147,7 +147,6 @@ type ControlPanelSectionId
     | 'invoice'
     | 'catalog'
     | 'line-detection'
-    | 'designer'
     | 'import'
     | 'backup'
     | 'ai'
@@ -159,7 +158,6 @@ const openSections = reactive<Record<ControlPanelSectionId, boolean>>({
   invoice: false,
   catalog: false,
   'line-detection': false,
-  designer: false,
   import: false,
   backup: false,
   ai: false,
@@ -183,7 +181,7 @@ function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
 watch(() => route.query.tab, (tab) => {
   const valid: ControlPanelSectionId[] = [
     'business', 'email', 'invoice', 'catalog', 'line-detection',
-    'designer', 'import', 'backup', 'ai', 'security',
+    'import', 'backup', 'ai', 'security',
   ]
   if (typeof tab === 'string' && valid.includes(tab as ControlPanelSectionId)) {
     openSections[tab as ControlPanelSectionId] = true
@@ -351,20 +349,13 @@ async function testAiConnection() {
 
     <template v-else-if="status">
       <div class="admin-overview">
+        <ControlPanelDatabaseChart hero style="margin-bottom:16px;" />
+
         <ControlPanelSystemMonitor
           v-if="monitorStatus"
           :status="monitorStatus"
-          style="margin-bottom:16px;"
+          style="margin-bottom:20px;"
         />
-
-        <div class="card" style="margin-bottom:20px;">
-          <div class="chead"><h3>Administration</h3></div>
-          <div class="cbody cp-quicklinks">
-            <NuxtLink to="/users" class="btn">Users &amp; Moderation</NuxtLink>
-            <NuxtLink to="/deletion-requests" class="btn">Deletion Requests</NuxtLink>
-            <NuxtLink to="/system-logs" class="btn">System Logs</NuxtLink>
-          </div>
-        </div>
       </div>
 
       <div class="cp-sections">
@@ -425,17 +416,6 @@ async function testAiConnection() {
           @update:open="setSectionOpen('line-detection', $event)"
         >
           <SettingsLineDetectionPanel />
-        </ControlPanelSection>
-
-        <ControlPanelSection
-          id="designer"
-          title="Template designer"
-          icon="🎨"
-          subtitle="Invoice PDF layout and branding"
-          :open="openSections.designer"
-          @update:open="setSectionOpen('designer', $event)"
-        >
-          <ControlPanelTemplateDesigner />
         </ControlPanelSection>
 
         <p class="cp-sections-sublabel">System</p>
