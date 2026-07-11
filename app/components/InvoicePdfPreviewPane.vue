@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PdfViewer } from '~/utils/pdf-viewer'
+import { PdfViewerShell } from '~/utils/pdf-viewer'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,
@@ -65,10 +65,13 @@ defineExpose({ refresh: loadPreview })
   <div v-else-if="error" class="invoice-pdf-pane-empty invoice-pdf-pane-error">{{ error }}</div>
   <div v-else-if="busy && !previewUrl" class="invoice-pdf-pane-empty">Rendering PDF…</div>
   <ClientOnly v-else-if="previewUrl">
-    <PdfViewer
+    <PdfViewerShell
+      fill
       :src="previewUrl"
       :title="`${invoiceLabel} PDF`"
       :show-download="showDownload !== false"
+      :download-href="previewUrl"
+      :download-filename="`${invoiceLabel}.pdf`"
       @download="downloadPdf"
     />
     <template #fallback>

@@ -1,795 +1,368 @@
 <script setup lang="ts">
-import * as pdfjs from 'pdfjs-dist'
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { renderPdfPageToJpegDataUrl } from '~/utils/render-pdf-page-to-jpeg'
+/**
+ * TripBuddy HistoryPdfJsViewer pattern — canvas main view + bottom thumbnail strip.
+ * Zoom is controlled by the parent shell via v-model:zoomMult.
+ */
+import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { ensureWorker, pdfjs, renderPdfPageToCanvas } from '~/utils/pdf-js-render'
 
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker
-
-const props = withDefaults(defineProps<{
+const props = defineProps<{
+  /** Blob object URL — bytes are copied on load so the URL can be revoked. */
   src: string
-  title?: string
-  showDownload?: boolean
-  showToolbar?: boolean
-  showThumbnails?: boolean
-  /** Fill the parent flex container (modals, split panels). */
-  fill?: boolean
-}>(), {
-  showThumbnails: true,
-  fill: false,
-})
-
-const emit = defineEmits<{
-  download: []
 }>()
 
-const shellEl = ref<HTMLElement | null>(null)
-const canvasHost = ref<HTMLElement | null>(null)
-const stageEl = ref<HTMLElement | null>(null)
+const emit = defineEmits<{ 'load-error': [unknown] }>()
 
-const loading = ref(false)
-const error = ref('')
-const scale = ref(1)
-const pageNum = ref(1)
-const pageInput = ref('1')
+const zoomMult = defineModel<number>('zoomMult', { default: 1 })
+
+const loading = ref(true)
+const loadError = ref('')
 const numPages = ref(0)
-const rotation = ref(0)
-const fitMode = ref<'page' | 'width' | null>('page')
-const isFullscreen = ref(false)
-const thumbsOpen = ref(true)
-const thumbnails = ref<string[]>([])
-const thumbsLoading = ref(false)
+const pdf = shallowRef<PDFDocumentProxy | null>(null)
 
-let doc: PDFDocumentProxy | null = null
-let renderTask: RenderTask | null = null
+const mainWrapRef = ref<HTMLElement | null>(null)
+const mainCanvasRef = ref<HTMLCanvasElement | null>(null)
+const currentPage = ref(1)
+const fitScale = ref(1)
 
-const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`)
-const displayTitle = computed(() => props.title ?? 'PDF document')
-const pageLabel = computed(() => (numPages.value ? `${pageNum.value} / ${numPages.value}` : '—'))
-const showThumbPanel = computed(() => props.showThumbnails && numPages.value > 1 && thumbsOpen.value)
+const thumbCanvasByPage = new Map<number, HTMLCanvasElement>()
 
-function syncPageInput() {
-  pageInput.value = String(pageNum.value)
+let fetchAbort: AbortController | null = null
+let resizeObs: ResizeObserver | null = null
+let renderToken = 0
+
+const THUMB_MAX_W = 72
+
+function effectiveMainScale() {
+  return fitScale.value * zoomMult.value
 }
 
-async function loadDocument(url: string) {
-  if (!url) return
-  loading.value = true
-  error.value = ''
-  try {
-    if (doc) {
-      await doc.destroy()
-      doc = null
-    }
-    doc = await pdfjs.getDocument({ url, withCredentials: false }).promise
-    numPages.value = doc.numPages
-    pageNum.value = 1
-    rotation.value = 0
-    thumbnails.value = []
-    syncPageInput()
+function setThumbCanvas(pageNum: number, el: Element | null) {
+  if (el instanceof HTMLCanvasElement) thumbCanvasByPage.set(pageNum, el)
+  else thumbCanvasByPage.delete(pageNum)
+}
+
+async function selectThumbPage(p: number) {
+  if (p < 1 || p > numPages.value) return
+  currentPage.value = p
+  await measureFitScale()
+  await renderCurrentPage()
+}
+
+async function waitForMainWrap(maxTries = 48) {
+  for (let i = 0; i < maxTries; i++) {
+    const wrap = mainWrapRef.value
+    if (wrap && wrap.clientWidth > 0) return wrap
     await nextTick()
-    applyFit()
-    await renderPage()
-    void buildThumbnails()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+  }
+  return mainWrapRef.value
+}
+
+async function measureFitScale() {
+  const doc = pdf.value
+  const wrap = (await waitForMainWrap()) || mainWrapRef.value
+  if (!doc || !wrap || wrap.clientWidth <= 0) return
+  const p = Math.min(Math.max(1, currentPage.value), doc.numPages)
+  const page = await doc.getPage(p)
+  const vp = page.getViewport({ scale: 1 })
+  const pad = 12
+  const w = Math.max(120, wrap.clientWidth - pad)
+  fitScale.value = Math.max(0.2, Math.min(4, w / vp.width))
+}
+
+async function renderCurrentPage() {
+  const doc = pdf.value
+  const canvas = mainCanvasRef.value
+  const p = currentPage.value
+  if (!doc || !canvas || numPages.value < 1 || p < 1 || p > numPages.value) return
+  const token = ++renderToken
+  const scale = effectiveMainScale()
+  const page = await doc.getPage(p)
+  if (token !== renderToken) return
+  await renderPdfPageToCanvas(page, canvas, scale, true)
+}
+
+async function renderThumbnails() {
+  const doc = pdf.value
+  const n = numPages.value
+  if (!doc || n < 1) return
+  for (let i = 1; i <= n; i++) {
+    const canvas = thumbCanvasByPage.get(i)
+    if (!canvas) continue
+    const page = await doc.getPage(i)
+    const vp = page.getViewport({ scale: 1 })
+    const scale = THUMB_MAX_W / vp.width
+    await renderPdfPageToCanvas(page, canvas, scale, false)
+  }
+}
+
+function teardownResizeObserver() {
+  resizeObs?.disconnect()
+  resizeObs = null
+}
+
+function setupResizeObserver() {
+  teardownResizeObserver()
+  const wrap = mainWrapRef.value
+  if (!wrap || typeof ResizeObserver === 'undefined') return
+  let t = 0
+  resizeObs = new ResizeObserver(() => {
+    window.clearTimeout(t)
+    t = window.setTimeout(async () => {
+      await measureFitScale()
+      await renderCurrentPage()
+    }, 120)
+  })
+  resizeObs.observe(wrap)
+}
+
+function cleanupDoc() {
+  teardownResizeObserver()
+  if (pdf.value) {
+    try {
+      void pdf.value.destroy()
+    }
+    catch { /* ignore */ }
+    pdf.value = null
+  }
+  numPages.value = 0
+  currentPage.value = 1
+  thumbCanvasByPage.clear()
+  renderToken++
+}
+
+async function loadFromUrl(url: string) {
+  ensureWorker()
+  fetchAbort?.abort()
+  fetchAbort = new AbortController()
+  cleanupDoc()
+  loadError.value = ''
+  loading.value = true
+  try {
+    const res = await fetch(url, { signal: fetchAbort.signal })
+    if (!res.ok) throw new Error(`Could not load PDF (${res.status})`)
+    const buf = await res.arrayBuffer()
+    const doc = await pdfjs.getDocument({ data: buf }).promise
+    pdf.value = doc
+    numPages.value = doc.numPages
+    currentPage.value = 1
   }
   catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Could not load PDF'
-  }
-  finally {
+    if (e instanceof Error && e.name === 'AbortError') {
+      loading.value = false
+      return
+    }
+    const msg = e instanceof Error ? e.message : 'Could not load PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
     loading.value = false
+    return
   }
-}
 
-async function buildThumbnails() {
-  if (!doc || !props.showThumbnails || doc.numPages <= 1) return
-  thumbsLoading.value = true
-  const urls: string[] = []
+  loading.value = false
+  await nextTick()
+  await new Promise<void>(r => requestAnimationFrame(() => r()))
+
+  if (!pdf.value || numPages.value < 1) return
+
   try {
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
-      urls.push(await renderPdfPageToJpegDataUrl(page))
-    }
-    thumbnails.value = urls
+    await measureFitScale()
+    setupResizeObserver()
+    await nextTick()
+    await renderThumbnails()
+    await nextTick()
+    await renderCurrentPage()
   }
-  catch {
-    thumbnails.value = []
-  }
-  finally {
-    thumbsLoading.value = false
-  }
-}
-
-function stageSize() {
-  const stage = stageEl.value
-  if (!stage) return { width: 0, height: 0 }
-  const style = getComputedStyle(stage)
-  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
-  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
-  return {
-    width: Math.max(0, stage.clientWidth - padX),
-    height: Math.max(0, stage.clientHeight - padY),
+  catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Could not render PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
   }
 }
-
-function applyFit() {
-  if (!doc || !canvasHost.value) return
-  void doc.getPage(pageNum.value).then((page) => {
-    const base = page.getViewport({ scale: 1, rotation: rotation.value })
-    const { width, height } = stageSize()
-    if (!width || !height) return
-    const padding = 32
-    if (fitMode.value === 'page') {
-      const fitW = (width - padding) / base.width
-      const fitH = (height - padding) / base.height
-      scale.value = Math.max(0.25, Math.min(4, Math.min(fitW, fitH)))
-    }
-    else {
-      scale.value = Math.max(0.25, Math.min(4, (width - padding) / base.width))
-    }
-    void renderPage()
-  })
-}
-
-async function renderPage() {
-  if (!doc || !canvasHost.value) return
-  renderTask?.cancel()
-  const page = await doc.getPage(pageNum.value)
-  const outputScale = window.devicePixelRatio || 1
-  const viewport = page.getViewport({ scale: scale.value, rotation: rotation.value })
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  canvas.width = Math.floor(viewport.width * outputScale)
-  canvas.height = Math.floor(viewport.height * outputScale)
-  canvas.style.width = `${Math.floor(viewport.width)}px`
-  canvas.style.height = `${Math.floor(viewport.height)}px`
-  canvas.className = 'pdf-acrobat__canvas'
-
-  canvasHost.value.replaceChildren(canvas)
-
-  const transform = outputScale !== 1
-    ? [outputScale, 0, 0, outputScale, 0, 0] as [number, number, number, number, number, number]
-    : undefined
-
-  renderTask = page.render({ canvasContext: ctx, viewport, transform })
-  await renderTask.promise
-  renderTask = null
-}
-
-function zoomIn() {
-  fitMode.value = null
-  scale.value = Math.min(4, Math.round((scale.value + 0.1) * 100) / 100)
-  void renderPage()
-}
-
-function zoomOut() {
-  fitMode.value = null
-  scale.value = Math.max(0.25, Math.round((scale.value - 0.1) * 100) / 100)
-  void renderPage()
-}
-
-function fitWidth() {
-  fitMode.value = 'width'
-  applyFit()
-}
-
-function fitPage() {
-  fitMode.value = 'page'
-  applyFit()
-}
-
-function rotateClockwise() {
-  rotation.value = (rotation.value + 90) % 360
-  if (fitMode.value) applyFit()
-  else void renderPage()
-}
-
-function goToPage(raw: string | number) {
-  const parsed = Number.parseInt(String(raw), 10)
-  if (!Number.isFinite(parsed) || !numPages.value) return
-  const next = Math.min(numPages.value, Math.max(1, parsed))
-  if (next === pageNum.value) {
-    syncPageInput()
-    return
-  }
-  pageNum.value = next
-  syncPageInput()
-  if (fitMode.value) applyFit()
-  else void renderPage()
-}
-
-function prevPage() {
-  if (pageNum.value <= 1) return
-  goToPage(pageNum.value - 1)
-}
-
-function nextPage() {
-  if (pageNum.value >= numPages.value) return
-  goToPage(pageNum.value + 1)
-}
-
-function onPageInputBlur() {
-  goToPage(pageInput.value)
-}
-
-function onPageInputEnter(event: KeyboardEvent) {
-  if (event.key === 'Enter') {
-    (event.target as HTMLInputElement).blur()
-  }
-}
-
-function openDirect() {
-  if (!props.src) return
-  window.open(props.src, '_blank', 'noopener,noreferrer')
-}
-
-function printPdf() {
-  if (!props.src) return
-  const frame = document.createElement('iframe')
-  frame.style.display = 'none'
-  frame.src = props.src
-  frame.onload = () => {
-    frame.contentWindow?.focus()
-    frame.contentWindow?.print()
-    window.setTimeout(() => frame.remove(), 1000)
-  }
-  document.body.appendChild(frame)
-}
-
-function toggleThumbnails() {
-  thumbsOpen.value = !thumbsOpen.value
-  if (fitMode.value) void nextTick(() => applyFit())
-}
-
-async function toggleFullscreen() {
-  const el = shellEl.value
-  if (!el) return
-  if (!document.fullscreenElement) {
-    await el.requestFullscreen()
-    isFullscreen.value = true
-  }
-  else {
-    await document.exitFullscreen()
-    isFullscreen.value = false
-  }
-}
-
-function onFullscreenChange() {
-  isFullscreen.value = !!document.fullscreenElement
-  if (fitMode.value) applyFit()
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (loading.value || error.value) return
-  if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
-    event.preventDefault()
-    prevPage()
-  }
-  else if (event.key === 'ArrowRight' || event.key === 'PageDown') {
-    event.preventDefault()
-    nextPage()
-  }
-  else if (event.key === 'Home') {
-    event.preventDefault()
-    goToPage(1)
-  }
-  else if (event.key === 'End') {
-    event.preventDefault()
-    goToPage(numPages.value)
-  }
-}
-
-function onWheel(event: WheelEvent) {
-  if (loading.value || error.value || !numPages.value) return
-  if (event.ctrlKey || event.metaKey) {
-    event.preventDefault()
-    if (event.deltaY < 0) zoomIn()
-    else zoomOut()
-    return
-  }
-  if (Math.abs(event.deltaY) < 8) return
-  event.preventDefault()
-  if (event.deltaY > 0) nextPage()
-  else prevPage()
-}
-
-let resizeObserver: ResizeObserver | null = null
 
 watch(() => props.src, (url) => {
-  if (url) void loadDocument(url)
+  if (url) void loadFromUrl(url)
+  else {
+    fetchAbort?.abort()
+    cleanupDoc()
+    loading.value = false
+    loadError.value = ''
+  }
 }, { immediate: true })
 
-onMounted(() => {
-  document.addEventListener('fullscreenchange', onFullscreenChange)
-  resizeObserver = new ResizeObserver(() => {
-    if (fitMode.value) applyFit()
-  })
-  void nextTick(() => {
-    if (stageEl.value) resizeObserver?.observe(stageEl.value)
-  })
+watch(zoomMult, async () => {
+  if (!pdf.value || numPages.value < 1) return
+  await measureFitScale()
+  await renderCurrentPage()
 })
 
 onUnmounted(() => {
-  document.removeEventListener('fullscreenchange', onFullscreenChange)
-  renderTask?.cancel()
-  resizeObserver?.disconnect()
-  void doc?.destroy()
-  doc = null
+  fetchAbort?.abort()
+  cleanupDoc()
 })
 
-defineExpose({ fitWidth, fitPage, reload: () => loadDocument(props.src) })
+defineExpose({ currentPage, numPages, reload: () => props.src && loadFromUrl(props.src) })
 </script>
 
 <template>
-  <div
-    ref="shellEl"
-    class="pdf-acrobat"
-    :class="{
-      'pdf-acrobat--fullscreen': isFullscreen,
-      'pdf-acrobat--fill': fill,
-    }"
-    @keydown="onKeydown"
-  >
-    <header
-      v-if="showToolbar !== false"
-      class="pdf-acrobat__toolbar"
-      role="toolbar"
-      aria-label="PDF controls"
-    >
-      <div class="pdf-acrobat__toolbar-row">
-        <div class="pdf-acrobat__cluster pdf-acrobat__cluster--start">
-          <span class="pdf-acrobat__doc-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-              <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 13h8v1.5H8V13zm0 3.5h8V18H8v-1.5z" />
-            </svg>
-          </span>
-          <span class="pdf-acrobat__title" :title="displayTitle">{{ displayTitle }}</span>
-        </div>
-
-        <div class="pdf-acrobat__cluster pdf-acrobat__cluster--center">
-          <button
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :disabled="loading || pageNum <= 1"
-            aria-label="Previous page"
-            @click="prevPage"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 14l5-5 5 5H7z" /></svg>
-          </button>
-          <label class="pdf-acrobat__page-field">
-            <span class="sr-only">Page</span>
-            <input
-              :value="pageInput"
-              type="text"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              class="pdf-acrobat__page-input"
-              :disabled="loading || !numPages"
-              aria-label="Current page"
-              @input="pageInput = ($event.target as HTMLInputElement).value"
-              @blur="onPageInputBlur"
-              @keydown="onPageInputEnter"
-            >
-            <span class="pdf-acrobat__page-total">/ {{ numPages || '—' }}</span>
-          </label>
-          <button
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :disabled="loading || pageNum >= numPages"
-            aria-label="Next page"
-            @click="nextPage"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 10l5 5 5-5H7z" /></svg>
-          </button>
-        </div>
-
-        <div class="pdf-acrobat__cluster pdf-acrobat__cluster--end">
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Zoom out" @click="zoomOut">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M5 11h14v2H5z" /></svg>
-          </button>
-          <span class="pdf-acrobat__zoom">{{ zoomPercent }}</span>
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Zoom in" @click="zoomIn">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M11 5h2v14h-2V5zm-6 6h14v2H5v-2z" /></svg>
-          </button>
-          <span class="pdf-acrobat__divider" aria-hidden="true" />
-          <button
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :class="{ 'is-active': fitMode === 'page' }"
-            :disabled="loading"
-            aria-label="Fit page"
-            title="Fit page"
-            @click="fitPage"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 4h7v2H6v5H4V4zm13 0v7h-2V6h-5V4h7zM4 13h2v5h5v2H4v-7zm16 0v7h-7v-2h5v-5h2z" /></svg>
-          </button>
-          <button
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :class="{ 'is-active': fitMode === 'width' }"
-            :disabled="loading"
-            aria-label="Fit width"
-            title="Fit width"
-            @click="fitWidth"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 7h18v2H3V7zm0 8h18v2H3v-2z" /></svg>
-          </button>
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Rotate clockwise" title="Rotate" @click="rotateClockwise">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.55 5.55 14 4v7h7l-1.55-1.55A6.9 6.9 0 0 0 12 5c-3.31 0-6 2.46-6 5.75h2C8 8.57 9.79 7 12 7c1.66 0 3.14.69 4.22 1.8l-1.67 1.75H20V4l-1.55 1.55A8.9 8.9 0 0 0 12 3a8.96 8.96 0 0 0-6.45 2.75L7 7.14A6.97 6.97 0 0 1 12 5z" /></svg>
-          </button>
-          <button
-            v-if="showThumbnails && numPages > 1"
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :class="{ 'is-active': thumbsOpen }"
-            :disabled="loading"
-            aria-label="Toggle page thumbnails"
-            title="Thumbnails"
-            @click="toggleThumbnails"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 5h7v7H4V5zm9 0h7v7h-7V5zM4 14h7v7H4v-7zm9 0h7v7h-7v-7z" /></svg>
-          </button>
-          <span class="pdf-acrobat__divider" aria-hidden="true" />
-          <button
-            v-if="showDownload !== false"
-            type="button"
-            class="pdf-acrobat__btn pdf-acrobat__btn--icon"
-            :disabled="loading"
-            aria-label="Download"
-            title="Download"
-            @click="emit('download')"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 16.5 7.5 12 9 10.5l2 2V4h2v8.5l2-2 1.5 1.5L12 16.5zM5 20v-2h14v2H5z" /></svg>
-          </button>
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Print" title="Print" @click="printPdf">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 9V4h12v5h2a2 2 0 0 1 2 2v5h-4v4H6v-4H4v-5a2 2 0 0 1 2-2h0zm2 0h8V6H8v3zm10 7v-3H6v3h2v3h8v-3h2z" /></svg>
-          </button>
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Open in new tab" title="Open" @click="openDirect">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4 9.3-9.3H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z" /></svg>
-          </button>
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--icon" :disabled="loading" aria-label="Fullscreen" title="Fullscreen" @click="toggleFullscreen">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 7h4V5H5v6h2V7zm10 0v4h2V5h-6v2h4zM7 17v-4H5v6h6v-2H7zm10 0h-4v2h6v-6h-2v4z" /></svg>
-          </button>
-        </div>
-      </div>
-      <div class="pdf-acrobat__status" aria-live="polite">
-        <span>{{ pageLabel }}</span>
-        <span v-if="loading"> · Loading…</span>
-      </div>
-    </header>
-
-    <div class="pdf-acrobat__workspace">
-      <aside
-        v-if="showThumbPanel"
-        class="pdf-acrobat__thumbs"
-        aria-label="Page thumbnails"
-      >
-        <p v-if="thumbsLoading" class="pdf-acrobat__thumbs-status">Loading…</p>
-        <button
-          v-for="(thumb, index) in thumbnails"
-          :key="index"
-          type="button"
-          class="pdf-acrobat__thumb"
-          :class="{ 'is-active': pageNum === index + 1 }"
-          :aria-label="`Page ${index + 1}`"
-          :aria-current="pageNum === index + 1 ? 'page' : undefined"
-          @click="goToPage(index + 1)"
-        >
-          <img :src="thumb" alt="" width="96" height="124">
-          <span>{{ index + 1 }}</span>
-        </button>
-      </aside>
-
-      <div
-        ref="stageEl"
-        class="pdf-acrobat__stage"
-        tabindex="0"
-        :aria-label="displayTitle"
-        @wheel="onWheel"
-      >
-        <p v-if="error" class="pdf-acrobat__message pdf-acrobat__message--err">
-          {{ error }}
-          <button type="button" class="pdf-acrobat__btn pdf-acrobat__btn--text" @click="openDirect">Open PDF</button>
-        </p>
-        <p v-else-if="loading && !numPages" class="pdf-acrobat__message">Loading document…</p>
-        <div ref="canvasHost" class="pdf-acrobat__canvas-host" />
-      </div>
+  <div class="pdf-js-viewer">
+    <div v-if="loadError" class="pdf-js-viewer__state pdf-js-viewer__state--err">
+      {{ loadError }}
     </div>
+    <template v-else>
+      <div ref="mainWrapRef" class="pdf-js-viewer__main">
+        <div v-if="loading" class="pdf-js-viewer__loading" role="status" aria-live="polite">
+          Loading PDF…
+        </div>
+        <template v-else-if="numPages > 0">
+          <div class="pdf-js-viewer__page-shell">
+            <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
+          </div>
+        </template>
+      </div>
+      <div
+        v-if="!loading && numPages > 1"
+        class="pdf-js-viewer__thumbs"
+        role="tablist"
+        aria-label="Pages"
+      >
+        <button
+          v-for="p in numPages"
+          :key="`th-${p}`"
+          type="button"
+          role="tab"
+          :aria-selected="p === currentPage"
+          class="pdf-js-viewer__thumb"
+          :class="{ 'pdf-js-viewer__thumb--on': p === currentPage }"
+          :title="`Page ${p}`"
+          @click="selectThumbPage(p)"
+        >
+          <span class="pdf-js-viewer__thumb-num">{{ p }}</span>
+          <canvas :ref="(el) => setThumbCanvas(p, el as Element | null)" class="pdf-js-viewer__thumb-cv" />
+        </button>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.pdf-acrobat {
+.pdf-js-viewer {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: min(78vh, 920px);
-  border: 1px solid #1a1a1a;
-  border-radius: 10px;
   overflow: hidden;
-  background: #404040;
-  color: #f1f3f4;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #1e293b;
 }
 
-.pdf-acrobat--fill {
+.pdf-js-viewer__state {
   flex: 1;
-  min-height: 0;
-  height: 100%;
-}
-
-.pdf-acrobat--fill .pdf-acrobat__workspace {
-  flex: 1;
-  min-height: 0;
-}
-
-.pdf-acrobat--fill .pdf-acrobat__stage {
-  min-height: 0;
-}
-
-.pdf-acrobat--fullscreen {
-  min-height: 100vh;
-  border-radius: 0;
-  border: none;
-}
-
-.pdf-acrobat__toolbar {
-  background: linear-gradient(180deg, #3c3f41 0%, #323639 100%);
-  border-bottom: 1px solid #1f1f1f;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
-}
-
-.pdf-acrobat__toolbar-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-}
-
-.pdf-acrobat__status {
-  padding: 0 12px 8px;
-  font-size: 11px;
-  color: #9aa0a6;
-  text-align: center;
-}
-
-.pdf-acrobat__cluster {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.pdf-acrobat__cluster--start { justify-self: start; }
-.pdf-acrobat__cluster--center { justify-self: center; }
-.pdf-acrobat__cluster--end {
-  justify-self: end;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.pdf-acrobat__doc-icon {
-  display: inline-flex;
-  color: #bdc1c6;
-  flex: none;
-}
-
-.pdf-acrobat__title {
+  justify-content: center;
+  padding: 1rem;
   font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: min(240px, 28vw);
-  color: #e8eaed;
+  color: #94a3b8;
 }
 
-.pdf-acrobat__page-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
-}
-
-.pdf-acrobat__page-input {
-  width: 2.75rem;
-  height: 28px;
-  border: 1px solid #5f6368;
-  border-radius: 4px;
-  background: #202124;
-  color: #e8eaed;
-  text-align: center;
-  font: inherit;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.pdf-acrobat__page-input:focus {
-  outline: 2px solid #8ab4f8;
-  outline-offset: 0;
-  border-color: #8ab4f8;
-}
-
-.pdf-acrobat__page-total,
-.pdf-acrobat__zoom {
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: #e8eaed;
-  min-width: 2.5rem;
+.pdf-js-viewer__state--err {
+  color: #fca5a5;
   text-align: center;
 }
 
-.pdf-acrobat__divider {
-  width: 1px;
-  height: 22px;
-  background: #5f6368;
-  margin: 0 4px;
-}
-
-.pdf-acrobat__btn {
-  border: none;
-  background: transparent;
-  color: #e8eaed;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.pdf-acrobat__btn--icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
-.pdf-acrobat__btn--text {
-  margin-top: 12px;
-  padding: 8px 14px;
-  border: 1px solid #5f6368;
-  font-size: 12px;
-}
-
-.pdf-acrobat__btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.pdf-acrobat__btn.is-active {
-  background: rgba(138, 180, 248, 0.22);
-  color: #fff;
-}
-
-.pdf-acrobat__btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.pdf-acrobat__workspace {
-  display: flex;
-  flex: 1;
+.pdf-js-viewer__main {
+  flex: 1 1 0;
   min-height: 0;
-}
-
-.pdf-acrobat__thumbs {
-  flex: none;
-  width: 116px;
-  overflow-y: auto;
-  padding: 10px 8px;
-  background: #2b2b2b;
-  border-right: 1px solid #1f1f1f;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pdf-acrobat__thumbs-status {
-  margin: 0;
-  font-size: 11px;
-  color: #9aa0a6;
-  text-align: center;
-}
-
-.pdf-acrobat__thumb {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border: 2px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: #bdc1c6;
-  font-size: 10px;
-}
-
-.pdf-acrobat__thumb img {
-  display: block;
-  width: 96px;
-  height: auto;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-}
-
-.pdf-acrobat__thumb.is-active {
-  border-color: #8ab4f8;
-  background: rgba(138, 180, 248, 0.12);
-  color: #fff;
-}
-
-.pdf-acrobat__thumb:hover {
-  border-color: #5f6368;
-}
-
-.pdf-acrobat__stage {
-  flex: 1;
-  min-width: 0;
+  position: relative;
   overflow: auto;
-  padding: 28px 20px;
-  min-height: 480px;
-  background: #525659;
-  outline: none;
-}
-
-.pdf-acrobat__canvas-host {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  padding: 0.35rem 0.3rem 0.45rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  min-height: calc(100% - 8px);
+  justify-content: flex-start;
 }
 
-.pdf-acrobat__canvas-host :deep(.pdf-acrobat__canvas) {
+.pdf-js-viewer__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  font-size: 13px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.55);
+  pointer-events: none;
+}
+
+.pdf-js-viewer__page-shell {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+  overflow: hidden;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.pdf-js-viewer__canvas {
   display: block;
+}
+
+.pdf-js-viewer__thumbs {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0));
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-top: 1px solid #334155;
+  background: #0f172a;
+}
+
+.pdf-js-viewer__thumb {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0.2rem;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pdf-js-viewer__thumb--on {
+  border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.14);
+}
+
+.pdf-js-viewer__thumb:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.pdf-js-viewer__thumb-num {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  z-index: 1;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+
+.pdf-js-viewer__thumb-cv {
+  display: block;
+  width: 72px;
+  height: auto;
+  border-radius: 4px;
   background: #fff;
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.2),
-    0 8px 24px rgba(0, 0, 0, 0.45);
-  image-rendering: auto;
-}
-
-.pdf-acrobat__message {
-  margin: auto;
-  text-align: center;
-  font-size: 14px;
-  color: #e8eaed;
-  padding: 48px 16px;
-}
-
-.pdf-acrobat__message--err {
-  color: #f9dedc;
-}
-
-@media (max-width: 900px) {
-  .pdf-acrobat__toolbar-row {
-    grid-template-columns: 1fr;
-    justify-items: center;
-  }
-  .pdf-acrobat__cluster--start,
-  .pdf-acrobat__cluster--center,
-  .pdf-acrobat__cluster--end {
-    justify-self: center;
-    justify-content: center;
-  }
-  .pdf-acrobat__title {
-    max-width: 70vw;
-  }
-  .pdf-acrobat__thumbs {
-    display: none;
-  }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PdfViewer } from '~/utils/pdf-viewer'
+import { PdfViewerShell } from '~/utils/pdf-viewer'
 import {
   designSettingsFromForm,
   detectFontPreset,
@@ -561,7 +561,7 @@ onUnmounted(() => {
               Click <strong>Refresh preview</strong> to render the current template settings as PDF.
             </p>
             <ClientOnly v-else-if="previewUrl">
-              <PdfViewer
+              <PdfViewerShell
                 fill
                 :src="previewUrl"
                 title="Invoice template PDF preview"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PdfViewer } from '~/utils/pdf-viewer'
+import { PdfViewerDialog } from '~/utils/pdf-viewer'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,
@@ -20,7 +20,7 @@ const emit = defineEmits<{
   refreshed: []
 }>()
 
-const open = ref(false)
+const dialogOpen = ref(false)
 const previewBusy = ref(false)
 const downloadBusy = ref(false)
 const error = ref('')
@@ -30,12 +30,12 @@ const canUse = computed(() => props.canGeneratePdf !== false)
 
 async function openPreview() {
   if (!canUse.value) return
-  open.value = true
   previewBusy.value = true
   error.value = ''
   revokePreview()
   try {
     setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
+    dialogOpen.value = true
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'Could not render PDF preview')
@@ -73,15 +73,15 @@ async function downloadOfficialOrPreview() {
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'PDF download failed')
-    open.value = true
+    dialogOpen.value = true
   }
   finally {
     downloadBusy.value = false
   }
 }
 
-function close() {
-  open.value = false
+function closeDialog() {
+  dialogOpen.value = false
   error.value = ''
   revokePreview()
 }
@@ -101,7 +101,7 @@ defineExpose({
       :title="canUse ? 'Preview PDF (Laravel Blade)' : 'Requires generate PDF permission'"
       @click="openPreview"
     >
-      {{ previewBusy && open ? 'Rendering…' : 'Preview PDF' }}
+      {{ previewBusy ? 'Rendering…' : 'Preview PDF' }}
     </button>
     <button
       type="button"
@@ -112,30 +112,18 @@ defineExpose({
     >
       {{ downloadBusy ? 'Preparing…' : 'Download PDF' }}
     </button>
+    <p v-if="error && !dialogOpen" class="invoice-pdf-actions-error">{{ error }}</p>
   </div>
 
-  <div v-if="open" class="modal-scrim open" @click.self="close">
-    <div class="card modal-card invoice-pdf-modal">
-      <div class="chead">
-        <h3>{{ invoiceLabel }}</h3>
-        <div class="right">
-          <button type="button" class="btn sm" @click="close">Close</button>
-        </div>
-      </div>
-      <div class="cbody invoice-pdf-body">
-        <p v-if="error" class="invoice-pdf-error">{{ error }}</p>
-        <p v-else-if="previewBusy" class="invoice-pdf-empty">Rendering invoice PDF…</p>
-        <ClientOnly v-else-if="previewUrl">
-          <PdfViewer
-            fill
-            :src="previewUrl"
-            :title="`${invoiceLabel} PDF`"
-            @download="downloadOfficialOrPreview"
-          />
-        </ClientOnly>
-      </div>
-    </div>
-  </div>
+  <PdfViewerDialog
+    v-model:open="dialogOpen"
+    :src="previewUrl"
+    :title="`${invoiceLabel} PDF`"
+    :download-href="previewUrl || undefined"
+    :download-filename="`${invoiceLabel}.pdf`"
+    @close="closeDialog"
+    @download="downloadOfficialOrPreview"
+  />
 </template>
 
 <style scoped>
@@ -143,29 +131,12 @@ defineExpose({
   display: inline-flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
-.invoice-pdf-modal {
-  width: min(920px, 96vw);
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-}
-.invoice-pdf-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 12px !important;
-}
-.invoice-pdf-empty,
-.invoice-pdf-error {
-  margin: auto;
-  text-align: center;
-  font-size: 13px;
-  color: #64748b;
-  padding: 40px 16px;
-}
-.invoice-pdf-error {
+.invoice-pdf-actions-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
   color: #dc2626;
 }
 </style>
