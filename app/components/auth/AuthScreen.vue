@@ -12,6 +12,12 @@ const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
 const auth = useAuthStore()
 
+const { data: publicBusiness } = await useFetch<{ businessName: string }>('/api/public/business')
+const displayBusinessName = computed(() => {
+  const name = publicBusiness.value?.businessName?.trim()
+  return name || BRAND_NAME
+})
+
 const portalUsername = ref('')
 const portalPass = ref('')
 const loginEmail = ref('')
@@ -103,7 +109,7 @@ async function submitSignup() {
         <div class="auth-head">
           <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
           <div class="auth-head__text">
-            <b>DORINC</b>
+            <b>{{ displayBusinessName }}</b>
             <small>Customer portal</small>
           </div>
         </div>
@@ -150,7 +156,7 @@ async function submitSignup() {
         <div class="auth-head">
           <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
           <div class="auth-head__text">
-            <b>DORINC</b>
+            <b>{{ displayBusinessName }}</b>
             <small>Staff workspace</small>
           </div>
         </div>
