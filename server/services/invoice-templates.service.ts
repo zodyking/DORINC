@@ -6,8 +6,7 @@ import {
   invoiceTemplates,
 } from '../db/schema/invoice-templates'
 import { invoiceFiles, invoices } from '../db/schema/invoices'
-import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
-import { mergeTemplateSections } from '../../shared/invoice-template-design'
+import { mergeTemplateSections, BLADE_INVOICE_TEMPLATE_MARKER } from '../../shared/invoice-template-design'
 import {
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
@@ -33,8 +32,7 @@ export class InvoiceTemplatesServiceError extends Error {
 }
 
 export interface PublishInvoiceTemplateInput {
-  designSettings?: InvoiceTemplateDesignSettings
-  htmlContent?: string
+  designSettings: InvoiceTemplateDesignSettings
 }
 
 export async function ensureDefaultInvoiceTemplate(db: Db) {
@@ -172,30 +170,20 @@ export async function publishInvoiceTemplateVersion(
   const latest = await getLatestTemplateVersion(db, templateId)
   if (!latest) throw new InvoiceTemplatesServiceError('NO_VERSION')
 
-  const designSettings: InvoiceTemplateDesignSettings = input.designSettings
-    ? {
-        ...latest.designSettings,
-        ...input.designSettings,
-        sections: mergeTemplateSections({
-          ...latest.designSettings.sections,
-          ...input.designSettings.sections,
-        }),
-      }
-    : latest.designSettings
-
-  const htmlContent = input.htmlContent?.trim()
-    ? input.htmlContent.trim()
-    : applyDesignSettingsToHtml(
-        latest.htmlContent,
-        designSettings,
-        logoPreviewPath(designSettings.logoFileId),
-      )
+  const designSettings: InvoiceTemplateDesignSettings = {
+    ...latest.designSettings,
+    ...input.designSettings,
+    sections: mergeTemplateSections({
+      ...latest.designSettings.sections,
+      ...input.designSettings.sections,
+    }),
+  }
 
   const [version] = await db.insert(invoiceTemplateVersions).values({
     templateId,
     versionNumber: latest.versionNumber + 1,
     status: 'published',
-    htmlContent,
+    htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
     designSettings,
     publishedAt: new Date(),
     publishedBy: actorId,
@@ -248,7 +236,7 @@ export async function duplicateInvoiceTemplate(
     templateId: template!.id,
     versionNumber: 1,
     status: 'draft',
-    htmlContent: sourceVersion.htmlContent,
+    htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
     designSettings: sourceVersion.designSettings,
     createdBy: actorId,
   })
@@ -324,13 +312,12 @@ export async function getTemplatePreviewInvoice(db: Db) {
 
 export interface TestRenderTemplatePdfInput {
   designSettings?: InvoiceTemplateDesignSettings
-  htmlContent?: string
 }
 
 export async function previewTemplatePdf(
   db: Db,
   templateId: string,
-  _htmlContent: string,
+  previewDesignSettings?: InvoiceTemplateDesignSettings,
 ) {
   const detail = await getInvoiceTemplateDetail(db, templateId)
   if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
@@ -340,7 +327,17 @@ export async function previewTemplatePdf(
 
   const invoiceDetail = await getInvoiceDetail(db, preview.id)
   const business = await getBusinessProfile(db)
-  const designSettings = detail.latestVersion.designSettings
+  const baseSettings = detail.publishedVersion?.designSettings ?? detail.latestVersion.designSettings
+  const designSettings: InvoiceTemplateDesignSettings = previewDesignSettings
+    ? {
+        ...baseSettings,
+        ...previewDesignSettings,
+        sections: mergeTemplateSections({
+          ...baseSettings.sections,
+          ...previewDesignSettings.sections,
+        }),
+      }
+    : baseSettings
   const data = buildInvoicePdfData(invoiceDetail, {
     company: { name: business.businessName || undefined },
     design: designSettings,

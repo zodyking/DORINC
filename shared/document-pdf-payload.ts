@@ -1,7 +1,7 @@
 import { formatMoney, parseMoney } from './money'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
-import { DEFAULT_INVOICE_TEMPLATE_DESIGN } from './invoice-template-design'
+import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from './invoice-template-design'
 
 export type DocumentPdfType = 'invoice' | 'estimate'
 
@@ -67,7 +67,7 @@ export interface DocumentPdfData {
   totals: DocumentPdfTotals
   note: string
   company: DocumentPdfCompany
-  design: Pick<InvoiceTemplateDesignSettings, 'accentColor' | 'accentColor2' | 'fontSans' | 'fontMono'>
+  design: Pick<InvoiceTemplateDesignSettings, 'accentColor' | 'accentColor2' | 'fontSans' | 'fontMono' | 'sections'>
 }
 
 export interface DocumentPdfRenderPayload {
@@ -306,6 +306,7 @@ export function buildInvoicePdfData(
       accentColor2: design.accentColor2,
       fontSans: design.fontSans,
       fontMono: design.fontMono,
+      sections: mergeTemplateSections(design.sections),
     },
   }
 }

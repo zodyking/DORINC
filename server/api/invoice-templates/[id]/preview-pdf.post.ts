@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, previewTemplatePdfSchema)
 
   try {
-    const { pdf } = await previewTemplatePdf(useDb(), id, body.htmlContent)
+    const { pdf } = await previewTemplatePdf(useDb(), id, body.designSettings)
 
     setResponseHeader(event, 'Content-Type', 'application/pdf')
     setResponseHeader(event, 'Content-Disposition', 'inline; filename="template-preview.pdf"')

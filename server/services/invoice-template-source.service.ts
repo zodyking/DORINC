@@ -2,13 +2,14 @@ import { and, desc, eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { InvoiceTemplateDesignSettings } from '../db/schema/invoice-templates'
 import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
-import { DEFAULT_INVOICE_TEMPLATE_DESIGN } from '../../shared/invoice-template-design'
-import { applyDesignSettingsToHtml } from '../../shared/invoice-template-html'
-import { loadInvoiceTemplateReferenceHtml } from '../assets/invoice-template-reference.loader'
+import {
+  BLADE_INVOICE_TEMPLATE_VIEW,
+  DEFAULT_INVOICE_TEMPLATE_DESIGN,
+} from '../../shared/invoice-template-design'
 
-/** Template source for invoice/estimate PDF rendering. */
+/** Template source for invoice/estimate PDF rendering (Laravel Blade). */
 export interface InvoicePdfTemplateSource {
-  htmlContent: string
+  bladeView: typeof BLADE_INVOICE_TEMPLATE_VIEW
   designSettings: InvoiceTemplateDesignSettings
   /** DB version id when a published designer template is active; null for built-in. */
   templateVersionId: string | null
@@ -18,7 +19,7 @@ export interface InvoicePdfTemplateSource {
 /** Built-in default invoice PDF template — always available without database seeding. */
 export function getBuiltInInvoicePdfTemplate(): InvoicePdfTemplateSource {
   return {
-    htmlContent: loadInvoiceTemplateReferenceHtml(),
+    bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
     designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
     templateVersionId: null,
     isBuiltIn: true,
@@ -48,27 +49,11 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
   if (!row) return getBuiltInInvoicePdfTemplate()
 
   return {
-    htmlContent: row.version.htmlContent,
+    bladeView: BLADE_INVOICE_TEMPLATE_VIEW,
     designSettings: row.version.designSettings,
     templateVersionId: row.version.id,
     isBuiltIn: false,
   }
-}
-
-function logoPreviewPath(fileId: string | null | undefined): string | null {
-  if (!fileId) return null
-  const base = process.env.APP_URL?.trim().replace(/\/$/, '')
-  const path = `/api/files/${fileId}/preview`
-  return base ? `${base}${path}` : path
-}
-
-/** Apply designer settings to template HTML before invoice data merge. */
-export function prepareInvoiceTemplateHtml(template: InvoicePdfTemplateSource): string {
-  return applyDesignSettingsToHtml(
-    template.htmlContent,
-    template.designSettings,
-    logoPreviewPath(template.designSettings.logoFileId),
-  )
 }
 
 export function pdfRenderOptionsFromTemplate(template: InvoicePdfTemplateSource) {

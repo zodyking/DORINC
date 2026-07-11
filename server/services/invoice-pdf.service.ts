@@ -64,7 +64,7 @@ export async function getDefaultPublishedTemplateVersion(db: Db) {
   return {
     version: {
       id: template.templateVersionId,
-      htmlContent: template.htmlContent,
+      bladeView: template.bladeView,
       designSettings: template.designSettings,
     },
     isBuiltIn: template.isBuiltIn,

@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm'
 import type { Db } from './client'
-import { loadInvoiceTemplateReferenceHtml } from '../assets/invoice-template-reference.loader'
+import { BLADE_INVOICE_TEMPLATE_MARKER } from '../../shared/invoice-template-design'
 import {
   DEFAULT_INVOICE_TEMPLATE_DESIGN,
   invoiceTemplateVersions,
@@ -10,12 +10,8 @@ import {
 export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'standard-invoice'
 export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Standard Invoice'
 
-export { resolveInvoiceTemplateReferencePath } from '../assets/invoice-template-reference.loader'
-
 /** Idempotent seed — default template published as v1 (P1-27). */
 export async function seedInvoiceTemplates(db: Db) {
-  const htmlContent = loadInvoiceTemplateReferenceHtml()
-
   const [template] = await db.insert(invoiceTemplates)
     .values({
       name: DEFAULT_INVOICE_TEMPLATE_NAME,
@@ -46,21 +42,13 @@ export async function seedInvoiceTemplates(db: Db) {
         templateId: template!.id,
         versionNumber: 1,
         status: 'published',
-        htmlContent,
+        htmlContent: BLADE_INVOICE_TEMPLATE_MARKER,
         designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
         publishedAt: new Date(),
       })
       .onConflictDoNothing({
         target: [invoiceTemplateVersions.templateId, invoiceTemplateVersions.versionNumber],
       })
-  }
-  else {
-    await db.update(invoiceTemplateVersions)
-      .set({ htmlContent })
-      .where(and(
-        eq(invoiceTemplateVersions.templateId, template!.id),
-        eq(invoiceTemplateVersions.versionNumber, 1),
-      ))
   }
 
   const published = await db.select()

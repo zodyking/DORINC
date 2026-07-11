@@ -2,13 +2,15 @@
 import { config } from 'dotenv'
 import { and, eq, desc } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { readFileSync } from 'node:fs'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
+  BLADE_INVOICE_TEMPLATE_MARKER,
+  mergeTemplateSections,
+} from '../../shared/invoice-template-design'
+import {
   DEFAULT_INVOICE_TEMPLATE_NAME,
   DEFAULT_INVOICE_TEMPLATE_SLUG,
-  resolveInvoiceTemplateReferencePath,
   seedInvoiceTemplates,
 } from '../../server/db/seed-invoice-templates'
 import {
@@ -28,7 +30,7 @@ afterAll(async () => {
 })
 
 describe('P1-27 invoice template seed', () => {
-  it('seeds Professional Bill Matrix as published v1', async () => {
+  it('seeds standard Blade template as published v1', async () => {
     const { template, publishedVersion, baselineVersion } = await seedInvoiceTemplates(db)
 
     expect(template.name).toBe(DEFAULT_INVOICE_TEMPLATE_NAME)
@@ -37,11 +39,8 @@ describe('P1-27 invoice template seed', () => {
 
     expect(publishedVersion.versionNumber).toBeGreaterThanOrEqual(1)
     expect(publishedVersion.status).toBe('published')
-    expect(publishedVersion.htmlContent.length).toBeGreaterThan(1000)
+    expect(publishedVersion.htmlContent).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
     expect(baselineVersion.designSettings.pageSize).toBe('Letter')
-
-    const referenceHtml = readFileSync(resolveInvoiceTemplateReferencePath(), 'utf8')
-    expect(baselineVersion.htmlContent).toBe(referenceHtml)
 
     const [storedTemplate] = await db.select().from(invoiceTemplates)
       .where(eq(invoiceTemplates.slug, DEFAULT_INVOICE_TEMPLATE_SLUG))
@@ -78,8 +77,8 @@ describe('P1-27 invoice template seed', () => {
     expect(version.status).toBe('published')
     expect(version.designSettings.pageSize).toBe('A4')
     expect(version.designSettings.accentColor).toBe('#4f46e5')
-    expect(version.htmlContent).toContain('#4f46e5')
-    expect(version.htmlContent).toContain('size: A4')
+    expect(version.htmlContent).toBe(BLADE_INVOICE_TEMPLATE_MARKER)
+    expect(mergeTemplateSections(version.designSettings.sections).vehicle.visible).toBe(true)
 
     const [priorPublished] = await db.select().from(invoiceTemplateVersions)
       .where(and(

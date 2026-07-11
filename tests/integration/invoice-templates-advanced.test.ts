@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
+import { mergeTemplateSections } from '../../shared/invoice-template-design'
 import { seedInvoiceTemplates } from '../../server/db/seed-invoice-templates'
 import { invoiceTemplates } from '../../server/db/schema/invoice-templates'
 import {
@@ -12,7 +13,6 @@ import {
   setDefaultInvoiceTemplate,
   testRenderTemplatePdf,
 } from '../../server/services/invoice-templates.service'
-import { applySectionVisibilityToHtml } from '../../shared/invoice-template-html'
 import { users } from '../../server/db/schema/auth'
 import {
   approveInvoice,
@@ -47,10 +47,10 @@ describe('P3-05 advanced template designer', () => {
     await db.delete(invoiceTemplates).where(eq(invoiceTemplates.id, detail!.template.id))
   })
 
-  it('publish merges section visibility into HTML', async () => {
+  it('publish stores section visibility in design settings', async () => {
     const { template } = await seedInvoiceTemplates(db)
     const [actor] = await db.select({ id: users.id }).from(users).limit(1)
-    const before = await publishInvoiceTemplateVersion(db, template.id, {
+    const published = await publishInvoiceTemplateVersion(db, template.id, {
       designSettings: {
         pageSize: 'Letter',
         marginInches: 0.5,
@@ -66,8 +66,9 @@ describe('P3-05 advanced template designer', () => {
       },
     }, actor!.id)
 
-    expect(before.htmlContent).toContain('data-designer-sections="true"')
-    expect(before.htmlContent).toContain('[data-section="vehicle"]{ display:none')
+    const sections = mergeTemplateSections(published.designSettings.sections)
+    expect(sections.vehicle.visible).toBe(false)
+    expect(sections.footer.visible).toBe(false)
   })
 
   it('setDefault switches default template flag', async () => {
@@ -104,12 +105,15 @@ describe('P3-05 advanced template designer', () => {
 
     const { template } = await seedInvoiceTemplates(db)
     const { job } = await testRenderTemplatePdf(db, template.id, {
-      pageSize: 'Letter',
-      marginInches: 0.5,
-      accentColor: '#ffd400',
-      accentColor2: '#0b0f1a',
-      fontSans: 'ui-sans-serif, system-ui, sans-serif',
-      fontMono: 'ui-monospace, monospace',
+      designSettings: {
+        pageSize: 'Letter',
+        marginInches: 0.5,
+        accentColor: '#ffd400',
+        accentColor2: '#0b0f1a',
+        fontSans: 'ui-sans-serif, system-ui, sans-serif',
+        fontMono: 'ui-monospace, monospace',
+        logoFileId: null,
+      },
     }, actor!.id)
 
     expect(job.entityType).toBe('invoice')
@@ -119,13 +123,5 @@ describe('P3-05 advanced template designer', () => {
     await db.delete(invoices).where(eq(invoices.customerId, cust.id))
     await db.delete(vehicles).where(eq(vehicles.customerId, cust.id))
     await db.delete(customers).where(eq(customers.id, cust.id))
-  })
-
-  it('applySectionVisibilityToHtml injects hide rules', () => {
-    const html = '<html><head></head><body><div data-section="vehicle">x</div></body></html>'
-    const out = applySectionVisibilityToHtml(html, {
-      sections: { vehicle: { visible: false, label: 'Vehicle' } },
-    })
-    expect(out).toContain('[data-section="vehicle"]{ display:none')
   })
 })

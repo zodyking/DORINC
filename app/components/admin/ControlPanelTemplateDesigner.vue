@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import {
+  designSettingsFromForm,
+  detectFontPreset,
+  logoPreviewUrl,
   publishStatusLabel,
+  sectionsFromSettings,
+  TEMPLATE_FONT_OPTIONS,
+  TEMPLATE_PAGE_SIZE_OPTIONS,
+  TEMPLATE_SECTION_DEFS,
   templateOptionLabel,
   versionStatusLabel,
   type InvoiceTemplateDesignSettings,
+  type InvoiceTemplateSectionKey,
+  type TemplateFontPreset,
 } from '~/utils/invoice-template-designer-ui'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 
@@ -20,7 +29,6 @@ interface TemplateVersionRow {
   id: string
   versionNumber: number
   status: string
-  htmlContent: string
   designSettings: InvoiceTemplateDesignSettings
   publishedAt: string | null
 }
@@ -37,24 +45,6 @@ interface TemplateDetailResponse {
   usageCount: number
 }
 
-const TD_SNIPPETS = [
-  { label: 'company_info', snippet: ' data-section="company_info"' },
-  { label: 'invoice_meta', snippet: ' data-section="invoice_meta"' },
-  { label: 'customer', snippet: ' data-section="customer"' },
-  { label: 'vehicle', snippet: ' data-section="vehicle"' },
-  { label: 'line_items', snippet: ' data-section="line_items"' },
-  { label: 'totals', snippet: ' data-section="totals"' },
-  { label: 'footer', snippet: ' data-section="footer"' },
-  { label: '--accent', snippet: 'var(--accent)' },
-  { label: 'line row', snippet: `<tr>
-  <td><div class="desc">Description</div></td>
-  <td class="center"><span class="type-badge">L</span></td>
-  <td class="center mono">1</td>
-  <td class="num mono">$0.00</td>
-  <td class="num mono">$0.00</td>
-</tr>` },
-] as const
-
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -64,10 +54,17 @@ const canRead = computed(() => auth.loaded && auth.can('templates.read.all'))
 const canManage = computed(() => auth.loaded && auth.can('templates.manage.all'))
 
 const selectedTemplateId = ref<string | null>(null)
-const sourceCode = ref('')
-const savedSource = ref('')
-const dirty = ref(false)
-const codeEditor = ref<HTMLTextAreaElement | null>(null)
+const savedSettings = ref<InvoiceTemplateDesignSettings | null>(null)
+
+const form = reactive({
+  pageSize: 'Letter' as 'Letter' | 'A4',
+  marginInches: 0.5,
+  accentColor: '#2563eb',
+  accentColor2: '#1e293b',
+  fontPreset: 'system' as TemplateFontPreset,
+  logoFileId: null as string | null,
+  sections: sectionsFromSettings() as Record<InvoiceTemplateSectionKey, { visible: boolean, label: string }>,
+})
 
 const publishBusy = ref(false)
 const publishError = ref('')
@@ -75,6 +72,7 @@ const actionError = ref('')
 const actionMessage = ref('')
 const testPdfBusy = ref(false)
 const duplicateBusy = ref(false)
+const logoUploadBusy = ref(false)
 
 const previewBusy = ref(false)
 const previewError = ref('')
@@ -102,6 +100,15 @@ const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ 
   '/api/invoice-templates/preview-invoice',
   { server: false, lazy: true, immediate: false },
 )
+
+const currentDesignSettings = computed(() => designSettingsFromForm(form))
+
+const dirty = computed(() => {
+  if (!savedSettings.value) return false
+  return JSON.stringify(currentDesignSettings.value) !== JSON.stringify(savedSettings.value)
+})
+
+const logoUrl = computed(() => logoPreviewUrl(form.logoFileId))
 
 watch(canRead, (allowed) => {
   if (allowed) {
@@ -140,20 +147,21 @@ const template = computed(() => data.value?.template ?? null)
 const activeVersion = computed(() => data.value?.publishedVersion ?? data.value?.latestVersion ?? null)
 const usageCount = computed(() => data.value?.usageCount ?? 0)
 
-function loadSourceFromVersion(v: TemplateVersionRow) {
-  sourceCode.value = v.htmlContent
-  savedSource.value = v.htmlContent
-  dirty.value = false
+function loadSettingsFromVersion(settings: InvoiceTemplateDesignSettings) {
+  form.pageSize = settings.pageSize
+  form.marginInches = settings.marginInches
+  form.accentColor = settings.accentColor
+  form.accentColor2 = settings.accentColor2
+  form.fontPreset = detectFontPreset(settings)
+  form.logoFileId = settings.logoFileId ?? null
+  form.sections = sectionsFromSettings(settings)
+  savedSettings.value = designSettingsFromForm(form)
 }
 
 watch(activeVersion, (v) => {
   if (!v) return
-  loadSourceFromVersion(v)
+  loadSettingsFromVersion(v.designSettings)
 }, { immediate: true })
-
-watch(sourceCode, () => {
-  dirty.value = sourceCode.value !== savedSource.value
-})
 
 const statusText = computed(() => {
   const v = activeVersion.value
@@ -182,32 +190,10 @@ const loadErrorMessage = computed(() => {
   return 'Could not load the invoice template.'
 })
 
-function insertSnippet(snippet: string) {
-  const el = codeEditor.value
-  if (!el || !canManage.value) return
-  const start = el.selectionStart
-  const end = el.selectionEnd
-  const val = sourceCode.value
-  sourceCode.value = val.slice(0, start) + snippet + val.slice(end)
-  nextTick(() => {
-    el.selectionStart = el.selectionEnd = start + snippet.length
-    el.focus()
-  })
-}
-
-function formatSource() {
-  sourceCode.value = sourceCode.value
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim() + '\n'
-}
-
-function resetSource() {
+function resetSettings() {
   if (!activeVersion.value) return
   if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
-  loadSourceFromVersion(activeVersion.value)
+  loadSettingsFromVersion(activeVersion.value.designSettings)
 }
 
 async function onTemplateChange(ev: Event) {
@@ -219,20 +205,20 @@ async function onTemplateChange(ev: Event) {
 }
 
 async function refreshPreview() {
-  if (!canRead.value || !template.value || !sourceCode.value.trim()) return
+  if (!canRead.value || !template.value) return
   previewBusy.value = true
   previewError.value = ''
   try {
     const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
       method: 'POST',
-      body: { htmlContent: sourceCode.value },
+      body: { designSettings: currentDesignSettings.value },
       responseType: 'blob',
     })
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     previewUrl.value = URL.createObjectURL(blob)
   }
   catch (e: unknown) {
-    previewError.value = await fetchErrorMessage(e, 'Preview failed — check template HTML and PDF service')
+    previewError.value = await fetchErrorMessage(e, 'Preview failed — check PDF service')
     if (previewUrl.value) {
       URL.revokeObjectURL(previewUrl.value)
       previewUrl.value = ''
@@ -244,19 +230,15 @@ async function refreshPreview() {
 }
 
 async function publishTemplate() {
-  if (!canManage.value || !template.value || !activeVersion.value) return
+  if (!canManage.value || !template.value) return
   publishBusy.value = true
   publishError.value = ''
   try {
     await $fetch(`/api/invoice-templates/${template.value.id}/publish`, {
       method: 'POST',
-      body: {
-        htmlContent: sourceCode.value,
-        designSettings: activeVersion.value.designSettings,
-      },
+      body: { designSettings: currentDesignSettings.value },
     })
-    savedSource.value = sourceCode.value
-    dirty.value = false
+    savedSettings.value = currentDesignSettings.value
     await refresh()
     await refreshList()
     actionMessage.value = 'Template saved and published'
@@ -315,7 +297,7 @@ async function testRenderPdf() {
   try {
     await $fetch<{ job: { id: string } }>(
       `/api/invoice-templates/${template.value.id}/test-pdf`,
-      { method: 'POST', body: { htmlContent: sourceCode.value } },
+      { method: 'POST', body: { designSettings: currentDesignSettings.value } },
     )
     actionMessage.value = 'Test PDF queued — it will appear in your downloads shortly.'
   }
@@ -325,6 +307,35 @@ async function testRenderPdf() {
   finally {
     testPdfBusy.value = false
   }
+}
+
+async function onLogoPick(ev: Event) {
+  if (!canManage.value || !template.value) return
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  logoUploadBusy.value = true
+  actionError.value = ''
+  try {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('ownerEntityType', 'template')
+    body.append('ownerEntityId', template.value.id)
+    body.append('fileKind', 'attachment')
+    const res = await $fetch<{ file: { id: string } }>('/api/files', { method: 'POST', body })
+    form.logoFileId = res.file.id
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Logo upload failed'
+  }
+  finally {
+    logoUploadBusy.value = false
+  }
+}
+
+function clearLogo() {
+  form.logoFileId = null
 }
 
 onUnmounted(() => {
@@ -359,7 +370,7 @@ onUnmounted(() => {
             <span v-if="template.isDefault" class="pill ok" style="vertical-align:3px;margin-left:6px;">Default</span>
           </h3>
           <p style="margin:6px 0 0;font-size:13px;color:#64748b;">
-            Edit the full HTML layout — paste code, insert snippets, preview as PDF, and save.
+            Customize the Laravel Blade invoice layout — colors, fonts, sections, and page setup.
           </p>
         </div>
         <div class="right" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -426,36 +437,102 @@ onUnmounted(() => {
                   {{ templateOptionLabel(t.name, t.isDefault, t.latestVersion?.status) }}
                 </option>
               </select>
-              <span class="badge">HTML</span>
+              <span class="badge">Blade</span>
             </div>
             <div style="display:flex; gap:8px;">
-              <button type="button" class="btn ghost sm" :disabled="!canManage" @click="formatSource">Format</button>
-              <button type="button" class="btn ghost sm" :disabled="!dirty" @click="resetSource">Reset</button>
+              <button type="button" class="btn ghost sm" :disabled="!dirty" @click="resetSettings">Reset</button>
             </div>
           </div>
 
-          <div class="td-snippets" aria-label="Insert HTML snippets">
-            <button
-              v-for="item in TD_SNIPPETS"
-              :key="item.label"
-              type="button"
-              :disabled="!canManage"
-              @click="insertSnippet(item.snippet)"
-            >
-              {{ item.label }}
-            </button>
+          <div class="td-settings">
+            <label class="fld">
+              Page size
+              <select v-model="form.pageSize" class="fld" :disabled="!canManage">
+                <option v-for="opt in TEMPLATE_PAGE_SIZE_OPTIONS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </label>
+
+            <label class="fld">
+              Margins (inches)
+              <input
+                v-model.number="form.marginInches"
+                type="number"
+                min="0.25"
+                max="1.5"
+                step="0.05"
+                :disabled="!canManage"
+              >
+            </label>
+
+            <label class="fld">
+              Font family
+              <select v-model="form.fontPreset" class="fld" :disabled="!canManage">
+                <option v-for="opt in TEMPLATE_FONT_OPTIONS" :key="opt.key" :value="opt.key">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </label>
+
+            <div class="fld">
+              <span>Accent colors</span>
+              <div class="td-color-row">
+                <input v-model="form.accentColor" type="color" :disabled="!canManage" aria-label="Primary accent">
+                <input v-model="form.accentColor" type="text" maxlength="7" :disabled="!canManage">
+              </div>
+              <div class="td-color-row">
+                <input v-model="form.accentColor2" type="color" :disabled="!canManage" aria-label="Secondary accent">
+                <input v-model="form.accentColor2" type="text" maxlength="7" :disabled="!canManage">
+              </div>
+            </div>
+
+            <div class="fld">
+              <span>Logo</span>
+              <div class="td-logo-block">
+                <div class="td-logo-preview" :style="{ '--pv-accent': form.accentColor }">
+                  <img v-if="logoUrl" :src="logoUrl" alt="Logo preview">
+                  <span v-else>DOR<br>INC</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <label v-if="canManage" class="btn sm" style="cursor:pointer;">
+                    {{ logoUploadBusy ? 'Uploading…' : 'Upload logo' }}
+                    <input type="file" accept="image/*" hidden :disabled="logoUploadBusy" @change="onLogoPick">
+                  </label>
+                  <button v-if="canManage && form.logoFileId" type="button" class="btn ghost sm" @click="clearLogo">
+                    Remove logo
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <fieldset class="fld" style="border:none; padding:0; margin:12px 0 0;">
+              <legend style="font-size:12px; font-weight:600; color:#475569; margin-bottom:8px;">Sections</legend>
+              <div
+                v-for="section in TEMPLATE_SECTION_DEFS"
+                :key="section.key"
+                style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;"
+              >
+                <label style="display:flex; align-items:center; gap:6px; min-width:180px;">
+                  <input
+                    v-model="form.sections[section.key].visible"
+                    type="checkbox"
+                    :disabled="!canManage || section.required"
+                  >
+                  <span style="font-size:13px;">{{ section.label }}</span>
+                </label>
+                <input
+                  v-model="form.sections[section.key].label"
+                  type="text"
+                  class="fld"
+                  style="flex:1; min-width:140px; margin:0;"
+                  :placeholder="section.label"
+                  :disabled="!canManage"
+                >
+              </div>
+            </fieldset>
           </div>
 
-          <div class="cbody">
-            <textarea
-              ref="codeEditor"
-              v-model="sourceCode"
-              class="td-code"
-              spellcheck="false"
-              aria-label="Invoice template HTML source"
-              :readonly="!canManage"
-            />
-          </div>
           <div class="td-status" :class="{ dirty }">{{ statusText }}</div>
         </div>
       </div>
@@ -465,12 +542,12 @@ onUnmounted(() => {
           <div class="td-preview-head">
             <div>
               <strong style="font-size:13px;">PDF preview</strong>
-              <span>Renders via DomPDF · {{ previewInvoiceLabel }}</span>
+              <span>Laravel Blade + DomPDF · {{ previewInvoiceLabel }}</span>
             </div>
             <button
               type="button"
               class="btn sm"
-              :disabled="previewBusy || !sourceCode.trim()"
+              :disabled="previewBusy"
               @click="refreshPreview"
             >
               {{ previewBusy ? 'Rendering…' : 'Refresh preview' }}
@@ -480,20 +557,21 @@ onUnmounted(() => {
           <div class="pvwrap td-pdf-wrap">
             <p v-if="previewError" class="td-preview-error">{{ previewError }}</p>
             <p v-else-if="!previewUrl && !previewBusy" class="td-preview-empty">
-              Click <strong>Refresh preview</strong> to render the current HTML as PDF.
+              Click <strong>Refresh preview</strong> to render the current template settings as PDF.
             </p>
-            <iframe
-              v-if="previewUrl"
-              :src="previewUrl"
-              class="td-pdf-frame"
-              title="Invoice template PDF preview"
-            />
+            <ClientOnly v-else-if="previewUrl">
+              <PdfViewer
+                :src="previewUrl"
+                title="Invoice template PDF preview"
+                :show-download="false"
+              />
+            </ClientOnly>
           </div>
 
           <dl class="kv" style="margin:0; border-top:1px solid #f1f5f9;">
             <dt>Version</dt><dd>{{ versionMeta }}</dd>
             <dt>Used by</dt><dd>{{ usageCount }} invoice{{ usageCount === 1 ? '' : 's' }}</dd>
-            <dt>Engine</dt><dd>Laravel Blade + DomPDF</dd>
+            <dt>Engine</dt><dd>Laravel Blade (invoices/pdf)</dd>
           </dl>
         </div>
       </div>
@@ -510,14 +588,9 @@ onUnmounted(() => {
   min-height:520px;
   padding:12px;
 }
-.td-pdf-frame {
+.td-pdf-wrap :deep(.pdf-native-viewer) {
   flex:1;
-  width:100%;
   min-height:480px;
-  border:none;
-  border-radius:8px;
-  background:#fff;
-  box-shadow:0 8px 32px -8px rgba(15,23,42,.25);
 }
 .td-preview-empty,
 .td-preview-error {

@@ -1,3 +1,7 @@
+/** Marker stored in invoice_template_versions.html_content — layout is always Laravel Blade. */
+export const BLADE_INVOICE_TEMPLATE_VIEW = 'invoices/pdf'
+export const BLADE_INVOICE_TEMPLATE_MARKER = `laravel-blade:${BLADE_INVOICE_TEMPLATE_VIEW}`
+
 /** Designer settings persisted with each template version (SPEC §9). */
 export interface InvoiceTemplateSectionConfig {
   visible: boolean

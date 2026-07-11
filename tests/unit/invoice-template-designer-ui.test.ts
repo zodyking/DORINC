@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { applyDesignSettingsToHtml, applySectionVisibilityToHtml } from '../../shared/invoice-template-html'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from '../../shared/invoice-template-design'
 import {
   designSettingsFromForm,
@@ -13,37 +12,6 @@ import {
   versionStatusLabel,
 } from '../../app/utils/invoice-template-designer-ui'
 
-const SAMPLE_HTML = `<!doctype html>
-<style>
-  @page { size: Letter; margin: 0.5in; }
-  :root{
-    --accent:#ffd400; --accent2:#0b0f1a;
-    --sans: ui-sans-serif, system-ui; --mono: ui-monospace;
-  }
-</style>
-<body><div class="logo">DOR<br/>INC</div></body>`
-
-describe('invoice-template-html (P1-30)', () => {
-  it('patches CSS variables and page size in stored HTML', () => {
-    const out = applyDesignSettingsToHtml(SAMPLE_HTML, {
-      ...DEFAULT_INVOICE_TEMPLATE_DESIGN,
-      accentColor: '#4f46e5',
-      pageSize: 'A4',
-      marginInches: 0.75,
-    })
-    expect(out).toContain('--accent:#4f46e5;')
-    expect(out).toContain('size: A4; margin: 0.75in')
-  })
-
-  it('injects logo preview path when logoFileId is set', () => {
-    const out = applyDesignSettingsToHtml(SAMPLE_HTML, {
-      ...DEFAULT_INVOICE_TEMPLATE_DESIGN,
-      logoFileId: '00000000-0000-4000-8000-000000000001',
-    }, '/api/files/00000000-0000-4000-8000-000000000001/preview')
-    expect(out).toContain('<img src="/api/files/00000000-0000-4000-8000-000000000001/preview"')
-  })
-})
-
 describe('invoice-template-designer-ui helpers (P1-30)', () => {
   it('maps font presets to design settings', () => {
     const settings = designSettingsFromForm({
@@ -53,6 +21,7 @@ describe('invoice-template-designer-ui helpers (P1-30)', () => {
       accentColor2: '#0b0f1a',
       fontPreset: 'inter',
       logoFileId: null,
+      sections: sectionsFromSettings(),
     })
     expect(settings.fontSans).toContain('Inter')
     expect(detectFontPreset(settings)).toBe('inter')
@@ -100,15 +69,5 @@ describe('invoice-template-designer-ui helpers (P1-30)', () => {
     expect(sectionVisible(sections, 'vehicle')).toBe(false)
     expect(sectionVisible(sections, 'line_items')).toBe(true)
     expect(mergeTemplateSections(sections).vehicle.visible).toBe(false)
-  })
-})
-
-describe('invoice-template-html sections (P3-05)', () => {
-  it('hides sections via injected CSS', () => {
-    const html = '<html><head></head><body><div data-section="footer">x</div></body></html>'
-    const out = applySectionVisibilityToHtml(html, {
-      sections: { footer: { visible: false, label: 'Footer' } },
-    })
-    expect(out).toContain('[data-section="footer"]{ display:none')
   })
 })
