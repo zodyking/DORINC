@@ -83,7 +83,7 @@ const nav = computed<NavSection[]>(() => {
   if (isSuperAdmin.value) {
     sections.push({
       label: 'Administration',
-      items: [{ label: 'Settings', to: '/admin', ico: '⚙', permission: 'system.admin.all' }],
+      items: [{ label: 'Control Panel', to: '/admin', ico: '⚙', permission: 'system.admin.all' }],
     })
   }
 

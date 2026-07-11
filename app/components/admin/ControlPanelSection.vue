@@ -4,6 +4,7 @@ const props = defineProps<{
   title: string
   icon?: string
   subtitle?: string
+  statusTone?: 'ok' | 'warn' | 'bad'
   open?: boolean
 }>()
 
@@ -32,7 +33,10 @@ function toggle() {
     >
       <span v-if="icon" class="cp-section__icon" aria-hidden="true">{{ icon }}</span>
       <span class="cp-section__text">
-        <b>{{ title }}</b>
+        <b>
+          <span v-if="statusTone" class="cp-section__status-dot" :class="statusTone" aria-hidden="true" />
+          {{ title }}
+        </b>
         <small v-if="subtitle">{{ subtitle }}</small>
       </span>
       <span class="cp-section__chev" aria-hidden="true">{{ isOpen ? '▾' : '▸' }}</span>
