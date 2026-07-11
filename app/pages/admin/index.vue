@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Control Panel — workspace settings, system health, and configuration.
 import ControlPanelBackupRestore from '~/components/admin/ControlPanelBackupRestore.vue'
-import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseChart.vue'
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelSection from '~/components/admin/ControlPanelSection.vue'
+import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMonitor.vue'
 import ControlPanelTemplateDesigner from '~/components/admin/ControlPanelTemplateDesigner.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
@@ -14,20 +14,12 @@ import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
   aiHealthTone,
-  aiStatusLabel,
   backupHealthTone,
-  backupStatusLabel,
-  databaseHealthTone,
-  formatAiCost,
   formatCapUsage,
-  formatDbLatency,
-  pdfWorkerHealthTone,
-  pdfWorkerStatusLabel,
+  securitySectionTone,
   smtpHealthTone,
-  smtpSummary,
   suspiciousAlertRuleLabel,
   suspiciousAlertSeverityClass,
-  workerQueueHealthTone,
   workerQueueStatusLabel,
 } from '~/utils/admin-panel-ui'
 
@@ -219,6 +211,32 @@ async function dismissSuspiciousAlert(alertId: string) {
 
 const { data: status, refresh, error } = await useFetch<SystemStatus>('/api/admin/system/status')
 
+const monitorStatus = computed(() => {
+  if (!status.value) return null
+  return {
+    database: status.value.database,
+    dbLatencyMs: status.value.dbLatencyMs,
+    version: status.value.version,
+    brandName: BRAND_NAME,
+    smtp: status.value.smtp,
+    backup: {
+      status: status.value.backup.status,
+      message: status.value.backup.message,
+    },
+    ai: status.value.ai ?? null,
+    pdfWorker: status.value.pdfWorker,
+    workerQueue: status.value.workerQueue,
+  }
+})
+
+const securityTone = computed(() => {
+  if (!status.value) return undefined
+  return securitySectionTone(
+    status.value.workerQueue.status,
+    suspiciousAlerts.value?.items?.length ?? 0,
+  )
+})
+
 const canManageAi = computed(() => auth.can('ai.admin.all'))
 const { data: aiData, refresh: refreshAi } = await useFetch<{
   settings: AiSettingsView
@@ -319,8 +337,8 @@ async function testAiConnection() {
 
 <template>
   <section class="page active">
-    <StaffPageHead subtitle="Business profile, email, invoices, detection rules, backups, and system health">
-      <template #title>Settings</template>
+    <StaffPageHead subtitle="System monitoring, workspace configuration, and administration">
+      <template #title>Control Panel</template>
       <template #actions>
         <NuxtLink to="/setup" class="btn primary">Server Setup Wizard</NuxtLink>
       </template>
@@ -333,102 +351,11 @@ async function testAiConnection() {
 
     <template v-else-if="status">
       <div class="admin-overview">
-        <div class="admin-banner" style="margin-bottom:16px;">
-          <span class="ico">🔐</span>
-          <div>
-            <b>UI-managed configuration</b>
-            <p>Database, SMTP, encryption, workers, backups, and AI credentials are stored encrypted in PostgreSQL and managed through this panel or the setup wizard.</p>
-          </div>
-        </div>
-
-        <div class="health" style="margin-bottom:16px;">
-          <div class="hcard" :class="databaseHealthTone(status.database)">
-            <span class="ic">🗄</span>
-            <div>
-              <b>PostgreSQL</b>
-              <small>{{ formatDbLatency(status.dbLatencyMs) }}</small>
-            </div>
-            <span class="st pill" :class="status.database === 'ok' ? 'ok' : 'over'">
-              {{ status.database === 'ok' ? 'Connected' : 'Error' }}
-            </span>
-          </div>
-
-          <div class="hcard" :class="smtpHealthTone(status.smtp.configured)">
-            <span class="ic">✉</span>
-            <div>
-              <b>SMTP</b>
-              <small>{{ smtpSummary(status.smtp.host, status.smtp.port, status.smtp.configured) }}</small>
-            </div>
-            <span class="st pill" :class="status.smtp.configured ? 'ok' : 'warn'">
-              {{ status.smtp.configured ? 'Configured' : 'Action needed' }}
-            </span>
-          </div>
-
-          <div class="hcard ok">
-            <span class="ic">📦</span>
-            <div>
-              <b>App version</b>
-              <small>{{ BRAND_NAME }} v{{ status.version }}</small>
-            </div>
-            <span class="st pill ok">Running</span>
-          </div>
-
-          <div class="hcard" :class="pdfWorkerHealthTone(status.pdfWorker.status)">
-            <span class="ic">📄</span>
-            <div>
-              <b>PDF worker</b>
-              <small>{{ status.pdfWorker.message }}</small>
-            </div>
-            <span
-              class="st pill"
-              :class="status.pdfWorker.status === 'running' || status.pdfWorker.status === 'idle' ? 'ok' : status.pdfWorker.status === 'backlog' ? 'warn' : 'over'"
-            >
-              {{ pdfWorkerStatusLabel(status.pdfWorker.status) }}
-            </span>
-          </div>
-
-          <div class="hcard" :class="workerQueueHealthTone(status.workerQueue.status)">
-            <span class="ic">⚙</span>
-            <div>
-              <b>Worker queue</b>
-              <small>{{ status.workerQueue.message }}</small>
-            </div>
-            <span
-              class="st pill"
-              :class="status.workerQueue.status === 'healthy' || status.workerQueue.status === 'idle' ? 'ok' : status.workerQueue.status === 'backlog' ? 'warn' : 'over'"
-            >
-              {{ workerQueueStatusLabel(status.workerQueue.status) }}
-            </span>
-          </div>
-
-          <div class="hcard" :class="backupHealthTone(status.backup.status)">
-            <span class="ic">☁</span>
-            <div>
-              <b>Backup</b>
-              <small>{{ status.backup.message }}</small>
-            </div>
-            <span class="st pill" :class="status.backup.status === 'healthy' ? 'ok' : status.backup.status === 'error' ? 'over' : 'warn'">
-              {{ backupStatusLabel(status.backup.status) }}
-            </span>
-          </div>
-
-          <div v-if="status.ai" class="hcard" :class="aiHealthTone(status.ai.status)">
-            <span class="ic">✦</span>
-            <div>
-              <b>OpenRouter AI</b>
-              <small>
-                {{ status.ai.defaultModel ?? 'No model' }}
-                · {{ status.ai.hasApiKey ? 'key set' : 'no key' }}
-                · {{ formatAiCost(status.ai.monthlyCostUsd) }}
-              </small>
-            </div>
-            <span class="st pill" :class="status.ai.status === 'active' ? 'ok' : status.ai.status === 'error' ? 'over' : 'warn'">
-              {{ aiStatusLabel(status.ai.status) }}
-            </span>
-          </div>
-        </div>
-
-        <ControlPanelDatabaseChart style="margin-bottom:16px;" />
+        <ControlPanelSystemMonitor
+          v-if="monitorStatus"
+          :status="monitorStatus"
+          style="margin-bottom:16px;"
+        />
 
         <div class="card" style="margin-bottom:20px;">
           <div class="chead"><h3>Administration</h3></div>
@@ -441,7 +368,8 @@ async function testAiConnection() {
       </div>
 
       <div class="cp-sections">
-        <p class="cp-sections-label">Workspace</p>
+        <p class="cp-sections-label">Configuration</p>
+        <p class="cp-sections-sublabel">Workspace</p>
 
         <ControlPanelSection
           id="business"
@@ -459,6 +387,7 @@ async function testAiConnection() {
           title="Email (SMTP)"
           icon="✉️"
           subtitle="Outbound mail and test delivery"
+          :status-tone="smtpHealthTone(status.smtp.configured)"
           :open="openSections.email"
           @update:open="setSectionOpen('email', $event)"
         >
@@ -509,7 +438,7 @@ async function testAiConnection() {
           <ControlPanelTemplateDesigner />
         </ControlPanelSection>
 
-        <p class="cp-sections-label">System</p>
+        <p class="cp-sections-sublabel">System</p>
 
         <ControlPanelSection
           id="import"
@@ -527,6 +456,7 @@ async function testAiConnection() {
           title="Backup & Restore"
           icon="☁️"
           subtitle="Encrypted archives and Google Drive"
+          :status-tone="backupHealthTone(status.backup.status)"
           :open="openSections.backup"
           @update:open="setSectionOpen('backup', $event)"
         >
@@ -541,6 +471,7 @@ async function testAiConnection() {
           title="AI"
           icon="✦"
           subtitle="OpenRouter models, caps, and usage"
+          :status-tone="status.ai ? aiHealthTone(status.ai.status) : undefined"
           :open="openSections.ai"
           @update:open="setSectionOpen('ai', $event)"
         >
@@ -664,6 +595,7 @@ async function testAiConnection() {
           title="Security"
           icon="🔒"
           subtitle="Alerts and worker queue detail"
+          :status-tone="securityTone"
           :open="openSections.security"
           @update:open="setSectionOpen('security', $event)"
         >

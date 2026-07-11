@@ -7,6 +7,7 @@ import {
   backupHealthTone,
   backupRunStatusClass,
   backupStatusLabel,
+  buildSystemMonitorItems,
   databaseHealthTone,
   driveConnectionLabel,
   formatAiCost,
@@ -15,6 +16,7 @@ import {
   formatScheduleDisplay,
   pdfWorkerHealthTone,
   pdfWorkerStatusLabel,
+  securitySectionTone,
   smtpHealthTone,
   smtpSummary,
   workerQueueHealthTone,
@@ -71,5 +73,35 @@ describe('admin-panel-ui helpers (P1-34)', () => {
     expect(workerQueueHealthTone('error')).toBe('bad')
     expect(workerQueueStatusLabel('backlog')).toBe('Backlog')
     expect(aiFeatureLabel('email_send')).toBe('Email')
+  })
+
+  it('builds compact system monitor items from status payload', () => {
+    const items = buildSystemMonitorItems({
+      database: 'ok',
+      dbLatencyMs: 12,
+      version: '1.1.0',
+      brandName: 'DOBINCI',
+      smtp: { configured: true, host: 'smtp.gmail.com', port: 587 },
+      backup: { status: 'not_configured', message: 'No encrypted backups yet' },
+      ai: {
+        status: 'active',
+        defaultModel: 'anthropic/claude-3.5-sonnet',
+        hasApiKey: true,
+        monthlyCostUsd: 4.12,
+      },
+      pdfWorker: { status: 'idle', message: 'Queue idle · 0 failed' },
+      workerQueue: { status: 'idle', message: 'All queues idle · 0 pending' },
+    })
+
+    expect(items).toHaveLength(7)
+    expect(items[0]?.label).toBe('PostgreSQL')
+    expect(items[0]?.tone).toBe('ok')
+    expect(items.find(item => item.id === 'ai')?.statusText).toBe('Active')
+  })
+
+  it('maps security section tone from alerts and worker queue', () => {
+    expect(securitySectionTone('idle', 0)).toBe('ok')
+    expect(securitySectionTone('backlog', 0)).toBe('warn')
+    expect(securitySectionTone('idle', 2)).toBe('bad')
   })
 })

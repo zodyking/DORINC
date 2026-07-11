@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { formatDatabaseSizeGb, formatDatabaseSizeDelta } from '~/utils/admin-panel-ui'
 
+defineProps<{
+  embedded?: boolean
+}>()
+
 interface DatabaseSizePoint {
   recordedAt: string
   databaseBytes: number
@@ -59,8 +63,8 @@ function formatChartDate(iso: string): string {
 </script>
 
 <template>
-  <div class="card cp-db-chart">
-    <div class="chead">
+  <div :class="embedded ? 'cp-db-chart cp-db-chart--embedded' : 'card cp-db-chart'">
+    <div :class="embedded ? 'cp-db-chart__head' : 'chead'">
       <h3>Database storage</h3>
       <div class="right">
         <button type="button" class="btn sm" :disabled="pending" @click="refresh()">
@@ -68,7 +72,7 @@ function formatChartDate(iso: string): string {
         </button>
       </div>
     </div>
-    <div class="cbody">
+    <div :class="embedded ? 'cp-db-chart__body' : 'cbody'">
       <p v-if="error" class="settings-err">Could not load database size metrics.</p>
       <template v-else-if="data">
         <div class="cp-db-chart__stats">

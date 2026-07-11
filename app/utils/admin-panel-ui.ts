@@ -182,3 +182,111 @@ export function suspiciousAlertRuleLabel(ruleKey: string): string {
     default: return ruleKey
   }
 }
+
+export interface SystemMonitorStatusInput {
+  database: 'ok' | 'error'
+  dbLatencyMs: number | null
+  version: string
+  brandName: string
+  smtp: {
+    configured: boolean
+    host: string | null
+    port: number
+  }
+  backup: {
+    status: 'not_configured' | 'healthy' | 'error'
+    message: string
+  }
+  ai: {
+    status: AiHealthStatus
+    defaultModel: string | null
+    hasApiKey: boolean
+    monthlyCostUsd: number
+  } | null
+  pdfWorker: {
+    status: PdfWorkerStatus
+    message: string
+  }
+  workerQueue: {
+    status: WorkerQueueStatus
+    message: string
+  }
+}
+
+export interface SystemMonitorItem {
+  id: string
+  label: string
+  tone: HealthTone
+  summary: string
+  statusText: string
+}
+
+export function buildSystemMonitorItems(status: SystemMonitorStatusInput): SystemMonitorItem[] {
+  const items: SystemMonitorItem[] = [
+    {
+      id: 'database',
+      label: 'PostgreSQL',
+      tone: databaseHealthTone(status.database),
+      summary: formatDbLatency(status.dbLatencyMs),
+      statusText: status.database === 'ok' ? 'Connected' : 'Error',
+    },
+    {
+      id: 'smtp',
+      label: 'SMTP',
+      tone: smtpHealthTone(status.smtp.configured),
+      summary: smtpSummary(status.smtp.host, status.smtp.port, status.smtp.configured),
+      statusText: status.smtp.configured ? 'Configured' : 'Action needed',
+    },
+    {
+      id: 'app',
+      label: 'App version',
+      tone: 'ok',
+      summary: `${status.brandName} v${status.version}`,
+      statusText: 'Running',
+    },
+    {
+      id: 'pdf-worker',
+      label: 'PDF worker',
+      tone: pdfWorkerHealthTone(status.pdfWorker.status),
+      summary: status.pdfWorker.message,
+      statusText: pdfWorkerStatusLabel(status.pdfWorker.status),
+    },
+    {
+      id: 'worker-queue',
+      label: 'Worker queue',
+      tone: workerQueueHealthTone(status.workerQueue.status),
+      summary: status.workerQueue.message,
+      statusText: workerQueueStatusLabel(status.workerQueue.status),
+    },
+    {
+      id: 'backup',
+      label: 'Backup',
+      tone: backupHealthTone(status.backup.status),
+      summary: status.backup.message,
+      statusText: backupStatusLabel(status.backup.status),
+    },
+  ]
+
+  if (status.ai) {
+    items.push({
+      id: 'ai',
+      label: 'OpenRouter AI',
+      tone: aiHealthTone(status.ai.status),
+      summary: `${status.ai.defaultModel ?? 'No model'} · ${status.ai.hasApiKey ? 'key set' : 'no key'} · ${formatAiCost(status.ai.monthlyCostUsd)}`,
+      statusText: aiStatusLabel(status.ai.status),
+    })
+  }
+
+  return items
+}
+
+export function securitySectionTone(
+  workerQueueStatus: WorkerQueueStatus,
+  openAlertCount: number,
+): HealthTone {
+  if (openAlertCount > 0) return 'bad'
+  if (workerQueueStatus === 'backlog' || workerQueueStatus === 'error') {
+    return workerQueueStatus === 'error' ? 'bad' : 'warn'
+  }
+  return 'ok'
+}
