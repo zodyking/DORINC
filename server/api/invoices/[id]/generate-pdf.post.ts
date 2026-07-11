@@ -15,8 +15,15 @@ export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'pdf_gen', rateLimitKeyFromUser(actor.id))
   const { id } = validateParams(event, idParamSchema)
 
+  const query = getQuery(event)
+  const body = await readBody(event).catch(() => null) as { force?: boolean } | null
+  const force = body?.force === true
+    || query.force === '1'
+    || query.force === 'true'
+    || query.force === 'yes'
+
   try {
-    const result = await generateInvoicePdf(useDb(), id, actor.id)
+    const result = await generateInvoicePdf(useDb(), id, actor.id, { force })
 
     await writeAudit(event, {
       entityType: 'invoice',
@@ -28,6 +35,7 @@ export default defineEventHandler(async (event) => {
         invoiceFileId: result.invoiceFile?.id ?? null,
         alreadyExists: result.alreadyExists,
         jobStatus: result.job?.status ?? null,
+        force,
       },
       permissionKey: 'invoices.generate_pdf.all',
       riskLevel: 'sensitive',

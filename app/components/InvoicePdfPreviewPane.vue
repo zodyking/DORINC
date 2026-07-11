@@ -2,21 +2,20 @@
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   downloadPdfBlob,
-  fetchInvoiceOfficialPdf,
   fetchInvoicePreviewPdf,
-  queueInvoicePdfGeneration,
 } from '~/utils/invoice-pdf'
 
 const props = defineProps<{
   invoiceId: string
   invoiceLabel: string
+  /** @deprecated Official PDFs are never shown in preview — live Blade only. Kept for call-site compat. */
   preferOfficial?: boolean
   hasOfficialPdf?: boolean
   canGeneratePdf?: boolean
   showDownload?: boolean
 }>()
 
-const emit = defineEmits<{ refreshed: [] }>()
+defineEmits<{ refreshed: [] }>()
 
 const auth = useAuthStore()
 const canUse = computed(() => props.canGeneratePdf !== false && auth.can('invoices.generate_pdf.all'))
@@ -32,15 +31,9 @@ async function loadPreview() {
   error.value = ''
   revokePreview()
   try {
-    if (props.preferOfficial && props.hasOfficialPdf) {
-      try {
-        setFromBlob(await fetchInvoiceOfficialPdf(props.invoiceId))
-        return
-      }
-      catch {
-        // Fall back to live Blade preview.
-      }
-    }
+    // Always render the current published Blade template so every invoice
+    // preview looks the same. Official stored PDFs may be from an older
+    // template era and are reserved for portal / email attachments.
     setFromBlob(await fetchInvoicePreviewPdf(props.invoiceId))
   }
   catch (e: unknown) {
@@ -56,19 +49,7 @@ async function downloadPdf() {
   downloadBusy.value = true
   error.value = ''
   try {
-    if (props.preferOfficial) {
-      if (!props.hasOfficialPdf) {
-        await queueInvoicePdfGeneration(props.invoiceId)
-        emit('refreshed')
-      }
-      try {
-        downloadPdfBlob(await fetchInvoiceOfficialPdf(props.invoiceId), `${props.invoiceLabel}.pdf`)
-        return
-      }
-      catch {
-        // Official file may still be rendering.
-      }
-    }
+    // Download matches the live Blade preview shown in this pane.
     downloadPdfBlob(await fetchInvoicePreviewPdf(props.invoiceId), `${props.invoiceLabel}.pdf`)
   }
   catch (e: unknown) {
@@ -83,7 +64,7 @@ onMounted(() => {
   if (canUse.value) void loadPreview()
 })
 
-watch(() => [props.invoiceId, props.hasOfficialPdf, props.preferOfficial], () => {
+watch(() => [props.invoiceId], () => {
   if (canUse.value) void loadPreview()
 })
 

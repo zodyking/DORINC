@@ -8,7 +8,7 @@ import {
   buildInvoicePdfData,
   serializePdfRenderPayload,
 } from '../../shared/document-pdf-payload'
-import { getFileWithData } from './files.service'
+import { archiveFile, getFileWithData } from './files.service'
 import { renderDocumentPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getInvoiceDetail, InvoicesServiceError } from './invoices.service'
@@ -95,8 +95,37 @@ export interface GenerateInvoicePdfResult {
   templateVersionId: string | null
 }
 
-/** Enqueue PDF render for a finalized invoice — immutable once stored (SPEC §9). */
-export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: string): Promise<GenerateInvoicePdfResult> {
+export interface GenerateInvoicePdfOptions {
+  /**
+   * Replace an existing official PDF with a fresh render from the current
+   * published Blade template. Used to unify invoices generated under older
+   * template eras.
+   */
+  force?: boolean
+}
+
+/** Clear the official invoice PDF row so a new Blade render can be stored. */
+async function clearOfficialInvoicePdf(db: Db, invoiceId: string) {
+  const existing = await getInvoicePdfRecord(db, invoiceId)
+  if (!existing) return null
+
+  await db.delete(invoiceFiles).where(eq(invoiceFiles.invoiceId, invoiceId))
+  try {
+    await archiveFile(db, existing.fileId)
+  }
+  catch {
+    // File may already be archived or missing — official row is gone either way.
+  }
+  return existing
+}
+
+/** Enqueue PDF render for a finalized invoice — immutable once stored unless force=true. */
+export async function generateInvoicePdf(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+  options: GenerateInvoicePdfOptions = {},
+): Promise<GenerateInvoicePdfResult> {
   let detail
   try {
     detail = await getInvoiceDetail(db, invoiceId)
@@ -112,13 +141,22 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
     throw new InvoicePdfServiceError('NOT_FINALIZED')
   }
 
+  const template = await resolveInvoicePdfTemplate(db)
   const existing = await getInvoicePdfRecord(db, invoiceId)
-  if (existing) {
-    return {
-      job: null,
-      invoiceFile: existing,
-      alreadyExists: true,
-      templateVersionId: existing.templateVersionId,
+
+  if (existing && !options.force) {
+    // Auto-refresh when the stored PDF was built on a different template version
+    // (e.g. pre-Blade / old published design) so official downloads stay unified.
+    const sameTemplate = existing.templateVersionId != null
+      && template.templateVersionId != null
+      && existing.templateVersionId === template.templateVersionId
+    if (sameTemplate || template.templateVersionId == null) {
+      return {
+        job: null,
+        invoiceFile: existing,
+        alreadyExists: true,
+        templateVersionId: existing.templateVersionId,
+      }
     }
   }
 
@@ -132,7 +170,10 @@ export async function generateInvoicePdf(db: Db, invoiceId: string, actorId: str
     }
   }
 
-  const template = await resolveInvoicePdfTemplate(db)
+  if (existing && (options.force || existing.templateVersionId !== template.templateVersionId)) {
+    await clearOfficialInvoicePdf(db, invoiceId)
+  }
+
   const payload = await buildInvoicePdfPayload(db, detail, template)
   const filename = `${detail.invoiceNumberFormatted}.pdf`
 

@@ -143,17 +143,38 @@ function paymentTermsLabel(terms: string): string {
   return PAYMENT_TERMS_LABELS[terms] ?? terms.replace(/_/g, ' ')
 }
 
-function addressLines(addr: {
-  line1: string
+/** Customer addresses use `zip`; some snapshots/tests use `postalCode`. */
+export type DocumentPdfAddressInput = {
+  line1?: string | null
   line2?: string | null
-  city: string
-  state: string
-  postalCode: string
-} | null | undefined): string[] {
+  city?: string | null
+  state?: string | null
+  zip?: string | null
+  postalCode?: string | null
+} | null | undefined
+
+function cleanAddressPart(value: string | null | undefined): string {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return ''
+  return trimmed
+}
+
+/** Format address lines without leaking JS `undefined` into the PDF. */
+export function addressLines(addr: DocumentPdfAddressInput): string[] {
   if (!addr) return []
-  const lines = [addr.line1]
-  if (addr.line2?.trim()) lines.push(addr.line2.trim())
-  lines.push(`${addr.city}, ${addr.state} ${addr.postalCode}`)
+  const lines: string[] = []
+  const line1 = cleanAddressPart(addr.line1)
+  if (line1) lines.push(line1)
+  const line2 = cleanAddressPart(addr.line2)
+  if (line2) lines.push(line2)
+
+  const city = cleanAddressPart(addr.city)
+  const state = cleanAddressPart(addr.state)
+  const postal = cleanAddressPart(addr.postalCode) || cleanAddressPart(addr.zip)
+  const locality = [city, state].filter(Boolean).join(', ')
+  const cityLine = [locality, postal].filter(Boolean).join(' ').trim()
+  if (cityLine) lines.push(cityLine)
+
   return lines
 }
 
@@ -182,20 +203,8 @@ export interface BuildInvoicePdfPayloadInput {
     displayName?: string | null
     phone?: string | null
     email?: string | null
-    billingAddress?: {
-      line1: string
-      line2?: string | null
-      city: string
-      state: string
-      postalCode: string
-    } | null
-    serviceAddress?: {
-      line1: string
-      line2?: string | null
-      city: string
-      state: string
-      postalCode: string
-    } | null
+    billingAddress?: DocumentPdfAddressInput
+    serviceAddress?: DocumentPdfAddressInput
   } | null
   vehicleSnapshot?: {
     busNumber?: string | null

@@ -168,6 +168,8 @@
           <td width="{{ $sectionVisible('invoice_meta') ? '55%' : '100%' }}" valign="top">
             @if(!empty($company['logoUrl']))
               <img src="{{ $company['logoUrl'] }}" alt="" style="max-height:48px; max-width:160px; margin-bottom:10px;" />
+            @elseif(!empty($company['logoText']))
+              <div style="display:inline-block; margin-bottom:10px; padding:8px 10px; background:{{ $accent }}; color:#0f172a; font-size:9pt; font-weight:700; line-height:1.15; letter-spacing:0.04em; text-align:center;">{!! $company['logoText'] !!}</div>
             @endif
             <h1 class="company-name">{{ $company['name'] ?? 'Business Name' }}</h1>
             <div class="company-meta">
