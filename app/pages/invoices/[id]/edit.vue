@@ -603,19 +603,17 @@ const aiPopStyle = computed(() => {
     </div>
 
     <template v-else-if="invoice">
-      <div class="pagehead">
-        <div>
-          <h2>
-            Invoice Editor
-            <span :class="pill.cls" style="vertical-align:3px">{{ pill.label }} · {{ invoice.invoiceNumberFormatted }}</span>
-          </h2>
-          <p>
-            <NuxtLink to="/invoices">Invoices</NuxtLink>
-            / <NuxtLink :to="`/invoices/${id}`">{{ invoice.invoiceNumberFormatted }}</NuxtLink>
-            · {{ autosaveText }}
-          </p>
-        </div>
-        <div class="actions">
+      <StaffPageHead>
+        <template #title>
+          Invoice Editor
+          <span :class="pill.cls" style="vertical-align:3px">{{ pill.label }} · {{ invoice.invoiceNumberFormatted }}</span>
+        </template>
+        <template #subtitle>
+          <NuxtLink to="/invoices">Invoices</NuxtLink>
+          / <NuxtLink :to="`/invoices/${id}`">{{ invoice.invoiceNumberFormatted }}</NuxtLink>
+          · {{ autosaveText }}
+        </template>
+        <template #actions>
           <NuxtLink to="/admin?tab=designer" class="btn">Template designer</NuxtLink>
           <InvoicePdfActions
             :invoice-id="id"
@@ -641,8 +639,8 @@ const aiPopStyle = computed(() => {
             :entity-label="invoice.invoiceNumberFormatted"
             :disabled="busy"
           />
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
 
       <div
         v-if="lockedByOther"

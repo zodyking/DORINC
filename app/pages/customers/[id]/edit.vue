@@ -113,18 +113,16 @@ async function restore() {
       Customer not found. <NuxtLink to="/customers">Back to customers</NuxtLink>
     </div>
     <template v-else>
-      <div class="pagehead">
-        <div>
-          <h2>
-            Edit account
-            <span v-if="customer?.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
-          </h2>
-          <p>
-            <NuxtLink to="/customers">Customers</NuxtLink> /
-            <NuxtLink :to="`/customers/${route.params.id}`">{{ customer?.displayName }}</NuxtLink> / Edit
-          </p>
-        </div>
-        <div class="actions">
+      <StaffPageHead>
+        <template #title>
+          Edit account
+          <span v-if="customer?.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
+        </template>
+        <template #subtitle>
+          <NuxtLink to="/customers">Customers</NuxtLink> /
+          <NuxtLink :to="`/customers/${route.params.id}`">{{ customer?.displayName }}</NuxtLink> / Edit
+        </template>
+        <template #actions>
           <button
             v-if="customer?.archivedAt && canArchive"
             type="button"
@@ -142,8 +140,8 @@ async function restore() {
             :disabled="busy"
             @submitted="flash = 'Deletion request submitted for admin review'"
           />
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
       <p v-if="flash" class="flash ok" style="margin:-8px 0 16px;">{{ flash }}</p>
       <CustomersCustomerForm
         v-model="form"

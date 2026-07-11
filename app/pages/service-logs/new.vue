@@ -219,15 +219,12 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active sl-page">
-    <div class="pagehead">
-      <div>
-        <h2>New service log</h2>
-        <p>Step-by-step field upload · saved when submitted</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Step-by-step field upload · saved when submitted">
+      <template #title>New service log</template>
+      <template #actions>
         <NuxtLink to="/service-logs" class="btn">Cancel</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <div class="sl-progress" aria-label="Progress">
       <div

@@ -276,18 +276,16 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
   </section>
 
   <section v-else-if="log" class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>
-          {{ logNumberDisplay(log.logNumber) }}
-          <span :class="pill.cls" style="vertical-align:3px">{{ pill.label }}</span>
-        </h2>
-        <p>
-          <NuxtLink to="/service-logs">Service Logs</NuxtLink>
-          / {{ vehicleTag(log.vehicle) }} · {{ log.customerName }}
-        </p>
-      </div>
-      <div class="actions">
+    <StaffPageHead>
+      <template #title>
+        {{ logNumberDisplay(log.logNumber) }}
+        <span :class="pill.cls" style="vertical-align:3px">{{ pill.label }}</span>
+      </template>
+      <template #subtitle>
+        <NuxtLink to="/service-logs">Service Logs</NuxtLink>
+        / {{ vehicleTag(log.vehicle) }} · {{ log.customerName }}
+      </template>
+      <template #actions>
         <button
           v-if="canReview && log.status === 'in_review'"
           class="btn"
@@ -374,8 +372,8 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           :entity-label="logNumberDisplay(log.logNumber)"
           :disabled="busy"
         />
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
     <p v-if="convertFlash" class="flash ok" style="margin:-8px 0 16px;">

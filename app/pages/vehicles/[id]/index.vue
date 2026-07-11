@@ -102,18 +102,16 @@ function histWhen(iso: string): string {
     </div>
 
     <template v-else-if="vehicle">
-      <div class="pagehead">
-        <div>
-          <h2>
-            {{ vehicleTag(vehicle) }}
-            <span :class="vehicleStatusPill(vehicle).cls" style="vertical-align:3px">{{ vehicleStatusPill(vehicle).label }}</span>
-          </h2>
-          <p>
-            <NuxtLink to="/vehicles">Vehicles</NuxtLink> /
-            {{ vehicleSub(vehicle) }}<template v-if="customer"> · {{ customer.displayName }}</template>
-          </p>
-        </div>
-        <div class="actions">
+      <StaffPageHead>
+        <template #title>
+          {{ vehicleTag(vehicle) }}
+          <span :class="vehicleStatusPill(vehicle).cls" style="vertical-align:3px">{{ vehicleStatusPill(vehicle).label }}</span>
+        </template>
+        <template #subtitle>
+          <NuxtLink to="/vehicles">Vehicles</NuxtLink> /
+          {{ vehicleSub(vehicle) }}<template v-if="customer"> · {{ customer.displayName }}</template>
+        </template>
+        <template #actions>
           <NuxtLink v-if="canUpdate" :to="`/vehicles/${vehicle.id}/edit`" class="btn">Edit unit</NuxtLink>
           <button
             v-if="vehicle.archivedAt && canArchive"
@@ -124,8 +122,8 @@ function histWhen(iso: string): string {
             Restore
           </button>
           <button class="btn primary" disabled title="Coming soon">+ New Invoice</button>
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
 
       <p v-if="flash" class="flash" :class="flashKind">{{ flash }}</p>
 

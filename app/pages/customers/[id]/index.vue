@@ -305,20 +305,18 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
     </div>
 
     <template v-else-if="customer">
-      <div class="pagehead">
-        <div>
-          <h2>
-            {{ customer.displayName }}
-            <span v-if="customer.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
-            <span v-else-if="customer.portalEnabled" class="pill ok" style="vertical-align:3px">Portal enabled</span>
-          </h2>
-          <p>
-            <NuxtLink to="/customers">Customers</NuxtLink> /
-            {{ customer.displayName }} ·
-            {{ customer.accountKind === 'fleet' ? 'Fleet' : 'Individual' }} account since {{ sinceYear(customer.createdAt) }}
-          </p>
-        </div>
-        <div class="actions">
+      <StaffPageHead>
+        <template #title>
+          {{ customer.displayName }}
+          <span v-if="customer.archivedAt" class="pill gray" style="vertical-align:3px">Archived</span>
+          <span v-else-if="customer.portalEnabled" class="pill ok" style="vertical-align:3px">Portal enabled</span>
+        </template>
+        <template #subtitle>
+          <NuxtLink to="/customers">Customers</NuxtLink> /
+          {{ customer.displayName }} ·
+          {{ customer.accountKind === 'fleet' ? 'Fleet' : 'Individual' }} account since {{ sinceYear(customer.createdAt) }}
+        </template>
+        <template #actions>
           <NuxtLink v-if="canUpdate" :to="`/customers/${customer.id}/edit`" class="btn">Edit account</NuxtLink>
           <button
             v-if="canPortalAccess"
@@ -352,8 +350,8 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
           >
             + New Invoice
           </NuxtLink>
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
 
       <p v-if="flash" class="flash" :class="flashKind">{{ flash }}</p>
 

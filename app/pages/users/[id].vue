@@ -153,15 +153,15 @@ function activityTitle(a: ActivityRow): string {
     </div>
 
     <template v-else-if="user">
-      <div class="pagehead">
-        <div>
-          <h2>
-            {{ user.name }}
-            <span :class="accountTypePill(user.accountType)" style="vertical-align:3px">{{ accountTypeLabel(user.accountType) }}</span>
-          </h2>
-          <p><NuxtLink to="/users">Users</NuxtLink> / {{ user.email }} · joined {{ joinedLabel(user.createdAt) }}</p>
-        </div>
-        <div class="actions">
+      <StaffPageHead>
+        <template #title>
+          {{ user.name }}
+          <span :class="accountTypePill(user.accountType)" style="vertical-align:3px">{{ accountTypeLabel(user.accountType) }}</span>
+        </template>
+        <template #subtitle>
+          <NuxtLink to="/users">Users</NuxtLink> / {{ user.email }} · joined {{ joinedLabel(user.createdAt) }}
+        </template>
+        <template #actions>
           <template v-if="user.status === 'pending' && canManage">
             <button class="btn" :disabled="busy" @click="rejectUser">Reject</button>
             <button class="btn primary" :disabled="busy" @click="approve">Approve</button>
@@ -185,8 +185,8 @@ function activityTitle(a: ActivityRow): string {
               Save changes
             </button>
           </template>
-        </div>
-      </div>
+        </template>
+      </StaffPageHead>
 
       <p v-if="errorMsg" class="flash err">{{ errorMsg }}</p>
       <p v-if="notice" class="flash ok">{{ notice }}</p>

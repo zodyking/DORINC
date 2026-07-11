@@ -467,19 +467,16 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
 
 <template>
   <section class="page active inv-wizard-page">
-    <div class="pagehead">
-      <div>
-        <h2>
-          New Invoice
-          <span class="pill draft" style="vertical-align:3px">{{ invoiceId ? 'Draft' : 'Unsaved' }}</span>
-        </h2>
-        <p>Create, save at any step, and resume later — PDF when finalized</p>
-      </div>
-      <div class="actions">
+    <StaffPageHead subtitle="Create, save at any step, and resume later — PDF when finalized">
+      <template #title>
+        New Invoice
+        <span class="pill draft" style="vertical-align:3px">{{ invoiceId ? 'Draft' : 'Unsaved' }}</span>
+      </template>
+      <template #actions>
         <button type="button" class="btn" :disabled="busy || !customerId" @click="saveDraft">Save draft</button>
         <NuxtLink to="/invoices" class="btn">Cancel</NuxtLink>
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
     <div class="wizbar">
       <span class="state">Workflow: <b>{{ wizardStateLabel(step) }}</b></span>
       <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>

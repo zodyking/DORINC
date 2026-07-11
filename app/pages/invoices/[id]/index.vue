@@ -299,18 +299,16 @@ const summaryRows = computed(() => {
   </section>
 
   <section v-else-if="invoice" class="page active">
-    <div class="pagehead">
-      <div>
-        <h2>
-          {{ invoice.invoiceNumberFormatted }}
-          <span :class="pill.cls" style="vertical-align:3px">{{ headlineStatus }}</span>
-        </h2>
-        <p>
-          <NuxtLink to="/invoices">Invoices</NuxtLink>
-          / {{ invoice.invoiceNumberFormatted }} · {{ invoice.customerName }}
-        </p>
-      </div>
-      <div class="actions">
+    <StaffPageHead>
+      <template #title>
+        {{ invoice.invoiceNumberFormatted }}
+        <span :class="pill.cls" style="vertical-align:3px">{{ headlineStatus }}</span>
+      </template>
+      <template #subtitle>
+        <NuxtLink to="/invoices">Invoices</NuxtLink>
+        / {{ invoice.invoiceNumberFormatted }} · {{ invoice.customerName }}
+      </template>
+      <template #actions>
         <InvoicePdfActions
           v-if="canGeneratePdf"
           :invoice-id="id"
@@ -388,8 +386,8 @@ const summaryRows = computed(() => {
           :entity-label="invoice.invoiceNumberFormatted"
           :disabled="busy"
         />
-      </div>
-    </div>
+      </template>
+    </StaffPageHead>
 
     <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
