@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageActionsMenu from './PageActionsMenu.vue'
+
 defineProps<{
   title?: string
   subtitle?: string
