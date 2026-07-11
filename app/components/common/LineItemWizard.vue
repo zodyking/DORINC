@@ -9,6 +9,7 @@ import {
 } from '~/utils/line-item-wizard-ui'
 import { lineTypeLabel } from '~/utils/invoices-ui'
 import { formatFieldText } from '#shared/format/prose-field'
+import type { SpeechLineField } from '~/utils/speech-line-flow'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
 
@@ -31,8 +32,11 @@ const {
   supported,
   status,
   prompt,
+  lastHeard,
   error,
+  captured,
   editingIndex,
+  fieldLabel,
   start,
   resume,
   stop,
@@ -40,15 +44,27 @@ const {
 } = useSpeechLineFlow({
   lineCount: () => lines.value.length,
   getLine: index => lines.value[index],
-  onLineSaved: (line, addAnother) => {
+  onLineSaved: (line) => {
     lines.value = [...lines.value, line]
-    if (!addAnother) sessionOpen.value = false
   },
   onLineUpdated: (line, index) => {
     const next = [...lines.value]
     next[index] = line
     lines.value = next
   },
+})
+
+const capturedEntries = computed(() => {
+  const fields: SpeechLineField[] = ['type', 'description', 'qty', 'rate']
+  return fields
+    .filter(f => captured.value[f])
+    .map(f => ({
+      key: f,
+      label: fieldLabel(f),
+      value: f === 'type'
+        ? lineTypeLabel(captured.value[f] as WizardLineType)
+        : captured.value[f]!,
+    }))
 })
 
 const feedback = computed(() => {
@@ -66,7 +82,7 @@ const feedback = computed(() => {
     case 'processing':
       return 'Got it…'
     default:
-      return prompt.value || 'Say add line, or edit line item number'
+      return prompt.value || 'Say add line, edit line item number, or done when finished'
   }
 })
 
@@ -83,6 +99,11 @@ function openSession() {
 }
 
 function finishSession() {
+  stop()
+  sessionOpen.value = false
+}
+
+function cancelSession() {
   stop()
   sessionOpen.value = false
 }
@@ -124,9 +145,7 @@ function saveManualLine(addAnother: boolean) {
     amount,
   }]
   manualDraft.value = emptyWizardLine()
-  manualOpen.value = false
-  sessionOpen.value = addAnother
-  if (addAnother) nextTick(() => start())
+  if (!addAnother) manualOpen.value = false
 }
 
 onBeforeUnmount(() => stop())
@@ -146,8 +165,9 @@ defineExpose({ openWizard: openSession })
         @remove="removeLine"
       />
       <p class="li-list-hint">
+        Say <b>add line</b> or <b>add another</b> for more.
         Say <b>edit line 1</b> or <b>edit line item number {{ editHint }}</b> to change a line.
-        While editing, say <b>description</b>, <b>rate</b>, or <b>cancel</b>.
+        Say <b>done</b> when finished.
       </p>
     </section>
 
@@ -164,17 +184,44 @@ defineExpose({ openWizard: openSession })
 
       <p class="li-feedback" :class="{ error: !!error }">{{ feedback }}</p>
 
-      <button
-        v-if="sessionOpen"
-        type="button"
-        class="li-done"
-        @click="finishSession"
-      >
-        Done adding lines
-      </button>
+      <p v-if="sessionOpen && lastHeard" class="li-heard">
+        You said: “{{ lastHeard }}”
+      </p>
+
+      <div v-if="sessionOpen && capturedEntries.length" class="li-captured">
+        <div v-for="entry in capturedEntries" :key="entry.key" class="li-captured-row">
+          <span class="k">{{ entry.label }}</span>
+          <span class="v">{{ entry.value }}</span>
+        </div>
+      </div>
+
+      <div v-if="sessionOpen" class="li-voice-actions">
+        <button
+          v-if="supported && (status === 'listening' || status === 'idle')"
+          type="button"
+          class="li-retry"
+          @click="retryListen"
+        >
+          Tap to speak again
+        </button>
+        <button
+          type="button"
+          class="li-done"
+          @click="finishSession"
+        >
+          Done adding lines
+        </button>
+        <button
+          type="button"
+          class="li-cancel"
+          @click="cancelSession"
+        >
+          Cancel
+        </button>
+      </div>
     </section>
 
-    <details v-if="!supported" class="li-manual" :open="manualOpen">
+    <details class="li-manual" :open="manualOpen || !supported">
       <summary @click.prevent="manualOpen = !manualOpen">Type a line instead</summary>
       <div class="li-manual-body">
         <label class="fld">
@@ -210,15 +257,6 @@ defineExpose({ openWizard: openSession })
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.li-list-title {
-  margin: 0 0 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #64748b;
 }
 
 .li-list-hint {
@@ -298,7 +336,7 @@ defineExpose({ openWizard: openSession })
   font-size: 15px;
   line-height: 1.45;
   color: #475569;
-  max-width: 30ch;
+  max-width: 34ch;
 }
 
 .li-voice.active .li-feedback {
@@ -312,16 +350,70 @@ defineExpose({ openWizard: openSession })
   font-weight: 500;
 }
 
-.li-done {
+.li-heard {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 36ch;
+  line-height: 1.4;
+}
+
+.li-captured {
   margin-top: 12px;
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.li-captured-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.li-captured-row .k {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.li-captured-row .v {
+  color: #0f172a;
+  text-align: right;
+}
+
+.li-voice-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.li-retry,
+.li-done,
+.li-cancel {
   appearance: none;
   border: none;
   background: none;
-  color: #6366f1;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   padding: 8px 12px;
+}
+
+.li-retry,
+.li-done {
+  color: #6366f1;
+}
+
+.li-cancel {
+  color: #94a3b8;
 }
 
 .li-manual {

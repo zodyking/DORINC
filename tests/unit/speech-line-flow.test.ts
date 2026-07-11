@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   parseSpokenAddLineCommand,
   parseSpokenCancel,
+  parseSpokenConfirm,
   parseSpokenEditField,
   parseSpokenEditLineNumber,
   parseSpokenLineType,
@@ -13,7 +14,16 @@ describe('speech line flow commands', () => {
     expect(parseSpokenAddLineCommand('add a line')).toBe(true)
     expect(parseSpokenAddLineCommand('add another item')).toBe(true)
     expect(parseSpokenAddLineCommand('another line')).toBe(true)
+    expect(parseSpokenAddLineCommand('add another')).toBe(true)
+    expect(parseSpokenAddLineCommand('another')).toBe(true)
     expect(parseSpokenAddLineCommand('edit line 2')).toBe(false)
+  })
+
+  it('parses confirm actions', () => {
+    expect(parseSpokenConfirm('save')).toBe('save')
+    expect(parseSpokenConfirm('add another')).toBe('another')
+    expect(parseSpokenConfirm('done')).toBe('done')
+    expect(parseSpokenConfirm('that is all')).toBe('done')
   })
 
   it('parses edit line item number with digits and words', () => {

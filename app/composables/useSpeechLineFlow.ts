@@ -201,8 +201,7 @@ export function useSpeechLineFlow(handlers: {
       else startAddFlow()
     }
     else {
-      active.value = false
-      stop()
+      idleAfterSave()
     }
   }
 
@@ -258,8 +257,18 @@ export function useSpeechLineFlow(handlers: {
       cancelEditFlow()
       return
     }
-    if (parseSpokenConfirm(spoken) === 'save' || parseSpokenEditField(spoken) === 'confirm') {
-      saveEditedLine(false)
+    if (confirmAction === 'another') {
+      if (editingIndex.value === null) return
+      const line = buildLineFromDraft(draft.value)
+      if (line) handlers.onLineUpdated(line, editingIndex.value)
+      editingIndex.value = null
+      draft.value = emptyWizardLine()
+      captured.value = {}
+      startAddFlow()
+      return
+    }
+    if (confirmAction === 'save' || parseSpokenEditField(spoken) === 'confirm') {
+      saveEditedLine(true)
       return
     }
     const target = parseSpokenEditField(spoken)
@@ -280,6 +289,7 @@ export function useSpeechLineFlow(handlers: {
     if (parseSpokenCancel(spoken)) {
       if (flowMode.value === 'edit') cancelEditFlow()
       else if (flowMode.value === 'add') cancelAddFlow()
+      else if (handlers.lineCount() > 0) idleAfterSave()
       else stop()
       return
     }
@@ -291,6 +301,11 @@ export function useSpeechLineFlow(handlers: {
     }
 
     if (field.value === 'command') {
+      const confirmAction = parseSpokenConfirm(spoken)
+      if (confirmAction === 'done') {
+        idleAfterSave()
+        return
+      }
       if (parseSpokenAddLineCommand(spoken)) {
         startAddFlow()
         return
@@ -299,7 +314,7 @@ export function useSpeechLineFlow(handlers: {
         startEditFlow(editIndex)
         return
       }
-      error.value = 'Say add line, or edit line item number.'
+      error.value = 'Say add line, edit line item number, or done when finished.'
       speakThenListen(retryPromptForCommandMode())
       return
     }
@@ -315,7 +330,17 @@ export function useSpeechLineFlow(handlers: {
       if (field.value === 'confirm') {
         const action = parseSpokenConfirm(spoken)
         if (action === 'save') {
-          saveEditedLine(false)
+          saveEditedLine(true)
+          return
+        }
+        if (action === 'another') {
+          if (editingIndex.value === null) return
+          const line = buildLineFromDraft(draft.value)
+          if (line) handlers.onLineUpdated(line, editingIndex.value)
+          editingIndex.value = null
+          draft.value = emptyWizardLine()
+          captured.value = {}
+          startAddFlow()
           return
         }
         speakThenListen(retryPromptForCurrentField())

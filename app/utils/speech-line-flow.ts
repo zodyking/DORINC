@@ -12,17 +12,17 @@ export type SpeechLineField = 'command' | 'pick' | 'type' | 'description' | 'qty
 
 export function promptForCommandMode(lineCount: number): string {
   if (lineCount === 0) return promptForSpeechField('type', '')
-  return 'Say add line, or edit line item number.'
+  return 'Say add line, edit line item number, or done when finished.'
 }
 
 export function retryPromptForCommandMode(): string {
-  return 'Say add line, or edit line item number.'
+  return 'Say add line, edit line item number, or done when finished.'
 }
 
 export function promptForSpeechField(field: SpeechLineField, lineType: WizardLineType | ''): string {
   switch (field) {
     case 'command':
-      return 'Say add line, or edit line item number.'
+      return 'Say add line, edit line item number, or done when finished.'
     case 'pick':
       return 'Say type, description, quantity, rate, save, or cancel.'
     case 'type':
@@ -34,7 +34,7 @@ export function promptForSpeechField(field: SpeechLineField, lineType: WizardLin
     case 'rate':
       return lineType === 'labor' ? 'Rate per hour?' : 'What is the price?'
     case 'confirm':
-      return 'Say save to finish, or add another for more lines.'
+      return 'Say save to finish this line, add another for more lines, or cancel to go back.'
   }
 }
 
@@ -53,7 +53,7 @@ export function retryPromptForField(field: SpeechLineField): string {
     case 'rate':
       return 'Give me the rate or price, or say keep. Say cancel to go back.'
     case 'confirm':
-      return 'Say save, or cancel to go back.'
+      return 'Say save, add another, or cancel to go back.'
   }
 }
 
@@ -80,10 +80,12 @@ export function parseSpokenNumber(spoken: string): string {
   return m ? m[1]! : words
 }
 
-export function parseSpokenConfirm(spoken: string): 'save' | 'another' | null {
+export function parseSpokenConfirm(spoken: string): 'save' | 'another' | 'done' | null {
   const t = spoken.toLowerCase()
-  if (/\b(another|more|next|add)\b/.test(t)) return 'another'
-  if (/\b(save|done|finish|yes|okay|ok)\b/.test(t)) return 'save'
+  if (/\b(another|more|next)\b/.test(t) && !/\b(edit|change)\b/.test(t)) return 'another'
+  if (/\b(add)\b/.test(t) && /\b(another|more|line|item)\b/.test(t)) return 'another'
+  if (/\b(done|finished|that\s+is\s+all|that'?s?\s*all|all\s*done|i'?m\s*done|complete)\b/.test(t)) return 'done'
+  if (/\b(save|yes|okay|ok|good|correct)\b/.test(t)) return 'save'
   return null
 }
 
@@ -100,7 +102,9 @@ export function parseSpokenAddLineCommand(spoken: string): boolean {
   return (
     /\b(add|new|another|more)\b/.test(t) && /\b(line|item|charge)\b/.test(t)
   ) || /\badd\s+(a\s+)?(new\s+)?(line|item)\b/.test(t)
-    || /\banother\s+(line|item)\b/.test(t)
+    || /\banother\s+(line|item|one)?\b/.test(t)
+    || /^add\s+another$/i.test(t.trim())
+    || /^another$/i.test(t.trim())
 }
 
 export function parseSpokenEditLineNumber(spoken: string, lineCount: number): number | null {
