@@ -2,6 +2,7 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { accountTypeLabel, avColor, initials } from '~/utils/users-ui'
 import { useDetectionSettings } from '~/composables/useDetectionSettings'
+import type { StaffNavIconName } from '~/components/staff/StaffNavIcon.vue'
 
 import type { PermissionKey } from '~/shared/permissions/keys'
 
@@ -24,7 +25,7 @@ const notifOpen = ref(false)
 interface NavItem {
   label: string
   to: string
-  ico: string
+  icon: StaffNavIconName
   count?: number
   permission?: PermissionKey | PermissionKey[]
 }
@@ -61,21 +62,21 @@ const nav = computed<NavSection[]>(() => {
     {
       label: 'Workspace',
       items: [
-        { label: 'Dashboard', to: '/dashboard', ico: '▫' },
-        { label: 'Invoices', to: '/invoices', ico: '▤', permission: 'invoices.read.all' },
-        { label: 'Customers', to: '/customers', ico: '◉', permission: 'customers.read.all' },
-        { label: 'Vehicles', to: '/vehicles', ico: '⛟', permission: 'vehicles.read.all' },
-        { label: 'Service Logs', to: '/service-logs', ico: '✎', permission: ['service_logs.read.all', 'service_logs.read.own'] },
-        { label: 'Portal Requests', to: '/portal-requests', ico: '✉', permission: 'portal_requests.review.all' },
-        { label: 'Deletion Requests', to: '/deletion-requests', ico: '🗑', permission: 'deletion_requests.review.all' },
-        { label: 'Catalog', to: '/catalog', ico: '▦', permission: 'catalog.read.all' },
+        { label: 'Dashboard', to: '/dashboard', icon: 'dashboard' },
+        { label: 'Invoices', to: '/invoices', icon: 'invoices', permission: 'invoices.read.all' },
+        { label: 'Customers', to: '/customers', icon: 'customers', permission: 'customers.read.all' },
+        { label: 'Vehicles', to: '/vehicles', icon: 'vehicles', permission: 'vehicles.read.all' },
+        { label: 'Service Logs', to: '/service-logs', icon: 'service-logs', permission: ['service_logs.read.all', 'service_logs.read.own'] },
+        { label: 'Portal Requests', to: '/portal-requests', icon: 'portal-requests', permission: 'portal_requests.review.all' },
+        { label: 'Deletion Requests', to: '/deletion-requests', icon: 'deletion-requests', permission: 'deletion_requests.review.all' },
+        { label: 'Catalog', to: '/catalog', icon: 'catalog', permission: 'catalog.read.all' },
       ],
     },
     {
       label: 'System',
       items: [
-        { label: 'Users', to: '/users', ico: '👥', permission: 'users.read.all' },
-        { label: 'System Logs', to: '/system-logs', ico: '▣', permission: 'audit.read.all' },
+        { label: 'Users', to: '/users', icon: 'users', permission: 'users.read.all' },
+        { label: 'System Logs', to: '/system-logs', icon: 'system-logs', permission: 'audit.read.all' },
       ],
     },
   ]
@@ -83,7 +84,7 @@ const nav = computed<NavSection[]>(() => {
   if (isSuperAdmin.value) {
     sections.push({
       label: 'Administration',
-      items: [{ label: 'Control Panel', to: '/admin', ico: '⚙', permission: 'system.admin.all' }],
+      items: [{ label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' }],
     })
   }
 
@@ -140,7 +141,8 @@ watch(() => route.path, () => {
           class="nav-item"
           :class="{ on: isActive(item.to) }"
         >
-          <span class="ico">{{ item.ico }}</span> {{ item.label }}
+          <span class="ico" aria-hidden="true"><StaffNavIcon :name="item.icon" /></span>
+          <span class="nav-label">{{ item.label }}</span>
           <span v-if="item.count" class="cnt">{{ item.count }}</span>
         </NuxtLink>
       </template>
