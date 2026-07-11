@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     })
 
     const appUrl = getAppUrl()
-    const verifyUrl = `${appUrl}/auth/verify-email?token=${verificationToken}`
+    const verifyUrl = `${appUrl}/auth/verify-email?token=${encodeURIComponent(verificationToken)}`
     const mail = buildSignupVerificationEmail({
       name: user.name,
       verifyUrl,
