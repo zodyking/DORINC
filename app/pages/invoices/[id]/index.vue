@@ -591,21 +591,14 @@ const summaryRows = computed(() => {
       </div>
     </div>
 
-    <div v-if="viewTab === 'pdf' && canGeneratePdf" class="card">
-      <div class="chead">
-        <h3>PDF preview</h3>
-        <p class="sub" style="margin:0;">Embedded viewer — use toolbar for refresh and download</p>
-      </div>
-      <div class="cbody">
-        <InvoicePdfPreviewPane
-          :invoice-id="id"
-          :invoice-label="invoice.invoiceNumberFormatted"
-          :prefer-official="isPdfEligible"
-          :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
-          :can-generate-pdf="canGeneratePdf"
-          @refreshed="refresh()"
-        />
-      </div>
-    </div>
+    <InvoicePdfPreviewPane
+      v-if="viewTab === 'pdf' && canGeneratePdf"
+      :invoice-id="id"
+      :invoice-label="invoice.invoiceNumberFormatted"
+      :prefer-official="isPdfEligible"
+      :has-official-pdf="!!pdfStatus?.hasOfficialPdf"
+      :can-generate-pdf="canGeneratePdf"
+      @refreshed="refresh()"
+    />
   </section>
 </template>

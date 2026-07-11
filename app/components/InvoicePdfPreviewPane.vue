@@ -4,10 +4,10 @@ import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 const props = defineProps<{
   invoiceId: string
   invoiceLabel: string
-  /** When true, prefer stored official PDF for finalized invoices. */
   preferOfficial?: boolean
   hasOfficialPdf?: boolean
   canGeneratePdf?: boolean
+  showDownload?: boolean
 }>()
 
 const emit = defineEmits<{ refreshed: [] }>()
@@ -52,7 +52,7 @@ async function loadPreview() {
         return
       }
       catch {
-        // Fall back to live preview if official file unavailable.
+        // Fall back to live preview.
       }
     }
     const blob = await fetchPreviewBlob()
@@ -126,57 +126,32 @@ defineExpose({ refresh: loadPreview })
   <div v-if="!canUse" class="invoice-pdf-pane-empty">
     You do not have permission to preview invoice PDFs.
   </div>
-  <div v-else class="invoice-pdf-pane">
-    <div class="invoice-pdf-pane-toolbar">
-      <span class="pill indigo">Laravel Blade PDF</span>
-      <div style="display:flex; gap:8px; margin-left:auto;">
-        <button type="button" class="btn sm" :disabled="busy" @click="loadPreview">
-          {{ busy ? 'Rendering…' : 'Refresh' }}
-        </button>
-        <button type="button" class="btn sm" :disabled="downloadBusy" @click="downloadPdf">
-          {{ downloadBusy ? 'Preparing…' : 'Download' }}
-        </button>
-      </div>
-    </div>
-    <p v-if="error" class="invoice-pdf-pane-error">{{ error }}</p>
-    <p v-else-if="busy && !previewUrl" class="invoice-pdf-pane-empty">Rendering invoice PDF…</p>
-    <iframe
-      v-else-if="previewUrl"
+  <div v-else-if="error" class="invoice-pdf-pane-empty invoice-pdf-pane-error">{{ error }}</div>
+  <div v-else-if="busy && !previewUrl" class="invoice-pdf-pane-empty">Rendering PDF…</div>
+  <ClientOnly v-else-if="previewUrl">
+    <PdfViewer
+      ref="viewerRef"
       :src="previewUrl"
-      class="invoice-pdf-pane-frame"
-      :title="`${invoiceLabel} PDF preview`"
+      :title="`${invoiceLabel} PDF`"
+      :show-download="showDownload !== false"
+      @download="downloadPdf"
     />
-    <p v-else class="invoice-pdf-pane-empty">No preview available.</p>
-  </div>
+    <template #fallback>
+      <div class="invoice-pdf-pane-empty">Loading viewer…</div>
+    </template>
+  </ClientOnly>
 </template>
 
 <style scoped>
-.invoice-pdf-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 480px;
-}
-.invoice-pdf-pane-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.invoice-pdf-pane-frame {
-  width: 100%;
-  min-height: min(960px, calc(100vh - 14rem));
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #eef0f4;
-}
-.invoice-pdf-pane-empty,
-.invoice-pdf-pane-error {
+.invoice-pdf-pane-empty {
   margin: 0;
   text-align: center;
   font-size: 13px;
   color: #64748b;
   padding: 48px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 .invoice-pdf-pane-error {
   color: #dc2626;
