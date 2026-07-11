@@ -1,4 +1,4 @@
-import { formatSmtpFromHeader, parseSmtpFromHeader } from '../../../shared/format/smtp-from'
+import { formatSmtpFromHeader, parseSmtpFromHeader } from '../../../../shared/format/smtp-from'
 import { getSmtpConfig } from '../../../services/app-config.service'
 import { requirePermission } from '../../../utils/require-permission'
 

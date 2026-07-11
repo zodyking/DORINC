@@ -1,4 +1,4 @@
-import { formatSmtpFromHeader } from '../../../shared/format/smtp-from'
+import { formatSmtpFromHeader } from '../../../../shared/format/smtp-from'
 import { useDb } from '../../../db/client'
 import { getSmtpConfig, saveSmtpConfig } from '../../../services/app-config.service'
 import { resetMailTransport } from '../../../mail/mailer'
