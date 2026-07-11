@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { accountTypeLabel, avColor, initials } from '~/utils/users-ui'
+import { useDetectionSettings } from '~/composables/useDetectionSettings'
 
 import type { PermissionKey } from '~/shared/permissions/keys'
 
 const route = useRoute()
 const auth = useAuthStore()
+const { load: loadDetectionSettings } = useDetectionSettings()
+
+onMounted(() => {
+  if (auth.user) void loadDetectionSettings()
+})
+
+watch(() => auth.user, (user) => {
+  if (user) void loadDetectionSettings()
+})
 
 const sidebarOpen = ref(false)
 const menuOpen = ref(false)

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LineTypeVerbSettings } from '#shared/workspace-settings-defaults'
+import { reloadDetectionSettings } from '~/composables/useDetectionSettings'
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -50,6 +51,7 @@ async function save() {
     })
     message.value = 'Line detection library saved'
     await refresh()
+    await reloadDetectionSettings()
     emit('saved')
   }
   catch (e: unknown) {

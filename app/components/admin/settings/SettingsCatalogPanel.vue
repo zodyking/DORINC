@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CatalogKeywordMap } from '#shared/workspace-settings-defaults'
 import { DEFAULT_CATALOG_CATEGORIES } from '#shared/catalog-default-categories'
+import { reloadDetectionSettings } from '~/composables/useDetectionSettings'
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -50,6 +51,7 @@ async function save() {
     })
     message.value = 'Catalog detection dictionary saved'
     await refresh()
+    await reloadDetectionSettings()
     emit('saved')
   }
   catch (e: unknown) {

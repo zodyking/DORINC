@@ -12,6 +12,10 @@ export function setDetectionSettingsCache(data: {
   cache = data
 }
 
+export function clearDetectionSettingsCache() {
+  cache = null
+}
+
 export function getLineTypeVerbsCache(): LineTypeVerbSettings | null {
   return cache?.lineTypeVerbs ?? null
 }

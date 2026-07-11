@@ -31,4 +31,16 @@ describe('inferLineTypeFromDescription', () => {
     expect(inferLineTypeFromDescription('Replace tire')).toBe('part')
     expect(inferLineTypeFromDescription('Service call')).toBe('labor')
   })
+
+  it('uses custom verb lists from workspace settings', () => {
+    const custom = {
+      part: ['Fabricate'],
+      labor: ['Wash', 'Steam'],
+      fee: ['Transport'],
+    }
+    expect(inferLineTypeFromDescription('Wash engine bay', custom)).toBe('labor')
+    expect(inferLineTypeFromDescription('Steam clean interior', custom)).toBe('labor')
+    expect(inferLineTypeFromDescription('Transport vehicle', custom)).toBe('fee')
+    expect(inferLineTypeFromDescription('Fabricate bracket', custom)).toBe('part')
+  })
 })

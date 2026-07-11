@@ -1,5 +1,5 @@
 import type { CatalogKeywordMap, LineTypeVerbSettings } from '#shared/workspace-settings-defaults'
-import { setDetectionSettingsCache } from '~/utils/detection-settings-store'
+import { clearDetectionSettingsCache, setDetectionSettingsCache } from '~/utils/detection-settings-store'
 
 const detection = ref<{
   catalogKeywords: CatalogKeywordMap
@@ -8,27 +8,42 @@ const detection = ref<{
 
 let loadPromise: Promise<void> | null = null
 
+async function fetchDetectionSettings(force = false) {
+  if (!force && detection.value) return detection.value
+  if (!loadPromise) {
+    loadPromise = $fetch<{
+      catalogKeywords: CatalogKeywordMap
+      lineTypeVerbs: LineTypeVerbSettings
+    }>('/api/settings/detection')
+      .then((data) => {
+        detection.value = data
+        setDetectionSettingsCache(data)
+        return data
+      })
+      .catch(() => {
+        detection.value = null
+        clearDetectionSettingsCache()
+        return null
+      })
+      .finally(() => {
+        loadPromise = null
+      })
+  }
+  await loadPromise
+  return detection.value
+}
+
+/** Refetch after admin saves new verb/keyword lists. */
+export async function reloadDetectionSettings() {
+  detection.value = null
+  clearDetectionSettingsCache()
+  loadPromise = null
+  return fetchDetectionSettings(true)
+}
+
 export function useDetectionSettings() {
-  async function load() {
-    if (detection.value) return detection.value
-    if (!loadPromise) {
-      loadPromise = $fetch<{
-        catalogKeywords: CatalogKeywordMap
-        lineTypeVerbs: LineTypeVerbSettings
-      }>('/api/settings/detection')
-        .then((data) => {
-          detection.value = data
-          setDetectionSettingsCache(data)
-        })
-        .catch(() => {
-          detection.value = null
-        })
-        .finally(() => {
-          loadPromise = null
-        })
-    }
-    await loadPromise
-    return detection.value
+  async function load(force = false) {
+    return fetchDetectionSettings(force)
   }
 
   if (import.meta.client && !detection.value) {
