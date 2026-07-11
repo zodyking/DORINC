@@ -180,7 +180,7 @@ defineExpose({
   flex-direction: column;
   padding: 12px !important;
 }
-.invoice-pdf-body :deep(.pdf-viewer) {
+.invoice-pdf-body :deep(.pdf-native-viewer) {
   min-height: 70vh;
 }
 .invoice-pdf-empty,
