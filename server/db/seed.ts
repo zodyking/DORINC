@@ -11,7 +11,7 @@ import {
 } from '../../shared/permissions/keys'
 import type { PermissionKey } from '../../shared/permissions/keys'
 import { accountTypePermissions, accountTypes, permissions } from './schema/auth'
-import { seedInvoiceTemplates } from './seed-invoice-templates'
+import { seedInvoiceTemplatePresets, seedInvoiceTemplates } from './seed-invoice-templates'
 import { seedCatalogCategories } from './seed-catalog-categories'
 
 config()
@@ -87,6 +87,9 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
 
     const templateSeed = await seedInvoiceTemplates(db)
     console.log(`[seed] invoice_template=${templateSeed.template.slug} version=${templateSeed.publishedVersion.versionNumber} status=${templateSeed.publishedVersion.status}`)
+
+    const presetSeed = await seedInvoiceTemplatePresets(db)
+    console.log(`[seed] invoice_template_presets inserted=${presetSeed.inserted} total=${presetSeed.total}`)
 
     const catalogSeed = await seedCatalogCategories(db)
     console.log(`[seed] catalog_categories inserted=${catalogSeed.inserted} total_defaults=${catalogSeed.total}`)

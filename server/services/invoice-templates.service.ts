@@ -49,19 +49,28 @@ export async function ensureDefaultInvoiceTemplate(db: Db) {
     .from(invoiceTemplates)
     .where(isNull(invoiceTemplates.archivedAt))
     .limit(1)
-  if (row) return
 
+  if (!row) {
+    try {
+      const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
+      await seedInvoiceTemplates(db)
+    }
+    catch (err) {
+      const [again] = await db.select({ id: invoiceTemplates.id })
+        .from(invoiceTemplates)
+        .where(isNull(invoiceTemplates.archivedAt))
+        .limit(1)
+      if (!again) throw err
+    }
+  }
+
+  // Built-in presets are additive and idempotent — safe on existing installs.
   try {
-    const { seedInvoiceTemplates } = await import('../db/seed-invoice-templates')
-    await seedInvoiceTemplates(db)
+    const { seedInvoiceTemplatePresets } = await import('../db/seed-invoice-templates')
+    await seedInvoiceTemplatePresets(db)
   }
   catch (err) {
-    const [again] = await db.select({ id: invoiceTemplates.id })
-      .from(invoiceTemplates)
-      .where(isNull(invoiceTemplates.archivedAt))
-      .limit(1)
-    if (again) return
-    throw err
+    console.warn(`[invoice-templates] preset seed skipped: ${(err as Error).message}`)
   }
 }
 
