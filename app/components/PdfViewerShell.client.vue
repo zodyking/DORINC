@@ -50,6 +50,13 @@ function resetZoom() {
   zoomMult.value = 1
 }
 
+async function onFitPage() {
+  resetZoom()
+  await viewerRef.value?.refit?.()
+}
+
+const viewerRef = ref<InstanceType<typeof PdfViewerCore> | null>(null)
+
 function updateLayoutNarrow() {
   const narrow = typeof window !== 'undefined'
     && window.matchMedia('(max-width: 640px)').matches
@@ -113,8 +120,8 @@ onUnmounted(() => {
           >
             +
           </button>
-          <button type="button" class="pdf-shell__zfit" @click="resetZoom">
-            {{ layoutNarrow ? 'Fit' : 'Fit width' }}
+          <button type="button" class="pdf-shell__zfit" @click="onFitPage">
+            Fit page
           </button>
         </div>
         <a
@@ -143,6 +150,7 @@ onUnmounted(() => {
     </header>
     <div class="pdf-shell__frame">
       <PdfViewerCore
+        ref="viewerRef"
         v-if="src || blob"
         :src="src"
         :blob="blob"
@@ -167,7 +175,7 @@ onUnmounted(() => {
 
 .pdf-shell--fill {
   flex: 1;
-  min-height: min(72vh, 820px);
+  min-height: 0;
 }
 
 .pdf-shell__head {
@@ -347,21 +355,28 @@ onUnmounted(() => {
 }
 
 @media (max-width: 640px) {
+  .pdf-shell {
+    max-height: min(52dvh, 440px);
+  }
+
   .pdf-shell__head {
-    padding: 0.4rem 0.5rem;
+    padding: 0.35rem 0.45rem;
   }
 
   .pdf-shell__frame {
-    min-height: min(58dvh, 640px);
+    min-height: 0;
+    max-height: min(42dvh, 360px);
   }
 
   .pdf-shell--fill {
     min-height: 0;
+    max-height: min(50dvh, 420px);
   }
 
   .pdf-shell--fill .pdf-shell__frame {
     flex: 1;
     min-height: 0;
+    max-height: none;
   }
 
   .pdf-shell__zbtn,
