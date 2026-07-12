@@ -79,7 +79,8 @@ describe('P1-27 invoice template seed', () => {
     expect(version.versionNumber).toBe(beforeLatest!.versionNumber + 1)
     expect(version.status).toBe('published')
     expect(version.designSettings.pageSize).toBe('A4')
-    expect(version.designSettings.accentColor).toBe('#4f46e5')
+    // Invoices render monochrome — normalize pins accents regardless of input.
+    expect(version.designSettings.accentColor).toBe('#0a0a0a')
     expect(version.layoutMarker).toContain('@php')
     expect(mergeTemplateSections(version.designSettings.sections).vehicle.visible).toBe(true)
 
