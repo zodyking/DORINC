@@ -1,5 +1,5 @@
 /* DORINC Suite service worker — offline shell cache (P4-01). */
-const CACHE_NAME = 'dorinc-shell-v12'
+const CACHE_NAME = 'dorinc-shell-v13'
 
 const SHELL_URLS = ['/', '/auth/login', '/manifest.webmanifest']
 

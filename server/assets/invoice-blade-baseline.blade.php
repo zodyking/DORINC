@@ -19,7 +19,6 @@
   $vehicle = $doc['vehicle'] ?? null;
   $note = trim((string) ($doc['note'] ?? ''));
   if ($note === '' || $note === '—') { $note = 'No complaint / symptoms recorded.'; }
-  $fillerRows = max(0, 9 - count($lineItems));
   $sections = $doc['design']['sections'] ?? [];
   $sectionVisible = function (string $key) use ($sections): bool {
     if (!isset($sections[$key])) return true;
@@ -100,6 +99,7 @@
     .complaint .body { font-size: 8.5pt; color: {{ $muted }}; line-height: 1.45; }
 
     .lines-table { margin-top: 10px; font-size: 8.5pt; }
+    .lines-table thead { display: table-header-group; }
     .lines-table thead th {
       padding: 5px 8px;
       text-align: left;
@@ -134,9 +134,8 @@
       color: {{ $muted }};
       font-family: {!! $fontMono !!};
     }
-    .lines-table tr.filler td { color: transparent; }
 
-    .bottom { margin-top: 8px; page-break-inside: avoid; }
+    .bottom { margin-top: 8px; }
     .bottom > tbody > tr > td { vertical-align: bottom; }
     .sig-line {
       border-top: 1px solid {{ $ink }};
@@ -284,9 +283,6 @@
             <td colspan="5" class="center muted" style="padding:12px;">No line items</td>
           </tr>
         @endforelse
-        @for($i = 0; $i < $fillerRows; $i++)
-          <tr class="filler"><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
-        @endfor
       </tbody>
     </table>
   @endif

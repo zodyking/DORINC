@@ -11,7 +11,10 @@ const props = defineProps<{
   blob?: Blob | null
 }>()
 
-const emit = defineEmits<{ 'load-error': [unknown] }>()
+const emit = defineEmits<{
+  'load-error': [unknown]
+  'page-info': [{ current: number, total: number }]
+}>()
 
 const zoomMult = defineModel<number>('zoomMult', { default: 1 })
 
@@ -35,6 +38,8 @@ const mainRenderTask: { current: RenderTask | null } = { current: null }
 
 const THUMB_MAX_W = 72
 const layoutNarrow = ref(false)
+type FitMode = 'page' | 'width'
+const fitMode = ref<FitMode>('page')
 
 function updateLayoutNarrow() {
   layoutNarrow.value = typeof window !== 'undefined'
@@ -97,8 +102,15 @@ async function measureFitScale() {
   const availH = Math.max(80, wrap.clientHeight - padY)
   const scaleW = availW / vp.width
   const scaleH = availH / vp.height
-  const fit = layoutNarrow.value ? scaleW : Math.min(scaleW, scaleH)
+  const fit = fitMode.value === 'width' ? scaleW : Math.min(scaleW, scaleH)
   fitScale.value = Math.max(0.15, Math.min(4, fit))
+}
+
+async function setFitMode(mode: FitMode) {
+  fitMode.value = mode
+  await settleLayout()
+  await measureFitScale()
+  await renderCurrentPage()
 }
 
 async function selectThumbPage(p: number) {
@@ -266,6 +278,10 @@ watch(() => [props.src, props.blob] as const, () => {
   }
 }, { immediate: true })
 
+watch([currentPage, numPages], () => {
+  emit('page-info', { current: currentPage.value, total: numPages.value })
+}, { immediate: true })
+
 watch(zoomMult, async () => {
   if (!pdf.value || numPages.value < 1) return
   await renderCurrentPage()
@@ -293,12 +309,16 @@ onUnmounted(() => {
 defineExpose({
   currentPage,
   numPages,
+  fitMode,
   reload: () => void loadSource(),
   refit: async () => {
     await settleLayout()
     await measureFitScale()
     await renderCurrentPage()
   },
+  setFitMode,
+  prevPage: () => void selectThumbPage(currentPage.value - 1),
+  nextPage: () => void selectThumbPage(currentPage.value + 1),
 })
 </script>
 
@@ -326,32 +346,6 @@ defineExpose({
         >
           No pages in this document.
         </p>
-      </div>
-      <div
-        v-if="pageReady && !loading && numPages > 1 && layoutNarrow"
-        class="pdf-js-viewer__pager"
-        role="navigation"
-        aria-label="PDF pages"
-      >
-        <button
-          type="button"
-          class="pdf-js-viewer__pager-btn"
-          :disabled="currentPage <= 1"
-          aria-label="Previous page"
-          @click="selectThumbPage(currentPage - 1)"
-        >
-          Prev
-        </button>
-        <span class="pdf-js-viewer__pager-label">{{ currentPage }} / {{ numPages }}</span>
-        <button
-          type="button"
-          class="pdf-js-viewer__pager-btn"
-          :disabled="currentPage >= numPages"
-          aria-label="Next page"
-          @click="selectThumbPage(currentPage + 1)"
-        >
-          Next
-        </button>
       </div>
       <div
         v-if="pageReady && !loading && numPages > 1 && !layoutNarrow"
@@ -432,20 +426,14 @@ defineExpose({
 }
 
 .pdf-js-viewer__page-shell {
-  width: 100%;
-  max-width: 100%;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   border-radius: 2px;
-  overflow: hidden;
   line-height: 0;
   flex-shrink: 0;
-  display: flex;
-  justify-content: center;
 }
 
 .pdf-js-viewer__canvas {
   display: block;
-  max-width: 100%;
 }
 
 .pdf-js-viewer__thumbs {
