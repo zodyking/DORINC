@@ -157,8 +157,8 @@ a{ color:#4f46e5; }
 .portal-user b{ font-size:13px; display:block; }
 .portal-user small{ color:#94a3b8; font-size:11px; }
 
-.portal-shell .page{ display:none; padding:24px 28px 56px; flex:1; }
-.portal-shell .page.active{ display:block; }
+.portal-shell section.page{ display:none; padding:24px 28px 56px; flex:1; }
+.portal-shell section.page.active{ display:block; }
 .pagehead{ margin-bottom:20px; }
 .pagehead__main{ min-width:0; }
 .pagehead__title-row{
@@ -921,8 +921,9 @@ label.fld .fld-badge{ display:inline-block; margin-left:6px; font-size:10px; fon
 }
 
 /* ---------- Page container ---------- */
-.page{ display:none; padding:24px 28px 56px; }
-.page.active{ display:block; }
+/* Staff route sections only — do not use bare .page (conflicts with @tato30/vue-pdf). */
+section.page{ display:none; padding:24px 28px 56px; }
+section.page.active{ display:block; }
 .pagehead{ margin-bottom:20px; }
 .pagehead__main{ min-width:0; }
 .pagehead__title-row{
@@ -1622,7 +1623,7 @@ body.help-chat-open{ overflow:hidden; }
   .scrim.show{ display:block; }
   .burger{ display:grid; place-items:center; }
   .cols{ grid-template-columns:1fr; }
-  .page{ padding:18px 16px 48px; }
+  section.page{ padding:18px 16px 48px; }
   .topbar{ padding:12px 16px; }
   .avbtn .who{ display:none; }
   .health{ grid-template-columns:repeat(2,1fr); }

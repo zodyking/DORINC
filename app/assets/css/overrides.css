@@ -162,7 +162,7 @@ textarea {
   .portal-user small {
     display: none;
   }
-  .portal-shell .page {
+  .portal-shell section.page {
     padding: 18px 16px 48px;
   }
 }
