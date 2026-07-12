@@ -330,7 +330,7 @@ onUnmounted(() => {
 
 .pdf-shell__frame {
   flex: 1 1 auto;
-  min-height: min(72vh, 820px);
+  min-height: min(60vh, 680px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -339,7 +339,7 @@ onUnmounted(() => {
 
 .pdf-shell--fill .pdf-shell__frame {
   flex: 1;
-  min-height: min(60vh, 720px);
+  min-height: 0;
 }
 
 .pdf-shell__fallback {
@@ -356,7 +356,7 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .pdf-shell {
-    max-height: min(52dvh, 440px);
+    max-height: min(44dvh, 380px);
   }
 
   .pdf-shell__head {
@@ -365,12 +365,13 @@ onUnmounted(() => {
 
   .pdf-shell__frame {
     min-height: 0;
-    max-height: min(42dvh, 360px);
+    max-height: min(36dvh, 300px);
   }
 
   .pdf-shell--fill {
     min-height: 0;
-    max-height: min(50dvh, 420px);
+    max-height: min(44dvh, 380px);
+    height: 100%;
   }
 
   .pdf-shell--fill .pdf-shell__frame {

@@ -1,5 +1,6 @@
 import * as pdfjs from 'pdfjs-dist'
-import type { PDFPageProxy } from 'pdfjs-dist'
+import { OutputScale } from 'pdfjs-dist'
+import type { PDFPageProxy, RenderTask } from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let workerReady = false
@@ -11,49 +12,67 @@ function ensureWorker() {
   }
 }
 
+function floorToDivide(n: number, div: number) {
+  return Math.floor(n / div) * div
+}
+
 /**
  * Render a PDF.js page to a canvas at the given scale.
- * Uses pdf.js transform for HiDPI — avoids upside-down WebKit glitches at scale !== 1.
+ * Mirrors the official pdf.js viewer OutputScale + transform pattern (WebKit-safe).
  */
 export async function renderPdfPageToCanvas(
   page: PDFPageProxy,
   canvas: HTMLCanvasElement,
   scale: number,
   hiDpi = true,
+  activeTask?: { current: RenderTask | null },
 ): Promise<void> {
-  const viewport = page.getViewport({ scale, dontFlip: false })
+  activeTask?.current?.cancel()
+  activeTask && (activeTask.current = null)
+
+  const viewport = page.getViewport({ scale })
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return
 
-  const outputScale = hiDpi && typeof window !== 'undefined'
-    ? Math.min(2.5, window.devicePixelRatio || 1)
-    : 1
+  const { width, height } = viewport
+  const outputScale = new OutputScale()
+  if (!hiDpi) {
+    outputScale.sx = 1
+    outputScale.sy = 1
+  }
 
-  const pxW = Math.floor(viewport.width * outputScale)
-  const pxH = Math.floor(viewport.height * outputScale)
-  canvas.width = pxW
-  canvas.height = pxH
-  canvas.style.width = `${Math.floor(viewport.width)}px`
-  canvas.style.height = `${Math.floor(viewport.height)}px`
+  const canvasWidth = floorToDivide(Math.floor(width * outputScale.sx), 1)
+  const canvasHeight = floorToDivide(Math.floor(height * outputScale.sy), 1)
+  canvas.width = canvasWidth
+  canvas.height = canvasHeight
+  canvas.style.width = `${Math.floor(width)}px`
+  canvas.style.height = `${Math.floor(height)}px`
 
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  const transform = outputScale.scaled
+    ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0]
+    : undefined
 
-  const renderParams: {
-    canvasContext: CanvasRenderingContext2D
-    viewport: typeof viewport
-    background: string
-    transform?: number[]
-  } = {
+  const renderTask = page.render({
     canvasContext: ctx,
     viewport,
     background: '#ffffff',
-  }
+    ...(transform ? { transform } : {}),
+  })
 
-  if (outputScale !== 1) {
-    renderParams.transform = [outputScale, 0, 0, outputScale, 0, 0]
-  }
+  if (activeTask) activeTask.current = renderTask
 
-  await page.render(renderParams).promise
+  try {
+    await renderTask.promise
+  }
+  catch (e: unknown) {
+    if (e && typeof e === 'object' && 'name' in e && e.name === 'RenderingCancelledException') {
+      return
+    }
+    throw e
+  }
+  finally {
+    if (activeTask?.current === renderTask) activeTask.current = null
+  }
 }
 
 export { ensureWorker, pdfjs }

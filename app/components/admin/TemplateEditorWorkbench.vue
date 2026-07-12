@@ -463,11 +463,20 @@ function resetBlade() {
 .te-pane__hint .dirty { color: #d97706; font-weight: 700; }
 .te-pane--preview {
   background: #eef0f4;
-  min-height: min(78vh, 920px);
+  min-height: min(62vh, 720px);
   position: relative;
   display: flex;
   flex-direction: column;
   padding: 12px;
+}
+
+@media (max-width: 640px) {
+  .te-pane--preview {
+    min-height: 0;
+    height: min(44dvh, 380px);
+    max-height: min(44dvh, 380px);
+    padding: 8px;
+  }
 }
 .te-preview-loading {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

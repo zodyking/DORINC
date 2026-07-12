@@ -3,7 +3,7 @@
  * TripBuddy HistoryPdfJsViewer pattern — canvas main view + bottom thumbnail strip.
  * Zoom is controlled by the parent shell via v-model:zoomMult.
  */
-import type { PDFDocumentProxy } from 'pdfjs-dist'
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { ensureWorker, pdfjs, renderPdfPageToCanvas } from '~/utils/pdf-js-render'
 
 const props = defineProps<{
@@ -32,6 +32,7 @@ const thumbCanvasByPage = new Map<number, HTMLCanvasElement>()
 let fetchAbort: AbortController | null = null
 let resizeObs: ResizeObserver | null = null
 let renderToken = 0
+const mainRenderTask: { current: RenderTask | null } = { current: null }
 
 const THUMB_MAX_W = 72
 const layoutNarrow = ref(false)
@@ -58,17 +59,10 @@ function setThumbCanvas(pageNum: number, el: Element | null) {
   else thumbCanvasByPage.delete(pageNum)
 }
 
-async function selectThumbPage(p: number) {
-  if (p < 1 || p > numPages.value) return
-  currentPage.value = p
-  await measureFitScale()
-  await renderCurrentPage()
-}
-
-async function waitForMainWrap(maxTries = 48) {
+async function waitForLayout(maxTries = 60) {
   for (let i = 0; i < maxTries; i++) {
     const wrap = mainWrapRef.value
-    if (wrap && wrap.clientWidth > 0) return wrap
+    if (wrap && wrap.clientWidth > 0 && wrap.clientHeight > 0) return wrap
     await nextTick()
     await new Promise<void>(r => requestAnimationFrame(() => r()))
   }
@@ -84,21 +78,34 @@ async function waitForCanvas(maxTries = 60) {
   return mainCanvasRef.value
 }
 
+async function settleLayout() {
+  await nextTick()
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+  await waitForLayout()
+}
+
 async function measureFitScale() {
   const doc = pdf.value
-  const wrap = (await waitForMainWrap()) || mainWrapRef.value
-  if (!doc || !wrap || wrap.clientWidth <= 0) return
+  const wrap = (await waitForLayout()) || mainWrapRef.value
+  if (!doc || !wrap || wrap.clientWidth <= 0 || wrap.clientHeight <= 0) return
   const p = Math.min(Math.max(1, currentPage.value), doc.numPages)
   const page = await doc.getPage(p)
-  const vp = page.getViewport({ scale: 1, dontFlip: false })
+  const vp = page.getViewport({ scale: 1 })
   const padX = horizontalPad()
   const padY = verticalPad()
   const availW = Math.max(80, wrap.clientWidth - padX)
-  const availH = Math.max(80, (wrap.clientHeight || wrap.clientWidth * 1.3) - padY)
+  const availH = Math.max(80, wrap.clientHeight - padY)
   const scaleW = availW / vp.width
   const scaleH = availH / vp.height
-  // Fit entire page in view (width + height), not just width.
   fitScale.value = Math.max(0.15, Math.min(4, Math.min(scaleW, scaleH)))
+}
+
+async function selectThumbPage(p: number) {
+  if (p < 1 || p > numPages.value) return
+  currentPage.value = p
+  await settleLayout()
+  await measureFitScale()
+  await renderCurrentPage()
 }
 
 async function renderCurrentPage() {
@@ -110,7 +117,7 @@ async function renderCurrentPage() {
   const scale = effectiveMainScale()
   const page = await doc.getPage(p)
   if (token !== renderToken) return
-  await renderPdfPageToCanvas(page, canvas, scale, true)
+  await renderPdfPageToCanvas(page, canvas, scale, true, mainRenderTask)
 }
 
 async function renderThumbnails() {
@@ -149,6 +156,8 @@ function setupResizeObserver() {
 
 function cleanupDoc() {
   teardownResizeObserver()
+  mainRenderTask.current?.cancel()
+  mainRenderTask.current = null
   if (pdf.value) {
     try {
       void pdf.value.destroy()
@@ -189,9 +198,8 @@ async function loadFromBytes(buf: ArrayBuffer) {
   }
 
   loading.value = false
-  await nextTick()
+  await settleLayout()
   await waitForCanvas()
-  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
   if (!pdf.value || numPages.value < 1) return
 
@@ -200,6 +208,10 @@ async function loadFromBytes(buf: ArrayBuffer) {
     setupResizeObserver()
     await renderCurrentPage()
     void renderThumbnails()
+    // Re-fit after first paint — iOS Safari needs a settled layout for correct scale/orientation.
+    await settleLayout()
+    await measureFitScale()
+    await renderCurrentPage()
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Could not render PDF'
@@ -258,7 +270,7 @@ watch(zoomMult, async () => {
 watch(layoutNarrow, async (narrow) => {
   if (narrow && zoomMult.value < 1) zoomMult.value = 1
   if (!pdf.value || numPages.value < 1) return
-  await nextTick()
+  await settleLayout()
   await measureFitScale()
   await renderCurrentPage()
 })
@@ -275,6 +287,7 @@ onUnmounted(() => {
 })
 
 defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: async () => {
+  await settleLayout()
   await measureFitScale()
   await renderCurrentPage()
 } })
@@ -290,7 +303,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
         <div v-if="loading" class="pdf-js-viewer__loading" role="status" aria-live="polite">
           Loading PDF…
         </div>
-        <div class="pdf-js-viewer__page-shell" :class="{ 'is-hidden': loading || numPages < 1 }">
+        <div class="pdf-js-viewer__page-shell">
           <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
         </div>
         <p
@@ -381,8 +394,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
   flex: 1 1 0;
   min-height: 0;
   position: relative;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
   padding: 0.35rem 0.3rem 0.45rem;
@@ -411,20 +423,12 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
   overflow: hidden;
   line-height: 0;
   flex-shrink: 0;
-  width: fit-content;
   max-width: 100%;
-}
-
-.pdf-js-viewer__page-shell.is-hidden {
-  visibility: hidden;
-  position: absolute;
-  pointer-events: none;
 }
 
 .pdf-js-viewer__canvas {
   display: block;
-  max-width: 100%;
-  height: auto !important;
+  vertical-align: top;
 }
 
 .pdf-js-viewer__thumbs {
@@ -527,7 +531,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
 @media (max-width: 640px) {
   .pdf-js-viewer {
     min-height: 0;
-    max-height: min(46dvh, 400px);
+    max-height: min(40dvh, 340px);
   }
 
   .pdf-js-viewer__main {
