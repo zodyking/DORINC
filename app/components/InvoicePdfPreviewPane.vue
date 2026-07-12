@@ -116,8 +116,8 @@ defineExpose({ refresh: loadPreview })
 @media (max-width: 640px) {
   .invoice-pdf-pane {
     min-height: 0;
-    height: min(50dvh, 440px);
-    max-height: min(50dvh, 440px);
+    height: min(42dvh, 360px);
+    max-height: min(42dvh, 360px);
     display: flex;
     flex-direction: column;
   }

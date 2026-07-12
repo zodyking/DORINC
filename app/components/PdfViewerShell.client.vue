@@ -109,7 +109,7 @@ onUnmounted(() => {
             aria-label="Zoom out"
             @click="bumpZoom(-0.15)"
           >
-            −
+            <span aria-hidden="true">-</span>
           </button>
           <span class="pdf-shell__zpct">{{ Math.round(zoomMult * 100) }}%</span>
           <button
@@ -118,7 +118,7 @@ onUnmounted(() => {
             aria-label="Zoom in"
             @click="bumpZoom(0.15)"
           >
-            +
+            <span aria-hidden="true">+</span>
           </button>
           <button type="button" class="pdf-shell__zfit" @click="onFitPage">
             Fit page
