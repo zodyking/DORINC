@@ -316,6 +316,47 @@ function resetBlade() {
   clearPreview()
   if (editorTab.value === 'preview') refreshPreview()
 }
+
+const bladeEditorRef = ref<HTMLTextAreaElement | null>(null)
+
+async function copyBladeSource() {
+  const el = bladeEditorRef.value
+  const hasSelection = !!el && el.selectionStart !== el.selectionEnd
+  const text = hasSelection
+    ? bladeSource.value.slice(el!.selectionStart, el!.selectionEnd)
+    : bladeSource.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    actionMessage.value = hasSelection ? 'Selection copied to clipboard' : 'Blade source copied to clipboard'
+    actionError.value = ''
+  }
+  catch {
+    actionError.value = 'Could not copy — check browser clipboard permission'
+  }
+}
+
+async function pasteBladeFromClipboard() {
+  if (!canManage.value) return
+  const el = bladeEditorRef.value
+  if (!el) return
+  try {
+    const text = await navigator.clipboard.readText()
+    if (!text) return
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    bladeSource.value = `${bladeSource.value.slice(0, start)}${text}${bladeSource.value.slice(end)}`
+    await nextTick()
+    const caret = start + text.length
+    el.focus()
+    el.setSelectionRange(caret, caret)
+    actionMessage.value = 'Pasted from clipboard'
+    actionError.value = ''
+  }
+  catch {
+    actionError.value = 'Could not paste — allow clipboard access in your browser'
+  }
+}
 </script>
 
 <template>
@@ -382,12 +423,33 @@ function resetBlade() {
           </button>
         </div>
         <div class="te-workspace__actions">
+          <template v-if="editorTab === 'code'">
+            <button
+              type="button"
+              class="btn sm ghost"
+              :disabled="!bladeSource"
+              title="Copy all Blade source (or current selection)"
+              @click="copyBladeSource"
+            >
+              Copy
+            </button>
+            <button
+              v-if="canManage"
+              type="button"
+              class="btn sm ghost"
+              title="Paste clipboard at cursor"
+              @click="pasteBladeFromClipboard"
+            >
+              Paste
+            </button>
+          </template>
           <button type="button" class="btn sm ghost" :disabled="!bladeDirty" @click="resetBlade">Reset</button>
         </div>
       </div>
 
       <div v-show="editorTab === 'code'" class="te-pane te-pane--code">
         <textarea
+          ref="bladeEditorRef"
           v-model="bladeSource"
           class="td-code te-blade-editor"
           spellcheck="false"
