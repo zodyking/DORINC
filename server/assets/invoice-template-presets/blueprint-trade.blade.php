@@ -1,6 +1,7 @@
 @php
-  // Blueprint Trade — structured service-shop invoice with steel-blue section
-  // bars, boxed panels, and a work-order feel. Built for fleet & repair trades.
+  // Blueprint Trade — compact steel-blue shop invoice. Rounded navy header
+  // band, one shared info card, complaint strip above a blue-ruled item
+  // grid that owns the page, navy rounded pay band.
   $paperCss = ($paper ?? 'letter') === 'a4' ? 'A4' : 'Letter';
   $m = $margins ?? ['top' => 0.75, 'right' => 0.75, 'bottom' => 0.75, 'left' => 0.75];
   $ink = '#16222e';
@@ -9,7 +10,8 @@
   $muted = '#51606f';
   $faint = '#7d8a97';
   $line = '#c7d2dd';
-  $surface = '#f0f4f8';
+  $hairline = '#e2e8ee';
+  $tint = '#f0f4f8';
   $onDark = '#f5f8fb';
   $fontSans = $doc['design']['fontSans'] ?? 'DejaVu Sans, Helvetica, Arial, sans-serif';
   $fontMono = $doc['design']['fontMono'] ?? 'DejaVu Sans Mono, Courier, monospace';
@@ -17,6 +19,10 @@
   $lineItems = $doc['lineItems'] ?? [];
   $customer = $doc['customer'] ?? [];
   $totals = $doc['totals'] ?? [];
+  $vehicle = $doc['vehicle'] ?? null;
+  $note = trim((string) ($doc['note'] ?? ''));
+  if ($note === '' || $note === '—') { $note = 'No complaint / symptoms recorded.'; }
+  $fillerRows = max(0, 9 - count($lineItems));
   $sections = $doc['design']['sections'] ?? [];
   $sectionVisible = function (string $key) use ($sections): bool {
     if (!isset($sections[$key])) return true;
@@ -38,8 +44,8 @@
     body {
       margin: 0;
       font-family: {!! $fontSans !!};
-      font-size: 9.5pt;
-      line-height: 1.5;
+      font-size: 9pt;
+      line-height: 1.4;
       color: {{ $ink }};
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -47,276 +53,227 @@
     table { border-collapse: collapse; width: 100%; }
     .mono { font-family: {!! $fontMono !!}; font-variant-numeric: tabular-nums; }
     .muted { color: {{ $muted }}; }
-
-    .head td { vertical-align: top; }
-    .company-name {
-      margin: 0 0 6px;
-      font-size: 16pt;
-      font-weight: 700;
-      color: {{ $navy }};
-      line-height: 1.2;
-    }
-    .company-meta { font-size: 8.5pt; color: {{ $muted }}; line-height: 1.6; }
-    .doc-box {
-      border: 2px solid {{ $navy }};
-    }
-    .doc-box .doc-box-title {
-      background: {{ $navy }};
-      color: {{ $onDark }};
-      text-align: center;
-      padding: 7px 10px;
-      font-size: 13pt;
-      font-weight: 700;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-    }
-    .doc-box .doc-box-row { border-top: 1px solid {{ $line }}; }
-    .doc-box .doc-box-row td {
-      padding: 5px 10px;
-      font-size: 8.5pt;
-    }
-    .doc-box .doc-box-row td:first-child {
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-size: 7pt;
-      color: {{ $steel }};
-      width: 42%;
-    }
-    .doc-box .doc-box-row td:last-child { text-align: right; font-weight: 700; }
-
-    .section-bar {
-      margin-top: 16px;
-      background: {{ $navy }};
-      color: {{ $onDark }};
-      padding: 5px 10px;
-      font-size: 7.5pt;
-      font-weight: 700;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-    }
-
-    .panel-grid td { vertical-align: top; }
-    .panel {
-      border: 1px solid {{ $line }};
-      border-top: none;
-      padding: 10px 12px;
-      background: #ffffff;
-    }
-    .panel p { margin: 0 0 3px; font-size: 9pt; }
-    .panel .party-name { font-size: 10pt; font-weight: 700; }
-
-    .spec-table td {
-      border: 1px solid {{ $line }};
-      border-top: none;
-      padding: 7px 10px;
-      vertical-align: top;
-      font-size: 9pt;
-      background: #ffffff;
-    }
-    .spec-table .sp-label {
-      display: block;
+    .label {
       font-size: 6.5pt;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: {{ $steel }};
-      margin-bottom: 2px;
-    }
-    .spec-table .sp-val { font-weight: 700; }
-
-    .notes-panel {
-      border: 1px solid {{ $line }};
-      border-top: none;
-      padding: 10px 12px;
-      font-size: 9pt;
-      color: {{ $muted }};
-      line-height: 1.6;
-      background: #ffffff;
-    }
-
-    .lines-table { font-size: 9pt; }
-    .lines-table th, .lines-table td { border: 1px solid {{ $line }}; }
-    .lines-table thead th {
-      padding: 7px 9px;
-      background: {{ $surface }};
-      text-align: left;
-      font-size: 7pt;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: {{ $steel }};
-      border-top: none;
-    }
-    .lines-table tbody td { padding: 8px 9px; vertical-align: top; }
-    .lines-table .num {
-      text-align: right;
-      white-space: nowrap;
-      font-family: {!! $fontMono !!};
-      font-variant-numeric: tabular-nums;
-    }
-    .lines-table .center { text-align: center; }
-    .type-tag {
-      display: inline-block;
-      min-width: 16px;
-      padding: 1px 4px;
-      border: 1px solid {{ $steel }};
-      color: {{ $steel }};
-      text-align: center;
-      font-size: 7.5pt;
-      font-weight: 700;
-      font-family: {!! $fontMono !!};
-    }
-
-    .bottom { margin-top: 16px; page-break-inside: avoid; }
-    .bottom > tbody > tr > td { vertical-align: top; }
-
-    .pay-panel {
-      border: 1px solid {{ $line }};
-      padding: 10px 12px;
-      background: {{ $surface }};
-      font-size: 8.5pt;
-      color: {{ $muted }};
-      line-height: 1.6;
-    }
-    .pay-panel .pay-head {
-      font-size: 7pt;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: {{ $steel }};
-      margin-bottom: 4px;
+      margin: 0 0 3px;
     }
 
-    .totals-table { font-size: 9pt; }
-    .totals-table td { border: 1px solid {{ $line }}; padding: 5px 10px; background: #ffffff; }
-    .totals-table td:first-child {
-      color: {{ $steel }};
-      font-size: 7.5pt;
+    .masthead { background: {{ $navy }}; border-radius: 10px; }
+    .masthead td { padding: 11px 16px; vertical-align: top; }
+    .masthead .company-name { margin: 0 0 3px; font-size: 13pt; font-weight: 700; color: {{ $onDark }}; line-height: 1.2; }
+    .masthead .company-meta { font-size: 7.5pt; color: #c5d2df; line-height: 1.45; }
+    .masthead .doc-title { margin: 0; font-size: 16pt; font-weight: 700; letter-spacing: 0.14em; text-align: right; color: {{ $onDark }}; line-height: 1; }
+    .masthead .doc-sub { margin-top: 3px; text-align: right; font-size: 8.5pt; font-weight: 700; color: #c5d2df; }
+    .masthead .status {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 1px 9px;
+      border: 1px solid {{ $onDark }};
+      border-radius: 9px;
+      font-size: 6.5pt;
       font-weight: 700;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
+      color: {{ $onDark }};
     }
-    .totals-table td:last-child {
+
+    .info-card {
+      margin-top: 8px;
+      background: {{ $tint }};
+      border: 1px solid {{ $line }};
+      border-radius: 10px;
+    }
+    .info-card td { padding: 8px 12px; vertical-align: top; border-left: 1px solid {{ $line }}; }
+    .info-card td:first-child { border-left: none; }
+    .info-card p { margin: 0 0 1px; font-size: 8.5pt; }
+    .info-card .strong { font-weight: 700; font-size: 9pt; }
+    .kv { font-size: 8.5pt; }
+    .kv td { padding: 0 0 1px; border: none; vertical-align: top; }
+    .kv .k { color: {{ $faint }}; width: 34%; padding-right: 6px; font-size: 7.5pt; }
+    .kv .v { font-weight: 600; }
+
+    .complaint {
+      margin-top: 8px;
+      border: 1px solid {{ $line }};
+      border-radius: 8px;
+      padding: 6px 11px;
+    }
+    .complaint .body { font-size: 8.5pt; color: {{ $muted }}; line-height: 1.45; }
+
+    .lines-table { margin-top: 10px; font-size: 8.5pt; }
+    .lines-table thead th {
+      padding: 5px 8px;
+      background: {{ $tint }};
+      text-align: left;
+      font-size: 6.5pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: {{ $steel }};
+      border-bottom: 2px solid {{ $navy }};
+    }
+    .lines-table tbody td {
+      padding: 4.5px 8px;
+      vertical-align: top;
+      border-bottom: 1px solid {{ $hairline }};
+    }
+    .lines-table .num {
       text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-family: {!! $fontMono !!};
+    }
+    .lines-table .center { text-align: center; }
+    .type-tag {
+      display: inline-block;
+      min-width: 14px;
+      padding: 0 3px;
+      border: 1px solid {{ $steel }};
+      border-radius: 3px;
+      color: {{ $steel }};
+      text-align: center;
+      font-size: 7pt;
       font-weight: 700;
       font-family: {!! $fontMono !!};
-      font-variant-numeric: tabular-nums;
     }
-    .totals-table tr.total td { background: {{ $surface }}; font-size: 10pt; }
-    .totals-table tr.balance td {
-      background: {{ $navy }};
-      color: {{ $onDark }};
-      border-color: {{ $navy }};
-      font-size: 11pt;
-    }
-    .totals-table tr.balance td:first-child { color: {{ $onDark }}; }
+    .lines-table tr.filler td { color: transparent; }
 
-    .signatures { margin-top: 30px; page-break-inside: avoid; }
-    .signatures td { width: 50%; padding: 0 18px 0 0; vertical-align: bottom; }
-    .signatures td:last-child { padding: 0 0 0 18px; }
+    .bottom { margin-top: 8px; page-break-inside: avoid; }
+    .bottom > tbody > tr > td { vertical-align: bottom; }
     .sig-line {
-      border-top: 1px solid {{ $ink }};
-      padding-top: 5px;
-      font-size: 7pt;
+      border-top: 1px solid {{ $navy }};
+      margin-right: 30px;
+      padding-top: 4px;
+      font-size: 6.5pt;
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: {{ $faint }};
     }
-    .footer {
-      margin-top: 20px;
-      border-top: 2px solid {{ $navy }};
-      padding-top: 8px;
-      font-size: 7.5pt;
-      color: {{ $faint }};
+    .totals-table { font-size: 8.5pt; }
+    .totals-table td { padding: 2.5px 2px; }
+    .totals-table td:first-child { color: {{ $muted }}; }
+    .totals-table td:last-child {
+      text-align: right;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      font-family: {!! $fontMono !!};
     }
-    .footer td:last-child { text-align: right; }
+    .totals-table tr.total td {
+      padding-top: 5px;
+      border-top: 2px solid {{ $navy }};
+      font-size: 9.5pt;
+      font-weight: 700;
+    }
+    .balance-band { margin-top: 5px; background: {{ $navy }}; border-radius: 8px; }
+    .balance-band td { padding: 6px 10px; }
+    .balance-band .bd-label {
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: {{ $onDark }};
+    }
+    .balance-band .bd-amount {
+      text-align: right;
+      font-size: 11pt;
+      font-weight: 700;
+      color: {{ $onDark }};
+      font-family: {!! $fontMono !!};
+    }
+
+    .footer {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid {{ $line }};
+      font-size: 7pt;
+      color: {{ $faint }};
+      text-align: center;
+      letter-spacing: 0.04em;
+    }
   </style>
 </head>
 <body>
-  <table class="head">
+  <table class="masthead">
     <tr>
       @if($sectionVisible('company_info'))
-        <td width="{{ $sectionVisible('invoice_meta') ? '56%' : '100%' }}" style="padding-right:20px;">
+        <td width="{{ $sectionVisible('invoice_meta') ? '60%' : '100%' }}">
           <h1 class="company-name">{{ $company['name'] ?? 'Business Name' }}</h1>
           <div class="company-meta">
-            @if(!empty($company['addressLine1']))<div>{{ $company['addressLine1'] }}</div>@endif
-            @if(!empty($company['addressLine2']))<div>{{ $company['addressLine2'] }}</div>@endif
-            @if(!empty($company['phone']))<div>Tel: {{ $company['phone'] }}</div>@endif
-            @if(!empty($company['email']))<div>{{ $company['email'] }}</div>@endif
-            @if(!empty($company['website']))<div>{{ $company['website'] }}</div>@endif
+            {{ trim(implode(', ', array_filter([$company['addressLine1'] ?? '', $company['addressLine2'] ?? '']))) }}<br>
+            {{ $company['phone'] ?? '' }}@if(!empty($company['phone']) && !empty($company['email'])) &nbsp;·&nbsp; @endif{{ $company['email'] ?? '' }}
           </div>
         </td>
       @endif
       @if($sectionVisible('invoice_meta'))
-        <td width="{{ $sectionVisible('company_info') ? '44%' : '100%' }}">
-          <table class="doc-box">
-            <tr><td class="doc-box-title" colspan="2">{{ $doc['documentTitle'] ?? 'INVOICE' }}</td></tr>
-            <tr class="doc-box-row"><td>{{ $doc['numberLabel'] ?? 'Invoice #' }}</td><td>{{ $doc['number'] ?? '—' }}</td></tr>
-            <tr class="doc-box-row"><td>{{ $doc['dateLabel'] ?? 'Date' }}</td><td>{{ $doc['date'] ?? '—' }}</td></tr>
-            <tr class="doc-box-row"><td>{{ $doc['dueDateLabel'] ?? 'Due' }}</td><td>{{ $doc['dueLabel'] ?? '—' }}</td></tr>
-            @if(!empty($doc['statusLabel']))
-              <tr class="doc-box-row"><td>Status</td><td>{{ $doc['statusLabel'] }}</td></tr>
-            @endif
-            <tr class="doc-box-row"><td>Amount due</td><td>{{ $totals['balanceDue'] ?? $totals['total'] ?? '$0.00' }}</td></tr>
+        <td width="{{ $sectionVisible('company_info') ? '40%' : '100%' }}">
+          <h2 class="doc-title">{{ $doc['documentTitle'] ?? 'INVOICE' }}</h2>
+          <div class="doc-sub mono">{{ $doc['number'] ?? '—' }}</div>
+          @if(!empty($doc['statusLabel']))
+            <div style="text-align:right;"><span class="status">{{ $doc['statusLabel'] }}</span></div>
+          @endif
+        </td>
+      @endif
+    </tr>
+  </table>
+
+  <table class="info-card">
+    <tr>
+      @if($sectionVisible('customer'))
+        <td width="{{ ($sectionVisible('vehicle') && $vehicle) ? '36%' : '55%' }}">
+          <div class="label">{{ $sectionLabel('customer', 'Bill to') }}</div>
+          <p class="strong">{{ $customer['name'] ?? '—' }}</p>
+          @foreach(($customer['addressLines'] ?? []) as $line)
+            <p class="muted">{{ $line }}</p>
+          @endforeach
+          @if(!empty($customer['phone']) && $customer['phone'] !== '—')<p class="muted">{{ $customer['phone'] }}</p>@endif
+          @if(!empty($customer['email']) && $customer['email'] !== '—')<p class="muted">{{ $customer['email'] }}</p>@endif
+        </td>
+      @endif
+      @if($sectionVisible('vehicle') && $vehicle)
+        <td width="{{ $sectionVisible('customer') ? '36%' : '55%' }}">
+          <div class="label">{{ $sectionLabel('vehicle', 'Vehicle / unit') }}</div>
+          <table class="kv">
+            <tr><td class="k">Unit</td><td class="v">{{ $vehicle['unitNumber'] ?? '—' }} · {{ $vehicle['year'] ?? '—' }} {{ $vehicle['makeModel'] ?? '' }}</td></tr>
+            <tr><td class="k">VIN</td><td class="v mono">{{ $vehicle['vin'] ?? '—' }}</td></tr>
+            <tr><td class="k">Plate</td><td class="v">{{ $vehicle['plate'] ?? '—' }}</td></tr>
+          </table>
+        </td>
+      @endif
+      @if($sectionVisible('invoice_meta'))
+        <td width="28%">
+          <div class="label">Invoice details</div>
+          <table class="kv">
+            <tr><td class="k">{{ $doc['numberLabel'] ?? 'Invoice #' }}</td><td class="v mono">{{ $doc['number'] ?? '—' }}</td></tr>
+            <tr><td class="k">{{ $doc['dateLabel'] ?? 'Date' }}</td><td class="v">{{ $doc['date'] ?? '—' }}</td></tr>
+            <tr><td class="k">{{ $doc['dueDateLabel'] ?? 'Due' }}</td><td class="v">{{ $doc['dueLabel'] ?? '—' }}</td></tr>
           </table>
         </td>
       @endif
     </tr>
   </table>
 
-  @if($sectionVisible('customer') || ($sectionVisible('vehicle') && !empty($doc['vehicle'])))
-    <table class="panel-grid" style="margin-top:2px;">
-      <tr>
-        @if($sectionVisible('customer'))
-          <td width="{{ ($sectionVisible('vehicle') && !empty($doc['vehicle'])) ? '46%' : '100%' }}" style="{{ ($sectionVisible('vehicle') && !empty($doc['vehicle'])) ? 'padding-right:12px;' : '' }}">
-            <div class="section-bar">{{ $sectionLabel('customer', 'Bill to') }}</div>
-            <div class="panel">
-              <p class="party-name">{{ $customer['name'] ?? '—' }}</p>
-              @foreach(($customer['addressLines'] ?? []) as $line)
-                <p class="muted">{{ $line }}</p>
-              @endforeach
-              @if(!empty($customer['phone']) && $customer['phone'] !== '—')<p class="muted">{{ $customer['phone'] }}</p>@endif
-              @if(!empty($customer['email']) && $customer['email'] !== '—')<p class="muted">{{ $customer['email'] }}</p>@endif
-            </div>
-          </td>
-        @endif
-        @if($sectionVisible('vehicle') && !empty($doc['vehicle']))
-          <td width="{{ $sectionVisible('customer') ? '54%' : '100%' }}">
-            <div class="section-bar">{{ $sectionLabel('vehicle', 'Vehicle / unit') }}</div>
-            <table class="spec-table">
-              <tr>
-                <td width="25%"><span class="sp-label">Unit</span><span class="sp-val">{{ $doc['vehicle']['unitNumber'] ?? '—' }}</span></td>
-                <td width="25%"><span class="sp-label">Year</span><span class="sp-val">{{ $doc['vehicle']['year'] ?? '—' }}</span></td>
-                <td width="50%"><span class="sp-label">Make / model</span><span class="sp-val">{{ $doc['vehicle']['makeModel'] ?? '—' }}</span></td>
-              </tr>
-              <tr>
-                <td colspan="2"><span class="sp-label">VIN</span><span class="sp-val mono">{{ $doc['vehicle']['vin'] ?? '—' }}</span></td>
-                <td><span class="sp-label">Plate</span><span class="sp-val">{{ $doc['vehicle']['plate'] ?? '—' }}</span></td>
-              </tr>
-            </table>
-          </td>
-        @endif
-      </tr>
-    </table>
-  @endif
-
-  @if(($sectionVisible('symptoms') || $sectionVisible('job_summary')) && !empty($doc['note']) && $doc['note'] !== '—')
-    <div class="section-bar">{{ $sectionLabel('symptoms', 'Work performed / customer notes') }}</div>
-    <div class="notes-panel">{{ $doc['note'] }}</div>
+  @if($sectionVisible('symptoms') || $sectionVisible('job_summary'))
+    <div class="complaint">
+      <div class="label">{{ $sectionLabel('symptoms', 'Customer complaint / symptoms') }}</div>
+      <div class="body">{{ $note }}</div>
+    </div>
   @endif
 
   @if($sectionVisible('line_items'))
-    <div class="section-bar">{{ $sectionLabel('line_items', 'Parts & labor detail') }}</div>
     <table class="lines-table">
       <thead>
         <tr>
-          <th style="width:8%;" class="center">Type</th>
-          <th style="width:44%;">Description</th>
-          <th style="width:12%;" class="num">Qty</th>
-          <th style="width:16%;" class="num">Unit price</th>
-          <th style="width:20%;" class="num">Amount</th>
+          <th style="width:7%; text-align:center;">Type</th>
+          <th style="width:47%;">Description</th>
+          <th style="width:11%; text-align:right;">Qty</th>
+          <th style="width:16%; text-align:right;">Unit price</th>
+          <th style="width:19%; text-align:right;">Amount</th>
         </tr>
       </thead>
       <tbody>
@@ -330,35 +287,26 @@
           </tr>
         @empty
           <tr>
-            <td colspan="5" class="center muted" style="padding:14px;">No line items</td>
+            <td colspan="5" class="center muted" style="padding:12px;">No line items</td>
           </tr>
         @endforelse
+        @for($i = 0; $i < $fillerRows; $i++)
+          <tr class="filler"><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
+        @endfor
       </tbody>
     </table>
   @endif
 
-  @if($sectionVisible('totals') || $sectionVisible('payment') || $sectionVisible('terms'))
+  @if($sectionVisible('totals') || $sectionVisible('footer'))
     <table class="bottom">
       <tr>
-        @if($sectionVisible('payment') || $sectionVisible('terms'))
-          <td width="{{ $sectionVisible('totals') ? '52%' : '100%' }}" style="padding-right:14px;">
-            @if($sectionVisible('payment'))
-              <div class="pay-panel">
-                <div class="pay-head">{{ $sectionLabel('payment', 'Payment instructions') }}</div>
-                {{ $doc['dueLabel'] ?? 'Due upon receipt' }}. Please reference {{ $doc['numberLabel'] ?? 'invoice' }} {{ $doc['number'] ?? '' }} with your payment.
-              </div>
-            @endif
-            @if($sectionVisible('terms'))
-              <div class="pay-panel" style="margin-top:10px;">
-                <div class="pay-head">{{ $sectionLabel('terms', 'Terms & conditions') }}</div>
-                All work has been completed as described above. Payment is due per the stated terms;
-                past-due balances may accrue service charges where permitted by law.
-              </div>
-            @endif
-          </td>
-        @endif
+        <td width="55%" style="padding-right:24px;">
+          @if($sectionVisible('footer'))
+            <div class="sig-line">Customer signature / date</div>
+          @endif
+        </td>
         @if($sectionVisible('totals'))
-          <td width="{{ ($sectionVisible('payment') || $sectionVisible('terms')) ? '48%' : '100%' }}">
+          <td width="45%">
             <table class="totals-table">
               <tr><td>Parts</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
               <tr><td>Labor</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
@@ -366,7 +314,12 @@
               <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
               <tr><td>Tax</td><td>{{ $totals['tax'] ?? '$0.00' }}</td></tr>
               <tr class="total"><td>Total</td><td>{{ $totals['total'] ?? '$0.00' }}</td></tr>
-              <tr class="balance"><td>Balance due</td><td>{{ $totals['balanceDue'] ?? $totals['total'] ?? '$0.00' }}</td></tr>
+            </table>
+            <table class="balance-band">
+              <tr>
+                <td class="bd-label">Balance due</td>
+                <td class="bd-amount">{{ $totals['balanceDue'] ?? $totals['total'] ?? '$0.00' }}</td>
+              </tr>
             </table>
           </td>
         @endif
@@ -375,18 +328,9 @@
   @endif
 
   @if($sectionVisible('footer'))
-    <table class="signatures">
-      <tr>
-        <td><div class="sig-line">Authorized signature</div></td>
-        <td><div class="sig-line">Customer signature / date</div></td>
-      </tr>
-    </table>
-    <table class="footer">
-      <tr>
-        <td>{{ $company['name'] ?? '' }} — {{ $doc['documentTitle'] ?? 'Invoice' }} {{ $doc['number'] ?? '' }}</td>
-        <td>Generated {{ $doc['generatedAt'] ?? '' }}</td>
-      </tr>
-    </table>
+    <div class="footer">
+      {{ $company['name'] ?? '' }} &nbsp;·&nbsp; {{ $doc['documentTitle'] ?? 'Invoice' }} {{ $doc['number'] ?? '' }} &nbsp;·&nbsp; Thank you for your business
+    </div>
   @endif
 </body>
 </html>

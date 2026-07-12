@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 import type { Db } from './client'
 import { BLADE_INVOICE_TEMPLATE_MARKER } from '../../shared/invoice-template-design'
 import {
@@ -18,7 +18,7 @@ export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Standard Invoice'
  * users can pick, duplicate, and customize them from the designer.
  */
 export const INVOICE_TEMPLATE_PRESETS: ReadonlyArray<{ slug: string, name: string, file: string }> = [
-  { slug: 'classic-ledger', name: 'Classic Ledger', file: 'classic-ledger.blade.php' },
+  { slug: 'classic-ledger', name: 'Service Matrix', file: 'classic-ledger.blade.php' },
   { slug: 'onyx-bold', name: 'Onyx Bold', file: 'onyx-bold.blade.php' },
   { slug: 'aria-minimal', name: 'Aria Minimal', file: 'aria-minimal.blade.php' },
   { slug: 'executive-slate', name: 'Executive Slate', file: 'executive-slate.blade.php' },
@@ -46,31 +46,71 @@ async function readPresetBladeSource(file: string): Promise<string> {
 }
 
 /**
- * Idempotent seed of built-in template presets. Inserts only presets whose
- * slug does not exist yet (archived ones stay archived — never re-added).
+ * Idempotent seed of built-in template presets.
+ * - Missing slugs are inserted as published v1.
+ * - Existing presets whose versions were all seeded (never edited by a user)
+ *   are upgraded in place when the shipped Blade source changes.
+ * - User-edited or archived presets are left untouched.
  */
 export async function seedInvoiceTemplatePresets(db: Db) {
   const presetSlugs = INVOICE_TEMPLATE_PRESETS.map(p => p.slug)
-  const existing = await db.select({ slug: invoiceTemplates.slug })
+  const existing = await db.select()
     .from(invoiceTemplates)
     .where(inArray(invoiceTemplates.slug, presetSlugs))
-  const existingSlugs = new Set(existing.map(r => r.slug))
+  const existingBySlug = new Map(existing.map(r => [r.slug, r]))
 
   let inserted = 0
+  let upgraded = 0
   for (const preset of INVOICE_TEMPLATE_PRESETS) {
-    if (existingSlugs.has(preset.slug)) continue
-
     const bladeSource = await readPresetBladeSource(preset.file)
-    const [template] = await db.insert(invoiceTemplates)
-      .values({ name: preset.name, slug: preset.slug, isDefault: false })
-      .onConflictDoNothing({ target: invoiceTemplates.slug })
-      .returning()
-    if (!template) continue
+    const template = existingBySlug.get(preset.slug)
 
-    await db.insert(invoiceTemplateVersions)
+    if (!template) {
+      const [row] = await db.insert(invoiceTemplates)
+        .values({ name: preset.name, slug: preset.slug, isDefault: false })
+        .onConflictDoNothing({ target: invoiceTemplates.slug })
+        .returning()
+      if (!row) continue
+
+      await db.insert(invoiceTemplateVersions)
+        .values({
+          templateId: row.id,
+          versionNumber: 1,
+          status: 'published',
+          layoutMarker: bladeSource,
+          designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
+          publishedAt: new Date(),
+        })
+        .onConflictDoNothing({
+          target: [invoiceTemplateVersions.templateId, invoiceTemplateVersions.versionNumber],
+        })
+      inserted += 1
+      continue
+    }
+
+    if (template.archivedAt) continue
+
+    const versions = await db.select({
+      id: invoiceTemplateVersions.id,
+      versionNumber: invoiceTemplateVersions.versionNumber,
+      layoutMarker: invoiceTemplateVersions.layoutMarker,
+      createdBy: invoiceTemplateVersions.createdBy,
+      publishedBy: invoiceTemplateVersions.publishedBy,
+    })
+      .from(invoiceTemplateVersions)
+      .where(eq(invoiceTemplateVersions.templateId, template.id))
+      .orderBy(desc(invoiceTemplateVersions.versionNumber))
+    const latest = versions[0]
+    if (!latest) continue
+
+    // Seeded versions carry no actor ids; any actor means a user touched it.
+    const userTouched = versions.some(v => v.createdBy !== null || v.publishedBy !== null)
+    if (userTouched || latest.layoutMarker === bladeSource) continue
+
+    const [version] = await db.insert(invoiceTemplateVersions)
       .values({
         templateId: template.id,
-        versionNumber: 1,
+        versionNumber: latest.versionNumber + 1,
         status: 'published',
         layoutMarker: bladeSource,
         designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
@@ -79,10 +119,26 @@ export async function seedInvoiceTemplatePresets(db: Db) {
       .onConflictDoNothing({
         target: [invoiceTemplateVersions.templateId, invoiceTemplateVersions.versionNumber],
       })
-    inserted += 1
+      .returning()
+    if (!version) continue
+
+    await db.update(invoiceTemplateVersions)
+      .set({ status: 'archived' })
+      .where(and(
+        eq(invoiceTemplateVersions.templateId, template.id),
+        eq(invoiceTemplateVersions.status, 'published'),
+        ne(invoiceTemplateVersions.id, version.id),
+      ))
+
+    if (template.name !== preset.name) {
+      await db.update(invoiceTemplates)
+        .set({ name: preset.name, updatedAt: new Date() })
+        .where(eq(invoiceTemplates.id, template.id))
+    }
+    upgraded += 1
   }
 
-  return { inserted, total: INVOICE_TEMPLATE_PRESETS.length }
+  return { inserted, upgraded, total: INVOICE_TEMPLATE_PRESETS.length }
 }
 
 /** Idempotent seed — default template published as v1 (P1-27). */

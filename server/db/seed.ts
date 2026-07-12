@@ -89,7 +89,7 @@ export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
     console.log(`[seed] invoice_template=${templateSeed.template.slug} version=${templateSeed.publishedVersion.versionNumber} status=${templateSeed.publishedVersion.status}`)
 
     const presetSeed = await seedInvoiceTemplatePresets(db)
-    console.log(`[seed] invoice_template_presets inserted=${presetSeed.inserted} total=${presetSeed.total}`)
+    console.log(`[seed] invoice_template_presets inserted=${presetSeed.inserted} upgraded=${presetSeed.upgraded} total=${presetSeed.total}`)
 
     const catalogSeed = await seedCatalogCategories(db)
     console.log(`[seed] catalog_categories inserted=${catalogSeed.inserted} total_defaults=${catalogSeed.total}`)
