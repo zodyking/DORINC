@@ -186,6 +186,14 @@ const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 
+const { busy: pdfDownloadBusy, error: pdfDownloadError, download: downloadInvoicePdf } = useInvoicePdfDownload({
+  invoiceId: () => id.value,
+  invoiceLabel: () => invoice.value?.invoiceNumberFormatted ?? 'invoice',
+  allowOfficialDownload: () => isPdfEligible.value,
+  canGeneratePdf: () => canGeneratePdf.value,
+  onRefreshed: () => refresh(),
+})
+
 const pill = computed(() => {
   if (!invoice.value) return { cls: 'pill gray', label: '—' }
   return invoiceStatusPill(invoice.value.status, invoice.value.dueDate, invoice.value.balanceDue)
@@ -309,14 +317,6 @@ const summaryRows = computed(() => {
         / {{ invoice.invoiceNumberFormatted }} · {{ invoice.customerName }}
       </template>
       <template #actions>
-        <InvoicePdfActions
-          v-if="canGeneratePdf"
-          :invoice-id="id"
-          :invoice-label="invoice.invoiceNumberFormatted"
-          :allow-official-download="isPdfEligible"
-          :can-generate-pdf="canGeneratePdf"
-          @refreshed="refresh()"
-        />
         <button
           v-if="canSend && invoice.status === 'sent'"
           type="button"
@@ -367,6 +367,15 @@ const summaryRows = computed(() => {
         >
           Record payment
         </NuxtLink>
+        <button
+          v-if="canGeneratePdf"
+          type="button"
+          class="btn"
+          :disabled="pdfDownloadBusy"
+          @click="downloadInvoicePdf"
+        >
+          {{ pdfDownloadBusy ? 'Preparing…' : 'Download' }}
+        </button>
         <ReassignEntityButton
           v-if="invoice.status !== 'void'"
           entity-type="invoice"
@@ -389,6 +398,7 @@ const summaryRows = computed(() => {
     </StaffPageHead>
 
     <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
+    <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
       Email delivery in progress to {{ sendDelivery?.recipientEmail ?? 'customer' }}.
       Status will change to Sent after the PDF is generated and the email is delivered.

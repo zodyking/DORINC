@@ -43,8 +43,6 @@ const pageLabel = computed(() => {
   return `${pageCurrent.value} / ${pageTotal.value}`
 })
 
-const activeFitMode = ref<'page' | 'width'>('page')
-
 function onPageInfo(info: { current: number, total: number }) {
   pageCurrent.value = info.current
   pageTotal.value = info.total
@@ -63,14 +61,7 @@ function resetZoom() {
 
 async function onFitPage() {
   resetZoom()
-  activeFitMode.value = 'page'
-  await viewerRef.value?.setFitMode?.('page')
-}
-
-async function onFitWidth() {
-  resetZoom()
-  activeFitMode.value = 'width'
-  await viewerRef.value?.setFitMode?.('width')
+  await viewerRef.value?.refit?.()
 }
 
 function prevPage() {
@@ -89,7 +80,6 @@ function updateLayoutNarrow() {
 watch(() => [props.src, props.blob] as const, ([url, blob]) => {
   if (url || blob) {
     resetZoom()
-    activeFitMode.value = 'page'
     updateLayoutNarrow()
   }
 }, { immediate: true })
@@ -144,18 +134,9 @@ onUnmounted(() => {
         <button
           type="button"
           class="pdf-shell__fitbtn"
-          :class="{ 'pdf-shell__fitbtn--on': activeFitMode === 'page' }"
           @click="onFitPage"
         >
           Fit page
-        </button>
-        <button
-          type="button"
-          class="pdf-shell__fitbtn"
-          :class="{ 'pdf-shell__fitbtn--on': activeFitMode === 'width' }"
-          @click="onFitWidth"
-        >
-          Fit width
         </button>
       </div>
 
@@ -338,12 +319,6 @@ onUnmounted(() => {
 
 .pdf-shell__fitbtn:hover {
   background: #5a5d61;
-}
-
-.pdf-shell__fitbtn--on {
-  background: #4f46e5;
-  border-color: #4338ca;
-  color: #fff;
 }
 
 .pdf-shell__fitbtn:focus-visible {

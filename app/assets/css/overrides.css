@@ -406,12 +406,6 @@ textarea {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.page-actions__panel .invoice-pdf-actions {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  gap: 4px;
-}
 .pagehead__title-row {
   align-items: flex-start;
 }

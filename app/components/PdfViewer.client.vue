@@ -38,8 +38,6 @@ const mainRenderTask: { current: RenderTask | null } = { current: null }
 
 const THUMB_MAX_W = 72
 const layoutNarrow = ref(false)
-type FitMode = 'page' | 'width'
-const fitMode = ref<FitMode>('page')
 
 function updateLayoutNarrow() {
   layoutNarrow.value = typeof window !== 'undefined'
@@ -102,15 +100,7 @@ async function measureFitScale() {
   const availH = Math.max(80, wrap.clientHeight - padY)
   const scaleW = availW / vp.width
   const scaleH = availH / vp.height
-  const fit = fitMode.value === 'width' ? scaleW : Math.min(scaleW, scaleH)
-  fitScale.value = Math.max(0.15, Math.min(4, fit))
-}
-
-async function setFitMode(mode: FitMode) {
-  fitMode.value = mode
-  await settleLayout()
-  await measureFitScale()
-  await renderCurrentPage()
+  fitScale.value = Math.max(0.15, Math.min(4, Math.min(scaleW, scaleH)))
 }
 
 async function selectThumbPage(p: number) {
@@ -309,14 +299,12 @@ onUnmounted(() => {
 defineExpose({
   currentPage,
   numPages,
-  fitMode,
   reload: () => void loadSource(),
   refit: async () => {
     await settleLayout()
     await measureFitScale()
     await renderCurrentPage()
   },
-  setFitMode,
   prevPage: () => void selectThumbPage(currentPage.value - 1),
   nextPage: () => void selectThumbPage(currentPage.value + 1),
 })
