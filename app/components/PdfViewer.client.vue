@@ -45,6 +45,10 @@ function horizontalPad() {
   return layoutNarrow.value ? 4 : 12
 }
 
+function verticalPad() {
+  return layoutNarrow.value ? 4 : 16
+}
+
 function effectiveMainScale() {
   return fitScale.value * zoomMult.value
 }
@@ -86,10 +90,15 @@ async function measureFitScale() {
   if (!doc || !wrap || wrap.clientWidth <= 0) return
   const p = Math.min(Math.max(1, currentPage.value), doc.numPages)
   const page = await doc.getPage(p)
-  const vp = page.getViewport({ scale: 1 })
-  const pad = horizontalPad()
-  const w = Math.max(120, wrap.clientWidth - pad)
-  fitScale.value = Math.max(0.2, Math.min(4, w / vp.width))
+  const vp = page.getViewport({ scale: 1, dontFlip: false })
+  const padX = horizontalPad()
+  const padY = verticalPad()
+  const availW = Math.max(80, wrap.clientWidth - padX)
+  const availH = Math.max(80, (wrap.clientHeight || wrap.clientWidth * 1.3) - padY)
+  const scaleW = availW / vp.width
+  const scaleH = availH / vp.height
+  // Fit entire page in view (width + height), not just width.
+  fitScale.value = Math.max(0.15, Math.min(4, Math.min(scaleW, scaleH)))
 }
 
 async function renderCurrentPage() {
@@ -181,17 +190,16 @@ async function loadFromBytes(buf: ArrayBuffer) {
 
   loading.value = false
   await nextTick()
-  await new Promise<void>(r => requestAnimationFrame(() => r()))
+  await waitForCanvas()
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
   if (!pdf.value || numPages.value < 1) return
 
   try {
     await measureFitScale()
     setupResizeObserver()
-    await waitForCanvas()
-    await nextTick()
-    await renderThumbnails()
     await renderCurrentPage()
+    void renderThumbnails()
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Could not render PDF'
@@ -244,7 +252,6 @@ watch(() => [props.src, props.blob] as const, () => {
 
 watch(zoomMult, async () => {
   if (!pdf.value || numPages.value < 1) return
-  await measureFitScale()
   await renderCurrentPage()
 })
 
@@ -267,7 +274,10 @@ onUnmounted(() => {
   cleanupDoc()
 })
 
-defineExpose({ currentPage, numPages, reload: () => void loadSource() })
+defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: async () => {
+  await measureFitScale()
+  await renderCurrentPage()
+} })
 </script>
 
 <template>
@@ -379,7 +389,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .pdf-js-viewer__loading {
@@ -401,6 +411,8 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
   overflow: hidden;
   line-height: 0;
   flex-shrink: 0;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .pdf-js-viewer__page-shell.is-hidden {
@@ -411,6 +423,8 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
 
 .pdf-js-viewer__canvas {
   display: block;
+  max-width: 100%;
+  height: auto !important;
 }
 
 .pdf-js-viewer__thumbs {
@@ -513,10 +527,12 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource() })
 @media (max-width: 640px) {
   .pdf-js-viewer {
     min-height: 0;
+    max-height: min(46dvh, 400px);
   }
 
   .pdf-js-viewer__main {
-    padding: 0.15rem 0.1rem 0.2rem;
+    padding: 0.1rem 0.05rem 0.15rem;
+    justify-content: center;
   }
 }
 </style>

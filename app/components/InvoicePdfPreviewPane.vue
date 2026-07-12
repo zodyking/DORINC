@@ -115,12 +115,19 @@ defineExpose({ refresh: loadPreview })
 
 @media (max-width: 640px) {
   .invoice-pdf-pane {
-    min-height: calc(100dvh - 13.5rem);
-    max-height: calc(100dvh - 10rem);
+    min-height: 0;
+    height: min(50dvh, 420px);
+    max-height: min(50dvh, 420px);
   }
 
   .invoice-pdf-pane :deep(.pdf-shell) {
     border-radius: 10px;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .invoice-pdf-pane :deep(.pdf-shell__frame) {
+    max-height: none;
   }
 }
 </style>
