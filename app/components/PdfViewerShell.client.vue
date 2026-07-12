@@ -124,28 +124,30 @@ onUnmounted(() => {
             Fit page
           </button>
         </div>
-        <a
-          v-if="showDownload && downloadHref"
-          class="pdf-shell__download"
-          :href="downloadHref"
-          :download="downloadFilename"
-        >{{ layoutNarrow ? 'Download' : 'Download PDF' }}</a>
-        <button
-          v-else-if="showDownload"
-          type="button"
-          class="pdf-shell__download"
-          @click="emit('download')"
-        >
-          {{ layoutNarrow ? 'Download' : 'Download PDF' }}
-        </button>
-        <button
-          v-if="showClose"
-          type="button"
-          class="pdf-shell__close"
-          @click="emit('close')"
-        >
-          Close
-        </button>
+        <div class="pdf-shell__actions">
+          <a
+            v-if="showDownload && downloadHref"
+            class="pdf-shell__download"
+            :href="downloadHref"
+            :download="downloadFilename"
+          >{{ layoutNarrow ? 'Download' : 'Download PDF' }}</a>
+          <button
+            v-else-if="showDownload"
+            type="button"
+            class="pdf-shell__download"
+            @click="emit('download')"
+          >
+            {{ layoutNarrow ? 'Download' : 'Download PDF' }}
+          </button>
+          <button
+            v-if="showClose"
+            type="button"
+            class="pdf-shell__close"
+            @click="emit('close')"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </header>
     <div class="pdf-shell__frame">
@@ -222,12 +224,25 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem 0.45rem;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .pdf-shell__controls--narrow {
   width: 100%;
   justify-content: space-between;
+}
+
+.pdf-shell__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pdf-shell__controls--narrow .pdf-shell__actions {
+  margin-left: 0;
 }
 
 .pdf-shell__zoom {
