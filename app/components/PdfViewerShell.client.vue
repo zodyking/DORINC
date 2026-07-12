@@ -356,7 +356,8 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .pdf-shell {
-    max-height: min(52dvh, 440px);
+    min-height: 0;
+    flex: 1 1 auto;
   }
 
   .pdf-shell__head {
@@ -364,19 +365,18 @@ onUnmounted(() => {
   }
 
   .pdf-shell__frame {
+    flex: 1 1 auto;
     min-height: 0;
-    max-height: min(42dvh, 360px);
   }
 
   .pdf-shell--fill {
     min-height: 0;
-    max-height: min(50dvh, 420px);
+    flex: 1 1 auto;
   }
 
   .pdf-shell--fill .pdf-shell__frame {
     flex: 1;
     min-height: 0;
-    max-height: none;
   }
 
   .pdf-shell__zbtn,

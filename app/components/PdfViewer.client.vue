@@ -18,6 +18,8 @@ const emit = defineEmits<{ 'load-error': [unknown] }>()
 const zoomMult = defineModel<number>('zoomMult', { default: 1 })
 
 const loading = ref(true)
+/** True after the first page canvas render completes — avoids empty gray stage on load. */
+const pageReady = ref(false)
 const loadError = ref('')
 const numPages = ref(0)
 const pdf = shallowRef<PDFDocumentProxy | null>(null)
@@ -85,6 +87,7 @@ async function waitForCanvas(maxTries = 60) {
 }
 
 async function measureFitScale() {
+  updateLayoutNarrow()
   const doc = pdf.value
   const wrap = (await waitForMainWrap()) || mainWrapRef.value
   if (!doc || !wrap || wrap.clientWidth <= 0) return
@@ -97,8 +100,10 @@ async function measureFitScale() {
   const availH = Math.max(80, (wrap.clientHeight || wrap.clientWidth * 1.3) - padY)
   const scaleW = availW / vp.width
   const scaleH = availH / vp.height
-  // Fit entire page in view (width + height), not just width.
-  fitScale.value = Math.max(0.15, Math.min(4, Math.min(scaleW, scaleH)))
+  // Mobile: fit to width so text stays readable; scroll vertically for the rest.
+  // Desktop: fit entire page in view (width + height).
+  const fit = layoutNarrow.value ? scaleW : Math.min(scaleW, scaleH)
+  fitScale.value = Math.max(0.15, Math.min(4, fit))
 }
 
 async function renderCurrentPage() {
@@ -158,17 +163,20 @@ function cleanupDoc() {
   }
   numPages.value = 0
   currentPage.value = 1
+  pageReady.value = false
   thumbCanvasByPage.clear()
   renderToken++
 }
 
 async function loadFromBytes(buf: ArrayBuffer) {
+  updateLayoutNarrow()
   ensureWorker()
   fetchAbort?.abort()
   fetchAbort = new AbortController()
   cleanupDoc()
   loadError.value = ''
   loading.value = true
+  pageReady.value = false
   try {
     const doc = await pdfjs.getDocument({ data: buf.slice(0) }).promise
     pdf.value = doc
@@ -188,17 +196,20 @@ async function loadFromBytes(buf: ArrayBuffer) {
     return
   }
 
-  loading.value = false
   await nextTick()
   await waitForCanvas()
   await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
-  if (!pdf.value || numPages.value < 1) return
+  if (!pdf.value || numPages.value < 1) {
+    loading.value = false
+    return
+  }
 
   try {
     await measureFitScale()
     setupResizeObserver()
     await renderCurrentPage()
+    pageReady.value = true
     void renderThumbnails()
   }
   catch (e: unknown) {
@@ -206,6 +217,9 @@ async function loadFromBytes(buf: ArrayBuffer) {
     loadError.value = msg
     emit('load-error', e)
     cleanupDoc()
+  }
+  finally {
+    loading.value = false
   }
 }
 
@@ -287,10 +301,18 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
     </div>
     <template v-else>
       <div ref="mainWrapRef" class="pdf-js-viewer__main">
-        <div v-if="loading" class="pdf-js-viewer__loading" role="status" aria-live="polite">
+        <div
+          v-if="loading || !pageReady"
+          class="pdf-js-viewer__loading"
+          role="status"
+          aria-live="polite"
+        >
           Loading PDF…
         </div>
-        <div class="pdf-js-viewer__page-shell" :class="{ 'is-hidden': loading || numPages < 1 }">
+        <div
+          class="pdf-js-viewer__page-shell"
+          :class="{ 'is-hidden': loading || !pageReady || numPages < 1 }"
+        >
           <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
         </div>
         <p
@@ -301,7 +323,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
         </p>
       </div>
       <div
-        v-if="!loading && numPages > 1 && layoutNarrow"
+        v-if="pageReady && !loading && numPages > 1 && layoutNarrow"
         class="pdf-js-viewer__pager"
         role="navigation"
         aria-label="PDF pages"
@@ -327,7 +349,7 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
         </button>
       </div>
       <div
-        v-if="!loading && numPages > 1 && !layoutNarrow"
+        v-if="pageReady && !loading && numPages > 1 && !layoutNarrow"
         class="pdf-js-viewer__thumbs"
         role="tablist"
         aria-label="Pages"
@@ -527,12 +549,16 @@ defineExpose({ currentPage, numPages, reload: () => void loadSource(), refit: as
 @media (max-width: 640px) {
   .pdf-js-viewer {
     min-height: 0;
-    max-height: min(46dvh, 400px);
+    flex: 1 1 auto;
   }
 
   .pdf-js-viewer__main {
-    padding: 0.1rem 0.05rem 0.15rem;
-    justify-content: center;
+    padding: 0.15rem 0.1rem 0.2rem;
+    justify-content: flex-start;
+  }
+
+  .pdf-js-viewer__page-shell {
+    max-width: 100%;
   }
 }
 </style>
