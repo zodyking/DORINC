@@ -467,6 +467,7 @@ async function pasteBladeFromClipboard() {
         <ClientOnly v-if="previewUrl">
           <PdfViewerShell
             fill
+            compact
             :src="previewUrl"
             :blob="previewBlob"
             :title="`Template preview — ${previewInvoiceLabel}`"
@@ -542,7 +543,7 @@ async function pasteBladeFromClipboard() {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(238, 240, 244, 0.92); color: #64748b; font-size: 14px; font-weight: 600; z-index: 1;
 }
-.te-pane--preview :deep(.pdf-viewer) { flex: 1; min-height: 0; height: 100%; }
+.te-pane--preview :deep(.pdf-shell) { flex: 1; min-height: 0; height: 100%; }
 .te-preview-empty {
   margin: 0; padding: 48px 24px; text-align: center; color: #64748b; font-size: 14px; line-height: 1.5;
 }

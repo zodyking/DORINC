@@ -72,6 +72,7 @@ defineExpose({ refresh: loadPreview })
     <div class="invoice-pdf-pane">
       <PdfViewerShell
         fill
+        compact
         :src="previewUrl"
         :blob="previewBlob"
         :title="`${invoiceLabel} PDF`"
@@ -107,7 +108,7 @@ defineExpose({ refresh: loadPreview })
   min-height: min(82vh, 960px);
 }
 
-.invoice-pdf-pane :deep(.pdf-viewer) {
+.invoice-pdf-pane :deep(.pdf-shell) {
   flex: 1;
   min-height: 0;
 }
@@ -116,11 +117,20 @@ defineExpose({ refresh: loadPreview })
   .invoice-pdf-pane {
     min-height: min(85dvh, calc(100dvh - 8.5rem));
     height: min(85dvh, calc(100dvh - 8.5rem));
+    display: flex;
+    flex-direction: column;
   }
 
-  .invoice-pdf-pane :deep(.pdf-viewer) {
+  .invoice-pdf-pane :deep(.pdf-shell) {
+    flex: 1;
+    min-height: 0;
     height: 100%;
-    border-radius: 8px;
+    border-radius: 10px;
+  }
+
+  .invoice-pdf-pane :deep(.pdf-shell__frame) {
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>

@@ -33,6 +33,7 @@
     "drizzle-orm": "^0.45.2",
     "nodemailer": "^9.0.3",
     "nuxt": "^4.4.8",
+    "pdfjs-dist": "^4.10.38",
     "pg": "^8.22.0",
     "pinia": "^3.0.4",
     "playwright": "1.61.0",
