@@ -72,7 +72,6 @@ defineExpose({ refresh: loadPreview })
     <div class="invoice-pdf-pane">
       <PdfViewerShell
         fill
-        compact
         :src="previewUrl"
         :blob="previewBlob"
         :title="`${invoiceLabel} PDF`"
@@ -103,35 +102,25 @@ defineExpose({ refresh: loadPreview })
   color: #dc2626;
 }
 .invoice-pdf-pane {
-  min-height: min(62vh, 720px);
   display: flex;
   flex-direction: column;
+  min-height: min(82vh, 960px);
 }
 
-.invoice-pdf-pane :deep(.pdf-panel) {
+.invoice-pdf-pane :deep(.pdf-viewer) {
   flex: 1;
   min-height: 0;
 }
 
 @media (max-width: 640px) {
   .invoice-pdf-pane {
-    min-height: 0;
-    height: min(42dvh, 360px);
-    max-height: min(42dvh, 360px);
-    display: flex;
-    flex-direction: column;
+    min-height: min(85dvh, calc(100dvh - 8.5rem));
+    height: min(85dvh, calc(100dvh - 8.5rem));
   }
 
-  .invoice-pdf-pane :deep(.pdf-panel) {
-    border-radius: 10px;
-    flex: 1;
-    min-height: 0;
+  .invoice-pdf-pane :deep(.pdf-viewer) {
     height: 100%;
-  }
-
-  .invoice-pdf-pane :deep(.pdf-panel__body) {
-    flex: 1;
-    min-height: 0;
+    border-radius: 8px;
   }
 }
 </style>

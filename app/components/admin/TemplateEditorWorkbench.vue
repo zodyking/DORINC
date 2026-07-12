@@ -467,7 +467,6 @@ async function pasteBladeFromClipboard() {
         <ClientOnly v-if="previewUrl">
           <PdfViewerShell
             fill
-            compact
             :src="previewUrl"
             :blob="previewBlob"
             :title="`Template preview — ${previewInvoiceLabel}`"
@@ -525,7 +524,7 @@ async function pasteBladeFromClipboard() {
 .te-pane__hint .dirty { color: #d97706; font-weight: 700; }
 .te-pane--preview {
   background: #eef0f4;
-  min-height: min(62vh, 720px);
+  min-height: min(78vh, 920px);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -534,9 +533,8 @@ async function pasteBladeFromClipboard() {
 
 @media (max-width: 640px) {
   .te-pane--preview {
-    min-height: 0;
-    height: min(42dvh, 360px);
-    max-height: min(42dvh, 360px);
+    min-height: min(78dvh, calc(100dvh - 10rem));
+    height: min(78dvh, calc(100dvh - 10rem));
     padding: 8px;
   }
 }
@@ -544,7 +542,7 @@ async function pasteBladeFromClipboard() {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(238, 240, 244, 0.92); color: #64748b; font-size: 14px; font-weight: 600; z-index: 1;
 }
-.te-pane--preview :deep(.pdf-panel) { flex: 1; min-height: 0; }
+.te-pane--preview :deep(.pdf-viewer) { flex: 1; min-height: 0; height: 100%; }
 .te-preview-empty {
   margin: 0; padding: 48px 24px; text-align: center; color: #64748b; font-size: 14px; line-height: 1.5;
 }
