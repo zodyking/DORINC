@@ -103,7 +103,7 @@ function close() {
     max-width: 100%;
   }
 
-  .pdf-dialog__panel :deep(.pdf-shell) {
+  .pdf-dialog__panel :deep(.pdf-panel) {
     border-radius: 0;
     box-shadow: none;
   }

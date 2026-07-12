@@ -1,11 +1,8 @@
 <script setup lang="ts">
 /**
- * PDF chrome — title, zoom controls, download, optional close.
- * Wraps the shared canvas PdfViewer component.
+ * PDF preview — native browser embed (iframe). No pdf.js, no custom canvas.
  */
-import PdfViewerCore from '~/components/PdfViewer.client.vue'
-
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   src?: string
   blob?: Blob | null
   title?: string
@@ -13,398 +10,186 @@ const props = withDefaults(defineProps<{
   downloadHref?: string
   downloadFilename?: string
   showClose?: boolean
-  /** Fill parent flex column (modals, panels). */
   fill?: boolean
-  /** Hide title row on narrow screens (e.g. when context already shows the label). */
   compact?: boolean
-}>(), {
-  showDownload: true,
-  fill: false,
-  compact: false,
-})
+}>()
 
 const emit = defineEmits<{
   close: []
   download: []
-  'load-error': [unknown]
 }>()
 
-const ZOOM_MIN_DESKTOP = 0.55
-const ZOOM_MIN_MOBILE = 0.85
-const ZOOM_MAX = 2.6
-const zoomMult = ref(1)
-const layoutNarrow = ref(false)
+const displayUrl = ref('')
+let ownedBlobUrl = ''
 
-const zoomMin = computed(() => layoutNarrow.value ? ZOOM_MIN_MOBILE : ZOOM_MIN_DESKTOP)
-
-const displayTitle = computed(() => props.title ?? 'PDF document')
-
-function bumpZoom(delta: number) {
-  zoomMult.value = Math.min(
-    ZOOM_MAX,
-    Math.max(zoomMin.value, Math.round((zoomMult.value + delta) * 100) / 100),
-  )
-}
-
-function resetZoom() {
-  zoomMult.value = 1
-}
-
-async function onFitPage() {
-  resetZoom()
-  await viewerRef.value?.refit?.()
-}
-
-const viewerRef = ref<InstanceType<typeof PdfViewerCore> | null>(null)
-
-function updateLayoutNarrow() {
-  const narrow = typeof window !== 'undefined'
-    && window.matchMedia('(max-width: 640px)').matches
-  if (narrow && !layoutNarrow.value && zoomMult.value < 1) {
-    zoomMult.value = 1
+function setUrl(url: string) {
+  if (ownedBlobUrl && ownedBlobUrl !== url) {
+    URL.revokeObjectURL(ownedBlobUrl)
+    ownedBlobUrl = ''
   }
-  layoutNarrow.value = narrow
+  displayUrl.value = url
 }
 
-watch(() => [props.src, props.blob] as const, ([url, blob]) => {
-  if (url || blob) {
-    resetZoom()
-    updateLayoutNarrow()
+watch(() => [props.src, props.blob] as const, ([src, blob]) => {
+  if (src) {
+    setUrl(src)
+    return
   }
+  if (blob) {
+    const url = URL.createObjectURL(blob)
+    ownedBlobUrl = url
+    displayUrl.value = url
+    return
+  }
+  setUrl('')
 }, { immediate: true })
 
-onMounted(() => {
-  updateLayoutNarrow()
-  window.addEventListener('resize', updateLayoutNarrow)
-})
-
 onUnmounted(() => {
-  window.removeEventListener('resize', updateLayoutNarrow)
+  if (ownedBlobUrl) URL.revokeObjectURL(ownedBlobUrl)
 })
 </script>
 
 <template>
-  <div
-    class="pdf-shell"
-    :class="{
-      'pdf-shell--fill': fill,
-    }"
-  >
+  <div class="pdf-panel" :class="{ 'pdf-panel--fill': fill }">
     <header
-      class="pdf-shell__head"
-      :class="{
-        'pdf-shell__head--narrow': layoutNarrow,
-        'pdf-shell__head--compact': layoutNarrow && compact,
-      }"
+      v-if="showDownload || showClose || (title && !compact)"
+      class="pdf-panel__bar"
     >
-      <h3 v-if="!(layoutNarrow && compact)" class="pdf-shell__title">{{ displayTitle }}</h3>
-      <div
-        class="pdf-shell__controls"
-        :class="{ 'pdf-shell__controls--narrow': layoutNarrow }"
-      >
-        <div class="pdf-shell__zoom" role="toolbar" aria-label="PDF zoom">
-          <button
-            type="button"
-            class="pdf-shell__zbtn"
-            aria-label="Zoom out"
-            @click="bumpZoom(-0.15)"
-          >
-            <span aria-hidden="true">-</span>
-          </button>
-          <span class="pdf-shell__zpct">{{ Math.round(zoomMult * 100) }}%</span>
-          <button
-            type="button"
-            class="pdf-shell__zbtn"
-            aria-label="Zoom in"
-            @click="bumpZoom(0.15)"
-          >
-            <span aria-hidden="true">+</span>
-          </button>
-          <button type="button" class="pdf-shell__zfit" @click="onFitPage">
-            Fit page
-          </button>
-        </div>
-        <div class="pdf-shell__actions">
-          <a
-            v-if="showDownload && downloadHref"
-            class="pdf-shell__download"
-            :href="downloadHref"
-            :download="downloadFilename"
-          >{{ layoutNarrow ? 'Download' : 'Download PDF' }}</a>
-          <button
-            v-else-if="showDownload"
-            type="button"
-            class="pdf-shell__download"
-            @click="emit('download')"
-          >
-            {{ layoutNarrow ? 'Download' : 'Download PDF' }}
-          </button>
-          <button
-            v-if="showClose"
-            type="button"
-            class="pdf-shell__close"
-            @click="emit('close')"
-          >
-            Close
-          </button>
-        </div>
+      <h3 v-if="title && !compact" class="pdf-panel__title">{{ title }}</h3>
+      <div class="pdf-panel__actions">
+        <a
+          v-if="showDownload && downloadHref"
+          class="pdf-panel__btn pdf-panel__btn--primary"
+          :href="downloadHref"
+          :download="downloadFilename"
+        >Download PDF</a>
+        <button
+          v-else-if="showDownload"
+          type="button"
+          class="pdf-panel__btn pdf-panel__btn--primary"
+          @click="emit('download')"
+        >
+          Download PDF
+        </button>
+        <button
+          v-if="showClose"
+          type="button"
+          class="pdf-panel__btn"
+          @click="emit('close')"
+        >
+          Close
+        </button>
       </div>
     </header>
-    <div class="pdf-shell__frame">
-      <PdfViewerCore
-        ref="viewerRef"
-        v-if="src || blob"
-        :src="src"
-        :blob="blob"
-        v-model:zoom-mult="zoomMult"
-        @load-error="emit('load-error', $event)"
+    <div class="pdf-panel__body">
+      <iframe
+        v-if="displayUrl"
+        :src="displayUrl"
+        class="pdf-panel__embed"
+        :title="title ?? 'PDF preview'"
       />
-      <p v-else class="pdf-shell__fallback" role="status">No PDF loaded</p>
+      <p v-else class="pdf-panel__empty">No PDF loaded</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.pdf-shell {
+.pdf-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 8px 24px -12px rgba(15, 23, 42, 0.18);
 }
 
-.pdf-shell--fill {
+.pdf-panel--fill {
   flex: 1;
   min-height: 0;
 }
 
-.pdf-shell__head {
+.pdf-panel__bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.45rem 0.65rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  background: #f8fafc;
 }
 
-.pdf-shell__head--narrow {
-  align-items: stretch;
-}
-
-.pdf-shell__head--narrow .pdf-shell__title {
-  flex-basis: 100%;
-}
-
-.pdf-shell__head--compact {
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-}
-
-.pdf-shell__head--compact .pdf-shell__controls {
-  width: 100%;
-}
-
-.pdf-shell__title {
+.pdf-panel__title {
   margin: 0;
-  flex: 1 1 10rem;
-  min-width: 0;
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.35;
   color: #0f172a;
 }
 
-.pdf-shell__controls {
+.pdf-panel__actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem 0.45rem;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.pdf-shell__controls--narrow {
-  width: 100%;
-  justify-content: space-between;
-}
-
-.pdf-shell__actions {
-  display: inline-flex;
-  align-items: center;
   gap: 0.35rem;
   margin-left: auto;
-  flex-shrink: 0;
 }
 
-.pdf-shell__controls--narrow .pdf-shell__actions {
-  margin-left: 0;
-}
-
-.pdf-shell__zoom {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-}
-
-.pdf-shell__zbtn {
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
+.pdf-panel__btn {
+  padding: 0.4rem 0.75rem;
   border-radius: 8px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #0f172a;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.pdf-shell__zbtn:hover {
-  background: #f1f5f9;
-}
-
-.pdf-shell__zbtn:focus-visible {
-  outline: 2px solid #818cf8;
-  outline-offset: 2px;
-}
-
-.pdf-shell__zfit {
-  min-height: 36px;
-  padding: 0 0.55rem;
-  border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   border: 1px solid #e2e8f0;
   background: #fff;
   color: #334155;
   cursor: pointer;
-  touch-action: manipulation;
-}
-
-.pdf-shell__zfit:hover {
-  background: #f1f5f9;
-}
-
-.pdf-shell__zfit:focus-visible {
-  outline: 2px solid #818cf8;
-  outline-offset: 2px;
-}
-
-.pdf-shell__zpct {
-  min-width: 2.65rem;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: #475569;
-}
-
-.pdf-shell__download {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.38rem 0.75rem;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 700;
   text-decoration: none;
+}
+
+.pdf-panel__btn--primary {
   color: #fff;
-  background: linear-gradient(145deg, #6366f1, #4f46e5);
-  border: 1px solid #4338ca;
-  cursor: pointer;
-  touch-action: manipulation;
+  background: #4f46e5;
+  border-color: #4338ca;
 }
 
-.pdf-shell__download:hover {
-  filter: brightness(1.05);
-}
-
-.pdf-shell__close {
-  padding: 0.38rem 0.7rem;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.pdf-shell__close:hover {
-  background: #f1f5f9;
-}
-
-.pdf-shell__frame {
-  flex: 1 1 auto;
-  min-height: min(60vh, 680px);
+.pdf-panel__body {
+  flex: 1;
+  min-height: min(70vh, 800px);
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
   background: #525659;
 }
 
-.pdf-shell--fill .pdf-shell__frame {
-  flex: 1;
+.pdf-panel--fill .pdf-panel__body {
   min-height: 0;
 }
 
-.pdf-shell__fallback {
+.pdf-panel__embed {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+  background: #fff;
+}
+
+.pdf-panel__empty {
   flex: 1;
   margin: 0;
-  padding: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #94a3b8;
   font-size: 13px;
-  color: #d1d5db;
-  background: #525659;
 }
 
 @media (max-width: 640px) {
-  .pdf-shell {
-    min-height: 0;
-    flex: 1 1 auto;
+  .pdf-panel__body {
+    min-height: min(55dvh, 520px);
   }
 
-  .pdf-shell__head {
-    padding: 0.35rem 0.45rem;
-  }
-
-  .pdf-shell__frame {
-    flex: 1 1 auto;
+  .pdf-panel--fill .pdf-panel__body {
     min-height: 0;
   }
 
-  .pdf-shell--fill {
+  .pdf-panel__embed {
     min-height: 0;
-    flex: 1 1 auto;
-  }
-
-  .pdf-shell--fill .pdf-shell__frame {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .pdf-shell__zbtn,
-  .pdf-shell__zfit {
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  .pdf-shell__controls--narrow .pdf-shell__download,
-  .pdf-shell__controls--narrow .pdf-shell__close {
-    min-height: 44px;
-    font-size: 12px;
-    padding-inline: 0.55rem;
   }
 }
 </style>

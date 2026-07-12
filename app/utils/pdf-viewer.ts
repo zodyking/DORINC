@@ -1,19 +1,14 @@
 import { defineAsyncComponent } from 'vue'
 
-/** Canvas + thumbnail strip (TripBuddy HistoryPdfJsViewer). */
-export const PdfViewerCore = defineAsyncComponent(
-  () => import('~/components/PdfViewer.client.vue'),
-)
-
-/** Title bar + zoom + download — use on every PDF surface. */
+/** PDF preview panel — native browser embed + optional download. */
 export const PdfViewerShell = defineAsyncComponent(
   () => import('~/components/PdfViewerShell.client.vue'),
 )
 
-/** Full-screen modal dialog wrapping PdfViewerShell. */
+/** Full-screen modal with PDF preview. */
 export const PdfViewerDialog = defineAsyncComponent(
   () => import('~/components/PdfViewerDialog.client.vue'),
 )
 
-/** @deprecated Use PdfViewerShell — kept as alias for existing imports. */
+/** @deprecated Use PdfViewerShell */
 export const PdfViewer = PdfViewerShell

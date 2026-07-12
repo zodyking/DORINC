@@ -11,9 +11,6 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss()],
-    optimizeDeps: {
-      include: ['pdfjs-dist'],
-    },
   },
 
   typescript: {

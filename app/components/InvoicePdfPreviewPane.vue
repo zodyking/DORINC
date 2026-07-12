@@ -108,7 +108,7 @@ defineExpose({ refresh: loadPreview })
   flex-direction: column;
 }
 
-.invoice-pdf-pane :deep(.pdf-shell) {
+.invoice-pdf-pane :deep(.pdf-panel) {
   flex: 1;
   min-height: 0;
 }
@@ -122,14 +122,14 @@ defineExpose({ refresh: loadPreview })
     flex-direction: column;
   }
 
-  .invoice-pdf-pane :deep(.pdf-shell) {
+  .invoice-pdf-pane :deep(.pdf-panel) {
     border-radius: 10px;
     flex: 1;
     min-height: 0;
     height: 100%;
   }
 
-  .invoice-pdf-pane :deep(.pdf-shell__frame) {
+  .invoice-pdf-pane :deep(.pdf-panel__body) {
     flex: 1;
     min-height: 0;
   }
