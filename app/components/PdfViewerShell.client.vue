@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * TripBuddy-style PDF chrome — title, zoom controls, download, optional close.
- * Wraps the shared PdfViewer canvas component so every surface looks identical.
+ * Wraps the shared PdfViewer (@tato30/vue-pdf) so every surface looks identical.
  */
 import PdfViewerCore from '~/components/PdfViewer.client.vue'
 
@@ -345,7 +345,7 @@ onUnmounted(() => {
 
 .pdf-shell__frame {
   flex: 1 1 auto;
-  min-height: min(72vh, 820px);
+  min-height: min(60vh, 680px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -354,7 +354,7 @@ onUnmounted(() => {
 
 .pdf-shell--fill .pdf-shell__frame {
   flex: 1;
-  min-height: min(60vh, 720px);
+  min-height: 0;
 }
 
 .pdf-shell__fallback {

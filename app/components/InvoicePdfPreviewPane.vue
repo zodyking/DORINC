@@ -103,7 +103,7 @@ defineExpose({ refresh: loadPreview })
   color: #dc2626;
 }
 .invoice-pdf-pane {
-  min-height: min(78vh, 920px);
+  min-height: min(62vh, 720px);
   display: flex;
   flex-direction: column;
 }
@@ -115,8 +115,9 @@ defineExpose({ refresh: loadPreview })
 
 @media (max-width: 640px) {
   .invoice-pdf-pane {
-    min-height: min(72dvh, 720px);
-    height: min(72dvh, 720px);
+    min-height: 0;
+    height: min(50dvh, 440px);
+    max-height: min(50dvh, 440px);
     display: flex;
     flex-direction: column;
   }
