@@ -2,6 +2,7 @@
 import { isBuiltInBladeMarker, isLegacyAccentBladeSource } from '#shared/invoice-template-blade'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
+import { PdfViewerShell } from '~/utils/pdf-viewer'
 
 interface TemplateListItem {
   id: string
@@ -47,8 +48,14 @@ const bladeSource = ref('')
 const templateName = ref('')
 const savedTemplateName = ref('')
 const editorTab = ref<EditorTab>('code')
-const previewHtml = ref('')
+const previewBlob = ref<Blob | null>(null)
+const { url: previewUrl, setFromBlob: setPreviewBlob, revoke: revokePreviewUrl } = usePdfBlobUrl()
 const previewInvoiceLabel = ref('sample invoice')
+
+function clearPreview() {
+  revokePreviewUrl()
+  previewBlob.value = null
+}
 
 const publishBusy = ref(false)
 const renameBusy = ref(false)
@@ -135,7 +142,8 @@ watch(activeVersion, async (v) => {
     const source = await resolveBladeFromMarker(v.layoutMarker)
     bladeSource.value = source
     savedBladeSource.value = source
-    previewHtml.value = ''
+    clearPreview()
+    if (editorTab.value === 'preview') refreshPreview()
   }
   catch (e: unknown) {
     actionError.value = fetchErrorMessage(e, 'Could not load Blade source')
@@ -162,18 +170,23 @@ async function refreshPreview(opts?: { switchToPreview?: boolean }) {
   previewBusy.value = true
   previewError.value = ''
   try {
-    const html = await $fetch<string>(`/api/invoice-templates/${template.value.id}/preview-html`, {
+    // Render the same dompdf PDF invoices use, so the preview shows the real
+    // paginated document (page size, margins, page breaks) instead of raw HTML.
+    const source = bladeSource.value.trim()
+    const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
       method: 'POST',
-      body: { bladeSource: bladeSource.value },
+      body: source.length >= 20 ? { bladeSource: bladeSource.value } : {},
+      responseType: 'blob',
     })
     if (requestId !== previewRequestId) return
-    previewHtml.value = html
+    previewBlob.value = blob
+    setPreviewBlob(blob)
     if (opts?.switchToPreview) editorTab.value = 'preview'
   }
   catch (e: unknown) {
     if (requestId !== previewRequestId) return
     previewError.value = await fetchErrorMessage(e, 'Preview failed — check Blade syntax and PDF service')
-    previewHtml.value = ''
+    clearPreview()
   }
   finally {
     if (requestId === previewRequestId) previewBusy.value = false
@@ -300,7 +313,8 @@ async function testRenderPdf() {
 function resetBlade() {
   if (dirty.value && !confirm('Reset all changes to the last loaded version?')) return
   bladeSource.value = savedBladeSource.value
-  previewHtml.value = ''
+  clearPreview()
+  if (editorTab.value === 'preview') refreshPreview()
 }
 </script>
 
@@ -364,7 +378,7 @@ function resetBlade() {
             Blade code
           </button>
           <button type="button" class="te-tab" :class="{ active: editorTab === 'preview' }" @click="editorTab = 'preview'">
-            HTML preview
+            PDF preview
           </button>
         </div>
         <div class="te-workspace__actions">
@@ -387,14 +401,20 @@ function resetBlade() {
       </div>
 
       <div v-show="editorTab === 'preview'" class="te-pane te-pane--preview">
-        <div v-if="previewBusy" class="te-preview-loading">Rendering preview…</div>
-        <iframe
-          v-if="previewHtml"
-          class="te-preview-frame"
-          :srcdoc="previewHtml"
-          title="Invoice HTML preview"
-          sandbox="allow-same-origin"
-        />
+        <div v-if="previewBusy" class="te-preview-loading">Rendering PDF preview…</div>
+        <ClientOnly v-if="previewUrl">
+          <PdfViewerShell
+            fill
+            compact
+            :src="previewUrl"
+            :blob="previewBlob"
+            :title="`Template preview — ${previewInvoiceLabel}`"
+            :show-download="false"
+          />
+          <template #fallback>
+            <p class="te-preview-empty">Loading viewer…</p>
+          </template>
+        </ClientOnly>
         <p v-else-if="!previewBusy" class="te-preview-empty">
           Preview renders automatically when you open this tab.
         </p>
@@ -441,12 +461,19 @@ function resetBlade() {
 .te-blade-editor { flex: 1; min-height: 480px; resize: vertical; }
 .te-pane__hint { margin: 10px 0 14px; font-size: 12px; color: #64748b; }
 .te-pane__hint .dirty { color: #d97706; font-weight: 700; }
-.te-pane--preview { background: #eef0f4; min-height: 560px; position: relative; }
+.te-pane--preview {
+  background: #eef0f4;
+  min-height: min(78vh, 920px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
 .te-preview-loading {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(238, 240, 244, 0.92); color: #64748b; font-size: 14px; font-weight: 600; z-index: 1;
 }
-.te-preview-frame { width: 100%; height: 560px; border: none; background: #fff; }
+.te-pane--preview :deep(.pdf-shell) { flex: 1; min-height: 0; }
 .te-preview-empty {
   margin: 0; padding: 48px 24px; text-align: center; color: #64748b; font-size: 14px; line-height: 1.5;
 }
