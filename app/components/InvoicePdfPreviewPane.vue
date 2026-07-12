@@ -103,34 +103,21 @@ defineExpose({ refresh: loadPreview })
   color: #dc2626;
 }
 .invoice-pdf-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: min(82vh, 960px);
 }
 
 .invoice-pdf-pane :deep(.pdf-shell) {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
 }
 
-@media (max-width: 640px) {
-  .invoice-pdf-pane {
-    min-height: min(85dvh, calc(100dvh - 8.5rem));
-    height: min(85dvh, calc(100dvh - 8.5rem));
-    display: flex;
-    flex-direction: column;
-  }
-
-  .invoice-pdf-pane :deep(.pdf-shell) {
-    flex: 1;
-    min-height: 0;
-    height: 100%;
-    border-radius: 10px;
-  }
-
-  .invoice-pdf-pane :deep(.pdf-shell__frame) {
-    flex: 1;
-    min-height: 0;
-  }
+.invoice-pdf-pane :deep(.pdf-shell__frame) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 </style>

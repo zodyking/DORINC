@@ -406,6 +406,18 @@ textarea {
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* Invoice PDF tab — fill main content area without page scroll. */
+.main-body:has(.page--invoice-pdf) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-body:has(.page--invoice-pdf) > .page--invoice-pdf {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .pagehead__title-row {
   align-items: flex-start;
 }

@@ -306,7 +306,7 @@ const summaryRows = computed(() => {
     </div>
   </section>
 
-  <section v-else-if="invoice" class="page active">
+  <section v-else-if="invoice" class="page active" :class="{ 'page--invoice-pdf': viewTab === 'pdf' && canGeneratePdf }">
     <StaffPageHead>
       <template #title>
         {{ invoice.invoiceNumberFormatted }}
@@ -600,11 +600,46 @@ const summaryRows = computed(() => {
       </div>
     </div>
 
-    <InvoicePdfPreviewPane
-      v-if="viewTab === 'pdf' && canGeneratePdf"
-      :invoice-id="id"
-      :invoice-label="invoice.invoiceNumberFormatted"
-      :can-generate-pdf="canGeneratePdf"
-    />
+    <div v-if="viewTab === 'pdf' && canGeneratePdf" class="invoice-pdf-tab">
+      <InvoicePdfPreviewPane
+        :invoice-id="id"
+        :invoice-label="invoice.invoiceNumberFormatted"
+        :can-generate-pdf="canGeneratePdf"
+      />
+    </div>
   </section>
 </template>
+
+<style scoped>
+.page--invoice-pdf {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.page--invoice-pdf :deep(.pagehead) {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.page--invoice-pdf .ed-tabs-wrap {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.page--invoice-pdf .help,
+.page--invoice-pdf .flash,
+.page--invoice-pdf .edit-lock-banner {
+  flex-shrink: 0;
+}
+
+.invoice-pdf-tab {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>
