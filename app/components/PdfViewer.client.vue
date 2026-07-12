@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * PDF canvas viewer using @tato30/vue-pdf.
- * @see https://github.com/TaTo30/vue-pdf
+ * Canvas PDF viewer — pdf.js via pdf-js-render helper.
+ * Zoom is controlled by the parent shell via v-model:zoomMult.
  */
-import { VuePDF, usePDF } from '@tato30/vue-pdf'
-import '@tato30/vue-pdf/style.css'
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
+import { ensureWorker, pdfjs, renderPdfPageToCanvas } from '~/utils/pdf-js-render'
 
 const props = defineProps<{
   src?: string
@@ -15,39 +15,124 @@ const emit = defineEmits<{ 'load-error': [unknown] }>()
 
 const zoomMult = defineModel<number>('zoomMult', { default: 1 })
 
-const pdfSource = ref<string | Uint8Array | undefined>(undefined)
+const loading = ref(true)
+const pageReady = ref(false)
 const loadError = ref('')
+const numPages = ref(0)
+const pdf = shallowRef<PDFDocumentProxy | null>(null)
+
+const mainWrapRef = ref<HTMLElement | null>(null)
+const mainCanvasRef = ref<HTMLCanvasElement | null>(null)
 const currentPage = ref(1)
-const hostRef = ref<HTMLElement | null>(null)
-const hostWidth = ref(0)
-const layoutNarrow = ref(false)
+const fitScale = ref(1)
 
+const thumbCanvasByPage = new Map<number, HTMLCanvasElement>()
+
+let fetchAbort: AbortController | null = null
 let resizeObs: ResizeObserver | null = null
-
-const { pdf, pages } = usePDF(pdfSource, {
-  onError(err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Could not load PDF'
-    loadError.value = msg
-    emit('load-error', err)
-  },
-})
-
-const numPages = computed(() => pages.value || 0)
-const loading = computed(() => Boolean(pdfSource.value) && !pdf.value && !loadError.value)
-const renderWidth = computed(() => {
-  if (hostWidth.value <= 0) return 0
-  return Math.max(80, Math.floor(hostWidth.value * zoomMult.value))
-})
+let renderToken = 0
+const mainRenderTask: { current: RenderTask | null } = { current: null }
 
 const THUMB_MAX_W = 72
+const layoutNarrow = ref(false)
 
 function updateLayoutNarrow() {
   layoutNarrow.value = typeof window !== 'undefined'
     && window.matchMedia('(max-width: 640px)').matches
 }
 
-function measureHost() {
-  hostWidth.value = hostRef.value?.clientWidth ?? 0
+function horizontalPad() {
+  return layoutNarrow.value ? 4 : 12
+}
+
+function verticalPad() {
+  return layoutNarrow.value ? 4 : 16
+}
+
+function effectiveMainScale() {
+  return fitScale.value * zoomMult.value
+}
+
+function setThumbCanvas(pageNum: number, el: Element | null) {
+  if (el instanceof HTMLCanvasElement) thumbCanvasByPage.set(pageNum, el)
+  else thumbCanvasByPage.delete(pageNum)
+}
+
+async function waitForLayout(maxTries = 60) {
+  for (let i = 0; i < maxTries; i++) {
+    const wrap = mainWrapRef.value
+    if (wrap && wrap.clientWidth > 0 && wrap.clientHeight > 0) return wrap
+    await nextTick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+  }
+  return mainWrapRef.value
+}
+
+async function waitForCanvas(maxTries = 60) {
+  for (let i = 0; i < maxTries; i++) {
+    if (mainCanvasRef.value) return mainCanvasRef.value
+    await nextTick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+  }
+  return mainCanvasRef.value
+}
+
+async function settleLayout() {
+  await nextTick()
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+  await waitForLayout()
+}
+
+async function measureFitScale() {
+  updateLayoutNarrow()
+  const doc = pdf.value
+  const wrap = (await waitForLayout()) || mainWrapRef.value
+  if (!doc || !wrap || wrap.clientWidth <= 0 || wrap.clientHeight <= 0) return
+  const p = Math.min(Math.max(1, currentPage.value), doc.numPages)
+  const page = await doc.getPage(p)
+  const vp = page.getViewport({ scale: 1 })
+  const padX = horizontalPad()
+  const padY = verticalPad()
+  const availW = Math.max(80, wrap.clientWidth - padX)
+  const availH = Math.max(80, wrap.clientHeight - padY)
+  const scaleW = availW / vp.width
+  const scaleH = availH / vp.height
+  const fit = layoutNarrow.value ? scaleW : Math.min(scaleW, scaleH)
+  fitScale.value = Math.max(0.15, Math.min(4, fit))
+}
+
+async function selectThumbPage(p: number) {
+  if (p < 1 || p > numPages.value) return
+  currentPage.value = p
+  await settleLayout()
+  await measureFitScale()
+  await renderCurrentPage()
+}
+
+async function renderCurrentPage() {
+  const doc = pdf.value
+  const canvas = mainCanvasRef.value
+  const p = currentPage.value
+  if (!doc || !canvas || numPages.value < 1 || p < 1 || p > numPages.value) return
+  const token = ++renderToken
+  const scale = effectiveMainScale()
+  const page = await doc.getPage(p)
+  if (token !== renderToken) return
+  await renderPdfPageToCanvas(page, canvas, scale, true, mainRenderTask)
+}
+
+async function renderThumbnails() {
+  const doc = pdf.value
+  const n = numPages.value
+  if (!doc || n < 1) return
+  for (let i = 1; i <= n; i++) {
+    const canvas = thumbCanvasByPage.get(i)
+    if (!canvas) continue
+    const page = await doc.getPage(i)
+    const vp = page.getViewport({ scale: 1 })
+    const scale = THUMB_MAX_W / vp.width
+    await renderPdfPageToCanvas(page, canvas, scale, false)
+  }
 }
 
 function teardownResizeObserver() {
@@ -57,153 +142,244 @@ function teardownResizeObserver() {
 
 function setupResizeObserver() {
   teardownResizeObserver()
-  const host = hostRef.value
-  if (!host || typeof ResizeObserver === 'undefined') return
-  resizeObs = new ResizeObserver(() => measureHost())
-  resizeObs.observe(host)
+  const wrap = mainWrapRef.value
+  if (!wrap || typeof ResizeObserver === 'undefined') return
+  let t = 0
+  resizeObs = new ResizeObserver(() => {
+    window.clearTimeout(t)
+    t = window.setTimeout(async () => {
+      await measureFitScale()
+      await renderCurrentPage()
+    }, 120)
+  })
+  resizeObs.observe(wrap)
 }
 
-async function loadSource() {
-  loadError.value = ''
+function cleanupDoc() {
   teardownResizeObserver()
+  mainRenderTask.current?.cancel()
+  mainRenderTask.current = null
+  if (pdf.value) {
+    try {
+      void pdf.value.destroy()
+    }
+    catch { /* ignore */ }
+    pdf.value = null
+  }
+  numPages.value = 0
+  currentPage.value = 1
+  pageReady.value = false
+  thumbCanvasByPage.clear()
+  renderToken++
+}
 
-  if (props.blob) {
-    pdfSource.value = new Uint8Array(await props.blob.arrayBuffer())
+async function loadFromBytes(buf: ArrayBuffer) {
+  updateLayoutNarrow()
+  ensureWorker()
+  fetchAbort?.abort()
+  fetchAbort = new AbortController()
+  cleanupDoc()
+  loadError.value = ''
+  loading.value = true
+  pageReady.value = false
+  try {
+    const doc = await pdfjs.getDocument({ data: buf.slice(0) }).promise
+    pdf.value = doc
+    numPages.value = doc.numPages
+    currentPage.value = 1
   }
-  else if (props.src) {
-    pdfSource.value = props.src
-  }
-  else {
-    pdfSource.value = undefined
+  catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      loading.value = false
+      return
+    }
+    const msg = e instanceof Error ? e.message : 'Could not load PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
+    loading.value = false
     return
   }
 
-  await nextTick()
-  measureHost()
-  setupResizeObserver()
+  loading.value = false
+  await settleLayout()
+  await waitForCanvas()
+
+  if (!pdf.value || numPages.value < 1) return
+
+  try {
+    await measureFitScale()
+    setupResizeObserver()
+    await renderCurrentPage()
+    pageReady.value = true
+    void renderThumbnails()
+    await settleLayout()
+    await measureFitScale()
+    await renderCurrentPage()
+  }
+  catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Could not render PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
+  }
 }
 
-function selectPage(p: number) {
-  if (p < 1 || p > numPages.value) return
-  currentPage.value = p
+async function loadFromUrl(url: string) {
+  fetchAbort?.abort()
+  fetchAbort = new AbortController()
+  try {
+    const res = await fetch(url, { signal: fetchAbort.signal })
+    if (!res.ok) throw new Error(`Could not load PDF (${res.status})`)
+    await loadFromBytes(await res.arrayBuffer())
+  }
+  catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      loading.value = false
+      return
+    }
+    const msg = e instanceof Error ? e.message : 'Could not load PDF'
+    loadError.value = msg
+    emit('load-error', e)
+    cleanupDoc()
+    loading.value = false
+  }
+}
+
+async function loadSource() {
+  if (props.blob) {
+    await loadFromBytes(await props.blob.arrayBuffer())
+    return
+  }
+  if (props.src) {
+    await loadFromUrl(props.src)
+  }
 }
 
 watch(() => [props.src, props.blob] as const, () => {
-  currentPage.value = 1
-  void loadSource()
+  if (props.blob || props.src) void loadSource()
+  else {
+    fetchAbort?.abort()
+    cleanupDoc()
+    loading.value = false
+    loadError.value = ''
+  }
 }, { immediate: true })
 
-watch(zoomMult, () => measureHost())
-
-watch(pdf, async (task) => {
-  if (!task) return
-  currentPage.value = 1
-  await nextTick()
-  measureHost()
+watch(zoomMult, async () => {
+  if (!pdf.value || numPages.value < 1) return
+  await renderCurrentPage()
 })
 
-function onWindowResize() {
-  updateLayoutNarrow()
-  measureHost()
-}
+watch(layoutNarrow, async (narrow) => {
+  if (narrow && zoomMult.value < 1) zoomMult.value = 1
+  if (!pdf.value || numPages.value < 1) return
+  await settleLayout()
+  await measureFitScale()
+  await renderCurrentPage()
+})
 
 onMounted(() => {
   updateLayoutNarrow()
-  measureHost()
-  window.addEventListener('resize', onWindowResize)
+  window.addEventListener('resize', updateLayoutNarrow)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', onWindowResize)
-  teardownResizeObserver()
-  pdfSource.value = undefined
+  window.removeEventListener('resize', updateLayoutNarrow)
+  fetchAbort?.abort()
+  cleanupDoc()
 })
 
 defineExpose({
   currentPage,
   numPages,
   reload: () => void loadSource(),
-  refit: () => {
-    measureHost()
+  refit: async () => {
+    await settleLayout()
+    await measureFitScale()
+    await renderCurrentPage()
   },
 })
 </script>
 
 <template>
-  <div class="pdf-viewer">
-    <div v-if="loadError" class="pdf-viewer__state pdf-viewer__state--err">
+  <div class="pdf-js-viewer">
+    <div v-if="loadError" class="pdf-js-viewer__state pdf-js-viewer__state--err">
       {{ loadError }}
     </div>
-    <template v-else-if="pdfSource">
-      <div ref="hostRef" class="pdf-viewer__host">
-        <div v-if="loading" class="pdf-viewer__loading" role="status" aria-live="polite">
+    <template v-else>
+      <div ref="mainWrapRef" class="pdf-js-viewer__main">
+        <div
+          v-if="loading || !pageReady"
+          class="pdf-js-viewer__loading"
+          role="status"
+          aria-live="polite"
+        >
           Loading PDF…
         </div>
-        <VuePDF
-          v-if="pdf && renderWidth > 0"
-          :pdf="pdf"
-          :page="currentPage"
-          :width="renderWidth"
-          :auto-destroy="false"
-        />
+        <div class="pdf-js-viewer__page-shell">
+          <canvas ref="mainCanvasRef" class="pdf-js-viewer__canvas" />
+        </div>
+        <p
+          v-if="!loading && !loadError && numPages === 0"
+          class="pdf-js-viewer__state"
+        >
+          No pages in this document.
+        </p>
       </div>
       <div
-        v-if="pdf && numPages > 1 && layoutNarrow"
-        class="pdf-viewer__pager"
+        v-if="pageReady && !loading && numPages > 1 && layoutNarrow"
+        class="pdf-js-viewer__pager"
         role="navigation"
         aria-label="PDF pages"
       >
         <button
           type="button"
-          class="pdf-viewer__pager-btn"
+          class="pdf-js-viewer__pager-btn"
           :disabled="currentPage <= 1"
-          @click="selectPage(currentPage - 1)"
+          aria-label="Previous page"
+          @click="selectThumbPage(currentPage - 1)"
         >
           Prev
         </button>
-        <span class="pdf-viewer__pager-label">{{ currentPage }} / {{ numPages }}</span>
+        <span class="pdf-js-viewer__pager-label">{{ currentPage }} / {{ numPages }}</span>
         <button
           type="button"
-          class="pdf-viewer__pager-btn"
+          class="pdf-js-viewer__pager-btn"
           :disabled="currentPage >= numPages"
-          @click="selectPage(currentPage + 1)"
+          aria-label="Next page"
+          @click="selectThumbPage(currentPage + 1)"
         >
           Next
         </button>
       </div>
       <div
-        v-if="pdf && numPages > 1 && !layoutNarrow"
-        class="pdf-viewer__thumbs"
+        v-if="pageReady && !loading && numPages > 1 && !layoutNarrow"
+        class="pdf-js-viewer__thumbs"
         role="tablist"
         aria-label="Pages"
       >
         <button
           v-for="p in numPages"
-          :key="p"
+          :key="`th-${p}`"
           type="button"
           role="tab"
           :aria-selected="p === currentPage"
-          class="pdf-viewer__thumb"
-          :class="{ 'pdf-viewer__thumb--on': p === currentPage }"
+          class="pdf-js-viewer__thumb"
+          :class="{ 'pdf-js-viewer__thumb--on': p === currentPage }"
           :title="`Page ${p}`"
-          @click="selectPage(p)"
+          @click="selectThumbPage(p)"
         >
-          <span class="pdf-viewer__thumb-num">{{ p }}</span>
-          <VuePDF
-            :pdf="pdf"
-            :page="p"
-            :width="THUMB_MAX_W"
-            :auto-destroy="false"
-          />
+          <span class="pdf-js-viewer__thumb-num">{{ p }}</span>
+          <canvas :ref="(el) => setThumbCanvas(p, el as Element | null)" class="pdf-js-viewer__thumb-cv" />
         </button>
       </div>
     </template>
-    <div v-else class="pdf-viewer__state">No PDF loaded.</div>
   </div>
 </template>
 
 <style scoped>
-.pdf-viewer {
+.pdf-js-viewer {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -212,7 +388,7 @@ defineExpose({
   background: #525659;
 }
 
-.pdf-viewer__state {
+.pdf-js-viewer__state {
   flex: 1;
   display: flex;
   align-items: center;
@@ -222,25 +398,27 @@ defineExpose({
   color: #d1d5db;
 }
 
-.pdf-viewer__state--err {
+.pdf-js-viewer__state--err {
   color: #fca5a5;
   text-align: center;
 }
 
-.pdf-viewer__host {
+.pdf-js-viewer__main {
   flex: 1 1 0;
   min-height: 0;
-  width: 100%;
   position: relative;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0.35rem 0.5rem;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  padding: 0.35rem 0.5rem 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 
-.pdf-viewer__loading {
+.pdf-js-viewer__loading {
   position: absolute;
   inset: 0;
   display: flex;
@@ -249,32 +427,40 @@ defineExpose({
   z-index: 2;
   font-size: 13px;
   color: #e5e7eb;
-  background: rgba(64, 64, 64, 0.5);
+  background: rgba(64, 64, 64, 0.45);
+  pointer-events: none;
 }
 
-.pdf-viewer__host :deep(.page) {
+.pdf-js-viewer__page-shell {
+  width: 100%;
+  max-width: 100%;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   border-radius: 2px;
   overflow: hidden;
-}
-
-.pdf-viewer__host :deep(canvas) {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
-.pdf-viewer__thumbs {
+  line-height: 0;
   flex-shrink: 0;
   display: flex;
+  justify-content: center;
+}
+
+.pdf-js-viewer__canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.pdf-js-viewer__thumbs {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
   gap: 0.4rem;
   padding: 0.35rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0));
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-top: 1px solid #484848;
   background: #404040;
 }
 
-.pdf-viewer__thumb {
+.pdf-js-viewer__thumb {
   position: relative;
   flex: 0 0 auto;
   padding: 0.2rem;
@@ -282,13 +468,20 @@ defineExpose({
   border: 2px solid transparent;
   background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.pdf-viewer__thumb--on {
+.pdf-js-viewer__thumb--on {
   border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.14);
 }
 
-.pdf-viewer__thumb-num {
+.pdf-js-viewer__thumb:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.pdf-js-viewer__thumb-num {
   position: absolute;
   top: 2px;
   left: 3px;
@@ -300,7 +493,15 @@ defineExpose({
   pointer-events: none;
 }
 
-.pdf-viewer__pager {
+.pdf-js-viewer__thumb-cv {
+  display: block;
+  width: 72px;
+  height: auto;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.pdf-js-viewer__pager {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -311,13 +512,16 @@ defineExpose({
   background: #404040;
 }
 
-.pdf-viewer__pager-label {
+.pdf-js-viewer__pager-label {
+  min-width: 4.5rem;
+  text-align: center;
   font-size: 13px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: #f3f4f6;
 }
 
-.pdf-viewer__pager-btn {
+.pdf-js-viewer__pager-btn {
   min-width: 44px;
   min-height: 44px;
   padding: 0 0.5rem;
@@ -327,10 +531,25 @@ defineExpose({
   color: #fff;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.pdf-viewer__pager-btn:disabled {
+.pdf-js-viewer__pager-btn:disabled {
   opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pdf-js-viewer__pager-btn:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .pdf-js-viewer__main {
+    padding: 0.15rem 0.25rem 0.3rem;
+    justify-content: flex-start;
+  }
 }
 </style>

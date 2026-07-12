@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * TripBuddy-style PDF chrome — title, zoom controls, download, optional close.
- * Wraps the shared PdfViewer (@tato30/vue-pdf) so every surface looks identical.
+ * PDF chrome — title, zoom controls, download, optional close.
+ * Wraps the shared canvas PdfViewer component.
  */
 import PdfViewerCore from '~/components/PdfViewer.client.vue'
 

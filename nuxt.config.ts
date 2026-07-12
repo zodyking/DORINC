@@ -12,12 +12,8 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
     optimizeDeps: {
-      include: ['@tato30/vue-pdf', 'pdfjs-dist'],
+      include: ['pdfjs-dist'],
     },
-  },
-
-  build: {
-    transpile: ['@tato30/vue-pdf'],
   },
 
   typescript: {
