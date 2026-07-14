@@ -43,6 +43,7 @@ export const invoiceCreateSchema = z.object({
 })
 
 export const invoiceUpdateSchema = z.object({
+  customerId: uuidSchema.optional(),
   vehicleId: uuidSchema.nullish(),
   ...invoiceHeaderFields,
 }).partial()

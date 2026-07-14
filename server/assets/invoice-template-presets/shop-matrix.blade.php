@@ -120,14 +120,7 @@
   </title>
 
   <style>
-    @page {
-      size: {{ $paperCss }};
-      margin:
-        {{ $m['top'] }}in
-        {{ $m['right'] }}in
-        {{ $m['bottom'] }}in
-        {{ $m['left'] }}in;
-    }
+    @page { size: {{ $paperCss }}; margin: {{ $m['top'] }}in {{ $m['right'] }}in {{ $m['bottom'] }}in {{ $m['left'] }}in; }
 
     * {
       box-sizing: border-box;

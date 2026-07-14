@@ -17,14 +17,17 @@ export const invoiceTemplateDesignSettingsSchema = z.object({
   })).optional(),
 })
 
+/** Partial design settings for publish/preview/test — server merges with stored settings. */
+export const partialDesignSettingsSchema = invoiceTemplateDesignSettingsSchema.partial()
+
 export const publishInvoiceTemplateSchema = z.object({
   bladeSource: z.string().min(20).max(500_000),
-  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  designSettings: partialDesignSettingsSchema.optional(),
 })
 
 export const previewTemplatePdfSchema = z.object({
   bladeSource: z.string().min(20).max(500_000).optional(),
-  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  designSettings: partialDesignSettingsSchema.optional(),
 })
 
 export const duplicateInvoiceTemplateSchema = z.object({
@@ -42,5 +45,5 @@ export const previewTemplateHtmlSchema = z.object({
 
 export const testTemplatePdfSchema = z.object({
   bladeSource: z.string().min(20).max(500_000).optional(),
-  designSettings: invoiceTemplateDesignSettingsSchema.optional(),
+  designSettings: partialDesignSettingsSchema.optional(),
 })

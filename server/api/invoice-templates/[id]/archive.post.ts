@@ -33,6 +33,9 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'CANNOT_ARCHIVE_DEFAULT') {
         throw apiError(event, 'CONFLICT', 'Cannot archive the default template — set another default first')
       }
+      if (err.code === 'CANNOT_ARCHIVE_SYSTEM') {
+        throw apiError(event, 'CONFLICT', 'Built-in templates cannot be deleted')
+      }
     }
     throw err
   }

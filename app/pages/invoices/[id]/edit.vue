@@ -11,7 +11,17 @@ import {
   formatHistoryChange,
   type CatalogQuickItem,
 } from '~/utils/invoice-editor-ui'
-import { dueDateFromTerms, LINE_TYPE_OPTIONS, previewLineAmount, previewLinesSubtotal, previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
+import {
+  buildInvoiceLinePatchBody,
+  dueDateFromTerms,
+  formatQuantityField,
+  formatUnitPriceField,
+  isDraftLineValid,
+  LINE_TYPE_OPTIONS,
+  previewLineAmount,
+  previewLinesSubtotal,
+  previewLineTypeBreakdown,
+} from '~/utils/invoice-creator-ui'
 import {
   auditWhenDisplay,
   invoiceDateDisplay,
@@ -84,6 +94,13 @@ interface VehiclePick extends VehicleDisplay {
   odometerUnit: string
 }
 
+interface CustomerPick {
+  id: string
+  displayName: string
+  accountKind: string
+  paymentTerms: string
+}
+
 const route = useRoute()
 const auth = useAuthStore()
 const editorLink = { path: '/templates/designer' }
@@ -115,6 +132,7 @@ watch(activeTab, async (tab) => {
 })
 
 const vehicleId = ref('')
+const customerId = ref('')
 const invoiceDate = ref('')
 const dueDate = ref('')
 const paymentTerms = ref('net_30')
@@ -176,9 +194,20 @@ const autosaveText = computed(() => {
   return autosavedLabel(lastSavedAt.value)
 })
 
+const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
+  '/api/customers',
+  { query: { pageSize: 200, sort: 'name-asc' } },
+)
+
+const customerOptions = computed(() => customersData.value?.items ?? [])
+
+const selectedCustomer = computed(() =>
+  customerOptions.value.find(c => c.id === customerId.value) ?? null,
+)
+
 const { data: vehiclesData } = await useFetch<{ items: VehiclePick[] }>(
   '/api/vehicles',
-  { query: computed(() => ({ customerId: invoice.value?.customerId, pageSize: 100 })), watch: [invoice] },
+  { query: computed(() => ({ customerId: customerId.value || undefined, pageSize: 100, sort: 'tag-asc' })), watch: [customerId] },
 )
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
@@ -230,7 +259,8 @@ const { data: serviceLogData } = await useFetch<{
 )
 
 watch(invoice, (inv) => {
-  if (!inv) return
+  if (!inv || hydratingFromServer.value) return
+  customerId.value = inv.customerId
   vehicleId.value = inv.vehicleId ?? ''
   invoiceDate.value = inv.invoiceDate
   dueDate.value = inv.dueDate ?? dueDateFromTerms(inv.invoiceDate, inv.paymentTerms)
@@ -250,20 +280,33 @@ if (import.meta.client) {
   onBeforeUnmount(() => clearInterval(tick))
 }
 
+const hydratingFromServer = ref(false)
+
 async function refreshInvoice() {
-  await refresh()
-  lastSavedAt.value = new Date()
-  await pdfPreviewRef.value?.refresh()
+  hydratingFromServer.value = true
+  try {
+    await refresh()
+    lastSavedAt.value = new Date()
+    await pdfPreviewRef.value?.refresh()
+  }
+  finally {
+    await nextTick()
+    hydratingFromServer.value = false
+  }
 }
 
-async function patchHeader() {
+async function patchHeader(opts: { refreshAfter?: boolean, manageBusy?: boolean } = {}) {
+  const { refreshAfter = true, manageBusy = true } = opts
   if (!editable.value || !invoice.value) return
-  busy.value = true
-  saveError.value = ''
+  if (manageBusy) {
+    busy.value = true
+    saveError.value = ''
+  }
   try {
     await $fetch(`/api/invoices/${id}`, {
       method: 'PATCH',
       body: {
+        customerId: customerId.value,
         vehicleId: vehicleId.value || null,
         invoiceDate: invoiceDate.value,
         dueDate: dueDate.value || null,
@@ -273,38 +316,80 @@ async function patchHeader() {
         internalNotes: internalNotes.value || null,
       },
     })
-    await refreshInvoice()
+    if (refreshAfter) await refreshInvoice()
   }
   catch (e: unknown) {
     saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    if (manageBusy) throw e
+  }
+  finally {
+    if (manageBusy) busy.value = false
+  }
+}
+
+async function saveDraft() {
+  if (!editable.value || !invoice.value) return
+  busy.value = true
+  saveError.value = ''
+  try {
+    for (const line of lines.value) {
+      if (!isDraftLineValid(line)) continue
+      await patchLine(line, { refreshAfter: false, manageBusy: false })
+    }
+    await patchHeader({ refreshAfter: false, manageBusy: false })
+    await refreshInvoice()
+  }
+  catch (e: unknown) {
+    if (!saveError.value) {
+      saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    }
   }
   finally {
     busy.value = false
   }
 }
 
-async function patchLine(line: LineItem, opts: { catalogItemId?: string | null } = {}) {
-  if (!editable.value || !line.description.trim()) return
-  busy.value = true
-  saveError.value = ''
+async function onCustomerChange() {
+  if (!editable.value) return
+  vehicleId.value = ''
+  if (selectedCustomer.value?.paymentTerms) {
+    paymentTerms.value = selectedCustomer.value.paymentTerms
+    dueDate.value = dueDateFromTerms(invoiceDate.value, paymentTerms.value)
+  }
+  await patchHeader()
+}
+
+async function patchLine(
+  line: LineItem,
+  opts: { catalogItemId?: string | null, refreshAfter?: boolean, manageBusy?: boolean } = {},
+) {
+  const { refreshAfter = true, manageBusy = true } = opts
+  if (!editable.value) return
+  const body = buildInvoiceLinePatchBody(line, opts)
+  if (!body) return
+
+  const quantity = formatQuantityField(line.quantity)
+  const unitPrice = formatUnitPriceField(line.unitPrice)
+  if (quantity) line.quantity = quantity
+  if (unitPrice !== null) line.unitPrice = unitPrice
+
+  if (manageBusy) {
+    busy.value = true
+    saveError.value = ''
+  }
   try {
     await $fetch(`/api/invoices/${id}/line-items/${line.id}`, {
       method: 'PATCH',
-      body: {
-        lineType: line.lineType,
-        description: line.description.trim(),
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        ...(opts.catalogItemId !== undefined ? { catalogItemId: opts.catalogItemId } : {}),
-      },
+      body,
     })
-    await refreshInvoice()
+    if (refreshAfter) await refreshInvoice()
   }
   catch (e: unknown) {
     saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Line update failed'
+    if (!manageBusy) throw e
   }
   finally {
-    busy.value = false
+    if (manageBusy) busy.value = false
   }
 }
 
@@ -718,8 +803,12 @@ const aiPopStyle = computed(() => {
               <div class="cbody ed-details-grid">
                 <label class="fld">
                   Customer
-                  <input type="text" :value="invoice.customerName" disabled>
-                  <span class="help">{{ customerTermsHelp(invoice.paymentTerms) }}</span>
+                  <select v-model="customerId" :disabled="!editable" @change="onCustomerChange">
+                    <option v-for="c in customerOptions" :key="c.id" :value="c.id">
+                      {{ c.displayName }}
+                    </option>
+                  </select>
+                  <span class="help">{{ customerTermsHelp(selectedCustomer?.paymentTerms ?? invoice.paymentTerms, selectedCustomer?.accountKind) }}</span>
                 </label>
                 <label class="fld">
                   Vehicle
@@ -856,7 +945,7 @@ const aiPopStyle = computed(() => {
             </div>
 
             <div v-if="editable" class="savebar">
-              <button type="button" class="btn" :disabled="busy" @click="patchHeader">Save draft</button>
+              <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
               <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
               <button
                 type="button"

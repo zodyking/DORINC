@@ -72,6 +72,7 @@ export interface CreateInvoiceInput {
 }
 
 export interface InvoicePatch {
+  customerId?: string
   vehicleId?: string | null
   invoiceDate?: string
   dueDate?: string | null
@@ -609,10 +610,48 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
 
   const changes: Record<string, unknown> = { updatedBy: actorId, updatedAt: new Date() }
   const changedFields: string[] = []
+  let effectiveCustomerId = before.customerId
+
+  if (patch.customerId !== undefined && patch.customerId !== before.customerId) {
+    let customer
+    try {
+      customer = await getCustomer(db, patch.customerId)
+    }
+    catch {
+      throw new InvoicesServiceError('CUSTOMER_NOT_FOUND')
+    }
+
+    changes.customerId = patch.customerId
+    changes.customerSnapshot = buildCustomerSnapshot(customer)
+    changes.taxExempt = customer.taxExempt
+    changedFields.push('customerId', 'taxExempt')
+    effectiveCustomerId = patch.customerId
+
+    if (patch.paymentTerms === undefined) {
+      changes.paymentTerms = customer.paymentTerms
+      changedFields.push('paymentTerms')
+    }
+
+    if (patch.vehicleId === undefined && before.vehicleId) {
+      try {
+        const vehicle = await getVehicle(db, before.vehicleId)
+        if (vehicle.customerId !== patch.customerId) {
+          changes.vehicleId = null
+          changes.vehicleSnapshot = null
+          changedFields.push('vehicleId')
+        }
+      }
+      catch {
+        changes.vehicleId = null
+        changes.vehicleSnapshot = null
+        changedFields.push('vehicleId')
+      }
+    }
+  }
 
   if (patch.vehicleId !== undefined) {
     if (patch.vehicleId) {
-      const vehicleSnapshot = await resolveVehicleForCustomer(db, before.customerId, patch.vehicleId)
+      const vehicleSnapshot = await resolveVehicleForCustomer(db, effectiveCustomerId, patch.vehicleId)
       changes.vehicleId = patch.vehicleId
       changes.vehicleSnapshot = vehicleSnapshot
     }
@@ -638,7 +677,7 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
   if (!changedFields.length) return { invoice: before, before, changedFields }
 
   const [updated] = await db.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
-  const totalsFields = ['taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount']
+  const totalsFields = ['taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount', 'customerId', 'taxExempt']
   if (changedFields.some(f => totalsFields.includes(f))) {
     await recalculateInvoiceTotals(db, id, actorId)
     const refreshed = await getInvoice(db, id)

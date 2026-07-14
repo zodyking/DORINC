@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildInvoiceLinePatchBody,
   previewLineAmount,
   previewLinesSubtotal,
   previewLineTypeBreakdown,
@@ -7,6 +8,8 @@ import {
   createEmptyLine,
   dueDateFromTerms,
   formatInvoiceNumberDisplay,
+  formatQuantityField,
+  formatUnitPriceField,
   isDraftLineValid,
   wizardStateLabel,
 } from '../../app/utils/invoice-creator-ui'
@@ -44,6 +47,26 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     line.unitPrice = '145.00'
     expect(previewLineAmount('2', '145.00')).toBe('290.00')
     expect(previewLinesSubtotal([line])).toBe('290.00')
+  })
+
+  it('normalizes quantity and unit price fields for API save', () => {
+    expect(formatQuantityField('')).toBeNull()
+    expect(formatQuantityField('0')).toBeNull()
+    expect(formatQuantityField('2')).toBe('2.00')
+    expect(formatQuantityField('1.5')).toBe('1.50')
+    expect(formatUnitPriceField('145')).toBe('145.00')
+    expect(formatUnitPriceField('')).toBeNull()
+    expect(buildInvoiceLinePatchBody({
+      lineType: 'labor',
+      description: ' Brake labor ',
+      quantity: '2',
+      unitPrice: '145',
+    })).toEqual({
+      lineType: 'labor',
+      description: 'Brake labor',
+      quantity: '2.00',
+      unitPrice: '145.00',
+    })
   })
 
   it('breaks subtotals down by parts, labor, and fees', () => {

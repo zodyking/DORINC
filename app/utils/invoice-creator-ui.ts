@@ -70,6 +70,46 @@ export function isDraftLineValid(line: DraftLine): boolean {
     && Number.parseFloat(line.unitPrice) >= 0
 }
 
+/** Normalize qty/rate strings from number inputs before API save (max 2 decimals). */
+export function formatQuantityField(value: string | number): string | null {
+  const raw = String(value).trim()
+  if (!raw) return null
+  const parsed = Number.parseFloat(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return (Math.round(parsed * 100) / 100).toFixed(2)
+}
+
+export function formatUnitPriceField(value: string | number): string | null {
+  const raw = String(value).trim()
+  if (!raw) return null
+  const parsed = Number.parseFloat(raw)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return (Math.round(parsed * 100) / 100).toFixed(2)
+}
+
+export function buildInvoiceLinePatchBody(
+  line: Pick<DraftLine, 'lineType' | 'description' | 'quantity' | 'unitPrice' | 'catalogItemId'>,
+  opts: { catalogItemId?: string | null } = {},
+): Record<string, unknown> | null {
+  const description = line.description.trim()
+  if (!description) return null
+
+  const body: Record<string, unknown> = {
+    lineType: line.lineType,
+    description,
+  }
+
+  const quantity = formatQuantityField(line.quantity)
+  const unitPrice = formatUnitPriceField(line.unitPrice)
+  if (quantity) body.quantity = quantity
+  if (unitPrice !== null) body.unitPrice = unitPrice
+
+  if (opts.catalogItemId !== undefined) body.catalogItemId = opts.catalogItemId
+  else if (line.catalogItemId !== undefined) body.catalogItemId = line.catalogItemId ?? null
+
+  return body
+}
+
 export function canProceedWizardStep(
   step: number,
   ctx: { customerId: string, vehicleId: string, lines: DraftLine[] },

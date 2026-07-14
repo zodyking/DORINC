@@ -11,6 +11,7 @@ interface TemplateListItem {
   name: string
   slug: string
   isDefault: boolean
+  isSystem: boolean
   usageCount: number
   latestVersion: { status: string, versionNumber: number } | null
 }
@@ -30,6 +31,7 @@ interface TemplateDetailResponse {
     name: string
     slug: string
     isDefault: boolean
+    isSystem: boolean
   }
   latestVersion: TemplateVersionRow | null
   publishedVersion: TemplateVersionRow | null
@@ -71,6 +73,7 @@ const renameBusy = ref(false)
 const previewBusy = ref(false)
 const duplicateBusy = ref(false)
 const testPdfBusy = ref(false)
+const deleteBusy = ref(false)
 const publishError = ref('')
 const previewError = ref('')
 const actionError = ref('')
@@ -100,9 +103,10 @@ const designDirty = computed(() =>
 const dirty = computed(() => bladeDirty.value || nameDirty.value || designDirty.value)
 
 function currentDesignSettings(): Partial<InvoiceTemplateDesignSettings> {
+  const margin = Number(marginInches.value)
   return {
     pageSize: pageSize.value,
-    marginInches: marginInches.value,
+    marginInches: Number.isFinite(margin) ? Math.min(1.5, Math.max(0.25, margin)) : 0.75,
   }
 }
 
@@ -329,6 +333,27 @@ async function setDefaultTemplate() {
   }
 }
 
+async function deleteTemplate() {
+  if (!canManage.value || !template.value) return
+  if (template.value.isDefault || template.value.isSystem) return
+  if (!confirm(`Delete template "${template.value.name}"? This cannot be undone.`)) return
+  deleteBusy.value = true
+  actionError.value = ''
+  try {
+    await $fetch(`/api/invoice-templates/${template.value.id}/archive`, { method: 'POST' })
+    actionMessage.value = `Template "${template.value.name}" deleted`
+    await refreshList()
+    const defaultTemplate = listData.value?.items.find(t => t.isDefault)
+    selectedTemplateId.value = defaultTemplate?.id ?? listData.value?.items[0]?.id ?? null
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Delete failed'
+  }
+  finally {
+    deleteBusy.value = false
+  }
+}
+
 async function testRenderPdf() {
   if (!canManage.value || !template.value) return
   testPdfBusy.value = true
@@ -457,6 +482,9 @@ async function pasteBladeFromClipboard() {
         <button v-if="canManage && !template.isDefault" type="button" class="btn" @click="setDefaultTemplate">
           Set default
         </button>
+        <button v-if="canManage && !template.isDefault && !template.isSystem" type="button" class="btn" :disabled="deleteBusy" @click="deleteTemplate">
+          {{ deleteBusy ? 'Deleting…' : 'Delete' }}
+        </button>
         <button v-if="canManage" type="button" class="btn primary" :disabled="publishBusy || !dirty" @click="publishTemplate">
           {{ publishBusy ? 'Saving…' : 'Save template' }}
         </button>
@@ -563,7 +591,7 @@ async function pasteBladeFromClipboard() {
 <style scoped>
 .te-page { display: flex; flex-direction: column; gap: 12px; }
 .te-toolbar {
-  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 16px;
 }
 .te-toolbar__main { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; flex: 1; }
 .te-toolbar__actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -572,6 +600,13 @@ async function pasteBladeFromClipboard() {
 .te-field--sm input { width: 100px; }
 .te-field span {
   font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #94a3b8;
+}
+.te-field input, .te-field select {
+  height: 36px; padding: 6px 10px; font-size: 13px;
+  border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #0f172a;
+}
+.te-field input:focus, .te-field select:focus {
+  outline: none; border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(79,70,229,.12);
 }
 .te-badges { display: flex; gap: 6px; align-items: center; padding-bottom: 2px; }
 .te-msg { margin: 0; font-size: 13px; }

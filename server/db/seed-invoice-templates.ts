@@ -26,6 +26,17 @@ export const INVOICE_TEMPLATE_PRESETS: ReadonlyArray<{ slug: string, name: strin
   { slug: 'blueprint-trade', name: 'Blueprint Trade', file: 'blueprint-trade.blade.php' },
 ]
 
+/** Slugs of built-in system templates that cannot be deleted. */
+export const SYSTEM_INVOICE_TEMPLATE_SLUGS: ReadonlySet<string> = new Set([
+  DEFAULT_INVOICE_TEMPLATE_SLUG,
+  ...INVOICE_TEMPLATE_PRESETS.map(p => p.slug),
+])
+
+/** Check if a template slug is a system (built-in) template. */
+export function isSystemTemplateSlug(slug: string): boolean {
+  return SYSTEM_INVOICE_TEMPLATE_SLUGS.has(slug)
+}
+
 const PRESET_DIR_CANDIDATES = [
   // Shipped with nuxt-app production image (see docker/Dockerfile.app).
   join(process.cwd(), 'server/assets/invoice-template-presets'),

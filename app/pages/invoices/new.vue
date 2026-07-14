@@ -381,21 +381,20 @@ async function ensureDraft(): Promise<string> {
 async function syncLines(id: string) {
   for (let i = 0; i < lines.value.length; i++) {
     const line = lines.value[i]!
-    if (!isDraftLineValid(line)) continue
+    const body = buildInvoiceLinePatchBody(line, { catalogItemId: line.catalogItemId ?? null })
+    if (!body || !body.quantity || body.unitPrice === undefined) continue
 
-    const body = {
-      lineType: line.lineType,
-      description: line.description.trim(),
-      quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      catalogItemId: line.catalogItemId || null,
-      sortOrder: i,
-    }
+    const quantity = formatQuantityField(line.quantity)
+    const unitPrice = formatUnitPriceField(line.unitPrice)
+    if (quantity) line.quantity = quantity
+    if (unitPrice !== null) line.unitPrice = unitPrice
+
+    const payload = { ...body, sortOrder: i }
 
     if (line.serverId) {
       const { line: updated } = await $fetch<{ line: { id: string, lineAmount: string } }>(
         `/api/invoices/${id}/line-items/${line.serverId}`,
-        { method: 'PATCH', body },
+        { method: 'PATCH', body: payload },
       )
       line.lineAmount = updated.lineAmount
       continue
@@ -403,7 +402,7 @@ async function syncLines(id: string) {
 
     const { line: created } = await $fetch<{ line: { id: string, lineAmount: string } }>(
       `/api/invoices/${id}/line-items`,
-      { method: 'POST', body: { ...body } },
+      { method: 'POST', body: payload },
     )
     line.serverId = created.id
     line.lineAmount = created.lineAmount
@@ -441,7 +440,7 @@ async function continueToLines() {
 
 async function saveAndContinueEditing() {
   const ok = await saveDraft()
-  if (ok && invoiceId.value) await navigateTo(`/invoices/${invoiceId.value}`)
+  if (ok && invoiceId.value) await navigateTo(`/invoices/${invoiceId.value}/edit`)
 }
 
 async function finalizeAndSend() {
@@ -774,7 +773,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <button type="button" class="btn" @click="prevStep">← Back</button>
         <div class="wiz-foot-right">
           <button type="button" class="btn" :disabled="busy" @click="saveAndContinueEditing">
-            Save draft &amp; view invoice
+            Save draft &amp; continue editing
           </button>
           <button
             type="button"

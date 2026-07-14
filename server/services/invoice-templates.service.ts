@@ -20,7 +20,7 @@ import {
   businessProfileToDocumentPdfCompany,
   serializePdfRenderPayload,
 } from '../../shared/document-pdf-payload'
-import { DEFAULT_INVOICE_TEMPLATE_SLUG } from '../db/seed-invoice-templates'
+import { DEFAULT_INVOICE_TEMPLATE_SLUG, isSystemTemplateSlug } from '../db/seed-invoice-templates'
 import { getInvoiceDetail } from './invoices.service'
 import { renderDocumentHtmlBuffer, renderDocumentPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
@@ -31,6 +31,7 @@ export type InvoiceTemplatesServiceErrorCode
     | 'NO_VERSION'
     | 'DUPLICATE_SLUG'
     | 'CANNOT_ARCHIVE_DEFAULT'
+    | 'CANNOT_ARCHIVE_SYSTEM'
     | 'NO_PREVIEW_INVOICE'
 
 export class InvoiceTemplatesServiceError extends Error {
@@ -41,7 +42,7 @@ export class InvoiceTemplatesServiceError extends Error {
 
 export interface PublishInvoiceTemplateInput {
   bladeSource: string
-  designSettings?: InvoiceTemplateDesignSettings
+  designSettings?: Partial<InvoiceTemplateDesignSettings>
 }
 
 export async function ensureDefaultInvoiceTemplate(db: Db) {
@@ -84,6 +85,7 @@ export async function listInvoiceTemplates(db: Db) {
     const usageCount = await countTemplateUsage(db, template.id)
     return {
       ...template,
+      isSystem: isSystemTemplateSlug(template.slug),
       usageCount,
       latestVersion: latest
         ? {
@@ -165,7 +167,10 @@ export async function getInvoiceTemplateDetail(db: Db, templateId: string) {
   const usageCount = await countTemplateUsage(db, templateId)
 
   return {
-    template,
+    template: {
+      ...template,
+      isSystem: isSystemTemplateSlug(template.slug),
+    },
     latestVersion,
     publishedVersion,
     usageCount,
@@ -268,6 +273,7 @@ export async function archiveInvoiceTemplate(db: Db, templateId: string) {
   const template = await getInvoiceTemplateById(db, templateId)
   if (!template) throw new InvoiceTemplatesServiceError('NOT_FOUND')
   if (template.isDefault) throw new InvoiceTemplatesServiceError('CANNOT_ARCHIVE_DEFAULT')
+  if (isSystemTemplateSlug(template.slug)) throw new InvoiceTemplatesServiceError('CANNOT_ARCHIVE_SYSTEM')
 
   await db.update(invoiceTemplates)
     .set({ archivedAt: new Date(), updatedAt: new Date(), isDefault: false })
@@ -363,13 +369,13 @@ export async function getTemplatePreviewInvoice(db: Db) {
 
 export interface TestRenderTemplatePdfInput {
   bladeSource?: string
-  designSettings?: InvoiceTemplateDesignSettings
+  designSettings?: Partial<InvoiceTemplateDesignSettings>
 }
 
 async function buildTemplatePreviewPayload(
   db: Db,
   templateId: string,
-  input?: { bladeSource?: string, designSettings?: InvoiceTemplateDesignSettings },
+  input?: { bladeSource?: string, designSettings?: Partial<InvoiceTemplateDesignSettings> },
 ) {
   const detail = await getInvoiceTemplateDetail(db, templateId)
   if (!detail?.latestVersion) throw new InvoiceTemplatesServiceError('NOT_FOUND')
@@ -413,7 +419,7 @@ async function buildTemplatePreviewPayload(
 export async function previewTemplatePdf(
   db: Db,
   templateId: string,
-  input?: { bladeSource?: string, designSettings?: InvoiceTemplateDesignSettings },
+  input?: { bladeSource?: string, designSettings?: Partial<InvoiceTemplateDesignSettings> },
 ) {
   const { payload, previewInvoiceNumber } = await buildTemplatePreviewPayload(db, templateId, input)
   const pdf = await renderDocumentPdfBuffer(payload)
