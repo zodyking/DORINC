@@ -13,7 +13,7 @@ import {
 } from '~/utils/portal-request-review-ui'
 import { avColor, initials } from '~/utils/users-ui'
 
-definePageMeta({ layout: 'staff', name: 'staff-portal-requests' })
+definePageMeta({ layout: 'staff', name: 'staff-portal-requests', permission: 'portal_requests.review.all' })
 
 interface StaffRequestRow {
   id: string

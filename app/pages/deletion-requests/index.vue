@@ -8,7 +8,7 @@ import {
 } from '~/utils/deletion-requests-ui'
 import { avColor, initials } from '~/utils/users-ui'
 
-definePageMeta({ layout: 'staff', name: 'staff-deletion-requests' })
+definePageMeta({ layout: 'staff', name: 'staff-deletion-requests', permission: 'deletion_requests.review.all' })
 
 interface DeletionRequestRow {
   id: string

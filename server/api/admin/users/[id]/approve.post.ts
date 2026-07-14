@@ -8,7 +8,8 @@ import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
 
 const approveSchema = z.object({
-  accountType: z.enum(['admin', 'manager', 'accountant', 'mechanic', 'viewer', 'external_auditor']).optional(),
+  // Accept any string - DB validation happens in the service layer
+  accountType: z.string().trim().min(1).max(100).optional(),
 })
 
 export default defineEventHandler(async (event) => {

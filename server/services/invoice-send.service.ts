@@ -99,8 +99,20 @@ export interface QueueInvoiceSendResult {
   alreadyQueued: boolean
 }
 
+/** Optional staff overrides captured from the send-compose UI. */
+export interface InvoiceSendOverrides {
+  recipientEmail?: string | null
+  subject?: string | null
+  message?: string | null
+}
+
 /** Queue PDF generation + email delivery. Invoice stays approved until email succeeds. */
-export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: string): Promise<QueueInvoiceSendResult> {
+export async function queueInvoiceSend(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+  overrides?: InvoiceSendOverrides,
+): Promise<QueueInvoiceSendResult> {
   const { isNotificationEnabled } = await import('./workspace-settings.service')
   if (!(await isNotificationEnabled(db, 'invoiceEmail'))) {
     throw new InvoiceSendServiceError('NOTIFICATION_DISABLED')
@@ -121,7 +133,12 @@ export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: strin
     throw new InvoiceSendServiceError('INVALID_TRANSITION')
   }
 
-  const recipient = await resolveInvoiceSendRecipient(db, invoice.customerId)
+  let recipient = await resolveInvoiceSendRecipient(db, invoice.customerId)
+  const overrideEmail = overrides?.recipientEmail?.trim()
+  if (overrideEmail) {
+    const snapshotName = (invoice.customerSnapshot as { displayName?: string } | null)?.displayName
+    recipient = { email: overrideEmail, name: recipient?.name ?? snapshotName ?? 'Customer' }
+  }
   if (!recipient) {
     throw new InvoiceSendServiceError('NO_RECIPIENT')
   }
@@ -138,7 +155,10 @@ export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: strin
   }
 
   const pdfResult = await generateInvoicePdf(db, invoiceId, actorId)
-  const mailPayload = await buildInvoiceSendMail(db, recipient, invoice, `${formatInvoiceNumber(invoice.invoiceNumber)}.pdf`)
+  const mailPayload = await buildInvoiceSendMail(db, recipient, invoice, `${formatInvoiceNumber(invoice.invoiceNumber)}.pdf`, {
+    subject: overrides?.subject ?? null,
+    message: overrides?.message ?? null,
+  })
   const job = await enqueueJob(db, 'invoice_send', {
     invoiceId,
     actorId,
@@ -155,6 +175,101 @@ export async function queueInvoiceSend(db: Db, invoiceId: string, actorId: strin
     pdfJobId: pdfResult.job?.id ?? null,
     alreadyQueued: false,
   }
+}
+
+/** Data for the send-compose UI: recipient + editable defaults + gating flags. */
+export async function getInvoiceSendPreview(db: Db, invoiceId: string) {
+  const { isNotificationEnabled } = await import('./workspace-settings.service')
+  const { invoiceSendEditableDefaults } = await import('../mail/customer-email-templates')
+
+  let invoice
+  try {
+    invoice = await getInvoice(db, invoiceId)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      throw new InvoiceSendServiceError('NOT_FOUND')
+    }
+    throw err
+  }
+
+  const invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
+  const recipient = invoice.customerId ? await resolveInvoiceSendRecipient(db, invoice.customerId) : null
+  const pending = await findPendingInvoiceSendJob(db, invoiceId)
+  const defaults = invoiceSendEditableDefaults(invoiceNumber)
+
+  return {
+    invoiceId,
+    invoiceNumber,
+    status: invoice.status,
+    total: invoice.total,
+    dueDate: invoice.dueDate,
+    recipient,
+    subject: defaults.subject,
+    message: defaults.message,
+    notificationEnabled: await isNotificationEnabled(db, 'invoiceEmail'),
+    alreadyQueued: !!pending,
+    sendable: invoice.status === 'approved',
+  }
+}
+
+export interface BulkInvoiceSendResult {
+  invoiceId: string
+  invoiceNumber: string
+  queued: boolean
+  alreadyQueued: boolean
+  error: string | null
+}
+
+const SEND_ERROR_MESSAGES: Record<InvoiceSendServiceErrorCode, string> = {
+  NOT_FOUND: 'Invoice not found',
+  INVALID_TRANSITION: 'Only approved invoices can be sent',
+  NO_RECIPIENT: 'No billing email on file',
+  ALREADY_QUEUED: 'Already queued for delivery',
+  PDF_FAILED: 'PDF generation failed',
+  EMAIL_FAILED: 'Email delivery failed',
+  NOTIFICATION_DISABLED: 'Invoice emails are disabled in Control Panel',
+}
+
+/** Queue multiple invoices belonging to a single customer. Never throws per-invoice; returns a report. */
+export async function bulkQueueInvoiceSend(
+  db: Db,
+  input: { customerId: string, invoiceIds: string[], subject?: string | null, message?: string | null },
+  actorId: string,
+): Promise<{ results: BulkInvoiceSendResult[], recipient: InvoiceSendRecipient | null }> {
+  const recipient = await resolveInvoiceSendRecipient(db, input.customerId)
+  const results: BulkInvoiceSendResult[] = []
+
+  for (const invoiceId of input.invoiceIds) {
+    let invoiceNumber = ''
+    try {
+      const invoice = await getInvoice(db, invoiceId)
+      invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
+      if (invoice.customerId !== input.customerId) {
+        results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, error: 'Invoice belongs to a different customer' })
+        continue
+      }
+      const result = await queueInvoiceSend(db, invoiceId, actorId, {
+        subject: input.subject ?? null,
+        message: input.message ?? null,
+      })
+      results.push({
+        invoiceId,
+        invoiceNumber: formatInvoiceNumber(result.invoice.invoiceNumber),
+        queued: !result.alreadyQueued,
+        alreadyQueued: result.alreadyQueued,
+        error: null,
+      })
+    }
+    catch (err) {
+      const message = err instanceof InvoiceSendServiceError
+        ? SEND_ERROR_MESSAGES[err.code]
+        : 'Could not queue this invoice'
+      results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, error: message })
+    }
+  }
+
+  return { results, recipient }
 }
 
 /** Mark invoice sent after worker confirms SMTP delivery (called from worker handler). */
@@ -175,6 +290,7 @@ export async function buildInvoiceSendMail(
   recipient: InvoiceSendRecipient,
   invoice: Awaited<ReturnType<typeof getInvoice>>,
   pdfFilename: string,
+  custom?: { subject?: string | null, message?: string | null },
 ) {
   const { resolveEmailBrand } = await import('./email-branding.service')
   const brand = await resolveEmailBrand(db)
@@ -185,6 +301,8 @@ export async function buildInvoiceSendMail(
     dueDate: invoice.dueDate,
     total: invoice.total,
     brand,
+    customSubject: custom?.subject ?? null,
+    customMessage: custom?.message ?? null,
   })
   return {
     ...base,

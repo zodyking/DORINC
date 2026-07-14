@@ -35,6 +35,18 @@ export interface InvoiceSentTemplateInput {
   total?: string | null
   brand?: EmailBrandContext
   appUrl?: string
+  /** Optional staff-edited subject line; falls back to the default when blank. */
+  customSubject?: string | null
+  /** Optional staff-edited message body; falls back to the default when blank. */
+  customMessage?: string | null
+}
+
+/** Editable defaults surfaced to the send-compose UI (subject + message body). */
+export function invoiceSendEditableDefaults(invoiceNumber: string) {
+  return {
+    subject: `Invoice ${invoiceNumber} is ready`,
+    message: `Invoice ${invoiceNumber} has been sent and is available in your customer portal.`,
+  }
 }
 
 export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
@@ -42,11 +54,13 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
   const detailUrl = portalUrl(`/invoices/${input.invoiceId}`, appUrl)
   const dueLine = input.dueDate || null
   const totalLine = input.total || null
-  const subject = `Invoice ${input.invoiceNumber} is ready`
+  const defaults = invoiceSendEditableDefaults(input.invoiceNumber)
+  const subject = input.customSubject?.trim() || defaults.subject
+  const message = input.customMessage?.trim() || defaults.message
   const text = [
     `Hello ${input.recipientName},`,
     '',
-    `Invoice ${input.invoiceNumber} has been sent and is available in your customer portal.`,
+    message,
     dueLine ? `Due date: ${dueLine}` : '',
     totalLine ? `Total: ${totalLine}` : '',
     '',
@@ -61,7 +75,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
       text,
       eyebrow: 'Invoice',
       headline: `Invoice ${input.invoiceNumber}`,
-      lead: `Invoice ${input.invoiceNumber} has been sent and is available in your customer portal.`,
+      lead: message,
       highlight: totalLine
         ? {
             label: 'Invoice total',

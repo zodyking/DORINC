@@ -20,6 +20,7 @@ const busy = ref(false)
 const error = ref('')
 const previewBlob = ref<Blob | null>(null)
 const { url: previewUrl, setFromBlob, revoke: revokePreview } = usePdfBlobUrl()
+const shellRef = ref<InstanceType<typeof PdfViewerShell> | null>(null)
 
 async function loadPreview() {
   if (!canUse.value) return
@@ -59,7 +60,10 @@ watch(() => props.invoiceId, () => {
   if (canUse.value) void loadPreview()
 })
 
-defineExpose({ refresh: loadPreview })
+defineExpose({
+  refresh: loadPreview,
+  refit: () => shellRef.value?.refit?.(),
+})
 </script>
 
 <template>
@@ -71,6 +75,7 @@ defineExpose({ refresh: loadPreview })
   <ClientOnly v-else-if="previewUrl">
     <div class="invoice-pdf-pane">
       <PdfViewerShell
+        ref="shellRef"
         fill
         compact
         :src="previewUrl"

@@ -81,10 +81,13 @@ const nav = computed<NavSection[]>(() => {
     },
   ]
 
-  if (isSuperAdmin.value) {
+  if (isSuperAdmin.value || auth.can('roles.manage.all')) {
     sections.push({
       label: 'Administration',
-      items: [{ label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' }],
+      items: [
+        { label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' },
+        { label: 'Roles & Permissions', to: '/admin/roles', icon: 'users', permission: 'roles.manage.all' },
+      ],
     })
   }
 

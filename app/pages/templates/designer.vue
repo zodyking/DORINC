@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TemplateEditorWorkbench from '~/components/admin/TemplateEditorWorkbench.vue'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'templates.manage.all' })
 
 const auth = useAuthStore()
 

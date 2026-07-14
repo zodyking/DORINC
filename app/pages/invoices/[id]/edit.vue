@@ -105,7 +105,14 @@ const history = computed(() => data.value?.history ?? [])
 const isDraft = computed(() => invoice.value?.status === 'draft')
 
 const activeTab = ref<'invoice' | 'servicelog' | 'pdf'>('invoice')
-const pdfPreviewRef = ref<{ refresh: () => Promise<void> } | null>(null)
+const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
+
+watch(activeTab, async (tab) => {
+  if (tab === 'pdf') {
+    await nextTick()
+    pdfPreviewRef.value?.refit()
+  }
+})
 
 const vehicleId = ref('')
 const invoiceDate = ref('')
@@ -976,7 +983,7 @@ const aiPopStyle = computed(() => {
         </div>
       </div>
 
-      <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane active">
+      <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane active ed-pane--pdf">
         <InvoicePdfPreviewPane
           ref="pdfPreviewRef"
           :invoice-id="id"

@@ -39,6 +39,7 @@ export const users = pgTable('users', {
   // Users are disabled, never deleted (SPEC §22.14)
   isActive: boolean('is_active').notNull().default(true),
   disabledAt: timestamp('disabled_at', { withTimezone: true }),
+  disabledReason: text('disabled_reason'),
 
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   approvedAt: timestamp('approved_at', { withTimezone: true }),

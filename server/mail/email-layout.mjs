@@ -21,7 +21,7 @@ export const EMAIL_TOKENS = {
   accentLine: '#e5e7eb',
   line: '#eef0f3',
   border: '#e5e7eb',
-  buttonBg: '#111827',
+  buttonBg: '#2563eb',
   radius: '8px',
   radiusBtn: '7px',
   font: 'Arial, Helvetica, sans-serif',
@@ -242,6 +242,7 @@ export function emailNote(note) {
 export function emailActions(actions) {
   if (!actions?.primary && !actions?.secondary) return ''
   return [
+    `<table role="presentation" width="100%"><tr><td align="center">`,
     `<table role="presentation"><tr>`,
     actions.primary
       ? `<td>${emailButton(actions.primary.href, actions.primary.label)}</td>`
@@ -250,6 +251,7 @@ export function emailActions(actions) {
       ? `<td style="padding-left:18px;">${emailSecondaryLink(actions.secondary.href, actions.secondary.label)}</td>`
       : '',
     `</tr></table>`,
+    `</td></tr></table>`,
   ].join('')
 }
 
@@ -442,7 +444,7 @@ export function wrapEmailHtml(opts) {
           ${opts.actionsHtml
             ? `<!-- Actions -->
           <tr>
-            <td class="mobile-padding" style="padding-top:30px; padding-bottom:38px;">
+            <td class="mobile-padding" align="center" style="padding-top:30px; padding-bottom:38px;">
               ${opts.actionsHtml}
             </td>
           </tr>`

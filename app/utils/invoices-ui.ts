@@ -137,6 +137,9 @@ export function formatInvoiceAuditAction(action: string): string {
   if (action === 'invoices.send') return 'Finalized & sent'
   if (action === 'invoices.send_queued') return 'Queued for email delivery'
   if (action === 'invoices.mark_paid') return 'Marked paid'
+  if (action === 'invoices.reassign_customer') return 'Customer reassigned'
+  if (action === 'invoices.reassign_vehicle') return 'Unit changed'
+  if (action === 'invoices.update_dates') return 'Dates updated'
   if (action.startsWith('invoices.line.')) return 'Line items updated'
   return action.replace(/\./g, ' ')
 }

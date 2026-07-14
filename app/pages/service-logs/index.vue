@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: ['service_logs.read.all', 'service_logs.read.own'] })
 
 interface VehicleBits {
   unitType: string

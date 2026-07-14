@@ -222,28 +222,33 @@ export function buildInvoiceAttachedEmail({
 
 export function buildLoginNotificationEmail({
   name,
+  email,
   portal = 'staff',
   signedInAt,
   ipAddress,
+  location,
+  device,
   userAgent,
   appUrl,
   brandName,
   brand,
 }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
-  const portalLabel = portal === 'customer' ? 'Customer portal' : 'Staff account'
   const when = signedInAt
     ? new Date(signedInAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
     : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
   const subject = `New sign-in to ${resolvedBrand}`
+  const deviceLabel = device || userAgent || null
   const text = [
     `Hi ${name},`,
     '',
-    `Your ${portalLabel.toLowerCase()} was used to sign in to ${resolvedBrand}.`,
+    `Your staff account was used to sign in to ${resolvedBrand}.`,
     '',
     `When: ${when}`,
+    email ? `Email: ${email}` : '',
+    location ? `Location: ${location}` : '',
     ipAddress ? `IP address: ${ipAddress}` : '',
-    userAgent ? `Device: ${userAgent}` : '',
+    deviceLabel ? `Device: ${deviceLabel}` : '',
     '',
     'If this was not you, contact your administrator immediately and change your password.',
   ].filter(Boolean).join('\n')
@@ -256,13 +261,14 @@ export function buildLoginNotificationEmail({
     text,
     eyebrow: 'Sign-in alert',
     headline: 'New sign-in',
-    lead: `Your ${portalLabel.toLowerCase()} was used to sign in to ${resolvedBrand}.`,
+    lead: `Your staff account was used to sign in to ${resolvedBrand}.`,
     details: [
       { label: 'When', value: when },
-      { label: 'Account', value: portalLabel },
-      ipAddress ? { label: 'IP address', value: ipAddress } : null,
-      userAgent ? { label: 'Device', value: userAgent } : null,
       { label: 'User', value: name },
+      email ? { label: 'Email', value: email } : null,
+      location ? { label: 'Location', value: location } : null,
+      ipAddress ? { label: 'IP address', value: ipAddress } : null,
+      deviceLabel ? { label: 'Device', value: deviceLabel } : null,
     ].filter(Boolean),
     note: {
       title: 'Was this you?',

@@ -6,6 +6,7 @@ import { apiError } from './api-error'
 
 export interface AuthContext {
   user: PermissionUser
+  roleGrants: PermissionKey[]
   overrides: PermissionOverrides
 }
 
@@ -26,6 +27,7 @@ export function requirePermission(
 
   const decision = evaluatePermission({
     user: auth.user,
+    roleGrants: auth.roleGrants,
     overrides: auth.overrides,
     required,
     ownsRecord: options.ownsRecord,
@@ -51,6 +53,7 @@ export function hasPermission(
   if (!auth?.user) return false
   return evaluatePermission({
     user: auth.user,
+    roleGrants: auth.roleGrants,
     overrides: auth.overrides,
     required,
     ownsRecord: options.ownsRecord,

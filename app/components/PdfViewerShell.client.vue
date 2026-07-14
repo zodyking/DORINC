@@ -92,6 +92,10 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', updateLayoutNarrow)
 })
+
+defineExpose({
+  refit: () => viewerRef.value?.refit?.(),
+})
 </script>
 
 <template>

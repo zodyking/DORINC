@@ -74,12 +74,14 @@ class PdfRenderController extends Controller
 
         if ($bladeSource !== '') {
             $html = Blade::render($bladeSource, $viewData);
-            $pdf = Pdf::loadHTML($html);
         }
         else {
             $view = $documentType === 'estimate' ? 'estimates.pdf' : 'invoices.pdf';
-            $pdf = Pdf::loadView($view, $viewData);
+            $html = view($view, $viewData)->render();
         }
+
+        $html = $this->injectMarginSafetyNet($html, $margins);
+        $pdf = Pdf::loadHTML($html);
 
         $pdf->setPaper($paper, 'portrait');
 
@@ -109,5 +111,34 @@ class PdfRenderController extends Controller
             'bottom' => (float) ($margins['bottom'] ?? $fallback),
             'left' => (float) ($margins['left'] ?? $fallback),
         ];
+    }
+
+    /**
+     * Inject a canonical @page margin rule as a safety net.
+     * This ensures margins apply even when a template's @page is missing or malformed.
+     * The injected rule is placed at the end of <head> so template rules can override if valid.
+     *
+     * @param  array{top: float, right: float, bottom: float, left: float}  $margins
+     */
+    private function injectMarginSafetyNet(string $html, array $margins): string
+    {
+        $m = sprintf(
+            '@page { margin: %.3fin %.3fin %.3fin %.3fin; }',
+            $margins['top'],
+            $margins['right'],
+            $margins['bottom'],
+            $margins['left']
+        );
+        $style = '<style data-safety-net="margin">' . $m . '</style>';
+
+        if (stripos($html, '</head>') !== false) {
+            return preg_replace('/<\/head>/i', $style . '</head>', $html, 1);
+        }
+
+        if (stripos($html, '<body') !== false) {
+            return preg_replace('/<body/i', $style . '<body', $html, 1);
+        }
+
+        return $style . $html;
     }
 }

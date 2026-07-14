@@ -5,7 +5,7 @@ import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 import { normalizeCatalogItemType } from '~/utils/catalog-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'catalog.read.all' })
 
 interface CatalogItemRow {
   id: string

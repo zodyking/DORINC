@@ -2,7 +2,7 @@
 import { moneyDisplay } from '~/utils/invoices-ui'
 import { avColor, initials } from '~/utils/users-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'customers.read.all' })
 
 const auth = useAuthStore()
 const canImport = computed(() => auth.can('system.admin.all'))

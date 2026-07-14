@@ -8,6 +8,7 @@ import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
+import { invoiceSendSchema } from '../../../../shared/validators/invoices'
 
 function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendServiceError) {
   switch (err.code) {
@@ -30,8 +31,13 @@ export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'invoices.send.all')
   const { id } = validateParams(event, idParamSchema)
 
+  // Body is optional: the one-click flows post nothing, the compose UI posts overrides.
+  const rawBody = await readBody(event).catch(() => null)
+  const parsedBody = invoiceSendSchema.safeParse(rawBody ?? {})
+  const overrides = parsedBody.success ? parsedBody.data : {}
+
   try {
-    const result = await queueInvoiceSend(useDb(), id, actor.id)
+    const result = await queueInvoiceSend(useDb(), id, actor.id, overrides)
 
     await writeAudit(event, {
       entityType: 'invoice',

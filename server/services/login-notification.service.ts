@@ -1,3 +1,4 @@
+import { UAParser } from 'ua-parser-js'
 import type { LoginPortal } from '../auth/auth.service'
 import type { Db } from '../db/client'
 import { buildLoginNotificationEmail } from '../mail/templates/system'
@@ -5,6 +6,26 @@ import { sendMail } from '../mail/mailer'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
+import { resolveIpLocation } from './ip-geolocation.service'
+
+function buildDeviceLabel(userAgent: string | null | undefined): string | null {
+  if (!userAgent) return null
+  const { device, os, browser } = new UAParser(userAgent).getResult()
+  const parts: string[] = []
+  if (device.vendor && device.model) {
+    parts.push(`${device.vendor} ${device.model}`)
+  }
+  else if (device.model) {
+    parts.push(device.model)
+  }
+  else if (os.name) {
+    parts.push(os.name)
+  }
+  if (browser.name) {
+    parts.push(browser.name)
+  }
+  return parts.length ? parts.join(' - ') : null
+}
 
 export async function sendLoginNotificationEmail(
   db: Db,
@@ -26,11 +47,17 @@ export async function sendLoginNotificationEmail(
   }
 
   const brand = await resolveEmailBrand(db)
+  const deviceLabel = buildDeviceLabel(opts.userAgent)
+  const location = await resolveIpLocation(opts.ipAddress)
+
   const mail = buildLoginNotificationEmail({
     name: opts.name,
+    email: to,
     portal: opts.portal,
     signedInAt: (opts.signedInAt ?? new Date()).toISOString(),
     ipAddress: opts.ipAddress ?? null,
+    location,
+    device: deviceLabel,
     userAgent: opts.userAgent ?? null,
     appUrl: brand.appUrl || getAppUrl(),
     brand,

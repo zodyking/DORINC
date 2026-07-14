@@ -8,8 +8,10 @@ import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
 
 const updateSchema = z.object({
-  accountType: z.enum(['admin', 'manager', 'accountant', 'mechanic', 'viewer', 'external_auditor']).optional(),
+  // Accept any string - DB validation happens in the service layer
+  accountType: z.string().trim().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
+  disabledReason: z.string().trim().max(500).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -24,6 +26,7 @@ export default defineEventHandler(async (event) => {
       actor: { id: actor.id, accountType: actor.accountType },
       accountTypeKey: body.accountType,
       isActive: body.isActive,
+      disabledReason: body.disabledReason,
     })
 
     if (result.changedFields.length) {

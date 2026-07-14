@@ -17,6 +17,7 @@ import {
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 import type {
   ReassignInvoiceCustomerInput,
+  ReassignInvoiceVehicleInput,
   ReassignServiceLogInput,
   ReassignVehicleInput,
 } from '../../shared/validators/reassign'
@@ -24,7 +25,7 @@ import type {
 export type ReassignServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'CUSTOMER_ARCHIVED' | 'VEHICLE_NOT_FOUND'
     | 'VEHICLE_CUSTOMER_MISMATCH' | 'SAME_CUSTOMER' | 'DUPLICATE_BUS_NUMBER'
-    | 'NOT_REASSIGNABLE' | 'ALREADY_CONVERTED'
+    | 'NOT_REASSIGNABLE' | 'ALREADY_CONVERTED' | 'NO_CUSTOMER'
 
 export class ReassignServiceError extends Error {
   constructor(public readonly code: ReassignServiceErrorCode) {
@@ -230,6 +231,44 @@ export async function reassignInvoiceCustomer(
     before,
     customer,
     clearedVehicle: !!(before.vehicleId && !vehicleResolved.vehicleId),
+  }
+}
+
+export async function reassignInvoiceVehicle(
+  db: Db,
+  invoiceId: string,
+  input: ReassignInvoiceVehicleInput,
+  actorId: string,
+) {
+  let before
+  try {
+    before = await getInvoice(db, invoiceId)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      throw new ReassignServiceError('NOT_FOUND')
+    }
+    throw err
+  }
+
+  if (before.status === 'void') throw new ReassignServiceError('NOT_REASSIGNABLE')
+  if (!before.customerId) throw new ReassignServiceError('NO_CUSTOMER')
+
+  const resolved = await resolveVehicleForCustomer(db, before.customerId, input.vehicleId)
+
+  await db.update(invoices).set({
+    vehicleId: resolved.vehicleId,
+    vehicleSnapshot: resolved.vehicleSnapshot,
+    updatedBy: actorId,
+    updatedAt: new Date(),
+  }).where(eq(invoices.id, invoiceId))
+
+  const invoice = await getInvoice(db, invoiceId)
+
+  return {
+    invoice,
+    before,
+    clearedVehicle: !!(before.vehicleId && !resolved.vehicleId),
   }
 }
 

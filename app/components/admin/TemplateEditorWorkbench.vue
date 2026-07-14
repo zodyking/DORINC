@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { isBuiltInBladeMarker, isLegacyAccentBladeSource } from '#shared/invoice-template-blade'
+import { DEFAULT_INVOICE_TEMPLATE_DESIGN, type InvoiceTemplateDesignSettings } from '#shared/invoice-template-design'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
+import { INVOICE_TEMPLATE_HELP_SECTIONS, INVOICE_TEMPLATE_HELP_SUMMARY } from '~/utils/invoice-template-help'
 import { PdfViewerShell } from '~/utils/pdf-viewer'
 
 interface TemplateListItem {
@@ -19,6 +21,7 @@ interface TemplateVersionRow {
   status: string
   layoutMarker: string
   publishedAt: string | null
+  designSettings: InvoiceTemplateDesignSettings
 }
 
 interface TemplateDetailResponse {
@@ -52,6 +55,12 @@ const previewBlob = ref<Blob | null>(null)
 const { url: previewUrl, setFromBlob: setPreviewBlob, revoke: revokePreviewUrl } = usePdfBlobUrl()
 const previewInvoiceLabel = ref('sample invoice')
 
+const pageSize = ref<'Letter' | 'A4'>(DEFAULT_INVOICE_TEMPLATE_DESIGN.pageSize)
+const savedPageSize = ref<'Letter' | 'A4'>(DEFAULT_INVOICE_TEMPLATE_DESIGN.pageSize)
+const marginInches = ref(DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches)
+const savedMarginInches = ref(DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches)
+const helpExpanded = ref(false)
+
 function clearPreview() {
   revokePreviewUrl()
   previewBlob.value = null
@@ -84,7 +93,18 @@ const { data: previewInvoiceData, refresh: refreshPreviewInvoice } = useFetch<{ 
 
 const bladeDirty = computed(() => bladeSource.value !== savedBladeSource.value)
 const nameDirty = computed(() => templateName.value.trim() !== savedTemplateName.value)
-const dirty = computed(() => bladeDirty.value || nameDirty.value)
+const designDirty = computed(() =>
+  pageSize.value !== savedPageSize.value
+  || marginInches.value !== savedMarginInches.value,
+)
+const dirty = computed(() => bladeDirty.value || nameDirty.value || designDirty.value)
+
+function currentDesignSettings(): Partial<InvoiceTemplateDesignSettings> {
+  return {
+    pageSize: pageSize.value,
+    marginInches: marginInches.value,
+  }
+}
 
 watch(canRead, (allowed) => {
   if (allowed) {
@@ -142,6 +162,13 @@ watch(activeVersion, async (v) => {
     const source = await resolveBladeFromMarker(v.layoutMarker)
     bladeSource.value = source
     savedBladeSource.value = source
+
+    const ds = v.designSettings ?? DEFAULT_INVOICE_TEMPLATE_DESIGN
+    pageSize.value = ds.pageSize ?? DEFAULT_INVOICE_TEMPLATE_DESIGN.pageSize
+    savedPageSize.value = pageSize.value
+    marginInches.value = ds.marginInches ?? DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches
+    savedMarginInches.value = marginInches.value
+
     clearPreview()
     if (editorTab.value === 'preview') refreshPreview()
   }
@@ -170,12 +197,14 @@ async function refreshPreview(opts?: { switchToPreview?: boolean }) {
   previewBusy.value = true
   previewError.value = ''
   try {
-    // Render the same dompdf PDF invoices use, so the preview shows the real
-    // paginated document (page size, margins, page breaks) instead of raw HTML.
     const source = bladeSource.value.trim()
+    const body: { bladeSource?: string, designSettings?: Partial<InvoiceTemplateDesignSettings> } = {}
+    if (source.length >= 20) body.bladeSource = bladeSource.value
+    if (designDirty.value) body.designSettings = currentDesignSettings()
+
     const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
       method: 'POST',
-      body: source.length >= 20 ? { bladeSource: bladeSource.value } : {},
+      body,
       responseType: 'blob',
     })
     if (requestId !== previewRequestId) return
@@ -206,6 +235,10 @@ watch(editorTab, (tab) => {
 })
 
 watch(bladeSource, () => {
+  if (editorTab.value === 'preview') schedulePreviewRefresh()
+})
+
+watch([pageSize, marginInches], () => {
   if (editorTab.value === 'preview') schedulePreviewRefresh()
 })
 
@@ -240,9 +273,14 @@ async function publishTemplate() {
     if (nameDirty.value) await saveTemplateName()
     await $fetch(`/api/invoice-templates/${template.value.id}/publish`, {
       method: 'POST',
-      body: { bladeSource: bladeSource.value },
+      body: {
+        bladeSource: bladeSource.value,
+        designSettings: currentDesignSettings(),
+      },
     })
     savedBladeSource.value = bladeSource.value
+    savedPageSize.value = pageSize.value
+    savedMarginInches.value = marginInches.value
     await refresh()
     await refreshList()
     actionMessage.value = 'Template published'
@@ -383,6 +421,24 @@ async function pasteBladeFromClipboard() {
             </option>
           </select>
         </label>
+        <label class="te-field te-field--sm">
+          <span>Paper size</span>
+          <select v-model="pageSize" :disabled="!canManage">
+            <option value="Letter">Letter (8.5 x 11")</option>
+            <option value="A4">A4 (210 x 297mm)</option>
+          </select>
+        </label>
+        <label class="te-field te-field--sm">
+          <span>Margins (inches)</span>
+          <input
+            v-model.number="marginInches"
+            type="number"
+            min="0.25"
+            max="1.5"
+            step="0.05"
+            :disabled="!canManage"
+          >
+        </label>
         <div class="te-badges">
           <span v-if="template.isDefault" class="pill ok">Default</span>
           <span class="pill indigo">Laravel Blade</span>
@@ -404,6 +460,20 @@ async function pasteBladeFromClipboard() {
         <button v-if="canManage" type="button" class="btn primary" :disabled="publishBusy || !dirty" @click="publishTemplate">
           {{ publishBusy ? 'Saving…' : 'Save template' }}
         </button>
+      </div>
+    </div>
+
+    <div class="card te-help">
+      <button type="button" class="te-help__toggle" @click="helpExpanded = !helpExpanded">
+        <span class="te-help__icon">{{ helpExpanded ? '−' : '+' }}</span>
+        <span class="te-help__title">How to build a template</span>
+        <span class="te-help__summary">{{ INVOICE_TEMPLATE_HELP_SUMMARY }}</span>
+      </button>
+      <div v-if="helpExpanded" class="te-help__body">
+        <div v-for="(section, idx) in INVOICE_TEMPLATE_HELP_SECTIONS" :key="idx" class="te-help__section">
+          <h4>{{ section.title }}</h4>
+          <div class="te-help__content" v-html="section.content.replace(/\n/g, '<br>').replace(/`([^`]+)`/g, '<code>$1</code>')" />
+        </div>
       </div>
     </div>
 
@@ -498,6 +568,8 @@ async function pasteBladeFromClipboard() {
 .te-toolbar__main { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; flex: 1; }
 .te-toolbar__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .te-field { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+.te-field--sm { min-width: 120px; }
+.te-field--sm input { width: 100px; }
 .te-field span {
   font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #94a3b8;
 }
@@ -550,5 +622,33 @@ async function pasteBladeFromClipboard() {
 .te-meta {
   display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px;
   border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8;
+}
+
+.te-help { overflow: hidden; }
+.te-help__toggle {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px;
+  text-align: left; border: none; background: transparent; cursor: pointer;
+  font: inherit;
+}
+.te-help__toggle:hover { background: #f8fafc; }
+.te-help__icon {
+  flex: none; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #4f46e5; background: #eef2ff; border-radius: 4px;
+}
+.te-help__title { flex: none; font-size: 13px; font-weight: 700; color: #1e293b; }
+.te-help__summary { flex: 1; font-size: 12px; color: #64748b; line-height: 1.4; }
+.te-help__body { padding: 0 16px 16px; border-top: 1px solid #f1f5f9; }
+.te-help__section { margin-top: 16px; }
+.te-help__section h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #334155; }
+.te-help__content {
+  font-size: 12.5px; line-height: 1.6; color: #475569;
+  white-space: pre-wrap; font-family: inherit;
+}
+.te-help__content :deep(code) {
+  display: inline; padding: 1px 5px; background: #f1f5f9; border-radius: 4px;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace; font-size: 11.5px; color: #334155;
+}
+@media (max-width: 640px) {
+  .te-help__summary { display: none; }
 }
 </style>

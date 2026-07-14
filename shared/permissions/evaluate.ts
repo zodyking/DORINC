@@ -3,7 +3,7 @@ import { ACCOUNT_TYPE_BUNDLES } from './keys'
 
 export interface PermissionUser {
   id: string
-  accountType: AccountType
+  accountType: AccountType | string
   isActive: boolean
   emailVerifiedAt: string | Date | null
   approvedAt: string | Date | null
@@ -18,6 +18,11 @@ export interface PermissionCheckInput {
   user: PermissionUser
   overrides?: PermissionOverrides
   required: PermissionKey
+  /**
+   * DB-driven role grants. When provided, used instead of ACCOUNT_TYPE_BUNDLES.
+   * Omit in unit tests to fall back to the hardcoded bundles.
+   */
+  roleGrants?: PermissionKey[]
   /**
    * For `.own`-scoped keys: does the target record belong to the user?
    * Omit when the route has no specific record (e.g. create/list own).
@@ -35,7 +40,7 @@ export type PermissionDecision
  * 5. deny wins → 6. record scope.
  */
 export function evaluatePermission(input: PermissionCheckInput): PermissionDecision {
-  const { user, required, overrides, ownsRecord } = input
+  const { user, required, overrides, ownsRecord, roleGrants } = input
 
   if (!user.isActive) return { allowed: false, reason: 'inactive' }
 
@@ -48,7 +53,8 @@ export function evaluatePermission(input: PermissionCheckInput): PermissionDecis
   // Deny wins over any allow, bundle or override.
   if (overrides?.deny.includes(required)) return { allowed: false, reason: 'denied' }
 
-  const bundle = ACCOUNT_TYPE_BUNDLES[user.accountType] ?? []
+  // Use DB-driven roleGrants if provided, otherwise fall back to hardcoded bundles
+  const bundle = roleGrants ?? ACCOUNT_TYPE_BUNDLES[user.accountType as AccountType] ?? []
   const granted = bundle.includes(required) || overrides?.allow.includes(required) === true
   if (!granted) return { allowed: false, reason: 'not_granted' }
 

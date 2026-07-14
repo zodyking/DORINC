@@ -47,6 +47,33 @@ export const invoiceUpdateSchema = z.object({
   ...invoiceHeaderFields,
 }).partial()
 
+export const invoiceDatesSchema = z.object({
+  invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable(),
+  reason: z.string().trim().max(500).optional(),
+}).refine(v => !v.dueDate || v.dueDate >= v.invoiceDate, {
+  message: 'Due date cannot be before the invoice date',
+  path: ['dueDate'],
+})
+
+export type InvoiceDatesInput = z.infer<typeof invoiceDatesSchema>
+
+export const invoiceSendSchema = z.object({
+  recipientEmail: z.string().trim().email('Enter a valid email').max(200).optional(),
+  subject: z.string().trim().min(1).max(300).optional(),
+  message: z.string().trim().max(5000).optional(),
+})
+
+export const invoiceBulkSendSchema = z.object({
+  customerId: uuidSchema,
+  invoiceIds: z.array(uuidSchema).min(1, 'Select at least one invoice').max(100),
+  subject: z.string().trim().min(1).max(300).optional(),
+  message: z.string().trim().max(5000).optional(),
+})
+
+export type InvoiceSendInput = z.infer<typeof invoiceSendSchema>
+export type InvoiceBulkSendInput = z.infer<typeof invoiceBulkSendSchema>
+
 export const invoiceLineCreateSchema = z.object({
   lineType: invoiceLineTypeSchema,
   catalogItemId: uuidSchema.nullish(),

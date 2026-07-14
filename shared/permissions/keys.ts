@@ -65,6 +65,9 @@ export const PERMISSIONS = {
   'users.manage.all': 'Manage users (approve, disable, account type)',
   'users.permissions.all': 'Manage permission overrides',
 
+  // Roles
+  'roles.manage.all': 'Manage roles and their permission bundles',
+
   // Audit
   'audit.read.all': 'View audit logs',
 

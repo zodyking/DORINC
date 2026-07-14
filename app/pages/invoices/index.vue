@@ -9,7 +9,7 @@ import {
   type InvoiceVehicleSnapshotDisplay,
 } from '~/utils/invoices-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'invoices.read.all' })
 
 type StatusChip = 'all' | 'draft' | 'pending_manager_approval' | 'sent' | 'overdue' | 'paid'
 
@@ -43,6 +43,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
+const canSend = computed(() => auth.can('invoices.send.all'))
 
 const q = ref('')
 const fStatus = ref<StatusChip>((route.query.status as StatusChip) || 'all')
@@ -177,6 +178,7 @@ async function retryLoad() {
     <StaffPageHead :subtitle="auth.loaded ? subtitle : 'Loading…'">
       <template #title>Invoices</template>
       <template #actions>
+        <BulkSendInvoicesButton v-if="canSend" @sent="retryLoad" />
         <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
       </template>

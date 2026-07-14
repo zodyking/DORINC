@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import {
+  accountTypePermissions,
   accountTypes,
   emailVerificationTokens,
   permissions,
@@ -242,6 +243,7 @@ export interface ResolvedSession {
     customerId: string | null
     mustChangePassword: boolean
   }
+  roleGrants: PermissionKey[]
   overrides: PermissionOverrides
   sessionId: string
   stepUpVerifiedAt: Date | null
@@ -251,7 +253,7 @@ export interface ResolvedSession {
 export async function resolveSession(db: Db, sessionToken: string): Promise<ResolvedSession | null> {
   const now = new Date()
   const [row] = await db
-    .select({ session: sessions, user: users, accountTypeKey: accountTypes.key })
+    .select({ session: sessions, user: users, accountTypeKey: accountTypes.key, accountTypeId: accountTypes.id })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
@@ -271,6 +273,16 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
 
   await db.update(sessions).set({ lastActivityAt: now }).where(eq(sessions.id, row.session.id))
 
+  // Load role grants from DB (accountTypePermissions)
+  const roleGrantRows = await db
+    .select({ key: permissions.key })
+    .from(accountTypePermissions)
+    .innerJoin(permissions, eq(accountTypePermissions.permissionId, permissions.id))
+    .where(eq(accountTypePermissions.accountTypeId, row.accountTypeId))
+
+  const roleGrants = roleGrantRows.map(r => r.key as PermissionKey)
+
+  // Load user-level overrides
   const overrideRows = await db
     .select({ effect: userPermissionOverrides.effect, key: permissions.key })
     .from(userPermissionOverrides)
@@ -295,6 +307,7 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
       customerId: row.user.customerId,
       mustChangePassword: row.user.mustChangePassword,
     },
+    roleGrants,
     overrides,
     sessionId: row.session.id,
     stepUpVerifiedAt: row.session.stepUpVerifiedAt,

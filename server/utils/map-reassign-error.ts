@@ -22,6 +22,8 @@ export function mapReassignError(event: H3Event, err: unknown): never {
       throw apiError(event, 'CONFLICT', 'Target customer already has a unit with that fleet number')
     case 'NOT_REASSIGNABLE':
       throw apiError(event, 'CONFLICT', 'This record cannot be reassigned in its current state')
+    case 'NO_CUSTOMER':
+      throw apiError(event, 'CONFLICT', 'Assign a customer to this invoice before attaching a unit')
     case 'ALREADY_CONVERTED':
       throw apiError(event, 'CONFLICT', 'Converted service logs cannot be reassigned')
     default:

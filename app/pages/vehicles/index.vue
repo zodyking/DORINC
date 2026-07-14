@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Staff vehicles list (mockup: PAGE: VEHICLES).
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'vehicles.read.all' })
 
 interface VehicleRow {
   id: string

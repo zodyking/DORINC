@@ -25,13 +25,9 @@ import {
   workerQueueStatusLabel,
 } from '~/utils/admin-panel-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
 const auth = useAuthStore()
-
-if (import.meta.client && auth.loaded && !auth.can('system.admin.all')) {
-  navigateTo('/dashboard')
-}
 
 interface SystemStatus {
   database: 'ok' | 'error'

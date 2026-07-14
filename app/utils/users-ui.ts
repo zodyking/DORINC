@@ -35,6 +35,7 @@ export function statusPill(status: string): string {
     case 'active': return 'pill ok'
     case 'pending': return 'pill warn'
     case 'rejected': return 'pill over'
+    case 'suspended': return 'pill over'
     default: return 'pill gray'
   }
 }
@@ -44,6 +45,7 @@ export function statusLabel(status: string): string {
     case 'active': return 'Active'
     case 'pending': return 'Pending'
     case 'rejected': return 'Rejected'
+    case 'suspended': return 'Suspended'
     case 'disabled': return 'Inactive'
     default: return status
   }

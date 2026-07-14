@@ -103,18 +103,26 @@ describe('system email templates', () => {
   it('builds login notification with sign-in details', () => {
     const mail = buildLoginNotificationEmail({
       name: 'Alex',
+      email: 'alex@example.com',
       portal: 'staff',
       signedInAt: '2026-07-10T20:00:00.000Z',
       ipAddress: '203.0.113.10',
-      userAgent: 'Mozilla/5.0',
+      location: 'Austin, Texas',
+      device: 'iPhone - Safari',
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)',
       appUrl,
       brand,
     })
     expect(mail.subject).toContain('New sign-in')
     expect(mail.html).toContain('Sign-in alert')
     expect(mail.html).toContain('Alex')
+    expect(mail.html).toContain('alex@example.com')
+    expect(mail.html).toContain('Austin, Texas')
+    expect(mail.html).toContain('iPhone - Safari')
     expect(mail.html).toContain('203.0.113.10')
     expect(mail.text).toContain('If this was not you')
+    expect(mail.text).toContain('alex@example.com')
+    expect(mail.text).toContain('Austin, Texas')
   })
 
   it('builds deletion request submitted and result emails', () => {

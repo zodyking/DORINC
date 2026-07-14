@@ -421,3 +421,24 @@ textarea {
 .pagehead__title-row {
   align-items: flex-start;
 }
+
+/* High-specificity override: ensure section.page--invoice-pdf uses flex even
+   when ledger.css's section.page.active { display:block } wins on specificity. */
+section.page.active.page--invoice-pdf {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fallback floor so the viewer never fully collapses even if flex chain breaks. */
+.page--invoice-pdf .invoice-pdf-tab {
+  min-height: 60vh;
+}
+
+/* Edit page PDF pane — override .ed-pane.active { display:block } from ledger.css. */
+.ed-pane.active.ed-pane--pdf {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 60vh;
+  max-height: calc(100vh - 300px);
+}

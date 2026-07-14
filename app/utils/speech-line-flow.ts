@@ -71,13 +71,16 @@ export function parseSpokenNumber(spoken: string): string {
   const wordMap: Record<string, string> = {
     one: '1', two: '2', three: '3', four: '4', five: '5',
     six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
-    half: '0.5',
+    eleven: '11', twelve: '12', thirteen: '13', fourteen: '14', fifteen: '15',
+    twenty: '20', thirty: '30', forty: '40', fifty: '50',
+    hundred: '100',
+    half: '0.5', quarter: '0.25',
   }
   for (const [word, num] of Object.entries(wordMap)) {
     if (words === word || words.startsWith(`${word} `)) return num
   }
   const m = words.replace(/,/g, '').replace(/\$/g, '').match(/(\d+(?:\.\d+)?)/)
-  return m ? m[1]! : words
+  return m ? m[1]! : ''
 }
 
 export function parseSpokenConfirm(spoken: string): 'save' | 'another' | 'done' | null {

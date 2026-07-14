@@ -6,6 +6,7 @@ import {
   invoiceDateDisplay,
   invoiceStatusHeadline,
   invoiceStatusPill,
+  isInvoiceOverdue,
   lineQuantityDisplay,
   lineTypeLabel,
   lineTypePill,
@@ -204,6 +205,11 @@ const headlineStatus = computed(() => {
   return invoiceStatusHeadline(invoice.value.status, invoice.value.dueDate, invoice.value.balanceDue)
 })
 
+const dueIsOverdue = computed(() =>
+  !!invoice.value
+  && isInvoiceOverdue(invoice.value.status, invoice.value.dueDate, invoice.value.balanceDue),
+)
+
 const isDraft = computed(() => invoice.value?.status === 'draft')
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
@@ -216,6 +222,14 @@ const showRecordPayment = computed(() =>
 const busy = ref(false)
 const actionError = ref('')
 const viewTab = ref<'detail' | 'pdf'>('detail')
+const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
+
+watch(viewTab, async (tab) => {
+  if (tab === 'pdf') {
+    await nextTick()
+    pdfPreviewRef.value?.refit()
+  }
+})
 
 async function runAdminForceRelease() {
   const reason = window.prompt('Reason for unlocking this invoice for editing (required):')
@@ -314,7 +328,7 @@ const summaryRows = computed(() => {
       </template>
       <template #subtitle>
         <NuxtLink to="/invoices">Invoices</NuxtLink>
-        / {{ invoice.invoiceNumberFormatted }} · {{ invoice.customerName }}
+        / {{ invoice.customerName }} · Issued {{ invoiceDateDisplay(invoice.invoiceDate) }}
       </template>
       <template #actions>
         <button
@@ -344,15 +358,12 @@ const summaryRows = computed(() => {
         >
           Manager approve
         </button>
-        <button
+        <SendInvoiceButton
           v-if="canSend && invoice.status === 'approved' && !sendInProgress"
-          type="button"
-          class="btn primary"
+          :invoice-id="id"
           :disabled="busy"
-          @click="runAction(`/api/invoices/${id}/send`)"
-        >
-          Send invoice
-        </button>
+          @sent="refresh()"
+        />
         <NuxtLink
           v-if="canUpdate && isDraft"
           :to="`/invoices/${id}/edit`"
@@ -376,6 +387,23 @@ const summaryRows = computed(() => {
         >
           {{ pdfDownloadBusy ? 'Preparing…' : 'Download' }}
         </button>
+        <ChangeDatesButton
+          v-if="invoice.status !== 'void'"
+          :invoice-id="id"
+          :invoice-date="invoice.invoiceDate"
+          :due-date="invoice.dueDate"
+          :payment-terms="invoice.paymentTerms"
+          :disabled="busy"
+          @changed="refresh()"
+        />
+        <ChangeVehicleButton
+          v-if="invoice.status !== 'void' && invoice.customerId"
+          :invoice-id="id"
+          :customer-id="invoice.customerId"
+          :current-vehicle-id="invoice.vehicleId"
+          :disabled="busy"
+          @changed="refresh()"
+        />
         <ReassignEntityButton
           v-if="invoice.status !== 'void'"
           entity-type="invoice"
@@ -396,6 +424,27 @@ const summaryRows = computed(() => {
         />
       </template>
     </StaffPageHead>
+
+    <div class="inv-meta">
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Invoice date</span>
+        <span class="inv-meta__value">{{ invoiceDateDisplay(invoice.invoiceDate) }}</span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Due</span>
+        <span class="inv-meta__value" :class="{ over: dueIsOverdue }">
+          {{ invoice.dueDate ? invoiceDateDisplay(invoice.dueDate) : paymentTermsLabel(invoice.paymentTerms) }}
+        </span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Terms</span>
+        <span class="inv-meta__value">{{ paymentTermsLabel(invoice.paymentTerms) }}</span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Balance due</span>
+        <span class="inv-meta__value strong">{{ moneyDisplay(invoice.balanceDue) }}</span>
+      </div>
+    </div>
 
     <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
     <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
@@ -544,19 +593,22 @@ const summaryRows = computed(() => {
           </dl>
         </div>
 
-        <div v-if="invoice.vehicleSnapshot" class="card">
+        <div v-if="invoice.customerId || invoice.vehicleSnapshot" class="card">
           <div class="chead">
             <h3>Vehicle</h3>
             <div v-if="invoice.vehicleId" class="right">
               <NuxtLink :to="`/vehicles/${invoice.vehicleId}`" class="btn ghost sm">View →</NuxtLink>
             </div>
           </div>
-          <dl class="kv">
+          <dl v-if="invoice.vehicleSnapshot" class="kv">
             <dt>Unit</dt><dd>{{ vehicleSub(invoice.vehicleSnapshot) }}</dd>
             <dt>VIN</dt><dd class="mono" style="font-size:12px">{{ invoice.vehicleSnapshot.vin ?? '—' }}</dd>
             <dt>Odometer</dt><dd>{{ odoDisplay(invoice.vehicleSnapshot.odometer, invoice.vehicleSnapshot.odometerUnit || 'mi') }}</dd>
             <dt>Fleet #</dt><dd>{{ invoice.vehicleSnapshot.busNumber ?? invoice.vehicleSnapshot.unitTag ?? '—' }}</dd>
           </dl>
+          <p v-else style="margin:0; padding:4px 2px; color:#64748b; font-size:13.5px;">
+            No unit attached to this invoice.
+          </p>
         </div>
 
         <div v-if="invoice.serviceLogId" class="card">
@@ -602,6 +654,7 @@ const summaryRows = computed(() => {
 
     <div v-if="viewTab === 'pdf' && canGeneratePdf" class="invoice-pdf-tab">
       <InvoicePdfPreviewPane
+        ref="pdfPreviewRef"
         :invoice-id="id"
         :invoice-label="invoice.invoiceNumberFormatted"
         :can-generate-pdf="canGeneratePdf"
@@ -632,8 +685,50 @@ const summaryRows = computed(() => {
 
 .page--invoice-pdf .help,
 .page--invoice-pdf .flash,
-.page--invoice-pdf .edit-lock-banner {
+.page--invoice-pdf .edit-lock-banner,
+.page--invoice-pdf .inv-meta {
   flex-shrink: 0;
+}
+
+.inv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  padding: 12px 16px;
+  margin: -4px 0 16px;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+}
+
+.inv-meta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+}
+
+.inv-meta__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+}
+
+.inv-meta__value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text, #0f172a);
+}
+
+.inv-meta__value.strong {
+  font-weight: 700;
+}
+
+.inv-meta__value.over {
+  color: #dc2626;
+  font-weight: 700;
 }
 
 .invoice-pdf-tab {

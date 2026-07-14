@@ -17,7 +17,8 @@ export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Standard Invoice'
  * Each seeds as its own template with the Blade source stored inline, so
  * users can pick, duplicate, and customize them from the designer.
  */
-export const INVOICE_TEMPLATE_PRESETS: ReadonlyArray<{ slug: string, name: string, file: string }> = [
+export const INVOICE_TEMPLATE_PRESETS: ReadonlyArray<{ slug: string, name: string, file: string, setAsDefault?: boolean }> = [
+  { slug: 'shop-matrix', name: 'Shop Matrix', file: 'shop-matrix.blade.php', setAsDefault: true },
   { slug: 'classic-ledger', name: 'Service Matrix', file: 'classic-ledger.blade.php' },
   { slug: 'onyx-bold', name: 'Onyx Bold', file: 'onyx-bold.blade.php' },
   { slug: 'aria-minimal', name: 'Aria Minimal', file: 'aria-minimal.blade.php' },
@@ -66,8 +67,15 @@ export async function seedInvoiceTemplatePresets(db: Db) {
     const template = existingBySlug.get(preset.slug)
 
     if (!template) {
+      const shouldSetDefault = preset.setAsDefault === true
+      if (shouldSetDefault) {
+        await db.update(invoiceTemplates)
+          .set({ isDefault: false })
+          .where(eq(invoiceTemplates.isDefault, true))
+      }
+
       const [row] = await db.insert(invoiceTemplates)
-        .values({ name: preset.name, slug: preset.slug, isDefault: false })
+        .values({ name: preset.name, slug: preset.slug, isDefault: shouldSetDefault })
         .onConflictDoNothing({ target: invoiceTemplates.slug })
         .returning()
       if (!row) continue

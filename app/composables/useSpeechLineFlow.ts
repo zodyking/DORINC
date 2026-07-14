@@ -22,6 +22,7 @@ import {
 } from '~/utils/speech-line-flow'
 import { formatFieldText } from '#shared/format/prose-field'
 import { applyInferredLineType, emptyWizardLine, type WizardLineDraft } from '~/utils/line-item-wizard-ui'
+import { lineTypeLabel } from '~/utils/invoices-ui'
 
 export type SpeechFlowMode = 'command' | 'add' | 'edit'
 
@@ -45,6 +46,7 @@ export function useSpeechLineFlow(handlers: {
 
   let aborted = false
   let listenGen = 0
+  let speakGen = 0
 
   if (import.meta.client) {
     supported.value = isSpeechAnswerSupported()
@@ -63,6 +65,7 @@ export function useSpeechLineFlow(handlers: {
   function stop() {
     aborted = true
     listenGen += 1
+    speakGen += 1
     cancelSpeech()
     status.value = 'idle'
     active.value = false
@@ -72,6 +75,7 @@ export function useSpeechLineFlow(handlers: {
 
   function speakThenListen(text: string) {
     if (aborted) return
+    const gen = ++speakGen
     status.value = 'speaking'
     prompt.value = text
     cancelSpeech()
@@ -79,7 +83,7 @@ export function useSpeechLineFlow(handlers: {
       fromGesture: true,
       skipConsentCheck: true,
       onEnd: () => {
-        if (aborted) return
+        if (aborted || gen !== speakGen) return
         window.setTimeout(() => void beginListen(), 500)
       },
     })
@@ -257,6 +261,7 @@ export function useSpeechLineFlow(handlers: {
       cancelEditFlow()
       return
     }
+    const confirmAction = parseSpokenConfirm(spoken)
     if (confirmAction === 'another') {
       if (editingIndex.value === null) return
       const line = buildLineFromDraft(draft.value)
@@ -295,7 +300,8 @@ export function useSpeechLineFlow(handlers: {
     }
 
     const editIndex = parseSpokenEditLineNumber(spoken, handlers.lineCount())
-    if (editIndex !== null && (field.value === 'command' || flowMode.value === 'add')) {
+    const hasExplicitEditVerb = /\b(edit|change|modify|update|fix|review)\b/i.test(spoken)
+    if (editIndex !== null && (field.value === 'command' || (field.value === 'type' && hasExplicitEditVerb))) {
       startEditFlow(editIndex)
       return
     }
@@ -379,7 +385,9 @@ export function useSpeechLineFlow(handlers: {
         return
       }
       draft.value.description = desc
-      applyInferredLineType(draft.value)
+      if (!captured.value.type) {
+        applyInferredLineType(draft.value)
+      }
       captured.value = { ...captured.value, description: desc }
       if (isEdit) {
         goToEditPick()
@@ -394,7 +402,8 @@ export function useSpeechLineFlow(handlers: {
       const qty = isEdit && parseKeepCurrent(spoken)
         ? draft.value.qty
         : parseSpokenNumber(spoken)
-      if (!qty || Number.parseFloat(qty) <= 0) {
+      const qtyNum = Number.parseFloat(qty)
+      if (!qty || !Number.isFinite(qtyNum) || qtyNum <= 0) {
         speakThenListen(retryPromptForCurrentField())
         return
       }
@@ -413,7 +422,8 @@ export function useSpeechLineFlow(handlers: {
       const rate = isEdit && parseKeepCurrent(spoken)
         ? draft.value.rate
         : parseSpokenNumber(spoken)
-      if (!rate || Number.parseFloat(rate) < 0) {
+      const rateNum = Number.parseFloat(rate)
+      if (!rate || !Number.isFinite(rateNum) || rateNum < 0) {
         speakThenListen(retryPromptForCurrentField())
         return
       }
@@ -426,7 +436,7 @@ export function useSpeechLineFlow(handlers: {
       field.value = 'confirm'
       const line = buildLineFromDraft(draft.value)
       const summary = line
-        ? `${line.description}. ${line.qty} at ${line.rate}.`
+        ? `${lineTypeLabel(line.lineType)}: ${line.description}. ${line.qty} at ${line.rate}.`
         : ''
       speakThenListen(`${summary} ${promptForSpeechField('confirm', draft.value.lineType)}`)
       return
@@ -446,8 +456,7 @@ export function useSpeechLineFlow(handlers: {
       }
       handlers.onLineSaved(line, action === 'another')
       if (action === 'another') {
-        if (handlers.lineCount() > 0) startCommandFlow()
-        else startAddFlow()
+        startAddFlow()
       }
       else {
         idleAfterSave()

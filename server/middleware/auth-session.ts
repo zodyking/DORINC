@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
 
       event.context.auth = {
         user: resolved.user,
+        roleGrants: resolved.roleGrants,
         overrides: resolved.overrides,
         sessionId: resolved.sessionId,
         sessionToken: token,

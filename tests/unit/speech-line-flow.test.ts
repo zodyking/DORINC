@@ -6,6 +6,7 @@ import {
   parseSpokenEditField,
   parseSpokenEditLineNumber,
   parseSpokenLineType,
+  parseSpokenNumber,
   parseKeepCurrent,
 } from '../../app/utils/speech-line-flow'
 
@@ -69,5 +70,30 @@ describe('speech line flow commands', () => {
     expect(parseSpokenEditField('save')).toBe('confirm')
     expect(parseSpokenEditField('that looks good')).toBe('confirm')
     expect(parseSpokenEditField('labor')).toBeNull()
+  })
+
+  it('parses spoken numbers correctly', () => {
+    expect(parseSpokenNumber('1')).toBe('1')
+    expect(parseSpokenNumber('2.5')).toBe('2.5')
+    expect(parseSpokenNumber('one')).toBe('1')
+    expect(parseSpokenNumber('two')).toBe('2')
+    expect(parseSpokenNumber('ten')).toBe('10')
+    expect(parseSpokenNumber('half')).toBe('0.5')
+    expect(parseSpokenNumber('quarter')).toBe('0.25')
+    expect(parseSpokenNumber('$125')).toBe('125')
+    expect(parseSpokenNumber('$45.50')).toBe('45.50')
+    expect(parseSpokenNumber('1,500')).toBe('1500')
+    expect(parseSpokenNumber('fifteen')).toBe('15')
+    expect(parseSpokenNumber('twenty')).toBe('20')
+    expect(parseSpokenNumber('hundred')).toBe('100')
+  })
+
+  it('returns empty string for non-numeric input', () => {
+    expect(parseSpokenNumber('um')).toBe('')
+    expect(parseSpokenNumber('for')).toBe('')
+    expect(parseSpokenNumber('the')).toBe('')
+    expect(parseSpokenNumber('labor')).toBe('')
+    expect(parseSpokenNumber('hello there')).toBe('')
+    expect(parseSpokenNumber('')).toBe('')
   })
 })

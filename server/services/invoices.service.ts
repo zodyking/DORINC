@@ -648,6 +648,31 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
   return { invoice: updated!, before, changedFields }
 }
 
+export async function updateInvoiceDates(
+  db: Db,
+  id: string,
+  input: { invoiceDate: string, dueDate: string | null },
+  actorId: string,
+) {
+  const before = await getInvoice(db, id)
+  if (before.status === 'void') throw new InvoicesServiceError('NOT_EDITABLE')
+
+  const changedFields: string[] = []
+  if (before.invoiceDate !== input.invoiceDate) changedFields.push('invoiceDate')
+  if ((before.dueDate ?? null) !== (input.dueDate ?? null)) changedFields.push('dueDate')
+
+  if (!changedFields.length) return { invoice: before, before, changedFields }
+
+  const [updated] = await db.update(invoices).set({
+    invoiceDate: input.invoiceDate,
+    dueDate: input.dueDate ?? null,
+    updatedBy: actorId,
+    updatedAt: new Date(),
+  }).where(eq(invoices.id, id)).returning()
+
+  return { invoice: updated!, before, changedFields }
+}
+
 export async function addInvoiceLineItem(
   db: Db,
   invoiceId: string,

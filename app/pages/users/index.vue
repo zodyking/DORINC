@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'users.read.all' })
 
 interface UserRow {
   id: string

@@ -67,7 +67,11 @@ export function listenOnce(timeoutMs = 12000): Promise<string> {
     }
 
     const timer = setTimeout(() => {
-      finish(transcript)
+      if (transcript.trim()) {
+        finish(transcript)
+      } else {
+        fail('no-speech')
+      }
     }, timeoutMs)
 
     recognition.continuous = false
@@ -91,7 +95,13 @@ export function listenOnce(timeoutMs = 12000): Promise<string> {
     }
 
     recognition.onend = () => {
-      if (!settled) finish(transcript)
+      if (!settled) {
+        if (transcript.trim()) {
+          finish(transcript)
+        } else {
+          fail('no-speech')
+        }
+      }
     }
 
     try {

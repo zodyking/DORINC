@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ilike, isNull, or } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, notInArray, or } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import type { AccountType } from '../../shared/permissions/keys'
@@ -15,10 +15,37 @@ export class UsersServiceError extends Error {
   }
 }
 
-/** Account types assignable during approval — never customer or super_admin. */
-export const APPROVABLE_ACCOUNT_TYPES: AccountType[] = [
+/** Protected account types that cannot be assigned through normal approval/update flows. */
+export const PROTECTED_ACCOUNT_TYPES = ['customer', 'super_admin'] as const
+
+/** Default system account types assignable during approval (fallback). */
+export const DEFAULT_APPROVABLE_ACCOUNT_TYPES: AccountType[] = [
   'admin', 'manager', 'accountant', 'mechanic', 'viewer', 'external_auditor',
 ]
+
+/**
+ * Get all assignable account types from DB (excludes customer and super_admin).
+ * Includes both system roles and custom roles.
+ */
+export async function getAssignableAccountTypes(db: Db): Promise<string[]> {
+  const rows = await db.select({ key: accountTypes.key })
+    .from(accountTypes)
+    .where(notInArray(accountTypes.key, [...PROTECTED_ACCOUNT_TYPES]))
+  return rows.map(r => r.key)
+}
+
+/**
+ * Check if an account type key is assignable (exists in DB and not protected).
+ */
+export async function isAssignableAccountType(db: Db, key: string): Promise<boolean> {
+  if (PROTECTED_ACCOUNT_TYPES.includes(key as typeof PROTECTED_ACCOUNT_TYPES[number])) {
+    return false
+  }
+  const [row] = await db.select({ id: accountTypes.id })
+    .from(accountTypes)
+    .where(eq(accountTypes.key, key))
+  return !!row
+}
 
 async function getUserWithType(db: Db, userId: string) {
   const [row] = await db
@@ -33,7 +60,7 @@ export interface ApproveInput {
   userId: string
   approvedBy: string
   /** Optional account type override — defaults to the type requested at signup. */
-  accountTypeKey?: AccountType
+  accountTypeKey?: string
 }
 
 export async function approveUser(db: Db, input: ApproveInput) {
@@ -42,10 +69,11 @@ export async function approveUser(db: Db, input: ApproveInput) {
   if (row.user.approvedAt || row.user.rejectedAt) throw new UsersServiceError('NOT_PENDING')
 
   let accountTypeId = row.user.accountTypeId
-  let accountTypeKey = row.accountTypeKey as AccountType
+  let accountTypeKey = row.accountTypeKey
 
   if (input.accountTypeKey && input.accountTypeKey !== accountTypeKey) {
-    if (!APPROVABLE_ACCOUNT_TYPES.includes(input.accountTypeKey)) {
+    // Validate against DB - must exist and not be protected
+    if (!(await isAssignableAccountType(db, input.accountTypeKey))) {
       throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
     }
     const [typeRow] = await db.select().from(accountTypes)
@@ -65,7 +93,7 @@ export async function approveUser(db: Db, input: ApproveInput) {
     .where(eq(users.id, input.userId))
     .returning()
 
-  return { user: updated!, accountTypeKey, previousAccountTypeKey: row.accountTypeKey as AccountType }
+  return { user: updated!, accountTypeKey, previousAccountTypeKey: row.accountTypeKey }
 }
 
 export interface RejectInput {
@@ -96,9 +124,11 @@ export async function rejectUser(db: Db, input: RejectInput) {
 
 export interface UpdateUserInput {
   userId: string
-  actor: { id: string, accountType: AccountType }
-  accountTypeKey?: AccountType
+  actor: { id: string, accountType: string }
+  accountTypeKey?: string
   isActive?: boolean
+  /** Reason for deactivation (suspension). Only used when isActive=false. */
+  disabledReason?: string
 }
 
 /**
@@ -117,10 +147,11 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
 
   const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
   const changedFields: string[] = []
-  let accountTypeKey = row.accountTypeKey as AccountType
+  let accountTypeKey = row.accountTypeKey
 
   if (input.accountTypeKey && input.accountTypeKey !== accountTypeKey) {
-    if (targetIsSuperAdmin || !APPROVABLE_ACCOUNT_TYPES.includes(input.accountTypeKey)) {
+    // Cannot change super_admin role or assign to protected types
+    if (targetIsSuperAdmin || !(await isAssignableAccountType(db, input.accountTypeKey))) {
       throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
     }
     const [typeRow] = await db.select().from(accountTypes)
@@ -137,7 +168,11 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
     }
     changes.isActive = input.isActive
     changes.disabledAt = input.isActive ? null : new Date()
+    changes.disabledReason = input.isActive ? null : (input.disabledReason?.trim() || null)
     changedFields.push('isActive', 'disabledAt')
+    if (!input.isActive && input.disabledReason) {
+      changedFields.push('disabledReason')
+    }
   }
 
   if (!changedFields.length) {
@@ -155,7 +190,7 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
 export interface ListUsersFilter {
   q?: string
   status?: 'pending' | 'active' | 'disabled' | 'rejected'
-  accountType?: AccountType
+  accountType?: string
   page: number
   pageSize: number
 }
@@ -165,9 +200,12 @@ export function userStatus(user: {
   approvedAt: Date | null
   rejectedAt: Date | null
   emailVerifiedAt: Date | null
-}): 'pending' | 'active' | 'disabled' | 'rejected' {
+  disabledReason?: string | null
+}): 'pending' | 'active' | 'disabled' | 'rejected' | 'suspended' {
   if (user.rejectedAt) return 'rejected'
-  if (!user.isActive) return 'disabled'
+  if (!user.isActive) {
+    return user.disabledReason ? 'suspended' : 'disabled'
+  }
   if (!user.approvedAt) return 'pending'
   return 'active'
 }
@@ -218,7 +256,7 @@ export async function listUsers(db: Db, filter: ListUsersFilter) {
     id: r.user.id,
     name: r.user.name,
     email: r.user.email,
-    accountType: r.accountTypeKey as AccountType,
+    accountType: r.accountTypeKey,
     status: userStatus(r.user),
     emailVerified: !!r.user.emailVerifiedAt,
     createdAt: r.user.createdAt,
@@ -239,7 +277,7 @@ export async function getUserDetail(db: Db, userId: string) {
     id: row.user.id,
     name: row.user.name,
     email: row.user.email,
-    accountType: row.accountTypeKey as AccountType,
+    accountType: row.accountTypeKey,
     status: userStatus(row.user),
     emailVerified: !!row.user.emailVerifiedAt,
     emailVerifiedAt: row.user.emailVerifiedAt,
@@ -249,6 +287,7 @@ export async function getUserDetail(db: Db, userId: string) {
     rejectedReason: row.user.rejectedReason,
     isActive: row.user.isActive,
     disabledAt: row.user.disabledAt,
+    disabledReason: row.user.disabledReason,
     customerId: row.user.customerId,
     createdAt: row.user.createdAt,
     updatedAt: row.user.updatedAt,

@@ -182,7 +182,7 @@ defineExpose({ openWizard: openSession })
         <span class="li-orb-icon" aria-hidden="true">🎙️</span>
       </button>
 
-      <p class="li-feedback" :class="{ error: !!error }">{{ feedback }}</p>
+      <p class="li-feedback" :class="{ error: !!error }" aria-live="polite">{{ feedback }}</p>
 
       <p v-if="sessionOpen && lastHeard" class="li-heard">
         You said: “{{ lastHeard }}”

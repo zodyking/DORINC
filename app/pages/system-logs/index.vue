@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Platform-wide audit log (mockup: PAGE: SYSTEM LOGS). Append-only — no delete UI.
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'audit.read.all' })
 
 type AuditCategory = 'all' | 'settings' | 'users' | 'backups' | 'security'
 
