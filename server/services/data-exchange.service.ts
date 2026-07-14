@@ -10,6 +10,7 @@ import {
   INVOICE_CREATION_SOURCES,
   INVOICE_LINE_TYPES,
   INVOICE_STATUSES,
+  invoiceFiles,
   invoiceLineItems,
   invoices,
   type InvoiceCreationSource,
@@ -934,6 +935,10 @@ async function clearInvoiceForeignKeys(db: Db) {
   await db.update(serviceLogs)
     .set({ invoiceId: null })
     .where(sql`${serviceLogs.invoiceId} IS NOT NULL`)
+  // invoice_files.pdf_render_job_id blocks deleting pdf_render_jobs (ON DELETE NO ACTION)
+  await db.update(invoiceFiles)
+    .set({ pdfRenderJobId: null })
+    .where(sql`${invoiceFiles.pdfRenderJobId} IS NOT NULL`)
   await db.delete(pdfRenderJobs).where(eq(pdfRenderJobs.entityType, 'invoice'))
   await db.delete(editingSessions).where(eq(editingSessions.entityType, 'invoice'))
 }
