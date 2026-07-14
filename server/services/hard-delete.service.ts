@@ -249,7 +249,6 @@ export async function hardDeleteUser(
 
 export {
   CustomersServiceError,
-  HardDeleteUserServiceError,
   InvoicesServiceError,
   ServiceLogsServiceError,
   VehiclesServiceError,
