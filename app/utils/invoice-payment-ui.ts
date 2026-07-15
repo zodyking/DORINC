@@ -1,6 +1,6 @@
 // Record payment form helpers (mockup: PAGE: RECORD PAYMENT / P1-25).
 
-import { compareMoney } from '#shared/money'
+import { addMoney, compareMoney, subtractMoney } from '#shared/money'
 
 export const PAYMENT_METHODS = [
   { value: 'ach', label: 'ACH' },
@@ -40,4 +40,68 @@ export function projectedBalanceAfterPayment(balanceDue: string, paymentAmount: 
 
 export function willMarkFullyPaid(balanceDue: string, paymentAmount: string): boolean {
   return compareMoney(paymentAmount, balanceDue) >= 0
+}
+
+export interface InvoicePaymentAuditRow {
+  id: string
+  action: string
+  actorName: string | null
+  afterData: Record<string, unknown> | null
+  createdAt: string
+}
+
+export interface InvoicePaymentHistoryRow {
+  id: string
+  date: string
+  method: string
+  reference: string
+  amount: string
+  actorName: string | null
+}
+
+/** Build a chronological payment ledger from invoice audit history. */
+export function parseInvoicePaymentHistory(
+  history: InvoicePaymentAuditRow[],
+  opts: { sort?: 'asc' | 'desc' } = {},
+): InvoicePaymentHistoryRow[] {
+  const rows = history
+    .filter(row => row.action === 'invoices.mark_paid')
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+  let prevPaid = '0'
+  const parsed: InvoicePaymentHistoryRow[] = []
+  for (const row of rows) {
+    const after = row.afterData ?? {}
+    const afterPaid = typeof after.amountPaid === 'string' ? after.amountPaid : prevPaid
+    let amount = typeof after.paymentAmount === 'string' ? after.paymentAmount : null
+    if (!amount || compareMoney(amount, '0') <= 0) {
+      amount = subtractMoney(afterPaid, prevPaid)
+    }
+    const paidAt = typeof after.paidAt === 'string' ? after.paidAt : row.createdAt
+    parsed.push({
+      id: row.id,
+      date: paidAt,
+      method: typeof after.method === 'string' ? after.method : '—',
+      reference: typeof after.reference === 'string' && after.reference ? after.reference : '—',
+      amount,
+      actorName: row.actorName,
+    })
+    prevPaid = afterPaid
+  }
+
+  if (opts.sort === 'desc') parsed.reverse()
+  return parsed
+}
+
+/** Amount paid on the invoice that is not explained by audit payment rows (imports/legacy). */
+export function unreconciledPaymentAmount(
+  amountPaid: string,
+  payments: InvoicePaymentHistoryRow[],
+): string | null {
+  if (compareMoney(amountPaid, '0') <= 0) return null
+  const ledgerTotal = payments.reduce((sum, row) => addMoney(sum, row.amount), '0')
+  const diff = subtractMoney(amountPaid, ledgerTotal)
+  if (compareMoney(diff, '0') > 0) return diff
+  return null
 }

@@ -18,6 +18,10 @@ import {
 } from '~/utils/invoices-ui'
 import { editorSummaryRows } from '~/utils/invoice-editor-ui'
 import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
+import {
+  parseInvoicePaymentHistory,
+  unreconciledPaymentAmount,
+} from '~/utils/invoice-payment-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
@@ -164,9 +168,18 @@ const deletionNotice = ref('')
 watch(
   () => route.query.saved,
   (saved) => {
-    if (saved !== 'draft') return
-    savedNotice.value = 'Invoice saved.'
-    const { saved: _saved, ...rest } = route.query
+    if (saved === 'draft') {
+      savedNotice.value = 'Invoice saved.'
+    }
+    else if (saved === 'payment') {
+      savedNotice.value = route.query.partial === '1'
+        ? 'Partial payment recorded.'
+        : 'Payment recorded — invoice paid.'
+    }
+    else {
+      return
+    }
+    const { saved: _saved, partial: _partial, ...rest } = route.query
     void router.replace({ path: route.path, query: rest })
   },
   { immediate: true },
@@ -294,29 +307,12 @@ const summaryRows = computed(() => {
   return rows
 })
 
-interface PaymentHistoryRow {
-  id: string
-  date: string
-  method: string
-  reference: string
-  amount: string
-}
+const paymentHistory = computed(() =>
+  parseInvoicePaymentHistory(history.value, { sort: 'desc' }),
+)
 
-const paymentHistory = computed((): PaymentHistoryRow[] =>
-  history.value
-    .filter(row => row.action === 'invoices.mark_paid')
-    .map((row) => {
-      const after = row.afterData ?? {}
-      const paidAt = typeof after.paidAt === 'string' ? after.paidAt : null
-      const paymentAmount = typeof after.paymentAmount === 'string' ? after.paymentAmount : null
-      return {
-        id: row.id,
-        date: paidAt ?? row.createdAt,
-        method: typeof after.method === 'string' ? after.method : '—',
-        reference: typeof after.reference === 'string' && after.reference ? after.reference : '—',
-        amount: paymentAmount ?? '—',
-      }
-    }),
+const priorPaymentAmount = computed(() =>
+  invoice.value ? unreconciledPaymentAmount(invoice.value.amountPaid, paymentHistory.value) : null,
 )
 
 const showPaymentsCard = computed(() =>
@@ -615,16 +611,20 @@ const showPaymentsCard = computed(() =>
                 <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
               </thead>
               <tbody>
+                <tr v-if="priorPaymentAmount">
+                  <td>—</td>
+                  <td>Prior balance</td>
+                  <td class="mono">—</td>
+                  <td class="num">{{ moneyDisplay(priorPaymentAmount) }}</td>
+                </tr>
                 <tr v-for="payment in paymentHistory" :key="payment.id">
                   <td>{{ invoiceDateDisplay(payment.date.slice(0, 10)) }}</td>
                   <td>{{ payment.method }}</td>
                   <td class="mono">{{ payment.reference }}</td>
                   <td class="num">{{ moneyDisplay(payment.amount) }}</td>
                 </tr>
-                <tr v-if="!paymentHistory.length">
-                  <td colspan="4" class="empty" style="display:table-cell;">
-                    {{ moneyDisplay(invoice.amountPaid) }} recorded — payment details appear in change history after the next payment.
-                  </td>
+                <tr v-if="!paymentHistory.length && !priorPaymentAmount">
+                  <td colspan="4" class="empty" style="display:table-cell;">No payments recorded yet.</td>
                 </tr>
               </tbody>
             </table>
