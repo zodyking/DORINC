@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 definePageMeta({
   layout: 'staff',
   permission: 'messages.read.own',
@@ -70,7 +72,7 @@ async function pickStaffUser(userId: string) {
     showThread.value = true
   }
   catch (e: unknown) {
-    dmStartError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not start conversation'
+    dmStartError.value = syncFetchErrorMessage(e, 'Could not start conversation')
   }
 }
 
@@ -115,7 +117,7 @@ function onBack() {
           >
         </div>
         <div class="dm-conv-list">
-          <div v-if="dm.loadingConversations" class="dm-list-empty">Loading…</div>
+          <div v-if="dm.loadingConversations && !dm.conversations.length" class="dm-list-empty">Loading…</div>
           <MessagingConversationList
             v-for="conv in dm.conversations"
             :key="conv.id"

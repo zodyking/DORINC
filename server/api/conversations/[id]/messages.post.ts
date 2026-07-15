@@ -13,7 +13,7 @@ import { sendMessageSchema } from '../../../../shared/validators/messages'
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'messages.send.own')
   const { id } = validateParams(event, idParamSchema)
-  const body = validateBody(event, sendMessageSchema)
+  const body = await validateBody(event, sendMessageSchema)
 
   const refs = body.entityRefs?.length ? body.entityRefs : parseEntityRefsFromBody(body.body)
 

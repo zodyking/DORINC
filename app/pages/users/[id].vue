@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 definePageMeta({ layout: 'staff', permission: 'users.read.all' })
 
 interface UserDetail {
@@ -143,8 +145,7 @@ function getEffectiveState(key: string): boolean {
 }
 
 function messageFrom(err: unknown): string {
-  const fe = err as { data?: { data?: { message?: string } } }
-  return fe.data?.data?.message ?? 'Something went wrong — try again'
+  return syncFetchErrorMessage(err, 'Something went wrong — try again')
 }
 
 async function run(action: () => Promise<unknown>, successNote: string) {
@@ -265,11 +266,13 @@ async function deleteUser() {
     await navigateTo('/users')
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string, dependents?: string[] } } }
-    if (fe.data?.data?.dependents) {
-      deleteError.value = `Cannot delete: ${fe.data.data.dependents.join(', ')}`
-    } else {
-      deleteError.value = fe.data?.data?.message ?? 'Failed to delete user'
+    const data = (err as { data?: { message?: string, details?: { dependents?: string[] } } })?.data
+    const dependents = data?.details?.dependents
+    if (dependents?.length) {
+      deleteError.value = `Cannot delete: ${dependents.join(', ')}`
+    }
+    else {
+      deleteError.value = syncFetchErrorMessage(err, 'Failed to delete user')
     }
   }
   finally {

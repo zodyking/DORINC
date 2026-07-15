@@ -61,9 +61,12 @@ export function useDirectMessages() {
     }
   }
 
-  async function fetchConversations() {
+  async function fetchConversations(options?: { silent?: boolean }) {
     if (!canUseMessages.value) return
-    loadingConversations.value = true
+    const silent = options?.silent ?? false
+    if (!silent || !conversations.value.length) {
+      loadingConversations.value = !silent
+    }
     fetchError.value = null
     try {
       const res = await $fetch<{ items: ConversationSummary[] }>('/api/conversations', {
@@ -83,9 +86,10 @@ export function useDirectMessages() {
     }
   }
 
-  async function fetchMessages(conversationId: string, afterId?: string) {
+  async function fetchMessages(conversationId: string, afterId?: string, options?: { silent?: boolean }) {
     if (!canUseMessages.value) return
-    if (!afterId) loadingMessages.value = true
+    const silent = options?.silent ?? false
+    if (!afterId && !silent) loadingMessages.value = true
     try {
       const res = await $fetch<{ items: ChatMessage[] }>(`/api/conversations/${conversationId}/messages`, {
         query: {
@@ -106,7 +110,7 @@ export function useDirectMessages() {
       lastMessageId = last?.id ?? null
     }
     finally {
-      loadingMessages.value = false
+      if (!afterId && !silent) loadingMessages.value = false
     }
   }
 
@@ -150,7 +154,7 @@ export function useDirectMessages() {
       })
       messages.value.push(msg)
       lastMessageId = msg.id
-      await fetchConversations()
+      await fetchConversations({ silent: true })
       await fetchUnreadCount()
     }
     finally {
@@ -162,13 +166,10 @@ export function useDirectMessages() {
     if (!canUseMessages.value) return
     await fetchUnreadCount()
     if (route.path.startsWith('/messages')) {
-      await fetchConversations()
+      await fetchConversations({ silent: true })
       if (activeConversationId.value) {
         if (lastMessageId) {
-          await fetchMessages(activeConversationId.value, lastMessageId)
-        }
-        else {
-          await fetchMessages(activeConversationId.value)
+          await fetchMessages(activeConversationId.value, lastMessageId, { silent: true })
         }
       }
     }

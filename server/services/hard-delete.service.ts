@@ -1,9 +1,19 @@
-import { eq } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, userPermissionOverrides, users } from '../db/schema/auth'
-import { customers } from '../db/schema/customers'
+import { customerCredentialEmailLogs, customers } from '../db/schema/customers'
+import { entityDeletionRequests } from '../db/schema/deletion-requests'
+import { editingSessions } from '../db/schema/editing-sessions'
 import { estimates } from '../db/schema/estimates'
 import { invoiceLineItems, invoices } from '../db/schema/invoices'
+import { messages } from '../db/schema/messages'
+import {
+  invoiceChangeRequests,
+  newVehicleRequests,
+  portalGeneralRequests,
+  serviceRequests,
+  vehicleChangeRequests,
+} from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import { buildCustomerSnapshot, buildVehicleSnapshot } from './entity-snapshots'
@@ -163,9 +173,8 @@ export async function hardDeleteUser(
   db: Db,
   userId: string,
   actorId: string,
-  reason?: string,
+  _reason?: string,
 ): Promise<{ id: string, snapshot: ReturnType<typeof buildUserSnapshot> }> {
-  // Get user with account type
   const [row] = await db
     .select({ user: users, accountTypeKey: accountTypes.key })
     .from(users)
@@ -191,10 +200,10 @@ export async function hardDeleteUser(
   const blockers: string[] = []
 
   // Check service_logs.submitted_by (NOT NULL)
-  const [serviceLogCount] = await db.select({ count: db.$count(serviceLogs) })
+  const [serviceLogCount] = await db.select({ count: count() })
     .from(serviceLogs)
     .where(eq(serviceLogs.submittedBy, userId))
-  if (serviceLogCount && serviceLogCount.count > 0) {
+  if (serviceLogCount && Number(serviceLogCount.count) > 0) {
     blockers.push(`${serviceLogCount.count} service log(s)`)
   }
 
@@ -205,15 +214,30 @@ export async function hardDeleteUser(
   // Create snapshot for audit
   const snapshot = buildUserSnapshot(row.user, row.accountTypeKey)
 
+  // Remove rows that block deletion (NOT NULL FK without cascade)
+  await db.delete(messages).where(eq(messages.senderUserId, userId))
+  await db.delete(editingSessions).where(eq(editingSessions.userId, userId))
+  await db.delete(entityDeletionRequests).where(eq(entityDeletionRequests.submittedBy, userId))
+  await db.delete(customerCredentialEmailLogs).where(eq(customerCredentialEmailLogs.sentBy, userId))
+  await db.delete(customerCredentialEmailLogs).where(eq(customerCredentialEmailLogs.portalUserId, userId))
+  await db.delete(newVehicleRequests).where(eq(newVehicleRequests.submittedBy, userId))
+  await db.delete(serviceRequests).where(eq(serviceRequests.submittedBy, userId))
+  await db.delete(invoiceChangeRequests).where(eq(invoiceChangeRequests.submittedBy, userId))
+  await db.delete(vehicleChangeRequests).where(eq(vehicleChangeRequests.submittedBy, userId))
+  await db.delete(portalGeneralRequests).where(eq(portalGeneralRequests.submittedBy, userId))
+
   // Nullify nullable user-attribution FKs across the database
-  // These columns have ON DELETE SET NULL or we manually set them
   await db.update(customers)
-    .set({ sentBy: null, updatedAt: new Date() })
-    .where(eq(customers.sentBy, userId))
+    .set({ createdBy: null, updatedAt: new Date() })
+    .where(eq(customers.createdBy, userId))
 
   await db.update(invoices)
     .set({ createdBy: null, updatedAt: new Date() })
     .where(eq(invoices.createdBy, userId))
+
+  await db.update(invoices)
+    .set({ updatedBy: null, updatedAt: new Date() })
+    .where(eq(invoices.updatedBy, userId))
 
   await db.update(invoices)
     .set({ approvedBy: null, updatedAt: new Date() })
@@ -222,6 +246,10 @@ export async function hardDeleteUser(
   await db.update(invoices)
     .set({ sentBy: null, updatedAt: new Date() })
     .where(eq(invoices.sentBy, userId))
+
+  await db.update(invoices)
+    .set({ submittedForApprovalBy: null, updatedAt: new Date() })
+    .where(eq(invoices.submittedForApprovalBy, userId))
 
   await db.update(estimates)
     .set({ createdBy: null, updatedAt: new Date() })

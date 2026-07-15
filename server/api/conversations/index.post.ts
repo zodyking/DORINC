@@ -10,7 +10,7 @@ import { createConversationSchema } from '../../../shared/validators/messages'
 
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'messages.send.own')
-  const body = validateBody(event, createConversationSchema)
+  const body = await validateBody(event, createConversationSchema)
 
   try {
     return await createOrGetDmConversation(useDb(), user.id, body.participantUserId)

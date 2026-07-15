@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import { eq } from 'drizzle-orm'
 import { useDb } from '../../../../db/client'
+import { users } from '../../../../db/schema/auth'
 import { hardDeleteUser, HardDeleteUserServiceError } from '../../../../services/hard-delete.service'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
@@ -18,13 +20,20 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, deleteSchema)
   const db = useDb()
 
+  // Confirm email before mutating — never delete first.
+  const [target] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, id))
+  if (!target) {
+    throw apiError(event, 'NOT_FOUND', 'User not found')
+  }
+  if (body.confirmEmail.toLowerCase() !== target.email.toLowerCase()) {
+    throw apiError(event, 'VALIDATION_ERROR', 'Confirmation email does not match user email')
+  }
+
   try {
     const result = await hardDeleteUser(db, id, actor.id, body.reason)
-
-    // Verify confirmation email matches
-    if (body.confirmEmail.toLowerCase() !== result.snapshot.email.toLowerCase()) {
-      throw apiError(event, 'VALIDATION_ERROR', 'Confirmation email does not match user email')
-    }
 
     await writeAudit(event, {
       entityType: 'user',
