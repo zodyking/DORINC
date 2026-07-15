@@ -1,6 +1,7 @@
 // Editing session composable — acquire, heartbeat, release (SPEC §12 / P1-24, P1-31).
 
 import { EDIT_SESSION_HEARTBEAT_MS, EDIT_SESSION_STATUS_POLL_MS } from '~/utils/invoice-editor-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 interface EditingSessionPayload {
   id: string
@@ -58,9 +59,7 @@ export function useEditingSession(entityType: 'invoice' | 'estimate', entityId: 
         startLockPolling()
       }
       else {
-        error.value = (e as { data?: { message?: string, data?: { message?: string } } })?.data?.data?.message
-          ?? (e as { data?: { message?: string } })?.data?.message
-          ?? 'Could not open the editor — refresh and try again'
+        error.value = syncFetchErrorMessage(e, 'Could not open the editor — refresh and try again')
       }
     }
     finally {

@@ -156,8 +156,14 @@ watch([invoiceDate, paymentTerms], () => {
 })
 
 watch([customerId, vehicleId, serviceLogId, invoiceDate, dueDate, paymentTerms, poNumber, lines], () => {
+  if (!dirtyReady.value) return
   dirty.value = true
 }, { deep: true })
+
+const dirtyReady = ref(false)
+onMounted(() => {
+  nextTick(() => { dirtyReady.value = true })
+})
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
 const serviceLogOptions = computed(() => serviceLogsData.value?.items ?? [])

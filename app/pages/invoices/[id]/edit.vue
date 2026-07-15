@@ -31,6 +31,7 @@ import {
 } from '~/utils/invoices-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff' })
 
@@ -115,15 +116,14 @@ const {
   canEdit,
   error: sessionError,
   acquire: acquireEditSession,
+  release: releaseEditSession,
 } = useEditingSession('invoice', id)
 
 // Client-only — do not await (Suspense blank) and do not fetch during SSR
 // (server:false refresh on the server never completes, leaving pending stuck after hydrate).
-const { data, refresh, error, pending } = useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
+const { data, refresh, error, pending } = useClientFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
   () => (idValid.value ? `/api/invoices/${id}` : null),
   {
-    server: false,
-    lazy: true,
     immediate: false,
     watch: false,
   },
@@ -229,32 +229,89 @@ const autosaveText = computed(() => {
   return autosavedLabel(lastSavedAt.value)
 })
 
-const { data: customersData } = useFetch<{ items: CustomerPick[] }>(
+const customerFilterQ = ref('')
+const customerSearchQ = ref('')
+
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerFilterQ, (q) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => {
+    customerSearchQ.value = q.trim()
+  }, 300)
+})
+
+const { data: customersData, pending: customersPending } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
   {
-    query: { pageSize: 200, sort: 'name-asc' },
-    server: false,
-    lazy: true,
+    query: computed(() => ({
+      pageSize: 50,
+      sort: 'name-asc' as const,
+      q: customerSearchQ.value || undefined,
+    })),
   },
 )
 
-const customerOptions = computed(() => customersData.value?.items ?? [])
+function customerPickFromInvoice(inv: InvoicePayload): CustomerPick {
+  return {
+    id: inv.customerId,
+    displayName: inv.customerName,
+    accountKind: 'fleet',
+    paymentTerms: inv.customerSnapshot?.paymentTerms ?? inv.paymentTerms,
+  }
+}
+
+const customerOptions = computed(() => {
+  const fromApi = customersData.value?.items ?? []
+  const merged = new Map<string, CustomerPick>()
+  for (const c of fromApi) merged.set(c.id, c)
+  const inv = invoice.value
+  if (inv?.customerId && !merged.has(inv.customerId)) {
+    merged.set(inv.customerId, customerPickFromInvoice(inv))
+  }
+  if (customerId.value && !merged.has(customerId.value) && inv?.customerId === customerId.value) {
+    merged.set(customerId.value, customerPickFromInvoice(inv))
+  }
+  return [...merged.values()].sort((a, b) => a.displayName.localeCompare(b.displayName))
+})
 
 const selectedCustomer = computed(() =>
   customerOptions.value.find(c => c.id === customerId.value) ?? null,
 )
 
-const { data: vehiclesData } = useFetch<{ items: VehiclePick[] }>(
+const { data: vehiclesData, pending: vehiclesPending } = useClientFetch<{ items: VehiclePick[] }>(
   '/api/vehicles',
   {
-    query: computed(() => ({ customerId: customerId.value || undefined, pageSize: 100, sort: 'tag-asc' })),
+    query: computed(() => ({ customerId: customerId.value || undefined, pageSize: 100, sort: 'tag-asc' as const })),
     watch: [customerId],
-    server: false,
-    lazy: true,
   },
 )
 
-const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
+function vehiclePickFromSnapshot(vehicleIdValue: string, snap: NonNullable<InvoicePayload['vehicleSnapshot']>): VehiclePick {
+  return {
+    id: vehicleIdValue,
+    unitType: snap.unitType,
+    busNumber: snap.busNumber,
+    unitTag: snap.unitTag,
+    year: snap.year,
+    make: snap.make,
+    model: snap.model,
+    trim: null,
+    vin: snap.vin ?? null,
+    odometer: snap.odometer ?? null,
+    odometerUnit: snap.odometerUnit ?? 'miles',
+  }
+}
+
+const vehicleOptions = computed(() => {
+  const fromApi = vehiclesData.value?.items ?? []
+  const vid = vehicleId.value
+  const inv = invoice.value
+  if (!vid || fromApi.some(v => v.id === vid)) return fromApi
+  if (inv?.vehicleSnapshot && inv.vehicleId === vid) {
+    return [vehiclePickFromSnapshot(vid, inv.vehicleSnapshot), ...fromApi]
+  }
+  return fromApi
+})
 
 const selectedVehicle = computed(() =>
   vehicleOptions.value.find(v => v.id === vehicleId.value) ?? null,
@@ -274,12 +331,10 @@ const vehicleHelp = computed(() => {
   return 'Select a vehicle for this invoice'
 })
 
-const { data: catalogData } = useFetch<{ items: CatalogRow[] }>(
+const { data: catalogData } = useClientFetch<{ items: CatalogRow[] }>(
   '/api/catalog/items',
   {
-    query: computed(() => ({ q: catalogQ.value || undefined, pageSize: 8, sort: 'name-asc' })),
-    server: false,
-    lazy: true,
+    query: computed(() => ({ q: catalogQ.value || undefined, pageSize: 8, sort: 'name-asc' as const })),
   },
 )
 
@@ -287,7 +342,7 @@ const catalogItems = computed(() => catalogData.value?.items ?? [])
 
 const serviceLogId = computed(() => invoice.value?.serviceLogId ?? null)
 
-const { data: serviceLogData } = useFetch<{
+const { data: serviceLogData } = useClientFetch<{
   log: {
     id: string
     logNumber: number
@@ -303,7 +358,7 @@ const { data: serviceLogData } = useFetch<{
   files: { id: string }[]
 }>(
   () => (serviceLogId.value ? `/api/service-logs/${serviceLogId.value}` : null),
-  { watch: [serviceLogId], server: false, lazy: true },
+  { watch: [serviceLogId] },
 )
 
 const hydratingFromServer = ref(false)
@@ -373,7 +428,7 @@ async function patchHeader(opts: { refreshAfter?: boolean, manageBusy?: boolean 
     if (refreshAfter) await refreshInvoice()
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    saveError.value = syncFetchErrorMessage(e, 'Save failed')
     if (manageBusy) throw e
   }
   finally {
@@ -391,11 +446,12 @@ async function saveDraft() {
       await patchLine(line, { refreshAfter: false, manageBusy: false })
     }
     await patchHeader({ refreshAfter: false, manageBusy: false })
-    await refreshInvoice()
+    await releaseEditSession()
+    await navigateTo({ path: `/invoices/${id}`, query: { saved: 'draft' } })
   }
   catch (e: unknown) {
     if (!saveError.value) {
-      saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+      saveError.value = syncFetchErrorMessage(e, 'Save failed')
     }
   }
   finally {
@@ -439,7 +495,7 @@ async function patchLine(
     if (refreshAfter) await refreshInvoice()
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Line update failed'
+    saveError.value = syncFetchErrorMessage(e, 'Line update failed')
     if (!manageBusy) throw e
   }
   finally {
@@ -481,7 +537,7 @@ async function addEmptyLine() {
     if (err.data?.code === 'EDIT_SESSION_ACTIVE' && err.data?.message?.includes('locked')) {
       await acquireEditSession()
     }
-    saveError.value = err.data?.message ?? 'Could not add line'
+    saveError.value = syncFetchErrorMessage(e, 'Could not add line')
   }
   finally {
     busy.value = false
@@ -508,7 +564,7 @@ async function addFromCatalog(item: CatalogRow) {
     void refreshInvoice()
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not add catalog item'
+    saveError.value = syncFetchErrorMessage(e, 'Could not add catalog item')
   }
   finally {
     busy.value = false
@@ -525,7 +581,7 @@ async function removeLine(lineId: string) {
     void refreshInvoice()
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not remove line'
+    saveError.value = syncFetchErrorMessage(e, 'Could not remove line')
   }
   finally {
     busy.value = false
@@ -546,7 +602,7 @@ async function finalizeAndSend() {
     await navigateTo(`/invoices/${id}`)
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Finalize failed'
+    saveError.value = syncFetchErrorMessage(e, 'Finalize failed')
   }
   finally {
     busy.value = false
@@ -578,9 +634,9 @@ const aiBusy = ref(false)
 const aiError = ref('')
 const aiPopAnchor = ref<{ x: number, y: number } | null>(null)
 
-const { data: invoiceAiData, refresh: refreshInvoiceAi } = useFetch<{ suggestions: AiSuggestionRow[] }>(
+const { data: invoiceAiData, refresh: refreshInvoiceAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
   () => (idValid.value ? `/api/invoices/${id}/ai-suggestions` : null),
-  { server: false, lazy: true, watch: false },
+  { immediate: false, watch: false },
 )
 
 const invoiceAiSuggestions = computed(() => invoiceAiData.value?.suggestions ?? [])
@@ -870,7 +926,18 @@ const aiPopStyle = computed(() => {
               <div class="cbody ed-details-grid">
                 <label class="fld">
                   Customer
+                  <input
+                    v-model="customerFilterQ"
+                    type="search"
+                    placeholder="Search customers…"
+                    aria-label="Search customers"
+                    autocomplete="off"
+                    :disabled="!editable"
+                  >
                   <select v-model="customerId" :disabled="!editable" @change="onCustomerChange">
+                    <option v-if="!customerOptions.length" value="" disabled>
+                      {{ customersPending ? 'Loading customers…' : 'No customers found' }}
+                    </option>
                     <option v-for="c in customerOptions" :key="c.id" :value="c.id">
                       {{ c.displayName }}
                     </option>
@@ -879,8 +946,9 @@ const aiPopStyle = computed(() => {
                 </label>
                 <label class="fld">
                   Vehicle
-                  <select v-model="vehicleId" :disabled="!editable" @change="patchHeader">
+                  <select v-model="vehicleId" :disabled="!editable || !customerId" @change="patchHeader">
                     <option value="">— Select vehicle —</option>
+                    <option v-if="vehiclesPending && !vehicleOptions.length" value="" disabled>Loading vehicles…</option>
                     <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">
                       {{ vehicleTag(v) }} — {{ vehicleSub(v) }}
                     </option>
@@ -1020,7 +1088,9 @@ const aiPopStyle = computed(() => {
             </div>
 
             <div v-if="editable" class="savebar">
-              <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
+              <button type="button" class="btn" :disabled="busy" @click="saveDraft">
+                {{ busy ? 'Saving…' : 'Save draft' }}
+              </button>
               <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
               <button
                 type="button"
@@ -1063,7 +1133,7 @@ const aiPopStyle = computed(() => {
             <div class="card">
               <div class="chead"><h3>PDF output</h3></div>
               <dl class="kv">
-                <dt>Paper</dt><dd>Letter · 0.5in margins</dd>
+                <dt>Paper</dt><dd>Letter · 0.75in margins</dd>
                 <dt>Delivery</dt><dd>Portal + email</dd>
               </dl>
             </div>

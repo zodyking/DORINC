@@ -78,6 +78,7 @@ interface HistoryRow {
 }
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const id = computed(() => String(route.params.id || ''))
 const idValid = computed(() => UUID_RE.test(id.value))
@@ -155,6 +156,19 @@ const sendInProgress = computed(() =>
 const sendFailed = computed(() =>
   invoice.value?.status === 'approved'
   && sendDelivery.value?.status === 'failed',
+)
+
+const savedNotice = ref('')
+
+watch(
+  () => route.query.saved,
+  (saved) => {
+    if (saved !== 'draft') return
+    savedNotice.value = 'Invoice saved.'
+    const { saved: _saved, ...rest } = route.query
+    void router.replace({ path: route.path, query: rest })
+  },
+  { immediate: true },
 )
 
 let sendPollTimer: ReturnType<typeof setInterval> | undefined
@@ -445,6 +459,7 @@ const summaryRows = computed(() => {
       </div>
     </div>
 
+    <p v-if="savedNotice" class="flash ok" style="margin:-8px 0 16px;">{{ savedNotice }}</p>
     <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
     <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
