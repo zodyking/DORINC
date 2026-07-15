@@ -92,6 +92,10 @@ export const PERMISSIONS = {
   'deletion_requests.submit.all': 'Request record deletion',
   'deletion_requests.review.all': 'Approve or reject deletion requests',
 
+  // Direct messages (staff)
+  'messages.read.own': 'View own direct messages',
+  'messages.send.own': 'Send direct messages',
+
   // Record reassignment (fix mis-linked imports / transfers)
   'records.reassign.all': 'Reassign invoices, vehicles, and service logs between customers',
 } as const
@@ -135,6 +139,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'portal_requests.review.all',
     'deletion_requests.submit.all',
     'records.reassign.all',
+    'messages.read.own', 'messages.send.own',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',
@@ -152,6 +157,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'portal_requests.review.all',
     'deletion_requests.submit.all',
     'records.reassign.all',
+    'messages.read.own', 'messages.send.own',
   ],
   mechanic: [
     'customers.read.all',
@@ -160,6 +166,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'files.upload.all',
     'ai.help.all',
     'deletion_requests.submit.all',
+    'messages.read.own', 'messages.send.own',
   ],
   viewer: [
     'customers.read.all',
@@ -170,6 +177,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'estimates.read.all',
     'reports.read.all',
     'ai.help.all',
+    'messages.read.own', 'messages.send.own',
   ],
   external_auditor: [
     'customers.read.all',

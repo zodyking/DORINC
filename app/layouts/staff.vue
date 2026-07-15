@@ -22,6 +22,9 @@ const sidebarOpen = ref(false)
 const menuOpen = ref(false)
 const notifOpen = ref(false)
 
+const dm = useDirectMessages()
+const canUseMessages = computed(() => auth.can('messages.read.own'))
+
 interface NavItem {
   label: string
   to: string
@@ -123,6 +126,11 @@ function closeOverlays() {
   notifOpen.value = false
 }
 
+function openMessages() {
+  closeOverlays()
+  navigateTo('/messages')
+}
+
 watch(() => route.path, () => {
   sidebarOpen.value = false
   closeOverlays()
@@ -164,6 +172,19 @@ watch(() => route.path, () => {
         <button class="burger" aria-label="Open navigation" @click="sidebarOpen = !sidebarOpen">☰</button>
         <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
         <span class="spacer" />
+        <div v-if="canUseMessages" class="notif-wrap">
+          <button
+            class="iconbtn dm-header-btn"
+            aria-label="Messages"
+            :class="{ on: route.path.startsWith('/messages') }"
+            @click="openMessages"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span v-if="dm.unreadTotal" class="dm-header-badge">{{ dm.unreadTotal > 9 ? '9+' : dm.unreadTotal }}</span>
+          </button>
+        </div>
         <div class="notif-wrap">
           <button
             class="iconbtn"
@@ -239,5 +260,8 @@ watch(() => route.path, () => {
 .menu-link:hover {
   background: #f1f5f9;
   color: #0f172a;
+}
+.dm-header-btn svg {
+  display: block;
 }
 </style>
