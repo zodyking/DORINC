@@ -113,7 +113,7 @@ const {
   error: sessionError,
 } = useEditingSession('invoice', id)
 
-const { data, refresh, error } = await useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
+const { data, refresh, error, pending } = await useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
   `/api/invoices/${id}`,
 )
 
@@ -258,8 +258,9 @@ const { data: serviceLogData } = await useFetch<{
   { watch: [serviceLogId] },
 )
 
-watch(invoice, (inv) => {
-  if (!inv || hydratingFromServer.value) return
+const hydratingFromServer = ref(false)
+
+function syncFormFromInvoice(inv: InvoicePayload) {
   customerId.value = inv.customerId
   vehicleId.value = inv.vehicleId ?? ''
   invoiceDate.value = inv.invoiceDate
@@ -269,6 +270,11 @@ watch(invoice, (inv) => {
   complaint.value = inv.complaint ?? ''
   internalNotes.value = inv.internalNotes ?? ''
   lines.value = inv.lineItems.map(l => ({ ...l }))
+}
+
+watch(invoice, (inv) => {
+  if (!inv || hydratingFromServer.value) return
+  syncFormFromInvoice(inv)
 }, { immediate: true })
 
 watch(paymentTerms, (terms) => {
@@ -280,8 +286,6 @@ if (import.meta.client) {
   onBeforeUnmount(() => clearInterval(tick))
 }
 
-const hydratingFromServer = ref(false)
-
 async function refreshInvoice() {
   hydratingFromServer.value = true
   try {
@@ -292,6 +296,7 @@ async function refreshInvoice() {
   finally {
     await nextTick()
     hydratingFromServer.value = false
+    if (invoice.value) syncFormFromInvoice(invoice.value)
   }
 }
 
@@ -690,7 +695,9 @@ const aiPopStyle = computed(() => {
 
 <template>
   <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
+    <div v-if="pending && !invoice && !error" class="cp-state">Loading invoice…</div>
+
+    <div v-else-if="error" class="card" style="padding:24px;">
       <p>Invoice not found.</p>
       <NuxtLink to="/invoices" class="btn">Back to invoices</NuxtLink>
     </div>
@@ -877,7 +884,15 @@ const aiPopStyle = computed(() => {
                     <span class="dot">✦</span> AI
                   </button>
                   <NuxtLink to="/catalog" class="btn sm">From catalog</NuxtLink>
-                  <button type="button" class="btn sm primary" :disabled="!editable || busy" @click="addEmptyLine">+ Add line</button>
+                  <button
+                    type="button"
+                    class="btn sm primary"
+                    :disabled="!editable || busy"
+                    :title="!editable && lockedByOther ? 'Another user is editing this invoice' : !editable && sessionLoading ? 'Opening editor…' : !editable ? 'This invoice cannot be edited' : busy ? 'Saving…' : undefined"
+                    @click="addEmptyLine"
+                  >
+                    + Add line
+                  </button>
                 </div>
               </div>
               <div class="tscroll">
@@ -1080,46 +1095,48 @@ const aiPopStyle = computed(() => {
           :can-generate-pdf="canGeneratePdf"
         />
       </div>
+
+      <Teleport to="body">
+        <div
+          v-if="aiPopOpen"
+          class="ai-pop open"
+          role="dialog"
+          aria-label="AI description assist"
+          :style="aiPopStyle"
+        >
+          <div class="ph">
+            <b>✦ Description assist</b>
+            <kbd>Ctrl+Shift+D</kbd>
+          </div>
+          <p v-if="aiPopOriginal" class="help" style="margin:0 0 8px;">
+            Original: <span style="color:#64748b;">{{ aiPopOriginal }}</span>
+          </p>
+          <p v-if="aiError" class="help" style="color:#dc2626; margin:0 0 8px;">{{ aiError }}</p>
+          <div v-if="aiBusy && !aiPopText" class="body">Generating customer-facing wording…</div>
+          <textarea
+            v-else
+            v-model="aiPopText"
+            class="body"
+            rows="5"
+            style="width:100%; resize:vertical; font:inherit;"
+            placeholder="AI suggestion appears here — edit before inserting"
+          />
+          <div class="acts">
+            <button type="button" class="btn sm primary" :disabled="aiBusy || !aiPopText.trim()" @click="insertAiDescription">
+              Insert into selected line
+            </button>
+            <button type="button" class="btn sm" :disabled="aiBusy" @click="regenerateAiDescription">
+              Regenerate
+            </button>
+            <button type="button" class="btn sm" @click="dismissAiPopover">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </Teleport>
     </template>
 
-    <Teleport to="body">
-      <div
-        v-if="aiPopOpen"
-        class="ai-pop open"
-        role="dialog"
-        aria-label="AI description assist"
-        :style="aiPopStyle"
-      >
-        <div class="ph">
-          <b>✦ Description assist</b>
-          <kbd>Ctrl+Shift+D</kbd>
-        </div>
-        <p v-if="aiPopOriginal" class="help" style="margin:0 0 8px;">
-          Original: <span style="color:#64748b;">{{ aiPopOriginal }}</span>
-        </p>
-        <p v-if="aiError" class="help" style="color:#dc2626; margin:0 0 8px;">{{ aiError }}</p>
-        <div v-if="aiBusy && !aiPopText" class="body">Generating customer-facing wording…</div>
-        <textarea
-          v-else
-          v-model="aiPopText"
-          class="body"
-          rows="5"
-          style="width:100%; resize:vertical; font:inherit;"
-          placeholder="AI suggestion appears here — edit before inserting"
-        />
-        <div class="acts">
-          <button type="button" class="btn sm primary" :disabled="aiBusy || !aiPopText.trim()" @click="insertAiDescription">
-            Insert into selected line
-          </button>
-          <button type="button" class="btn sm" :disabled="aiBusy" @click="regenerateAiDescription">
-            Regenerate
-          </button>
-          <button type="button" class="btn sm" @click="dismissAiPopover">
-            Dismiss
-          </button>
-        </div>
-      </div>
-    </Teleport>
+    <div v-else class="cp-state">Loading invoice…</div>
   </section>
 </template>
 
