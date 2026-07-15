@@ -8,7 +8,7 @@ import {
   type WizardLineDraft,
 } from '~/utils/line-item-wizard-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
 interface CustomerPick {
   id: string
@@ -49,9 +49,6 @@ interface SavedInvoiceTotals {
 }
 
 const auth = useAuthStore()
-if (import.meta.client && auth.loaded && !auth.can('invoices.create.all')) {
-  navigateTo('/invoices')
-}
 
 const canApprove = computed(() => auth.can('invoices.approve.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
@@ -102,10 +99,15 @@ const route = useRoute()
 if (typeof route.query.customerId === 'string' && route.query.customerId) {
   customerId.value = route.query.customerId
 }
+if (typeof route.query.vehicleId === 'string' && route.query.vehicleId) {
+  vehicleId.value = route.query.vehicleId
+}
+
+const removedServerLineIds = ref<string[]>([])
 
 const { data: customersData } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
-  { query: { pageSize: 100, sort: 'name-asc' } },
+  { query: { pageSize: 200, sort: 'name-asc' } },
 )
 
 const customerOptions = computed(() => customersData.value?.items ?? [])
@@ -131,9 +133,11 @@ const { data: serviceLogsData, refresh: refreshServiceLogs } = useClientFetch<{ 
   },
 )
 
-watch(customerId, (id) => {
-  vehicleId.value = ''
-  serviceLogId.value = ''
+watch(customerId, (id, oldId) => {
+  if (oldId !== undefined && id !== oldId) {
+    vehicleId.value = ''
+    serviceLogId.value = ''
+  }
   if (id) {
     refreshVehicles()
     refreshServiceLogs()
@@ -143,7 +147,7 @@ watch(customerId, (id) => {
       if (!dueDateManual.value) dueDate.value = dueDateFromTerms(invoiceDate.value, paymentTerms.value)
     }
   }
-})
+}, { immediate: true })
 
 watch([invoiceDate, paymentTerms], () => {
   if (!dueDateManual.value) {
@@ -289,6 +293,8 @@ async function continueToReview() {
 
 function removeLine(localId: string) {
   if (lines.value.length <= 1) return
+  const line = lines.value.find(l => l.localId === localId)
+  if (line?.serverId) removedServerLineIds.value.push(line.serverId)
   lines.value = lines.value.filter(l => l.localId !== localId)
 }
 
@@ -379,8 +385,23 @@ async function ensureDraft(): Promise<string> {
 }
 
 async function syncLines(id: string) {
+  const keptServerIds = new Set(
+    lines.value.map(l => l.serverId).filter((sid): sid is string => Boolean(sid)),
+  )
+  for (const lineId of removedServerLineIds.value) {
+    if (keptServerIds.has(lineId)) continue
+    try {
+      await $fetch(`/api/invoices/${id}/line-items/${lineId}`, { method: 'DELETE' })
+    }
+    catch {
+      // Line may already be gone — continue syncing the rest
+    }
+  }
+  removedServerLineIds.value = []
+
   for (let i = 0; i < lines.value.length; i++) {
-    const line = lines.value[i]!
+    const line = lines.value[i]
+    if (!line) continue
     const body = buildInvoiceLinePatchBody(line, { catalogItemId: line.catalogItemId ?? null })
     if (!body || !body.quantity || body.unitPrice === undefined) continue
 
@@ -444,6 +465,10 @@ async function saveAndContinueEditing() {
 }
 
 async function finalizeAndSend() {
+  if (!canApprove.value || !canSend.value) {
+    submitError.value = 'You need approve and send permissions to finalize and email this invoice.'
+    return
+  }
   const ok = await saveDraft()
   if (!ok || !invoiceId.value) return
   busy.value = true
@@ -778,7 +803,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
           <button
             type="button"
             class="btn primary"
-            :disabled="busy || !invoiceId"
+            :disabled="busy || !invoiceId || !canApprove || !canSend"
             :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
             @click="finalizeAndSend"
           >

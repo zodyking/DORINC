@@ -12,6 +12,8 @@ const newDmOpen = ref(false)
 const staffSearch = ref('')
 const staffUsers = ref<Array<{ id: string, name: string, email: string, accountType: string }>>([])
 const staffLoading = ref(false)
+const staffError = ref('')
+const dmStartError = ref('')
 
 onMounted(async () => {
   await dm.fetchConversations()
@@ -22,17 +24,24 @@ onMounted(async () => {
   }
 })
 
+let conversationSearchTimer: ReturnType<typeof setTimeout> | null = null
 watch(() => dm.conversationSearch, () => {
-  void dm.fetchConversations()
+  if (conversationSearchTimer) clearTimeout(conversationSearchTimer)
+  conversationSearchTimer = setTimeout(() => { void dm.fetchConversations() }, 300)
 })
 
 async function loadStaffUsers() {
   staffLoading.value = true
+  staffError.value = ''
   try {
     const res = await $fetch<{ items: typeof staffUsers.value }>('/api/messages/staff-users', {
       query: { q: staffSearch.value || undefined, page: 1, pageSize: 30 },
     })
     staffUsers.value = res.items
+  }
+  catch (e: unknown) {
+    staffError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not load staff users'
+    staffUsers.value = []
   }
   finally {
     staffLoading.value = false
@@ -42,13 +51,27 @@ async function loadStaffUsers() {
 function openNewDm() {
   newDmOpen.value = true
   staffSearch.value = ''
+  staffError.value = ''
+  dmStartError.value = ''
   void loadStaffUsers()
 }
 
+let staffSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(staffSearch, () => {
+  if (staffSearchTimer) clearTimeout(staffSearchTimer)
+  staffSearchTimer = setTimeout(() => { void loadStaffUsers() }, 300)
+})
+
 async function pickStaffUser(userId: string) {
-  newDmOpen.value = false
-  await dm.startConversation(userId)
-  showThread.value = true
+  dmStartError.value = ''
+  try {
+    await dm.startConversation(userId)
+    newDmOpen.value = false
+    showThread.value = true
+  }
+  catch (e: unknown) {
+    dmStartError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not start conversation'
+  }
 }
 
 async function selectConversation(id: string) {
@@ -130,8 +153,8 @@ function onBack() {
         class="dm-search"
         placeholder="Search staff…"
         aria-label="Search staff"
-        @input="loadStaffUsers"
       >
+      <p v-if="dmStartError" class="dm-fetch-error" style="margin:0 12px 8px;">{{ dmStartError }}</p>
       <div class="dm-staff-list">
         <button
           v-for="user in staffUsers"
@@ -144,6 +167,7 @@ function onBack() {
           <small>{{ user.email }}</small>
         </button>
         <div v-if="staffLoading" class="dm-list-empty">Loading…</div>
+        <div v-else-if="staffError" class="dm-list-empty">{{ staffError }}</div>
         <div v-else-if="!staffUsers.length" class="dm-list-empty">No staff found</div>
       </div>
     </div>

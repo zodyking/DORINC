@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Dev-only preview of the Ledger design system (P0-04 verify).
+definePageMeta({ middleware: 'dev-only' })
 </script>
 
 <template>

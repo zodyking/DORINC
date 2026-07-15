@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { moneyDisplay } from '~/utils/invoices-ui'
 import { avColor, initials } from '~/utils/users-ui'
+import { listRangeLabel, windowedPagerPages } from '~/utils/pager-ui'
 
 definePageMeta({ layout: 'staff', permission: 'customers.read.all' })
 
@@ -30,9 +31,14 @@ const fKind = ref<'all' | 'fleet' | 'individual'>('all')
 const fPortal = ref<'all' | 'on' | 'off'>('all')
 const fSort = ref<'name-asc' | 'name-desc' | 'newest'>('name-asc')
 const showArchived = ref(false)
+const page = ref(1)
+const PAGE_SIZE = 24
+
+watch([q, fKind, fPortal, fSort, showArchived], () => { page.value = 1 })
 
 const query = computed(() => ({
-  pageSize: 100,
+  page: page.value,
+  pageSize: PAGE_SIZE,
   q: q.value || undefined,
   kind: fKind.value === 'all' ? undefined : fKind.value,
   portal: fPortal.value === 'all' ? undefined : fPortal.value,
@@ -40,13 +46,17 @@ const query = computed(() => ({
   includeArchived: showArchived.value || undefined,
 }))
 
-const { data } = useClientFetch<{ items: CustomerRow[], total: number }>(
+const { data, pending } = useClientFetch<{ items: CustomerRow[], total: number }>(
   '/api/customers',
   { query },
 )
 
 const items = computed(() => data.value?.items ?? [])
-const fleetCount = computed(() => items.value.filter(c => c.accountKind === 'fleet').length)
+const total = computed(() => data.value?.total ?? 0)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
+const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.value))
+const fleetOnPage = computed(() => items.value.filter(c => c.accountKind === 'fleet').length)
 
 const filtersDirty = computed(() =>
   fKind.value !== 'all' || fPortal.value !== 'all' || fSort.value !== 'name-asc' || showArchived.value || !!q.value,
@@ -72,7 +82,7 @@ function subtitleFor(c: CustomerRow): string {
 
 <template>
   <section class="page active">
-    <StaffPageHead :subtitle="`${data?.total ?? 0} accounts · ${fleetCount} fleet · ${items.length - fleetCount} individual`">
+    <StaffPageHead :subtitle="`${total} accounts`">
       <template #title>Customers</template>
       <template #actions>
         <NuxtLink
@@ -128,7 +138,8 @@ function subtitleFor(c: CustomerRow): string {
       </template>
     </ListFilterBar>
 
-    <div v-if="items.length" class="grid3">
+    <div v-if="pending && !items.length" class="empty" style="display:block;">Loading customers…</div>
+    <div v-else-if="items.length" class="grid3">
       <NuxtLink
         v-for="c in items"
         :key="c.id"
@@ -154,6 +165,23 @@ function subtitleFor(c: CustomerRow): string {
     </div>
     <div v-else class="empty" style="display:block;">
       No customers match your search.
+    </div>
+
+    <div v-if="total > 0" class="cfoot" style="margin-top:16px;">
+      <span>{{ rangeLabel }}<template v-if="fleetOnPage"> · {{ fleetOnPage }} fleet on this page</template></span>
+      <div v-if="pageCount > 1" class="pager">
+        <button type="button" aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+        <button
+          v-for="p in pagerPages"
+          :key="p"
+          type="button"
+          :class="{ on: p === page }"
+          @click="page = p"
+        >
+          {{ p }}
+        </button>
+        <button type="button" aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
+      </div>
     </div>
   </section>
 </template>

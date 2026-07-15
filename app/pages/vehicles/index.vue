@@ -92,9 +92,9 @@ async function runBulkVinDecode() {
   }
 }
 
-const { data: customersData } = useClientFetch<{ items: { id: string, displayName: string }[] }>(
+const { data: customersData } = useClientFetch<{ items: { id: string, displayName: string }[], total: number }>(
   '/api/customers',
-  { query: { pageSize: 100, sort: 'name-asc' } },
+  { query: { pageSize: 500, sort: 'name-asc' } },
 )
 
 const items = computed(() => data.value?.items ?? [])
