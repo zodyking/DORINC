@@ -107,5 +107,12 @@ export default defineNuxtConfig({
         }
       }
     },
+    async 'nitro:build:public-assets'(nitro) {
+      const { cp } = await import('node:fs/promises')
+      const { join } = await import('node:path')
+      const src = join(nitro.options.rootDir, 'server/db/migrations')
+      const dest = join(nitro.options.output.serverDir, 'db/migrations')
+      await cp(src, dest, { recursive: true })
+    },
   },
 })

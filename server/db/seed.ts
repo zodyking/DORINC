@@ -11,6 +11,7 @@ import {
 } from '../../shared/permissions/keys'
 import type { PermissionKey } from '../../shared/permissions/keys'
 import { accountTypePermissions, accountTypes, permissions } from './schema/auth'
+import type { Db } from './client'
 import { seedInvoiceTemplatePresets, seedInvoiceTemplates } from './seed-invoice-templates'
 import { seedCatalogCategories } from './seed-catalog-categories'
 
@@ -27,74 +28,78 @@ const ACCOUNT_TYPE_NAMES: Record<(typeof ACCOUNT_TYPES)[number], { name: string,
   customer: { name: 'Customer', description: 'Portal only; staff-created accounts; no self-signup' },
 }
 
+/** Idempotent registry sync — safe on every boot after migrations. */
+export async function syncAuthRegistry(db: Db) {
+  // 1. Account types
+  for (const key of ACCOUNT_TYPES) {
+    const { name, description } = ACCOUNT_TYPE_NAMES[key]
+    await db.insert(accountTypes)
+      .values({ key, name, description, isSystem: true })
+      .onConflictDoUpdate({
+        target: accountTypes.key,
+        set: { name, description, updatedAt: sql`now()` },
+      })
+  }
+
+  // 2. Permissions registry
+  for (const [key, description] of Object.entries(PERMISSIONS)) {
+    const module = key.split('.')[0]!
+    await db.insert(permissions)
+      .values({ key, description, module })
+      .onConflictDoUpdate({ target: permissions.key, set: { description, module } })
+  }
+
+  // 3. Default bundles (sync: remove stale, add missing)
+  const typeRows = await db.select().from(accountTypes)
+  const permRows = await db.select().from(permissions)
+  const permIdByKey = new Map(permRows.map(p => [p.key, p.id]))
+
+  for (const typeRow of typeRows) {
+    const bundle = ACCOUNT_TYPE_BUNDLES[typeRow.key as keyof typeof ACCOUNT_TYPE_BUNDLES] ?? []
+    const wantedIds = new Set(bundle.map((k: PermissionKey) => permIdByKey.get(k)).filter(Boolean) as string[])
+
+    const existing = await db.select().from(accountTypePermissions)
+      .where(eq(accountTypePermissions.accountTypeId, typeRow.id))
+    const existingIds = new Set(existing.map(r => r.permissionId))
+
+    for (const id of wantedIds) {
+      if (!existingIds.has(id)) {
+        await db.insert(accountTypePermissions)
+          .values({ accountTypeId: typeRow.id, permissionId: id })
+          .onConflictDoNothing()
+      }
+    }
+    for (const row of existing) {
+      if (!wantedIds.has(row.permissionId)) {
+        await db.delete(accountTypePermissions).where(eq(accountTypePermissions.id, row.id))
+      }
+    }
+  }
+
+  const counts = {
+    accountTypes: typeRows.length,
+    permissions: permRows.length,
+  }
+
+  const templateSeed = await seedInvoiceTemplates(db)
+  const presetSeed = await seedInvoiceTemplatePresets(db)
+  const catalogSeed = await seedCatalogCategories(db)
+
+  return { ...counts, invoiceTemplate: templateSeed.template.slug, catalogCategories: catalogSeed, presetSeed }
+}
+
 export async function seedAuth(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) throw new Error('DATABASE_URL is not set')
   const pool = new Pool({ connectionString: databaseUrl })
   const db = drizzle({ client: pool })
 
   try {
-    // 1. Account types
-    for (const key of ACCOUNT_TYPES) {
-      const { name, description } = ACCOUNT_TYPE_NAMES[key]
-      await db.insert(accountTypes)
-        .values({ key, name, description, isSystem: true })
-        .onConflictDoUpdate({
-          target: accountTypes.key,
-          set: { name, description, updatedAt: sql`now()` },
-        })
-    }
-
-    // 2. Permissions registry
-    for (const [key, description] of Object.entries(PERMISSIONS)) {
-      const module = key.split('.')[0]!
-      await db.insert(permissions)
-        .values({ key, description, module })
-        .onConflictDoUpdate({ target: permissions.key, set: { description, module } })
-    }
-
-    // 3. Default bundles (sync: remove stale, add missing)
-    const typeRows = await db.select().from(accountTypes)
-    const permRows = await db.select().from(permissions)
-    const permIdByKey = new Map(permRows.map(p => [p.key, p.id]))
-
-    for (const typeRow of typeRows) {
-      const bundle = ACCOUNT_TYPE_BUNDLES[typeRow.key as keyof typeof ACCOUNT_TYPE_BUNDLES] ?? []
-      const wantedIds = new Set(bundle.map((k: PermissionKey) => permIdByKey.get(k)).filter(Boolean) as string[])
-
-      const existing = await db.select().from(accountTypePermissions)
-        .where(eq(accountTypePermissions.accountTypeId, typeRow.id))
-      const existingIds = new Set(existing.map(r => r.permissionId))
-
-      for (const id of wantedIds) {
-        if (!existingIds.has(id)) {
-          await db.insert(accountTypePermissions)
-            .values({ accountTypeId: typeRow.id, permissionId: id })
-            .onConflictDoNothing()
-        }
-      }
-      for (const row of existing) {
-        if (!wantedIds.has(row.permissionId)) {
-          await db.delete(accountTypePermissions).where(eq(accountTypePermissions.id, row.id))
-        }
-      }
-    }
-
-    const counts = {
-      accountTypes: typeRows.length,
-      permissions: permRows.length,
-    }
-    console.log(`[seed] account_types=${counts.accountTypes} permissions=${counts.permissions} bundles synced`)
-
-    const templateSeed = await seedInvoiceTemplates(db)
-    console.log(`[seed] invoice_template=${templateSeed.template.slug} version=${templateSeed.publishedVersion.versionNumber} status=${templateSeed.publishedVersion.status}`)
-
-    const presetSeed = await seedInvoiceTemplatePresets(db)
-    console.log(`[seed] invoice_template_presets inserted=${presetSeed.inserted} upgraded=${presetSeed.upgraded} total=${presetSeed.total}`)
-
-    const catalogSeed = await seedCatalogCategories(db)
-    console.log(`[seed] catalog_categories inserted=${catalogSeed.inserted} total_defaults=${catalogSeed.total}`)
-
-    return { ...counts, invoiceTemplate: templateSeed.template.slug, catalogCategories: catalogSeed }
+    const result = await syncAuthRegistry(db)
+    console.log(`[seed] account_types=${result.accountTypes} permissions=${result.permissions} bundles synced`)
+    console.log(`[seed] invoice_template=${result.invoiceTemplate}`)
+    console.log(`[seed] invoice_template_presets inserted=${result.presetSeed.inserted} upgraded=${result.presetSeed.upgraded} total=${result.presetSeed.total}`)
+    console.log(`[seed] catalog_categories inserted=${result.catalogCategories.inserted} total_defaults=${result.catalogCategories.total}`)
+    return result
   }
   finally {
     await pool.end()

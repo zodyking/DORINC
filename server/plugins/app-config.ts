@@ -2,22 +2,23 @@ import { defineNitroPlugin } from 'nitropack/runtime'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { useDb } from '../db/client'
 import { applyPendingMigrations } from '../db/migrate-runtime'
+import { syncAuthRegistry } from '../db/seed'
 import { refreshAppConfigCache } from '../services/app-config.service'
-import { ensureDefaultInvoiceTemplate } from '../services/invoice-templates.service'
 
 export default defineNitroPlugin(async () => {
   if (!hasDatabaseConfig()) return
 
-  // Fail boot if migrations cannot apply — Dockploy redeploy must not run on a stale schema.
-  await applyPendingMigrations(useDb())
-  console.log('[migrate] pending migrations applied on boot')
-
   const db = useDb()
+
+  // Fail boot if migrations cannot apply — redeploy must not run on a stale schema.
+  await applyPendingMigrations(db)
+
   try {
-    await ensureDefaultInvoiceTemplate(db)
+    await syncAuthRegistry(db)
+    console.log('[seed] auth registry synced on boot')
   }
   catch (err) {
-    console.warn(`[invoice-templates] default seed skipped: ${(err as Error).message}`)
+    console.warn(`[seed] auth registry sync skipped: ${(err as Error).message}`)
   }
 
   try {

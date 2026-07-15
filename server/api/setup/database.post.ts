@@ -5,7 +5,7 @@ import {
 } from '../../services/runtime-config.service'
 import { resetDbPool, testDatabaseConnection, useDb } from '../../db/client'
 import { applyPendingMigrations } from '../../db/migrate-runtime'
-import { seedAuth } from '../../db/seed'
+import { syncAuthRegistry } from '../../db/seed'
 import { isBootstrapped } from '../../services/setup.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
 
     const db = useDb()
     await applyPendingMigrations(db)
-    await seedAuth(connectionString)
+    await syncAuthRegistry(db)
 
     return {
       ok: true,
