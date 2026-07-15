@@ -32,7 +32,7 @@ export function normalizeInvoiceTemplateDesign(
   const margin = settings.marginInches ?? DEFAULT_INVOICE_TEMPLATE_DESIGN.marginInches
   return {
     ...settings,
-    marginInches: Math.max(0.25, Math.min(1.5, margin)),
+    marginInches: Math.max(0.75, Math.min(1.5, margin)),
     accentColor: DEFAULT_INVOICE_TEMPLATE_DESIGN.accentColor,
     accentColor2: DEFAULT_INVOICE_TEMPLATE_DESIGN.accentColor2,
     fontSans: settings.fontSans || DEFAULT_INVOICE_TEMPLATE_DESIGN.fontSans,

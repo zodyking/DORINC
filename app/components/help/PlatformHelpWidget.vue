@@ -25,10 +25,14 @@ const suggestions = computed(() => helpSuggestionsForPage(pageKey.value))
 const displayName = computed(() => auth.user?.name ?? 'there')
 const avInitials = computed(() => initials(displayName.value))
 
-const { data: helpStatus } = await useFetch<{ enabled: boolean, aiAvailable: boolean, capped: boolean }>(
+const { data: helpStatus, refresh: refreshHelpStatus } = useClientFetch<{ enabled: boolean, aiAvailable: boolean, capped: boolean }>(
   '/api/ai/help-status',
-  { immediate: canUseHelp.value },
+  { immediate: false },
 )
+
+watch([() => auth.loaded, canUseHelp], ([loaded, can]) => {
+  if (loaded && can) refreshHelpStatus()
+}, { immediate: true })
 
 const widgetVisible = computed(() =>
   isPlatformHelpWidgetVisible(canUseHelp.value, helpStatus.value),

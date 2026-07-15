@@ -94,6 +94,13 @@
       "breakpoints": true
     },
     {
+      "idx": 13,
+      "version": "7",
+      "when": 1783553700000,
+      "tag": "0013_natural_human_robot",
+      "breakpoints": true
+    },
+    {
       "idx": 14,
       "version": "7",
       "when": 1783554000000,
@@ -264,12 +271,19 @@
     {
       "idx": 38,
       "version": "7",
+      "when": 1783577500000,
+      "tag": "0038_invoice_template_monochrome",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
       "when": 1783578000000,
       "tag": "0039_user_disabled_reason",
       "breakpoints": true
     },
     {
-      "idx": 39,
+      "idx": 40,
       "version": "7",
       "when": 1783579000000,
       "tag": "0040_messages",

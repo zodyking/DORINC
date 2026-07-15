@@ -33,6 +33,8 @@ const canBulkDecode = computed(() =>
 const q = ref('')
 const fType = ref<'all' | 'truck' | 'bus' | 'equipment' | 'tractor' | 'other'>('all')
 const fCustomer = ref('all')
+const customerFilterQ = ref('')
+const customerSearchQ = ref('')
 const fSort = ref<'tag-asc' | 'tag-desc' | 'customer-asc' | 'odo-desc' | 'newest'>('tag-asc')
 const showArchived = ref(false)
 const page = ref(1)
@@ -92,9 +94,17 @@ async function runBulkVinDecode() {
   }
 }
 
-const { data: customersData } = useClientFetch<{ items: { id: string, displayName: string }[], total: number }>(
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerFilterQ, (q) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => {
+    customerSearchQ.value = q.trim()
+  }, 300)
+})
+
+const { data: customersData, pending: customersPending } = useClientFetch<{ items: { id: string, displayName: string }[], total: number }>(
   '/api/customers',
-  { query: { pageSize: 500, sort: 'name-asc' } },
+  { query: computed(() => ({ pageSize: 50, sort: 'name-asc' as const, q: customerSearchQ.value || undefined })) },
 )
 
 const items = computed(() => data.value?.items ?? [])
@@ -166,10 +176,20 @@ const rangeLabel = computed(() => {
         </label>
         <label class="fld">
           Customer
+          <input
+            id="veh-f-customer-search"
+            v-model="customerFilterQ"
+            type="search"
+            placeholder="Search customers…"
+            aria-label="Search customers"
+            autocomplete="off"
+          >
           <select id="veh-f-customer" v-model="fCustomer">
             <option value="all">All customers</option>
             <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
           </select>
+          <span v-if="customersPending" class="help">Loading customers…</span>
+          <span v-else-if="customerSearchQ && !customerOptions.length" class="help">No customers match.</span>
         </label>
         <label class="fld">
           Sort by

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Manage catalog categories (mockup: PAGE: CATALOG → Manage categories).
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 interface CategoryRow {
   id: string
@@ -11,7 +11,11 @@ const open = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{ changed: [] }>()
 
-const { data, refresh } = await useFetch<{ items: CategoryRow[] }>('/api/catalog/categories')
+const { data, refresh } = useClientFetch<{ items: CategoryRow[] }>('/api/catalog/categories', { immediate: false })
+
+watch(open, (isOpen) => {
+  if (isOpen) refresh()
+})
 
 const categories = computed(() => data.value?.items ?? [])
 
@@ -27,8 +31,7 @@ function close() {
 }
 
 function apiErrorMessage(err: unknown, fallback: string): string {
-  const data = (err as { data?: { message?: string, data?: { message?: string } } })?.data
-  return data?.message ?? data?.data?.message ?? fallback
+  return syncFetchErrorMessage(err, fallback)
 }
 
 async function addCategory() {
