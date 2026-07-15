@@ -3,7 +3,7 @@ import {
   createOrGetDmConversation,
   MessagesServiceError,
 } from '../../services/messages.service'
-import { apiError } from '../../utils/api-error'
+import { throwMessagesApiError } from '../../utils/messages-api-errors'
 import { requirePermission } from '../../utils/require-permission'
 import { validateBody } from '../../utils/validate'
 import { createConversationSchema } from '../../../shared/validators/messages'
@@ -17,13 +17,7 @@ export default defineEventHandler(async (event) => {
   }
   catch (e) {
     if (e instanceof MessagesServiceError) {
-      const code = e.code === 'SELF_DM' ? 'VALIDATION_ERROR' : e.code
-      const message = e.code === 'SELF_DM'
-        ? 'You cannot message yourself'
-        : e.code === 'INVALID_PARTICIPANT'
-          ? 'That user cannot receive messages'
-          : 'Could not start conversation'
-      throw apiError(event, code, message)
+      throwMessagesApiError(event, e, 'Could not start conversation')
     }
     throw e
   }

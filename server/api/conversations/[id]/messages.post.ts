@@ -4,7 +4,7 @@ import {
   parseEntityRefsFromBody,
   sendMessage,
 } from '../../../services/messages.service'
-import { apiError } from '../../../utils/api-error'
+import { throwMessagesApiError } from '../../../utils/messages-api-errors'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
@@ -22,12 +22,13 @@ export default defineEventHandler(async (event) => {
   }
   catch (e) {
     if (e instanceof MessagesServiceError) {
-      const message = e.code === 'ENTITY_NOT_FOUND'
-        ? 'One or more referenced records could not be found'
-        : e.code === 'FORBIDDEN'
-          ? 'You do not have access to this conversation'
-          : 'Could not send message'
-      throw apiError(event, e.code, message)
+      throwMessagesApiError(
+        event,
+        e,
+        e.code === 'ENTITY_NOT_FOUND'
+          ? 'One or more referenced records could not be found'
+          : 'Could not send message',
+      )
     }
     throw e
   }

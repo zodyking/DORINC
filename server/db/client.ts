@@ -23,12 +23,28 @@ export async function resetDbPool(): Promise<void> {
   _db = undefined
 }
 
+/** Node may resolve localhost to ::1 while Postgres listens on 127.0.0.1 only. */
+function normalizeDatabaseUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname === 'localhost') {
+      parsed.hostname = '127.0.0.1'
+      return parsed.toString()
+    }
+    return url
+  }
+  catch {
+    return url.replace(/@localhost(?=[:/]|$)/g, '@127.0.0.1')
+  }
+}
+
 export function usePool(): Pool {
   if (!_pool) {
-    const connectionString = getDatabaseUrl()
-    if (!connectionString) {
+    const raw = getDatabaseUrl()
+    if (!raw) {
       throw new Error('DATABASE_NOT_CONFIGURED')
     }
+    const connectionString = normalizeDatabaseUrl(raw)
     _pool = new Pool({ connectionString, max: 10 })
   }
   return _pool
