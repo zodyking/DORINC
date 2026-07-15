@@ -16,6 +16,9 @@ import {
   type InvoiceStatus,
   type InvoiceVehicleSnapshotDisplay,
 } from '~/utils/invoices-ui'
+import { editorSummaryRows } from '~/utils/invoice-editor-ui'
+import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 
@@ -92,9 +95,10 @@ const {
   forceRelease,
   forceReleaseBusy,
   forceReleaseError,
-} = useEditingSessionStatus('invoice', id.value)
+  refreshStatus,
+} = useEditingSessionStatus('invoice', id)
 
-const { data, refresh, error } = useFetch<{
+const { data, refresh, error } = useClientFetch<{
   invoice: Invoice
   history: HistoryRow[]
   sendDelivery: {
@@ -111,8 +115,6 @@ const { data, refresh, error } = useFetch<{
     pendingJobStatus: string | null
   } | null
 }>(() => (idValid.value ? `/api/invoices/${id.value}` : null), {
-  server: false,
-  lazy: true,
   immediate: false,
   watch: false,
 })
@@ -142,9 +144,7 @@ const isPdfEligible = computed(() =>
 
 const loadErrorMessage = computed(() => {
   if (!idValid.value) return 'This invoice link is invalid.'
-  const msg = (error.value as { data?: { message?: string } } | null)?.data?.message
-  if (msg) return msg
-  if (error.value) return 'Invoice not found or you do not have access.'
+  if (error.value) return syncFetchErrorMessage(error.value, 'Invoice not found or you do not have access.')
   return null
 })
 
@@ -159,6 +159,7 @@ const sendFailed = computed(() =>
 )
 
 const savedNotice = ref('')
+const deletionNotice = ref('')
 
 watch(
   () => route.query.saved,
@@ -186,9 +187,9 @@ onUnmounted(() => {
   if (sendPollTimer) clearInterval(sendPollTimer)
 })
 
-const { data: linkedLogData } = useFetch<{ log: { logNumber: number } }>(
+const { data: linkedLogData } = useClientFetch<{ log: { logNumber: number } }>(
   () => (invoice.value?.serviceLogId ? `/api/service-logs/${invoice.value.serviceLogId}` : null),
-  { server: false, lazy: true, watch: [() => invoice.value?.serviceLogId] },
+  { watch: [() => invoice.value?.serviceLogId] },
 )
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
@@ -224,6 +225,12 @@ const dueIsOverdue = computed(() =>
 )
 
 const isDraft = computed(() => invoice.value?.status === 'draft')
+const editLockedByOther = computed(() =>
+  isDraft.value
+  && Boolean(activeEditor.value)
+  && !isSelfEditing.value
+  && !sessionLoading.value,
+)
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
@@ -248,6 +255,7 @@ async function runAdminForceRelease() {
   const reason = window.prompt('Reason for unlocking this invoice for editing (required):')
   if (!reason?.trim()) return
   await forceRelease(reason.trim())
+  await refreshStatus()
 }
 
 async function runAction(path: string) {
@@ -260,7 +268,7 @@ async function runAction(path: string) {
     if (result.message) actionError.value = result.message
   }
   catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Action failed'
+    actionError.value = syncFetchErrorMessage(e, 'Action failed')
   }
   finally {
     busy.value = false
@@ -277,29 +285,43 @@ const summaryRows = computed(() => {
     unitPrice: line.unitPrice,
     lineAmount: line.lineAmount,
   })))
-  const rows: { label: string, value: string, grand?: boolean }[] = [
-    { label: 'Parts', value: moneyDisplay(breakdown.parts) },
-    { label: 'Labor', value: moneyDisplay(breakdown.labor) },
-    { label: 'Fees', value: moneyDisplay(breakdown.fees) },
-    { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
-  ]
-  if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
-    rows.push({ label: 'Fees & surcharges', value: moneyDisplay(inv.feesAmount) })
-  }
-  if (inv.shopSuppliesPercent && Number.parseFloat(inv.shopSuppliesPercent) > 0) {
-    rows.push({ label: `Shop supplies (${inv.shopSuppliesPercent}%)`, value: 'Included in fees' })
-  }
-  const taxLabel = inv.taxExempt ? 'Tax (exempt)' : 'Tax'
-  rows.push({ label: taxLabel, value: moneyDisplay(inv.taxAmount) })
-  if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
-    rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
-  }
+  const rows = editorSummaryRows(inv, { breakdown, grandLabel: 'Total' })
+  rows.pop()
   if (inv.amountPaid && Number.parseFloat(inv.amountPaid) > 0) {
     rows.push({ label: 'Amount paid', value: `−${moneyDisplay(inv.amountPaid)}` })
   }
   rows.push({ label: 'Balance due', value: moneyDisplay(inv.balanceDue), grand: true })
   return rows
 })
+
+interface PaymentHistoryRow {
+  id: string
+  date: string
+  method: string
+  reference: string
+  amount: string
+}
+
+const paymentHistory = computed((): PaymentHistoryRow[] =>
+  history.value
+    .filter(row => row.action === 'invoices.mark_paid')
+    .map((row) => {
+      const after = row.afterData ?? {}
+      const paidAt = typeof after.paidAt === 'string' ? after.paidAt : null
+      const paymentAmount = typeof after.paymentAmount === 'string' ? after.paymentAmount : null
+      return {
+        id: row.id,
+        date: paidAt ?? row.createdAt,
+        method: typeof after.method === 'string' ? after.method : '—',
+        reference: typeof after.reference === 'string' && after.reference ? after.reference : '—',
+        amount: paymentAmount ?? '—',
+      }
+    }),
+)
+
+const showPaymentsCard = computed(() =>
+  Number.parseFloat(invoice.value?.amountPaid ?? '0') > 0 || paymentHistory.value.length > 0,
+)
 </script>
 
 <template>
@@ -378,12 +400,21 @@ const summaryRows = computed(() => {
           @sent="refresh()"
         />
         <NuxtLink
-          v-if="canUpdate && isDraft"
+          v-if="canUpdate && isDraft && !editLockedByOther"
           :to="`/invoices/${id}/edit`"
           class="btn"
         >
           Edit
         </NuxtLink>
+        <button
+          v-else-if="canUpdate && isDraft && editLockedByOther"
+          type="button"
+          class="btn"
+          disabled
+          title="Another user is editing this invoice"
+        >
+          Edit
+        </button>
         <NuxtLink
           v-if="canRecordPayment && showRecordPayment"
           :to="`/invoices/${id}/payment`"
@@ -434,6 +465,7 @@ const summaryRows = computed(() => {
           :entity-id="id"
           :entity-label="invoice.invoiceNumberFormatted"
           :disabled="busy"
+          @submitted="deletionNotice = 'Deletion request submitted for review.'"
         />
       </template>
     </StaffPageHead>
@@ -460,6 +492,7 @@ const summaryRows = computed(() => {
     </div>
 
     <p v-if="savedNotice" class="flash ok" style="margin:-8px 0 16px;">{{ savedNotice }}</p>
+    <p v-if="deletionNotice" class="flash ok" style="margin:-8px 0 16px;">{{ deletionNotice }}</p>
     <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
     <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
@@ -569,19 +602,29 @@ const summaryRows = computed(() => {
           </div>
         </div>
 
-        <div v-if="Number.parseFloat(invoice.amountPaid) > 0" class="card">
-          <div class="chead"><h3>Payments</h3></div>
+        <div v-if="showPaymentsCard" class="card">
+          <div class="chead">
+            <h3>Payments</h3>
+            <div v-if="canRecordPayment && showRecordPayment" class="right">
+              <NuxtLink :to="`/invoices/${id}/payment`" class="btn ghost sm">Record payment →</NuxtLink>
+            </div>
+          </div>
           <div class="tscroll">
             <table class="tbl">
               <thead>
                 <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>{{ invoiceDateDisplay(invoice.invoiceDate) }}</td>
-                  <td>Recorded</td>
-                  <td class="mono">—</td>
-                  <td class="num">{{ moneyDisplay(invoice.amountPaid) }}</td>
+                <tr v-for="payment in paymentHistory" :key="payment.id">
+                  <td>{{ invoiceDateDisplay(payment.date.slice(0, 10)) }}</td>
+                  <td>{{ payment.method }}</td>
+                  <td class="mono">{{ payment.reference }}</td>
+                  <td class="num">{{ moneyDisplay(payment.amount) }}</td>
+                </tr>
+                <tr v-if="!paymentHistory.length">
+                  <td colspan="4" class="empty" style="display:table-cell;">
+                    {{ moneyDisplay(invoice.amountPaid) }} recorded — payment details appear in change history after the next payment.
+                  </td>
                 </tr>
               </tbody>
             </table>
