@@ -1,5 +1,7 @@
 <script setup lang="ts">
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
+import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
+
 definePageMeta({ layout: 'staff', permission: ['service_logs.read.all', 'service_logs.read.own'] })
 
 interface VehicleBits {
@@ -52,6 +54,9 @@ const { data } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
+const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.value))
 const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Service Logs')
 
 const filtersDirty = computed(() =>
@@ -155,6 +160,23 @@ function openLog(id: string) {
         </div>
       </div>
       <div v-else id="log-queue-empty" class="empty">No service logs match your search.</div>
+
+      <div v-if="total > 0" class="cfoot">
+        <span>{{ rangeLabel }}</span>
+        <div v-if="pageCount > 1" class="pager">
+          <button type="button" aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+          <button
+            v-for="p in pagerPages"
+            :key="p"
+            type="button"
+            :class="{ on: p === page }"
+            @click="page = p"
+          >
+            {{ p }}
+          </button>
+          <button type="button" aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
+        </div>
+      </div>
     </div>
   </section>
 </template>

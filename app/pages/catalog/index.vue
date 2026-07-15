@@ -4,6 +4,7 @@ import CatalogItemForm, { type CatalogItemFormValue } from '~/components/catalog
 import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 import { normalizeCatalogItemType } from '~/utils/catalog-ui'
+import { windowedPagerPages } from '~/utils/pager-ui'
 
 definePageMeta({ layout: 'staff', permission: 'catalog.read.all' })
 
@@ -64,6 +65,7 @@ const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const categories = computed(() => categoriesData.value?.items ?? [])
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
 const filtersDirty = computed(() => !!q.value.trim() || fType.value !== 'all' || fSort.value !== 'name-asc')
 
 function clearFilters() {
@@ -345,7 +347,7 @@ function onRowClick(row: CatalogItemRow) {
         <div v-if="pageCount > 1" class="pager">
           <button aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
           <button
-            v-for="p in pageCount"
+            v-for="p in pagerPages"
             :key="p"
             :class="{ on: p === page }"
             @click="page = p"

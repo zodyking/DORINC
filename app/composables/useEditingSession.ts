@@ -14,6 +14,7 @@ interface EditingSessionPayload {
 
 export function useEditingSession(entityType: 'invoice' | 'estimate', entityId: string) {
   const auth = useAuthStore()
+  const updatePermission = entityType === 'estimate' ? 'estimates.manage.all' : 'invoices.update.all'
 
   const sessionId = ref<string | null>(null)
   const lockedByOther = ref<{ userName: string, userId: string } | null>(null)
@@ -135,7 +136,7 @@ export function useEditingSession(entityType: 'invoice' | 'estimate', entityId: 
     if (!auth.loaded) {
       await auth.fetchMe()
     }
-    if (!auth.can('invoices.update.all')) {
+    if (!auth.can(updatePermission)) {
       loading.value = false
       return
     }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 // Staff vehicles list (mockup: PAGE: VEHICLES).
+import { windowedPagerPages } from '~/utils/pager-ui'
+
 definePageMeta({ layout: 'staff', permission: 'vehicles.read.all' })
 
 interface VehicleRow {
@@ -100,6 +102,7 @@ const total = computed(() => data.value?.total ?? 0)
 const customerOptions = computed(() => customersData.value?.items ?? [])
 const customerCount = computed(() => new Set(items.value.map(v => v.customerId)).size)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
 
 const filtersDirty = computed(() =>
   fType.value !== 'all' || fCustomer.value !== 'all' || fSort.value !== 'tag-asc' || showArchived.value || !!q.value,
@@ -228,7 +231,7 @@ const rangeLabel = computed(() => {
         <div v-if="pageCount > 1" class="pager">
           <button aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
           <button
-            v-for="p in pageCount"
+            v-for="p in pagerPages"
             :key="p"
             :class="{ on: p === page }"
             @click="page = p"

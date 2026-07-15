@@ -116,8 +116,8 @@ async function reject(u: UserRow) {
     <StaffPageHead :subtitle="`${users.length} accounts · ${internalCount} internal staff · ${portalCount} customer portal logins`">
       <template #title>Users</template>
       <template #actions>
-        <button class="btn">Export</button>
-        <button class="btn primary">+ Invite user</button>
+        <button class="btn" type="button" disabled title="Export not available yet">Export</button>
+        <button class="btn primary" type="button" disabled title="Invite users via pending signup approval below">+ Invite user</button>
       </template>
     </StaffPageHead>
 

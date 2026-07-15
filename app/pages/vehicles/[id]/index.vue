@@ -48,6 +48,15 @@ const { data, refresh, error } = useClientFetch<{
 const vehicle = computed(() => data.value?.vehicle)
 const customer = computed(() => data.value?.customer)
 const history = computed(() => data.value?.history ?? [])
+const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
+
+const newInvoiceLink = computed(() => {
+  if (!vehicle.value) return '/invoices/new'
+  const q = new URLSearchParams()
+  q.set('vehicleId', vehicle.value.id)
+  q.set('customerId', vehicle.value.customerId)
+  return `/invoices/new?${q.toString()}`
+})
 
 const canUpdate = computed(() => auth.can('vehicles.update.all'))
 const canArchive = computed(() => auth.can('vehicles.archive.all'))
@@ -122,7 +131,13 @@ function histWhen(iso: string): string {
           >
             Restore
           </button>
-          <button class="btn primary" disabled title="Coming soon">+ New Invoice</button>
+          <NuxtLink
+            v-if="canCreateInvoice"
+            :to="newInvoiceLink"
+            class="btn primary"
+          >
+            + New Invoice
+          </NuxtLink>
         </template>
       </StaffPageHead>
 

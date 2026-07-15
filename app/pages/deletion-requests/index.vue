@@ -6,6 +6,7 @@ import {
   deletionStatusPill,
   deletionWhen,
 } from '~/utils/deletion-requests-ui'
+import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { avColor, initials } from '~/utils/users-ui'
 
 definePageMeta({ layout: 'staff', name: 'staff-deletion-requests', permission: 'deletion_requests.review.all' })
@@ -54,6 +55,9 @@ const { data, refresh, pending: loading } = useClientFetch<{
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pendingCount = computed(() => data.value?.pending ?? 0)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
+const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.value))
 
 const filtersDirty = computed(() => tab.value !== 'all' || status.value !== 'pending' || !!q.value)
 
@@ -219,6 +223,23 @@ async function submitModal() {
                 Reject
               </button>
             </div>
+          </div>
+        </div>
+
+        <div v-if="total > 0" class="cfoot">
+          <span>{{ rangeLabel }}</span>
+          <div v-if="pageCount > 1" class="pager">
+            <button type="button" aria-label="Previous page" :disabled="page <= 1" @click="page--">‹</button>
+            <button
+              v-for="p in pagerPages"
+              :key="p"
+              type="button"
+              :class="{ on: p === page }"
+              @click="page = p"
+            >
+              {{ p }}
+            </button>
+            <button type="button" aria-label="Next page" :disabled="page >= pageCount" @click="page++">›</button>
           </div>
         </div>
       </div>

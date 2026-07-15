@@ -2,15 +2,14 @@ import { useDb } from '../../db/client'
 import { acquireEditingSession, EditingSessionsServiceError } from '../../services/editing-sessions.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
-import { requirePermission } from '../../utils/require-permission'
+import { requireEditingSessionUpdate, editingSessionUpdatePermission } from '../../utils/editing-session-permissions'
 import { validateBody } from '../../utils/validate'
 import { editingSessionAcquireSchema } from '../../../shared/validators/editing-sessions'
 
 export default defineEventHandler(async (event) => {
-  const actor = requirePermission(event, 'invoices.update.all')
-  const authUser = (event.context.auth as { user?: { name?: string, email?: string } })?.user
-  const userName = authUser?.name?.trim() || authUser?.email || 'Staff user'
   const { entityType, entityId } = await validateBody(event, editingSessionAcquireSchema)
+  const actor = requireEditingSessionUpdate(event, entityType)
+  const userName = actor.name?.trim() || actor.email || 'Staff user'
 
   try {
     const session = await acquireEditingSession(
@@ -26,7 +25,7 @@ export default defineEventHandler(async (event) => {
       entityId,
       action: 'editing_sessions.acquire',
       afterData: { sessionId: session.id, userId: actor.id },
-      permissionKey: 'invoices.update.all',
+      permissionKey: editingSessionUpdatePermission(entityType),
     })
 
     return {
