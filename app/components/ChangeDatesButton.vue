@@ -86,7 +86,7 @@ async function submit() {
     type="button"
     :class="buttonClass"
     :disabled="disabled || busy"
-    @click="openModal"
+    @click.stop="openModal"
   >
     Change dates
   </button>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DeletionEntityType } from '~/server/db/schema/deletion-requests'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 const props = defineProps<{
   entityType: DeletionEntityType
@@ -78,8 +79,7 @@ async function submitRequest() {
     emit('submitted')
   }
   catch (e: unknown) {
-    const err = e as { data?: { message?: string, data?: { message?: string } } }
-    error.value = err.data?.data?.message ?? err.data?.message ?? 'Could not submit deletion request'
+    error.value = syncFetchErrorMessage(e, 'Could not submit deletion request')
   }
   finally {
     busy.value = false
@@ -102,7 +102,7 @@ function openRequestModal() {
       type="button"
       class="btn danger"
       :disabled="disabled || busy"
-      @click="openRequestModal"
+      @click.stop="openRequestModal"
     >
       Request deletion
     </button>
@@ -115,26 +115,28 @@ function openRequestModal() {
     </NuxtLink>
   </template>
 
-  <div v-if="requestModalOpen" class="modal-scrim open" @click.self="requestModalOpen = false">
-    <div class="card modal-card" style="max-width:480px; width:100%;">
-      <div class="chead"><h3>Request deletion</h3></div>
-      <div class="cbody">
-        <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-          An admin must approve before <strong>{{ entityLabel }}</strong> is permanently deleted.
-          {{ preservationNote }}
-        </p>
-        <label class="fld">
-          Reason for deletion
-          <textarea v-model="reason" rows="4" placeholder="Why should this record be removed?" />
-        </label>
-        <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button type="button" class="btn danger" :disabled="busy" @click="submitRequest">
-            {{ busy ? 'Submitting…' : 'Submit request' }}
-          </button>
-          <button type="button" class="btn" :disabled="busy" @click="requestModalOpen = false">Cancel</button>
-        </div>
+  <Teleport to="body">
+    <div v-if="requestModalOpen" class="modal-scrim open" @click.self="requestModalOpen = false">
+      <div class="card modal-card" style="max-width:480px; width:100%;" @click.stop>
+        <div class="chead"><h3>Request deletion</h3></div>
+        <form class="cbody" @submit.prevent="submitRequest">
+          <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
+            An admin must approve before <strong>{{ entityLabel }}</strong> is permanently deleted.
+            {{ preservationNote }}
+          </p>
+          <label class="fld">
+            Reason for deletion
+            <textarea v-model="reason" rows="4" placeholder="Why should this record be removed?" required minlength="10" />
+          </label>
+          <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button type="submit" class="btn danger" :disabled="busy">
+              {{ busy ? 'Submitting…' : 'Submit request' }}
+            </button>
+            <button type="button" class="btn" :disabled="busy" @click="requestModalOpen = false">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>

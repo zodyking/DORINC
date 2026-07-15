@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { vehicleTag } from '~/utils/vehicles-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 type ReassignEntityType = 'invoice' | 'vehicle' | 'service_log'
 
@@ -171,8 +172,7 @@ async function submit() {
     emit('reassigned')
   }
   catch (e: unknown) {
-    const err = e as { data?: { message?: string, data?: { message?: string } } }
-    error.value = err.data?.data?.message ?? err.data?.message ?? 'Could not reassign this record'
+    error.value = syncFetchErrorMessage(e, 'Could not reassign this record')
   }
   finally {
     busy.value = false
@@ -186,13 +186,14 @@ async function submit() {
     type="button"
     class="btn"
     :disabled="disabled || busy"
-    @click="openModal"
+    @click.stop="openModal"
   >
     {{ actionLabel }}
   </button>
 
-  <div v-if="open" class="modal-scrim open" @click.self="open = false">
-    <div class="card modal-card" style="max-width:520px; width:100%;">
+  <Teleport to="body">
+    <div v-if="open" class="modal-scrim open" @click.self="open = false">
+      <div class="card modal-card" style="max-width:520px; width:100%;" @click.stop>
       <div class="chead"><h3>{{ modalTitle }}</h3></div>
       <div class="cbody">
         <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
@@ -256,6 +257,7 @@ async function submit() {
           <button type="button" class="btn" :disabled="busy" @click="open = false">Cancel</button>
         </div>
       </div>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>

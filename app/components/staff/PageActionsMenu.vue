@@ -6,6 +6,11 @@ function close() {
   open.value = false
 }
 
+function onPanelClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('a, button')) close()
+}
+
 function toggle() {
   open.value = !open.value
 }
@@ -47,7 +52,7 @@ onUnmounted(() => {
       class="page-actions__panel"
       :class="{ open }"
       role="menu"
-      @click="close"
+      @click="onPanelClick"
     >
       <slot />
     </div>
