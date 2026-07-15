@@ -103,6 +103,7 @@ async function signOut() {
 }
 
 const crumb = computed(() => {
+  if (route.path === '/messages' || route.path.startsWith('/messages/')) return 'Messages'
   if (route.path === '/invoices/new') return 'New invoice'
   if (/^\/invoices\/[^/]+/.test(route.path) && route.path !== '/invoices/new') {
     return 'Invoice'

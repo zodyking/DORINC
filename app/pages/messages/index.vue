@@ -66,7 +66,7 @@ function onBack() {
 </script>
 
 <template>
-  <div class="dm-page">
+  <section class="page active dm-page">
     <StaffPageHead title="Messages" subtitle="Direct messages with your team">
       <template #actions>
         <button type="button" class="btn primary" @click="openNewDm">
@@ -74,6 +74,11 @@ function onBack() {
         </button>
       </template>
     </StaffPageHead>
+
+    <div v-if="dm.fetchError" class="dm-fetch-error">
+      {{ dm.fetchError }}
+      <button type="button" class="btn sm" @click="dm.fetchConversations()">Retry</button>
+    </div>
 
     <div class="dm-layout" :class="{ 'show-thread': showThread }">
       <aside class="dm-sidebar">
@@ -95,7 +100,7 @@ function onBack() {
             :active="conv.id === dm.activeConversationId"
             @select="selectConversation"
           />
-          <div v-if="!dm.loadingConversations && !dm.conversations.length" class="dm-list-empty">
+          <div v-if="!dm.loadingConversations && !dm.conversations.length && !dm.fetchError" class="dm-list-empty">
             <b>No conversations yet</b>
             <span>Start a new message to chat with a teammate.</span>
           </div>
@@ -142,5 +147,5 @@ function onBack() {
         <div v-else-if="!staffUsers.length" class="dm-list-empty">No staff found</div>
       </div>
     </div>
-  </div>
+  </section>
 </template>

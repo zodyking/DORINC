@@ -38,7 +38,7 @@ watch(() => props.conversation?.id, () => {
 </script>
 
 <template>
-  <section class="dm-thread">
+  <div class="dm-thread">
     <header v-if="conversation" class="dm-thread-head">
       <button type="button" class="dm-back-btn" aria-label="Back to conversations" @click="emit('back')">
         ←
@@ -72,5 +72,5 @@ watch(() => props.conversation?.id, () => {
       :disabled="loading"
       @send="emit('send', $event)"
     />
-  </section>
+  </div>
 </template>

@@ -39,6 +39,7 @@ export function useDirectMessages() {
   const loadingMessages = useState('dm-loading-messages', () => false)
   const sending = useState('dm-sending', () => false)
   const conversationSearch = useState('dm-conversation-search', () => '')
+  const fetchError = useState<string | null>('dm-fetch-error', () => null)
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let lastMessageId: string | null = null
@@ -63,6 +64,7 @@ export function useDirectMessages() {
   async function fetchConversations() {
     if (!canUseMessages.value) return
     loadingConversations.value = true
+    fetchError.value = null
     try {
       const res = await $fetch<{ items: ConversationSummary[] }>('/api/conversations', {
         query: {
@@ -72,6 +74,9 @@ export function useDirectMessages() {
         },
       })
       conversations.value = res.items
+    }
+    catch (e) {
+      fetchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not load conversations'
     }
     finally {
       loadingConversations.value = false
@@ -125,15 +130,15 @@ export function useDirectMessages() {
     }
   }
 
-async function startConversation(participantUserId: string) {
-  const conv = await $fetch<{ id: string }>('/api/conversations', {
-    method: 'POST',
-    body: { participantUserId },
-  })
-  await fetchConversations()
-  await openConversation(conv.id)
-  return conv
-}
+  async function startConversation(participantUserId: string) {
+    const conv = await $fetch<{ id: string }>('/api/conversations', {
+      method: 'POST',
+      body: { participantUserId },
+    })
+    await fetchConversations()
+    await openConversation(conv.id)
+    return conv
+  }
 
   async function sendMessage(body: string) {
     if (!activeConversationId.value || !body.trim() || sending.value) return
@@ -197,8 +202,8 @@ async function startConversation(participantUserId: string) {
     else stopPolling()
   })
 
-  return {
-    canUseMessages,
+  // Refs nested in reactive() auto-unwrap in templates — fixes v-for on dm.conversations.
+  return reactive({
     conversations,
     activeConversationId,
     activeConversation,
@@ -208,6 +213,8 @@ async function startConversation(participantUserId: string) {
     loadingMessages,
     sending,
     conversationSearch,
+    fetchError,
+    canUseMessages,
     fetchConversations,
     fetchUnreadCount,
     openConversation,
@@ -216,5 +223,5 @@ async function startConversation(participantUserId: string) {
     markRead,
     startPolling,
     stopPolling,
-  }
+  })
 }
