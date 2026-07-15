@@ -1,11 +1,11 @@
 import { count, eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, userPermissionOverrides, users } from '../db/schema/auth'
-import { customerCredentialEmailLogs, customers } from '../db/schema/customers'
+import { customerCredentialEmailLogs, customerContacts, customers } from '../db/schema/customers'
 import { entityDeletionRequests } from '../db/schema/deletion-requests'
 import { editingSessions } from '../db/schema/editing-sessions'
-import { estimates } from '../db/schema/estimates'
-import { invoiceLineItems, invoices } from '../db/schema/invoices'
+import { estimates, estimateFiles, estimateLineItems } from '../db/schema/estimates'
+import { invoiceFiles, invoiceLineItems, invoices } from '../db/schema/invoices'
 import { messages } from '../db/schema/messages'
 import {
   invoiceChangeRequests,
@@ -16,6 +16,12 @@ import {
 } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
+import { catalogItems, catalogLaborRates } from '../db/schema/catalog'
+import { appFiles } from '../db/schema/files'
+import { aiJobs, aiProviderSettings, aiSuggestions, aiUsageLogs } from '../db/schema/ai'
+import { backupIntegrations, backupRuns, backupSettings } from '../db/schema/backups'
+import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
+import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { buildCustomerSnapshot, buildVehicleSnapshot } from './entity-snapshots'
 import { CustomersServiceError, getCustomer } from './customers.service'
 import { getInvoice, InvoicesServiceError } from './invoices.service'
@@ -165,6 +171,153 @@ function buildUserSnapshot(user: typeof users.$inferSelect, accountTypeKey: stri
   }
 }
 
+/** Clear nullable user FK columns so DELETE users succeeds without orphan violations. */
+async function nullifyUserAttribution(db: Db, userId: string) {
+  const now = new Date()
+
+  await db.update(customerContacts)
+    .set({ portalUserId: null, updatedAt: now })
+    .where(eq(customerContacts.portalUserId, userId))
+
+  await db.update(customers)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(customers.createdBy, userId))
+
+  await db.update(vehicles)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(vehicles.createdBy, userId))
+
+  await db.update(catalogItems)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(catalogItems.createdBy, userId))
+
+  await db.update(catalogLaborRates)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(catalogLaborRates.createdBy, userId))
+
+  await db.update(appFiles)
+    .set({ createdBy: null })
+    .where(eq(appFiles.createdBy, userId))
+
+  await db.update(invoices)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(invoices.createdBy, userId))
+  await db.update(invoices)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(invoices.updatedBy, userId))
+  await db.update(invoices)
+    .set({ approvedBy: null, updatedAt: now })
+    .where(eq(invoices.approvedBy, userId))
+  await db.update(invoices)
+    .set({ submittedForApprovalBy: null, updatedAt: now })
+    .where(eq(invoices.submittedForApprovalBy, userId))
+
+  await db.update(invoiceLineItems)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(invoiceLineItems.createdBy, userId))
+  await db.update(invoiceLineItems)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(invoiceLineItems.updatedBy, userId))
+
+  await db.update(invoiceFiles)
+    .set({ createdBy: null })
+    .where(eq(invoiceFiles.createdBy, userId))
+
+  await db.update(estimates)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(estimates.createdBy, userId))
+  await db.update(estimates)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(estimates.updatedBy, userId))
+  await db.update(estimates)
+    .set({ approvedBy: null, updatedAt: now })
+    .where(eq(estimates.approvedBy, userId))
+  await db.update(estimates)
+    .set({ sentBy: null, updatedAt: now })
+    .where(eq(estimates.sentBy, userId))
+  await db.update(estimates)
+    .set({ customerApprovedBy: null, updatedAt: now })
+    .where(eq(estimates.customerApprovedBy, userId))
+  await db.update(estimates)
+    .set({ customerRejectedBy: null, updatedAt: now })
+    .where(eq(estimates.customerRejectedBy, userId))
+  await db.update(estimates)
+    .set({ convertedBy: null, updatedAt: now })
+    .where(eq(estimates.convertedBy, userId))
+
+  await db.update(estimateLineItems)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(estimateLineItems.createdBy, userId))
+  await db.update(estimateLineItems)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(estimateLineItems.updatedBy, userId))
+
+  await db.update(estimateFiles)
+    .set({ createdBy: null })
+    .where(eq(estimateFiles.createdBy, userId))
+
+  await db.update(invoiceTemplates)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(invoiceTemplates.createdBy, userId))
+  await db.update(invoiceTemplateVersions)
+    .set({ createdBy: null })
+    .where(eq(invoiceTemplateVersions.createdBy, userId))
+  await db.update(invoiceTemplateVersions)
+    .set({ publishedBy: null })
+    .where(eq(invoiceTemplateVersions.publishedBy, userId))
+
+  await db.update(pdfRenderJobs)
+    .set({ createdBy: null })
+    .where(eq(pdfRenderJobs.createdBy, userId))
+
+  await db.update(aiProviderSettings)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(aiProviderSettings.updatedBy, userId))
+  await db.update(aiJobs)
+    .set({ createdBy: null })
+    .where(eq(aiJobs.createdBy, userId))
+  await db.update(aiSuggestions)
+    .set({ reviewedBy: null })
+    .where(eq(aiSuggestions.reviewedBy, userId))
+  await db.update(aiUsageLogs)
+    .set({ createdBy: null })
+    .where(eq(aiUsageLogs.createdBy, userId))
+
+  await db.update(backupIntegrations)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(backupIntegrations.updatedBy, userId))
+  await db.update(backupSettings)
+    .set({ updatedBy: null, updatedAt: now })
+    .where(eq(backupSettings.updatedBy, userId))
+  await db.update(backupRuns)
+    .set({ createdBy: null })
+    .where(eq(backupRuns.createdBy, userId))
+
+  await db.update(entityDeletionRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(entityDeletionRequests.reviewedBy, userId))
+
+  await db.update(newVehicleRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(newVehicleRequests.reviewedBy, userId))
+  await db.update(serviceRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(serviceRequests.reviewedBy, userId))
+  await db.update(invoiceChangeRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(invoiceChangeRequests.reviewedBy, userId))
+  await db.update(vehicleChangeRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(vehicleChangeRequests.reviewedBy, userId))
+  await db.update(portalGeneralRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(portalGeneralRequests.reviewedBy, userId))
+
+  await db.update(userPermissionOverrides)
+    .set({ createdBy: null })
+    .where(eq(userPermissionOverrides.createdBy, userId))
+}
+
 /**
  * Hard-delete a user with preflight checks and audit snapshot.
  * Fails if the user is a super_admin, trying to delete themselves, or has NOT NULL dependent records.
@@ -226,42 +379,7 @@ export async function hardDeleteUser(
   await db.delete(vehicleChangeRequests).where(eq(vehicleChangeRequests.submittedBy, userId))
   await db.delete(portalGeneralRequests).where(eq(portalGeneralRequests.submittedBy, userId))
 
-  // Nullify nullable user-attribution FKs across the database
-  await db.update(customers)
-    .set({ createdBy: null, updatedAt: new Date() })
-    .where(eq(customers.createdBy, userId))
-
-  await db.update(invoices)
-    .set({ createdBy: null, updatedAt: new Date() })
-    .where(eq(invoices.createdBy, userId))
-
-  await db.update(invoices)
-    .set({ updatedBy: null, updatedAt: new Date() })
-    .where(eq(invoices.updatedBy, userId))
-
-  await db.update(invoices)
-    .set({ approvedBy: null, updatedAt: new Date() })
-    .where(eq(invoices.approvedBy, userId))
-
-  await db.update(invoices)
-    .set({ sentBy: null, updatedAt: new Date() })
-    .where(eq(invoices.sentBy, userId))
-
-  await db.update(invoices)
-    .set({ submittedForApprovalBy: null, updatedAt: new Date() })
-    .where(eq(invoices.submittedForApprovalBy, userId))
-
-  await db.update(estimates)
-    .set({ createdBy: null, updatedAt: new Date() })
-    .where(eq(estimates.createdBy, userId))
-
-  await db.update(estimates)
-    .set({ sentBy: null, updatedAt: new Date() })
-    .where(eq(estimates.sentBy, userId))
-
-  await db.update(vehicles)
-    .set({ createdBy: null, updatedAt: new Date() })
-    .where(eq(vehicles.createdBy, userId))
+  await nullifyUserAttribution(db, userId)
 
   // Delete user's sessions (cascade should handle this, but be explicit)
   await db.delete(sessions).where(eq(sessions.userId, userId))

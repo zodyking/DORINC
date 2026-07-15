@@ -71,6 +71,7 @@ export default defineEventHandler(async (event) => {
         })
       }
     }
-    throw err
+    console.error('[admin/users/delete]', err)
+    throw apiError(event, 'INTERNAL_ERROR', 'Could not delete user — try again or suspend the account instead')
   }
 })
