@@ -56,7 +56,7 @@ const {
   refresh: refreshCustomers,
 } = useFetch<{ items: CustomerPick[] }>('/api/customers', {
   key: 'bulk-send-customers',
-  query: { pageSize: 200, sort: 'name-asc' },
+  query: { pageSize: 100, sort: 'name-asc' },
   lazy: true,
   server: false,
   immediate: false,
