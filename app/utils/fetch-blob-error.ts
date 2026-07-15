@@ -35,6 +35,23 @@ async function messageFromErrorData(data: unknown): Promise<string | null> {
   return null
 }
 
+/** Sync parse of API error messages from $fetch/ofetch failures. */
+export function syncFetchErrorMessage(err: unknown, fallback: string): string {
+  const e = err as FetchErrorShape
+
+  if (typeof e.data === 'object' && e.data !== null && typeof (e.data as Blob).text !== 'function') {
+    const obj = e.data as { message?: string, data?: { message?: string } }
+    const msg = obj.message ?? obj.data?.message
+    if (msg) return msg
+  }
+
+  if (e.message && !/^\[(?:GET|POST|PUT|PATCH|DELETE)\]/i.test(e.message)) {
+    return e.message
+  }
+
+  return fallback
+}
+
 /** Parse API error messages from $fetch/ofetch failures (including blob responses). */
 export async function fetchErrorMessage(err: unknown, fallback: string): Promise<string> {
   const e = err as FetchErrorShape

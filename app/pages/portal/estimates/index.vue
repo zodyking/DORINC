@@ -24,7 +24,7 @@ interface PortalEstimateRow {
 
 const filter = ref<PortalEstimateFilter>('all')
 
-const { data, error } = useClientFetch<{ items: PortalEstimateRow[] }>('/api/portal/estimates')
+const { data, error, pending } = useClientFetch<{ items: PortalEstimateRow[] }>('/api/portal/estimates')
 
 const items = computed(() => data.value?.items ?? [])
 
@@ -39,6 +39,10 @@ const chips: PortalEstimateFilter[] = ['all', 'pending', 'approved', 'rejected']
   <section class="page active">
     <div v-if="error" class="card" style="padding:24px;">
       <p>Unable to load estimates.</p>
+    </div>
+
+    <div v-else-if="pending && !items.length" class="card" style="padding:24px;">
+      <p style="color:#64748b;font-size:13px;">Loading estimates…</p>
     </div>
 
     <template v-else>

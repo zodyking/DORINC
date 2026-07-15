@@ -45,11 +45,11 @@ const submitMessage = ref('')
 const submitError = ref('')
 const submitting = ref(false)
 
-const [{ data: vehiclesData }, { data: invoicesData }, { data: requestsData, refresh: refreshRequests }] = await Promise.all([
-  useFetch<{ items: PortalVehicleOption[] }>('/api/portal/vehicles'),
-  useFetch<{ items: PortalInvoiceOption[] }>('/api/portal/invoices'),
-  useFetch<{ items: PortalRequestItem[] }>('/api/portal/requests'),
-])
+const { data: vehiclesData, pending: vehiclesPending } = useClientFetch<{ items: PortalVehicleOption[] }>('/api/portal/vehicles')
+const { data: invoicesData, pending: invoicesPending } = useClientFetch<{ items: PortalInvoiceOption[] }>('/api/portal/invoices')
+const { data: requestsData, refresh: refreshRequests, pending: requestsPending } = useClientFetch<{ items: PortalRequestItem[] }>('/api/portal/requests')
+
+const pagePending = computed(() => vehiclesPending.value || invoicesPending.value || requestsPending.value)
 
 const vehicles = computed(() => vehiclesData.value?.items ?? [])
 const invoices = computed(() => invoicesData.value?.items ?? [])
@@ -193,6 +193,11 @@ const minDate = portalTodayIso()
 
 <template>
   <section class="page active">
+    <div v-if="pagePending && !vehicles.length && !history.length" class="card" style="padding:24px;">
+      <p style="color:#64748b;font-size:13px;">Loading requests…</p>
+    </div>
+
+    <template v-else>
     <div class="pagehead">
       <div>
         <h2>Requests</h2>
@@ -486,5 +491,6 @@ const minDate = portalTodayIso()
         <div v-else class="req-empty">No requests match this filter.</div>
       </div>
     </div>
+    </template>
   </section>
 </template>

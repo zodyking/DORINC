@@ -25,7 +25,7 @@ interface PortalInvoiceRow {
 
 const filter = ref<PortalInvoiceFilter>('all')
 
-const { data, error } = useClientFetch<{ items: PortalInvoiceRow[] }>('/api/portal/invoices')
+const { data, error, pending } = useClientFetch<{ items: PortalInvoiceRow[] }>('/api/portal/invoices')
 
 const items = computed(() => data.value?.items ?? [])
 
@@ -45,6 +45,10 @@ function downloadPdf(event: Event, invoiceId: string) {
   <section class="page active">
     <div v-if="error" class="card" style="padding:24px;">
       <p>Unable to load invoices.</p>
+    </div>
+
+    <div v-else-if="pending && !items.length" class="card" style="padding:24px;">
+      <p style="color:#64748b;font-size:13px;">Loading invoices…</p>
     </div>
 
     <template v-else>

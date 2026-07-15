@@ -5,7 +5,7 @@ import { reloadDetectionSettings } from '~/composables/useDetectionSettings'
 
 const emit = defineEmits<{ saved: [] }>()
 
-const { data, refresh, pending } = await useFetch<{ keywords: CatalogKeywordMap }>('/api/admin/settings/catalog-detection')
+const { data, refresh, pending } = useClientFetch<{ keywords: CatalogKeywordMap }>('/api/admin/settings/catalog-detection')
 
 const editors = reactive<Record<string, string>>({})
 

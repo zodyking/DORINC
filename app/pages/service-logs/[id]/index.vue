@@ -140,19 +140,29 @@ watch(pendingExtraction, (s) => {
 }, { immediate: true })
 
 let aiPollTimer: ReturnType<typeof setInterval> | null = null
+let aiPollAttempts = 0
+const AI_POLL_MAX = 60
 
 function stopAiPoll() {
   if (aiPollTimer) {
     clearInterval(aiPollTimer)
     aiPollTimer = null
   }
+  aiPollAttempts = 0
 }
 
 function startAiPoll() {
   stopAiPoll()
   aiPollTimer = setInterval(async () => {
+    aiPollAttempts++
     await refreshAi()
-    if (pendingExtraction.value || !extractBusy.value) stopAiPoll()
+    if (pendingExtraction.value) {
+      stopAiPoll()
+    }
+    else if (aiPollAttempts >= AI_POLL_MAX) {
+      extractError.value = 'AI extraction timed out — enter details manually or try again'
+      stopAiPoll()
+    }
   }, 2000)
 }
 

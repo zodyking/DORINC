@@ -19,7 +19,7 @@ interface DatabaseSizeMetrics {
   change7dPercent: number | null
 }
 
-const { data, pending, error, refresh } = await useFetch<DatabaseSizeMetrics>('/api/admin/system/database-size')
+const { data, pending, error, refresh } = useClientFetch<DatabaseSizeMetrics>('/api/admin/system/database-size')
 
 const chart = computed(() => {
   const points = data.value?.history ?? []

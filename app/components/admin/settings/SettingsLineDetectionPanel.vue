@@ -4,7 +4,7 @@ import { reloadDetectionSettings } from '~/composables/useDetectionSettings'
 
 const emit = defineEmits<{ saved: [] }>()
 
-const { data, refresh, pending } = await useFetch<{ verbs: LineTypeVerbSettings }>('/api/admin/settings/line-detection')
+const { data, refresh, pending } = useClientFetch<{ verbs: LineTypeVerbSettings }>('/api/admin/settings/line-detection')
 
 const form = reactive({
   part: '',

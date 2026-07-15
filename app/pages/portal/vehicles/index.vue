@@ -18,7 +18,7 @@ interface PortalVehicleRow {
   lastServiceDate: string | null
 }
 
-const { data, error } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
+const { data, error, pending } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
 
 const items = computed(() => data.value?.items ?? [])
 
@@ -91,6 +91,10 @@ async function submitRequest() {
   <section class="page active">
     <div v-if="error" class="card" style="padding:24px;">
       <p>Unable to load vehicles.</p>
+    </div>
+
+    <div v-else-if="pending && !items.length" class="card" style="padding:24px;">
+      <p style="color:#64748b;font-size:13px;">Loading vehicles…</p>
     </div>
 
     <template v-else>

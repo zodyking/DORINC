@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 definePageMeta({ layout: 'staff', permission: 'roles.manage.all' })
 
 interface RoleRow {
@@ -56,8 +58,7 @@ async function createRole() {
     await refresh()
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    createError.value = fe.data?.data?.message ?? 'Failed to create role'
+    createError.value = syncFetchErrorMessage(err, 'Failed to create role')
   }
   finally {
     createBusy.value = false

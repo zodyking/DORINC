@@ -7,8 +7,8 @@ const emit = defineEmits<{ saved: [] }>()
 const auth = useAuthStore()
 const canManageTemplates = computed(() => auth.loaded && auth.can('templates.manage.all'))
 
-const { data: settingsData, refresh } = await useFetch<{ settings: InvoiceWorkspaceSettings }>('/api/admin/settings/invoice')
-const { data: templatesData, refresh: refreshTemplates } = await useFetch<{
+const { data: settingsData, refresh } = useClientFetch<{ settings: InvoiceWorkspaceSettings }>('/api/admin/settings/invoice')
+const { data: templatesData, refresh: refreshTemplates } = useClientFetch<{
   items: {
     id: string
     name: string

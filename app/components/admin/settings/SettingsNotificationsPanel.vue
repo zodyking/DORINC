@@ -9,7 +9,7 @@ interface NotificationsResponse {
   meta: typeof NOTIFICATION_SETTING_META
 }
 
-const { data, refresh, pending } = await useFetch<NotificationsResponse>('/api/admin/settings/notifications')
+const { data, refresh, pending } = useClientFetch<NotificationsResponse>('/api/admin/settings/notifications')
 
 const form = reactive<NotificationSettings>({ ...DEFAULT_NOTIFICATION_SETTINGS })
 

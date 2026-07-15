@@ -14,7 +14,7 @@ interface SmtpView {
   envLocked: boolean
 }
 
-const { data: smtpData, refresh } = await useFetch<SmtpView>('/api/admin/system/smtp-settings')
+const { data: smtpData, refresh } = useClientFetch<SmtpView>('/api/admin/system/smtp-settings')
 
 const form = reactive({
   host: '',

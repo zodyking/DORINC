@@ -3,7 +3,7 @@ import type { BusinessProfile } from '#shared/workspace-settings-defaults'
 
 const emit = defineEmits<{ saved: [] }>()
 
-const { data, refresh, pending } = await useFetch<{ profile: BusinessProfile }>('/api/admin/settings/business')
+const { data, refresh, pending } = useClientFetch<{ profile: BusinessProfile }>('/api/admin/settings/business')
 
 const form = reactive({
   businessName: '',

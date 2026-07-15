@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 definePageMeta({ layout: 'staff', permission: 'roles.manage.all' })
 
 interface RoleDetail {
@@ -145,8 +147,7 @@ async function saveChanges() {
     notice.value = 'Role updated successfully'
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    errorMsg.value = fe.data?.data?.message ?? 'Failed to update role'
+    errorMsg.value = syncFetchErrorMessage(err, 'Failed to update role')
   }
   finally {
     busy.value = false
@@ -164,8 +165,7 @@ async function deleteRole() {
     await navigateTo('/admin/roles')
   }
   catch (err) {
-    const fe = err as { data?: { data?: { message?: string } } }
-    errorMsg.value = fe.data?.data?.message ?? 'Failed to delete role'
+    errorMsg.value = syncFetchErrorMessage(err, 'Failed to delete role')
     showDeleteModal.value = false
   }
   finally {
