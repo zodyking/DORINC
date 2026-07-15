@@ -106,20 +106,55 @@ const auth = useAuthStore()
 const editorLink = { path: '/templates/designer' }
 const id = route.params.id as string
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const idValid = computed(() => UUID_RE.test(id))
+
 const {
   lockedByOther,
   loading: sessionLoading,
   canEdit,
   error: sessionError,
+  acquire: acquireEditSession,
 } = useEditingSession('invoice', id)
 
-const { data, refresh, error, pending } = await useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
-  `/api/invoices/${id}`,
+// Client-only — do not await (Suspense blank) and do not fetch during SSR
+// (server:false refresh on the server never completes, leaving pending stuck after hydrate).
+const { data, refresh, error, pending } = useFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
+  () => (idValid.value ? `/api/invoices/${id}` : null),
+  {
+    server: false,
+    lazy: true,
+    immediate: false,
+    watch: false,
+  },
 )
+
+function loadInvoiceEditor() {
+  if (!import.meta.client) return
+  if (!auth.loaded || !auth.can('invoices.read.all')) return
+  if (!idValid.value) return
+  void refresh()
+}
+
+onMounted(() => {
+  loadInvoiceEditor()
+})
+
+watch([() => auth.loaded, () => auth.can('invoices.read.all'), idValid], () => {
+  loadInvoiceEditor()
+})
 
 const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
 const isDraft = computed(() => invoice.value?.status === 'draft')
+
+const loadErrorMessage = computed(() => {
+  if (!idValid.value) return 'This invoice link is invalid.'
+  const msg = (error.value as { data?: { message?: string } } | null)?.data?.message
+  if (msg) return msg
+  if (error.value) return 'Invoice not found or you do not have access.'
+  return null
+})
 
 const activeTab = ref<'invoice' | 'servicelog' | 'pdf'>('invoice')
 const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
@@ -194,9 +229,13 @@ const autosaveText = computed(() => {
   return autosavedLabel(lastSavedAt.value)
 })
 
-const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
+const { data: customersData } = useFetch<{ items: CustomerPick[] }>(
   '/api/customers',
-  { query: { pageSize: 200, sort: 'name-asc' } },
+  {
+    query: { pageSize: 200, sort: 'name-asc' },
+    server: false,
+    lazy: true,
+  },
 )
 
 const customerOptions = computed(() => customersData.value?.items ?? [])
@@ -205,9 +244,14 @@ const selectedCustomer = computed(() =>
   customerOptions.value.find(c => c.id === customerId.value) ?? null,
 )
 
-const { data: vehiclesData } = await useFetch<{ items: VehiclePick[] }>(
+const { data: vehiclesData } = useFetch<{ items: VehiclePick[] }>(
   '/api/vehicles',
-  { query: computed(() => ({ customerId: customerId.value || undefined, pageSize: 100, sort: 'tag-asc' })), watch: [customerId] },
+  {
+    query: computed(() => ({ customerId: customerId.value || undefined, pageSize: 100, sort: 'tag-asc' })),
+    watch: [customerId],
+    server: false,
+    lazy: true,
+  },
 )
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
@@ -230,16 +274,20 @@ const vehicleHelp = computed(() => {
   return 'Select a vehicle for this invoice'
 })
 
-const { data: catalogData } = await useFetch<{ items: CatalogRow[] }>(
+const { data: catalogData } = useFetch<{ items: CatalogRow[] }>(
   '/api/catalog/items',
-  { query: computed(() => ({ q: catalogQ.value || undefined, pageSize: 8, sort: 'name-asc' })) },
+  {
+    query: computed(() => ({ q: catalogQ.value || undefined, pageSize: 8, sort: 'name-asc' })),
+    server: false,
+    lazy: true,
+  },
 )
 
 const catalogItems = computed(() => catalogData.value?.items ?? [])
 
 const serviceLogId = computed(() => invoice.value?.serviceLogId ?? null)
 
-const { data: serviceLogData } = await useFetch<{
+const { data: serviceLogData } = useFetch<{
   log: {
     id: string
     logNumber: number
@@ -255,7 +303,7 @@ const { data: serviceLogData } = await useFetch<{
   files: { id: string }[]
 }>(
   () => (serviceLogId.value ? `/api/service-logs/${serviceLogId.value}` : null),
-  { watch: [serviceLogId] },
+  { watch: [serviceLogId], server: false, lazy: true },
 )
 
 const hydratingFromServer = ref(false)
@@ -414,7 +462,7 @@ async function addEmptyLine() {
   busy.value = true
   saveError.value = ''
   try {
-    await $fetch(`/api/invoices/${id}/line-items`, {
+    const { line } = await $fetch<{ line: LineItem }>(`/api/invoices/${id}/line-items`, {
       method: 'POST',
       body: {
         lineType: 'labor',
@@ -424,10 +472,15 @@ async function addEmptyLine() {
         sortOrder: lines.value.length,
       },
     })
-    await refreshInvoice()
+    lines.value = [...lines.value, { ...line }]
+    void refreshInvoice()
   }
   catch (e: unknown) {
-    saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not add line'
+    const err = e as { data?: { code?: string, message?: string } }
+    if (err.data?.code === 'EDIT_SESSION_ACTIVE' && err.data?.message?.includes('locked')) {
+      await acquireEditSession()
+    }
+    saveError.value = err.data?.message ?? 'Could not add line'
   }
   finally {
     busy.value = false
@@ -439,7 +492,7 @@ async function addFromCatalog(item: CatalogRow) {
   busy.value = true
   saveError.value = ''
   try {
-    await $fetch(`/api/invoices/${id}/line-items`, {
+    const { line } = await $fetch<{ line: LineItem }>(`/api/invoices/${id}/line-items`, {
       method: 'POST',
       body: {
         lineType: catalogTypeToLineType(item.itemType),
@@ -450,7 +503,8 @@ async function addFromCatalog(item: CatalogRow) {
         sortOrder: lines.value.length,
       },
     })
-    await refreshInvoice()
+    lines.value = [...lines.value, { ...line }]
+    void refreshInvoice()
   }
   catch (e: unknown) {
     saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not add catalog item'
@@ -466,7 +520,8 @@ async function removeLine(lineId: string) {
   saveError.value = ''
   try {
     await $fetch(`/api/invoices/${id}/line-items/${lineId}`, { method: 'DELETE' })
-    await refreshInvoice()
+    lines.value = lines.value.filter(line => line.id !== lineId)
+    void refreshInvoice()
   }
   catch (e: unknown) {
     saveError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not remove line'
@@ -522,8 +577,9 @@ const aiBusy = ref(false)
 const aiError = ref('')
 const aiPopAnchor = ref<{ x: number, y: number } | null>(null)
 
-const { data: invoiceAiData, refresh: refreshInvoiceAi } = await useFetch<{ suggestions: AiSuggestionRow[] }>(
-  `/api/invoices/${id}/ai-suggestions`,
+const { data: invoiceAiData, refresh: refreshInvoiceAi } = useFetch<{ suggestions: AiSuggestionRow[] }>(
+  () => (idValid.value ? `/api/invoices/${id}/ai-suggestions` : null),
+  { server: false, lazy: true, watch: false },
 )
 
 const invoiceAiSuggestions = computed(() => invoiceAiData.value?.suggestions ?? [])
@@ -695,11 +751,14 @@ const aiPopStyle = computed(() => {
 
 <template>
   <section class="page active">
-    <div v-if="pending && !invoice && !error" class="cp-state">Loading invoice…</div>
+    <div v-if="!auth.loaded || (pending && !invoice && !loadErrorMessage)" class="cp-state">Loading invoice…</div>
 
-    <div v-else-if="error" class="card" style="padding:24px;">
-      <p>Invoice not found.</p>
-      <NuxtLink to="/invoices" class="btn">Back to invoices</NuxtLink>
+    <div v-else-if="loadErrorMessage" class="card" style="padding:24px;">
+      <p style="margin:0 0 12px; color:#dc2626;">{{ loadErrorMessage }}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button v-if="idValid" type="button" class="btn" @click="refresh()">Retry</button>
+        <NuxtLink to="/invoices" class="btn primary">Back to invoices</NuxtLink>
+      </div>
     </div>
 
     <template v-else-if="invoice">

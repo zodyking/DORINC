@@ -132,6 +132,9 @@ export function useEditingSession(entityType: 'invoice' | 'estimate', entityId: 
   }
 
   onMounted(async () => {
+    if (!auth.loaded) {
+      await auth.fetchMe()
+    }
     if (!auth.can('invoices.update.all')) {
       loading.value = false
       return
