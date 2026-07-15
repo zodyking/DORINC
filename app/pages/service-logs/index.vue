@@ -45,7 +45,7 @@ const query = computed(() => ({
   sort: fSort.value,
 }))
 
-const { data } = await useFetch<{ items: ServiceLogRow[], total: number }>(
+const { data } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
   { query },
 )

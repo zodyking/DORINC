@@ -65,13 +65,15 @@ interface RecentInvoiceRow {
   balanceDue: string
 }
 
-const { data, refresh, error } = await useFetch<{
+const customerId = computed(() => String(route.params.id || ''))
+
+const { data, refresh, error } = useClientFetch<{
   customer: Customer
   contacts: Contact[]
   history: HistoryRow[]
   billing: BillingSummary
   recentInvoices: RecentInvoiceRow[]
-}>(`/api/customers/${route.params.id}`)
+}>(() => `/api/customers/${customerId.value}`, { watch: [customerId] })
 
 const customer = computed(() => data.value?.customer)
 const contacts = computed(() => data.value?.contacts ?? [])
@@ -104,9 +106,12 @@ interface VehicleRow {
   archivedAt: string | null
 }
 
-const { data: vehiclesData } = await useFetch<{ items: VehicleRow[], total: number }>(
+const { data: vehiclesData } = useClientFetch<{ items: VehicleRow[], total: number }>(
   '/api/vehicles',
-  { query: { customerId: route.params.id as string, pageSize: 100, sort: 'tag-asc' } },
+  {
+    query: computed(() => ({ customerId: customerId.value, pageSize: 100, sort: 'tag-asc' })),
+    watch: [customerId],
+  },
 )
 const vehicles = computed(() => vehiclesData.value?.items ?? [])
 
@@ -140,11 +145,13 @@ interface CredentialEmailRow {
   sentByName: string
 }
 
-const { data: portalData, refresh: refreshPortal } = await useFetch<PortalAccessSummary>(
-  `/api/customers/${route.params.id}/portal-access`,
+const { data: portalData, refresh: refreshPortal } = useClientFetch<PortalAccessSummary>(
+  () => `/api/customers/${customerId.value}/portal-access`,
+  { watch: [customerId] },
 )
-const { data: credentialHistory, refresh: refreshCredentialHistory } = await useFetch<{ items: CredentialEmailRow[] }>(
-  `/api/customers/${route.params.id}/credential-email-history`,
+const { data: credentialHistory, refresh: refreshCredentialHistory } = useClientFetch<{ items: CredentialEmailRow[] }>(
+  () => `/api/customers/${customerId.value}/credential-email-history`,
+  { watch: [customerId] },
 )
 
 const portal = computed(() => portalData.value)

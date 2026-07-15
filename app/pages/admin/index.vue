@@ -133,7 +133,7 @@ interface SuspiciousAlertItem {
   createdAt: string
 }
 
-const { data: suspiciousAlerts, refresh: refreshSuspiciousAlerts } = await useFetch<{ items: SuspiciousAlertItem[] }>(
+const { data: suspiciousAlerts, refresh: refreshSuspiciousAlerts } = useClientFetch<{ items: SuspiciousAlertItem[] }>(
   '/api/admin/security/suspicious-activity',
 )
 
@@ -207,7 +207,7 @@ async function dismissSuspiciousAlert(alertId: string) {
   }
 }
 
-const { data: status, refresh, error } = await useFetch<SystemStatus>('/api/admin/system/status')
+const { data: status, refresh, error } = useClientFetch<SystemStatus>('/api/admin/system/status')
 
 const monitorStatus = computed(() => {
   if (!status.value) return null
@@ -236,7 +236,7 @@ const securityTone = computed(() => {
 })
 
 const canManageAi = computed(() => auth.can('ai.admin.all'))
-const { data: aiData, refresh: refreshAi } = await useFetch<{
+const { data: aiData, refresh: refreshAi } = useClientFetch<{
   settings: AiSettingsView
   usage: AiUsageSummary
   spendCaps: AiSpendCaps
@@ -245,7 +245,7 @@ const { data: aiData, refresh: refreshAi } = await useFetch<{
   { immediate: canManageAi.value },
 )
 
-const { data: usageLogs, refresh: refreshUsageLogs } = await useFetch<{
+const { data: usageLogs, refresh: refreshUsageLogs } = useClientFetch<{
   items: AiUsageLogItem[]
   total: number
 }>('/api/admin/ai/usage', { immediate: canManageAi.value })

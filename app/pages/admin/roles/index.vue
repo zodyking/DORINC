@@ -12,7 +12,7 @@ interface RoleRow {
   createdAt: string
 }
 
-const { data, refresh } = await useFetch<{ roles: RoleRow[] }>('/api/admin/roles')
+const { data, refresh } = useClientFetch<{ roles: RoleRow[] }>('/api/admin/roles')
 
 const roles = computed(() => data.value?.roles ?? [])
 const systemRoles = computed(() => roles.value.filter(r => r.isSystem))

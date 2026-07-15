@@ -40,7 +40,7 @@ const query = computed(() => ({
   includeArchived: showArchived.value || undefined,
 }))
 
-const { data } = await useFetch<{ items: CustomerRow[], total: number }>(
+const { data } = useClientFetch<{ items: CustomerRow[], total: number }>(
   '/api/customers',
   { query },
 )

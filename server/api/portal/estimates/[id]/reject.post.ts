@@ -6,13 +6,13 @@ import { useDb } from '../../../../db/client'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
 import { requirePortalCustomer } from '../../../../utils/require-portal'
-import { validateBody } from '../../../../utils/validate'
+import { validateBody, validateParams } from '../../../../utils/validate'
 import { estimatePortalResponseSchema } from '../../../../../shared/validators/estimates'
+import { idParamSchema } from '../../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
-  const id = getRouterParam(event, 'id')
-  if (!id) throw apiError(event, 'VALIDATION_ERROR', 'Estimate id is required')
+  const { id } = validateParams(event, idParamSchema)
 
   const body = await validateBody(event, estimatePortalResponseSchema)
 

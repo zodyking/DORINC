@@ -42,15 +42,15 @@ interface PermissionGroup {
 const route = useRoute()
 const auth = useAuthStore()
 
-const { data, refresh, error } = await useFetch<{ user: UserDetail, activity: ActivityRow[] }>(
+const { data, refresh, error } = useClientFetch<{ user: UserDetail, activity: ActivityRow[] }>(
   `/api/admin/users/${route.params.id}`,
 )
 
-const { data: permData, refresh: refreshPerms } = await useFetch<UserPermissions>(
+const { data: permData, refresh: refreshPerms } = useClientFetch<UserPermissions>(
   `/api/admin/users/${route.params.id}/permissions`,
 )
 
-const { data: allPermsData } = await useFetch<{ permissions: PermissionGroup }>(
+const { data: allPermsData } = useClientFetch<{ permissions: PermissionGroup }>(
   '/api/admin/roles/permissions',
 )
 
@@ -280,12 +280,12 @@ async function deleteUser() {
 async function savePermissions() {
   const allow: string[] = []
   const deny: string[] = []
-  
+
   for (const [key, state] of Object.entries(overrideStates.value)) {
     if (state === 'allow') allow.push(key)
     if (state === 'deny') deny.push(key)
   }
-  
+
   await run(
     () => $fetch(`/api/admin/users/${route.params.id}/permissions`, {
       method: 'PUT',
@@ -293,6 +293,11 @@ async function savePermissions() {
     }),
     'Permission overrides saved',
   )
+}
+
+async function savePermissionsAndClose() {
+  await savePermissions()
+  if (!errorMsg.value) showPermissionsModal.value = false
 }
 
 // Key permissions to show at the top
@@ -604,7 +609,7 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
             <button
               class="btn primary"
               :disabled="busy || !permissionsDirty"
-              @click="savePermissions(); showPermissionsModal = false"
+              @click="savePermissionsAndClose()"
             >
               {{ busy ? 'Saving...' : 'Save overrides' }}
             </button>

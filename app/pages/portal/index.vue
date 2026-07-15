@@ -38,7 +38,7 @@ interface PortalDashboardPayload {
   }>
 }
 
-const { data: dash, error } = await useFetch<PortalDashboardPayload>('/api/portal/dashboard')
+const { data: dash, error } = useClientFetch<PortalDashboardPayload>('/api/portal/dashboard')
 </script>
 
 <template>

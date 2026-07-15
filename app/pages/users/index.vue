@@ -11,7 +11,7 @@ interface UserRow {
   createdAt: string
 }
 
-const { data, refresh } = await useFetch<{ items: UserRow[], total: number }>(
+const { data, refresh } = useClientFetch<{ items: UserRow[], total: number }>(
   '/api/admin/users',
   { query: { pageSize: 100 } },
 )

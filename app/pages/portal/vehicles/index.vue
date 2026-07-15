@@ -18,7 +18,7 @@ interface PortalVehicleRow {
   lastServiceDate: string | null
 }
 
-const { data, error } = await useFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
+const { data, error } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
 
 const items = computed(() => data.value?.items ?? [])
 

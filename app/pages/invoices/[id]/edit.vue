@@ -326,7 +326,8 @@ watch(invoice, (inv) => {
 }, { immediate: true })
 
 watch(paymentTerms, (terms) => {
-  if (editable.value) dueDate.value = dueDateFromTerms(invoiceDate.value, terms)
+  if (hydratingFromServer.value || !editable.value) return
+  dueDate.value = dueDateFromTerms(invoiceDate.value, terms)
 })
 
 if (import.meta.client) {

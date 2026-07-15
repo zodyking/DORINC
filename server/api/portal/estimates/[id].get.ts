@@ -5,11 +5,12 @@ import {
 import { useDb } from '../../../db/client'
 import { apiError } from '../../../utils/api-error'
 import { requirePortalCustomer } from '../../../utils/require-portal'
+import { validateParams } from '../../../utils/validate'
+import { idParamSchema } from '../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
-  const id = getRouterParam(event, 'id')
-  if (!id) throw apiError(event, 'VALIDATION_ERROR', 'Estimate id is required')
+  const { id } = validateParams(event, idParamSchema)
 
   try {
     return await getPortalEstimateDetail(useDb(), user.customerId, id)

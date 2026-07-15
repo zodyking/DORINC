@@ -20,11 +20,11 @@ interface PermissionGroup {
 const route = useRoute()
 const auth = useAuthStore()
 
-const { data, refresh, error } = await useFetch<{ role: RoleDetail }>(
+const { data, refresh, error } = useClientFetch<{ role: RoleDetail }>(
   `/api/admin/roles/${route.params.id}`,
 )
 
-const { data: permData } = await useFetch<{ permissions: PermissionGroup }>(
+const { data: permData } = useClientFetch<{ permissions: PermissionGroup }>(
   '/api/admin/roles/permissions',
 )
 

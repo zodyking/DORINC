@@ -36,7 +36,10 @@ interface PortalEstimateDetail {
   }>
 }
 
-const { data: estimate, error, refresh } = await useFetch<PortalEstimateDetail>(() => `/api/portal/estimates/${id.value}`)
+const { data: estimate, error, pending, refresh } = useClientFetch<PortalEstimateDetail>(
+  () => `/api/portal/estimates/${id.value}`,
+  { watch: [id] },
+)
 
 const statusPill = computed(() => {
   if (!estimate.value) return { cls: 'pill gray', label: '—' }

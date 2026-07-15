@@ -45,7 +45,7 @@ const query = computed(() => ({
   pageSize: PAGE_SIZE,
 }))
 
-const { data, refresh, pending: loading } = await useFetch<{
+const { data, refresh, pending: loading } = useClientFetch<{
   items: DeletionRequestRow[]
   total: number
   pending: number
@@ -64,7 +64,7 @@ function clearFilters() {
 }
 
 const listCountLabel = computed(() => {
-  if (loading.value && !items.length) return 'Loading…'
+  if (loading.value && !items.value.length) return 'Loading…'
   const prefix = status.value === 'pending' ? 'Pending requests' : 'Request history'
   return `${prefix} · ${total.value}`
 })

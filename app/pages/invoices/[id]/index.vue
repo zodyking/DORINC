@@ -93,7 +93,7 @@ const {
   forceReleaseError,
 } = useEditingSessionStatus('invoice', id.value)
 
-const { data, refresh, error, pending } = useFetch<{
+const { data, refresh, error } = useFetch<{
   invoice: Invoice
   history: HistoryRow[]
   sendDelivery: {
@@ -134,7 +134,6 @@ watch([canRead, id], () => {
 const invoice = computed(() => data.value?.invoice)
 const history = computed(() => data.value?.history ?? [])
 const sendDelivery = computed(() => data.value?.sendDelivery)
-const pdfStatus = computed(() => data.value?.pdf)
 const lines = computed(() => invoice.value?.lineItems ?? [])
 const isPdfEligible = computed(() =>
   !!invoice.value && ['approved', 'sent', 'paid'].includes(invoice.value.status),
@@ -290,7 +289,7 @@ const summaryRows = computed(() => {
 </script>
 
 <template>
-  <section v-if="!auth.loaded || (canRead && pending && !invoice && !loadErrorMessage)" class="page active">
+  <section v-if="!auth.loaded || (canRead && idValid && !invoice && !loadErrorMessage)" class="page active">
     <div class="cp-state">Loading invoice…</div>
   </section>
 
@@ -660,6 +659,10 @@ const summaryRows = computed(() => {
         :can-generate-pdf="canGeneratePdf"
       />
     </div>
+  </section>
+
+  <section v-else class="page active">
+    <div class="cp-state">Invoice not found.</div>
   </section>
 </template>
 

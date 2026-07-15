@@ -4,12 +4,13 @@ import { useDb } from '../../../../db/client'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
 import { requirePortalCustomer } from '../../../../utils/require-portal'
+import { validateParams } from '../../../../utils/validate'
+import { idParamSchema } from '../../../../../shared/validators/common'
 
 /** Download official invoice PDF — scoped to the signed-in customer's invoices (P2-05). */
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
-  const id = getRouterParam(event, 'id')
-  if (!id) throw apiError(event, 'VALIDATION_ERROR', 'Invoice id is required')
+  const { id } = validateParams(event, idParamSchema)
 
   try {
     const { record, file } = await getPortalInvoicePdfDownload(useDb(), user.customerId, id)

@@ -24,7 +24,7 @@ interface PortalEstimateRow {
 
 const filter = ref<PortalEstimateFilter>('all')
 
-const { data, error } = await useFetch<{ items: PortalEstimateRow[] }>('/api/portal/estimates')
+const { data, error } = useClientFetch<{ items: PortalEstimateRow[] }>('/api/portal/estimates')
 
 const items = computed(() => data.value?.items ?? [])
 

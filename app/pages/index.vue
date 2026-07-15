@@ -2,7 +2,7 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 
 // Root router: first-run setup → wizard; signed in → workspace/portal; else login.
-const { data: setupStatus } = await useFetch<{ needsBootstrap: boolean }>('/api/setup/status')
+const { data: setupStatus } = useClientFetch<{ needsBootstrap: boolean }>('/api/setup/status')
 
 if (setupStatus.value?.needsBootstrap) {
   await navigateTo('/setup', { replace: true })

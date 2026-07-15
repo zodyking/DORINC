@@ -37,12 +37,13 @@ interface HistoryRow {
 
 const route = useRoute()
 const auth = useAuthStore()
+const vehicleId = computed(() => String(route.params.id || ''))
 
-const { data, refresh, error } = await useFetch<{
+const { data, refresh, error } = useClientFetch<{
   vehicle: Vehicle
   customer: { id: string, displayName: string } | null
   history: HistoryRow[]
-}>(`/api/vehicles/${route.params.id}`)
+}>(() => `/api/vehicles/${vehicleId.value}`, { watch: [vehicleId] })
 
 const vehicle = computed(() => data.value?.vehicle)
 const customer = computed(() => data.value?.customer)

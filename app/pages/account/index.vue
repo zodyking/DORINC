@@ -36,7 +36,7 @@ interface AccountDetail {
   sessions: AccountSession[]
 }
 
-const { data, refresh, error } = await useFetch<{ account: AccountDetail }>('/api/account')
+const { data, refresh, error } = useClientFetch<{ account: AccountDetail }>('/api/account')
 
 const account = computed(() => data.value?.account)
 

@@ -103,7 +103,7 @@ const auth = useAuthStore()
 const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
 const canCreateLog = computed(() => auth.can('service_logs.upload.own'))
 
-const { data: dash, error } = await useFetch<DashboardPayload>('/api/dashboard')
+const { data: dash, error, pending } = useClientFetch<DashboardPayload>('/api/dashboard')
 
 const showBilling = computed(() => dash.value?.view === 'billing' && dash.value.billing)
 const showMechanic = computed(() => dash.value?.view === 'mechanic' && dash.value.mechanic)
@@ -112,7 +112,9 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
 
 <template>
   <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
+    <div v-if="pending && !dash && !error" class="cp-state">Loading dashboard…</div>
+
+    <div v-else-if="error" class="card" style="padding:24px;">
       <p>Unable to load dashboard.</p>
     </div>
 
@@ -396,5 +398,7 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
         </div>
       </div>
     </template>
+
+    <div v-else class="cp-state">Unable to load dashboard data.</div>
   </section>
 </template>

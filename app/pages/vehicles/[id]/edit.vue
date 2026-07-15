@@ -25,9 +25,11 @@ interface Vehicle {
 
 const route = useRoute()
 const auth = useAuthStore()
+const vehicleId = computed(() => String(route.params.id || ''))
 
-const { data, error, refresh } = await useFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null }>(
-  `/api/vehicles/${route.params.id}`,
+const { data, error, refresh } = useClientFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null }>(
+  () => `/api/vehicles/${vehicleId.value}`,
+  { watch: [vehicleId] },
 )
 
 const v = computed(() => data.value?.vehicle)

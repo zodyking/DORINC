@@ -14,7 +14,7 @@ const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 const auth = useAuthStore()
 const { busy: resendBusy, message: resendMessage, error: resendError, resend, reset: resetResend } = useResendVerification()
 
-const { data: publicBusiness } = await useFetch<{ businessName: string }>('/api/public/business')
+const { data: publicBusiness } = useClientFetch<{ businessName: string }>('/api/public/business')
 const displayBusinessName = computed(() => {
   const name = publicBusiness.value?.businessName?.trim()
   return name || BRAND_NAME

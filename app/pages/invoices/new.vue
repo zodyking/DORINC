@@ -103,14 +103,14 @@ if (typeof route.query.customerId === 'string' && route.query.customerId) {
   customerId.value = route.query.customerId
 }
 
-const { data: customersData } = await useFetch<{ items: CustomerPick[] }>(
+const { data: customersData } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
   { query: { pageSize: 100, sort: 'name-asc' } },
 )
 
 const customerOptions = computed(() => customersData.value?.items ?? [])
 
-const { data: vehiclesData, refresh: refreshVehicles } = await useFetch<{ items: VehiclePick[] }>(
+const { data: vehiclesData, refresh: refreshVehicles } = useClientFetch<{ items: VehiclePick[] }>(
   '/api/vehicles',
   { query: computed(() => ({
     customerId: customerId.value || undefined,
@@ -119,7 +119,7 @@ const { data: vehiclesData, refresh: refreshVehicles } = await useFetch<{ items:
   })) },
 )
 
-const { data: serviceLogsData, refresh: refreshServiceLogs } = await useFetch<{ items: ServiceLogPick[] }>(
+const { data: serviceLogsData, refresh: refreshServiceLogs } = useClientFetch<{ items: ServiceLogPick[] }>(
   '/api/service-logs',
   {
     query: computed(() => ({

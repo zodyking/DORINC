@@ -32,7 +32,10 @@ interface PortalInvoiceDetail {
   }>
 }
 
-const { data: invoice, error } = await useFetch<PortalInvoiceDetail>(() => `/api/portal/invoices/${id.value}`)
+const { data: invoice, error, pending } = useClientFetch<PortalInvoiceDetail>(
+  () => `/api/portal/invoices/${id.value}`,
+  { watch: [id] },
+)
 
 const statusPill = computed(() => {
   if (!invoice.value) return { cls: 'pill gray', label: '—' }
@@ -54,7 +57,11 @@ function downloadPdf() {
 </script>
 
 <template>
-  <section v-if="error" class="page active">
+  <section v-if="pending && !invoice" class="page active">
+    <div class="empty">Loading invoice…</div>
+  </section>
+
+  <section v-else-if="error" class="page active">
     <div class="empty">Invoice not found or you do not have access.</div>
   </section>
 
@@ -103,7 +110,7 @@ function downloadPdf() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="line in invoice.lineItems" :key="line.id">
+              <tr v-for="line in (invoice.lineItems ?? [])" :key="line.id">
                 <td><span class="lead">{{ line.description }}</span></td>
                 <td class="num">{{ line.quantity }}</td>
                 <td class="num">{{ moneyDisplay(line.lineAmount) }}</td>

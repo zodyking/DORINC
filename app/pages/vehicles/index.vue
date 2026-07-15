@@ -52,7 +52,7 @@ const query = computed(() => ({
   includeArchived: showArchived.value || undefined,
 }))
 
-const { data, refresh } = await useFetch<{ items: VehicleRow[], total: number }>(
+const { data, refresh } = useClientFetch<{ items: VehicleRow[], total: number }>(
   '/api/vehicles',
   { query },
 )
@@ -90,7 +90,7 @@ async function runBulkVinDecode() {
   }
 }
 
-const { data: customersData } = await useFetch<{ items: { id: string, displayName: string }[] }>(
+const { data: customersData } = useClientFetch<{ items: { id: string, displayName: string }[] }>(
   '/api/customers',
   { query: { pageSize: 100, sort: 'name-asc' } },
 )

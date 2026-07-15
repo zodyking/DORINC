@@ -55,17 +55,17 @@ const query = computed(() => ({
   dateTo: dateTo.value || undefined,
 }))
 
-const { data: facets } = await useFetch<{ entityTypes: string[], actions: string[] }>(
+const { data: facets } = useClientFetch<{ entityTypes: string[], actions: string[] }>(
   '/api/audit-logs/facets',
   { immediate: canRead.value },
 )
 
-const { data: usersData } = await useFetch<{ items: UserOption[] }>(
+const { data: usersData } = useClientFetch<{ items: UserOption[] }>(
   '/api/admin/users',
   { query: { pageSize: 100 }, immediate: canRead.value && auth.can('users.read.all') },
 )
 
-const { data } = await useFetch<{ items: AuditLogRow[], total: number }>(
+const { data } = useClientFetch<{ items: AuditLogRow[], total: number }>(
   '/api/audit-logs',
   { query, immediate: canRead.value },
 )
@@ -221,7 +221,7 @@ const listCountLabel = computed(() => {
       </div>
     </div>
 
-    <p class="append-note">{{ subtitle }}</p>
+    <p class="append-note">Append-only audit log — entries cannot be deleted.</p>
   </section>
 </template>
 

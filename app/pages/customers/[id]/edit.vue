@@ -3,9 +3,6 @@ import type { CustomerFormValue } from '~/components/customers/CustomerForm.vue'
 
 definePageMeta({ layout: 'staff' })
 
-const route = useRoute()
-const auth = useAuthStore()
-
 interface Address { line1?: string, city?: string, state?: string, zip?: string }
 interface Customer {
   id: string
@@ -21,7 +18,14 @@ interface Customer {
   archivedAt: string | null
 }
 
-const { data, error, refresh } = await useFetch<{ customer: Customer }>(`/api/customers/${route.params.id}`)
+const route = useRoute()
+const auth = useAuthStore()
+const customerId = computed(() => String(route.params.id || ''))
+
+const { data, error, refresh } = useClientFetch<{ customer: Customer }>(
+  () => `/api/customers/${customerId.value}`,
+  { watch: [customerId] },
+)
 
 const customer = computed(() => data.value?.customer)
 const canArchive = computed(() => auth.can('customers.archive.all'))

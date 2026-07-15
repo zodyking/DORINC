@@ -9,7 +9,7 @@ import {
 } from '~/utils/invoice-payment-ui'
 import { moneyDisplay } from '~/utils/invoices-ui'
 
-definePageMeta({ layout: 'staff' })
+definePageMeta({ layout: 'staff', permission: 'invoices.record_payment.all' })
 
 interface InvoiceSummary {
   id: string
@@ -25,11 +25,14 @@ const route = useRoute()
 const auth = useAuthStore()
 const id = route.params.id as string
 
-if (import.meta.client && auth.loaded && !auth.can('invoices.record_payment.all')) {
-  navigateTo(`/invoices/${id}`)
-}
+const { data, error, pending, refresh } = useClientFetch<{ invoice: InvoiceSummary }>(
+  () => `/api/invoices/${id}`,
+  { immediate: false, watch: false },
+)
 
-const { data, error } = await useFetch<{ invoice: InvoiceSummary }>(`/api/invoices/${id}`)
+onMounted(() => {
+  if (auth.can('invoices.record_payment.all')) void refresh()
+})
 
 const invoice = computed(() => data.value?.invoice)
 const canPay = computed(() =>
@@ -91,9 +94,14 @@ async function submitPayment() {
 
 <template>
   <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
-      <p>Invoice not found.</p>
-      <NuxtLink to="/invoices" class="btn">Back to invoices</NuxtLink>
+    <div v-if="pending && !invoice" class="cp-state">Loading invoice…</div>
+
+    <div v-else-if="error" class="card" style="padding:24px;">
+      <p>{{ (error as { data?: { message?: string } })?.data?.message ?? 'Invoice not found.' }}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+        <button type="button" class="btn" @click="refresh()">Retry</button>
+        <NuxtLink to="/invoices" class="btn">Back to invoices</NuxtLink>
+      </div>
     </div>
 
     <template v-else-if="invoice">
@@ -190,5 +198,7 @@ async function submitPayment() {
         </div>
       </div>
     </template>
+
+    <div v-else class="cp-state">Invoice not found.</div>
   </section>
 </template>

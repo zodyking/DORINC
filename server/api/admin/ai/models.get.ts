@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   }
   catch (err) {
     if (err instanceof AiProviderServiceError) {
-      throw apiError(event, 'BAD_GATEWAY', err.message)
+      throw apiError(event, 'UPSTREAM_ERROR', err.message)
     }
     throw err
   }

@@ -67,7 +67,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const id = route.params.id as string
 
-const { data, refresh, error } = await useFetch<{
+const { data, refresh, error } = useClientFetch<{
   log: ServiceLog
   files: FileMeta[]
   history: HistoryRow[]
@@ -102,7 +102,7 @@ interface AiSuggestionRow {
   createdAt: string
 }
 
-const { data: aiData, refresh: refreshAi } = await useFetch<{ suggestions: AiSuggestionRow[] }>(
+const { data: aiData, refresh: refreshAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
   `/api/service-logs/${id}/ai-suggestions`,
 )
 

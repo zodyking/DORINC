@@ -28,7 +28,7 @@ interface PortalMePayload {
   }
 }
 
-const { data, error } = await useFetch<PortalMePayload>('/api/portal/me')
+const { data, error } = useClientFetch<PortalMePayload>('/api/portal/me')
 
 const currentPassword = ref('')
 const newPassword = ref('')

@@ -46,17 +46,17 @@ const query = computed(() => ({
   sort: fSort.value,
 }))
 
-const { data, refresh, pending, error: listError } = await useFetch<{ items: CatalogItemRow[], total: number }>(
+const { data, refresh, pending, error: listError } = useClientFetch<{ items: CatalogItemRow[], total: number }>(
   '/api/catalog/items',
   { query },
 )
 
-const { data: allCount, refresh: refreshAllCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
-const { data: partCount, refresh: refreshPartCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
-const { data: laborCount, refresh: refreshLaborCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
-const { data: feeCount, refresh: refreshFeeCount } = await useFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
+const { data: allCount, refresh: refreshAllCount } = useClientFetch<{ total: number }>('/api/catalog/items', { query: { pageSize: 1 } })
+const { data: partCount, refresh: refreshPartCount } = useClientFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'part', pageSize: 1 } })
+const { data: laborCount, refresh: refreshLaborCount } = useClientFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'labor', pageSize: 1 } })
+const { data: feeCount, refresh: refreshFeeCount } = useClientFetch<{ total: number }>('/api/catalog/items', { query: { itemType: 'fee', pageSize: 1 } })
 
-const { data: categoriesData, refresh: refreshCategories } = await useFetch<{ items: { id: string, name: string }[] }>(
+const { data: categoriesData, refresh: refreshCategories } = useClientFetch<{ items: { id: string, name: string }[] }>(
   '/api/catalog/categories',
 )
 

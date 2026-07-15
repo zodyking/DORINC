@@ -189,7 +189,7 @@ onMounted(() => {
 
 onBeforeUnmount(stopWelcomeAutoplay)
 
-const { data: setupStatus, refresh: refreshStatus } = await useFetch<{
+const { data: setupStatus, refresh: refreshStatus } = useClientFetch<{
   needsBootstrap: boolean
   progress: { database: boolean, smtp: boolean, security: boolean, ai: boolean }
   envLocked: { security: boolean, appUrl: boolean, smtp: boolean }

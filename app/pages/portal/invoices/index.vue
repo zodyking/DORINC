@@ -25,7 +25,7 @@ interface PortalInvoiceRow {
 
 const filter = ref<PortalInvoiceFilter>('all')
 
-const { data, error } = await useFetch<{ items: PortalInvoiceRow[] }>('/api/portal/invoices')
+const { data, error } = useClientFetch<{ items: PortalInvoiceRow[] }>('/api/portal/invoices')
 
 const items = computed(() => data.value?.items ?? [])
 
