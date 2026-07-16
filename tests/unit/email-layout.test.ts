@@ -77,6 +77,23 @@ describe('email layout', () => {
     expect(mail.html).not.toContain('mobile-block')
   })
 
+  it('omits the footer completely when all footer content is disabled', () => {
+    const html = wrapEmailHtml({
+      bodyHtml: '<p>Hello</p>',
+      footerNote: null,
+      footerLinks: false,
+      footerAddress: false,
+      brand: {
+        brandName: 'Acme Shop',
+        brandLegal: 'Acme Shop LLC',
+      },
+    })
+
+    expect(html).not.toContain('<!-- Footer -->')
+    expect(html).not.toContain('Acme Shop LLC')
+    expect(html).not.toContain('Notification settings')
+  })
+
   it('still supports legacy body helpers', () => {
     const html = [
       emailButton('https://example.com', 'Go'),

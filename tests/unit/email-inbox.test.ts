@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildReferences,
   buildStaffEmailFooter,
+  buildStaffEmailHtmlFooter,
   extractEmailAddresses,
   normalizeEmailAddress,
   subjectWithRePrefix,
@@ -31,6 +32,25 @@ describe('email-thread helpers', () => {
   it('formats staff footer with first name and last initial', () => {
     expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Jane D.')
     expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Devon Onsite Repairs Inc')
+  })
+
+  it('builds one polished HTML signature with linked contact details', () => {
+    const html = buildStaffEmailHtmlFooter('Jane Doe', {
+      brandName: 'Acme Shop',
+      brandLegal: 'Acme Shop LLC',
+      brandTagline: 'Accounting workspace',
+      logoInitial: 'A',
+      appUrl: 'https://app.example.com',
+      phone: '(555) 555 0100',
+      email: 'hello@acme.test',
+      website: 'https://acme.test/',
+    })
+
+    expect(html).toContain('Jane D.')
+    expect(html.match(/Acme Shop LLC/g)).toHaveLength(1)
+    expect(html).toContain('mailto:hello@acme.test')
+    expect(html).toContain('tel:5555550100')
+    expect(html).toContain('>acme.test<')
   })
 })
 

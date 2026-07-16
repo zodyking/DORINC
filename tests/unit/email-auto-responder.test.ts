@@ -27,6 +27,8 @@ describe('customer auto-responder', () => {
     expect(mail.html).toContain('We got your email')
     expect(mail.html).toContain('Thanks for reaching out.')
     expect(mail.text).toContain('Pat')
+    expect(mail.html).not.toContain('Notification settings')
+    expect(mail.html.match(/Acme Shop LLC/g)).toHaveLength(1)
   })
 
   it('skips automated inbound messages', () => {
