@@ -142,148 +142,19 @@ async function saveLogEdits() {
 }
 
 const imageFiles = computed(() => files.value.filter(f => f.mimeType.startsWith('image/')))
-const selectedFileId = ref<string | null>(null)
-const lightboxOpen = ref(false)
+const otherFiles = computed(() => files.value.filter(f => !f.mimeType.startsWith('image/')))
+const galleryIndex = ref(0)
 
 watch(imageFiles, (imgs) => {
-  if (imgs.length && !selectedFileId.value) selectedFileId.value = imgs[0]!.id
-}, { immediate: true })
-
-const selectedFile = computed(() => imageFiles.value.find(f => f.id === selectedFileId.value) ?? imageFiles.value[0])
-
-interface AiSuggestionRow {
-  id: string
-  status: 'pending' | 'accepted' | 'edited' | 'rejected'
-  featureType: string
-  originalContent: Record<string, unknown> | null
-  suggestedContent: Record<string, unknown>
-  createdAt: string
-}
-
-const { data: aiData, refresh: refreshAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
-  `/api/service-logs/${id}/ai-suggestions`,
-)
-
-const aiSuggestions = computed(() => aiData.value?.suggestions ?? [])
-
-const pendingExtraction = computed(() => {
-  const fileId = selectedFile.value?.id
-  const pending = aiSuggestions.value.filter(s => s.status === 'pending' && s.featureType === 'service_log_extraction')
-  if (!fileId) return pending[0] ?? null
-  return pending.find((s) => {
-    const fid = s.suggestedContent.fileId as string | undefined
-    return !fid || fid === fileId
-  }) ?? pending[0] ?? null
-})
-
-const extractBusy = ref(false)
-const extractError = ref('')
-const editComplaint = ref('')
-const editInternal = ref('')
-const editDraftJson = ref('')
-
-watch(pendingExtraction, (s) => {
-  if (!s) {
-    editComplaint.value = ''
-    editInternal.value = ''
-    editDraftJson.value = ''
+  if (!imgs.length) {
+    galleryIndex.value = 0
     return
   }
-  const c = s.suggestedContent as { complaint?: string, internalNotes?: string, draftLineItems?: unknown[] }
-  editComplaint.value = c.complaint ?? ''
-  editInternal.value = c.internalNotes ?? ''
-  editDraftJson.value = c.draftLineItems?.length
-    ? JSON.stringify(c.draftLineItems, null, 2)
-    : ''
+  if (galleryIndex.value >= imgs.length) galleryIndex.value = 0
 }, { immediate: true })
 
-let aiPollTimer: ReturnType<typeof setInterval> | null = null
-let aiPollAttempts = 0
-const AI_POLL_MAX = 60
-
-function stopAiPoll() {
-  if (aiPollTimer) {
-    clearInterval(aiPollTimer)
-    aiPollTimer = null
-  }
-  aiPollAttempts = 0
-}
-
-function startAiPoll() {
-  stopAiPoll()
-  aiPollTimer = setInterval(async () => {
-    aiPollAttempts++
-    await refreshAi()
-    if (pendingExtraction.value) {
-      stopAiPoll()
-    }
-    else if (aiPollAttempts >= AI_POLL_MAX) {
-      extractError.value = 'AI extraction timed out — enter details manually or try again'
-      stopAiPoll()
-    }
-  }, 2000)
-}
-
-onBeforeUnmount(() => stopAiPoll())
-
-async function runExtraction() {
-  if (!canExtract.value) return
-  extractBusy.value = true
-  extractError.value = ''
-  try {
-    await $fetch(`/api/service-logs/${id}/ai-extract`, {
-      method: 'POST',
-      body: { fileId: selectedFileId.value ?? undefined },
-    })
-    startAiPoll()
-    await refreshAi()
-  }
-  catch (e: unknown) {
-    extractError.value = (e as { data?: { message?: string } })?.data?.message ?? 'AI extraction failed — enter details manually'
-  }
-  finally {
-    extractBusy.value = false
-  }
-}
-
-function buildExtractionContent() {
-  let draftLineItems: unknown[] | undefined
-  if (editDraftJson.value.trim()) {
-    draftLineItems = JSON.parse(editDraftJson.value) as unknown[]
-  }
-  return {
-    complaint: editComplaint.value || null,
-    internalNotes: editInternal.value || null,
-    draftLineItems,
-    fileId: selectedFileId.value ?? undefined,
-  }
-}
-
-async function reviewExtraction(action: 'accept' | 'edit' | 'reject') {
-  const suggestion = pendingExtraction.value
-  if (!suggestion) return
-  extractBusy.value = true
-  extractError.value = ''
-  try {
-    const body: Record<string, unknown> = { action }
-    if (action === 'edit' || action === 'accept') {
-      body.content = action === 'edit' ? buildExtractionContent() : suggestion.suggestedContent
-    }
-    await $fetch(`/api/ai/suggestions/${suggestion.id}/review`, { method: 'POST', body })
-    await Promise.all([refresh(), refreshAi()])
-  }
-  catch (e: unknown) {
-    if (action === 'edit' && (e as Error).message?.includes('JSON')) {
-      extractError.value = 'Draft line items must be valid JSON'
-    }
-    else {
-      extractError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Review failed'
-    }
-  }
-  finally {
-    extractBusy.value = false
-  }
-}
+const selectedFileId = computed(() => imageFiles.value[galleryIndex.value]?.id ?? null)
+const aiModalOpen = ref(false)
 
 const busy = ref(false)
 const actionError = ref('')
@@ -326,13 +197,13 @@ async function convertToInvoice() {
   }
 }
 
-function openLightbox(fileId: string) {
-  selectedFileId.value = fileId
-  lightboxOpen.value = true
-}
-
 function previewUrl(fileId: string) {
   return `/api/files/${fileId}/preview`
+}
+
+function openAiExtraction() {
+  if (!canExtract.value || !imageFiles.value.length) return
+  aiModalOpen.value = true
 }
 
 const pill = computed(() => log.value
@@ -356,6 +227,15 @@ const pill = computed(() => log.value
         / {{ vehicleTag(log.vehicle) }} · {{ log.customerName }}
       </template>
       <template #actions>
+        <button
+          v-if="canExtract && imageFiles.length"
+          type="button"
+          class="btn"
+          :disabled="busy"
+          @click="openAiExtraction"
+        >
+          ✦ Extract from image
+        </button>
         <button
           v-if="canReview && log.status === 'in_review'"
           class="btn"
@@ -480,101 +360,33 @@ const pill = computed(() => log.value
 
     <div class="cols sl-detail-cols">
       <div class="stack">
-        <div v-if="imageFiles.length" class="card sl-review-split">
-          <div class="chead"><h3>Image review</h3></div>
-          <div class="cbody sl-review-body">
-            <div class="sl-review-main">
-              <img
-                v-if="selectedFile"
-                :src="previewUrl(selectedFile.id)"
-                :alt="selectedFile.originalFilename"
-                class="sl-review-img"
-              >
-            </div>
-            <div class="sl-review-side">
-              <div class="photos sl-review-thumbs">
-                <button
-                  v-for="f in imageFiles"
-                  :key="f.id"
-                  type="button"
-                  class="photo sl-review-thumb"
-                  :class="{ on: f.id === selectedFile?.id }"
-                  @click="selectedFileId = f.id"
-                >
-                  <img :src="previewUrl(f.id)" :alt="f.originalFilename">
-                </button>
-              </div>
-              <p v-if="log.complaint" style="margin:12px 0 0; font-size:13px; color:#475569; line-height:1.55;">
-                <b style="display:block; font-size:11px; color:#94a3b8; margin-bottom:4px;">COMPLAINT</b>
-                {{ log.complaint }}
-              </p>
-
-              <div v-if="canExtract" class="sl-ai-panel">
-                <div class="sl-ai-head">
-                  <b>✦ AI extraction</b>
-                  <button
-                    type="button"
-                    class="btn sm"
-                    :disabled="extractBusy || !imageFiles.length"
-                    @click="runExtraction"
-                  >
-                    {{ extractBusy && !pendingExtraction ? 'Running…' : 'Extract from image' }}
-                  </button>
-                </div>
-                <p v-if="extractError" class="help" style="color:#dc2626; margin:0 0 8px;">{{ extractError }}</p>
-                <p v-else-if="!pendingExtraction" class="help" style="margin:0;">
-                  Suggest fields from the selected photo — accept, edit, or reject. Manual entry always works if AI fails.
-                </p>
-
-                <div v-if="pendingExtraction" class="sl-review">
-                  <div class="r stack">
-                    <span class="k">Suggested complaint</span>
-                    <textarea v-model="editComplaint" rows="2" class="sl-ai-field" />
-                  </div>
-                  <div class="r stack">
-                    <span class="k">Suggested internal notes</span>
-                    <textarea v-model="editInternal" rows="2" class="sl-ai-field" />
-                  </div>
-                  <div class="r stack">
-                    <span class="k">Draft lines (JSON)</span>
-                    <textarea v-model="editDraftJson" rows="3" class="sl-ai-field mono" placeholder="[]" />
-                  </div>
-                  <div class="sl-ai-acts">
-                    <button type="button" class="btn sm primary" :disabled="extractBusy" @click="reviewExtraction('accept')">
-                      Accept
-                    </button>
-                    <button type="button" class="btn sm" :disabled="extractBusy" @click="reviewExtraction('edit')">
-                      Accept with edits
-                    </button>
-                    <button type="button" class="btn sm" :disabled="extractBusy" @click="reviewExtraction('reject')">
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div v-if="imageFiles.length" class="card">
+          <div class="chead">
+            <h3>Photos · {{ imageFiles.length }}</h3>
+          </div>
+          <div class="cbody">
+            <ServiceLogImageGallery v-model="galleryIndex" :files="imageFiles" />
+            <p v-if="log.complaint" style="margin:14px 0 0; font-size:13px; color:#475569; line-height:1.55;">
+              <b style="display:block; font-size:11px; color:#94a3b8; margin-bottom:4px;">COMPLAINT</b>
+              {{ log.complaint }}
+            </p>
           </div>
         </div>
 
-        <div class="card">
-          <div class="chead"><h3>Uploaded files · {{ files.length }}</h3></div>
+        <div v-if="otherFiles.length" class="card">
+          <div class="chead"><h3>Other files · {{ otherFiles.length }}</h3></div>
           <div class="cbody">
             <div class="photos">
-              <button
-                v-for="f in files"
+              <a
+                v-for="f in otherFiles"
                 :key="f.id"
-                type="button"
+                :href="previewUrl(f.id)"
+                target="_blank"
+                rel="noopener"
                 class="photo"
-                @click="f.mimeType.startsWith('image/') ? openLightbox(f.id) : undefined"
               >
-                <img
-                  v-if="f.mimeType.startsWith('image/')"
-                  :src="previewUrl(f.id)"
-                  :alt="f.originalFilename"
-                  style="width:100%; height:100%; object-fit:cover; border-radius:10px;"
-                >
-                <span v-else>{{ fileThumbEmoji(f.mimeType, f.fileKind) }}</span>
-              </button>
+                <span>{{ fileThumbEmoji(f.mimeType, f.fileKind) }}</span>
+              </a>
             </div>
           </div>
         </div>
@@ -700,84 +512,13 @@ const pill = computed(() => log.value
       <span v-if="log.invoiceId" class="help" style="margin-left:auto;">Linked to an invoice — delete the invoice first or unlink before removing this log.</span>
     </div>
 
-    <div class="lightbox" :class="{ open: lightboxOpen }" @click="lightboxOpen = false">
-      <div class="inner" @click.stop>
-        <img
-          v-if="selectedFile"
-          :src="previewUrl(selectedFile.id)"
-          :alt="selectedFile.originalFilename"
-          style="max-width:100%; max-height:70vh; display:block; margin:0 auto;"
-        >
-        <p style="margin:12px 0 0; text-align:center; font-size:13px; color:#64748b;">{{ selectedFile?.originalFilename }}</p>
-      </div>
-    </div>
+    <ServiceLogAiExtractModal
+      :open="aiModalOpen"
+      :service-log-id="id"
+      :selected-file-id="selectedFileId"
+      :can-extract="canExtract"
+      @close="aiModalOpen = false"
+      @refreshed="refresh()"
+    />
   </section>
 </template>
-
-<style scoped>
-.sl-review-body {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-.sl-review-main {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-  min-height: 240px;
-  display: grid;
-  place-items: center;
-}
-.sl-review-img {
-  width: 100%;
-  max-height: 420px;
-  object-fit: contain;
-  display: block;
-}
-.sl-review-thumbs .photo {
-  cursor: pointer;
-  padding: 0;
-  overflow: hidden;
-}
-.sl-review-thumbs .photo.on {
-  outline: 3px solid #4f46e5;
-  outline-offset: 2px;
-}
-.sl-review-thumbs img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-@media (max-width: 720px) {
-  .sl-review-body {
-    grid-template-columns: 1fr;
-  }
-}
-.sl-ai-panel {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #e2e8f0;
-}
-.sl-ai-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.sl-ai-head b { font-size: 12px; color: #4f46e5; }
-.sl-ai-field {
-  width: 100%;
-  font: inherit;
-  font-size: 16px;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  resize: vertical;
-  color: #334155;
-}
-.sl-ai-field.mono { font-family: "IBM Plex Mono", monospace; }
-.sl-ai-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-</style>
