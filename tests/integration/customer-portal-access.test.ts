@@ -9,7 +9,7 @@ import { processMailJobs } from '../../server/workers/handlers/mail.mjs'
 import { users } from '../../server/db/schema/auth'
 import { customerCredentialEmailLogs, customers } from '../../server/db/schema/customers'
 import { workerJobs } from '../../server/db/schema/jobs'
-import { addContact, createCustomer } from '../../server/services/customers.service'
+import { addContact, createCustomer, updateCustomer } from '../../server/services/customers.service'
 import { getJob } from '../../server/services/jobs.service'
 import {
   getPortalAccessSummary,
@@ -68,9 +68,11 @@ describe('P2-01 customer credential email flow', () => {
   })
 
   it('enables portal access, sends credentials, and logs every send', async () => {
+    const accountEmail = `account@${emailDomain}`
     const customer = await createCustomer(db, {
       displayName: `Marren Farms ${stamp}`,
       accountKind: 'individual',
+      email: accountEmail,
     }, STAFF)
     customerId = customer.id
 
@@ -86,7 +88,7 @@ describe('P2-01 customer credential email flow', () => {
 
     const first = await sendPortalCredentials(db, customerId, STAFF)
     expect(first.sendType).toBe('initial')
-    expect(first.log.recipientEmail).toBe(contactEmail)
+    expect(first.log.recipientEmail).toBe(accountEmail)
     expect(first.log.status).toBe('queued')
     expect(first.job.jobType).toBe('email_send')
     expect(first.username).toBe('marren')
@@ -100,14 +102,20 @@ describe('P2-01 customer credential email flow', () => {
     const resend = await sendPortalCredentials(db, customerId, STAFF)
     expect(resend.sendType).toBe('resend')
 
+    const updatedEmail = `updated@${emailDomain}`
+    await updateCustomer(db, customerId, { email: updatedEmail })
+    const afterUpdate = await sendPortalCredentials(db, customerId, STAFF)
+    expect(afterUpdate.log.recipientEmail).toBe(updatedEmail)
+
     const history = await listCredentialEmailHistory(db, customerId)
-    expect(history).toHaveLength(2)
-    expect(history.every(h => h.recipientEmail === contactEmail)).toBe(true)
+    expect(history).toHaveLength(3)
+    expect(history[0]?.recipientEmail).toBe(updatedEmail)
+    expect(history.slice(1).every(h => h.recipientEmail === accountEmail)).toBe(true)
 
     const summary = await getPortalAccessSummary(db, customerId)
     expect(summary.portalEnabled).toBe(true)
     expect(summary.userCount).toBe(1)
-    expect(summary.users[0]?.email).toBe(contactEmail)
+    expect(summary.users[0]?.email).toBe(updatedEmail)
   })
 })
 

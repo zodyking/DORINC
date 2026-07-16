@@ -18,7 +18,7 @@ function mapPortalError(event: Parameters<typeof apiError>[0], err: PortalAccess
     case 'CONTACT_NOT_FOUND':
       throw apiError(event, 'NOT_FOUND', 'Customer or contact not found')
     case 'NO_EMAIL':
-      throw apiError(event, 'VALIDATION_ERROR', 'A contact with an email address is required to send credentials')
+      throw apiError(event, 'VALIDATION_ERROR', 'Set an account email on the customer before sending portal credentials')
     case 'EMAIL_IN_USE':
       throw apiError(event, 'CONFLICT', 'That email is already linked to another customer portal account')
     case 'PORTAL_DISABLED':

@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, or, sql } fr
 import type { Db } from '../db/client'
 import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
+import { users } from '../db/schema/auth'
 import { invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
 import { formatFieldText } from '#shared/format/prose-field'
@@ -90,6 +91,25 @@ export async function updateCustomer(db: Db, id: string, patch: Partial<Customer
 }
 
 /** Keep the primary contact aligned when individual account fields change in Edit account. */
+async function syncPortalUserEmailFromAccount(
+  db: Db,
+  portalUserId: string,
+  email: string,
+) {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return
+
+  const [linked] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, portalUserId))
+  if (!linked || linked.email === normalized) return
+
+  const [conflict] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalized))
+  if (conflict && conflict.id !== portalUserId) return
+
+  await db.update(users)
+    .set({ email: normalized, updatedAt: new Date() })
+    .where(eq(users.id, portalUserId))
+}
+
 async function syncPrimaryContactFromAccount(
   db: Db,
   customerId: string,
@@ -97,29 +117,36 @@ async function syncPrimaryContactFromAccount(
   changedFields: string[],
 ) {
   const syncFields = ['displayName', 'email', 'phone'] as const
-  if (customer.accountKind !== 'individual') return
   if (!changedFields.some(field => syncFields.includes(field as typeof syncFields[number]))) return
 
   const contacts = await listContacts(db, customerId)
   const primary = contacts.find(c => c.isPrimary) ?? contacts[0]
   if (!primary) {
     if (customer.email) {
-      await addContact(db, customerId, {
+      const created = await addContact(db, customerId, {
         name: customer.displayName,
         email: customer.email,
         phone: customer.phone,
         isPrimary: true,
       })
+      if (created.portalUserId) {
+        await syncPortalUserEmailFromAccount(db, created.portalUserId, customer.email)
+      }
     }
     return
   }
 
   const patch: Partial<ContactInput> = {}
-  if (changedFields.includes('displayName')) patch.name = customer.displayName
   if (changedFields.includes('email')) patch.email = customer.email
-  if (changedFields.includes('phone')) patch.phone = customer.phone
+  if (customer.accountKind === 'individual') {
+    if (changedFields.includes('displayName')) patch.name = customer.displayName
+    if (changedFields.includes('phone')) patch.phone = customer.phone
+  }
   if (Object.keys(patch).length) {
     await updateContact(db, customerId, primary.id, patch)
+  }
+  if (changedFields.includes('email') && customer.email && primary.portalUserId) {
+    await syncPortalUserEmailFromAccount(db, primary.portalUserId, customer.email)
   }
 }
 

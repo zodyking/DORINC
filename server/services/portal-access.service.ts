@@ -10,7 +10,7 @@ import {
 } from '../db/schema/customers'
 import { allocateUniquePortalUsername } from '../../shared/format/portal-username'
 import { enqueueJob } from './jobs.service'
-import { addContact, getCustomer, listContacts } from './customers.service'
+import { addContact, getCustomer, listContacts, updateContact, type ContactInput } from './customers.service'
 import { getAppUrl } from './app-config.service'
 import { buildPortalCredentialEmail } from '../mail/templates/system'
 
@@ -38,29 +38,68 @@ async function getCustomerAccountTypeId(db: Db) {
   return row.id
 }
 
-async function resolveContact(db: Db, customerId: string, contactId?: string) {
+function portalAccountEmail(customer: typeof customers.$inferSelect): string {
+  const email = customer.email?.trim().toLowerCase()
+  if (!email) throw new PortalAccessServiceError('NO_EMAIL')
+  return email
+}
+
+async function assertEmailAvailableForPortalUser(
+  db: Db,
+  email: string,
+  customerId: string,
+  exceptUserId?: string,
+) {
+  const [existing] = await db.select().from(users).where(eq(users.email, email))
+  if (!existing) return
+  if (exceptUserId && existing.id === exceptUserId) return
+  if (existing.customerId && existing.customerId !== customerId) {
+    throw new PortalAccessServiceError('EMAIL_IN_USE')
+  }
+}
+
+/** Portal access always uses the customer account email — keep contact + login aligned. */
+async function ensureContactMatchesAccountEmail(
+  db: Db,
+  customerId: string,
+  customer: typeof customers.$inferSelect,
+  contactId?: string,
+) {
+  const accountEmail = portalAccountEmail(customer)
   const contacts = await listContacts(db, customerId)
-  if (contactId) {
-    const match = contacts.find(c => c.id === contactId)
-    if (!match) throw new PortalAccessServiceError('CONTACT_NOT_FOUND')
-    return match
+
+  let contact = contactId
+    ? contacts.find(c => c.id === contactId)
+    : contacts.find(c => c.isPrimary) ?? contacts[0]
+
+  if (contactId && !contact) throw new PortalAccessServiceError('CONTACT_NOT_FOUND')
+
+  if (!contact) {
+    contact = await addContact(db, customerId, {
+      name: customer.displayName,
+      email: accountEmail,
+      phone: customer.phone ?? null,
+      isPrimary: true,
+    })
+    return contact
   }
 
-  const existing = contacts.find(c => c.isPrimary && c.email)
-    ?? contacts.find(c => c.email)
-  if (existing) return existing
+  const patch: Partial<ContactInput> = {}
+  if (contact.email?.trim().toLowerCase() !== accountEmail) patch.email = accountEmail
+  if (contact.name !== customer.displayName) patch.name = customer.displayName
+  if (customer.phone != null && contact.phone !== customer.phone) patch.phone = customer.phone
 
-  // Account email counts for portal access — create a primary contact when none exists yet.
+  if (Object.keys(patch).length) {
+    const { contact: updated } = await updateContact(db, customerId, contact.id, patch)
+    contact = updated
+  }
+
+  return contact
+}
+
+async function resolveContact(db: Db, customerId: string, contactId?: string) {
   const customer = await getCustomer(db, customerId)
-  const accountEmail = customer.email?.trim()
-  if (!accountEmail) return null
-
-  return addContact(db, customerId, {
-    name: customer.displayName,
-    email: accountEmail,
-    phone: customer.phone ?? null,
-    isPrimary: true,
-  })
+  return ensureContactMatchesAccountEmail(db, customerId, customer, contactId)
 }
 
 async function usernameIsTaken(db: Db, username: string, exceptUserId?: string) {
@@ -169,8 +208,8 @@ export async function setPortalAccess(
 
   if (enabled) {
     const contact = await resolveContact(db, customerId, contactId)
-    if (!contact?.email) throw new PortalAccessServiceError('NO_EMAIL')
-    await ensurePortalUser(db, customerId, contact, actorId)
+    const accountEmail = portalAccountEmail(customer)
+    await ensurePortalUser(db, customerId, contact, accountEmail, actorId)
   }
 
   const [updated] = await db.update(customers)
@@ -185,15 +224,41 @@ async function ensurePortalUser(
   db: Db,
   customerId: string,
   contact: typeof customerContacts.$inferSelect,
+  accountEmail: string,
   _actorId: string,
 ) {
-  if (!contact.email) throw new PortalAccessServiceError('NO_EMAIL')
-  const email = contact.email.trim().toLowerCase()
+  const email = accountEmail.trim().toLowerCase()
   const customerAccountTypeId = await getCustomerAccountTypeId(db)
   const customer = await getCustomer(db, customerId)
 
-  const [existing] = await db.select().from(users).where(eq(users.email, email))
   let portalUserId: string
+
+  if (contact.portalUserId) {
+    const [linked] = await db.select().from(users).where(eq(users.id, contact.portalUserId))
+    if (linked) {
+      if (linked.email !== email) {
+        await assertEmailAvailableForPortalUser(db, email, customerId, linked.id)
+        await db.update(users)
+          .set({ email, updatedAt: new Date() })
+          .where(eq(users.id, linked.id))
+      }
+      const username = await ensurePortalUsername(db, linked.id, customer.displayName, linked.username)
+      await db.update(users)
+        .set({
+          customerId,
+          username,
+          isActive: true,
+          disabledAt: null,
+          emailVerifiedAt: linked.emailVerifiedAt ?? new Date(),
+          approvedAt: linked.approvedAt ?? new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, linked.id))
+      return linked.id
+    }
+  }
+
+  const [existing] = await db.select().from(users).where(eq(users.email, email))
 
   if (existing) {
     if (existing.customerId && existing.customerId !== customerId) {
@@ -273,12 +338,12 @@ export async function sendPortalCredentials(
   const customer = await getCustomer(db, customerId)
   if (!customer.portalEnabled) throw new PortalAccessServiceError('PORTAL_DISABLED')
 
+  const accountEmail = portalAccountEmail(customer)
   const contact = await resolveContact(db, customerId, contactId)
-  if (!contact?.email) throw new PortalAccessServiceError('NO_EMAIL')
 
-  const portalUserId = await ensurePortalUser(db, customerId, contact, sentBy)
+  const portalUserId = await ensurePortalUser(db, customerId, contact, accountEmail, sentBy)
   const tempPassword = generatePortalTempPassword()
-  const email = contact.email.trim().toLowerCase()
+  const email = accountEmail
   const expiresAt = new Date(Date.now() + TEMP_PASSWORD_TTL_MS)
 
   const [portalUser] = await db.select().from(users).where(eq(users.id, portalUserId))

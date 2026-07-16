@@ -11,10 +11,9 @@ import {
   buildEstimateSentEmail,
   type PortalRequestKindLabel,
 } from '../mail/customer-email-templates'
-import { listContacts } from './customers.service'
-import { enqueueJob } from './jobs.service'
-import { getInvoice } from './invoices.service'
 import { getEstimate } from './estimates.service'
+import { getInvoice } from './invoices.service'
+import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 
@@ -39,14 +38,10 @@ async function resolvePortalRecipient(
     }
   }
 
-  const contacts = await listContacts(db, customerId)
-  const contact = contacts.find(c => c.portalUserId && c.email)
-    ?? contacts.find(c => c.isPrimary && c.email)
-    ?? contacts.find(c => c.isBilling && c.email)
-    ?? contacts.find(c => c.email)
-  if (contact?.email) {
-    return { email: contact.email, name: contact.name }
-  }
+  const [customer] = await db
+    .select({ displayName: customers.displayName, email: customers.email })
+    .from(customers)
+    .where(eq(customers.id, customerId))
 
   const [portalUser] = await db
     .select({ id: users.id, name: users.name, email: users.email })
@@ -58,6 +53,15 @@ async function resolvePortalRecipient(
       eq(users.isActive, true),
     ))
     .limit(1)
+
+  const accountEmail = customer?.email?.trim()
+  if (accountEmail) {
+    return {
+      email: accountEmail,
+      name: customer.displayName,
+      userId: portalUser?.id,
+    }
+  }
 
   if (portalUser?.email) {
     return { email: portalUser.email, name: portalUser.name, userId: portalUser.id }
