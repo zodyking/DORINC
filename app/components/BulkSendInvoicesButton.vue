@@ -6,9 +6,11 @@ const BULK_SEND_STATUSES = 'draft,pending_manager_approval,sent,paid'
 const props = withDefaults(defineProps<{
   buttonClass?: string
   disabled?: boolean
+  hideTrigger?: boolean
 }>(), {
   buttonClass: 'btn',
   disabled: false,
+  hideTrigger: false,
 })
 
 const emit = defineEmits<{ sent: [] }>()
@@ -315,11 +317,13 @@ function rowStatusClass(row: BulkResultRow): string {
 }
 
 onUnmounted(stopPolling)
+
+defineExpose({ openModal })
 </script>
 
 <template>
   <button
-    v-if="canSend"
+    v-if="canSend && !hideTrigger"
     type="button"
     :class="buttonClass"
     :disabled="disabled"

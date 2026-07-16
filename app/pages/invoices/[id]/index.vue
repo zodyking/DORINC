@@ -367,6 +367,13 @@ const summaryRows = computed(() => {
         / {{ invoice.customerName }} · Issued {{ invoiceDateDisplay(invoice.invoiceDate) }}
       </template>
       <template #actions>
+        <NuxtLink
+          v-if="canUpdate && isDraft"
+          :to="`/invoices/${id}/edit`"
+          class="btn"
+        >
+          Edit
+        </NuxtLink>
         <button
           v-if="canSend && invoice.status === 'sent'"
           type="button"
@@ -392,13 +399,6 @@ const summaryRows = computed(() => {
           :disabled="busy"
           @sent="refresh()"
         />
-        <NuxtLink
-          v-if="canUpdate && isDraft"
-          :to="`/invoices/${id}/edit`"
-          class="btn"
-        >
-          Edit
-        </NuxtLink>
         <NuxtLink
           v-if="canRecordPayment && showRecordPayment"
           :to="`/invoices/${id}/payment`"

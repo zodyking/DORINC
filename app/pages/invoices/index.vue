@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Invoices list — KPI cards, status chips, filters, table (mockup: PAGE: INVOICES).
 import InvoiceListRowActions from '~/components/invoices/InvoiceListRowActions.vue'
+import BulkSendInvoicesButton from '~/components/BulkSendInvoicesButton.vue'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,
@@ -53,6 +54,7 @@ const auth = useAuthStore()
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
+const bulkSendRef = ref<InstanceType<typeof BulkSendInvoicesButton> | null>(null)
 
 const q = ref('')
 const fStatus = ref<StatusChip>((route.query.status as StatusChip) || 'all')
@@ -237,12 +239,26 @@ async function exportCsv() {
       <template #title>Invoices</template>
       <template #actions>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
-        <BulkSendInvoicesButton v-if="canSend" @sent="retryLoad" />
+        <button
+          v-if="canSend"
+          type="button"
+          class="btn"
+          @click="bulkSendRef?.openModal()"
+        >
+          Bulk send
+        </button>
         <button type="button" class="btn" :disabled="exportBusy" @click="exportCsv">
           {{ exportBusy ? 'Exporting…' : 'Export CSV' }}
         </button>
       </template>
     </StaffPageHead>
+
+    <BulkSendInvoicesButton
+      v-if="canSend"
+      ref="bulkSendRef"
+      hide-trigger
+      @sent="retryLoad"
+    />
 
     <div v-if="exportError" class="card" style="padding:12px 16px; margin-bottom:16px;">
       <p style="margin:0; color:#dc2626;">{{ exportError }}</p>
