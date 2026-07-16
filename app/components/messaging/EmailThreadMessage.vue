@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { avColor, initials } from '~/utils/users-ui'
 import { formatMessageTime } from '~/utils/messages-ui'
-import { emailBodyForThreadDisplay } from '#shared/email-display'
+import { emailBodyForThreadDisplay, shouldRenderEmailAsHtml } from '#shared/email-display'
 import type { ChatMessage } from '~/composables/useDirectMessages'
 
 const props = defineProps<{
@@ -20,6 +20,10 @@ const addressLabel = computed(() => {
   }
   return props.message.fromAddress || props.peerEmail || ''
 })
+
+const useHtmlFrame = computed(() =>
+  shouldRenderEmailAsHtml(props.message.htmlBody, props.message.direction),
+)
 
 const rendered = computed(() =>
   emailBodyForThreadDisplay(props.message.body, props.message.htmlBody, props.message.direction),
@@ -40,10 +44,12 @@ const rendered = computed(() =>
     </header>
     <div
       class="dm-email-msg-body"
-      :class="{ 'dm-email-msg-body--html': rendered.mode === 'html' }"
+      :class="{ 'dm-email-msg-body--html': useHtmlFrame }"
     >
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div v-if="rendered.mode === 'html'" class="dm-email-html" v-html="rendered.content" />
+      <MessagingEmailHtmlFrame
+        v-if="useHtmlFrame && message.htmlBody"
+        :html="message.htmlBody"
+      />
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div v-else class="dm-email-text" v-html="rendered.content" />
     </div>

@@ -187,7 +187,7 @@ async function setEmailShowAll(showAll: boolean) {
 </script>
 
 <template>
-  <section class="page active dm-page">
+  <section class="page active dm-page" :class="{ 'dm-page--in-thread': showThreadPanel }">
     <StaffPageHead title="Messages" subtitle="Team chat and shared customer email threads">
       <template #actions>
         <button type="button" class="btn" @click="openNewEmail">

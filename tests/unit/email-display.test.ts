@@ -6,6 +6,7 @@ import {
   emailPreviewText,
   linkifyPlainEmailText,
   normalizeInboundEmailText,
+  prepareEmailHtmlIframeDocument,
   sanitizeEmailHtml,
   stripHtmlToText,
 } from '../../shared/email-display'
@@ -45,10 +46,30 @@ describe('email-display', () => {
     expect(safe).toContain('Hi')
   })
 
-  it('prefers sanitized html for display', () => {
+  it('prefers html iframe content for display when html exists', () => {
     const result = emailBodyForDisplay('fallback', '<p><strong>Alert</strong></p>')
     expect(result.mode).toBe('html')
     expect(result.content).toContain('<strong>Alert</strong>')
+  })
+
+  it('builds a sandboxed iframe document with preserved styles', () => {
+    const doc = prepareEmailHtmlIframeDocument(`
+      <html><head><style>p { color: red; }</style></head>
+      <body><p>Hello</p></body></html>
+    `)
+    expect(doc).toContain('color: red')
+    expect(doc).toContain('<p>Hello</p>')
+    expect(doc).not.toContain('<script')
+  })
+
+  it('prefers html iframe for inbound thread messages', () => {
+    const result = emailBodyForThreadDisplay(
+      '',
+      '<p><strong>Customer note</strong></p>',
+      'inbound',
+    )
+    expect(result.mode).toBe('html')
+    expect(result.content).toContain('<strong>Customer note</strong>')
   })
 
   it('shows compose text for outbound thread messages', () => {
@@ -60,15 +81,5 @@ describe('email-display', () => {
     expect(result.mode).toBe('text')
     expect(result.content).toContain('Its working!')
     expect(result.content).not.toContain('footer')
-  })
-
-  it('prefers html for inbound thread messages', () => {
-    const result = emailBodyForThreadDisplay(
-      '',
-      '<p><strong>Customer note</strong></p>',
-      'inbound',
-    )
-    expect(result.mode).toBe('html')
-    expect(result.content).toContain('<strong>Customer note</strong>')
   })
 })

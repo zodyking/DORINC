@@ -5,9 +5,11 @@ const IMAGE_PLACEHOLDER_RE = /\[image:\s*[^\]]+\]/gi
 const TRACKING_PIXEL_RE = /<img[^>]+(?:width|height)\s*=\s*["']?1["']?[^>]*>/gi
 
 const ALLOWED_TAGS = new Set([
-  'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
-  'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 'span', 'strong', 'sub', 'sup', 'table',
-  'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+  'a', 'abbr', 'address', 'article', 'b', 'blockquote', 'br', 'caption', 'center', 'code',
+  'col', 'colgroup', 'dd', 'div', 'dl', 'dt', 'em', 'figcaption', 'figure', 'font', 'footer',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'i', 'img', 'li', 'main', 'nav', 'ol',
+  'p', 'pre', 'section', 'small', 'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td',
+  'tfoot', 'th', 'thead', 'tr', 'u', 'ul',
 ])
 
 const GLOBAL_FORBIDDEN_ATTR_RE = /\s(on\w+|srcdoc)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi
@@ -96,7 +98,6 @@ export function sanitizeEmailHtml(html: string): string {
 
   const withoutNoise = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(TRACKING_PIXEL_RE, '')
 
   return withoutNoise.replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (match, tagName: string) => {
@@ -107,11 +108,80 @@ export function sanitizeEmailHtml(html: string): string {
   })
 }
 
+/** Strip dangerous CSS while keeping layout rules from marketing emails. */
+export function sanitizeEmailStyleBlock(css: string): string {
+  return css
+    .replace(/@import\b[^;]+;/gi, '')
+    .replace(/expression\s*\(/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/behavior\s*:/gi, '')
+    .replace(/-moz-binding/gi, '')
+    .replace(/binding\s*:/gi, '')
+}
+
+const EMAIL_IFRAME_BASE_STYLES = `
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #202124;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  img { max-width: 100% !important; height: auto !important; }
+  table { max-width: 100% !important; }
+  pre { white-space: pre-wrap; overflow-x: auto; }
+  a { color: #1a73e8; }
+  blockquote {
+    margin: 0 0 1em;
+    padding-left: 12px;
+    border-left: 3px solid #dadce0;
+    color: #5f6368;
+  }
+`
+
+/** Gmail-style sandboxed document — preserves <style> blocks from the original email. */
+export function prepareEmailHtmlIframeDocument(html: string): string {
+  const raw = html.trim()
+  if (!raw) return ''
+
+  const styleBlocks: string[] = []
+  let bodySource = raw.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
+    const cleaned = sanitizeEmailStyleBlock(css)
+    if (cleaned.trim()) styleBlocks.push(cleaned)
+    return ''
+  })
+
+  const bodyMatch = bodySource.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+  if (bodyMatch) {
+    bodySource = bodyMatch[1]
+  }
+  else {
+    bodySource = bodySource
+      .replace(/<!doctype[^>]*>/gi, '')
+      .replace(/<\/?html[^>]*>/gi, '')
+      .replace(/<head[\s\S]*?<\/head>/gi, '')
+  }
+
+  const sanitizedBody = sanitizeEmailHtml(bodySource)
+  if (!sanitizedBody.trim()) return ''
+
+  const styles = [EMAIL_IFRAME_BASE_STYLES, ...styleBlocks].join('\n')
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"><style>${styles}</style></head><body>${sanitizedBody}</body></html>`
+}
+
+export function shouldRenderEmailAsHtml(
+  html: string | null | undefined,
+  direction: 'inbound' | 'outbound' | undefined,
+): boolean {
+  return direction !== 'outbound' && !!html?.trim()
+}
+
 export function emailBodyForDisplay(body: string, html?: string | null): { mode: 'html' | 'text', content: string } {
   const plain = cleanPlainEmailText(body)
-  if (html?.trim()) {
-    const sanitized = sanitizeEmailHtml(html)
-    if (sanitized.trim()) return { mode: 'html', content: sanitized }
+  if (html?.trim() && prepareEmailHtmlIframeDocument(html)) {
+    return { mode: 'html', content: html }
   }
   if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
   return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
@@ -127,6 +197,9 @@ export function emailBodyForThreadDisplay(
     const plain = cleanPlainEmailText(body)
     if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
     return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
+  }
+  if (shouldRenderEmailAsHtml(html, direction)) {
+    return { mode: 'html', content: html! }
   }
   return emailBodyForDisplay(body, html)
 }
