@@ -528,7 +528,7 @@ const summaryRows = computed(() => {
     <div v-show="viewTab === 'detail'" class="inv-detail-body">
       <div class="cols">
         <div class="stack">
-        <div class="card">
+          <div class="card">
           <div class="chead">
             <h3>Line items · {{ lines.length }}</h3>
             <div class="right">
@@ -644,6 +644,7 @@ const summaryRows = computed(() => {
             <dt>Status</dt><dd>Linked to this invoice</dd>
           </dl>
         </div>
+      </div>
       </div>
 
       <div class="card inv-detail-history">
