@@ -51,6 +51,7 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Tab' && !e.shiftKey) {
     e.preventDefault()
     commit(model.value)
+    inputEl.value?.blur()
     emit('tab-next')
     return
   }

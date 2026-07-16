@@ -28,7 +28,7 @@ import {
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
-import { focusVisibleLineInput } from '~/utils/line-field-focus'
+import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 import {
   draftLineToWizard,
   wizardLinesToDraftLines,
@@ -319,8 +319,6 @@ function onServiceLogPick(logId: string) {
   if (log) vehicleId.value = log.vehicleId
 }
 
-const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
-
 function addLine() {
   lines.value.push(createEmptyLine())
 }
@@ -397,10 +395,6 @@ function onLineFieldBlur(line: DraftLine) {
   applyInferredLineType(line)
 }
 
-function setLineAcRef(localId: string, el: unknown) {
-  lineAcRefs.value[localId] = el as { focus: () => void } | null
-}
-
 function focusLineQty(localId: string) {
   focusVisibleLineInput(localId, 'quantity')
 }
@@ -411,10 +405,8 @@ function focusLineRate(localId: string) {
 
 function addLineAndFocusDescription() {
   addLine()
-  nextTick(() => {
-    const newest = lines.value[lines.value.length - 1]
-    if (newest) lineAcRefs.value[newest.localId]?.focus()
-  })
+  const newest = lines.value[lines.value.length - 1]
+  if (newest) focusVisibleLineDescription(newest.localId)
 }
 
 function onLineRateTabNext(line: DraftLine) {
@@ -425,14 +417,10 @@ function onLineRateTabNext(line: DraftLine) {
 function focusCatalogSearch() {
   const target = lines.value.find(l => !l.description.trim()) ?? lines.value[lines.value.length - 1]
   if (!target) {
-    addLine()
-    nextTick(() => {
-      const newest = lines.value[lines.value.length - 1]
-      if (newest) lineAcRefs.value[newest.localId]?.focus()
-    })
+    addLineAndFocusDescription()
     return
   }
-  lineAcRefs.value[target.localId]?.focus()
+  focusVisibleLineDescription(target.localId)
 }
 
 function nextStep() {
@@ -803,9 +791,9 @@ async function saveDraftAndFinish() {
                     </td>
                     <td>
                       <CatalogLineAutocomplete
-                        :ref="(el) => setLineAcRef(line.localId, el)"
                         v-model="line.description"
                         v-model:line-type="line.lineType"
+                        :line-id="line.localId"
                         @typed="onLineDescriptionTyped(line)"
                         @blur="onLineFieldBlur(line)"
                         @tab-next="focusLineQty(line.localId)"
@@ -850,9 +838,9 @@ async function saveDraftAndFinish() {
                 <label class="fld">
                   <span>Description</span>
                   <CatalogLineAutocomplete
-                    :ref="(el) => setLineAcRef(line.localId, el)"
                     v-model="line.description"
                     v-model:line-type="line.lineType"
+                    :line-id="line.localId"
                     @typed="onLineDescriptionTyped(line)"
                     @blur="onLineFieldBlur(line)"
                     @tab-next="focusLineQty(line.localId)"

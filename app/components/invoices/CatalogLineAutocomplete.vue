@@ -12,9 +12,11 @@ const lineType = defineModel<LineItemType | ''>('lineType')
 const props = withDefaults(defineProps<{
   disabled?: boolean
   placeholder?: string
+  lineId?: string
 }>(), {
   disabled: false,
   placeholder: 'Description — type to search catalog',
+  lineId: undefined,
 })
 
 const emit = defineEmits<{
@@ -251,6 +253,8 @@ onBeforeUnmount(() => {
       role="combobox"
       :placeholder="placeholder"
       :disabled="disabled"
+      :data-line-id="lineId"
+      data-line-field="description"
       autocomplete="off"
       aria-autocomplete="list"
       :aria-expanded="showList"

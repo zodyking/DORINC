@@ -32,7 +32,7 @@ import {
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
-import { focusVisibleLineInput } from '~/utils/line-field-focus'
+import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 
 definePageMeta({ layout: 'staff' })
 
@@ -172,12 +172,6 @@ const complaint = ref('')
 const internalNotes = ref('')
 const lines = ref<LineItem[]>([])
 
-const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
-
-function setLineAcRef(lineId: string, el: unknown) {
-  lineAcRefs.value[lineId] = el as { focus: () => void } | null
-}
-
 function focusLineQty(lineId: string) {
   focusVisibleLineInput(lineId, 'quantity')
 }
@@ -190,9 +184,8 @@ async function onLineRateTabNext(line: LineItem) {
   await patchLine(line, { refreshAfter: false })
   if (!editable.value) return
   await addEmptyLine()
-  await nextTick()
   const newest = lines.value[lines.value.length - 1]
-  if (newest) lineAcRefs.value[newest.id]?.focus()
+  if (newest) focusVisibleLineDescription(newest.id)
 }
 
 const busy = ref(false)
@@ -992,9 +985,9 @@ const aiPopStyle = computed(() => {
                       </td>
                       <td>
                         <CatalogLineAutocomplete
-                          :ref="(el) => setLineAcRef(line.id, el)"
                           v-model="line.description"
                           v-model:line-type="line.lineType"
+                          :line-id="line.id"
                           :disabled="!editable"
                           @focus="selectedLineId = line.id"
                           @blur="patchLine(line)"
