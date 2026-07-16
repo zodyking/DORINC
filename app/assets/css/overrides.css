@@ -466,6 +466,32 @@ section.page.active.page--invoice-pdf {
   padding: 2px 8px;
 }
 
+/* Service log list — compact row action menu + horizontal scroll on narrow screens. */
+.sl-list-tbl .col-log { min-width: 88px; }
+.sl-list-tbl .col-customer { min-width: 140px; }
+.sl-list-tbl .col-vehicle { min-width: 140px; }
+.sl-list-tbl .col-date { min-width: 108px; }
+.sl-list-tbl .col-work { min-width: 120px; }
+.sl-list-tbl .col-status { min-width: 130px; }
+.sl-list-tbl .col-invoice { min-width: 100px; }
+.sl-list-tbl .col-actions {
+  width: 44px;
+  min-width: 44px;
+  padding-left: 4px;
+  padding-right: 8px;
+  text-align: right;
+  vertical-align: middle;
+}
+.sl-list-tbl th.col-actions {
+  width: 44px;
+  min-width: 44px;
+}
+.sl-list-tbl .col-actions .page-actions__trigger {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
 /* Customer portal — shell tweaks + staff design alignment */
 .portal-app {
   min-height: 100dvh;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
+import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref } from '~/utils/invoice-pdf'
 
@@ -53,42 +54,7 @@ const query = computed(() => ({
   sort: fSort.value,
 }))
 
-const actionBusyId = ref<string | null>(null)
 const actionError = ref('')
-
-async function sendToInvoice(log: ServiceLogRow, event?: Event) {
-  event?.stopPropagation()
-  if (!log.canSendToInvoice || actionBusyId.value) return
-  actionBusyId.value = log.id
-  actionError.value = ''
-  try {
-    await $fetch(`/api/service-logs/${log.id}/convert-to-invoice`, { method: 'POST', body: {} })
-    await refresh()
-  }
-  catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Send to invoice failed'
-  }
-  finally {
-    actionBusyId.value = null
-  }
-}
-
-async function undoSendToInvoice(log: ServiceLogRow, event?: Event) {
-  event?.stopPropagation()
-  if (!log.canRevertInvoice || actionBusyId.value) return
-  actionBusyId.value = log.id
-  actionError.value = ''
-  try {
-    await $fetch(`/api/service-logs/${log.id}/revert-invoice`, { method: 'POST' })
-    await refresh()
-  }
-  catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed'
-  }
-  finally {
-    actionBusyId.value = null
-  }
-}
 
 const { data, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
@@ -127,6 +93,15 @@ const pageSubtitle = computed(() => {
   if (fView.value === 'review') return 'Logs awaiting accountant action before invoicing'
   return 'All field service logs — including those already linked to invoices'
 })
+
+function onRowActionError(message: string) {
+  actionError.value = message
+}
+
+async function onRowChanged() {
+  actionError.value = ''
+  await refresh()
+}
 
 function openLog(id: string) {
   navigateTo(`/service-logs/${id}`)
@@ -239,43 +214,17 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
                 </a>
                 <span v-else class="muted">—</span>
               </td>
-              <td class="col-actions" data-label="Actions">
-                <div class="sl-list-actions" @click.stop>
-                  <template v-if="log.canSendToInvoice">
-                    <button
-                      type="button"
-                      class="btn sm primary"
-                      :disabled="actionBusyId === log.id"
-                      @click="sendToInvoice(log, $event)"
-                    >
-                      {{ actionBusyId === log.id ? 'Sending…' : 'Send to invoice' }}
-                    </button>
-                    <button type="button" class="btn sm" @click="openLog(log.id)">Open</button>
-                  </template>
-                  <template v-else-if="log.canRevertInvoice">
-                    <button
-                      type="button"
-                      class="btn sm"
-                      :disabled="actionBusyId === log.id"
-                      @click="undoSendToInvoice(log, $event)"
-                    >
-                      {{ actionBusyId === log.id ? 'Undoing…' : 'Undo send' }}
-                    </button>
-                    <NuxtLink
-                      v-if="log.invoiceId"
-                      :to="`/invoices/${log.invoiceId}`"
-                      class="btn sm"
-                    >
-                      View invoice
-                    </NuxtLink>
-                  </template>
-                  <template v-else-if="log.status === 'converted_to_invoice' && log.invoiceId">
-                    <NuxtLink :to="`/invoices/${log.invoiceId}`" class="btn sm">View invoice</NuxtLink>
-                  </template>
-                  <template v-else>
-                    <button type="button" class="btn sm" @click="openLog(log.id)">View log</button>
-                  </template>
-                </div>
+              <td class="col-actions">
+                <ServiceLogListRowActions
+                  :log-id="log.id"
+                  :log-label="logNumberDisplay(log.logNumber)"
+                  :status="log.status as ServiceLogStatus"
+                  :invoice-id="log.invoiceId"
+                  :can-send-to-invoice="log.canSendToInvoice"
+                  :can-revert-invoice="log.canRevertInvoice"
+                  @changed="onRowChanged"
+                  @error="onRowActionError"
+                />
               </td>
             </tr>
           </tbody>
@@ -304,15 +253,6 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
 </template>
 
 <style scoped>
-.sl-list-tbl .col-log { width: 8%; min-width: 88px; }
-.sl-list-tbl .col-customer { width: 18%; min-width: 140px; }
-.sl-list-tbl .col-vehicle { width: 18%; min-width: 140px; }
-.sl-list-tbl .col-date { width: 11%; min-width: 108px; white-space: nowrap; }
-.sl-list-tbl .col-work { width: 14%; min-width: 120px; }
-.sl-list-tbl .col-status { width: 14%; min-width: 130px; }
-.sl-list-tbl .col-invoice { width: 11%; min-width: 100px; }
-.sl-list-tbl .col-actions { width: 12%; min-width: 120px; text-align: right; }
-
 .sl-list-tbl .lead {
   display: block;
   font-weight: 600;
@@ -329,10 +269,10 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
 }
 
 .sl-list-badges {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .sl-list-cust-req {
@@ -358,59 +298,5 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
 .sl-inv-pdf-icon {
   font-size: 11px;
   opacity: 0.85;
-}
-
-.sl-list-row td.col-actions {
-  vertical-align: middle;
-}
-
-.sl-list-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-@media (max-width: 960px) {
-  .sl-list-tbl thead {
-    display: none;
-  }
-
-  .sl-list-tbl tbody tr {
-    display: block;
-    padding: 14px 16px;
-    border-bottom: 1px solid #f1f5f9;
-  }
-
-  .sl-list-tbl tbody tr:last-child {
-    border-bottom: none;
-  }
-
-  .sl-list-tbl td {
-    display: grid;
-    grid-template-columns: 108px 1fr;
-    gap: 4px 12px;
-    padding: 4px 0;
-    border: none;
-  }
-
-  .sl-list-tbl td::before {
-    content: attr(data-label);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #94a3b8;
-  }
-
-  .sl-list-tbl td.col-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 8px;
-  }
-
-  .sl-list-tbl td.col-actions::before {
-    display: none;
-  }
 }
 </style>
