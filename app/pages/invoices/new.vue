@@ -29,6 +29,7 @@ import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
+import { invoiceWizardStepHint, invoiceWizardStepHintClass } from '~/utils/invoice-wizard-ui'
 import {
   draftLineToWizard,
   wizardLinesToDraftLines,
@@ -243,18 +244,31 @@ const serviceLogOptions = computed(() => serviceLogsData.value?.items ?? [])
 
 const selectedCustomer = computed(() => customerOptions.value.find(c => c.id === customerId.value))
 const selectedVehicle = computed(() => vehicleOptions.value.find(v => v.id === vehicleId.value))
-const autosaveLabel = computed(() => {
-  if (busy.value) return 'Saving…'
-  if (!invoiceId.value) return dirty.value ? 'Unsaved changes' : 'Not saved yet'
-  if (dirty.value) return 'Unsaved changes'
-  if (lastSavedAt.value) return `Saved ${auditWhenDisplay(lastSavedAt.value.toISOString())}`
-  return 'Saved'
-})
 
-const autosaveClass = computed(() => {
-  if (busy.value || dirty.value || !invoiceId.value) return 'pending'
-  return ''
-})
+function wizardStepHint(stepNumber: number): string {
+  return invoiceWizardStepHint({
+    step: stepNumber,
+    customerName: selectedCustomer.value?.displayName,
+    vehicle: selectedVehicle.value ?? null,
+    invoiceDate: invoiceDate.value,
+    lines: lines.value,
+    taxExempt: selectedCustomer.value?.taxExempt,
+    savedTotal: savedInvoice.value?.total ?? null,
+    dirty: dirty.value,
+    invoiceId: invoiceId.value,
+    savedAtLabel: lastSavedAt.value
+      ? `Saved ${auditWhenDisplay(lastSavedAt.value.toISOString())}`
+      : null,
+  })
+}
+
+function wizardStepHintClass(stepNumber: number): string {
+  return invoiceWizardStepHintClass(stepNumber, {
+    step: stepNumber,
+    dirty: dirty.value,
+    invoiceId: invoiceId.value,
+  })
+}
 
 const summaryRows = computed(() => {
   const breakdown = previewLineTypeBreakdown(lines.value)
@@ -574,12 +588,14 @@ async function saveDraftAndFinish() {
           class="sl-step"
           :class="{ on: step === s.n, done: step > s.n }"
         >
-          <div class="dot">{{ s.n }}</div>{{ s.label }}
+          <div class="dot">{{ s.n }}</div>
+          <span class="sl-step-label">{{ s.label }}</span>
+          <span
+            v-if="wizardStepHint(s.n)"
+            class="sl-step-sub"
+            :class="wizardStepHintClass(s.n)"
+          >{{ wizardStepHint(s.n) }}</span>
         </div>
-      </div>
-      <div v-if="invoiceNumberFormatted || autosaveLabel" class="inv-wizard-progress-extra">
-        <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
-        <span class="autosave" :class="autosaveClass">{{ autosaveLabel }}</span>
       </div>
     </div>
 
@@ -940,9 +956,9 @@ async function saveDraftAndFinish() {
 .inv-wizard-steps {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px 6px;
   overflow: visible;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   padding-bottom: 0;
 }
 
@@ -952,31 +968,40 @@ async function saveDraftAndFinish() {
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
   line-height: 1.25;
 }
 
-.inv-wizard-progress-extra {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  align-items: center;
-  font-size: 12px;
+.inv-wizard-steps .sl-step-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.inv-wizard-progress-extra .pill {
-  grid-column: 1;
-  justify-self: center;
-}
-
-.inv-wizard-progress-extra .autosave {
-  grid-column: 5;
-  justify-self: center;
+.inv-wizard-steps .sl-step-sub {
+  margin-top: 6px;
+  width: 100%;
+  min-height: 1.25em;
+  padding: 0 2px;
+  font-size: 11px;
   font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inv-wizard-steps .sl-step-sub.pending {
+  color: #d97706;
+}
+
+.inv-wizard-steps .sl-step-sub.saved {
   color: #059669;
 }
 
-.inv-wizard-progress-extra .autosave.pending {
-  color: #d97706;
+.inv-wizard-steps .sl-step.done .sl-step-sub:not(.pending) {
+  color: #059669;
 }
 
 .inv-wizard-error {
