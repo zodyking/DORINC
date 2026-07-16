@@ -1,18 +1,9 @@
 <script setup lang="ts">
-import type { ConversationSummary } from '~/composables/useDirectMessages'
+import type { ChatMessage, ConversationSummary } from '~/composables/useDirectMessages'
 
 const props = defineProps<{
   conversation: ConversationSummary | null
-  messages: Array<{
-    id: string
-    senderUserId: string | null
-    senderName: string
-    body: string
-    htmlBody?: string | null
-    createdAt: string
-    direction?: 'inbound' | 'outbound'
-    fromAddress?: string | null
-  }>
+  messages: ChatMessage[]
   loading?: boolean
   sending?: boolean
   currentUserId?: string
