@@ -97,6 +97,8 @@ export interface NotificationSettings {
   customerChangeRequestSubmitted: boolean
   /** Email all team members when a new customer email arrives in the inbox. */
   customerEmailReceived: boolean
+  /** Email accountants and admins when a mechanic sends a service log to invoice. */
+  serviceLogSentToInvoice: boolean
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -114,6 +116,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   customerServiceRequestSubmitted: true,
   customerChangeRequestSubmitted: true,
   customerEmailReceived: true,
+  serviceLogSentToInvoice: true,
 }
 
 export const NOTIFICATION_SETTING_META: Array<{
@@ -174,6 +177,12 @@ export const NOTIFICATION_SETTING_META: Array<{
     key: 'customerEmailReceived',
     label: 'Customer email received',
     description: 'Email all team members when a new customer email is synced into Messages.',
+    group: 'workflow',
+  },
+  {
+    key: 'serviceLogSentToInvoice',
+    label: 'Service log sent to invoice',
+    description: 'Email accountants and admins when a mechanic sends a service log to invoice.',
     group: 'workflow',
   },
   {

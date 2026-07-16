@@ -8,12 +8,14 @@ import {
   buildCustomerEmailReceivedStaffEmail,
   buildCustomerServiceRequestStaffEmail,
   buildInvoicePendingApprovalEmail,
+  buildServiceLogSentToInvoiceStaffEmail,
   buildUserSignupPendingEmail,
 } from '../mail/templates/system'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import {
   listAccountants,
+  listAccountingStaff,
   listAllTeamMembers,
   listPermissionRecipients,
 } from './notification-recipients.service'
@@ -349,6 +351,69 @@ export async function notifyCustomerEmailReceived(
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'customer_email_received',
       conversationId: opts.conversationId,
+      recipientUserId: recipient.id,
+    })
+    queued++
+  }
+
+  return { queued, reason: queued ? undefined : 'no_recipients' as const }
+}
+
+function formatServiceLogLabel(logNumber: number): string {
+  return `SL-${logNumber}`
+}
+
+export async function notifyServiceLogSentToInvoice(
+  db: Db,
+  opts: {
+    serviceLogId: string
+    logNumber: number
+    mechanicName: string
+    mechanicUserId: string
+    customerName: string
+    vehicleSnapshot: InvoiceVehicleSnapshot | null
+    invoiceId: string
+    invoiceNumber: number
+  },
+) {
+  if (!(await isNotificationEnabled(db, 'serviceLogSentToInvoice'))) {
+    return { queued: 0 as const, reason: 'disabled' as const }
+  }
+
+  const brand = await resolveEmailBrand(db)
+  const appUrl = brand.appUrl || getAppUrl()
+  const base = appUrl.replace(/\/$/, '')
+  const serviceLogLabel = formatServiceLogLabel(opts.logNumber)
+  const invoiceNumber = formatInvoiceNumber(opts.invoiceNumber)
+  const invoiceUrl = `${base}/invoices/${opts.invoiceId}`
+  const serviceLogUrl = `${base}/service-logs/${opts.serviceLogId}`
+  const vehicleUnit = opts.vehicleSnapshot
+    ? formatPdfVehicleUnitDisplay(opts.vehicleSnapshot)
+    : 'Unknown vehicle'
+  const vehicleDetails = opts.vehicleSnapshot
+    ? formatPdfVehicleYearMakeModel(opts.vehicleSnapshot)
+    : null
+  const recipients = await listAccountingStaff(db, opts.mechanicUserId)
+
+  let queued = 0
+  for (const recipient of recipients) {
+    const mail = buildServiceLogSentToInvoiceStaffEmail({
+      recipientName: recipient.name,
+      mechanicName: opts.mechanicName,
+      serviceLogLabel,
+      customerName: opts.customerName,
+      vehicleUnit,
+      vehicleDetails,
+      invoiceNumber,
+      invoiceUrl,
+      serviceLogUrl,
+      appUrl,
+      brand,
+    })
+    await enqueueHtmlMail(db, recipient.email, mail, {
+      notificationKind: 'service_log_sent_to_invoice',
+      serviceLogId: opts.serviceLogId,
+      invoiceId: opts.invoiceId,
       recipientUserId: recipient.id,
     })
     queued++
