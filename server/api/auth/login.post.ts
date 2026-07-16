@@ -5,6 +5,7 @@ import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
+import { resolveIpLocation } from '../../services/ip-geolocation.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
@@ -14,27 +15,34 @@ export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event))
   const body = await validateBody(event, loginBodySchema)
   const identifier = body.portal === 'customer' ? body.username : body.email
+  const ipAddress = getClientIp(event)
 
-  let deviceLocationLabel: string | null = null
+  let locationLabel: string | null = null
+  let locationSource: 'device' | 'ip' = 'ip'
   if (body.portal === 'staff') {
-    deviceLocationLabel = await resolveBrowserLocation({
+    locationLabel = await resolveBrowserLocation({
       latitude: body.geo.latitude,
       longitude: body.geo.longitude,
       accuracyM: body.geo.accuracyM,
     })
+    locationSource = 'device'
+  }
+  else {
+    locationLabel = await resolveIpLocation(ipAddress)
   }
 
   try {
     const result = await login(useDb(), identifier, body.password, {
-      ipAddress: getClientIp(event),
+      ipAddress,
       userAgent: getHeader(event, 'user-agent'),
       portal: body.portal,
+      locationLabel,
       geo: body.portal === 'staff'
         ? {
             latitude: body.geo.latitude,
             longitude: body.geo.longitude,
             accuracyM: body.geo.accuracyM ?? null,
-            locationLabel: deviceLocationLabel,
+            locationLabel,
           }
         : null,
     })
@@ -53,6 +61,10 @@ export default defineEventHandler(async (event) => {
           email: result.user.email,
         },
         riskLevel: 'sensitive',
+        afterData: {
+          locationLabel,
+          locationSource,
+        },
       })
     }
     catch (err) {
@@ -64,9 +76,9 @@ export default defineEventHandler(async (event) => {
         to: result.user.email,
         name: result.user.name,
         portal: body.portal,
-        ipAddress: getClientIp(event),
+        ipAddress,
         userAgent: getHeader(event, 'user-agent'),
-        deviceLocation: deviceLocationLabel,
+        deviceLocation: body.portal === 'staff' ? locationLabel : null,
         deviceAccuracyM: body.portal === 'staff' ? body.geo.accuracyM ?? null : null,
       }))
       .catch((err) => {

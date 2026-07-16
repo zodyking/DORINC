@@ -3,6 +3,7 @@ import {
   formatLastLogin,
   formatMemberSince,
   sessionDeviceLabel,
+  sessionLocation,
   validateNewPassword,
 } from '../../app/utils/account-ui'
 
@@ -17,6 +18,13 @@ describe('account-ui helpers (P1-35)', () => {
     expect(sessionDeviceLabel('Mozilla/5.0 (Windows NT 10.0) Chrome/120.0')).toBe('Windows · Chrome')
     expect(sessionDeviceLabel('Mozilla/5.0 (iPhone) Safari/604.1')).toBe('iPhone · Safari')
     expect(sessionDeviceLabel(null)).toBe('Unknown device')
+  })
+
+  it('shows recorded device location for sessions, not raw IP', () => {
+    expect(sessionLocation('Brooklyn, NY', false)).toBe('Brooklyn, NY')
+    expect(sessionLocation('Brooklyn, NY', true)).toBe('Brooklyn, NY · this device')
+    expect(sessionLocation(null, false)).toBe('—')
+    expect(sessionLocation('  ', true)).toBe('— · this device')
   })
 
   it('formats member since dates', () => {

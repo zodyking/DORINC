@@ -21,6 +21,7 @@ interface AccountSession {
   id: string
   userAgent: string | null
   ipAddress: string | null
+  locationLabel: string | null
   lastActivityAt: string
   createdAt: string
   isCurrent: boolean
@@ -272,7 +273,7 @@ const avInitials = computed(() => initials(displayName.value))
             </div>
             <div class="nm">
               <b>{{ sessionDeviceLabel(session.userAgent) }}</b>
-              <small>{{ sessionLocation(session.ipAddress, session.isCurrent) }} · {{ formatSessionAge(session.lastActivityAt) }}</small>
+              <small>{{ sessionLocation(session.locationLabel, session.isCurrent) }} · {{ formatSessionAge(session.lastActivityAt) }}</small>
             </div>
             <div class="end">
               <span v-if="session.isCurrent" class="pill ok">Current</span>

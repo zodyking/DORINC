@@ -5,6 +5,7 @@ import {
   auditActorDisplay,
   auditDetailDisplay,
   auditIpDisplay,
+  auditLocationDisplay,
   entityTypeLabel,
 } from '../../app/utils/system-logs-ui'
 
@@ -49,5 +50,37 @@ describe('system-logs-ui helpers (P1-33)', () => {
     expect(auditIpDisplay('10.0.4.2')).toBe('10.0.4.2')
     expect(auditIpDisplay('127.0.0.1')).toBe('localhost')
     expect(auditIpDisplay(null)).toBe('—')
+  })
+
+  it('prefers recorded login location over IP in the location column', () => {
+    expect(auditLocationDisplay({
+      action: 'auth.login',
+      afterData: { locationLabel: 'Brooklyn, NY', locationSource: 'device' },
+      ipAddress: '203.0.113.1',
+    })).toBe('Brooklyn, NY')
+
+    expect(auditLocationDisplay({
+      action: 'auth.login',
+      afterData: null,
+      ipAddress: '203.0.113.1',
+    })).toBe('—')
+
+    expect(auditLocationDisplay({
+      action: 'portal.login',
+      afterData: { locationLabel: 'Austin, TX', locationSource: 'ip' },
+      ipAddress: '203.0.113.2',
+    })).toBe('Austin, TX')
+
+    expect(auditLocationDisplay({
+      action: 'portal.login',
+      afterData: null,
+      ipAddress: '203.0.113.2',
+    })).toBe('203.0.113.2')
+
+    expect(auditLocationDisplay({
+      action: 'customers.create',
+      afterData: null,
+      ipAddress: '10.0.4.2',
+    })).toBe('10.0.4.2')
   })
 })

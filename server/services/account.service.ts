@@ -19,6 +19,7 @@ export interface AccountSessionRow {
   id: string
   userAgent: string | null
   ipAddress: string | null
+  locationLabel: string | null
   lastActivityAt: string
   createdAt: string
   isCurrent: boolean
@@ -58,6 +59,7 @@ export async function getAccountDetail(
     id: s.id,
     userAgent: s.userAgent,
     ipAddress: s.ipAddress,
+    locationLabel: s.locationLabel,
     lastActivityAt: s.lastActivityAt.toISOString(),
     createdAt: s.createdAt.toISOString(),
     isCurrent: s.id === currentSessionId,

@@ -99,4 +99,21 @@ export function auditIpDisplay(ip: string | null | undefined): string {
   return ip
 }
 
+interface LoginAuditAfterData {
+  locationLabel?: string | null
+  locationSource?: 'device' | 'ip' | string | null
+}
+
+/** Prefer recorded login location (device GPS for staff, IP geolocation for customers). */
+export function auditLocationDisplay(row: Pick<AuditLogRow, 'action' | 'afterData' | 'ipAddress'>): string {
+  const after = row.afterData as LoginAuditAfterData | null
+  const label = after?.locationLabel?.trim()
+  if (label) return label
+
+  if (row.action === 'auth.login') return '—'
+  if (row.action === 'portal.login') return auditIpDisplay(row.ipAddress)
+
+  return auditIpDisplay(row.ipAddress)
+}
+
 export { auditWhenDisplay }

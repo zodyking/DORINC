@@ -34,8 +34,11 @@ export function sessionDeviceLabel(userAgent: string | null): string {
   return `${os} · ${browser}`
 }
 
-export function sessionLocation(ipAddress: string | null, isCurrent: boolean): string {
-  const base = ipAddress ? ipAddress : 'Unknown location'
+export function sessionLocation(
+  locationLabel: string | null | undefined,
+  isCurrent: boolean,
+): string {
+  const base = locationLabel?.trim() || '—'
   return isCurrent ? `${base} · this device` : base
 }
 

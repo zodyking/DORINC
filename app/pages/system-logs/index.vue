@@ -183,7 +183,7 @@ const listCountLabel = computed(() => {
               <th class="col-user">User</th>
               <th class="col-action">Action</th>
               <th class="col-detail">Detail</th>
-              <th class="col-ip">IP</th>
+              <th class="col-ip">Location</th>
             </tr>
           </thead>
           <tbody>
@@ -196,7 +196,7 @@ const listCountLabel = computed(() => {
                 </span>
               </td>
               <td class="col-detail">{{ auditDetailDisplay(row) }}</td>
-              <td class="col-ip mono">{{ auditIpDisplay(row.ipAddress) }}</td>
+              <td class="col-ip mono">{{ auditLocationDisplay(row) }}</td>
             </tr>
           </tbody>
         </table>

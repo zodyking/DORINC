@@ -232,7 +232,13 @@ export async function login(
   db: Db,
   identifier: string,
   password: string,
-  meta: { ipAddress?: string | null, userAgent?: string | null, portal?: LoginPortal, geo?: LoginGeoMeta | null } = {},
+  meta: {
+    ipAddress?: string | null
+    userAgent?: string | null
+    portal?: LoginPortal
+    geo?: LoginGeoMeta | null
+    locationLabel?: string | null
+  } = {},
 ): Promise<LoginResult> {
   const portal = meta.portal ?? 'staff'
   const trimmed = identifier.trim()
@@ -302,7 +308,7 @@ export async function login(
     geoLatitude: meta.geo?.latitude ?? null,
     geoLongitude: meta.geo?.longitude ?? null,
     geoAccuracyM: meta.geo?.accuracyM ?? null,
-    locationLabel: meta.geo?.locationLabel ?? null,
+    locationLabel: meta.locationLabel ?? meta.geo?.locationLabel ?? null,
   })
 
   return {
