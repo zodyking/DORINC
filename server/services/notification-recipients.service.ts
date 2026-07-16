@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import {
   accountTypePermissions,
@@ -135,6 +135,28 @@ export async function listAccountants(
       eq(users.isActive, true),
       isNotNull(users.approvedAt),
       eq(accountTypes.key, 'accountant'),
+    ))
+
+  if (!excludeUserId) return rows.filter(r => r.email?.trim())
+  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+}
+
+/** Active approved staff with accountant or admin account types. */
+export async function listAccountingStaff(
+  db: Db,
+  excludeUserId?: string | null,
+): Promise<StaffNotifyRecipient[]> {
+  const rows = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(and(
+      eq(users.isActive, true),
+      isNotNull(users.approvedAt),
+      inArray(accountTypes.key, ['accountant', 'admin']),
     ))
 
   if (!excludeUserId) return rows.filter(r => r.email?.trim())

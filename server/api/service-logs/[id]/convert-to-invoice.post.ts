@@ -6,6 +6,8 @@ import {
 } from '../../../services/service-logs.service'
 import { InvoicesServiceError } from '../../../services/invoices.service'
 import { writeAudit } from '../../../services/audit.service'
+import { notifyServiceLogSentToInvoice } from '../../../services/staff-notifications.service'
+import { resolveCustomerDisplayName, resolveVehicleDisplay } from '../../../services/entity-snapshots'
 import { apiError } from '../../../utils/api-error'
 import { canSendServiceLogToInvoice } from '../../../utils/service-log-actions'
 import { validateBody, validateParams } from '../../../utils/validate'
@@ -61,6 +63,17 @@ export default defineEventHandler(async (event) => {
       permissionKey,
       riskLevel: 'sensitive',
     })
+
+    void notifyServiceLogSentToInvoice(db, {
+      serviceLogId: log.id,
+      logNumber: log.logNumber,
+      mechanicName: auth.user.name,
+      mechanicUserId: auth.user.id,
+      customerName: resolveCustomerDisplayName(null, log.customerSnapshot),
+      vehicleSnapshot: resolveVehicleDisplay(null, log.vehicleSnapshot),
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+    }).catch(() => {})
 
     return { invoice, log }
   }

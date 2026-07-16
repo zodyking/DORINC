@@ -4,6 +4,7 @@ import {
   buildCustomerChangeRequestStaffEmail,
   buildCustomerEmailReceivedStaffEmail,
   buildCustomerServiceRequestStaffEmail,
+  buildServiceLogSentToInvoiceStaffEmail,
   buildDeletionRequestResultEmail,
   buildDeletionRequestSubmittedEmail,
   buildInvoiceAttachedEmail,
@@ -219,5 +220,25 @@ describe('system email templates', () => {
     expect(change.html).toContain('Review in portal')
     expect(inbound.html).toContain('Open Messages')
     expect(inbound.text).toContain('fleet@example.com')
+  })
+
+  it('builds service log sent to invoice staff alert', () => {
+    const mail = buildServiceLogSentToInvoiceStaffEmail({
+      recipientName: 'Pat',
+      mechanicName: 'Brandon K.',
+      serviceLogLabel: 'SL-1007',
+      customerName: 'Fleet Co',
+      vehicleUnit: 'Bus #616',
+      vehicleDetails: '2023 IC BUS PB105',
+      invoiceNumber: 'INV-000711',
+      invoiceUrl: `${appUrl}/invoices/abc`,
+      serviceLogUrl: `${appUrl}/service-logs/abc`,
+      appUrl,
+      brand,
+    })
+    expect(mail.subject).toBe('Brandon K. needs SL-1007 to be invoiced')
+    expect(mail.html).toContain('SL-1007')
+    expect(mail.html).toContain('Review invoice')
+    expect(mail.text).toContain('Brandon K.')
   })
 })

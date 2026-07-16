@@ -645,3 +645,59 @@ export function buildCustomerEmailReceivedStaffEmail({
     brand,
   })
 }
+
+export function buildServiceLogSentToInvoiceStaffEmail({
+  recipientName,
+  mechanicName,
+  serviceLogLabel,
+  customerName,
+  vehicleUnit,
+  vehicleDetails,
+  invoiceNumber,
+  invoiceUrl,
+  serviceLogUrl,
+  appUrl,
+  brand,
+}) {
+  const subject = `${mechanicName} needs ${serviceLogLabel} to be invoiced`
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    `${mechanicName} sent ${serviceLogLabel} to invoice and needs it completed.`,
+    '',
+    `Customer: ${customerName}`,
+    `Vehicle: ${vehicleUnit}`,
+    vehicleDetails ? `Vehicle details: ${vehicleDetails}` : '',
+    invoiceNumber ? `Draft invoice: ${invoiceNumber}` : '',
+    '',
+    `Review invoice: ${invoiceUrl}`,
+    `Service log: ${serviceLogUrl}`,
+  ].filter(Boolean).join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Service log',
+    headline: 'Service log ready to invoice',
+    lead: `${mechanicName} needs ${serviceLogLabel} to be invoiced. Open the draft invoice to finish billing.`,
+    highlight: {
+      label: 'Service log',
+      value: serviceLogLabel,
+      status: 'Needs invoicing',
+      statusTone: 'warn',
+    },
+    details: [
+      { label: 'Mechanic', value: mechanicName },
+      { label: 'Customer', value: customerName },
+      { label: 'Vehicle', value: vehicleUnit },
+      vehicleDetails ? { label: 'Vehicle details', value: vehicleDetails } : null,
+      invoiceNumber ? { label: 'Draft invoice', value: invoiceNumber } : null,
+      { label: 'Notified', value: recipientName },
+    ].filter(Boolean),
+    primaryAction: { href: invoiceUrl, label: 'Review invoice' },
+    secondaryAction: { href: serviceLogUrl, label: 'View service log' },
+    footerNote: 'You received this because a mechanic sent a service log to invoice.',
+    appUrl,
+    brand,
+  })
+}
