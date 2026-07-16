@@ -23,8 +23,9 @@ import {
   createInvoice,
   getInvoice,
 } from '../../server/services/invoices.service'
-import { createServiceLog, getServiceLog } from '../../server/services/service-logs.service'
+import { convertServiceLogToInvoice, createServiceLog, getServiceLog, transitionServiceLog } from '../../server/services/service-logs.service'
 import { createVehicle, getVehicle } from '../../server/services/vehicles.service'
+import { INVOICE_LINK_RELEASED_REASON } from '../../server/services/invoice-dependents.service'
 
 config()
 
@@ -224,6 +225,35 @@ describe('deletion request workflow', () => {
     await expect(getInvoice(db, draftInvoice.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
     const invIdx = createdInvoiceIds.indexOf(draftInvoice.id)
     if (invIdx >= 0) createdInvoiceIds.splice(invIdx, 1)
+  })
+
+  it('restores service log status when a converted invoice is deleted', async () => {
+    const log = await createServiceLog(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      workType: 'repair',
+      serviceDate: '2026-07-08',
+      complaint: 'Converted then deleted invoice',
+    }, ACTOR)
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    await transitionServiceLog(db, log.id, 'in_review')
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, ACTOR)
+
+    const delReq = await createDeletionRequest(
+      db,
+      'invoice',
+      invoice.id,
+      'Wrong conversion — recreate from log',
+      ACTOR,
+    )
+    createdRequestIds.push(delReq.id)
+
+    await approveDeletionRequest(db, delReq.id, ACTOR)
+
+    const restored = await getServiceLog(db, log.id)
+    expect(restored.status).toBe('in_review')
+    expect(restored.invoiceId).toBeNull()
+    expect(restored.statusReason).toBe(INVOICE_LINK_RELEASED_REASON)
   })
 
   it('approves service log deletion and hard-deletes the log', async () => {

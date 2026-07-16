@@ -309,6 +309,13 @@
       "when": 1783582000000,
       "tag": "0043_remove_approved_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1783583000000,
+      "tag": "0044_reconcile_invoice_dependent_statuses",
+      "breakpoints": true
     }
   ]
 }

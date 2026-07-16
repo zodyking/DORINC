@@ -23,7 +23,16 @@ export function workTypeLabel(key: string): string {
   return WORK_TYPE_LABELS[key] ?? key
 }
 
-export function serviceLogStatusPill(status: ServiceLogStatus): { cls: string, label: string } {
+export const INVOICE_LINK_RELEASED_REASON = 'Linked invoice was deleted; returned to review'
+
+export function serviceLogInvoiceLinkReleased(statusReason: string | null | undefined): boolean {
+  return statusReason === INVOICE_LINK_RELEASED_REASON
+}
+
+export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceId?: string | null }): { cls: string, label: string } {
+  if (status === 'converted_to_invoice' && !opts?.invoiceId) {
+    return { cls: 'pill warn', label: 'Awaiting review' }
+  }
   switch (status) {
     case 'uploaded':
       return { cls: 'pill gray', label: 'Uploaded' }

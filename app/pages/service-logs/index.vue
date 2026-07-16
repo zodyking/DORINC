@@ -140,8 +140,8 @@ function openLog(id: string) {
             <b>{{ logTitle(log.logNumber, log.vehicle, log.workType) }}</b>
             <div class="sub">{{ logSubtitle(log.customerName, log.createdAt, log.submitterName, log.fileCount) }}</div>
             <div style="margin-top:6px;">
-              <span :class="serviceLogStatusPill(log.status as ServiceLogStatus).cls">
-                {{ serviceLogStatusPill(log.status as ServiceLogStatus).label }}
+              <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).cls">
+                {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).label }}
               </span>
             </div>
           </div>

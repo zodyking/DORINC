@@ -14,6 +14,8 @@ import {
   updateServiceLog,
 } from '../../server/services/service-logs.service'
 import { getInvoice } from '../../server/services/invoices.service'
+import { hardDeleteInvoice } from '../../server/services/hard-delete.service'
+import { INVOICE_LINK_RELEASED_REASON } from '../../server/services/invoice-dependents.service'
 import { uploadFile } from '../../server/services/files.service'
 import { createCustomer } from '../../server/services/customers.service'
 import { createVehicle } from '../../server/services/vehicles.service'
@@ -287,5 +289,42 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
 
     const review = await listServiceLogs(db, { customerId: owner.id, queue: 'review', page: 1, pageSize: 50 })
     expect(review.items.some(i => i.id === converted.id)).toBe(false)
+  })
+})
+
+describe('P1-27 invoice deletion restores service log status', () => {
+  async function convertedLog() {
+    const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    await transitionServiceLog(db, log.id, 'in_review')
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    return { log: converted, invoice }
+  }
+
+  it('returns converted logs to in_review when their invoice is hard-deleted', async () => {
+    const { log, invoice } = await convertedLog()
+
+    await hardDeleteInvoice(db, invoice.id)
+
+    const restored = await getServiceLog(db, log.id)
+    expect(restored.status).toBe('in_review')
+    expect(restored.invoiceId).toBeNull()
+    expect(restored.statusReason).toBe(INVOICE_LINK_RELEASED_REASON)
+    await expect(getInvoice(db, invoice.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('reconciles orphaned converted logs on read and allows re-conversion', async () => {
+    const { log, invoice } = await convertedLog()
+
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id))
+    await db.delete(invoices).where(eq(invoices.id, invoice.id))
+
+    const reconciled = await getServiceLog(db, log.id)
+    expect(reconciled.status).toBe('in_review')
+    expect(reconciled.invoiceId).toBeNull()
+
+    const { invoice: newInvoice, log: reconverted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    expect(reconverted.status).toBe('converted_to_invoice')
+    expect(reconverted.invoiceId).toBe(newInvoice.id)
   })
 })

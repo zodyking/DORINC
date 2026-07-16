@@ -24,6 +24,7 @@ import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
 import { buildCustomerSnapshot, buildVehicleSnapshot } from './entity-snapshots'
 import { CustomersServiceError, getCustomer } from './customers.service'
+import { releaseInvoiceDependents } from './invoice-dependents.service'
 import { getInvoice, InvoicesServiceError } from './invoices.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
@@ -143,9 +144,7 @@ export async function hardDeleteInvoice(db: Db, id: string) {
   const invoice = await getInvoice(db, id)
   if (invoice.status === 'paid') throw new InvoicesServiceError('INVALID_TRANSITION')
 
-  await db.update(serviceLogs)
-    .set({ invoiceId: null, updatedAt: new Date() })
-    .where(eq(serviceLogs.invoiceId, id))
+  await releaseInvoiceDependents(db, id)
 
   await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id))
   await db.delete(invoices).where(eq(invoices.id, id))

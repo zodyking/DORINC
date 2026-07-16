@@ -277,7 +277,9 @@ function previewUrl(fileId: string) {
   return `/api/files/${fileId}/preview`
 }
 
-const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) : { cls: 'pill gray', label: '—' })
+const pill = computed(() => log.value
+  ? serviceLogStatusPill(log.value.status, { invoiceId: log.value.invoiceId })
+  : { cls: 'pill gray', label: '—' })
 </script>
 
 <template>
@@ -377,6 +379,13 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
     </StaffPageHead>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
+    <p
+      v-if="log && serviceLogInvoiceLinkReleased(log.statusReason)"
+      class="flash warn"
+      style="margin:-8px 0 16px;"
+    >
+      The linked invoice was deleted. This log is back in review — create a new invoice when ready.
+    </p>
     <p v-if="convertFlash" class="flash ok" style="margin:-8px 0 16px;">
       Invoice created and linked to this service log. The log stays on file.
       <NuxtLink :to="`/invoices/${convertFlash}`">View invoice</NuxtLink>

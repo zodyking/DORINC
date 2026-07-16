@@ -2,10 +2,12 @@ import { and, asc, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-o
 import type { Db } from '../db/client'
 import type { ServiceLogStatus, ServiceLogWorkType } from '../db/schema/service-logs'
 import { serviceLogs } from '../db/schema/service-logs'
+import { invoices } from '../db/schema/invoices'
 import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { users } from '../db/schema/auth'
 import { appFiles } from '../db/schema/files'
+import { INVOICE_LINK_RELEASED_REASON } from './invoice-dependents.service'
 
 export type ServiceLogsServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'VEHICLE_CUSTOMER_MISMATCH'
@@ -29,7 +31,7 @@ export const SERVICE_LOG_TRANSITIONS: Record<ServiceLogStatus, ServiceLogStatus[
   in_review: ['needs_info', 'rejected', 'ready_for_review', 'converted_to_invoice'],
   needs_info: ['ready_for_review', 'in_review', 'archived'],
   rejected: ['ready_for_review', 'archived'],
-  converted_to_invoice: [],
+  converted_to_invoice: ['in_review'],
   archived: ['ready_for_review'],
 }
 
@@ -93,6 +95,36 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
   return row!
 }
 
+/** Restores review status when a converted log no longer has a live invoice link. */
+export async function reconcileServiceLogInvoiceLink(
+  db: Db,
+  log: typeof serviceLogs.$inferSelect,
+): Promise<typeof serviceLogs.$inferSelect> {
+  if (log.status !== 'converted_to_invoice') return log
+
+  let invoiceMissing = !log.invoiceId
+  if (!invoiceMissing && log.invoiceId) {
+    const [invoice] = await db.select({ id: invoices.id })
+      .from(invoices)
+      .where(eq(invoices.id, log.invoiceId))
+      .limit(1)
+    invoiceMissing = !invoice
+  }
+  if (!invoiceMissing) return log
+
+  const [updated] = await db.update(serviceLogs)
+    .set({
+      status: 'in_review',
+      invoiceId: null,
+      statusReason: INVOICE_LINK_RELEASED_REASON,
+      updatedAt: new Date(),
+    })
+    .where(eq(serviceLogs.id, log.id))
+    .returning()
+
+  return updated ?? log
+}
+
 export async function getServiceLog(db: Db, id: string) {
   const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
   const [row] = await db
@@ -135,8 +167,10 @@ export async function getServiceLog(db: Db, id: string) {
 
   const snapVehicle = resolveVehicleDisplay(row.vehicle, row.log.vehicleSnapshot)
 
+  const reconciled = await reconcileServiceLogInvoiceLink(db, row.log)
+
   return {
-    ...row.log,
+    ...reconciled,
     customerName: resolveCustomerDisplayName(row.customerName, row.log.customerSnapshot),
     submitterName: row.submitterName,
     vehicle: vehicleFromLive ?? (snapVehicle
@@ -229,7 +263,7 @@ export async function convertServiceLogToInvoice(
 ) {
   const before = await getServiceLog(db, id)
 
-  if (before.invoiceId || before.status === 'converted_to_invoice') {
+  if (before.status === 'converted_to_invoice' && before.invoiceId) {
     throw new ServiceLogsServiceError('ALREADY_CONVERTED')
   }
   if (before.status !== 'in_review') {
