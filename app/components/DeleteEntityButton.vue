@@ -9,6 +9,8 @@ const props = defineProps<{
   removed?: boolean
   disabled?: boolean
   menuItem?: boolean
+  hideTrigger?: boolean
+  title?: string
 }>()
 
 const emit = defineEmits<{ submitted: [] }>()
@@ -92,10 +94,12 @@ function openRequestModal() {
   reason.value = ''
   requestModalOpen.value = true
 }
+
+defineExpose({ openRequestModal })
 </script>
 
 <template>
-  <template v-if="!removed && canShow">
+  <template v-if="!removed && canShow && !hideTrigger">
     <span v-if="pending && !menuItem" class="pill warn" style="margin-right:8px;">Deletion pending</span>
 
     <button
@@ -112,6 +116,7 @@ function openRequestModal() {
       type="button"
       :class="menuItem ? 'btn' : 'btn danger'"
       :disabled="disabled || busy"
+      :title="title"
       @click.stop="openRequestModal"
     >
       Request deletion

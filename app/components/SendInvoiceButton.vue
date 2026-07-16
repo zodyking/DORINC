@@ -6,10 +6,12 @@ const props = withDefaults(defineProps<{
   buttonClass?: string
   label?: string
   disabled?: boolean
+  hideTrigger?: boolean
 }>(), {
   buttonClass: 'btn primary',
   label: 'Send invoice',
   disabled: false,
+  hideTrigger: false,
 })
 
 const emit = defineEmits<{ sent: [] }>()
@@ -160,11 +162,13 @@ function retry() {
 }
 
 onUnmounted(stopPolling)
+
+defineExpose({ openModal })
 </script>
 
 <template>
   <button
-    v-if="canSend"
+    v-if="canSend && !hideTrigger"
     type="button"
     :class="buttonClass"
     :disabled="disabled || busy"

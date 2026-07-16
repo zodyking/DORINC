@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
+import SendInvoiceButton from '~/components/SendInvoiceButton.vue'
+import DeleteEntityButton from '~/components/DeleteEntityButton.vue'
 import type { InvoiceStatus } from '~/utils/invoices-ui'
 
 const props = defineProps<{
@@ -11,51 +13,102 @@ const props = defineProps<{
 const emit = defineEmits<{ changed: [] }>()
 
 const auth = useAuthStore()
-
 const ready = computed(() => auth.loaded)
 
-const canUpdate = computed(() => ready.value && auth.can('invoices.update.all'))
-const canSend = computed(() => ready.value && auth.can('invoices.send.all'))
-const canDelete = computed(() => ready.value && auth.can('deletion_requests.submit.all'))
+const sendRef = ref<InstanceType<typeof SendInvoiceButton> | null>(null)
 
-const showSend = computed(() => canSend.value && props.status === 'approved')
-const showEdit = computed(() => canUpdate.value && props.status === 'draft')
-const showDelete = computed(() => canDelete.value && props.status !== 'void' && props.status !== 'paid')
+const canSendPerm = computed(() => auth.can('invoices.send.all'))
+const canUpdatePerm = computed(() => auth.can('invoices.update.all'))
+const canDeletePerm = computed(() => auth.can('deletion_requests.submit.all'))
+
+const sendAllowed = computed(() => canSendPerm.value && props.status === 'approved')
+const editAllowed = computed(() => canUpdatePerm.value && props.status === 'draft')
+const deleteAllowed = computed(() => canDeletePerm.value && props.status !== 'void' && props.status !== 'paid')
+
+const sendTitle = computed(() => {
+  if (!canSendPerm.value) return 'You do not have permission to send invoices'
+  if (sendAllowed.value) return 'Email invoice PDF to customer'
+  if (props.status === 'sent' || props.status === 'paid') return 'Invoice already sent'
+  if (props.status === 'draft') return 'Approve the invoice before sending'
+  if (props.status === 'pending_manager_approval') return 'Awaiting manager approval'
+  if (props.status === 'void') return 'Void invoices cannot be sent'
+  return 'Send is not available for this invoice'
+})
+
+const editTitle = computed(() => {
+  if (!canUpdatePerm.value) return 'You do not have permission to edit invoices'
+  return editAllowed.value ? 'Edit draft invoice' : 'Only draft invoices can be edited'
+})
+
+const deleteTitle = computed(() => {
+  if (!canDeletePerm.value) return 'You do not have permission to request deletion'
+  if (deleteAllowed.value) return 'Request permanent deletion'
+  if (props.status === 'paid') return 'Paid invoices cannot be deleted'
+  return 'Void invoices cannot be deleted'
+})
+
+function onSendClick() {
+  if (!sendAllowed.value) return
+  sendRef.value?.openModal()
+}
 </script>
 
 <template>
   <div v-if="ready" class="inv-row-actions" @click.stop>
     <PageActionsMenu>
-      <SendInvoiceButton
-        v-if="showSend"
-        :invoice-id="invoiceId"
-        label="Send"
-        button-class="btn"
-        @sent="emit('changed')"
-      />
+      <button
+        type="button"
+        class="btn"
+        :disabled="!sendAllowed"
+        :title="sendTitle"
+        @click="onSendClick"
+      >
+        Send
+      </button>
       <NuxtLink
-        v-if="showEdit"
+        v-if="editAllowed"
         :to="`/invoices/${invoiceId}/edit`"
         class="btn"
+        :title="editTitle"
       >
         Edit
       </NuxtLink>
+      <button
+        v-else
+        type="button"
+        class="btn"
+        disabled
+        :title="editTitle"
+      >
+        Edit
+      </button>
       <DeleteEntityButton
-        v-if="showDelete"
-        entity-type="invoice"
+        v-if="canDeletePerm"
         :entity-id="invoiceId"
+        entity-type="invoice"
         :entity-label="invoiceLabel"
         menu-item
+        :disabled="!deleteAllowed"
+        :title="deleteTitle"
         @submitted="emit('changed')"
       />
-      <NuxtLink
-        v-if="!showSend && !showEdit && !showDelete"
-        :to="`/invoices/${invoiceId}`"
+      <button
+        v-else
+        type="button"
         class="btn"
+        disabled
+        :title="deleteTitle"
       >
-        View invoice
-      </NuxtLink>
+        Request deletion
+      </button>
     </PageActionsMenu>
+
+    <SendInvoiceButton
+      ref="sendRef"
+      :invoice-id="invoiceId"
+      hide-trigger
+      @sent="emit('changed')"
+    />
   </div>
 </template>
 
@@ -67,5 +120,9 @@ const showDelete = computed(() => canDelete.value && props.status !== 'void' && 
 .inv-row-actions :deep(.page-actions__panel) {
   right: 0;
   left: auto;
+}
+.inv-row-actions :deep(.page-actions__panel .btn:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 </style>
