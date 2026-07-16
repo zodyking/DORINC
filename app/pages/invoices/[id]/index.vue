@@ -7,7 +7,9 @@ import {
   invoiceDateDisplay,
   invoiceStatusHeadline,
   invoiceStatusPill,
+  isInvoiceEmailable,
   isInvoiceOverdue,
+  isInvoiceResend,
   lineQuantityDisplay,
   lineTypeLabel,
   lineTypePill,
@@ -155,19 +157,19 @@ const loadErrorMessage = computed(() => {
 
 const sendInProgress = computed(() =>
   !!invoice.value
-  && ['draft', 'pending_manager_approval'].includes(invoice.value.status)
-  && sendDelivery.value
+  && !!sendDelivery.value
   && ['queued', 'processing'].includes(sendDelivery.value.status),
 )
 const sendFailed = computed(() =>
   !!invoice.value
-  && ['draft', 'pending_manager_approval'].includes(invoice.value.status)
   && sendDelivery.value?.status === 'failed',
 )
 
 const canSendNow = computed(() =>
-  !!invoice.value
-  && (invoice.value.status === 'draft' || invoice.value.status === 'pending_manager_approval'),
+  !!invoice.value && isInvoiceEmailable(invoice.value.status),
+)
+const sendButtonLabel = computed(() =>
+  invoice.value && isInvoiceResend(invoice.value.status) ? 'Resend invoice' : 'Send invoice',
 )
 
 const savedNotice = ref('')
@@ -386,6 +388,7 @@ const summaryRows = computed(() => {
         <SendInvoiceButton
           v-if="canSend && canSendNow && !sendInProgress"
           :invoice-id="id"
+          :label="sendButtonLabel"
           :disabled="busy"
           @sent="refresh()"
         />

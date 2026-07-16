@@ -12,6 +12,17 @@ export interface InvoiceVehicleSnapshotDisplay extends VehicleDisplay {
 }
 
 export type InvoiceStatus = 'draft' | 'pending_manager_approval' | 'sent' | 'paid' | 'void'
+
+export const INVOICE_EMAIL_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval', 'sent', 'paid']
+export const INVOICE_RESEND_STATUSES: InvoiceStatus[] = ['sent', 'paid']
+
+export function isInvoiceEmailable(status: InvoiceStatus): boolean {
+  return INVOICE_EMAIL_STATUSES.includes(status)
+}
+
+export function isInvoiceResend(status: InvoiceStatus): boolean {
+  return INVOICE_RESEND_STATUSES.includes(status)
+}
 export type InvoiceLineType = LineItemType
 
 export const PAYMENT_TERMS_LABELS: Record<string, string> = {

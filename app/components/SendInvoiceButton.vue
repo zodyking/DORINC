@@ -30,6 +30,7 @@ interface SendPreview {
   notificationEnabled: boolean
   alreadyQueued: boolean
   sendable: boolean
+  isResend: boolean
 }
 
 type Phase = 'compose' | 'sending' | 'sent' | 'failed'
@@ -45,6 +46,11 @@ const recipientEmail = ref('')
 const subject = ref('')
 const message = ref('')
 const resultMessage = ref('')
+
+const isResend = computed(() => preview.value?.isResend ?? props.label.toLowerCase().includes('resend'))
+const modalTitle = computed(() => `${isResend.value ? 'Resend' : 'Send'} invoice${preview.value ? ` ${preview.value.invoiceNumber}` : ''}`)
+const submitLabel = computed(() => (isResend.value ? 'Resend invoice' : 'Send invoice'))
+const successTitle = computed(() => (isResend.value ? 'Invoice resent' : 'Invoice sent'))
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
@@ -135,10 +141,14 @@ async function pollStatus() {
       delivery: { status: string, lastError: string | null, recipientEmail: string | null } | null
     }>(`/api/invoices/${props.invoiceId}/send-status`)
 
-    if (data.status === 'sent' || data.status === 'paid' || data.delivery?.status === 'done') {
+    const delivered = data.delivery?.status === 'done'
+    const becameSent = !isResend.value && (data.status === 'sent' || data.status === 'paid')
+    if (delivered || becameSent) {
       stopPolling()
       phase.value = 'sent'
-      resultMessage.value = `Invoice sent to ${data.delivery?.recipientEmail ?? recipientEmail.value}.`
+      resultMessage.value = isResend.value
+        ? `Invoice resent to ${data.delivery?.recipientEmail ?? recipientEmail.value}.`
+        : `Invoice sent to ${data.delivery?.recipientEmail ?? recipientEmail.value}.`
       emit('sent')
       return
     }
@@ -181,7 +191,7 @@ defineExpose({ openModal })
     <div v-if="open" class="modal-scrim open" @click.self="closeModal">
       <div class="card modal-card" style="max-width:560px; width:100%;">
         <div class="chead">
-          <h3>Send invoice{{ preview ? ` ${preview.invoiceNumber}` : '' }}</h3>
+          <h3>{{ modalTitle }}</h3>
         </div>
         <div class="cbody">
           <div v-if="loadingPreview" class="cp-state">Loading…</div>
@@ -192,6 +202,7 @@ defineExpose({ openModal })
             </p>
             <p v-else style="font-size:13px; color:#64748b; margin:0 0 14px;">
               A PDF of this invoice will be attached. Review the recipient and message below.
+              <span v-if="isResend"> This invoice was already sent — delivery will be attempted again.</span>
             </p>
 
             <label class="fld">
@@ -226,7 +237,7 @@ defineExpose({ openModal })
                 :disabled="busy || (preview ? !preview.notificationEnabled || !preview.sendable : true)"
                 @click="submit"
               >
-                {{ busy ? 'Sending…' : 'Send invoice' }}
+                {{ busy ? (isResend ? 'Resending…' : 'Sending…') : submitLabel }}
               </button>
               <button type="button" class="btn" :disabled="busy" @click="closeModal">Cancel</button>
             </div>
@@ -248,7 +259,7 @@ defineExpose({ openModal })
           <template v-else-if="phase === 'sent'">
             <div class="send-status">
               <div class="send-badge ok" aria-hidden="true">✓</div>
-              <p style="margin:0; font-weight:600;">Invoice sent</p>
+              <p style="margin:0; font-weight:600;">{{ successTitle }}</p>
               <p class="help" style="margin:6px 0 0;">{{ resultMessage }}</p>
             </div>
             <div style="display:flex; gap:8px; margin-top:16px;">

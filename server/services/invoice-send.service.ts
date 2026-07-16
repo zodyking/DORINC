@@ -10,7 +10,9 @@ import { generateInvoicePdf, InvoicePdfServiceError } from './invoice-pdf.servic
 import {
   assertInvoiceSendable,
   getInvoice,
+  INVOICE_SENDABLE_STATUSES,
   InvoicesServiceError,
+  isInvoiceResendable,
   transitionInvoice,
 } from './invoices.service'
 
@@ -230,7 +232,8 @@ export async function getInvoiceSendPreview(db: Db, invoiceId: string) {
     message: defaults.message,
     notificationEnabled: await isNotificationEnabled(db, 'invoiceEmail'),
     alreadyQueued: !!pending,
-    sendable: ['draft', 'pending_manager_approval'].includes(invoice.status),
+    sendable: INVOICE_SENDABLE_STATUSES.includes(invoice.status),
+    isResend: isInvoiceResendable(invoice.status),
   }
 }
 
@@ -239,12 +242,13 @@ export interface BulkInvoiceSendResult {
   invoiceNumber: string
   queued: boolean
   alreadyQueued: boolean
+  alreadySent: boolean
   error: string | null
 }
 
 const SEND_ERROR_MESSAGES: Record<InvoiceSendServiceErrorCode, string> = {
   NOT_FOUND: 'Invoice not found',
-  INVALID_TRANSITION: 'Only draft or manager-approved invoices can be sent',
+  INVALID_TRANSITION: 'This invoice cannot be emailed from its current status',
   MANAGER_APPROVAL_REQUIRED: 'Manager approval is required before sending this invoice',
   NO_RECIPIENT: 'No billing email on file',
   ALREADY_QUEUED: 'Already queued for delivery',
@@ -268,9 +272,10 @@ export async function bulkQueueInvoiceSend(
       const invoice = await getInvoice(db, invoiceId)
       invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
       if (invoice.customerId !== input.customerId) {
-        results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, error: 'Invoice belongs to a different customer' })
+        results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, alreadySent: false, error: 'Invoice belongs to a different customer' })
         continue
       }
+      const alreadySent = isInvoiceResendable(invoice.status)
       const result = await queueInvoiceSend(db, invoiceId, actorId, {
         subject: input.subject ?? null,
         message: input.message ?? null,
@@ -280,6 +285,7 @@ export async function bulkQueueInvoiceSend(
         invoiceNumber: formatInvoiceNumber(result.invoice.invoiceNumber),
         queued: !result.alreadyQueued,
         alreadyQueued: result.alreadyQueued,
+        alreadySent,
         error: null,
       })
     }
@@ -287,7 +293,7 @@ export async function bulkQueueInvoiceSend(
       const message = err instanceof InvoiceSendServiceError
         ? SEND_ERROR_MESSAGES[err.code]
         : 'Could not queue this invoice'
-      results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, error: message })
+      results.push({ invoiceId, invoiceNumber, queued: false, alreadyQueued: false, alreadySent: false, error: message })
     }
   }
 

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,
+  isInvoiceEmailable,
   isInvoiceOverdue,
+  isInvoiceResend,
   lineQuantityDisplay,
   moneyDisplay,
   paymentTermsLabel,
@@ -28,6 +30,17 @@ describe('invoices-ui helpers (P1-22)', () => {
     const pill = invoiceStatusPill('sent', '2026-06-01', '100.00')
     expect(pill.cls).toBe('pill over')
     expect(pill.label).toBe('Overdue')
+  })
+
+  it('identifies emailable and resendable invoice statuses', () => {
+    expect(isInvoiceEmailable('draft')).toBe(true)
+    expect(isInvoiceEmailable('pending_manager_approval')).toBe(true)
+    expect(isInvoiceEmailable('sent')).toBe(true)
+    expect(isInvoiceEmailable('paid')).toBe(true)
+    expect(isInvoiceEmailable('void')).toBe(false)
+    expect(isInvoiceResend('sent')).toBe(true)
+    expect(isInvoiceResend('paid')).toBe(true)
+    expect(isInvoiceResend('draft')).toBe(false)
   })
 
   it('formats dates and labor quantities', () => {
