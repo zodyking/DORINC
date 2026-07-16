@@ -22,6 +22,7 @@ import {
 import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { phoneDisplay } from '~/utils/phone-ui'
+import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 
 definePageMeta({ layout: 'staff' })
 
@@ -212,7 +213,6 @@ const serviceLogImages = computed(() =>
   (linkedLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
 )
 const hasServiceLogPhotos = computed(() => !!invoice.value?.serviceLogId && serviceLogImages.value.length > 0)
-const photoGalleryIndex = ref(0)
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
@@ -724,9 +724,8 @@ const summaryRows = computed(() => {
           <p class="help" style="margin:0 0 14px;">
             Photos from {{ logNumberDisplay(linkedLogData?.log?.logNumber ?? 0) }} — use arrow keys or buttons to browse.
           </p>
-          <ServiceLogImageGallery
+          <ServiceLogPhotoManager
             v-if="invoice.serviceLogId"
-            v-model="photoGalleryIndex"
             :service-log-id="invoice.serviceLogId"
             :files="serviceLogImages"
           />

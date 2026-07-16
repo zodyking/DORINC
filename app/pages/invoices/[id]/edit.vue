@@ -34,6 +34,7 @@ import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 import { useProseField } from '~/composables/useProseField'
+import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 
 definePageMeta({ layout: 'staff' })
 
@@ -353,7 +354,6 @@ const serviceLogImages = computed(() =>
   (serviceLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
 )
 const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
-const photoGalleryIndex = ref(0)
 
 const hydratingFromServer = ref(false)
 
@@ -1186,9 +1186,8 @@ const aiPopStyle = computed(() => {
             </div>
           </div>
           <div class="cbody">
-            <ServiceLogImageGallery
+            <ServiceLogPhotoManager
               v-if="invoice.serviceLogId"
-              v-model="photoGalleryIndex"
               :service-log-id="invoice.serviceLogId"
               :files="serviceLogImages"
             />
