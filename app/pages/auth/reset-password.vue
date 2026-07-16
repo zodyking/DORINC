@@ -8,19 +8,63 @@ const route = useRoute()
 
 type ResetState = 'form' | 'loading' | 'success' | 'error'
 
+const RESET_TOKEN_STORAGE_KEY = 'dorinc.pendingResetToken'
+
 const state = ref<ResetState>('form')
 const password = ref('')
 const confirm = ref('')
 const reveal = reactive({ password: false, confirm: false })
 const message = ref('')
 const formError = ref('')
+const resetToken = ref<string | null>(null)
 
-/** Survives the replace navigation that strips the token from the address bar. */
-let pendingResetToken: string | null = null
+function readStoredToken(): string | null {
+  if (!import.meta.client) return null
+  try {
+    return sessionStorage.getItem(RESET_TOKEN_STORAGE_KEY)
+  }
+  catch {
+    return null
+  }
+}
 
-const resetToken = computed(() => pendingResetToken)
+function storeToken(token: string) {
+  if (!import.meta.client) return
+  try {
+    sessionStorage.setItem(RESET_TOKEN_STORAGE_KEY, token)
+  }
+  catch {
+    // ignore storage failures
+  }
+}
 
-async function submitReset(token: string) {
+function clearStoredToken() {
+  if (!import.meta.client) return
+  try {
+    sessionStorage.removeItem(RESET_TOKEN_STORAGE_KEY)
+  }
+  catch {
+    // ignore storage failures
+  }
+}
+
+function captureTokenFromRoute() {
+  const fromQuery = typeof route.query.token === 'string' ? route.query.token.trim() : ''
+  if (fromQuery) {
+    resetToken.value = fromQuery
+    storeToken(fromQuery)
+  }
+}
+
+captureTokenFromRoute()
+
+async function submitReset() {
+  const token = resetToken.value ?? readStoredToken()
+  if (!token) {
+    formError.value = 'Reset link expired — request a new password reset email.'
+    return
+  }
+
   if (password.value !== confirm.value) {
     formError.value = 'Passwords do not match'
     return
@@ -34,6 +78,7 @@ async function submitReset(token: string) {
       method: 'POST',
       body: { token, password: password.value },
     })
+    clearStoredToken()
     state.value = 'success'
     message.value = res.message
   }
@@ -45,21 +90,21 @@ async function submitReset(token: string) {
 
 onMounted(() => {
   const fromQuery = typeof route.query.token === 'string' ? route.query.token.trim() : ''
-  const token = fromQuery || pendingResetToken
-
-  if (!token) {
-    state.value = 'error'
-    message.value = 'This reset link is missing or invalid. Request a new password reset email from the sign-in page.'
-    return
-  }
-
   if (fromQuery) {
-    pendingResetToken = fromQuery
+    resetToken.value = fromQuery
+    storeToken(fromQuery)
     void navigateTo({ path: '/auth/reset-password', query: {} }, { replace: true })
     return
   }
 
-  pendingResetToken = token
+  if (!resetToken.value) {
+    resetToken.value = readStoredToken()
+  }
+
+  if (!resetToken.value) {
+    state.value = 'error'
+    message.value = 'This reset link is missing or invalid. Request a new password reset email from the sign-in page.'
+  }
 })
 </script>
 
@@ -97,7 +142,7 @@ onMounted(() => {
             </div>
           </template>
 
-          <form v-else @submit.prevent="resetToken && submitReset(resetToken)">
+          <form v-else @submit.prevent="submitReset">
             <p class="auth-hint">Choose a new password (minimum 12 characters).</p>
             <div class="fld">
               <label for="reset-password">New password</label>
@@ -134,7 +179,7 @@ onMounted(() => {
 
             <p v-if="formError" class="auth-hint auth-error" role="alert">{{ formError }}</p>
 
-            <button type="submit" class="btn primary reset-btn" :disabled="!resetToken">
+            <button type="submit" class="btn primary reset-btn">
               Update password
             </button>
           </form>
