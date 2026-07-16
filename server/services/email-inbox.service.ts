@@ -35,6 +35,7 @@ import {
   maxUploadBytes,
   uploadFile,
 } from './files.service'
+import { suppressesInboundEmail } from './email-ingest-suppression.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
@@ -109,10 +110,12 @@ async function persistInboundAttachments(
 }
 
 export async function isEmailInboxReady(db: Db): Promise<boolean> {
-  const result = await db.execute<{ reg: string | null }>(
-    sql`SELECT to_regclass('public.email_threads') AS reg`,
+  const result = await db.execute<{ inbox_reg: string | null, suppression_reg: string | null }>(
+    sql`SELECT
+      to_regclass('public.email_threads') AS inbox_reg,
+      to_regclass('public.email_ingest_suppressions') AS suppression_reg`,
   )
-  return Boolean(result.rows[0]?.reg)
+  return Boolean(result.rows[0]?.inbox_reg && result.rows[0]?.suppression_reg)
 }
 
 /** Apply migration 0047 on demand when email inbox tables are missing. */
@@ -671,6 +674,14 @@ export async function ingestInboundEmail(db: Db, input: {
 }) {
   const normalizedId = input.internetMessageId.trim()
   if (!normalizedId) return { skipped: true as const, reason: 'missing_message_id' as const }
+
+  if (await suppressesInboundEmail(db, {
+    internetMessageId: normalizedId,
+    inReplyTo: input.inReplyTo,
+    references: input.references,
+  })) {
+    return { skipped: true as const, reason: 'suppressed' as const }
+  }
 
   const [existing] = await db.select({ messageId: emailMessageMeta.messageId })
     .from(emailMessageMeta)

@@ -131,7 +131,7 @@ async function assertEntityDeletable(db: Db, entityType: DeletionEntityType, ent
   }
 }
 
-async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId: string, _actorId: string, _reason: string) {
+async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId: string, actorId: string, _reason: string) {
   switch (entityType) {
     case 'customer':
       await hardDeleteCustomer(db, entityId)
@@ -146,7 +146,7 @@ async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId:
       await hardDeleteInvoice(db, entityId)
       return
     case 'conversation':
-      await hardDeleteConversation(db, entityId)
+      await hardDeleteConversation(db, entityId, actorId)
       return
   }
 }

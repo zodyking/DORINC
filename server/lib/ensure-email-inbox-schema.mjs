@@ -54,6 +54,22 @@ CREATE TABLE IF NOT EXISTS "imap_sync_state" (
 );
 `.trim()
 
+const INLINE_0048_SQL = `
+CREATE TABLE IF NOT EXISTS "email_ingest_suppressions" (
+  "internet_message_id" text PRIMARY KEY NOT NULL,
+  "source_conversation_id" uuid,
+  "counterpart_email" text,
+  "subject" text,
+  "deleted_by" uuid REFERENCES "users"("id") ON DELETE set null,
+  "deleted_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "email_ingest_suppressions_conversation_idx"
+  ON "email_ingest_suppressions" USING btree ("source_conversation_id");
+CREATE INDEX IF NOT EXISTS "email_ingest_suppressions_deleted_at_idx"
+  ON "email_ingest_suppressions" USING btree ("deleted_at");
+`.trim()
+
 async function resolveMigrationsFolder() {
   const candidates = [
     join(process.cwd(), 'server/db/migrations'),
@@ -75,22 +91,36 @@ async function resolveMigrationsFolder() {
 }
 
 /**
- * Apply 0047_email_inbox.sql when email inbox tables are missing.
+ * Apply email inbox and deletion-suppression schemas when either is missing.
  * Safe to run after Drizzle migrate on every boot or before IMAP operations.
  *
  * @param {import('pg').Pool} pool
  * @returns {Promise<boolean>} true when repair SQL was applied
  */
 export async function ensureEmailInboxSchema(pool) {
-  const { rows } = await pool.query(`SELECT to_regclass('public.email_threads') AS reg`)
-  if (rows[0]?.reg) return false
-
+  let applied = false
   const folder = await resolveMigrationsFolder()
-  const sql = folder
-    ? await readFile(join(folder, '0047_email_inbox.sql'), 'utf8')
-    : INLINE_0047_SQL
+  const { rows: inboxRows } = await pool.query(`SELECT to_regclass('public.email_threads') AS reg`)
+  if (!inboxRows[0]?.reg) {
+    const sql = folder
+      ? await readFile(join(folder, '0047_email_inbox.sql'), 'utf8')
+      : INLINE_0047_SQL
+    await pool.query(sql)
+    console.log('[migrate] ensured email inbox tables (0047_email_inbox)')
+    applied = true
+  }
 
-  await pool.query(sql)
-  console.log('[migrate] ensured email inbox tables (0047_email_inbox)')
-  return true
+  const { rows: suppressionRows } = await pool.query(
+    `SELECT to_regclass('public.email_ingest_suppressions') AS reg`,
+  )
+  if (!suppressionRows[0]?.reg) {
+    const sql = folder
+      ? await readFile(join(folder, '0048_email_ingest_suppressions.sql'), 'utf8')
+      : INLINE_0048_SQL
+    await pool.query(sql)
+    console.log('[migrate] ensured deleted email suppression table (0048_email_ingest_suppressions)')
+    applied = true
+  }
+
+  return applied
 }

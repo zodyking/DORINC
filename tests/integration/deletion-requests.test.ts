@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { users } from '../../server/db/schema/auth'
 import { customers } from '../../server/db/schema/customers'
 import { entityDeletionRequests } from '../../server/db/schema/deletion-requests'
+import { emailIngestSuppressions, emailMessageMeta, emailThreads } from '../../server/db/schema/email-inbox'
 import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { vehicles } from '../../server/db/schema/vehicles'
@@ -36,6 +37,7 @@ import {
   getConversationDeletionLabel,
   sendMessage,
 } from '../../server/services/messages.service'
+import { suppressesInboundEmail } from '../../server/services/email-ingest-suppression.service'
 
 config()
 
@@ -89,10 +91,15 @@ await addInvoiceLineItem(db, draftInvoice.id, {
 const createdRequestIds: string[] = []
 const createdInvoiceIds = [draftInvoice.id]
 const createdConversationIds: string[] = []
+const createdSuppressionIds: string[] = []
 
 afterAll(async () => {
   if (createdRequestIds.length) {
     await db.delete(entityDeletionRequests).where(inArray(entityDeletionRequests.id, createdRequestIds))
+  }
+  if (createdSuppressionIds.length) {
+    await db.delete(emailIngestSuppressions)
+      .where(inArray(emailIngestSuppressions.internetMessageId, createdSuppressionIds))
   }
   await db.delete(entityDeletionRequests).where(like(entityDeletionRequests.entityLabel, `%DelReq-${stamp}%`))
   if (createdInvoiceIds.length) {
@@ -387,6 +394,63 @@ describe('deletion request workflow', () => {
     expect(gone).toBeUndefined()
 
     const convIdx = createdConversationIds.indexOf(conv.id)
+    if (convIdx >= 0) createdConversationIds.splice(convIdx, 1)
+  })
+
+  it('tombstones deleted email threads and suppresses future replies', async () => {
+    const rootMessageId = `<deleted-${stamp}@example.com>`
+    const replyMessageId = `<deleted-reply-${stamp}@example.com>`
+    createdSuppressionIds.push(rootMessageId, replyMessageId)
+
+    const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
+    createdConversationIds.push(conversation!.id)
+    await db.insert(emailThreads).values({
+      conversationId: conversation!.id,
+      counterpartEmail: 'deleted-thread@example.com',
+      subject: 'Thread that must stay deleted',
+      rootMessageId,
+    })
+    const [message] = await db.insert(messages).values({
+      conversationId: conversation!.id,
+      senderUserId: null,
+      body: 'Please delete this email thread',
+    }).returning()
+    await db.insert(emailMessageMeta).values({
+      messageId: message!.id,
+      direction: 'inbound',
+      internetMessageId: rootMessageId,
+      fromAddress: 'deleted-thread@example.com',
+      toAddresses: ['accounting@example.com'],
+      ccAddresses: [],
+    })
+
+    const created = await createDeletionRequest(
+      db,
+      'conversation',
+      conversation!.id,
+      'Delete this email thread permanently',
+      ACTOR,
+    )
+    createdRequestIds.push(created.id)
+    await approveDeletionRequest(db, created.id, ACTOR, 'Confirmed permanent deletion')
+
+    const [tombstone] = await db.select()
+      .from(emailIngestSuppressions)
+      .where(eq(emailIngestSuppressions.internetMessageId, rootMessageId))
+    expect(tombstone?.sourceConversationId).toBe(conversation!.id)
+    expect(tombstone?.deletedBy).toBe(ACTOR)
+
+    await expect(suppressesInboundEmail(db, {
+      internetMessageId: replyMessageId,
+      inReplyTo: rootMessageId,
+    })).resolves.toBe(true)
+
+    const [propagated] = await db.select()
+      .from(emailIngestSuppressions)
+      .where(eq(emailIngestSuppressions.internetMessageId, replyMessageId))
+    expect(propagated?.sourceConversationId).toBe(conversation!.id)
+
+    const convIdx = createdConversationIds.indexOf(conversation!.id)
     if (convIdx >= 0) createdConversationIds.splice(convIdx, 1)
   })
 })

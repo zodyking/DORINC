@@ -57,3 +57,16 @@ export const imapSyncState = pgTable('imap_sync_state', {
   lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
   lastError: text('last_error'),
 })
+
+/** Durable RFC822 tombstones that prevent hard-deleted email threads from returning on IMAP sync. */
+export const emailIngestSuppressions = pgTable('email_ingest_suppressions', {
+  internetMessageId: text('internet_message_id').primaryKey(),
+  sourceConversationId: uuid('source_conversation_id'),
+  counterpartEmail: text('counterpart_email'),
+  subject: text('subject'),
+  deletedBy: uuid('deleted_by').references(() => users.id, { onDelete: 'set null' }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index('email_ingest_suppressions_conversation_idx').on(table.sourceConversationId),
+  index('email_ingest_suppressions_deleted_at_idx').on(table.deletedAt),
+])

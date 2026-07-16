@@ -6,6 +6,7 @@ import { entityDeletionRequests } from '../db/schema/deletion-requests'
 import { editingSessions } from '../db/schema/editing-sessions'
 import { estimates, estimateFiles, estimateLineItems } from '../db/schema/estimates'
 import { invoiceFiles, invoiceLineItems, invoices } from '../db/schema/invoices'
+import { emailIngestSuppressions, emailMessageMeta, emailThreads } from '../db/schema/email-inbox'
 import { conversations, messages } from '../db/schema/messages'
 import {
   invoiceChangeRequests,
@@ -152,13 +153,40 @@ export async function hardDeleteInvoice(db: Db, id: string) {
   return { id }
 }
 
-export async function hardDeleteConversation(db: Db, id: string) {
+export async function hardDeleteConversation(db: Db, id: string, actorId?: string | null) {
   await getConversationDeletionLabel(db, id)
 
-  const messageRows = await db.select({ id: messages.id })
+  const [emailThread] = await db.select({
+    counterpartEmail: emailThreads.counterpartEmail,
+    subject: emailThreads.subject,
+  })
+    .from(emailThreads)
+    .where(eq(emailThreads.conversationId, id))
+    .limit(1)
+
+  const messageRows = await db.select({
+    id: messages.id,
+    internetMessageId: emailMessageMeta.internetMessageId,
+  })
     .from(messages)
+    .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
     .where(eq(messages.conversationId, id))
   const messageIds = messageRows.map(r => r.id)
+
+  const internetMessageIds = messageRows
+    .map(row => row.internetMessageId?.trim())
+    .filter((messageId): messageId is string => !!messageId)
+  if (emailThread && internetMessageIds.length) {
+    await db.insert(emailIngestSuppressions).values(
+      internetMessageIds.map(internetMessageId => ({
+        internetMessageId,
+        sourceConversationId: id,
+        counterpartEmail: emailThread.counterpartEmail,
+        subject: emailThread.subject,
+        deletedBy: actorId ?? null,
+      })),
+    ).onConflictDoNothing()
+  }
 
   if (messageIds.length) {
     await db.delete(appFiles).where(and(
