@@ -227,17 +227,29 @@ async function setEmailShowAll(showAll: boolean) {
               Email
             </button>
           </div>
-          <label
-            v-if="dm.messageChannel === 'email' || dm.messageChannel === 'all'"
+          <div
+            v-if="dm.messageChannel === 'email'"
             class="dm-email-filter"
+            role="group"
+            aria-label="Email inbox filter"
           >
-            <input
-              type="checkbox"
-              :checked="dm.emailShowAll"
-              @change="setEmailShowAll(($event.target as HTMLInputElement).checked)"
+            <button
+              type="button"
+              class="dm-email-filter-opt"
+              :class="{ on: !dm.emailShowAll }"
+              @click="setEmailShowAll(false)"
             >
-            Show all synced mail (not just customer → company)
-          </label>
+              Customers
+            </button>
+            <button
+              type="button"
+              class="dm-email-filter-opt"
+              :class="{ on: dm.emailShowAll }"
+              @click="setEmailShowAll(true)"
+            >
+              Show all
+            </button>
+          </div>
           <input
             v-model="dm.conversationSearch"
             type="search"

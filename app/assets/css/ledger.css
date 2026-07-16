@@ -1662,8 +1662,10 @@ section.page.active.dm-page{
 .dm-email-html table{ max-width:100%; border-collapse:collapse; }
 .dm-email-empty{ color:#94a3b8; font-style:italic; }
 .dm-send-btn--labeled{
-  width:auto; min-width:96px; height:40px; padding:0 14px;
-  font-size:13px; font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:auto; min-width:88px; height:auto; min-height:44px;
+  padding:10px 16px; font-size:13px; font-weight:600;
+  white-space:nowrap; line-height:1;
 }
 .dm-modal-wide{ width:min(520px, calc(100vw - 32px)); max-height:min(90vh, 640px); }
 .dm-modal-body{ flex:1; overflow:auto; min-height:0; }
@@ -1677,10 +1679,18 @@ section.page.active.dm-page{
   font:inherit; font-weight:400; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;
 }
 .dm-email-filter{
-  display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#64748b;
-  line-height:1.35; cursor:pointer; user-select:none;
+  display:flex; gap:4px; margin-bottom:10px; padding:3px;
+  background:#f1f5f9; border-radius:8px;
 }
-.dm-email-filter input{ margin-top:2px; flex-shrink:0; accent-color:#4f46e5; }
+.dm-email-filter-opt{
+  flex:1; border:none; background:transparent; border-radius:6px;
+  padding:6px 8px; font-size:11px; font-weight:600; color:#64748b; cursor:pointer;
+  font:inherit; transition:background .15s, color .15s, box-shadow .15s;
+}
+.dm-email-filter-opt.on{
+  background:#fff; color:#4338ca; box-shadow:0 1px 2px rgba(15,23,42,.08);
+}
+.dm-email-filter-opt:hover:not(.on){ color:#475569; }
 .dm-search{
   width:100%; border:1px solid #e2e8f0; border-radius:10px; padding:9px 12px;
   font:inherit; font-size:13px; background:#fff;

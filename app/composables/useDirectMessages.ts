@@ -101,7 +101,7 @@ export function useDirectMessages() {
         query: {
           q: conversationSearch.value || undefined,
           channel: messageChannel.value,
-          emailScope: emailShowAll.value ? 'all' : 'customers',
+          emailScope: messageChannel.value === 'email' && emailShowAll.value ? 'all' : 'customers',
           page: 1,
           pageSize: 50,
         },
