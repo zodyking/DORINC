@@ -185,7 +185,7 @@ async function onDeletionRequested() {
   await dm.fetchConversations()
 }
 
-async function setChannel(channel: 'all' | 'dm' | 'email') {
+async function setChannel(channel: 'dm' | 'email') {
   await dm.setChannel(channel)
 }
 
@@ -224,16 +224,6 @@ async function setEmailShowAll(showAll: boolean) {
             </button>
           </div>
           <div class="dm-channel-tabs" role="tablist" aria-label="Message channels">
-            <button
-              type="button"
-              role="tab"
-              class="dm-channel-tab"
-              :class="{ on: dm.messageChannel === 'all' }"
-              :aria-selected="dm.messageChannel === 'all'"
-              @click="setChannel('all')"
-            >
-              All
-            </button>
             <button
               type="button"
               role="tab"

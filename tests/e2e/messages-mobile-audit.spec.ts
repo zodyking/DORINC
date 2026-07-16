@@ -40,7 +40,7 @@ test.describe('Messages fluid mobile audit fixture', () => {
     expect(emailBox!.y).toBeGreaterThan(messageBox!.y + messageBox!.height - 1)
 
     const tabBoxes = []
-    for (const label of ['All', 'Team', 'Email']) {
+    for (const label of ['Team', 'Email']) {
       const tab = page.getByRole('button', { name: label, exact: true })
       await expect(tab).toBeVisible()
       const box = await tab.boundingBox()
@@ -51,8 +51,7 @@ test.describe('Messages fluid mobile audit fixture', () => {
     }
     // Equal-width fluid tabs — no clipping / leftover empty track.
     expect(Math.abs(tabBoxes[0]!.width - tabBoxes[1]!.width)).toBeLessThan(2)
-    expect(Math.abs(tabBoxes[1]!.width - tabBoxes[2]!.width)).toBeLessThan(2)
-    expect(tabBoxes[0]!.width).toBeGreaterThan(90)
+    expect(tabBoxes[0]!.width).toBeGreaterThan(120)
 
     // Email address hidden on mobile list rows for density.
     await expect(page.locator('.dm-conv-email').first()).toBeHidden()

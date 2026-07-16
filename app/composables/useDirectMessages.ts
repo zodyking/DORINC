@@ -60,7 +60,11 @@ export interface ChatMessage {
   attachments?: EmailAttachment[]
 }
 
-export type MessageChannel = 'all' | 'dm' | 'email'
+export type MessageChannel = 'dm' | 'email'
+
+function normalizeMessageChannel(value: string): MessageChannel {
+  return value === 'email' ? 'email' : 'dm'
+}
 
 export function useDirectMessages() {
   const auth = useAuthStore()
@@ -74,7 +78,7 @@ export function useDirectMessages() {
   const loadingMessages = useState('dm-loading-messages', () => false)
   const sending = useState('dm-sending', () => false)
   const conversationSearch = useState('dm-conversation-search', () => '')
-  const messageChannel = useState<MessageChannel>('dm-message-channel', () => 'all')
+  const messageChannel = useState<string>('dm-message-channel', () => 'dm')
   const emailShowAll = useState('dm-email-show-all', () => false)
   const fetchError = useState<string | null>('dm-fetch-error', () => null)
 
@@ -123,8 +127,8 @@ export function useDirectMessages() {
       const res = await $fetch<{ items: ConversationSummary[] }>('/api/conversations', {
         query: {
           q: conversationSearch.value || undefined,
-          channel: messageChannel.value,
-          emailScope: messageChannel.value === 'email' && emailShowAll.value ? 'all' : 'customers',
+          channel: normalizeMessageChannel(messageChannel.value),
+          emailScope: normalizeMessageChannel(messageChannel.value) === 'email' && emailShowAll.value ? 'all' : 'customers',
           page: 1,
           pageSize: 50,
         },
@@ -237,8 +241,9 @@ export function useDirectMessages() {
   }
 
   async function setChannel(channel: MessageChannel) {
-    if (messageChannel.value === channel) return
-    messageChannel.value = channel
+    const next = normalizeMessageChannel(channel)
+    if (normalizeMessageChannel(messageChannel.value) === next) return
+    messageChannel.value = next
     activeConversationId.value = null
     messages.value = []
     await fetchConversations()

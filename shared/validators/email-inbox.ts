@@ -48,4 +48,4 @@ export const emailReplySchema = z.object({
   body: z.string().min(1).max(50000),
 })
 
-export const conversationChannelSchema = z.enum(['all', 'dm', 'email']).default('all')
+export const conversationChannelSchema = z.enum(['all', 'dm', 'email']).default('dm')
