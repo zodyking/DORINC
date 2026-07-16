@@ -22,6 +22,11 @@ a{ color:#4f46e5; }
   min-height:100vh; display:flex; align-items:center; justify-content:center;
   padding:24px; background:linear-gradient(160deg,#eef2ff 0%,#f8fafc 45%,#f1f5f9 100%);
 }
+.auth-screen--customer{
+  background:
+    linear-gradient(180deg, rgba(248,250,252,.78) 0%, rgba(241,245,249,.88) 100%),
+    url('/images/customer-login-bg.png') center / cover no-repeat fixed;
+}
 .auth-screen.hidden{ display:none; }
 .app-shell.hidden,.portal-shell.hidden{ display:none; }
 .auth-wrap{ width:min(360px,100%); }
