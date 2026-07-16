@@ -1,4 +1,5 @@
 import { formatMoney, parseMoney } from './money'
+import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from './invoice-template-design'
@@ -203,7 +204,7 @@ export function businessProfileToDocumentPdfCompany(profile: BusinessProfile): D
     name: profile.businessName?.trim() || 'Business Name',
     addressLine1: addrLines[0] ?? '',
     addressLine2: addrLines.slice(1).join(', '),
-    phone: profile.phone?.trim() ?? '',
+    phone: formatPhoneDisplay(profile.phone?.trim() ?? ''),
     email: profile.email?.trim() ?? '',
     website: profile.website?.trim() ?? '',
   }
@@ -298,7 +299,7 @@ export function buildInvoicePdfData(
     customer: {
       name: customerName,
       addressLines: addressLines(customerAddr),
-      phone: customer?.phone ?? '—',
+      phone: phoneDisplay(customer?.phone),
       email: customer?.email ?? '—',
     },
     vehicle: vehicle

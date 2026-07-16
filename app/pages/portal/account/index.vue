@@ -6,6 +6,7 @@ import {
   portalMustChangePasswordNote,
 } from '~/utils/portal-account-ui'
 import { portalUserInitials } from '~/utils/portal-dashboard-ui'
+import { phoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
 
@@ -132,7 +133,7 @@ async function signOut() {
           </label>
           <label class="fld">
             <span>Company phone</span>
-            <input type="text" :value="data.company.phone ?? '—'" readonly style="background:#f1f5f9;">
+            <input type="text" :value="phoneDisplay(data.company.phone)" readonly style="background:#f1f5f9;">
           </label>
           <p style="font-size:12.5px;color:#64748b;margin:0;">
             Contact the shop to update billing or account contact information.

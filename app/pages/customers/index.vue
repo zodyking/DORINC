@@ -2,6 +2,7 @@
 import { moneyDisplay } from '~/utils/invoices-ui'
 import { avColor, initials } from '~/utils/users-ui'
 import { listRangeLabel, windowedPagerPages } from '~/utils/pager-ui'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff', permission: 'customers.read.all' })
 
@@ -72,11 +73,13 @@ function clearFilters() {
 
 function subtitleFor(c: CustomerRow): string {
   if (c.primaryContact) {
-    return [c.primaryContact.name, c.primaryContact.email ?? c.primaryContact.phone]
-      .filter(Boolean).join(' · ')
+    return [
+      c.primaryContact.name,
+      c.primaryContact.email ?? formatPhoneDisplay(c.primaryContact.phone),
+    ].filter(Boolean).join(' · ')
   }
   const kind = c.accountKind === 'fleet' ? 'Fleet' : 'Individual'
-  return [kind, c.email ?? c.phone].filter(Boolean).join(' · ')
+  return [kind, c.email ?? formatPhoneDisplay(c.phone)].filter(Boolean).join(' · ')
 }
 </script>
 

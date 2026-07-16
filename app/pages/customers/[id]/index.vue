@@ -7,6 +7,7 @@ import {
   type InvoiceStatus,
 } from '~/utils/invoices-ui'
 import { avColor, initials } from '~/utils/users-ui'
+import { formatPhoneDisplay, phoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -435,7 +436,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
                 <span class="av" :class="avColor(c.name)">{{ initials(c.name) }}</span>
                 <div class="nm">
                   <b>{{ c.name }}</b>
-                  <small>{{ [c.title, c.email, c.phone].filter(Boolean).join(' · ') || 'No contact info' }}</small>
+                  <small>{{ [c.title, c.email, formatPhoneDisplay(c.phone)].filter(Boolean).join(' · ') || 'No contact info' }}</small>
                 </div>
                 <div class="end">
                   <span v-if="c.isPrimary" class="pill indigo">Primary</span>
@@ -452,7 +453,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
                 <label class="fld">Name <input v-model="contactForm.name" type="text" required></label>
                 <label class="fld">Title <input v-model="contactForm.title" type="text" placeholder="e.g. Fleet manager"></label>
                 <label class="fld">Email <input v-model="contactForm.email" type="email"></label>
-                <label class="fld">Phone <input v-model="contactForm.phone" type="tel"></label>
+                <label class="fld">Phone <input v-model="contactForm.phone" type="tel" @blur="contactForm.phone = formatPhoneDisplay(contactForm.phone)"></label>
                 <div class="tglrow">Primary contact <span class="tgl"><input v-model="contactForm.isPrimary" type="checkbox"><span class="tr" /></span></div>
                 <div class="tglrow">Billing contact <span class="tgl"><input v-model="contactForm.isBilling" type="checkbox"><span class="tr" /></span></div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
@@ -495,7 +496,7 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
             <dl class="kv">
               <dt>Primary contact</dt><dd>{{ primary?.name ?? '—' }}</dd>
               <dt>Email</dt><dd>{{ primary?.email ?? customer.email ?? '—' }}</dd>
-              <dt>Phone</dt><dd>{{ primary?.phone ?? customer.phone ?? '—' }}</dd>
+              <dt>Phone</dt><dd>{{ phoneDisplay(primary?.phone ?? customer.phone) }}</dd>
               <dt>Terms</dt><dd>{{ TERMS_LABELS[customer.paymentTerms] ?? customer.paymentTerms }}{{ customer.taxExempt ? ' · Tax exempt' : '' }}</dd>
               <dt>Billing address</dt><dd>{{ addressLine(customer.billingAddress) }}</dd>
               <dt>Service address</dt><dd>{{ addressLine(customer.serviceAddress) }}</dd>

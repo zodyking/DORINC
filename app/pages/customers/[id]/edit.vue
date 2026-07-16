@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CustomerFormValue } from '~/components/customers/CustomerForm.vue'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -48,7 +49,7 @@ watchEffect(() => {
   form.displayName = c.displayName
   form.accountKind = c.accountKind
   form.email = c.email ?? ''
-  form.phone = c.phone ?? ''
+  form.phone = formatPhoneDisplay(c.phone ?? '')
   form.billingAddress = { line1: '', city: '', state: '', zip: '', ...c.billingAddress }
   form.serviceAddress = { line1: '', city: '', state: '', zip: '', ...c.serviceAddress }
   form.taxExempt = c.taxExempt

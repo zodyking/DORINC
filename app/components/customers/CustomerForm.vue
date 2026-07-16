@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatPhoneDisplay } from '#shared/format/phone'
+
 export interface CustomerFormValue {
   displayName: string
   accountKind: 'fleet' | 'individual'
@@ -37,7 +39,7 @@ const emit = defineEmits<{ submit: [], cancel: [] }>()
               </select>
             </label>
             <label class="fld">Email <input v-model="model.email" type="email" placeholder="billing@company.com"></label>
-            <label class="fld">Phone <input v-model="model.phone" type="tel" placeholder="(302) 555-0100"></label>
+            <label class="fld">Phone <input v-model="model.phone" type="tel" placeholder="(302) 555 0100" @blur="model.phone = formatPhoneDisplay(model.phone)"></label>
             <label class="fld">Payment terms
               <select v-model="model.paymentTerms">
                 <option value="due_on_receipt">Due on receipt</option>

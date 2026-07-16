@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BusinessProfile } from '#shared/workspace-settings-defaults'
+import { formatPhoneDisplay } from '#shared/format/phone'
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -20,7 +21,7 @@ const form = reactive({
 
 watch(() => data.value?.profile, (p) => {
   if (!p) return
-  Object.assign(form, p)
+  Object.assign(form, { ...p, phone: formatPhoneDisplay(p.phone) })
 }, { immediate: true })
 
 const busy = ref(false)
@@ -36,7 +37,7 @@ async function save() {
       method: 'PATCH',
       body: {
         businessName: form.businessName.trim(),
-        phone: form.phone.trim(),
+        phone: formatPhoneDisplay(form.phone.trim()),
         email: form.email.trim(),
         website: form.website.trim(),
         addressLine1: form.addressLine1.trim(),
@@ -79,7 +80,7 @@ async function save() {
         <div class="row2">
           <label class="fld">
             Phone
-            <input v-model="form.phone" type="tel" maxlength="40" placeholder="(555) 555-0100">
+            <input v-model="form.phone" type="tel" maxlength="40" placeholder="(555) 555 0100" @blur="form.phone = formatPhoneDisplay(form.phone)">
           </label>
           <label class="fld">
             Email

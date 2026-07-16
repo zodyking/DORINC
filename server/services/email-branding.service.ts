@@ -1,6 +1,7 @@
 import type { Db } from '../db/client'
 import { BRAND_NAME } from '../../shared/brand'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
+import { formatPhoneDisplay } from '../../shared/format/phone'
 import { getAppUrl } from './app-config.service'
 import { resolveInvoicePdfTemplate } from './invoice-template-source.service'
 import { getBusinessProfile } from './workspace-settings.service'
@@ -63,7 +64,7 @@ export function buildEmailBrandFromProfile(
     logoUrl,
     logoInitial,
     addressLines: formatAddressLines(profile),
-    phone: profile.phone?.trim() || '',
+    phone: formatPhoneDisplay(profile.phone?.trim() || ''),
     email: profile.email?.trim() || '',
     website: profile.website?.trim() || '',
     appUrl,

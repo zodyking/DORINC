@@ -19,6 +19,7 @@ import {
 } from '~/utils/invoices-ui'
 import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
+import { phoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -604,7 +605,7 @@ const summaryRows = computed(() => {
           <dl class="kv">
             <dt>Account</dt><dd>{{ invoice.customerName }}</dd>
             <dt>Email</dt><dd>{{ invoice.customerSnapshot?.email ?? '—' }}</dd>
-            <dt>Phone</dt><dd>{{ invoice.customerSnapshot?.phone ?? '—' }}</dd>
+            <dt>Phone</dt><dd>{{ phoneDisplay(invoice.customerSnapshot?.phone) }}</dd>
             <dt>Terms</dt><dd>{{ paymentTermsLabel(invoice.paymentTerms) }}</dd>
             <dt>PO / ref</dt><dd>{{ invoice.poNumber ?? '—' }}</dd>
             <dt>Balance due</dt><dd>{{ moneyDisplay(invoice.balanceDue) }}</dd>

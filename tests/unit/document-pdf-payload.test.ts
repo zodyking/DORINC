@@ -17,7 +17,7 @@ describe('document-pdf-payload', () => {
       customerName: 'Acme Fleet',
       customerSnapshot: {
         displayName: 'Acme Fleet',
-        phone: '555-0199',
+        phone: '5555550199',
         email: 'billing@acme.test',
         billingAddress: {
           line1: '100 Industrial Way',
@@ -64,6 +64,7 @@ describe('document-pdf-payload', () => {
     expect(data.lineItems).toHaveLength(2)
     expect(data.lineItems[0]?.typeBadge).toBe('P')
     expect(data.customer.addressLines).toEqual(['100 Industrial Way', 'Newark, NJ 07102'])
+    expect(data.customer.phone).toBe('(555) 555 0199')
 
     const payload = buildDocumentPdfRenderPayload(data, { paper: 'a4', marginInches: 0.75 })
     expect(payload.options.paper).toBe('a4')
@@ -123,7 +124,7 @@ describe('document-pdf-payload', () => {
   it('maps business profile settings to PDF company block', () => {
     const company = businessProfileToDocumentPdfCompany({
       businessName: 'Acme Fleet Service',
-      phone: '555-0100',
+      phone: '5555550100',
       email: 'shop@acme.test',
       website: 'https://acme.test',
       addressLine1: '100 Industrial Way',
@@ -138,7 +139,7 @@ describe('document-pdf-payload', () => {
       name: 'Acme Fleet Service',
       addressLine1: '100 Industrial Way',
       addressLine2: 'Suite 4, Newark, NJ 07102',
-      phone: '555-0100',
+      phone: '(555) 555 0100',
       email: 'shop@acme.test',
       website: 'https://acme.test',
     })

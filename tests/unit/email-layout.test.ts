@@ -31,7 +31,7 @@ describe('email layout', () => {
         logoUrl: 'https://app.example.com/images/dorinc-icon-trans.png',
         logoInitial: 'A',
         addressLines: ['123 Main St', 'Austin, TX 78701'],
-        phone: '555-0100',
+        phone: '5555550100',
         email: 'billing@acme.test',
         appUrl: 'https://app.example.com',
         settingsUrl: 'https://app.example.com/admin?tab=notifications',
@@ -47,6 +47,7 @@ describe('email layout', () => {
     expect(html).toContain('Your password is ready')
     expect(html).toContain('Acme Shop')
     expect(html).toContain('123 Main St')
+    expect(html).toContain('(555) 555 0100')
     expect(html).toContain('Notification settings')
     expect(html).toContain('https://app.example.com')
   })

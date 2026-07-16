@@ -41,6 +41,27 @@ export function escapeHtml(value) {
 }
 
 /**
+ * Format a phone number for display as `(xxx) xxx xxxx`.
+ * Keep in sync with shared/format/phone.ts
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function formatPhoneDisplay(value) {
+  if (value == null) return ''
+  const trimmed = String(value).trim()
+  if (!trimmed || trimmed === '—' || trimmed === '-') return trimmed
+
+  const digits = trimmed.replace(/\D/g, '')
+  let local = digits
+  if (local.length === 11 && local.startsWith('1')) local = local.slice(1)
+  if (local.length === 10) {
+    return `(${local.slice(0, 3)}) ${local.slice(3, 6)} ${local.slice(6)}`
+  }
+
+  return trimmed
+}
+
+/**
  * @typedef {{
  *   brandName?: string,
  *   brandLegal?: string,
@@ -73,7 +94,7 @@ export function normalizeEmailBrand(brand, appUrl = '') {
     logoUrl: brand?.logoUrl ?? (base ? `${base}/images/dorinc-icon-trans.png` : null),
     logoInitial: brand?.logoInitial?.trim() || brandName.charAt(0).toUpperCase() || 'D',
     addressLines: Array.isArray(brand?.addressLines) ? brand.addressLines.filter(Boolean) : [],
-    phone: brand?.phone?.trim() || '',
+    phone: formatPhoneDisplay(brand?.phone?.trim() || ''),
     email: brand?.email?.trim() || '',
     website: brand?.website?.trim() || '',
     appUrl: base,
