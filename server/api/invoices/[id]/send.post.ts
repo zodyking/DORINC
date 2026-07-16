@@ -4,6 +4,7 @@ import {
   InvoiceSendServiceError,
   queueInvoiceSend,
 } from '../../../services/invoice-send.service'
+import { isInvoiceResendable } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
@@ -15,7 +16,7 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
     case 'NOT_FOUND':
       throw apiError(event, 'NOT_FOUND', 'Invoice not found')
     case 'INVALID_TRANSITION':
-      throw apiError(event, 'CONFLICT', 'Only draft or manager-approved invoices can be sent')
+      throw apiError(event, 'CONFLICT', 'This invoice cannot be emailed from its current status')
     case 'MANAGER_APPROVAL_REQUIRED':
       throw apiError(event, 'FORBIDDEN', 'Manager approval is required before sending this invoice')
     case 'NO_RECIPIENT':
@@ -24,6 +25,8 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
       throw apiError(event, 'CONFLICT', 'This invoice is already queued for delivery')
     case 'NOTIFICATION_DISABLED':
       throw apiError(event, 'VALIDATION_ERROR', 'Invoice emails are disabled in Control Panel → Notifications')
+    case 'PDF_FAILED':
+      throw apiError(event, 'INTERNAL_ERROR', 'PDF generation failed — try again or contact support')
     default:
       throw err
   }
@@ -68,7 +71,9 @@ export default defineEventHandler(async (event) => {
       alreadyQueued: result.alreadyQueued,
       message: result.alreadyQueued
         ? 'Invoice delivery is already in progress.'
-        : 'Invoice queued for PDF generation and email delivery. Status will update to Sent after the email is delivered.',
+        : isInvoiceResendable(result.invoice.status)
+          ? 'Invoice queued for resend. Email delivery will begin shortly.'
+          : 'Invoice queued for PDF generation and email delivery. Status will update to Sent after the email is delivered.',
     }
   }
   catch (err) {

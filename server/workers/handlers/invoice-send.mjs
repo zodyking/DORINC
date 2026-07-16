@@ -228,16 +228,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       const invoice = invoiceRows[0]
       if (!invoice) throw new Error('Invoice not found')
 
-      if (invoice.status === 'sent' || invoice.status === 'paid') {
-        await pool.query(
-          `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
-          [job.id],
-        )
-        processed++
-        continue
-      }
-
-      if (!['draft', 'pending_manager_approval'].includes(invoice.status)) {
+      if (!['draft', 'pending_manager_approval', 'sent', 'paid'].includes(invoice.status)) {
         throw new Error(`Invoice cannot be sent from status ${invoice.status}`)
       }
 
@@ -282,9 +273,12 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
 
       await deliverInvoiceEmail(pool, payload, pdfRow)
 
-      const marked = await markInvoiceSent(pool, invoiceId, actorId)
-      if (!marked) {
-        throw new Error('Invoice status changed before send could complete')
+      const isResend = invoice.status === 'sent' || invoice.status === 'paid'
+      if (!isResend) {
+        const marked = await markInvoiceSent(pool, invoiceId, actorId)
+        if (!marked) {
+          throw new Error('Invoice status changed before send could complete')
+        }
       }
 
       await pool.query(

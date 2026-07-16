@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
+import { invoiceDateDisplay, isInvoiceEmailable, isInvoiceResend, moneyDisplay, type InvoiceStatus } from '~/utils/invoices-ui'
+
+const BULK_SEND_STATUSES = 'draft,pending_manager_approval,sent,paid'
 
 const props = withDefaults(defineProps<{
   buttonClass?: string
@@ -24,6 +26,7 @@ interface CustomerPick {
 interface SendableInvoice {
   id: string
   invoiceNumberFormatted: string
+  status: InvoiceStatus
   total: string
   dueDate: string | null
 }
@@ -33,6 +36,7 @@ interface BulkApiResult {
   invoiceNumber: string
   queued: boolean
   alreadyQueued: boolean
+  alreadySent: boolean
   error: string | null
 }
 
@@ -43,6 +47,7 @@ interface BulkResultRow {
   invoiceNumber: string
   queueError: string | null
   alreadyQueued: boolean
+  alreadySent: boolean
   state: DeliveryState
   stateError: string | null
 }
@@ -82,7 +87,7 @@ const {
   key: 'bulk-send-invoices',
   query: computed(() => ({
     customerId: customerId.value || undefined,
-    status: 'draft',
+    statuses: BULK_SEND_STATUSES,
     pageSize: 100,
     sort: 'newest',
   })),
@@ -177,6 +182,7 @@ function seedProgressRows(ids: string[]) {
       invoiceNumber: inv?.invoiceNumberFormatted ?? '',
       queueError: null,
       alreadyQueued: false,
+      alreadySent: inv ? isInvoiceResend(inv.status) : false,
       state: 'pending' as const,
       stateError: null,
     }
@@ -189,6 +195,7 @@ function applyQueueResults(apiResults: BulkApiResult[]) {
     if (!target) continue
     target.invoiceNumber = row.invoiceNumber || target.invoiceNumber
     target.alreadyQueued = row.alreadyQueued
+    target.alreadySent = row.alreadySent
     if (row.error) {
       target.queueError = row.error
       target.state = 'failed'
@@ -227,7 +234,9 @@ async function pollStatuses() {
         delivery: { status: string, lastError: string | null, recipientEmail: string | null } | null
       }>(`/api/invoices/${row.invoiceId}/send-status`)
 
-      if (data.status === 'sent' || data.status === 'paid' || data.delivery?.status === 'done') {
+      const delivered = data.delivery?.status === 'done'
+      const becameSent = !row.alreadySent && (data.status === 'sent' || data.status === 'paid')
+      if (delivered || becameSent) {
         updateRow(row.invoiceId, { state: 'sent', stateError: null })
         return
       }
@@ -292,8 +301,8 @@ function rowStatusLabel(row: BulkResultRow): string {
   if (row.queueError) return row.queueError
   if (row.state === 'pending') return 'Queuing…'
   if (row.state === 'queued') return row.alreadyQueued ? 'In progress' : 'Queued'
-  if (row.state === 'processing') return 'Sending…'
-  if (row.state === 'sent') return 'Sent'
+  if (row.state === 'processing') return row.alreadySent ? 'Resending…' : 'Sending…'
+  if (row.state === 'sent') return row.alreadySent ? 'Resent' : 'Sent'
   return row.stateError ?? 'Failed'
 }
 
@@ -326,8 +335,8 @@ onUnmounted(stopPolling)
         <div class="cbody">
           <template v-if="phase === 'select'">
             <p style="font-size:13px; color:#64748b; margin:0 0 14px;">
-              Pick one customer, then select the approved invoices to email. Each invoice is sent as its own
-              email with a PDF attached.
+              Pick one customer, then select invoices to email. Already-sent invoices are included and will be resent.
+              Each invoice is sent as its own email with a PDF attached.
             </p>
 
             <label class="fld">
@@ -345,20 +354,21 @@ onUnmounted(stopPolling)
               <div class="bulk-list__head">
                 <label class="bulk-check">
                   <input type="checkbox" :checked="allSelected" :disabled="!invoices.length" @change="toggleAll">
-                  <span>Approved invoices ({{ invoices.length }})</span>
+                  <span>Invoices ({{ invoices.length }})</span>
                 </label>
                 <span class="help" style="margin:0;">{{ selectedCount }} selected</span>
               </div>
 
               <div v-if="invoicesPending" class="cp-state">Loading invoices…</div>
               <div v-else-if="!invoices.length" class="empty" style="padding:18px;">
-                No approved invoices ready to send for this customer.
+                No invoices available to send for this customer.
               </div>
               <ul v-else class="bulk-rows">
                 <li v-for="inv in invoices" :key="inv.id">
                   <label class="bulk-check">
                     <input type="checkbox" :checked="selected.has(inv.id)" @change="toggle(inv.id)">
                     <span class="bulk-rows__num">{{ inv.invoiceNumberFormatted }}</span>
+                    <span v-if="isInvoiceResend(inv.status)" class="pill sent bulk-sent-tag">Already sent</span>
                   </label>
                   <span class="bulk-rows__meta">
                     <span v-if="inv.dueDate">Due {{ invoiceDateDisplay(inv.dueDate) }}</span>
@@ -470,6 +480,11 @@ onUnmounted(stopPolling)
   font-weight: 500;
 }
 .bulk-rows__num { font-weight: 600; }
+.bulk-sent-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
 .bulk-rows__meta {
   display: flex;
   gap: 14px;

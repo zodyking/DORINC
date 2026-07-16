@@ -10,7 +10,8 @@ export default defineEventHandler(async (event) => {
 
   return listInvoices(useDb(), {
     q: query.q,
-    status: query.status,
+    status: query.statuses?.length ? undefined : query.status,
+    statuses: query.statuses,
     overdue: query.overdue,
     customerId: query.customerId,
     vehicleId: query.vehicleId,

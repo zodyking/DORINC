@@ -108,6 +108,13 @@ export const invoiceMarkPaidSchema = z.object({
 export const invoiceListQuerySchema = paginationSchema.extend({
   q: z.string().max(200).optional(),
   status: invoiceStatusSchema.optional(),
+  statuses: z.preprocess(
+    (val) => {
+      if (typeof val !== 'string' || !val.trim()) return undefined
+      return val.split(',').map(s => s.trim()).filter(Boolean)
+    },
+    z.array(invoiceStatusSchema).optional(),
+  ),
   overdue: z.coerce.boolean().optional(),
   customerId: uuidSchema.optional(),
   vehicleId: uuidSchema.optional(),

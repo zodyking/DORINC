@@ -2,7 +2,7 @@
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import SendInvoiceButton from '~/components/SendInvoiceButton.vue'
 import DeleteEntityButton from '~/components/DeleteEntityButton.vue'
-import type { InvoiceStatus } from '~/utils/invoices-ui'
+import { isInvoiceEmailable, isInvoiceResend, type InvoiceStatus } from '~/utils/invoices-ui'
 
 const props = defineProps<{
   invoiceId: string
@@ -21,17 +21,17 @@ const canSendPerm = computed(() => auth.can('invoices.send.all'))
 const canUpdatePerm = computed(() => auth.can('invoices.update.all'))
 const canDeletePerm = computed(() => auth.can('deletion_requests.submit.all'))
 
-const sendAllowed = computed(() =>
-  canSendPerm.value && (props.status === 'draft' || props.status === 'pending_manager_approval'),
-)
+const isResend = computed(() => isInvoiceResend(props.status))
+const sendAllowed = computed(() => canSendPerm.value && isInvoiceEmailable(props.status))
 const editAllowed = computed(() => canUpdatePerm.value && props.status === 'draft')
 const deleteAllowed = computed(() => canDeletePerm.value && props.status !== 'void' && props.status !== 'paid')
 
+const sendLabel = computed(() => (isResend.value ? 'Resend' : 'Send'))
+
 const sendTitle = computed(() => {
   if (!canSendPerm.value) return 'You do not have permission to send invoices'
+  if (sendAllowed.value && isResend.value) return 'Resend invoice PDF to customer'
   if (sendAllowed.value) return 'Email invoice PDF to customer'
-  if (props.status === 'draft' || props.status === 'pending_manager_approval') return 'Send invoice to customer'
-  if (props.status === 'sent' || props.status === 'paid') return 'Invoice already sent'
   if (props.status === 'void') return 'Void invoices cannot be sent'
   return 'Send is not available for this invoice'
 })
@@ -64,7 +64,7 @@ function onSendClick() {
         :title="sendTitle"
         @click="onSendClick"
       >
-        Send
+        {{ sendLabel }}
       </button>
       <NuxtLink
         v-if="editAllowed"
@@ -107,6 +107,7 @@ function onSendClick() {
     <SendInvoiceButton
       ref="sendRef"
       :invoice-id="invoiceId"
+      :label="sendLabel"
       hide-trigger
       @sent="emit('changed')"
     />

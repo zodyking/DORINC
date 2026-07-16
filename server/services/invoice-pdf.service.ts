@@ -34,6 +34,9 @@ export class InvoicePdfServiceError extends Error {
 /** Finalized invoices eligible for official PDF generation (SPEC §9). */
 export const PDF_ELIGIBLE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
 
+/** Draft invoices that may receive a pre-send PDF when queued for email delivery. */
+export const PDF_SEND_ELIGIBLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval']
+
 function pdfOptionsFromTemplate(template: InvoicePdfTemplateSource) {
   return pdfRenderOptionsFromTemplate(template)
 }
@@ -95,6 +98,8 @@ export interface GenerateInvoicePdfOptions {
    * template eras.
    */
   force?: boolean
+  /** Allow PDF enqueue for draft/pending invoices (invoice send pipeline only). */
+  allowDraft?: boolean
 }
 
 /** Clear the official invoice PDF row so a new Blade render can be stored. */
@@ -130,7 +135,9 @@ export async function generateInvoicePdf(
     throw err
   }
 
-  if (!PDF_ELIGIBLE_STATUSES.includes(detail.status)) {
+  const statusEligible = PDF_ELIGIBLE_STATUSES.includes(detail.status)
+    || (options.allowDraft && PDF_SEND_ELIGIBLE_STATUSES.includes(detail.status))
+  if (!statusEligible) {
     throw new InvoicePdfServiceError('NOT_FINALIZED')
   }
 

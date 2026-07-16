@@ -56,7 +56,14 @@ export const DRAFT_EDITABLE_STATUSES: InvoiceStatus[] = ['draft']
 export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
 
 /** Statuses from which an invoice may be emailed to the customer. */
-export const INVOICE_SENDABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval']
+export const INVOICE_SENDABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval', 'sent', 'paid']
+
+/** Sent/paid invoices are re-emailed without changing status. */
+export const INVOICE_RESENDABLE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
+
+export function isInvoiceResendable(status: InvoiceStatus): boolean {
+  return INVOICE_RESENDABLE_STATUSES.includes(status)
+}
 
 export interface CreateInvoiceInput {
   customerId?: string
@@ -114,6 +121,7 @@ export type UpdateInvoiceLineInput = Partial<AddInvoiceLineInput>
 export interface ListInvoicesFilter {
   q?: string
   status?: InvoiceStatus
+  statuses?: InvoiceStatus[]
   overdue?: boolean
   customerId?: string
   vehicleId?: string
@@ -606,6 +614,9 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     conditions.push(lt(invoices.dueDate, todayIsoDate()))
     conditions.push(gt(invoices.balanceDue, '0'))
   }
+  else if (filter.statuses?.length) {
+    conditions.push(inArray(invoices.status, filter.statuses))
+  }
   else if (filter.status) {
     conditions.push(eq(invoices.status, filter.status))
   }
@@ -1051,6 +1062,10 @@ export async function assertInvoiceSendable(
 ) {
   if (!INVOICE_SENDABLE_STATUSES.includes(invoice.status)) {
     throw new InvoicesServiceError('INVALID_TRANSITION')
+  }
+
+  if (isInvoiceResendable(invoice.status)) {
+    return
   }
 
   if (invoice.status === 'pending_manager_approval') {
