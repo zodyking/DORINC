@@ -4,12 +4,21 @@ import {
   PORTAL_SERVICE_CATEGORIES,
   PORTAL_SERVICE_URGENCIES,
   portalInvoiceOptionLabel,
+  portalRequestApplyListFilters,
+  portalRequestDefaultListFilters,
+  portalRequestDetailPath,
   portalRequestHistoryFilterLabel,
+  portalRequestInvoiceOptions,
+  portalRequestKindFilterLabel,
   portalRequestKindLabel,
-  portalRequestMatchesFilter,
+  portalRequestListFiltersDirty,
   portalRequestStatusPill,
+  portalRequestVehicleOptions,
   portalTodayIso,
   type PortalRequestHistoryFilter,
+  type PortalRequestKindFilter,
+  type PortalRequestListRow,
+  type PortalRequestSort,
   type PortalRequestTab,
 } from '~/utils/portal-requests-ui'
 
@@ -28,26 +37,15 @@ interface PortalInvoiceOption {
   status: string
 }
 
-interface PortalRequestItem {
-  id: string
-  kind: string
-  title: string
-  meta: string
-  status: string
-  statusLabel: string
-  createdAt: string
-  isOpen: boolean
-}
-
 const activeTab = ref<PortalRequestTab>('service')
-const historyFilter = ref<PortalRequestHistoryFilter>('open')
+const listFilters = reactive(portalRequestDefaultListFilters())
 const submitMessage = ref('')
 const submitError = ref('')
 const submitting = ref(false)
 
 const { data: vehiclesData, pending: vehiclesPending } = useClientFetch<{ items: PortalVehicleOption[] }>('/api/portal/vehicles')
 const { data: invoicesData, pending: invoicesPending } = useClientFetch<{ items: PortalInvoiceOption[] }>('/api/portal/invoices')
-const { data: requestsData, refresh: refreshRequests, pending: requestsPending } = useClientFetch<{ items: PortalRequestItem[] }>('/api/portal/requests')
+const { data: requestsData, refresh: refreshRequests, pending: requestsPending } = useClientFetch<{ items: PortalRequestListRow[] }>('/api/portal/requests')
 
 const pagePending = computed(() => vehiclesPending.value || invoicesPending.value || requestsPending.value)
 
@@ -55,9 +53,10 @@ const vehicles = computed(() => vehiclesData.value?.items ?? [])
 const invoices = computed(() => invoicesData.value?.items ?? [])
 const history = computed(() => requestsData.value?.items ?? [])
 
-const filteredHistory = computed(() =>
-  history.value.filter(item => portalRequestMatchesFilter(item, historyFilter.value)),
-)
+const filteredHistory = computed(() => portalRequestApplyListFilters(history.value, listFilters))
+
+const vehicleFilterOptions = computed(() => portalRequestVehicleOptions(history.value))
+const invoiceFilterOptions = computed(() => portalRequestInvoiceOptions(history.value))
 
 const tabs: Array<{ id: PortalRequestTab, label: string }> = [
   { id: 'service', label: 'Service' },
@@ -65,12 +64,14 @@ const tabs: Array<{ id: PortalRequestTab, label: string }> = [
   { id: 'general', label: 'Message' },
 ]
 
-const historyFilterOptions: PortalRequestHistoryFilter[] = ['open', 'all', 'resolved']
+const statusFilterOptions: PortalRequestHistoryFilter[] = ['open', 'all', 'resolved']
+const kindFilterOptions: PortalRequestKindFilter[] = ['all', 'service', 'billing', 'general', 'vehicle']
+const sortOptions: PortalRequestSort[] = ['newest', 'oldest', 'type', 'vehicle']
 
-const filtersDirty = computed(() => historyFilter.value !== 'open')
+const filtersDirty = computed(() => portalRequestListFiltersDirty(listFilters))
 
 function clearHistoryFilters() {
-  historyFilter.value = 'open'
+  Object.assign(listFilters, portalRequestDefaultListFilters())
 }
 
 const historyCountLabel = computed(() => {
@@ -143,6 +144,14 @@ async function submitService() {
 
 async function submitBilling() {
   submitError.value = ''
+  if (!billingForm.topic.trim()) {
+    submitError.value = 'Select a topic for your billing question.'
+    return
+  }
+  if (!billingForm.description.trim()) {
+    submitError.value = 'Describe what you need help with.'
+    return
+  }
   submitting.value = true
   try {
     await $fetch('/api/portal/invoice-change-requests', {
@@ -150,10 +159,12 @@ async function submitBilling() {
       body: {
         invoiceId: billingForm.invoiceId || null,
         topic: billingForm.topic,
-        description: billingForm.description,
+        description: billingForm.description.trim(),
       },
     })
-    submitMessage.value = 'Billing question sent — accounting will review.'
+    submitMessage.value = billingForm.invoiceId
+      ? 'Billing question sent — accounting will review.'
+      : 'Billing question sent — accounting will review.'
     billingForm.topic = ''
     billingForm.description = ''
     billingForm.invoiceId = ''
@@ -299,10 +310,15 @@ const minDate = portalTodayIso()
             </label>
             <label class="fld">
               <span>Details</span>
-              <textarea v-model="billingForm.description" rows="4" required placeholder="What do you need clarified?" />
+              <textarea
+                v-model="billingForm.description"
+                rows="4"
+                required
+                :placeholder="billingForm.invoiceId ? 'Explain the issue with this invoice…' : 'What do you need clarified?'"
+              />
             </label>
             <p v-if="submitError && activeTab === 'billing'" class="help" style="color:#dc2626;">{{ submitError }}</p>
-            <button type="submit" class="btn primary" :disabled="submitting || !billingForm.topic">
+            <button type="submit" class="btn primary" :disabled="submitting">
               {{ submitting ? 'Sending…' : 'Send billing question' }}
             </button>
           </form>
@@ -343,7 +359,9 @@ const minDate = portalTodayIso()
       </div>
 
       <ListFilterBar
-        :show-search="false"
+        v-model:search="listFilters.q"
+        search-placeholder="Search requests, vehicles, invoices…"
+        search-aria-label="Search requests"
         :count-label="historyCountLabel"
         :filters-active="filtersDirty"
         filter-title="Filter requests"
@@ -351,10 +369,52 @@ const minDate = portalTodayIso()
       >
         <template #filters>
           <label class="fld">
-            Show
-            <select v-model="historyFilter" aria-label="Request history filter">
-              <option v-for="opt in historyFilterOptions" :key="opt" :value="opt">
+            Status
+            <select v-model="listFilters.status" aria-label="Request status">
+              <option v-for="opt in statusFilterOptions" :key="opt" :value="opt">
                 {{ portalRequestHistoryFilterLabel(opt) }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Type
+            <select v-model="listFilters.kind" aria-label="Request type">
+              <option v-for="opt in kindFilterOptions" :key="opt" :value="opt">
+                {{ portalRequestKindFilterLabel(opt) }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Vehicle
+            <select v-model="listFilters.vehicleId" aria-label="Filter by vehicle">
+              <option value="all">All vehicles</option>
+              <option v-for="veh in vehicleFilterOptions" :key="veh.id" :value="veh.id">
+                {{ veh.label }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Invoice
+            <select v-model="listFilters.invoiceId" aria-label="Filter by invoice">
+              <option value="all">All invoices</option>
+              <option v-for="inv in invoiceFilterOptions" :key="inv.id" :value="inv.id">
+                {{ inv.label }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Submitted from
+            <input v-model="listFilters.dateFrom" type="date" aria-label="Submitted from date">
+          </label>
+          <label class="fld">
+            Submitted to
+            <input v-model="listFilters.dateTo" type="date" aria-label="Submitted to date">
+          </label>
+          <label class="fld">
+            Sort by
+            <select v-model="listFilters.sort" aria-label="Sort requests">
+              <option v-for="opt in sortOptions" :key="opt" :value="opt">
+                {{ opt === 'newest' ? 'Newest first' : opt === 'oldest' ? 'Oldest first' : opt === 'type' ? 'Type' : 'Vehicle' }}
               </option>
             </select>
           </label>
@@ -363,7 +423,7 @@ const minDate = portalTodayIso()
 
       <div class="card">
         <div v-if="filteredHistory.length" class="tscroll">
-          <table class="tbl">
+          <table class="tbl portal-request-table">
             <thead>
               <tr>
                 <th>Request</th>
@@ -372,7 +432,16 @@ const minDate = portalTodayIso()
               </tr>
             </thead>
             <tbody>
-              <tr v-for="req in filteredHistory" :key="`${req.kind}-${req.id}`">
+              <tr
+                v-for="req in filteredHistory"
+                :key="`${req.kind}-${req.id}`"
+                class="portal-request-row"
+                tabindex="0"
+                role="link"
+                :aria-label="`View ${req.title}`"
+                @click="navigateTo(portalRequestDetailPath(req.kind, req.id))"
+                @keydown.enter="navigateTo(portalRequestDetailPath(req.kind, req.id))"
+              >
                 <td>
                   <span class="lead">{{ req.title }}</span>
                   <span class="sub">{{ req.meta }}</span>
@@ -392,3 +461,16 @@ const minDate = portalTodayIso()
     </template>
   </section>
 </template>
+
+<style scoped>
+.portal-request-row {
+  cursor: pointer;
+}
+.portal-request-row:hover {
+  background: #f8fafc;
+}
+.portal-request-row:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+}
+</style>

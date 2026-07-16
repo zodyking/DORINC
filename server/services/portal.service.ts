@@ -176,6 +176,39 @@ export interface PortalRequestHistoryItem {
   statusLabel: string
   createdAt: string
   isOpen: boolean
+  vehicleId: string | null
+  vehicleLabel: string | null
+  invoiceId: string | null
+  invoiceNumberFormatted: string | null
+}
+
+export type PortalRequestKind = PortalRequestHistoryItem['kind']
+
+export interface PortalRequestDetailPayload {
+  id: string
+  kind: PortalRequestKind
+  status: string
+  statusLabel: string
+  createdAt: string
+  isOpen: boolean
+  reviewedAt: string | null
+  reviewReason: string | null
+  title: string
+  vehicleId: string | null
+  vehicleLabel: string | null
+  invoiceId: string | null
+  invoiceNumberFormatted: string | null
+  serviceCategory?: string
+  urgency?: string
+  preferredDate?: string | null
+  location?: string | null
+  topic?: string
+  subject?: string
+  description?: string
+  message?: string
+  fleetTag?: string
+  unitType?: string
+  correctionPayload?: PortalInvoiceCorrectionPayload | null
 }
 
 export async function listPortalRequests(db: Db, customerId: string, limit = 50): Promise<PortalRequestHistoryItem[]> {
@@ -198,9 +231,16 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
     db.select({
       request: invoiceChangeRequests,
       invoiceNumber: invoices.invoiceNumber,
+      invoiceVehicleId: invoices.vehicleId,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
     })
       .from(invoiceChangeRequests)
       .leftJoin(invoices, eq(invoiceChangeRequests.invoiceId, invoices.id))
+      .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
       .where(eq(invoiceChangeRequests.customerId, customerId))
       .orderBy(desc(invoiceChangeRequests.createdAt))
       .limit(limit),
@@ -240,6 +280,10 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
       statusLabel: requestStatusLabel(row.request.status),
       createdAt: row.request.createdAt.toISOString(),
       isOpen: row.request.status === 'pending',
+      vehicleId: row.request.vehicleId,
+      vehicleLabel: veh,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
     })
   }
 
@@ -247,6 +291,7 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
     const invLabel = row.invoiceNumber != null
       ? formatInvoiceNumber(row.invoiceNumber)
       : 'General billing'
+    const veh = vehicleLabelFromRow(row.vehicle?.busNumber || row.vehicle?.unitTag ? row.vehicle : null)
     items.push({
       id: row.request.id,
       kind: 'billing',
@@ -256,6 +301,10 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
       statusLabel: requestStatusLabel(row.request.status),
       createdAt: row.request.createdAt.toISOString(),
       isOpen: row.request.status === 'pending',
+      vehicleId: row.invoiceVehicleId ?? null,
+      vehicleLabel: veh || null,
+      invoiceId: row.request.invoiceId ?? null,
+      invoiceNumberFormatted: row.invoiceNumber != null ? formatInvoiceNumber(row.invoiceNumber) : null,
     })
   }
 
@@ -270,6 +319,10 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
       statusLabel: requestStatusLabel(row.request.status),
       createdAt: row.request.createdAt.toISOString(),
       isOpen: row.request.status === 'pending',
+      vehicleId: row.request.vehicleId,
+      vehicleLabel: veh,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
     })
   }
 
@@ -283,6 +336,10 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
       statusLabel: requestStatusLabel(row.status),
       createdAt: row.createdAt.toISOString(),
       isOpen: row.status === 'pending',
+      vehicleId: null,
+      vehicleLabel: row.fleetTag,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
     })
   }
 
@@ -296,12 +353,191 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
       statusLabel: requestStatusLabel(row.status),
       createdAt: row.createdAt.toISOString(),
       isOpen: row.status === 'pending',
+      vehicleId: null,
+      vehicleLabel: null,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
     })
   }
 
   return items
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit)
+}
+
+export async function getPortalRequestDetail(
+  db: Db,
+  customerId: string,
+  kind: PortalRequestKind,
+  id: string,
+): Promise<PortalRequestDetailPayload> {
+  await getPortalCustomer(db, customerId)
+
+  if (kind === 'service') {
+    const [row] = await db.select({
+      request: serviceRequests,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
+    })
+      .from(serviceRequests)
+      .innerJoin(vehicles, eq(serviceRequests.vehicleId, vehicles.id))
+      .where(and(eq(serviceRequests.id, id), eq(serviceRequests.customerId, customerId)))
+      .limit(1)
+    if (!row) throw new PortalServiceError('NOT_FOUND')
+    const veh = vehicleLabelFromRow(row.vehicle)
+    return {
+      id: row.request.id,
+      kind: 'service',
+      status: row.request.status,
+      statusLabel: requestStatusLabel(row.request.status),
+      createdAt: row.request.createdAt.toISOString(),
+      isOpen: row.request.status === 'pending',
+      reviewedAt: row.request.reviewedAt?.toISOString() ?? null,
+      reviewReason: row.request.reviewReason,
+      title: `${veh} — ${row.request.serviceCategory}`,
+      vehicleId: row.request.vehicleId,
+      vehicleLabel: veh,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
+      serviceCategory: row.request.serviceCategory,
+      urgency: row.request.urgency,
+      preferredDate: row.request.preferredDate,
+      location: row.request.location,
+      description: row.request.description,
+    }
+  }
+
+  if (kind === 'billing') {
+    const [row] = await db.select({
+      request: invoiceChangeRequests,
+      invoiceNumber: invoices.invoiceNumber,
+      invoiceVehicleId: invoices.vehicleId,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
+    })
+      .from(invoiceChangeRequests)
+      .leftJoin(invoices, eq(invoiceChangeRequests.invoiceId, invoices.id))
+      .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
+      .where(and(eq(invoiceChangeRequests.id, id), eq(invoiceChangeRequests.customerId, customerId)))
+      .limit(1)
+    if (!row) throw new PortalServiceError('NOT_FOUND')
+    const invLabel = row.invoiceNumber != null
+      ? formatInvoiceNumber(row.invoiceNumber)
+      : 'General billing'
+    const veh = vehicleLabelFromRow(row.vehicle?.busNumber || row.vehicle?.unitTag ? row.vehicle : null)
+    return {
+      id: row.request.id,
+      kind: 'billing',
+      status: row.request.status,
+      statusLabel: requestStatusLabel(row.request.status),
+      createdAt: row.request.createdAt.toISOString(),
+      isOpen: row.request.status === 'pending',
+      reviewedAt: row.request.reviewedAt?.toISOString() ?? null,
+      reviewReason: row.request.reviewReason,
+      title: `${invLabel} — ${row.request.topic}`,
+      vehicleId: row.invoiceVehicleId ?? null,
+      vehicleLabel: veh || null,
+      invoiceId: row.request.invoiceId ?? null,
+      invoiceNumberFormatted: row.invoiceNumber != null ? formatInvoiceNumber(row.invoiceNumber) : null,
+      topic: row.request.topic,
+      description: row.request.description,
+      correctionPayload: row.request.correctionPayload ?? null,
+    }
+  }
+
+  if (kind === 'vehicle_change') {
+    const [row] = await db.select({
+      request: vehicleChangeRequests,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
+    })
+      .from(vehicleChangeRequests)
+      .innerJoin(vehicles, eq(vehicleChangeRequests.vehicleId, vehicles.id))
+      .where(and(eq(vehicleChangeRequests.id, id), eq(vehicleChangeRequests.customerId, customerId)))
+      .limit(1)
+    if (!row) throw new PortalServiceError('NOT_FOUND')
+    const veh = vehicleLabelFromRow(row.vehicle)
+    return {
+      id: row.request.id,
+      kind: 'vehicle_change',
+      status: row.request.status,
+      statusLabel: requestStatusLabel(row.request.status),
+      createdAt: row.request.createdAt.toISOString(),
+      isOpen: row.request.status === 'pending',
+      reviewedAt: row.request.reviewedAt?.toISOString() ?? null,
+      reviewReason: row.request.reviewReason,
+      title: `${veh} — ${row.request.subject}`,
+      vehicleId: row.request.vehicleId,
+      vehicleLabel: veh,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
+      subject: row.request.subject,
+      description: row.request.description,
+    }
+  }
+
+  if (kind === 'vehicle_add') {
+    const [row] = await db.select()
+      .from(newVehicleRequests)
+      .where(and(eq(newVehicleRequests.id, id), eq(newVehicleRequests.customerId, customerId)))
+      .limit(1)
+    if (!row) throw new PortalServiceError('NOT_FOUND')
+    return {
+      id: row.id,
+      kind: 'vehicle_add',
+      status: row.status,
+      statusLabel: requestStatusLabel(row.status),
+      createdAt: row.createdAt.toISOString(),
+      isOpen: row.status === 'pending',
+      reviewedAt: row.reviewedAt?.toISOString() ?? null,
+      reviewReason: row.reviewReason,
+      title: `${row.fleetTag} — new vehicle`,
+      vehicleId: null,
+      vehicleLabel: row.fleetTag,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
+      fleetTag: row.fleetTag,
+      unitType: row.unitType,
+      description: row.notes ?? undefined,
+      subject: 'New vehicle request',
+    }
+  }
+
+  if (kind === 'general') {
+    const [row] = await db.select()
+      .from(portalGeneralRequests)
+      .where(and(eq(portalGeneralRequests.id, id), eq(portalGeneralRequests.customerId, customerId)))
+      .limit(1)
+    if (!row) throw new PortalServiceError('NOT_FOUND')
+    return {
+      id: row.id,
+      kind: 'general',
+      status: row.status,
+      statusLabel: requestStatusLabel(row.status),
+      createdAt: row.createdAt.toISOString(),
+      isOpen: row.status === 'pending',
+      reviewedAt: row.reviewedAt?.toISOString() ?? null,
+      reviewReason: row.reviewReason,
+      title: row.subject,
+      vehicleId: null,
+      vehicleLabel: null,
+      invoiceId: null,
+      invoiceNumberFormatted: null,
+      subject: row.subject,
+      message: row.message,
+    }
+  }
+
+  throw new PortalServiceError('NOT_FOUND')
 }
 
 function portalRequestTypeLabel(kind: PortalRequestHistoryItem['kind']): string {

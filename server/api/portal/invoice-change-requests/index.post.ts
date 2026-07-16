@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof PortalServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Customer not found')
       if (err.code === 'PORTAL_DISABLED') throw apiError(event, 'FORBIDDEN', 'Portal access is disabled')
-      if (err.code === 'INVALID_INVOICE') throw apiError(event, 'VALIDATION_ERROR', 'Invoice not found')
+      if (err.code === 'INVALID_INVOICE') throw apiError(event, 'VALIDATION_ERROR', 'That invoice is no longer available. Refresh the page or send a general billing question without selecting an invoice.')
       if (err.code === 'INVALID_CORRECTION') throw apiError(event, 'VALIDATION_ERROR', 'Correction details are incomplete')
       if (err.code === 'INVALID_LINE_ITEM') throw apiError(event, 'VALIDATION_ERROR', 'Line item not found on this invoice')
       if (err.code === 'NO_VEHICLE') throw apiError(event, 'VALIDATION_ERROR', 'This invoice has no vehicle information to correct')
