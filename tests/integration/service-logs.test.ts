@@ -18,6 +18,8 @@ import { getInvoice } from '../../server/services/invoices.service'
 import { hardDeleteInvoice } from '../../server/services/hard-delete.service'
 import { INVOICE_LINK_RELEASED_REASON } from '../../server/services/invoice-dependents.service'
 import { uploadFile } from '../../server/services/files.service'
+import { archiveFileWithDerivatives } from '../../server/services/files.service'
+import { listUserUploadsByOwner } from '../../server/services/files.service'
 import { createCustomer } from '../../server/services/customers.service'
 import { createVehicle } from '../../server/services/vehicles.service'
 import { appFiles } from '../../server/db/schema/files'
@@ -239,6 +241,26 @@ describe('P1-15 updates + list scope', () => {
     const listed = await listServiceLogs(db, { customerId: owner.id, page: 1, pageSize: 50 })
     const row = listed.items.find(i => i.id === log.id)
     expect(row?.fileCount).toBe(1)
+  })
+
+  it('archives uploaded photos and drops them from the service log file list', async () => {
+    const log = await makeLog()
+    const file = await uploadFile(db, {
+      ownerEntityType: 'service_log',
+      ownerEntityId: log.id,
+      fileKind: 'original',
+      originalFilename: 'remove-me.png',
+      mimeType: 'image/png',
+      data: PNG_BYTES,
+    }, MECHANIC)
+
+    await archiveFileWithDerivatives(db, file.id)
+
+    const remaining = await listUserUploadsByOwner(db, {
+      ownerEntityType: 'service_log',
+      ownerEntityId: log.id,
+    })
+    expect(remaining.some(f => f.id === file.id)).toBe(false)
   })
 })
 

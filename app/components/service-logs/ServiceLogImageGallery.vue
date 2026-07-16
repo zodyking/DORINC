@@ -6,13 +6,18 @@ const props = withDefaults(defineProps<{
   files: ServiceLogPhotoFile[]
   modelValue?: number
   compact?: boolean
+  editable?: boolean
+  deleteBusy?: boolean
 }>(), {
   modelValue: 0,
   compact: false,
+  editable: false,
+  deleteBusy: false,
 })
 
 const emit = defineEmits<{
   'update:modelValue': [index: number]
+  delete: []
 }>()
 
 const serviceLogIdRef = computed(() => props.serviceLogId)
@@ -116,6 +121,15 @@ function onKeydown(event: KeyboardEvent) {
           <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
         </div>
         <button
+          v-if="editable"
+          type="button"
+          class="btn sm sl-gallery__delete"
+          :disabled="deleteBusy || anyLoading"
+          @click="emit('delete')"
+        >
+          {{ deleteBusy ? 'Removing…' : 'Remove' }}
+        </button>
+        <button
           type="button"
           class="btn sm sl-gallery__nav"
           aria-label="Next photo"
@@ -212,7 +226,7 @@ function onKeydown(event: KeyboardEvent) {
 
 .sl-gallery__footer {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
@@ -244,6 +258,17 @@ function onKeydown(event: KeyboardEvent) {
 
 .sl-gallery__nav {
   white-space: nowrap;
+}
+
+.sl-gallery__delete {
+  color: #dc2626;
+  border-color: #fecaca;
+  white-space: nowrap;
+}
+
+.sl-gallery__delete:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
 
 .sl-gallery__thumbs {
@@ -288,11 +313,16 @@ function onKeydown(event: KeyboardEvent) {
 
 @media (max-width: 640px) {
   .sl-gallery__footer {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     text-align: center;
   }
 
-  .sl-gallery__nav {
+  .sl-gallery__meta {
+    grid-column: 1 / -1;
+  }
+
+  .sl-gallery__nav,
+  .sl-gallery__delete {
     width: 100%;
   }
 

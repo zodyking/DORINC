@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Service log detail — photo gallery + status actions.
-import ServiceLogImageGallery from '~/components/service-logs/ServiceLogImageGallery.vue'
+import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 
 definePageMeta({ layout: 'staff' })
 
@@ -154,17 +154,9 @@ async function saveLogEdits() {
 
 const imageFiles = computed(() => files.value.filter(f => f.mimeType.startsWith('image/')))
 const otherFiles = computed(() => files.value.filter(f => !f.mimeType.startsWith('image/')))
-const galleryIndex = ref(0)
+const showPhotoSection = computed(() => canEditLog.value || imageFiles.value.length > 0)
 
-watch(imageFiles, (imgs) => {
-  if (!imgs.length) {
-    galleryIndex.value = 0
-    return
-  }
-  if (galleryIndex.value >= imgs.length) galleryIndex.value = 0
-}, { immediate: true })
-
-const selectedFileId = computed(() => imageFiles.value[galleryIndex.value]?.id ?? null)
+const selectedFileId = computed(() => imageFiles.value[0]?.id ?? null)
 const aiModalOpen = ref(false)
 
 const busy = ref(false)
@@ -396,15 +388,16 @@ const pill = computed(() => log.value
 
     <div class="cols sl-detail-cols">
       <div class="stack">
-        <div v-if="imageFiles.length" class="card">
+        <div v-if="showPhotoSection" class="card">
           <div class="chead">
             <h3>Photos · {{ imageFiles.length }}</h3>
           </div>
           <div class="cbody">
-            <ServiceLogImageGallery
-              v-model="galleryIndex"
+            <ServiceLogPhotoManager
               :service-log-id="id"
               :files="imageFiles"
+              :editable="canEditLog"
+              @refreshed="refresh()"
             />
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { FileKind, FileOwnerEntityType } from '../db/schema/files'
 import { appFiles } from '../db/schema/files'
@@ -177,4 +177,22 @@ export async function archiveFile(db: Db, id: string) {
     .where(eq(appFiles.id, id))
     .returning(META_COLUMNS)
   return row!
+}
+
+/** Archives a file and any thumbnail/preview rows generated from it. */
+export async function archiveFileWithDerivatives(db: Db, id: string) {
+  const meta = await getFileMeta(db, id)
+  if (meta.archivedAt) throw new FilesServiceError('ALREADY_ARCHIVED')
+
+  const now = new Date()
+  await db.update(appFiles)
+    .set({ archivedAt: now })
+    .where(or(
+      eq(appFiles.id, id),
+      eq(appFiles.sourceFileId, id),
+    ))
+
+  const [row] = await db.select(META_COLUMNS).from(appFiles).where(eq(appFiles.id, id))
+  if (!row) throw new FilesServiceError('NOT_FOUND')
+  return row
 }
