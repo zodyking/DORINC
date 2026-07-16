@@ -24,8 +24,13 @@ const avInitials = computed(() => initials(props.message.senderName))
         <b>{{ message.senderName }}</b>
         <time :datetime="message.createdAt">{{ formatMessageTime(message.createdAt) }}</time>
       </div>
-      <div class="dm-msg-bubble">
-        <MessagingMessageBody :body="message.body" />
+      <div class="dm-msg-bubble" :class="{ 'dm-msg-bubble-email': isEmail }">
+        <MessagingEmailMessageBody
+          v-if="isEmail"
+          :body="message.body"
+          :html-body="message.htmlBody"
+        />
+        <MessagingMessageBody v-else :body="message.body" />
       </div>
     </div>
   </div>

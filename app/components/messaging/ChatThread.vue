@@ -8,6 +8,7 @@ const props = defineProps<{
     senderUserId: string | null
     senderName: string
     body: string
+    htmlBody?: string | null
     createdAt: string
     direction?: 'inbound' | 'outbound'
   }>

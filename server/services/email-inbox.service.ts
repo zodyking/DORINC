@@ -140,8 +140,10 @@ export interface EmailConversationSummary {
   updatedAt: string
 }
 
-function previewBody(body: string): string {
-  return body.replace(/\s+/g, ' ').trim().slice(0, 140)
+import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
+
+function previewBody(body: string, html?: string | null): string {
+  return emailPreviewText(body, html)
 }
 
 export async function listEmailConversations(db: Db, filter: {
@@ -176,6 +178,7 @@ export async function listEmailConversations(db: Db, filter: {
       createdAt: messages.createdAt,
       direction: emailMessageMeta.direction,
       senderName: users.name,
+      htmlBody: emailMessageMeta.htmlBody,
     })
       .from(messages)
       .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
@@ -218,7 +221,7 @@ export async function listEmailConversations(db: Db, filter: {
             senderName: lastMessage.senderName,
             direction: (lastMessage.direction ?? 'outbound') as 'inbound' | 'outbound',
             createdAt: lastMessage.createdAt.toISOString(),
-            preview: previewBody(lastMessage.body),
+            preview: previewBody(lastMessage.body, lastMessage.htmlBody),
           }
         : null,
       unreadCount,
@@ -553,7 +556,7 @@ export async function ingestInboundEmail(db: Db, input: {
   const [message] = await db.insert(messages).values({
     conversationId,
     senderUserId: null,
-    body: input.text.trim() || '(empty message)',
+    body: normalizeInboundEmailText(input.text, input.html),
     createdAt: input.receivedAt ?? new Date(),
   }).returning()
 
