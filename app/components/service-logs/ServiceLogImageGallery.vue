@@ -1,15 +1,9 @@
 <script setup lang="ts">
-import { filePreviewUrl } from '#shared/files'
-
-export interface GalleryFile {
-  id: string
-  originalFilename: string
-  mimeType: string
-}
+import type { ServiceLogPhotoFile } from '~/composables/useServiceLogPhotoPreviews'
 
 const props = withDefaults(defineProps<{
-  files: GalleryFile[]
-  /** v-model for the active image index */
+  serviceLogId: string
+  files: ServiceLogPhotoFile[]
   modelValue?: number
   compact?: boolean
 }>(), {
@@ -20,6 +14,11 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [index: number]
 }>()
+
+const serviceLogIdRef = computed(() => props.serviceLogId)
+const filesRef = computed(() => props.files)
+
+const { previewUrl, isLoading, hasError, anyLoading } = useServiceLogPhotoPreviews(serviceLogIdRef, filesRef)
 
 const imageFiles = computed(() => props.files.filter(f => f.mimeType.startsWith('image/')))
 
@@ -37,14 +36,16 @@ watch(imageFiles, (imgs) => {
 }, { immediate: true })
 
 const activeFile = computed(() => imageFiles.value[activeIndex.value] ?? null)
+const activePreview = computed(() => (activeFile.value ? previewUrl(activeFile.value.id) : ''))
 const hasMultiple = computed(() => imageFiles.value.length > 1)
-const imageLoading = ref(false)
-const imageError = ref(false)
 
-watch(activeFile, () => {
-  imageLoading.value = !!activeFile.value
-  imageError.value = false
-}, { immediate: true })
+const showLoading = computed(() =>
+  !!activeFile.value && (isLoading(activeFile.value.id) || (!activePreview.value && !hasError(activeFile.value.id))),
+)
+
+const showError = computed(() =>
+  !!activeFile.value && hasError(activeFile.value.id),
+)
 
 function goPrev() {
   if (!imageFiles.value.length) return
@@ -62,16 +63,6 @@ function goNext() {
 
 function selectIndex(index: number) {
   activeIndex.value = index
-}
-
-function onImageLoad() {
-  imageLoading.value = false
-  imageError.value = false
-}
-
-function onImageError() {
-  imageLoading.value = false
-  imageError.value = true
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -95,76 +86,71 @@ function onKeydown(event: KeyboardEvent) {
     tabindex="0"
     @keydown="onKeydown"
   >
-    <div class="sl-gallery__toolbar">
-      <span class="sl-gallery__count">{{ activeIndex + 1 }} of {{ imageFiles.length }}</span>
-      <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
-    </div>
-
-    <div class="sl-gallery__viewer">
-      <button
-        type="button"
-        class="sl-gallery__arrow"
-        aria-label="Previous image"
-        :disabled="!hasMultiple"
-        @click="goPrev"
-      >
-        ‹
-      </button>
-
+    <div class="sl-gallery__frame">
       <div class="sl-gallery__stage">
-        <div v-if="imageLoading && !imageError" class="sl-gallery__state">Loading image…</div>
-        <div v-if="imageError" class="sl-gallery__state sl-gallery__state--error">
-          Could not load this image.
-        </div>
+        <p v-if="showLoading" class="sl-gallery__placeholder">Loading photo…</p>
+        <p v-else-if="showError" class="sl-gallery__placeholder sl-gallery__placeholder--error">
+          Could not load this photo.
+        </p>
         <img
-          v-if="activeFile"
+          v-else-if="activeFile && activePreview"
           :key="activeFile.id"
-          :src="filePreviewUrl(activeFile.id)"
+          :src="activePreview"
           :alt="activeFile.originalFilename"
           class="sl-gallery__img"
-          :class="{ 'sl-gallery__img--hidden': imageError }"
-          @load="onImageLoad"
-          @error="onImageError"
         >
       </div>
 
-      <button
-        type="button"
-        class="sl-gallery__arrow"
-        aria-label="Next image"
-        :disabled="!hasMultiple"
-        @click="goNext"
-      >
-        ›
-      </button>
+      <div class="sl-gallery__footer">
+        <button
+          type="button"
+          class="btn sm sl-gallery__nav"
+          aria-label="Previous photo"
+          :disabled="!hasMultiple || anyLoading"
+          @click="goPrev"
+        >
+          ‹ Previous
+        </button>
+        <div class="sl-gallery__meta">
+          <span class="sl-gallery__count">Photo {{ activeIndex + 1 }} of {{ imageFiles.length }}</span>
+          <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn sm sl-gallery__nav"
+          aria-label="Next photo"
+          :disabled="!hasMultiple || anyLoading"
+          @click="goNext"
+        >
+          Next ›
+        </button>
+      </div>
     </div>
 
-    <div v-if="hasMultiple && !compact" class="sl-gallery__dots" role="tablist" aria-label="Photo thumbnails">
+    <div
+      v-if="hasMultiple && !compact"
+      class="sl-gallery__thumbs"
+      role="tablist"
+      aria-label="Photo thumbnails"
+    >
       <button
         v-for="(file, index) in imageFiles"
         :key="file.id"
         type="button"
-        class="sl-gallery__dot"
+        class="sl-gallery__thumb"
         :class="{ on: index === activeIndex }"
         role="tab"
         :aria-label="`Photo ${index + 1}: ${file.originalFilename}`"
         :aria-selected="index === activeIndex"
         @click="selectIndex(index)"
-      />
-    </div>
-
-    <div v-if="hasMultiple && !compact" class="sl-gallery__thumbs photos">
-      <button
-        v-for="(file, index) in imageFiles"
-        :key="file.id"
-        type="button"
-        class="photo sl-gallery__thumb"
-        :class="{ on: index === activeIndex }"
-        :aria-label="`View image ${index + 1}: ${file.originalFilename}`"
-        :aria-current="index === activeIndex ? 'true' : undefined"
-        @click="selectIndex(index)"
       >
-        <img :src="filePreviewUrl(file.id)" :alt="file.originalFilename" loading="lazy">
+        <img
+          v-if="previewUrl(file.id)"
+          :src="previewUrl(file.id)"
+          :alt="file.originalFilename"
+          loading="lazy"
+        >
+        <span v-else class="sl-gallery__thumb-fallback">{{ index + 1 }}</span>
       </button>
     </div>
   </div>
@@ -174,160 +160,140 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   outline: none;
 }
 
-.sl-gallery__toolbar {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.sl-gallery__frame {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.sl-gallery__stage {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.sl-gallery--compact .sl-gallery__stage {
+  min-height: 240px;
+  padding: 12px;
+}
+
+.sl-gallery__img {
+  max-width: 100%;
+  max-height: 480px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.sl-gallery--compact .sl-gallery__img {
+  max-height: 360px;
+}
+
+.sl-gallery__placeholder {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.sl-gallery__placeholder--error {
+  color: #dc2626;
+}
+
+.sl-gallery__footer {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
-  flex-wrap: wrap;
+  align-items: center;
+  padding: 12px 14px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.sl-gallery__meta {
+  text-align: center;
+  min-width: 0;
 }
 
 .sl-gallery__count {
-  font-size: 12px;
+  display: block;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #4f46e5;
+  color: #0f172a;
 }
 
 .sl-gallery__name {
-  font-size: 12px;
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sl-gallery__viewer {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 8px;
-  align-items: center;
+.sl-gallery__nav {
+  white-space: nowrap;
 }
 
-.sl-gallery__arrow {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  background: #fff;
-  color: #334155;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
-}
-
-.sl-gallery__arrow:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.sl-gallery__arrow:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.sl-gallery__stage {
-  position: relative;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-  min-height: 280px;
-  display: grid;
-  place-items: center;
-}
-
-.sl-gallery--compact .sl-gallery__stage {
-  min-height: 220px;
-}
-
-.sl-gallery__img {
-  width: 100%;
-  max-height: 520px;
-  object-fit: contain;
-  display: block;
-}
-
-.sl-gallery--compact .sl-gallery__img {
-  max-height: 380px;
-}
-
-.sl-gallery__img--hidden {
-  visibility: hidden;
-  position: absolute;
-}
-
-.sl-gallery__state {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  color: #64748b;
-  padding: 16px;
-  text-align: center;
-}
-
-.sl-gallery__state--error {
-  color: #dc2626;
-}
-
-.sl-gallery__dots {
+.sl-gallery__thumbs {
   display: flex;
-  justify-content: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.sl-gallery__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  border: none;
+.sl-gallery__thumb {
+  width: 72px;
+  height: 72px;
   padding: 0;
-  background: #cbd5e1;
-  cursor: pointer;
-}
-
-.sl-gallery__dot.on {
-  background: #4f46e5;
-  transform: scale(1.15);
-}
-
-.sl-gallery__thumbs .photo {
-  cursor: pointer;
-  padding: 0;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
   overflow: hidden;
+  background: #f8fafc;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
-.sl-gallery__thumbs .photo.on {
-  outline: 3px solid #4f46e5;
-  outline-offset: 2px;
+.sl-gallery__thumb.on {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
 }
 
-.sl-gallery__thumbs img {
+.sl-gallery__thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.sl-gallery__thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
 }
 
 @media (max-width: 640px) {
-  .sl-gallery__viewer {
+  .sl-gallery__footer {
     grid-template-columns: 1fr;
-    gap: 10px;
+    text-align: center;
   }
 
-  .sl-gallery__arrow {
-    display: none;
+  .sl-gallery__nav {
+    width: 100%;
   }
 
   .sl-gallery__stage {
