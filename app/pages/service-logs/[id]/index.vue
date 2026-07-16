@@ -324,6 +324,16 @@ const pill = computed(() => log.value
         >
           Edit invoice
         </NuxtLink>
+        <ChangeVehicleButton
+          v-if="log.status !== 'converted_to_invoice' && log.status !== 'archived' && log.customerId"
+          entity-type="service_log"
+          :entity-id="log.id"
+          :customer-id="log.customerId"
+          :current-vehicle-id="log.vehicleId"
+          :allow-edit="canEditLog"
+          :disabled="busy"
+          @changed="refresh()"
+        />
         <ReassignEntityButton
           v-if="log.status !== 'converted_to_invoice' && log.status !== 'archived'"
           entity-type="service_log"

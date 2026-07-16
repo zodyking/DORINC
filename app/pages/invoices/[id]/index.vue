@@ -423,7 +423,8 @@ const summaryRows = computed(() => {
         />
         <ChangeVehicleButton
           v-if="invoice.status !== 'void' && invoice.customerId"
-          :invoice-id="id"
+          entity-type="invoice"
+          :entity-id="id"
           :customer-id="invoice.customerId"
           :current-vehicle-id="invoice.vehicleId"
           :disabled="busy"

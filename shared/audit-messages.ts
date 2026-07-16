@@ -80,6 +80,7 @@ const ACTION_LABELS: Record<string, string> = {
   'invoices.revision': 'Revision invoice created',
   'invoices.reassign_customer': 'Customer reassigned',
   'invoices.reassign_vehicle': 'Vehicle changed',
+  'service_logs.reassign_vehicle': 'Unit changed',
   'invoices.update_dates': 'Invoice dates updated',
   'invoices.line_items.create': 'Line item added',
   'invoices.line_items.update': 'Line item updated',

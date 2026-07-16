@@ -22,6 +22,7 @@ import { archiveFileWithDerivatives } from '../../server/services/files.service'
 import { listUserUploadsByOwner } from '../../server/services/files.service'
 import { createCustomer } from '../../server/services/customers.service'
 import { createVehicle } from '../../server/services/vehicles.service'
+import { reassignServiceLogVehicle } from '../../server/services/reassign.service'
 import { appFiles } from '../../server/db/schema/files'
 import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
@@ -402,5 +403,33 @@ describe('P1-28 revert send to invoice', () => {
       sortOrder: 0,
     })
     await expect(revertServiceLogInvoice(db, log.id)).rejects.toThrow('NOT_REVERTIBLE')
+  })
+})
+
+describe('P1-29 change service log vehicle', () => {
+  it('updates vehicle while keeping the same customer', async () => {
+    const otherUnit = await createVehicle(db, {
+      customerId: owner.id,
+      unitType: 'truck',
+      busNumber: `SL-${stamp}-B`,
+      make: 'Peterbilt',
+      model: '579',
+      year: 2020,
+    }, MECHANIC)
+
+    const log = await makeLog()
+    const { log: updated } = await reassignServiceLogVehicle(db, log.id, { vehicleId: otherUnit.id }, MECHANIC)
+
+    expect(updated.vehicleId).toBe(otherUnit.id)
+    expect(updated.customerId).toBe(owner.id)
+
+    const read = await getServiceLog(db, log.id)
+    expect(read.vehicle.busNumber).toBe(`SL-${stamp}-B`)
+  })
+
+  it('rejects changing to the same vehicle', async () => {
+    const log = await makeLog()
+    await expect(reassignServiceLogVehicle(db, log.id, { vehicleId: unit.id }, MECHANIC))
+      .rejects.toMatchObject({ code: 'SAME_VEHICLE' })
   })
 })

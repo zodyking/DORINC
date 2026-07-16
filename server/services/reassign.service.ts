@@ -19,12 +19,13 @@ import type {
   ReassignInvoiceCustomerInput,
   ReassignInvoiceVehicleInput,
   ReassignServiceLogInput,
+  ReassignServiceLogVehicleInput,
   ReassignVehicleInput,
 } from '../../shared/validators/reassign'
 
 export type ReassignServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'CUSTOMER_ARCHIVED' | 'VEHICLE_NOT_FOUND'
-    | 'VEHICLE_CUSTOMER_MISMATCH' | 'SAME_CUSTOMER' | 'DUPLICATE_BUS_NUMBER'
+    | 'VEHICLE_CUSTOMER_MISMATCH' | 'SAME_CUSTOMER' | 'SAME_VEHICLE' | 'DUPLICATE_BUS_NUMBER'
     | 'NOT_REASSIGNABLE' | 'ALREADY_CONVERTED' | 'NO_CUSTOMER'
 
 export class ReassignServiceError extends Error {
@@ -309,4 +310,51 @@ export async function reassignServiceLog(
   }).where(eq(serviceLogs.id, logId)).returning()
 
   return { log: updated!, before, customer }
+}
+
+/** Change only the unit on a service log — customer stays the same. */
+export async function reassignServiceLogVehicle(
+  db: Db,
+  logId: string,
+  input: ReassignServiceLogVehicleInput,
+  actorId: string,
+) {
+  void actorId
+  let before
+  try {
+    before = await getServiceLog(db, logId)
+  }
+  catch (err) {
+    if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {
+      throw new ReassignServiceError('NOT_FOUND')
+    }
+    throw err
+  }
+
+  if (before.status === 'converted_to_invoice' || before.archivedAt) {
+    throw new ReassignServiceError('NOT_REASSIGNABLE')
+  }
+  if (!before.customerId) {
+    throw new ReassignServiceError('NO_CUSTOMER')
+  }
+  if (before.vehicleId === input.vehicleId) {
+    throw new ReassignServiceError('SAME_VEHICLE')
+  }
+
+  const { vehicleId, vehicleSnapshot } = await resolveVehicleForCustomer(
+    db,
+    before.customerId,
+    input.vehicleId,
+  )
+  if (!vehicleId || !vehicleSnapshot) {
+    throw new ReassignServiceError('VEHICLE_NOT_FOUND')
+  }
+
+  const [updated] = await db.update(serviceLogs).set({
+    vehicleId,
+    vehicleSnapshot,
+    updatedAt: new Date(),
+  }).where(eq(serviceLogs.id, logId)).returning()
+
+  return { log: updated!, before }
 }

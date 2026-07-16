@@ -18,6 +18,8 @@ export function mapReassignError(event: H3Event, err: unknown): never {
       throw apiError(event, 'CONFLICT', 'Vehicle does not belong to the selected customer')
     case 'SAME_CUSTOMER':
       throw apiError(event, 'CONFLICT', 'Record is already assigned to that customer')
+    case 'SAME_VEHICLE':
+      throw apiError(event, 'CONFLICT', 'Record is already linked to that unit')
     case 'DUPLICATE_BUS_NUMBER':
       throw apiError(event, 'CONFLICT', 'Target customer already has a unit with that fleet number')
     case 'NOT_REASSIGNABLE':
