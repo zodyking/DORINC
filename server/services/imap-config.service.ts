@@ -17,8 +17,11 @@ export interface ImapConfig {
   useTls: boolean
 }
 
+export type ImapAutoResponderScope = 'customers' | 'all'
+
 export interface ImapAutoResponderConfig {
   enabled: boolean
+  scope: ImapAutoResponderScope
   subject: string
   message: string
 }
@@ -69,6 +72,7 @@ function parseImapPayload(payload: Buffer): ImapConfig {
 function defaultAutoResponder(): ImapAutoResponderConfig {
   return {
     enabled: false,
+    scope: 'customers',
     subject: 'We received your message',
     message: DEFAULT_AUTO_RESPONDER_MESSAGE,
   }
@@ -77,6 +81,7 @@ function defaultAutoResponder(): ImapAutoResponderConfig {
 function normalizeAutoResponder(raw: Partial<ImapAutoResponderConfig> | null | undefined): ImapAutoResponderConfig {
   return {
     enabled: raw?.enabled === true,
+    scope: raw?.scope === 'all' ? 'all' : 'customers',
     subject: raw?.subject?.trim() || 'We received your message',
     message: raw?.message?.trim() || DEFAULT_AUTO_RESPONDER_MESSAGE,
   }

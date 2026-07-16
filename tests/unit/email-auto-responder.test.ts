@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildCustomerAutoResponderEmail } from '../../server/mail/templates/system.mjs'
-import { shouldSkipAutoResponder } from '../../server/services/email-auto-responder.service'
+import {
+  autoResponderMatchesScope,
+  shouldSkipAutoResponder,
+} from '../../server/services/email-auto-responder.service'
 
 describe('customer auto-responder', () => {
   const brand = {
@@ -30,5 +33,12 @@ describe('customer auto-responder', () => {
     expect(shouldSkipAutoResponder({ autoSubmitted: 'auto-replied' })).toBe(true)
     expect(shouldSkipAutoResponder({ subject: 'Out of office reply' })).toBe(true)
     expect(shouldSkipAutoResponder({ subject: 'Question about invoice' })).toBe(false)
+  })
+
+  it('limits auto-responder scope to customers when configured', () => {
+    expect(autoResponderMatchesScope('customers', true)).toBe(true)
+    expect(autoResponderMatchesScope('customers', false)).toBe(false)
+    expect(autoResponderMatchesScope('all', true)).toBe(true)
+    expect(autoResponderMatchesScope('all', false)).toBe(true)
   })
 })

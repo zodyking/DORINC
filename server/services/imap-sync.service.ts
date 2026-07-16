@@ -9,7 +9,7 @@ import {
   buildCustomerEmailAddresses,
   ensureEmailInboxReady,
   ingestInboundEmail,
-  messageMatchesCustomerInboxFilter,
+  shouldIngestInboundEmail,
 } from './email-inbox.service'
 import { extractEmailAddresses } from '../mail/email-thread'
 
@@ -95,7 +95,7 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
           const to = extractEmailAddresses(parsed.to?.value?.map(v => v.address ?? '') ?? msg.envelope?.to?.map(v => v.address ?? '') ?? [])
           const cc = extractEmailAddresses(parsed.cc?.value?.map(v => v.address ?? '') ?? msg.envelope?.cc?.map(v => v.address ?? '') ?? [])
 
-          if (!messageMatchesCustomerInboxFilter(companyInboxes, customerEmails, from, to, cc)) {
+          if (!shouldIngestInboundEmail(companyInboxes, customerEmails, from, to, cc)) {
             result.skipped++
             continue
           }

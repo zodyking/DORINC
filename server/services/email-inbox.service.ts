@@ -25,6 +25,7 @@ import { getSmtpConfig } from './app-config.service'
 import { notifyCustomerEmailReceived } from './staff-notifications.service'
 import {
   sendCustomerAutoResponderIfEnabled,
+  shouldAutoRespondToInbound,
   shouldSkipAutoResponder,
 } from './email-auto-responder.service'
 
@@ -92,6 +93,22 @@ export function buildCompanyInboxAddresses(): Set<string> {
   return inboxes
 }
 
+/** Mail delivered to a company inbox address (any sender except our own inboxes). */
+export function messageMatchesCompanyInboxFilter(
+  companyInboxes: Set<string>,
+  from: string,
+  to: string[],
+  cc: string[] = [],
+): boolean {
+  if (!companyInboxes.size) return false
+
+  const fromAddr = normalizeEmailAddress(from)
+  if (!fromAddr || companyInboxes.has(fromAddr)) return false
+
+  const recipients = [...to, ...cc].map(normalizeEmailAddress)
+  return recipients.some(addr => companyInboxes.has(addr))
+}
+
 /** Import only customer → company inbox mail (blocks Google alerts, newsletters, etc.). */
 export function messageMatchesCustomerInboxFilter(
   companyInboxes: Set<string>,
@@ -105,8 +122,22 @@ export function messageMatchesCustomerInboxFilter(
   const fromAddr = normalizeEmailAddress(from)
   if (!customerEmails.has(fromAddr)) return false
 
-  const recipients = [...to, ...cc].map(normalizeEmailAddress)
-  return recipients.some(addr => companyInboxes.has(addr))
+  return messageMatchesCompanyInboxFilter(companyInboxes, from, to, cc)
+}
+
+/** Decide whether an inbound message should be imported into Messages. */
+export function shouldIngestInboundEmail(
+  companyInboxes: Set<string>,
+  customerEmails: Set<string>,
+  from: string,
+  to: string[],
+  cc: string[] = [],
+): boolean {
+  if (!messageMatchesCompanyInboxFilter(companyInboxes, from, to, cc)) return false
+  if (messageMatchesCustomerInboxFilter(companyInboxes, customerEmails, from, to, cc)) return true
+
+  const filters = getImapFilters()
+  return filters.autoResponder.enabled && filters.autoResponder.scope === 'all'
 }
 
 export async function resolveCustomerByEmail(db: Db, email: string) {
@@ -531,7 +562,7 @@ export async function ingestInboundEmail(db: Db, input: {
   const from = normalizeEmailAddress(input.from)
   const companyInboxes = buildCompanyInboxAddresses()
   const customerEmails = await buildCustomerEmailAddresses(db)
-  if (!messageMatchesCustomerInboxFilter(companyInboxes, customerEmails, from, input.to, input.cc ?? [])) {
+  if (!shouldIngestInboundEmail(companyInboxes, customerEmails, from, input.to, input.cc ?? [])) {
     return { skipped: true as const, reason: 'filtered' as const }
   }
 
@@ -610,6 +641,7 @@ export async function ingestInboundEmail(db: Db, input: {
 
   if (
     isNewThread
+    && shouldAutoRespondToInbound(customer)
     && !shouldSkipAutoResponder({
       subject: input.subject,
       autoSubmitted: input.autoSubmitted,

@@ -18,6 +18,7 @@ interface ImapView {
     includeCustomerEmails: boolean
     autoResponder: {
       enabled: boolean
+      scope: 'customers' | 'all'
       subject: string
       message: string
     }
@@ -37,6 +38,7 @@ const form = reactive({
   additionalEmailsText: '',
   includeCustomerEmails: true,
   autoResponderEnabled: false,
+  autoResponderScope: 'customers' as 'customers' | 'all',
   autoResponderSubject: 'We received your message',
   autoResponderMessage: 'Thanks for contacting us. We received your email and a team member will reply shortly during business hours.',
 })
@@ -51,6 +53,7 @@ function hydrateForm(s: ImapView) {
   form.additionalEmailsText = s.filters.additionalEmails.join('\n')
   form.includeCustomerEmails = s.filters.includeCustomerEmails
   form.autoResponderEnabled = s.filters.autoResponder.enabled
+  form.autoResponderScope = s.filters.autoResponder.scope
   form.autoResponderSubject = s.filters.autoResponder.subject
   form.autoResponderMessage = s.filters.autoResponder.message
   form.password = s.hasPassword ? SAVED_PASSWORD_MASK : ''
@@ -91,6 +94,7 @@ async function save() {
         includeCustomerEmails: form.includeCustomerEmails,
         autoResponder: {
           enabled: form.autoResponderEnabled,
+          scope: form.autoResponderScope,
           subject: form.autoResponderSubject.trim(),
           message: form.autoResponderMessage.trim(),
         },
@@ -231,15 +235,35 @@ async function runSync() {
 
         <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;">
 
-        <h4 style="margin:0 0 8px;font-size:14px;">Customer auto-responder</h4>
+        <h4 style="margin:0 0 8px;font-size:14px;">Auto-responder</h4>
         <p class="settings-help" style="margin:0 0 12px;">
-          Automatically send a branded confirmation when a <b>new</b> customer email thread arrives
-          (matching the filter above). Replies in existing threads are not auto-answered.
+          Automatically send a branded confirmation when a <b>new</b> email thread arrives.
+          Replies in existing threads are not auto-answered.
         </p>
         <label class="fld" style="display:flex;align-items:center;gap:8px;">
           <input id="imap-auto-responder" v-model="form.autoResponderEnabled" type="checkbox">
-          <span>Enable customer auto-responder</span>
+          <span>Enable auto-responder</span>
         </label>
+        <fieldset class="fld" style="border:none;padding:0;margin:0;" :disabled="!form.autoResponderEnabled">
+          <legend style="font-size:13px;font-weight:600;margin-bottom:8px;">Send auto-replies to</legend>
+          <label class="fld" style="display:flex;align-items:center;gap:8px;font-weight:400;">
+            <input v-model="form.autoResponderScope" type="radio" value="customers">
+            <span>Customer emails only</span>
+          </label>
+          <label class="fld" style="display:flex;align-items:center;gap:8px;font-weight:400;">
+            <input v-model="form.autoResponderScope" type="radio" value="all">
+            <span>All new threads to your company inbox</span>
+          </label>
+          <p class="settings-help" style="margin:8px 0 0;">
+            <template v-if="form.autoResponderScope === 'customers'">
+              Only known customer and contact addresses receive an auto-reply.
+            </template>
+            <template v-else>
+              Any sender emailing your company inbox receives an auto-reply on a new thread.
+              Those threads also appear in Messages when you show all email threads.
+            </template>
+          </p>
+        </fieldset>
         <label class="fld">
           Auto-responder subject
           <input

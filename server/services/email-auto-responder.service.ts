@@ -9,9 +9,25 @@ import {
   normalizeEmailAddress,
   subjectWithRePrefix,
 } from '../mail/email-thread'
-import { getImapFilters } from './imap-config.service'
+import { getImapFilters, type ImapAutoResponderScope } from './imap-config.service'
 import { getSmtpConfig } from './app-config.service'
 import { resolveEmailBrand } from './email-branding.service'
+
+export function shouldAutoRespondToInbound(
+  customer: { id: string, displayName: string, email: string | null } | null,
+): boolean {
+  const auto = getImapFilters().autoResponder
+  if (!auto.enabled) return false
+  if (auto.scope === 'all') return true
+  return !!customer
+}
+
+export function autoResponderMatchesScope(
+  scope: ImapAutoResponderScope,
+  isCustomer: boolean,
+): boolean {
+  return scope === 'all' || isCustomer
+}
 
 export async function sendCustomerAutoResponderIfEnabled(
   db: Db,

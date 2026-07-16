@@ -12,8 +12,11 @@ export const imapSettingsSchema = z.object({
 
 export const DEFAULT_AUTO_RESPONDER_MESSAGE = 'Thanks for contacting us. We received your email and a team member will reply shortly during business hours.'
 
+export const imapAutoResponderScopeSchema = z.enum(['customers', 'all']).default('customers')
+
 export const imapAutoResponderSchema = z.object({
   enabled: z.boolean().default(false),
+  scope: imapAutoResponderScopeSchema,
   subject: z.string().min(1).max(200).default('We received your message'),
   message: z.string().min(1).max(5000).default(DEFAULT_AUTO_RESPONDER_MESSAGE),
 })
@@ -24,6 +27,7 @@ export const imapFilterSettingsSchema = z.object({
   includeCustomerEmails: z.boolean().default(true),
   autoResponder: imapAutoResponderSchema.default({
     enabled: false,
+    scope: 'customers',
     subject: 'We received your message',
     message: DEFAULT_AUTO_RESPONDER_MESSAGE,
   }),
