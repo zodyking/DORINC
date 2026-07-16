@@ -16,7 +16,6 @@ import {
   previewDraftTotals,
   previewLineAmount,
   previewLineTypeBreakdown,
-  wizardStateLabel,
   type DraftLine,
 } from '~/utils/invoice-creator-ui'
 import {
@@ -407,10 +406,6 @@ function prevStep() {
   if (step.value > 1) step.value -= 1
 }
 
-function goToStep(n: number) {
-  if (n < step.value) step.value = n
-}
-
 async function refreshSavedInvoice() {
   if (!invoiceId.value) return
   const { invoice } = await $fetch<{
@@ -561,85 +556,78 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
 </script>
 
 <template>
-  <section class="page active inv-wizard-page">
-    <StaffPageHead subtitle="Create, save at any step, and resume later — PDF when finalized">
+  <section class="page active sl-page">
+    <StaffPageHead subtitle="Step-by-step billing · save a draft at any step">
       <template #title>
-        New Invoice
-        <span class="pill draft" style="vertical-align:3px">{{ invoiceId ? 'Draft' : 'Unsaved' }}</span>
+        New invoice
+        <span v-if="!invoiceId" class="pill draft" style="vertical-align:3px; margin-left:6px;">Unsaved</span>
       </template>
       <template #actions>
         <button type="button" class="btn" :disabled="busy || !customerId" @click="saveDraft">Save draft</button>
         <NuxtLink to="/invoices" class="btn">Cancel</NuxtLink>
       </template>
     </StaffPageHead>
-    <div class="wizbar">
-      <span class="state">Workflow: <b>{{ wizardStateLabel(step) }}</b></span>
-      <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
-      <span class="autosave" :class="autosaveClass">{{ autosaveLabel }}</span>
-    </div>
 
-    <div class="wizard" aria-label="Invoice wizard steps">
-      <button
+    <div class="sl-progress" aria-label="Progress">
+      <div
         v-for="s in INVOICE_WIZARD_STEPS"
         :key="s.n"
-        type="button"
-        class="wstep"
+        class="sl-step"
         :class="{ on: step === s.n, done: step > s.n }"
-        :disabled="s.n > step"
-        @click="goToStep(s.n)"
       >
-        <span class="n">{{ s.n }}</span> {{ s.label }}
-      </button>
+        <div class="dot">{{ s.n }}</div>{{ s.label }}
+      </div>
     </div>
 
-    <p v-if="submitError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ submitError }}</p>
+    <p v-if="invoiceNumberFormatted || autosaveLabel" class="inv-wizard-meta">
+      <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
+      <span class="autosave" :class="autosaveClass">{{ autosaveLabel }}</span>
+    </p>
+
+    <p v-if="submitError" class="help inv-wizard-error">{{ submitError }}</p>
 
     <!-- Step 1: Customer -->
-    <div v-show="step === 1" class="wpanel" :class="{ active: step === 1 }">
-      <div class="card">
-        <div class="chead"><h3>Who is this invoice for?</h3></div>
-        <div class="cbody">
-          <label class="fld" style="margin-bottom:14px;">
-            <span>Search customers</span>
-            <input
-              v-model="customerFilterQ"
-              type="search"
-              placeholder="Type a name to search…"
-              aria-label="Search customers"
-              autocomplete="off"
-            >
-          </label>
-
-          <div v-if="customersPending && !customerOptions.length" class="cp-state" style="padding:16px 0;">
-            Loading customers…
-          </div>
-          <div v-else-if="customersLoadError" style="padding:8px 0;">
-            <p class="help" style="color:#dc2626; margin:0 0 10px;">{{ customersLoadError }}</p>
-            <button type="button" class="btn sm" @click="refreshCustomers()">Retry</button>
-          </div>
-          <p v-else-if="!customerOptions.length" class="sl-empty-veh">
-            No customers found. Try a different search or add a customer first.
-          </p>
-          <div v-else class="sl-picks">
-            <button
-              v-for="c in customerOptions"
-              :key="c.id"
-              type="button"
-              class="sl-pick"
-              :class="{ on: customerId === c.id }"
-              @click="customerId = c.id"
-            >
-              <span class="av teal">{{ initials(c.displayName) }}</span>
-              <span class="nm">
-                <b>{{ c.displayName }}</b>
-                <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }} · {{ paymentTermsLabel(c.paymentTerms) }}</small>
-              </span>
-              <span class="chk" />
-            </button>
-          </div>
-        </div>
+    <div v-show="step === 1" class="sl-panel active">
+      <h3>Which customer?</h3>
+      <p class="sl-hint">Select the billing account for this invoice.</p>
+      <label class="fld">
+        <span>Search</span>
+        <input
+          v-model="customerFilterQ"
+          type="search"
+          placeholder="Type a name to search…"
+          aria-label="Search customers"
+          autocomplete="off"
+        >
+      </label>
+      <div v-if="customersPending && !customerOptions.length" class="cp-state" style="padding:16px 0;">
+        Loading customers…
       </div>
-      <div class="wiz-foot">
+      <div v-else-if="customersLoadError">
+        <p class="help" style="color:#dc2626; margin:0 0 10px;">{{ customersLoadError }}</p>
+        <button type="button" class="btn sm" @click="refreshCustomers()">Retry</button>
+      </div>
+      <p v-else-if="!customerOptions.length" class="sl-empty-veh">
+        No customers found. Try a different search or add a customer first.
+      </p>
+      <div v-else class="sl-picks">
+        <button
+          v-for="c in customerOptions"
+          :key="c.id"
+          type="button"
+          class="sl-pick"
+          :class="{ on: customerId === c.id }"
+          @click="customerId = c.id"
+        >
+          <span class="av teal">{{ initials(c.displayName) }}</span>
+          <span class="nm">
+            <b>{{ c.displayName }}</b>
+            <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
+          </span>
+          <span class="chk" />
+        </button>
+      </div>
+      <div class="sl-foot">
         <button type="button" class="btn" disabled>Back</button>
         <button
           type="button"
@@ -647,283 +635,277 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
           :disabled="!canProceedWizardStep(1, { customerId, vehicleId, lines })"
           @click="nextStep"
         >
-          Continue to vehicle →
+          Continue
         </button>
       </div>
     </div>
 
     <!-- Step 2: Vehicle + dates -->
-    <div v-show="step === 2" class="wpanel" :class="{ active: step === 2 }">
-      <div class="cols">
-        <div class="card">
-          <div class="chead"><h3>Vehicle</h3></div>
-          <div class="cbody">
-            <div v-if="vehiclesPending && !vehicleOptions.length" class="cp-state" style="padding:12px 0;">
-              Loading vehicles…
-            </div>
-            <div v-else-if="vehicleOptions.length" class="sl-picks">
-              <button
-                v-for="v in vehicleOptions"
-                :key="v.id"
-                type="button"
-                class="sl-pick"
-                :class="{ on: vehicleId === v.id }"
-                @click="vehicleId = v.id"
-              >
-                <span class="av indigo">{{ (v.busNumber ?? v.unitTag ?? 'U').slice(0, 2) }}</span>
-                <span class="nm">
-                  <b>{{ vehicleTag(v) }}</b>
-                  <small>{{ vehicleSub(v) }}</small>
-                </span>
-                <span class="chk" />
-              </button>
-            </div>
-            <div v-else class="sl-empty-veh">No vehicles for this customer yet — you can continue without one.</div>
-            <p v-if="selectedVehicle" class="help" style="margin-top:12px;">
-              <template v-if="selectedVehicle.vin">VIN {{ selectedVehicle.vin }}</template>
-              <template v-if="selectedVehicle.vin && selectedVehicle.odometer"> · </template>
-              <template v-if="selectedVehicle.odometer">
-                {{ odoDisplay(selectedVehicle.odometer, selectedVehicle.odometerUnit) }}
-              </template>
-            </p>
-            <label v-if="serviceLogOptions.length" class="fld" style="margin-top:16px;">
-              <span>Or start from a service log</span>
-              <select :value="serviceLogId" @change="onServiceLogPick(($event.target as HTMLSelectElement).value)">
-                <option value="">— None —</option>
-                <option v-for="log in serviceLogOptions" :key="log.id" :value="log.id">
-                  {{ logNumberDisplay(log.logNumber) }} — {{ vehicleTag(log.vehicle) }}
-                </option>
-              </select>
-              <span class="help">Pre-fills customer &amp; vehicle from the log</span>
-            </label>
-          </div>
-        </div>
-        <div class="card">
-          <div class="chead"><h3>Dates &amp; terms</h3></div>
-          <div class="cbody">
-            <label class="fld"><span>Issue date</span><input v-model="invoiceDate" type="date" required></label>
-            <label class="fld"><span>Due date</span>
-              <input :value="dueDate" type="date" required @input="onDueDateInput(($event.target as HTMLInputElement).value)">
-            </label>
-            <label class="fld"><span>Payment terms</span>
-              <select v-model="paymentTerms">
-                <option value="due_on_receipt">Due on receipt</option>
-                <option value="net_15">Net 15</option>
-                <option value="net_30">Net 30</option>
-                <option value="net_45">Net 45</option>
-                <option value="net_60">Net 60</option>
-              </select>
-            </label>
-            <label class="fld"><span>PO / reference</span>
-              <input v-model="poNumber" type="text" placeholder="Optional customer PO">
-            </label>
-          </div>
-        </div>
+    <div v-show="step === 2" class="sl-panel active">
+      <h3>Which vehicle?</h3>
+      <p class="sl-hint">Pick the unit for this invoice, or continue without one.</p>
+      <div v-if="vehiclesPending && !vehicleOptions.length" class="cp-state" style="padding:12px 0;">
+        Loading vehicles…
       </div>
-      <div class="wiz-foot">
-        <button type="button" class="btn" @click="prevStep">← Back</button>
-        <div class="wiz-foot-right">
-          <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="!canProceedWizardStep(2, { customerId, vehicleId, lines })"
-            @click="continueToLines"
-          >
-            Continue to line items →
-          </button>
-        </div>
+      <div v-else-if="vehicleOptions.length" class="sl-picks">
+        <button
+          v-for="v in vehicleOptions"
+          :key="v.id"
+          type="button"
+          class="sl-pick"
+          :class="{ on: vehicleId === v.id }"
+          @click="vehicleId = v.id"
+        >
+          <span class="av indigo">{{ (v.busNumber ?? v.unitTag ?? 'U').slice(0, 2) }}</span>
+          <span class="nm">
+            <b>{{ vehicleTag(v) }}</b>
+            <small>{{ vehicleSub(v) }}</small>
+          </span>
+          <span class="chk" />
+        </button>
+      </div>
+      <div v-else class="sl-empty-veh">No vehicles for this customer yet.</div>
+      <p v-if="selectedVehicle" class="help" style="margin-top:12px;">
+        <template v-if="selectedVehicle.vin">VIN {{ selectedVehicle.vin }}</template>
+        <template v-if="selectedVehicle.vin && selectedVehicle.odometer"> · </template>
+        <template v-if="selectedVehicle.odometer">
+          {{ odoDisplay(selectedVehicle.odometer, selectedVehicle.odometerUnit) }}
+        </template>
+      </p>
+      <label v-if="serviceLogOptions.length" class="fld" style="margin-top:16px;">
+        <span>Start from a service log</span>
+        <select :value="serviceLogId" @change="onServiceLogPick(($event.target as HTMLSelectElement).value)">
+          <option value="">— None —</option>
+          <option v-for="log in serviceLogOptions" :key="log.id" :value="log.id">
+            {{ logNumberDisplay(log.logNumber) }} — {{ vehicleTag(log.vehicle) }}
+          </option>
+        </select>
+        <span class="help">Pre-fills the vehicle from the log</span>
+      </label>
+
+      <h3 style="margin-top:28px;">Dates &amp; terms</h3>
+      <p class="sl-hint">Issue date, due date, and payment terms.</p>
+      <label class="fld"><span>Issue date</span><input v-model="invoiceDate" type="date" required></label>
+      <label class="fld"><span>Due date</span>
+        <input :value="dueDate" type="date" required @input="onDueDateInput(($event.target as HTMLInputElement).value)">
+      </label>
+      <label class="fld"><span>Payment terms</span>
+        <select v-model="paymentTerms">
+          <option value="due_on_receipt">Due on receipt</option>
+          <option value="net_15">Net 15</option>
+          <option value="net_30">Net 30</option>
+          <option value="net_45">Net 45</option>
+          <option value="net_60">Net 60</option>
+        </select>
+      </label>
+      <label class="fld"><span>PO / reference</span>
+        <input v-model="poNumber" type="text" placeholder="Optional customer PO">
+      </label>
+      <div class="sl-foot">
+        <button type="button" class="btn" @click="prevStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="!canProceedWizardStep(2, { customerId, vehicleId, lines })"
+          @click="continueToLines"
+        >
+          Continue
+        </button>
       </div>
     </div>
 
     <!-- Step 3: Line items -->
-    <div v-show="step === 3" class="wpanel" :class="{ active: step === 3 }">
-      <div class="card">
-        <div class="chead">
-          <h3>Line items</h3>
+    <div v-show="step === 3" class="sl-panel active">
+      <h3>Line items</h3>
+      <p v-if="!lineEntryMode" class="sl-hint">How do you want to add charges?</p>
+
+      <div v-if="!lineEntryMode" class="sl-picks sl-log-modes">
+        <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
+          <span class="av teal" aria-hidden="true">🎙️</span>
+          <span class="nm">
+            <b>{{ VOICE_ENTRY_PICK.title }}</b>
+            <small>{{ VOICE_ENTRY_PICK.invoiceDescription }}</small>
+          </span>
+          <span class="chk" />
+        </button>
+        <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('manual')">
+          <span class="av indigo" aria-hidden="true">✏️</span>
+          <span class="nm">
+            <b>{{ MANUAL_ENTRY_PICK.title }}</b>
+            <small>{{ MANUAL_ENTRY_PICK.description }}</small>
+          </span>
+          <span class="chk" />
+        </button>
+      </div>
+
+      <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
+        <CommonLineItemWizard
+          ref="lineWizardRef"
+          v-model:lines="wizardLines"
+        />
+        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+      </div>
+
+      <template v-else>
+        <div class="inv-line-actions">
+          <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+          <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
         </div>
-        <div class="cbody">
-          <p v-if="!lineEntryMode" class="sl-hint" style="margin-top:0;">
-            How do you want to add charges?
-          </p>
-
-          <div v-if="!lineEntryMode" class="sl-picks sl-log-modes" style="margin-bottom:0;">
-            <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
-              <span class="av teal" aria-hidden="true">🎙️</span>
-              <span class="nm">
-                <b>{{ VOICE_ENTRY_PICK.title }}</b>
-                <small>{{ VOICE_ENTRY_PICK.invoiceDescription }}</small>
-              </span>
-              <span class="chk" />
-            </button>
-            <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('manual')">
-              <span class="av indigo" aria-hidden="true">✏️</span>
-              <span class="nm">
-                <b>{{ MANUAL_ENTRY_PICK.title }}</b>
-                <small>{{ MANUAL_ENTRY_PICK.description }}</small>
-              </span>
-              <span class="chk" />
-            </button>
-          </div>
-
-          <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
-            <CommonLineItemWizard
-              ref="lineWizardRef"
-              v-model:lines="wizardLines"
-            />
-            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
-          </div>
-
-          <template v-else>
-            <div class="chead" style="padding:0; margin-bottom:12px;">
-              <div class="right" style="width:100%; display:flex; gap:8px; justify-content:flex-end;">
-                <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
-                <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
-              </div>
-            </div>
-            <div class="tscroll">
-              <table class="ed-lines">
-                <thead>
-                  <tr>
-                    <th style="width:110px">Type</th>
-                    <th>Description</th>
-                    <th style="width:90px">Qty / Hrs</th>
-                    <th style="width:110px">Rate</th>
-                    <th style="width:110px; text-align:right">Amount</th>
-                    <th style="width:36px" />
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in lines" :key="line.localId">
-                    <td>
-                      <select v-model="line.lineType">
-                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                      </select>
-                    </td>
-                    <td>
-                      <CatalogLineAutocomplete
-                        :ref="(el) => setLineAcRef(line.localId, el)"
-                        v-model="line.description"
-                        v-model:line-type="line.lineType"
-                        @typed="onLineDescriptionTyped(line)"
-                        @select="applyCatalogToLine(line, $event)"
-                      />
-                    </td>
-                    <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
-                    <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
-                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
-                    <td>
-                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
-          </template>
+        <div class="tscroll inv-line-table">
+          <table class="ed-lines">
+            <thead>
+              <tr>
+                <th style="width:110px">Type</th>
+                <th>Description</th>
+                <th style="width:90px">Qty / Hrs</th>
+                <th style="width:110px">Rate</th>
+                <th style="width:110px; text-align:right">Amount</th>
+                <th style="width:36px" />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in lines" :key="line.localId">
+                <td>
+                  <select v-model="line.lineType">
+                    <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </td>
+                <td>
+                  <CatalogLineAutocomplete
+                    :ref="(el) => setLineAcRef(line.localId, el)"
+                    v-model="line.description"
+                    v-model:line-type="line.lineType"
+                    @typed="onLineDescriptionTyped(line)"
+                    @select="applyCatalogToLine(line, $event)"
+                  />
+                </td>
+                <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
+                <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
+                <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
+                <td>
+                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div v-if="lineEntryMode" class="ed-sums">
-          <div
-            v-for="(row, i) in summaryRows"
-            :key="i"
-            class="row"
-            :class="{ grand: row.grand }"
-          >
-            <span>{{ row.label }}</span>
-            <span>{{ row.value }}</span>
-          </div>
+        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+      </template>
+
+      <div v-if="lineEntryMode" class="ed-sums inv-wizard-sums">
+        <div
+          v-for="(row, i) in summaryRows"
+          :key="i"
+          class="row"
+          :class="{ grand: row.grand }"
+        >
+          <span>{{ row.label }}</span>
+          <span>{{ row.value }}</span>
         </div>
       </div>
-      <p v-if="submitError && step === 3" class="help" style="color:#dc2626; margin-top:8px;">{{ submitError }}</p>
-      <div class="wiz-foot">
-        <button type="button" class="btn" @click="prevFromLinesStep">← Back</button>
-        <div class="wiz-foot-right">
-          <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="busy || !lineEntryMode || !canProceedWizardStep(3, { customerId, vehicleId, lines })"
-            @click="continueToReview"
-          >
-            Review invoice →
-          </button>
-        </div>
+
+      <div class="sl-foot">
+        <button type="button" class="btn" @click="prevFromLinesStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="busy || !lineEntryMode || !canProceedWizardStep(3, { customerId, vehicleId, lines })"
+          @click="continueToReview"
+        >
+          Continue
+        </button>
       </div>
     </div>
 
     <!-- Step 4: Review -->
-    <div v-show="step === 4" class="wpanel" :class="{ active: step === 4 }">
-      <div class="cols">
-        <div class="card">
-          <div class="chead">
-            <h3>Summary</h3>
-            <div class="right">
-              <span v-if="invoiceNumberFormatted" class="pill draft">Draft · {{ invoiceNumberFormatted }}</span>
-            </div>
-          </div>
-          <dl class="kv">
-            <dt>Customer</dt><dd>{{ selectedCustomer?.displayName ?? '—' }}</dd>
-            <dt>Vehicle</dt><dd>{{ selectedVehicle ? vehicleTag(selectedVehicle) : '—' }}</dd>
-            <dt>Issue / Due</dt>
-            <dd>{{ invoiceDateDisplay(invoiceDate) }} → {{ invoiceDateDisplay(dueDate) }}</dd>
-            <dt>Line items</dt><dd>{{ validLines.length }}</dd>
-            <dt>Total</dt>
-            <dd style="color:#4f46e5; font-size:18px">{{ moneyDisplay((savedInvoice ?? previewDraftTotals(lines, { taxExempt: selectedCustomer?.taxExempt })).total) }}</dd>
-          </dl>
+    <div v-show="step === 4" class="sl-panel active">
+      <h3>Review &amp; finish</h3>
+      <p class="sl-hint">Confirm details before saving or sending the invoice.</p>
+      <div class="sl-review">
+        <div class="r">
+          <span class="k">Invoice</span>
+          <span class="v">{{ invoiceNumberFormatted ?? 'Assigned when saved' }}</span>
         </div>
-        <div class="stack">
-          <div class="card">
-            <div class="chead"><h3>Delivery</h3></div>
-            <dl class="kv">
-              <dt>On finalize</dt><dd>Generate PDF and email the customer</dd>
-              <dt>Portal</dt><dd>Visible to customer immediately</dd>
-            </dl>
-          </div>
-          <div class="card">
-            <div class="chead"><h3>Workflow</h3></div>
-            <div class="cbody" style="font-size:13px; color:#64748b; line-height:1.55;">
-              <b style="color:#0f172a">Save draft</b> — keeps your work and assigns an invoice number.<br><br>
-              <b style="color:#0f172a">Finalize &amp; send</b> — locks the invoice, generates the PDF, and notifies the customer.
-            </div>
-          </div>
+        <div class="r"><span class="k">Customer</span><span class="v">{{ selectedCustomer?.displayName ?? '—' }}</span></div>
+        <div class="r"><span class="k">Vehicle</span><span class="v">{{ selectedVehicle ? vehicleTag(selectedVehicle) : '—' }}</span></div>
+        <div class="r">
+          <span class="k">Issue / due</span>
+          <span class="v">{{ invoiceDateDisplay(invoiceDate) }} → {{ invoiceDateDisplay(dueDate) }}</span>
+        </div>
+        <div class="r"><span class="k">Terms</span><span class="v">{{ paymentTermsLabel(paymentTerms) }}</span></div>
+        <div class="r"><span class="k">Line items</span><span class="v">{{ validLines.length }}</span></div>
+        <div class="r">
+          <span class="k">Total</span>
+          <span class="v" style="color:#4f46e5;">{{ moneyDisplay((savedInvoice ?? previewDraftTotals(lines, { taxExempt: selectedCustomer?.taxExempt })).total) }}</span>
+        </div>
+        <div class="r stack">
+          <span class="k">On finalize</span>
+          <span class="v">Generate PDF and email the customer. Portal access is updated immediately.</span>
         </div>
       </div>
-      <div class="wiz-foot">
-        <button type="button" class="btn" @click="prevStep">← Back</button>
-        <div class="wiz-foot-right">
-          <button type="button" class="btn" :disabled="busy" @click="saveAndContinueEditing">
-            Save draft &amp; continue editing
-          </button>
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="busy || !invoiceId || !canApprove || !canSend"
-            :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
-            @click="finalizeAndSend"
-          >
-            Finalize &amp; send
-          </button>
-        </div>
+      <button
+        type="button"
+        class="btn ghost sm sl-change-mode"
+        :disabled="busy || !invoiceId"
+        @click="saveAndContinueEditing"
+      >
+        Save draft &amp; open full editor
+      </button>
+      <div class="sl-foot">
+        <button type="button" class="btn" :disabled="busy" @click="prevStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="busy || !invoiceId || !canApprove || !canSend"
+          :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
+          @click="finalizeAndSend"
+        >
+          {{ busy ? 'Sending…' : 'Finalize & send' }}
+        </button>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.wiz-foot {
+.inv-wizard-meta {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: -8px 0 16px;
+  font-size: 12px;
+}
+
+.inv-wizard-meta .autosave {
+  margin-left: auto;
+  font-weight: 600;
+  color: #059669;
+}
+
+.inv-wizard-meta .autosave.pending {
+  color: #d97706;
+}
+
+.inv-wizard-error {
+  color: #dc2626;
+  margin: -8px 0 16px;
+}
+
+.inv-line-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.inv-line-table {
+  margin-bottom: 8px;
+}
+
+.inv-wizard-sums {
   margin-top: 16px;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.wiz-foot-right {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.sl-hint {
-  font-size: 13px;
-  color: #64748b;
+  border-radius: 12px;
+  overflow: hidden;
 }
 </style>
