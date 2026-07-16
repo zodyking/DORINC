@@ -39,6 +39,17 @@ export async function isEmailInboxReady(db: Db): Promise<boolean> {
   return Boolean(result.rows[0]?.reg)
 }
 
+/** Apply migration 0047 on demand when email inbox tables are missing. */
+export async function ensureEmailInboxReady(db: Db): Promise<void> {
+  if (await isEmailInboxReady(db)) return
+  const { ensureEmailInboxSchema } = await import('../lib/ensure-email-inbox-schema.mjs')
+  const { usePool } = await import('../db/client')
+  await ensureEmailInboxSchema(usePool())
+  if (!(await isEmailInboxReady(db))) {
+    throw new Error('Email inbox tables could not be created automatically')
+  }
+}
+
 export async function buildAllowedFilterAddresses(db: Db): Promise<Set<string>> {
   const filters = getImapFilters()
   const allowed = new Set<string>()

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { formatSmtpFromHeader, parseSmtpFromHeader } from '#shared/format/smtp-from'
+import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
 
 const emit = defineEmits<{ saved: [] }>()
 
 interface SmtpView {
   configured: boolean
+  hasPassword?: boolean
   host: string
   port: number
   username: string
@@ -25,14 +27,18 @@ const form = reactive({
   fromAddress: '',
 })
 
-watch(() => smtpData.value, (s) => {
-  if (!s) return
+function hydrateForm(s: SmtpView) {
   form.host = s.host
   form.port = s.port
   form.username = s.username
   form.fromName = s.fromName || parseSmtpFromHeader(s.from).fromName
   form.fromAddress = s.fromAddress || parseSmtpFromHeader(s.from).fromAddress
-  form.password = ''
+  form.password = s.hasPassword ? SAVED_PASSWORD_MASK : ''
+}
+
+watch(() => smtpData.value, (s) => {
+  if (!s) return
+  hydrateForm(s)
 }, { immediate: true })
 
 const fromPreview = computed(() =>
@@ -63,9 +69,15 @@ async function save() {
       fromName: form.fromName.trim(),
       fromAddress: form.fromAddress.trim(),
     }
-    if (form.password.trim()) body.password = form.password.trim()
+    const nextPassword = passwordForSave(form.password, !!smtpData.value?.hasPassword)
+    if (nextPassword !== undefined) body.password = nextPassword
     await $fetch('/api/admin/system/smtp-settings', { method: 'PATCH', body })
-    form.password = ''
+    if (smtpData.value?.hasPassword || nextPassword) {
+      form.password = SAVED_PASSWORD_MASK
+    }
+    else {
+      form.password = ''
+    }
     message.value = 'SMTP settings saved'
     await refresh()
     emit('saved')
@@ -127,7 +139,8 @@ async function runTest() {
         </label>
         <label class="fld">
           Password
-          <input v-model="form.password" type="password" maxlength="500" :placeholder="smtpData?.configured ? 'Leave blank to keep current password' : 'App password'" :disabled="smtpData?.envLocked" autocomplete="off">
+          <input v-model="form.password" type="password" maxlength="500" :placeholder="smtpData?.hasPassword ? 'Saved — leave as-is to keep current password' : 'App password'" :disabled="smtpData?.envLocked" autocomplete="off">
+          <span v-if="smtpData?.hasPassword && isSavedPasswordMask(form.password)" class="help">App password is saved. Replace only if you want to change it.</span>
         </label>
         <div class="row2">
           <label class="fld">

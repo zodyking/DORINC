@@ -309,19 +309,28 @@ export async function saveSmtpConfig(db: Db, input: SmtpConfig, updatedBy?: stri
     throw new Error('SMTP settings are locked by environment variables')
   }
 
+  await ensureEncryptionReadyForSettings(db)
+
+  let pass = input.pass?.trim() ?? ''
+  if (!pass) {
+    await refreshAppConfigCache(db)
+    pass = getSmtpConfig()?.pass ?? ''
+  }
+
   const config: SmtpConfig = {
     host: input.host.trim(),
     port: Number(input.port ?? 587),
     user: input.user.trim(),
-    pass: input.pass,
+    pass,
     from: input.from.trim(),
   }
 
   if (!config.host || !config.from) {
     throw new Error('SMTP host and from address are required')
   }
-
-  await ensureEncryptionReadyForSettings(db)
+  if (!config.pass) {
+    throw new Error('SMTP password is required')
+  }
 
   const encrypted = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
   await upsertSetting(db, APP_CONFIG_KEYS.smtp, { encryptedValue: encrypted, updatedBy: updatedBy ?? null })

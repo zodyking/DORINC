@@ -5,6 +5,7 @@ import {
   saveImapFilters,
   clearImapConfigCache,
 } from '../../../services/imap-config.service'
+import { ensureEmailInboxReady } from '../../../services/email-inbox.service'
 import { writeAudit } from '../../../services/audit.service'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody } from '../../../utils/validate'
@@ -20,6 +21,8 @@ export default defineEventHandler(async (event) => {
   const existing = getImapConfig()
 
   try {
+    await ensureEmailInboxReady(db)
+
     await saveImapConfig(db, {
       host: body.host,
       port: body.port,

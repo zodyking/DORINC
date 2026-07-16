@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
+
 const emit = defineEmits<{ saved: [] }>()
 
 interface ImapView {
   configured: boolean
+  hasPassword?: boolean
   host: string
   port: number
   username: string
@@ -30,8 +33,7 @@ const form = reactive({
   includeCustomerEmails: true,
 })
 
-watch(() => imapData.value, (s) => {
-  if (!s) return
+function hydrateForm(s: ImapView) {
   form.host = s.host
   form.port = s.port
   form.username = s.username
@@ -40,7 +42,12 @@ watch(() => imapData.value, (s) => {
   form.companyEmail = s.filters.companyEmail
   form.additionalEmailsText = s.filters.additionalEmails.join('\n')
   form.includeCustomerEmails = s.filters.includeCustomerEmails
-  form.password = ''
+  form.password = s.hasPassword ? SAVED_PASSWORD_MASK : ''
+}
+
+watch(() => imapData.value, (s) => {
+  if (!s) return
+  hydrateForm(s)
 }, { immediate: true })
 
 const saveBusy = ref(false)
@@ -73,9 +80,15 @@ async function save() {
         includeCustomerEmails: form.includeCustomerEmails,
       },
     }
-    if (form.password.trim()) body.password = form.password.trim()
+    const nextPassword = passwordForSave(form.password, !!imapData.value?.hasPassword)
+    if (nextPassword !== undefined) body.password = nextPassword
     await $fetch('/api/admin/system/imap-settings', { method: 'PATCH', body })
-    form.password = ''
+    if (imapData.value?.hasPassword || nextPassword) {
+      form.password = SAVED_PASSWORD_MASK
+    }
+    else {
+      form.password = ''
+    }
     message.value = 'IMAP settings saved'
     await refresh()
     emit('saved')
@@ -157,10 +170,11 @@ async function runSync() {
             v-model="form.password"
             type="password"
             maxlength="500"
-            :placeholder="imapData?.configured ? 'Leave blank to keep current password' : 'App password'"
+            :placeholder="imapData?.hasPassword ? 'Saved — leave as-is to keep current password' : 'App password'"
             :disabled="imapData?.envLocked"
             autocomplete="off"
           >
+          <span v-if="imapData?.hasPassword && isSavedPasswordMask(form.password)" class="help">App password is saved. Replace only if you want to change it.</span>
         </label>
         <div class="row2">
           <label class="fld">

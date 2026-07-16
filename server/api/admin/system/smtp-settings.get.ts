@@ -8,6 +8,7 @@ export default defineEventHandler((event) => {
   const parsed = parseSmtpFromHeader(config?.from ?? '')
   return {
     configured: !!(config?.host && config?.from),
+    hasPassword: !!(config?.host && config?.pass),
     host: config?.host ?? '',
     port: config?.port ?? 587,
     username: config?.user ?? '',

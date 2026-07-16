@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     configured: !!config,
+    hasPassword: !!(config?.pass),
     host: config?.host ?? '',
     port: config?.port ?? 993,
     username: config?.user ?? '',

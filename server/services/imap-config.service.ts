@@ -119,7 +119,16 @@ export function isImapEnvLocked(): boolean {
 export async function saveImapConfig(db: Db, config: ImapConfig, actorId: string | null) {
   if (isImapEnvLocked()) throw new Error('IMAP is locked by environment variables on this server')
   await ensureEncryptionReadyForSettings(db)
-  const encryptedValue = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
+
+  let pass = config.pass?.trim() ?? ''
+  if (!pass) {
+    await refreshImapConfigCache(db)
+    pass = getImapConfig()?.pass ?? ''
+  }
+  if (!pass) throw new Error('IMAP password is required')
+
+  const normalized: ImapConfig = { ...config, pass }
+  const encryptedValue = encryptBuffer(Buffer.from(JSON.stringify(normalized), 'utf8')).toString('base64')
 
   const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, IMAP_CONFIG_KEY)).limit(1)
   if (existing) {
@@ -137,7 +146,7 @@ export async function saveImapConfig(db: Db, config: ImapConfig, actorId: string
     })
   }
 
-  cache.config = config
+  cache.config = normalized
 }
 
 export async function saveImapFilters(db: Db, filters: ImapFilterConfig, actorId: string | null) {
