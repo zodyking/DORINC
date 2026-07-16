@@ -525,8 +525,9 @@ const summaryRows = computed(() => {
       </div>
     </div>
 
-    <div v-show="viewTab === 'detail'" class="cols">
-      <div class="stack">
+    <div v-show="viewTab === 'detail'" class="inv-detail-body">
+      <div class="cols">
+        <div class="stack">
         <div class="card">
           <div class="chead">
             <h3>Line items · {{ lines.length }}</h3>
@@ -643,30 +644,30 @@ const summaryRows = computed(() => {
             <dt>Status</dt><dd>Linked to this invoice</dd>
           </dl>
         </div>
+      </div>
 
-        <div class="card">
-          <div class="chead">
-            <h3>Change history</h3>
-          </div>
-          <div class="tscroll">
-            <table class="tbl hist-log">
-              <thead>
-                <tr><th>When</th><th>User</th><th>Change</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in history" :key="row.id">
-                  <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
-                  <td class="who">{{ row.actorName ?? 'system' }}</td>
-                  <td class="chg">{{ formatInvoiceAuditAction(row.action, row) }}</td>
-                </tr>
-                <tr v-if="!history.length">
-                  <td class="when">—</td>
-                  <td class="who">—</td>
-                  <td class="chg">No activity recorded yet</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      <div class="card inv-detail-history">
+        <div class="chead">
+          <h3>Change history</h3>
+        </div>
+        <div class="tscroll">
+          <table class="tbl hist-log">
+            <thead>
+              <tr><th>When</th><th>User</th><th>Change</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in history" :key="row.id">
+                <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
+                <td class="who">{{ row.actorName ?? 'system' }}</td>
+                <td class="chg">{{ formatInvoiceAuditAction(row.action, row) }}</td>
+              </tr>
+              <tr v-if="!history.length">
+                <td class="when">—</td>
+                <td class="who">—</td>
+                <td class="chg">No activity recorded yet</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -687,6 +688,16 @@ const summaryRows = computed(() => {
 </template>
 
 <style scoped>
+.inv-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.inv-detail-history {
+  width: 100%;
+}
+
 .page--invoice-pdf {
   display: flex;
   flex-direction: column;
