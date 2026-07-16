@@ -442,3 +442,22 @@ section.page.active.page--invoice-pdf {
   min-height: 60vh;
   max-height: calc(100vh - 300px);
 }
+
+/* Invoice list — compact row action menu column. */
+.inv-tbl .col-actions {
+  width: 44px;
+  min-width: 44px;
+  padding-left: 4px;
+  padding-right: 8px;
+  text-align: right;
+  vertical-align: middle;
+}
+.inv-tbl th.col-actions {
+  width: 44px;
+  min-width: 44px;
+}
+.inv-tbl .col-actions .page-actions__trigger {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}

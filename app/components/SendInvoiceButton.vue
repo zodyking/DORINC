@@ -4,9 +4,11 @@ import { moneyDisplay, invoiceDateDisplay } from '~/utils/invoices-ui'
 const props = withDefaults(defineProps<{
   invoiceId: string
   buttonClass?: string
+  label?: string
   disabled?: boolean
 }>(), {
   buttonClass: 'btn primary',
+  label: 'Send invoice',
   disabled: false,
 })
 
@@ -168,7 +170,7 @@ onUnmounted(stopPolling)
     :disabled="disabled || busy"
     @click="openModal"
   >
-    Send invoice
+    {{ label }}
   </button>
 
   <Teleport to="body">

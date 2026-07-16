@@ -211,8 +211,8 @@ async function exportCsv() {
     <StaffPageHead :subtitle="auth.loaded ? subtitle : 'Loading…'">
       <template #title>Invoices</template>
       <template #actions>
-        <BulkSendInvoicesButton v-if="canSend" @sent="retryLoad" />
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
+        <BulkSendInvoicesButton v-if="canSend" @sent="retryLoad" />
         <button type="button" class="btn" :disabled="exportBusy" @click="exportCsv">
           {{ exportBusy ? 'Exporting…' : 'Export CSV' }}
         </button>
@@ -291,6 +291,7 @@ async function exportCsv() {
               <th class="col-due">Due</th>
               <th class="col-status">Status</th>
               <th class="num col-amt">Amount</th>
+              <th class="col-actions" aria-label="Actions" />
             </tr>
           </thead>
           <tbody id="inv-rows">
@@ -313,6 +314,14 @@ async function exportCsv() {
                 </span>
               </td>
               <td class="num col-amt">{{ moneyDisplay(row.total) }}</td>
+              <td class="col-actions">
+                <InvoiceListRowActions
+                  :invoice-id="row.id"
+                  :invoice-label="row.invoiceNumberFormatted"
+                  :status="row.status"
+                  @changed="retryLoad"
+                />
+              </td>
             </tr>
           </tbody>
         </table>
