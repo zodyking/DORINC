@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { users } from '../db/schema/auth'
 import { customerContacts, customers } from '../db/schema/customers'
@@ -171,7 +171,7 @@ export async function listEmailConversations(db: Db, filter: {
     .leftJoin(customers, eq(customers.id, emailThreads.customerId))
     .orderBy(desc(emailThreads.updatedAt))
 
-  const items: EmailConversationSummary[] = []
+  const filtered: typeof rows = []
   for (const row of rows) {
     const counterpart = row.thread.counterpartEmail.toLowerCase()
     const isCustomerThread = !!row.thread.customerId || customerEmails.has(counterpart)
@@ -183,43 +183,65 @@ export async function listEmailConversations(db: Db, filter: {
       const hay = `${label} ${row.thread.subject} ${row.thread.counterpartEmail}`.toLowerCase()
       if (!hay.includes(term)) continue
     }
+    filtered.push(row)
+  }
 
-    const [lastMessage] = await db.select({
-      id: messages.id,
-      body: messages.body,
-      senderUserId: messages.senderUserId,
-      createdAt: messages.createdAt,
-      direction: emailMessageMeta.direction,
-      senderName: users.name,
-      htmlBody: emailMessageMeta.htmlBody,
-    })
-      .from(messages)
-      .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
-      .leftJoin(users, eq(users.id, messages.senderUserId))
-      .where(eq(messages.conversationId, row.conversation.id))
-      .orderBy(desc(messages.createdAt))
-      .limit(1)
+  const total = filtered.length
+  const offset = (filter.page - 1) * filter.pageSize
+  const pageRows = filtered.slice(offset, offset + filter.pageSize)
+  const convIds = pageRows.map(r => r.conversation.id)
 
-    const [readRow] = await db.select({ lastReadAt: emailConversationReads.lastReadAt })
-      .from(emailConversationReads)
-      .where(and(
-        eq(emailConversationReads.conversationId, row.conversation.id),
-        eq(emailConversationReads.userId, filter.userId),
-      ))
-      .limit(1)
+  if (!convIds.length) {
+    return { items: [], total, page: filter.page, pageSize: filter.pageSize }
+  }
 
-    let unreadCount = 0
-    if (lastMessage) {
-      const [{ value }] = await db.select({ value: count() })
-        .from(messages)
-        .where(and(
-          eq(messages.conversationId, row.conversation.id),
-          readRow?.lastReadAt ? gt(messages.createdAt, readRow.lastReadAt) : sql`true`,
-        ))
-      unreadCount = Number(value)
-    }
+  const lastMessageResult = await db.execute<{
+    conversation_id: string
+    id: string
+    body: string
+    sender_user_id: string | null
+    created_at: Date
+    direction: string | null
+    sender_name: string | null
+    html_snippet: string | null
+  }>(sql`
+    SELECT DISTINCT ON (m.conversation_id)
+      m.conversation_id,
+      m.id,
+      m.body,
+      m.sender_user_id,
+      m.created_at,
+      em.direction,
+      u.name AS sender_name,
+      LEFT(COALESCE(em.html_body, ''), 2048) AS html_snippet
+    FROM ${messages} m
+    LEFT JOIN ${emailMessageMeta} em ON em.message_id = m.id
+    LEFT JOIN ${users} u ON u.id = m.sender_user_id
+    WHERE m.conversation_id IN (${sql.join(convIds.map(id => sql`${id}`), sql`, `)})
+    ORDER BY m.conversation_id, m.created_at DESC
+  `)
 
-    items.push({
+  const lastByConv = new Map(
+    lastMessageResult.rows.map(row => [row.conversation_id, row]),
+  )
+
+  const unreadResult = await db.execute<{ conversation_id: string, unread_count: string }>(sql`
+    SELECT m.conversation_id, COUNT(*)::text AS unread_count
+    FROM ${messages} m
+    LEFT JOIN ${emailConversationReads} r
+      ON r.conversation_id = m.conversation_id AND r.user_id = ${filter.userId}
+    WHERE m.conversation_id IN (${sql.join(convIds.map(id => sql`${id}`), sql`, `)})
+      AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+    GROUP BY m.conversation_id
+  `)
+  const unreadByConv = new Map(
+    unreadResult.rows.map(row => [row.conversation_id, Number(row.unread_count)]),
+  )
+
+  const items: EmailConversationSummary[] = pageRows.map((row) => {
+    const lastMessage = lastByConv.get(row.conversation.id)
+    const label = row.customerName || row.thread.counterpartName || row.thread.counterpartEmail
+    return {
       id: row.conversation.id,
       type: 'email',
       customer: row.thread.customerId
@@ -230,21 +252,19 @@ export async function listEmailConversations(db: Db, filter: {
         ? {
             id: lastMessage.id,
             body: lastMessage.body,
-            senderUserId: lastMessage.senderUserId,
-            senderName: lastMessage.senderName,
+            senderUserId: lastMessage.sender_user_id,
+            senderName: lastMessage.sender_name,
             direction: (lastMessage.direction ?? 'outbound') as 'inbound' | 'outbound',
-            createdAt: lastMessage.createdAt.toISOString(),
-            preview: previewBody(lastMessage.body, lastMessage.htmlBody),
+            createdAt: new Date(lastMessage.created_at).toISOString(),
+            preview: previewBody(lastMessage.body, lastMessage.html_snippet),
           }
         : null,
-      unreadCount,
+      unreadCount: unreadByConv.get(row.conversation.id) ?? 0,
       updatedAt: row.thread.updatedAt.toISOString(),
-    })
-  }
+    }
+  })
 
-  const total = items.length
-  const offset = (filter.page - 1) * filter.pageSize
-  return { items: items.slice(offset, offset + filter.pageSize), total, page: filter.page, pageSize: filter.pageSize }
+  return { items, total, page: filter.page, pageSize: filter.pageSize }
 }
 
 export async function getEmailThread(db: Db, conversationId: string) {
@@ -289,20 +309,37 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
     .offset((filter.page - 1) * filter.pageSize)
 
   return {
-    items: rows.map(r => ({
-      id: r.id,
-      conversationId: r.conversationId,
-      body: r.body,
-      senderUserId: r.senderUserId,
-      senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
-      createdAt: r.createdAt.toISOString(),
-      channel: 'email' as const,
-      direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
-      htmlBody: r.htmlBody,
-      fromAddress: r.fromAddress,
-      entityRefs: [],
-    })),
+    items: rows.map((r) => {
+      const hasHtmlBody = !!r.htmlBody?.trim()
+      return {
+        id: r.id,
+        conversationId: r.conversationId,
+        body: r.body,
+        senderUserId: r.senderUserId,
+        senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
+        createdAt: r.createdAt.toISOString(),
+        channel: 'email' as const,
+        direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
+        hasHtmlBody,
+        fromAddress: r.fromAddress,
+        entityRefs: [],
+      }
+    }),
   }
+}
+
+export async function getEmailMessageHtml(db: Db, conversationId: string, messageId: string) {
+  await getEmailThread(db, conversationId)
+  const [row] = await db.select({ htmlBody: emailMessageMeta.htmlBody })
+    .from(messages)
+    .innerJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+    .where(and(
+      eq(messages.id, messageId),
+      eq(messages.conversationId, conversationId),
+    ))
+    .limit(1)
+  if (!row) throw new EmailInboxError('NOT_FOUND')
+  return { htmlBody: row.htmlBody }
 }
 
 export async function markEmailConversationRead(db: Db, conversationId: string, userId: string) {

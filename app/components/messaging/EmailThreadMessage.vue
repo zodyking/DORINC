@@ -10,6 +10,28 @@ const props = defineProps<{
   companyEmail?: string
 }>()
 
+const htmlBody = ref<string | null>(props.message.htmlBody ?? null)
+const loadingHtml = ref(false)
+
+watch(() => props.message, async (message) => {
+  htmlBody.value = message.htmlBody ?? null
+  if (htmlBody.value || !message.hasHtmlBody) return
+
+  loadingHtml.value = true
+  try {
+    const res = await $fetch<{ htmlBody: string | null }>(
+      `/api/conversations/${message.conversationId}/messages/${message.id}/html`,
+    )
+    htmlBody.value = res.htmlBody
+  }
+  catch {
+    htmlBody.value = null
+  }
+  finally {
+    loadingHtml.value = false
+  }
+}, { immediate: true })
+
 const isOutbound = computed(() => props.message.direction === 'outbound')
 const avCls = computed(() => avColor(props.message.senderName))
 const avInitials = computed(() => initials(props.message.senderName))
@@ -22,11 +44,11 @@ const addressLabel = computed(() => {
 })
 
 const useHtmlFrame = computed(() =>
-  shouldRenderEmailAsHtml(props.message.htmlBody, props.message.direction),
+  shouldRenderEmailAsHtml(htmlBody.value, props.message.direction),
 )
 
 const rendered = computed(() =>
-  emailBodyForThreadDisplay(props.message.body, props.message.htmlBody, props.message.direction),
+  emailBodyForThreadDisplay(props.message.body, htmlBody.value, props.message.direction),
 )
 </script>
 
@@ -46,9 +68,10 @@ const rendered = computed(() =>
       class="dm-email-msg-body"
       :class="{ 'dm-email-msg-body--html': useHtmlFrame }"
     >
+      <div v-if="loadingHtml" class="dm-email-empty">Loading email…</div>
       <MessagingEmailHtmlFrame
-        v-if="useHtmlFrame && message.htmlBody"
-        :html="message.htmlBody"
+        v-else-if="useHtmlFrame && htmlBody"
+        :html="htmlBody"
       />
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div v-else class="dm-email-text" v-html="rendered.content" />
