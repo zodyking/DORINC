@@ -7,6 +7,7 @@ export {
   buildBackupNotificationEmail,
   buildInvoiceAttachedEmail,
   buildLoginNotificationEmail,
+  buildCustomerAutoResponderEmail,
   buildDeletionRequestSubmittedEmail,
   buildDeletionRequestResultEmail,
   buildUserSignupPendingEmail,
