@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { moneySchema, nonEmptyString, uuidSchema } from './common'
+import { fleetNumberRequiredSchema, fleetNumberTrimmedOptionalSchema } from './fleet-number'
 
 export const portalNewVehicleRequestSchema = z.object({
-  fleetTag: nonEmptyString.max(120),
+  fleetTag: fleetNumberRequiredSchema(120),
   unitType: z.enum(['truck', 'bus', 'equipment', 'tractor', 'other']).default('truck'),
   vin: z.string().trim().max(17).optional().nullable(),
   year: z.number().int().min(1980).max(2035).optional().nullable(),
@@ -29,7 +30,7 @@ export const portalLineItemCorrectionInputSchema = z.object({
 })
 
 export const portalVehicleCorrectionInputSchema = z.object({
-  unitNumber: z.string().trim().max(80).optional().nullable(),
+  unitNumber: fleetNumberTrimmedOptionalSchema(80),
   year: z.coerce.number().int().min(1980).max(2035).optional().nullable(),
   make: z.string().trim().max(80).optional().nullable(),
   model: z.string().trim().max(80).optional().nullable(),

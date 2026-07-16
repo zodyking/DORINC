@@ -257,8 +257,8 @@ async function submitRequest() {
         <form @submit.prevent="submitRequest">
           <div class="mbody">
             <label class="fld">
-              <span>Unit name</span>
-              <input v-model="form.fleetTag" type="text" required placeholder="Bus #616">
+              <span>Fleet number</span>
+              <FleetNumberInput v-model="form.fleetTag" required />
             </label>
             <label class="fld">
               <span>Type</span>

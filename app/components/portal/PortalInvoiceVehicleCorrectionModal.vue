@@ -3,7 +3,6 @@ import {
   portalInvoiceVehicleCorrectionFormFromVehicle,
   portalInvoiceVehicleCorrectionHasChanges,
   portalInvoiceVehicleCorrectionRequestBody,
-  portalVehicleUnitNumberInput,
 } from '~/utils/portal-invoices-ui'
 import { vehicleTag, vehicleSub, type VehicleDisplay } from '~/utils/vehicles-ui'
 
@@ -142,13 +141,11 @@ async function submit() {
 
           <label class="fld correction-desc">
             <span>Unit #</span>
-            <input
+            <FleetNumberInput
               v-model="form.unitNumber"
-              type="text"
               maxlength="80"
               autocomplete="off"
-              :placeholder="portalVehicleUnitNumberInput(vehicle) || '616'"
-            >
+            />
           </label>
 
           <div class="correction-metrics correction-metrics--three">

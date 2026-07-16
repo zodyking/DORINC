@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { nonEmptyString, uuidSchema } from './common'
+import { fleetNumberOptionalSchema, fleetNumberRequiredSchema, fleetNumberTrimmedOptionalSchema } from './fleet-number'
 
 export const vinSchema = z.string().trim().min(5).max(17)
   .regex(/^[A-HJ-NPR-Z0-9]+$/i, 'VIN contains invalid characters')
@@ -7,8 +8,8 @@ export const vinSchema = z.string().trim().min(5).max(17)
 export const vehicleCreateSchema = z.object({
   customerId: uuidSchema,
   unitType: z.enum(['truck', 'bus', 'equipment', 'tractor', 'other']).optional(),
-  busNumber: nonEmptyString.max(40).nullish(),
-  unitTag: z.string().max(80).nullish(),
+  busNumber: fleetNumberOptionalSchema(40),
+  unitTag: fleetNumberOptionalSchema(80),
   vin: vinSchema.nullish(),
   plate: z.string().max(20).nullish(),
   year: z.number().int().min(1900).max(2100).nullish(),

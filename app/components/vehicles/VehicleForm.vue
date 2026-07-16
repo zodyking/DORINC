@@ -108,8 +108,8 @@ async function decodeVin() {
                 <option v-for="c in props.customers" :key="c.id" :value="c.id">{{ c.displayName }}</option>
               </select>
             </label>
-            <label class="fld">Fleet tag
-              <input v-model="model.busNumber" type="text" placeholder="e.g. HL-120, Bus #43">
+            <label class="fld">Fleet number
+              <FleetNumberInput v-model="model.busNumber" />
               <span class="help">How the team identifies this unit — unique per customer</span>
             </label>
             <label class="fld">Unit type
