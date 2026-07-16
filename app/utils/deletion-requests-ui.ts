@@ -6,6 +6,7 @@ export const DELETION_ENTITY_TABS: { key: 'all' | DeletionEntityType, label: str
   { key: 'vehicle', label: 'Vehicles' },
   { key: 'service_log', label: 'Service logs' },
   { key: 'invoice', label: 'Invoices' },
+  { key: 'conversation', label: 'Conversations' },
 ]
 
 export function deletionEntityLabel(type: DeletionEntityType): string {
@@ -14,6 +15,7 @@ export function deletionEntityLabel(type: DeletionEntityType): string {
     case 'vehicle': return 'Vehicle'
     case 'service_log': return 'Service log'
     case 'invoice': return 'Invoice'
+    case 'conversation': return 'Conversation'
   }
 }
 

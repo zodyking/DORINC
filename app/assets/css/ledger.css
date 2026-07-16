@@ -1671,7 +1671,9 @@ section.page.active.dm-page{
   margin-right:8px; flex-shrink:0;
 }
 .dm-thread-subject{ display:block; color:#64748b; font-size:12px; margin-top:2px; }
-.dm-thread-peer{ display:flex; align-items:center; gap:0; }
+.dm-thread-peer{ display:flex; align-items:center; gap:0; flex:1; min-width:0; }
+.dm-thread-actions{ flex-shrink:0; margin-left:auto; display:flex; align-items:center; gap:8px; }
+.dm-thread-actions .btn.danger{ padding:6px 10px; font-size:12px; }
 .dm-msg.inbound .dm-msg-bubble{ background:#f8fafc; border:1px solid #e2e8f0; }
 .dm-msg-bubble-email{ max-width:100%; }
 .dm-email-body{ font-size:13.5px; line-height:1.55; color:inherit; }

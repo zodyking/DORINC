@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { paginationSchema, uuidSchema } from './common'
 
-export const deletionEntityTypeSchema = z.enum(['customer', 'vehicle', 'service_log', 'invoice'])
+export const deletionEntityTypeSchema = z.enum(['customer', 'vehicle', 'service_log', 'invoice', 'conversation'])
 
 export const deletionRequestCreateSchema = z.object({
   entityType: deletionEntityTypeSchema,

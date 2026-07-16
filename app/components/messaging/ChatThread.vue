@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   back: []
   send: [body: string]
+  'deletion-requested': []
 }>()
 
 const auth = useAuthStore()
@@ -39,6 +40,18 @@ const peerEmail = computed(() => {
 const emailSubject = computed(() =>
   props.conversation?.type === 'email' ? props.conversation.subject : '',
 )
+
+const conversationLabel = computed(() => {
+  if (!props.conversation) return ''
+  if (props.conversation.type === 'email') {
+    return emailSubject.value || peerName.value || 'Email thread'
+  }
+  return peerName.value || 'Direct message'
+})
+
+function onDeletionRequested() {
+  emit('deletion-requested')
+}
 
 function isOwnMessage(msg: { senderUserId: string | null, direction?: 'inbound' | 'outbound' }) {
   if (isEmail.value) return msg.direction === 'outbound' || msg.senderUserId === userId.value
@@ -70,6 +83,15 @@ watch(() => props.conversation?.id, () => {
           <small>{{ peerEmail }}</small>
           <small v-if="emailSubject" class="dm-thread-subject">{{ emailSubject }}</small>
         </div>
+      </div>
+      <div class="dm-thread-actions">
+        <DeleteEntityButton
+          entity-type="conversation"
+          :entity-id="conversation.id"
+          :entity-label="conversationLabel"
+          title="Request thread deletion"
+          @submitted="onDeletionRequested"
+        />
       </div>
     </header>
 

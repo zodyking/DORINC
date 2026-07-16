@@ -178,6 +178,13 @@ function onBack() {
   showThread.value = false
 }
 
+async function onDeletionRequested() {
+  showThread.value = false
+  dm.activeConversationId = null
+  dm.messages = []
+  await dm.fetchConversations()
+}
+
 async function setChannel(channel: 'all' | 'dm' | 'email') {
   await dm.setChannel(channel)
 }
@@ -305,6 +312,7 @@ async function setEmailShowAll(showAll: boolean) {
           :current-user-id="auth.user?.id"
           @back="onBack"
           @send="onSend"
+          @deletion-requested="onDeletionRequested"
         />
       </div>
     </div>
