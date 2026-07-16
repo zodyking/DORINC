@@ -10,3 +10,7 @@ export function isUserUploadFileKind(fileKind: string): boolean {
 export function filePreviewUrl(fileId: string): string {
   return `/api/files/${fileId}/preview`
 }
+
+export function serviceLogFilePreviewUrl(serviceLogId: string, fileId: string): string {
+  return `/api/service-logs/${serviceLogId}/files/${fileId}/preview`
+}

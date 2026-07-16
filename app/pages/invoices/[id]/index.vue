@@ -720,7 +720,12 @@ const summaryRows = computed(() => {
           <p class="help" style="margin:0 0 14px;">
             Photos from {{ logNumberDisplay(linkedLogData?.log?.logNumber ?? 0) }} — use arrow keys or buttons to browse.
           </p>
-          <ServiceLogImageGallery v-model="photoGalleryIndex" :files="serviceLogImages" />
+          <ServiceLogImageGallery
+            v-if="invoice.serviceLogId"
+            v-model="photoGalleryIndex"
+            :service-log-id="invoice.serviceLogId"
+            :files="serviceLogImages"
+          />
         </div>
       </div>
     </div>

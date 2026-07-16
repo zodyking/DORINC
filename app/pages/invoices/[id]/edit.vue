@@ -1186,7 +1186,12 @@ const aiPopStyle = computed(() => {
             </div>
           </div>
           <div class="cbody">
-            <ServiceLogImageGallery v-model="photoGalleryIndex" :files="serviceLogImages" />
+            <ServiceLogImageGallery
+              v-if="invoice.serviceLogId"
+              v-model="photoGalleryIndex"
+              :service-log-id="invoice.serviceLogId"
+              :files="serviceLogImages"
+            />
           </div>
         </div>
       </div>

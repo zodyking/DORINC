@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filePreviewUrl, isUserUploadFileKind, USER_UPLOAD_FILE_KINDS } from '../../shared/files'
+import { filePreviewUrl, isUserUploadFileKind, serviceLogFilePreviewUrl, USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 
 describe('shared/files', () => {
   it('defines user upload kinds without derivatives', () => {
@@ -12,5 +12,6 @@ describe('shared/files', () => {
 
   it('builds preview URLs', () => {
     expect(filePreviewUrl('abc-123')).toBe('/api/files/abc-123/preview')
+    expect(serviceLogFilePreviewUrl('log-1', 'file-2')).toBe('/api/service-logs/log-1/files/file-2/preview')
   })
 })

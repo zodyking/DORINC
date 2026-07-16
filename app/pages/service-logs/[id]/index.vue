@@ -1,5 +1,7 @@
 <script setup lang="ts">
-// Service log detail — side-by-side image review + status actions (mockup: PAGE: SERVICE LOG DETAIL).
+// Service log detail — photo gallery + status actions.
+import ServiceLogImageGallery from '~/components/service-logs/ServiceLogImageGallery.vue'
+
 definePageMeta({ layout: 'staff' })
 
 interface VehicleBits {
@@ -365,7 +367,11 @@ const pill = computed(() => log.value
             <h3>Photos · {{ imageFiles.length }}</h3>
           </div>
           <div class="cbody">
-            <ServiceLogImageGallery v-model="galleryIndex" :files="imageFiles" />
+            <ServiceLogImageGallery
+              v-model="galleryIndex"
+              :service-log-id="id"
+              :files="imageFiles"
+            />
           </div>
         </div>
 
