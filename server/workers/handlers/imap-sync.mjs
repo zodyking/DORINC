@@ -1,30 +1,10 @@
 // imap_sync handler — periodic Gmail/IMAP inbox polling for customer email threads.
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import { loadImapConfig } from '../lib/app-config.mjs'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const SYNC_SCRIPT = join(__dirname, '../../../scripts/run-imap-sync.ts')
-
-function defaultSyncIntervalMs() {
-  return Number(process.env.IMAP_SYNC_INTERVAL_MS ?? 60_000)
-}
-
-function runSyncScript() {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ['--import', 'tsx', SYNC_SCRIPT],
-      { stdio: 'inherit', env: process.env, cwd: join(__dirname, '../../..') },
-    )
-    child.on('error', reject)
-    child.on('close', (code) => {
-      if (code === 0) resolve(undefined)
-      else reject(new Error(`imap sync exited with code ${code}`))
-    })
-  })
-}
+import {
+  defaultSyncIntervalMs,
+  maybeRunImapInboxSync,
+  runImapInboxSync,
+} from '../lib/imap-inbox-sync.mjs'
 
 /**
  * Enqueue periodic IMAP sync when configured and interval elapsed.
@@ -100,7 +80,14 @@ export async function processImapSyncJobs(pool, batch = 1) {
     if (!job) break
 
     try {
-      await runSyncScript()
+      const result = await runImapInboxSync(pool)
+      if (result.busy) {
+        await pool.query(
+          `UPDATE worker_jobs SET status = 'queued', started_at = NULL, run_after = now() + interval '5 seconds' WHERE id = $1`,
+          [job.id],
+        )
+        break
+      }
       await pool.query(
         `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
         [job.id],
@@ -128,3 +115,5 @@ export async function processImapSyncJobs(pool, batch = 1) {
 
   return { processed, failed }
 }
+
+export { maybeRunImapInboxSync }

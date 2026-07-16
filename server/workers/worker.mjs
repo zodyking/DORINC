@@ -11,7 +11,7 @@ import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
 import { processAiJobs } from './handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from './handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handlers/retention.mjs'
-import { maybeEnqueueImapSync, processImapSyncJobs } from './handlers/imap-sync.mjs'
+import { maybeRunImapInboxSync, processImapSyncJobs } from './handlers/imap-sync.mjs'
 import { touchWorkerHeartbeat } from '../lib/worker-heartbeat.mjs'
 import { reclaimStaleWorkerJobs } from '../lib/reclaim-stale-jobs.mjs'
 
@@ -66,9 +66,9 @@ async function tick(pool) {
     console.log(`[worker] backup_retention_prune processed=${retention.processed} failed=${retention.failed}`)
   }
 
-  const imapScheduled = await maybeEnqueueImapSync(pool)
-  if (imapScheduled) {
-    console.log('[worker] imap_sync scheduled job enqueued')
+  const imapInline = await maybeRunImapInboxSync(pool)
+  if (imapInline?.ingested) {
+    console.log(`[worker] imap_sync inline ingested=${imapInline.ingested} skipped=${imapInline.skipped}`)
   }
 
   const imap = await processImapSyncJobs(pool)
