@@ -22,8 +22,9 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
   })
 
   it('labels wizard steps', () => {
-    expect(wizardStateLabel(1)).toBe('Step 1 of 4 — Customer')
-    expect(wizardStateLabel(4)).toBe('Step 4 of 4 — Review')
+    expect(wizardStateLabel(1)).toBe('Step 1 of 5 — Customer')
+    expect(wizardStateLabel(3)).toBe('Step 3 of 5 — Dates & terms')
+    expect(wizardStateLabel(5)).toBe('Step 5 of 5 — Review')
   })
 
   it('formats invoice numbers like the mockup', () => {
@@ -37,7 +38,8 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     expect(isDraftLineValid(line)).toBe(true)
     expect(canProceedWizardStep(1, { customerId: '', vehicleId: '', lines: [] })).toBe(false)
     expect(canProceedWizardStep(2, { customerId: 'c1', vehicleId: '', lines: [] })).toBe(true)
-    expect(canProceedWizardStep(3, { customerId: 'c1', vehicleId: 'v1', lines: [line] })).toBe(true)
+    expect(canProceedWizardStep(3, { customerId: 'c1', vehicleId: 'v1', lines: [] })).toBe(true)
+    expect(canProceedWizardStep(4, { customerId: 'c1', vehicleId: 'v1', lines: [line] })).toBe(true)
   })
 
   it('previews line amounts and subtotals while typing', () => {

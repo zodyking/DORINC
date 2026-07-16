@@ -84,9 +84,10 @@ const busy = ref(false)
 
 const INVOICE_NARRATIONS: Record<number, string> = {
   1: 'Pick who you are billing.',
-  2: 'Choose the vehicle and invoice dates.',
-  3: 'Add your line items and charges.',
-  4: 'Review totals, then save or send.',
+  2: 'Choose the vehicle for this invoice.',
+  3: 'Set the invoice date, due date, and payment terms.',
+  4: 'Add your line items and charges.',
+  5: 'Review totals, then save or send.',
 }
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
@@ -353,7 +354,7 @@ async function continueToReview() {
   if (lineEntryMode.value === 'guided') {
     lines.value = wizardLinesToDraftLines(wizardLines.value)
   }
-  if (!canProceedWizardStep(3, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
+  if (!canProceedWizardStep(4, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
     submitError.value = 'Add at least one complete line item.'
     return
   }
@@ -404,7 +405,7 @@ function focusCatalogSearch() {
 }
 
 function nextStep() {
-  if (step.value < 4) step.value += 1
+  if (step.value < 5) step.value += 1
 }
 
 function prevStep() {
@@ -525,11 +526,6 @@ async function saveDraft(): Promise<boolean> {
   }
 }
 
-async function continueToLines() {
-  if (!canProceedWizardStep(2, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) return
-  nextStep()
-}
-
 async function saveAndContinueEditing() {
   const ok = await saveDraft()
   if (ok && invoiceId.value) await navigateTo(`/invoices/${invoiceId.value}/edit`)
@@ -645,7 +641,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       </div>
     </div>
 
-    <!-- Step 2: Vehicle + dates -->
+    <!-- Step 2: Vehicle -->
     <div v-show="step === 2" class="sl-panel active">
       <h3>Which vehicle?</h3>
       <p class="sl-hint">Pick the unit for this invoice, or continue without one.</p>
@@ -687,10 +683,24 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         </select>
         <span class="help">Pre-fills the vehicle from the log</span>
       </label>
+      <div class="sl-foot">
+        <button type="button" class="btn" @click="prevStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="!canProceedWizardStep(2, { customerId, vehicleId, lines })"
+          @click="nextStep"
+        >
+          Continue
+        </button>
+      </div>
+    </div>
 
-      <h3 style="margin-top:28px;">Dates &amp; terms</h3>
-      <p class="sl-hint">Issue date, due date, and payment terms.</p>
-      <label class="fld"><span>Issue date</span><input v-model="invoiceDate" type="date" required></label>
+    <!-- Step 3: Dates & terms -->
+    <div v-show="step === 3" class="sl-panel active">
+      <h3>Dates &amp; terms</h3>
+      <p class="sl-hint">Invoice date, due date, and payment terms.</p>
+      <label class="fld"><span>Invoice Date</span><input v-model="invoiceDate" type="date" required></label>
       <label class="fld"><span>Due date</span>
         <input :value="dueDate" type="date" required @input="onDueDateInput(($event.target as HTMLInputElement).value)">
       </label>
@@ -711,16 +721,16 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <button
           type="button"
           class="btn primary"
-          :disabled="!canProceedWizardStep(2, { customerId, vehicleId, lines })"
-          @click="continueToLines"
+          :disabled="!canProceedWizardStep(3, { customerId, vehicleId, lines })"
+          @click="nextStep"
         >
           Continue
         </button>
       </div>
     </div>
 
-    <!-- Step 3: Line items -->
-    <div v-show="step === 3" class="sl-panel active">
+    <!-- Step 4: Line items -->
+    <div v-show="step === 4" class="sl-panel active">
       <h3>Line items</h3>
       <p v-if="!lineEntryMode" class="sl-hint">How do you want to add charges?</p>
 
@@ -861,7 +871,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <button
           type="button"
           class="btn primary"
-          :disabled="busy || !lineEntryMode || !canProceedWizardStep(3, { customerId, vehicleId, lines })"
+          :disabled="busy || !lineEntryMode || !canProceedWizardStep(4, { customerId, vehicleId, lines })"
           @click="continueToReview"
         >
           Continue
@@ -869,8 +879,8 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       </div>
     </div>
 
-    <!-- Step 4: Review -->
-    <div v-show="step === 4" class="sl-panel active">
+    <!-- Step 5: Review -->
+    <div v-show="step === 5" class="sl-panel active">
       <h3>Review &amp; finish</h3>
       <p class="sl-hint">Confirm details before saving or sending the invoice.</p>
       <div class="sl-review">
