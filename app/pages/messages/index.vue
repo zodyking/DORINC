@@ -298,7 +298,7 @@ async function setChannel(channel: 'all' | 'dm' | 'email') {
         <b>New customer email</b>
         <button type="button" class="xbtn" aria-label="Close" @click="newEmailOpen = false">✕</button>
       </header>
-      <div class="dm-email-form">
+      <div class="dm-modal-body dm-email-form">
         <input
           v-model="customerSearch"
           type="search"
@@ -335,17 +335,17 @@ async function setChannel(channel: 'all' | 'dm' | 'email') {
         </label>
         <label class="fld">
           Message
-          <textarea v-model="emailForm.body" rows="6" maxlength="50000" placeholder="Write your email…" required />
+          <textarea v-model="emailForm.body" rows="5" maxlength="50000" placeholder="Write your email…" required />
         </label>
-        <p v-if="emailStartError" class="dm-fetch-error">{{ emailStartError }}</p>
-        <div class="settings-actions">
-          <button type="button" class="btn primary" :disabled="customerLoading" @click="submitNewEmail">
-            Send email
-          </button>
-        </div>
         <div v-if="customerLoading" class="dm-list-empty">Loading customers…</div>
         <div v-else-if="customerError" class="dm-list-empty">{{ customerError }}</div>
       </div>
+      <footer class="dm-modal-footer">
+        <p v-if="emailStartError" class="dm-fetch-error" style="margin:0;">{{ emailStartError }}</p>
+        <button type="button" class="btn primary" :disabled="customerLoading" @click="submitNewEmail">
+          Send email
+        </button>
+      </footer>
     </div>
   </section>
 </template>

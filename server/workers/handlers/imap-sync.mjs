@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const SYNC_SCRIPT = join(__dirname, '../../../scripts/run-imap-sync.ts')
 
 function defaultSyncIntervalMs() {
-  return Number(process.env.IMAP_SYNC_INTERVAL_MS ?? 300_000)
+  return Number(process.env.IMAP_SYNC_INTERVAL_MS ?? 60_000)
 }
 
 function runSyncScript() {

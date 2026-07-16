@@ -182,8 +182,15 @@ function onKeydown(e: KeyboardEvent) {
         @keydown="onKeydown"
         @click="onInput"
       />
-      <button type="submit" class="dm-send-btn" :disabled="disabled || !text.trim()" aria-label="Send">
-        ↑
+      <button
+        type="submit"
+        class="dm-send-btn"
+        :class="{ 'dm-send-btn--labeled': isEmail }"
+        :disabled="disabled || !text.trim()"
+        :aria-label="isEmail ? 'Send reply' : 'Send'"
+      >
+        <span v-if="isEmail">Send reply</span>
+        <span v-else aria-hidden="true">↑</span>
       </button>
     </form>
     <div v-if="!isEmail" class="dm-compose-hint">
