@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import {
+  portalInvoiceApplyListFilters,
+  portalInvoiceDefaultListFilters,
   portalInvoiceDetailStatus,
   portalInvoiceIsOpen,
   portalInvoiceMatchesFilter,
+  type PortalInvoiceListRow,
 } from '../../app/utils/portal-invoices-ui'
+
+const rows: PortalInvoiceListRow[] = [
+  {
+    id: '1',
+    invoiceNumberFormatted: 'INV-000101',
+    status: 'sent',
+    invoiceDate: '2026-07-01',
+    dueDate: '2026-07-15',
+    total: '500.00',
+    balanceDue: '500.00',
+    vehicleId: 'veh-a',
+    vehicleLabel: 'Bus #616',
+  },
+  {
+    id: '2',
+    invoiceNumberFormatted: 'INV-000102',
+    status: 'paid',
+    invoiceDate: '2026-06-01',
+    dueDate: null,
+    total: '200.00',
+    balanceDue: '0',
+    vehicleId: 'veh-b',
+    vehicleLabel: 'Truck #12',
+  },
+]
 
 describe('portal-invoices-ui helpers (P2-05)', () => {
   it('detects open invoices', () => {
@@ -23,5 +51,24 @@ describe('portal-invoices-ui helpers (P2-05)', () => {
       cls: 'pill info',
       label: 'Open · $841.88 due',
     })
+  })
+
+  it('filters by vehicle, date range, and amount', () => {
+    const filters = {
+      ...portalInvoiceDefaultListFilters(),
+      vehicleId: 'veh-a',
+      dateFrom: '2026-07-01',
+      dateTo: '2026-07-31',
+      amountMin: '400',
+    }
+    expect(portalInvoiceApplyListFilters(rows, filters).map(r => r.id)).toEqual(['1'])
+  })
+
+  it('sorts by vehicle label', () => {
+    const filters = { ...portalInvoiceDefaultListFilters(), sort: 'vehicle' as const }
+    expect(portalInvoiceApplyListFilters(rows, filters).map(r => r.vehicleLabel)).toEqual([
+      'Bus #616',
+      'Truck #12',
+    ])
   })
 })

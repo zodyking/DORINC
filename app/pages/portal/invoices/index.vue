@@ -2,65 +2,35 @@
 import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import { portalInvoiceStatus } from '~/utils/portal-dashboard-ui'
 import {
+  portalInvoiceApplyListFilters,
+  portalInvoiceDefaultListFilters,
   portalInvoiceFilterLabel,
+  portalInvoiceListFiltersDirty,
   portalInvoiceListSublabel,
-  portalInvoiceMatchesFilter,
-  portalInvoicePdfUrl,
+  portalInvoiceVehicleOptions,
   type PortalInvoiceFilter,
+  type PortalInvoiceListRow,
+  type PortalInvoiceSort,
 } from '~/utils/portal-invoices-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
 
-interface PortalInvoiceRow {
-  id: string
-  invoiceNumberFormatted: string
-  status: string
-  invoiceDate: string
-  dueDate: string | null
-  total: string
-  balanceDue: string
-  vehicleLabel: string
-}
+const filters = reactive(portalInvoiceDefaultListFilters())
 
-type PortalInvoiceSort = 'newest' | 'oldest' | 'amount_high' | 'amount_low'
-
-const q = ref('')
-const filter = ref<PortalInvoiceFilter>('all')
-const fSort = ref<PortalInvoiceSort>('newest')
-
-const { data, error, pending } = useClientFetch<{ items: PortalInvoiceRow[] }>('/api/portal/invoices')
+const { data, error, pending } = useClientFetch<{ items: PortalInvoiceListRow[] }>('/api/portal/invoices')
 
 const items = computed(() => data.value?.items ?? [])
 
-const filtered = computed(() => {
-  const needle = q.value.trim().toLowerCase()
-  let rows = items.value.filter(inv => portalInvoiceMatchesFilter(inv.status, inv.balanceDue, filter.value))
-  if (needle) {
-    rows = rows.filter(inv =>
-      inv.invoiceNumberFormatted.toLowerCase().includes(needle)
-      || inv.vehicleLabel.toLowerCase().includes(needle),
-    )
-  }
-  const sorted = [...rows]
-  sorted.sort((a, b) => {
-    if (fSort.value === 'oldest') return a.invoiceDate.localeCompare(b.invoiceDate)
-    if (fSort.value === 'amount_high') return Number.parseFloat(b.total) - Number.parseFloat(a.total)
-    if (fSort.value === 'amount_low') return Number.parseFloat(a.total) - Number.parseFloat(b.total)
-    return b.invoiceDate.localeCompare(a.invoiceDate)
-  })
-  return sorted
-})
+const filtered = computed(() => portalInvoiceApplyListFilters(items.value, filters))
+
+const vehicleOptions = computed(() => portalInvoiceVehicleOptions(items.value))
 
 const statusOptions: PortalInvoiceFilter[] = ['all', 'open', 'paid']
 
-const filtersDirty = computed(() =>
-  filter.value !== 'all' || fSort.value !== 'newest' || !!q.value.trim(),
-)
+const filtersDirty = computed(() => portalInvoiceListFiltersDirty(filters))
 
 function clearFilters() {
-  q.value = ''
-  filter.value = 'all'
-  fSort.value = 'newest'
+  Object.assign(filters, portalInvoiceDefaultListFilters())
 }
 
 const countLabel = computed(() => {
@@ -69,11 +39,6 @@ const countLabel = computed(() => {
   if (!n) return 'No invoices'
   return `${n} invoice${n === 1 ? '' : 's'}`
 })
-
-function downloadPdf(event: Event, invoiceId: string) {
-  event.stopPropagation()
-  window.location.href = portalInvoicePdfUrl(invoiceId)
-}
 </script>
 
 <template>
@@ -88,7 +53,7 @@ function downloadPdf(event: Event, invoiceId: string) {
       </PortalPageHead>
 
       <ListFilterBar
-        v-model:search="q"
+        v-model:search="filters.q"
         search-placeholder="Search invoices, vehicles…"
         search-aria-label="Search invoices"
         :count-label="countLabel"
@@ -99,17 +64,57 @@ function downloadPdf(event: Event, invoiceId: string) {
         <template #filters>
           <label class="fld">
             Status
-            <select v-model="filter" aria-label="Invoice status">
+            <select v-model="filters.status" aria-label="Invoice status">
               <option v-for="opt in statusOptions" :key="opt" :value="opt">
                 {{ portalInvoiceFilterLabel(opt) }}
               </option>
             </select>
           </label>
           <label class="fld">
+            Vehicle
+            <select v-model="filters.vehicleId" aria-label="Filter by vehicle">
+              <option value="all">All vehicles</option>
+              <option v-for="veh in vehicleOptions" :key="veh.id" :value="veh.id">
+                {{ veh.label }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Issued from
+            <input v-model="filters.dateFrom" type="date" aria-label="Issued from date">
+          </label>
+          <label class="fld">
+            Issued to
+            <input v-model="filters.dateTo" type="date" aria-label="Issued to date">
+          </label>
+          <label class="fld">
+            Min amount
+            <input
+              v-model="filters.amountMin"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              aria-label="Minimum invoice amount"
+            >
+          </label>
+          <label class="fld">
+            Max amount
+            <input
+              v-model="filters.amountMax"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Any"
+              aria-label="Maximum invoice amount"
+            >
+          </label>
+          <label class="fld">
             Sort by
-            <select v-model="fSort" aria-label="Sort invoices">
+            <select v-model="filters.sort" aria-label="Sort invoices">
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
+              <option value="vehicle">Vehicle</option>
               <option value="amount_high">Amount: high to low</option>
               <option value="amount_low">Amount: low to high</option>
             </select>
@@ -121,7 +126,7 @@ function downloadPdf(event: Event, invoiceId: string) {
         <div v-if="pending && !items.length" class="empty">Loading invoices…</div>
         <div v-else-if="!filtered.length" class="empty">No invoices match your filters.</div>
         <div v-else class="tscroll">
-          <table class="tbl">
+          <table class="tbl inv-tbl">
             <thead>
               <tr>
                 <th>Invoice</th>
@@ -129,7 +134,7 @@ function downloadPdf(event: Event, invoiceId: string) {
                 <th>Issued</th>
                 <th>Status</th>
                 <th class="num">Amount</th>
-                <th />
+                <th class="col-actions" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -151,10 +156,8 @@ function downloadPdf(event: Event, invoiceId: string) {
                   </span>
                 </td>
                 <td class="num">{{ moneyDisplay(inv.total) }}</td>
-                <td>
-                  <button type="button" class="btn sm dl-pdf" @click="downloadPdf($event, inv.id)">
-                    PDF
-                  </button>
+                <td class="col-actions">
+                  <PortalInvoiceListRowActions :invoice-id="inv.id" />
                 </td>
               </tr>
             </tbody>

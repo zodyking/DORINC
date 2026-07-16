@@ -1,16 +1,22 @@
 <script setup lang="ts">
-// Customer portal invoice detail — line items + PDF download (mockup: Portal Invoice detail / P2-05).
-import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
+import { invoiceDateDisplay, moneyDisplay, paymentTermsLabel } from '~/utils/invoices-ui'
 import {
   portalInvoiceDetailStatus,
   portalInvoicePdfUrl,
 } from '~/utils/portal-invoices-ui'
-import { vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
+import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
 
 const route = useRoute()
 const id = computed(() => route.params.id as string)
+
+interface PortalVehicleDetail extends VehicleDisplay {
+  vin?: string | null
+  plate?: string | null
+  odometer?: string | null
+  odometerUnit?: string
+}
 
 interface PortalInvoiceDetail {
   id: string
@@ -19,10 +25,21 @@ interface PortalInvoiceDetail {
   invoiceDate: string
   dueDate: string | null
   total: string
+  subtotal: string
+  taxAmount: string
+  discountAmount: string
+  feesAmount: string
   balanceDue: string
   amountPaid: string
+  paymentTerms: string
+  poNumber: string | null
+  serviceLocation: string | null
+  customerNotes: string | null
+  complaint: string | null
+  paidAt: string | null
+  sentAt: string | null
   vehicleLabel: string
-  vehicle: VehicleDisplay | null
+  vehicle: PortalVehicleDetail | null
   lineItems: Array<{
     id: string
     description: string
@@ -51,8 +68,23 @@ const vehicleLine = computed(() => {
   return `${vehicleTag(invoice.value.vehicle)} — ${vehicleSub(invoice.value.vehicle)}`
 })
 
+const correctionOpen = ref(false)
+const correctionLine = ref<PortalInvoiceDetail['lineItems'][number] | null>(null)
+
+function openCorrection(line: PortalInvoiceDetail['lineItems'][number]) {
+  correctionLine.value = line
+  correctionOpen.value = true
+}
+
 function downloadPdf() {
   window.location.href = portalInvoicePdfUrl(id.value)
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 </script>
 
@@ -69,35 +101,92 @@ function downloadPdf() {
     </div>
   </section>
 
-  <section v-else-if="invoice" class="page active portal-page">
+  <section v-else-if="invoice" class="page active portal-page portal-invoice-detail">
     <PortalPageHead>
-      <template #title>{{ invoice.invoiceNumberFormatted }}</template>
+      <template #title>
+        {{ invoice.invoiceNumberFormatted }}
+        <span :class="statusPill.cls" style="vertical-align:3px;margin-left:8px;">{{ statusPill.label }}</span>
+      </template>
       <template #subtitle>
         <NuxtLink to="/portal/invoices">← Invoices</NuxtLink>
         · {{ invoice.vehicleLabel }}
         · issued {{ invoiceDateDisplay(invoice.invoiceDate) }}
       </template>
       <template #actions>
-        <button type="button" class="btn dl-pdf" @click="downloadPdf">Download PDF</button>
+        <button type="button" class="btn" @click="downloadPdf">Download PDF</button>
       </template>
     </PortalPageHead>
 
-    <div class="cols">
+    <div class="inv-meta">
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Invoice date</span>
+        <span class="inv-meta__value">{{ invoiceDateDisplay(invoice.invoiceDate) }}</span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Due</span>
+        <span class="inv-meta__value">{{ invoiceDateDisplay(invoice.dueDate) }}</span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Terms</span>
+        <span class="inv-meta__value">{{ paymentTermsLabel(invoice.paymentTerms) }}</span>
+      </div>
+      <div class="inv-meta__item">
+        <span class="inv-meta__label">Balance due</span>
+        <span class="inv-meta__value strong">{{ moneyDisplay(invoice.balanceDue) }}</span>
+      </div>
+    </div>
+
+    <div class="stack">
       <div class="card">
-        <div class="chead">
-          <h3>Summary</h3>
-          <span :class="statusPill.cls">{{ statusPill.label }}</span>
-        </div>
+        <div class="chead"><h3>Invoice details</h3></div>
         <dl class="kv">
-          <dt>Vehicle</dt>
-          <dd>{{ vehicleLine }}</dd>
-          <dt>Due date</dt>
-          <dd>{{ invoiceDateDisplay(invoice.dueDate) }}</dd>
+          <dt>Status</dt>
+          <dd><span :class="statusPill.cls">{{ statusPill.label }}</span></dd>
           <dt>Total</dt>
           <dd>{{ moneyDisplay(invoice.total) }}</dd>
-          <dt>Balance</dt>
-          <dd style="color:#4f46e5;font-weight:700;">{{ moneyDisplay(invoice.balanceDue) }}</dd>
+          <dt>Amount paid</dt>
+          <dd>{{ moneyDisplay(invoice.amountPaid) }}</dd>
+          <dt>Subtotal</dt>
+          <dd>{{ moneyDisplay(invoice.subtotal) }}</dd>
+          <dt>Tax</dt>
+          <dd>{{ moneyDisplay(invoice.taxAmount) }}</dd>
+          <dt v-if="Number.parseFloat(invoice.discountAmount) > 0">Discount</dt>
+          <dd v-if="Number.parseFloat(invoice.discountAmount) > 0">{{ moneyDisplay(invoice.discountAmount) }}</dd>
+          <dt v-if="Number.parseFloat(invoice.feesAmount) > 0">Fees</dt>
+          <dd v-if="Number.parseFloat(invoice.feesAmount) > 0">{{ moneyDisplay(invoice.feesAmount) }}</dd>
+          <dt>PO number</dt>
+          <dd>{{ invoice.poNumber || '—' }}</dd>
+          <dt>Service location</dt>
+          <dd>{{ invoice.serviceLocation || '—' }}</dd>
+          <dt>Sent</dt>
+          <dd>{{ formatTimestamp(invoice.sentAt) }}</dd>
+          <dt>Paid</dt>
+          <dd>{{ formatTimestamp(invoice.paidAt) }}</dd>
         </dl>
+      </div>
+
+      <div class="card">
+        <div class="chead"><h3>Vehicle</h3></div>
+        <dl class="kv">
+          <dt>Unit</dt>
+          <dd>{{ vehicleLine }}</dd>
+          <dt>VIN</dt>
+          <dd class="mono">{{ invoice.vehicle?.vin || '—' }}</dd>
+          <dt>Plate</dt>
+          <dd>{{ invoice.vehicle?.plate || '—' }}</dd>
+          <dt v-if="invoice.vehicle?.odometer">Odometer</dt>
+          <dd v-if="invoice.vehicle?.odometer">
+            {{ odoDisplay(invoice.vehicle.odometer, invoice.vehicle.odometerUnit ?? 'mi') }}
+          </dd>
+        </dl>
+      </div>
+
+      <div v-if="invoice.complaint || invoice.customerNotes" class="card">
+        <div class="chead"><h3>Work performed</h3></div>
+        <div class="cbody">
+          <p v-if="invoice.complaint" style="margin:0 0 12px;">{{ invoice.complaint }}</p>
+          <p v-if="invoice.customerNotes" class="help" style="margin:0;">{{ invoice.customerNotes }}</p>
+        </div>
       </div>
 
       <div class="card">
@@ -109,6 +198,7 @@ function downloadPdf() {
                 <th>Description</th>
                 <th class="num">Qty</th>
                 <th class="num">Amount</th>
+                <th class="col-actions" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -116,11 +206,66 @@ function downloadPdf() {
                 <td><span class="lead">{{ line.description }}</span></td>
                 <td class="num">{{ line.quantity }}</td>
                 <td class="num">{{ moneyDisplay(line.lineAmount) }}</td>
+                <td class="col-actions">
+                  <button type="button" class="btn sm" @click="openCorrection(line)">
+                    Request correction
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
+
+    <PortalInvoiceLineCorrectionModal
+      v-model:open="correctionOpen"
+      :invoice-id="invoice.id"
+      :invoice-number-formatted="invoice.invoiceNumberFormatted"
+      :line="correctionLine"
+    />
   </section>
 </template>
+
+<style scoped>
+.inv-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+.inv-meta__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inv-meta__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.inv-meta__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.inv-meta__value.strong {
+  color: #4f46e5;
+}
+.portal-invoice-detail .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.portal-invoice-detail .col-actions {
+  width: 160px;
+  text-align: right;
+  vertical-align: middle;
+}
+</style>

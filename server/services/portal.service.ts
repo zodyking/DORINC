@@ -472,6 +472,7 @@ export async function listPortalInvoices(db: Db, customerId: string, limit = 50)
     dueDate: r.invoice.dueDate,
     total: r.invoice.total,
     balanceDue: r.invoice.balanceDue,
+    vehicleId: r.invoice.vehicleId,
     vehicleLabel: vehicleLabelFromRow(r.vehicle?.busNumber || r.vehicle?.unitTag ? r.vehicle : null),
   }))
 }
@@ -492,6 +493,7 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
       year: vehicles.year,
       make: vehicles.make,
       model: vehicles.model,
+      vin: vehicles.vin,
     },
   })
     .from(invoices)
@@ -507,6 +509,35 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
 
   const lines = await listInvoiceLineItems(db, invoiceId)
 
+  const snapshot = row.invoice.vehicleSnapshot
+  const vehicleRow = row.vehicle?.busNumber || row.vehicle?.unitTag || row.vehicle?.make
+    ? {
+        unitType: row.vehicle.unitType,
+        busNumber: row.vehicle.busNumber,
+        unitTag: row.vehicle.unitTag,
+        year: row.vehicle.year,
+        make: row.vehicle.make,
+        model: row.vehicle.model,
+        vin: row.vehicle.vin ?? snapshot?.vin ?? null,
+        plate: snapshot?.plate ?? null,
+        odometer: snapshot?.odometer ?? null,
+        odometerUnit: snapshot?.odometerUnit ?? 'mi',
+      }
+    : snapshot
+      ? {
+          unitType: snapshot.unitType,
+          busNumber: snapshot.busNumber,
+          unitTag: snapshot.unitTag,
+          year: snapshot.year,
+          make: snapshot.make,
+          model: snapshot.model,
+          vin: snapshot.vin ?? null,
+          plate: snapshot.plate ?? null,
+          odometer: snapshot.odometer ?? null,
+          odometerUnit: snapshot.odometerUnit ?? 'mi',
+        }
+      : null
+
   return {
     id: row.invoice.id,
     invoiceNumberFormatted: formatInvoiceNumber(row.invoice.invoiceNumber),
@@ -514,19 +545,23 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
     invoiceDate: row.invoice.invoiceDate,
     dueDate: row.invoice.dueDate,
     total: row.invoice.total,
+    subtotal: row.invoice.subtotal,
+    taxAmount: row.invoice.taxAmount,
+    discountAmount: row.invoice.discountAmount,
+    feesAmount: row.invoice.feesAmount,
     balanceDue: row.invoice.balanceDue,
     amountPaid: row.invoice.amountPaid,
-    vehicleLabel: vehicleLabelFromRow(row.vehicle?.busNumber || row.vehicle?.unitTag ? row.vehicle : null),
-    vehicle: row.vehicle?.busNumber || row.vehicle?.unitTag || row.vehicle?.make
-      ? {
-          unitType: row.vehicle.unitType,
-          busNumber: row.vehicle.busNumber,
-          unitTag: row.vehicle.unitTag,
-          year: row.vehicle.year,
-          make: row.vehicle.make,
-          model: row.vehicle.model,
-        }
-      : null,
+    paymentTerms: row.invoice.paymentTerms,
+    poNumber: row.invoice.poNumber,
+    serviceLocation: row.invoice.serviceLocation,
+    customerNotes: row.invoice.customerNotes,
+    complaint: row.invoice.complaint,
+    paidAt: row.invoice.paidAt,
+    sentAt: row.invoice.sentAt,
+    vehicleId: row.invoice.vehicleId,
+    vehicleLabel: vehicleLabelFromRow(row.vehicle?.busNumber || row.vehicle?.unitTag ? row.vehicle : null)
+      ?? (snapshot ? vehicleLabelFromRow(snapshot) : '—'),
+    vehicle: vehicleRow,
     lineItems: lines.map(line => ({
       id: line.id,
       description: line.description,
