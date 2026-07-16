@@ -20,6 +20,7 @@ import {
   addInvoiceLineItem,
   approveInvoice,
   createInvoice,
+  listInvoiceLineItems,
   sendInvoice,
 } from '../../server/services/invoices.service'
 import {
@@ -164,6 +165,24 @@ describe('P2-07 portal invoice change request', () => {
 
     expect(request.status).toBe('pending')
     expect(request.invoiceId).toBe(invoiceAId)
+  })
+
+  it('creates a structured line item correction request', async () => {
+    const lines = await listInvoiceLineItems(db, invoiceAId)
+    const request = await createInvoiceChangeRequest(db, customerA.id, portalUserA.id, {
+      invoiceId: invoiceAId,
+      topic: 'Line item correction',
+      lineItemCorrection: {
+        lineItemId: lines[0]!.id,
+        description: lines[0]!.description,
+        quantity: '0.50',
+        unitPrice: '450.00',
+        notes: 'Half hour only',
+      },
+    })
+
+    expect(request.status).toBe('pending')
+    expect(request.correctionPayload).toMatchObject({ kind: 'line_item' })
   })
 
   it('allows billing requests without invoice reference', async () => {

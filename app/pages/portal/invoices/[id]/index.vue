@@ -234,14 +234,15 @@ function downloadPdf() {
 
     <PortalInvoiceLineCorrectionModal
       v-model:open="correctionOpen"
-      :invoice-id="invoice.id"
+      :invoice-id="id"
       :invoice-number-formatted="invoice.invoiceNumberFormatted"
       :line="correctionLine"
     />
 
     <PortalInvoiceVehicleCorrectionModal
       v-model:open="vehicleCorrectionOpen"
-      :invoice-id="invoice.id"
+      :invoice-id="id"
+      :invoice-number-formatted="invoice.invoiceNumberFormatted"
       :vehicle="invoice.vehicle"
     />
   </section>

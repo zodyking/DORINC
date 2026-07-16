@@ -2,6 +2,11 @@
 
 import { invoiceDateDisplay, moneyDisplay } from './invoices-ui'
 import { portalInvoiceStatus } from './portal-dashboard-ui'
+import {
+  buildPortalLineItemCorrectionDescription,
+  buildPortalVehicleCorrectionDescription,
+  type PortalVehicleCorrectionFields,
+} from '../../shared/portal-invoice-correction'
 
 export type PortalInvoiceFilter = 'all' | 'open' | 'paid'
 
@@ -240,6 +245,129 @@ export function portalInvoiceVehicleCorrectionHasChanges(
     || (original.vin ?? '') !== form.vin.trim()
     || (original.plate ?? '') !== form.plate.trim()
     || (original.odometer ?? '') !== form.odometer.trim()
+}
+
+export function portalVehicleCorrectionFieldsFromVehicle(vehicle: {
+  busNumber?: string | null
+  unitTag?: string | null
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  vin?: string | null
+  plate?: string | null
+  odometer?: string | null
+  odometerUnit?: string
+} | null): PortalVehicleCorrectionFields {
+  return {
+    busNumber: vehicle?.busNumber ?? null,
+    unitTag: vehicle?.unitTag ?? null,
+    year: vehicle?.year ?? null,
+    make: vehicle?.make ?? null,
+    model: vehicle?.model ?? null,
+    vin: vehicle?.vin ?? null,
+    plate: vehicle?.plate ?? null,
+    odometer: vehicle?.odometer ?? null,
+    odometerUnit: vehicle?.odometerUnit ?? 'mi',
+  }
+}
+
+export function portalVehicleCorrectionProposedFields(
+  original: PortalVehicleCorrectionFields,
+  form: PortalVehicleCorrectionForm,
+): PortalVehicleCorrectionFields {
+  const unitNumber = form.unitNumber.trim().replace(/^#/, '') || null
+  const usesBusNumber = Boolean(original.busNumber) || (!original.unitTag && Boolean(unitNumber))
+  return {
+    busNumber: usesBusNumber ? unitNumber : null,
+    unitTag: usesBusNumber ? null : unitNumber,
+    year: form.year.trim() ? Number.parseInt(form.year.trim(), 10) : original.year,
+    make: form.make.trim() || null,
+    model: form.model.trim() || null,
+    vin: form.vin.trim().toUpperCase() || null,
+    plate: form.plate.trim() || null,
+    odometer: form.odometer.trim() || null,
+    odometerUnit: original.odometerUnit,
+  }
+}
+
+export function portalCorrectionMoneyInput(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return trimmed
+  const n = Number.parseFloat(trimmed)
+  if (Number.isNaN(n)) return trimmed
+  return n.toFixed(2)
+}
+
+export function portalInvoiceLineCorrectionRequestBody(input: {
+  invoiceId: string
+  invoiceNumberFormatted: string
+  line: { id: string, description: string, quantity: string, unitPrice: string }
+  form: Pick<PortalLineItemCorrectionForm, 'description' | 'quantity' | 'unitPrice' | 'notes'>
+}) {
+  const quantity = portalCorrectionMoneyInput(input.form.quantity)
+  const unitPrice = portalCorrectionMoneyInput(input.form.unitPrice)
+  const original = {
+    description: input.line.description,
+    quantity: input.line.quantity,
+    unitPrice: input.line.unitPrice,
+  }
+  const proposed = {
+    description: input.form.description.trim(),
+    quantity,
+    unitPrice,
+  }
+  const payload = {
+    kind: 'line_item' as const,
+    lineItemId: input.line.id,
+    original,
+    proposed,
+    notes: input.form.notes.trim() || null,
+  }
+
+  return {
+    invoiceId: input.invoiceId,
+    topic: portalInvoiceLineCorrectionTopic(),
+    description: buildPortalLineItemCorrectionDescription(input.invoiceNumberFormatted, payload),
+    lineItemCorrection: {
+      lineItemId: input.line.id,
+      description: proposed.description,
+      quantity,
+      unitPrice,
+      notes: payload.notes,
+    },
+  }
+}
+
+export function portalInvoiceVehicleCorrectionRequestBody(input: {
+  invoiceId: string
+  invoiceNumberFormatted: string
+  vehicle: Parameters<typeof portalVehicleCorrectionFieldsFromVehicle>[0]
+  form: PortalVehicleCorrectionForm
+}) {
+  const original = portalVehicleCorrectionFieldsFromVehicle(input.vehicle)
+  const proposed = portalVehicleCorrectionProposedFields(original, input.form)
+  const payload = {
+    kind: 'vehicle' as const,
+    original,
+    proposed,
+    notes: input.form.notes.trim() || null,
+  }
+
+  return {
+    invoiceId: input.invoiceId,
+    topic: portalInvoiceVehicleCorrectionTopic(),
+    description: buildPortalVehicleCorrectionDescription(input.invoiceNumberFormatted, payload),
+    vehicleCorrection: {
+      unitNumber: input.form.unitNumber.trim() || null,
+      year: proposed.year,
+      make: proposed.make,
+      model: proposed.model,
+      vin: proposed.vin,
+      plate: proposed.plate,
+      odometer: proposed.odometer,
+      notes: payload.notes,
+    },
+  }
 }
 
 export interface PortalLineItemCorrectionForm {

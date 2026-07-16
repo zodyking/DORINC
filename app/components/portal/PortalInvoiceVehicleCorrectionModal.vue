@@ -2,7 +2,7 @@
 import {
   portalInvoiceVehicleCorrectionFormFromVehicle,
   portalInvoiceVehicleCorrectionHasChanges,
-  portalInvoiceVehicleCorrectionTopic,
+  portalInvoiceVehicleCorrectionRequestBody,
   portalVehicleUnitNumberInput,
 } from '~/utils/portal-invoices-ui'
 import { vehicleTag, vehicleSub, type VehicleDisplay } from '~/utils/vehicles-ui'
@@ -11,6 +11,7 @@ const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
   invoiceId: string
+  invoiceNumberFormatted: string
   vehicle: (VehicleDisplay & {
     vin?: string | null
     plate?: string | null
@@ -91,20 +92,12 @@ async function submit() {
   try {
     await $fetch('/api/portal/invoice-change-requests', {
       method: 'POST',
-      body: {
+      body: portalInvoiceVehicleCorrectionRequestBody({
         invoiceId: props.invoiceId,
-        topic: portalInvoiceVehicleCorrectionTopic(),
-        vehicleCorrection: {
-          unitNumber: form.value.unitNumber.trim() || null,
-          year: form.value.year.trim() ? Number.parseInt(form.value.year.trim(), 10) : null,
-          make: form.value.make.trim() || null,
-          model: form.value.model.trim() || null,
-          vin: form.value.vin.trim() || null,
-          plate: form.value.plate.trim() || null,
-          odometer: form.value.odometer.trim() || null,
-          notes: form.value.notes.trim() || null,
-        },
-      },
+        invoiceNumberFormatted: props.invoiceNumberFormatted,
+        vehicle: props.vehicle,
+        form: form.value,
+      }),
     })
     success.value = 'Submitted for review.'
     emit('submitted')

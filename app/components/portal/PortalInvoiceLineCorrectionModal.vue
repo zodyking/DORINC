@@ -3,7 +3,7 @@ import { moneyDisplay } from '~/utils/invoices-ui'
 import {
   portalInvoiceLineCorrectionFormFromLine,
   portalInvoiceLineCorrectionHasChanges,
-  portalInvoiceLineCorrectionTopic,
+  portalInvoiceLineCorrectionRequestBody,
 } from '~/utils/portal-invoices-ui'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -75,17 +75,12 @@ async function submit() {
   try {
     await $fetch('/api/portal/invoice-change-requests', {
       method: 'POST',
-      body: {
+      body: portalInvoiceLineCorrectionRequestBody({
         invoiceId: props.invoiceId,
-        topic: portalInvoiceLineCorrectionTopic(),
-        lineItemCorrection: {
-          lineItemId: props.line.id,
-          description: form.value.description.trim(),
-          quantity: form.value.quantity.trim(),
-          unitPrice: form.value.unitPrice.trim(),
-          notes: form.value.notes.trim() || null,
-        },
-      },
+        invoiceNumberFormatted: props.invoiceNumberFormatted,
+        line: props.line,
+        form: form.value,
+      }),
     })
     success.value = 'Submitted for review.'
     emit('submitted')

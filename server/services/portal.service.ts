@@ -18,7 +18,10 @@ import {
 import type { PortalInvoiceChangeRequestInput, PortalVehicleCorrectionInput } from '../../shared/validators/portal'
 import type { InvoiceVehicleSnapshot } from '../db/schema/invoices'
 
-export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM' | 'NO_VEHICLE'
+/** Customer-visible invoice statuses — drafts/voids are staff-only. */
+const PORTAL_INVOICE_STATUSES = ['approved', 'sent', 'paid'] as const
+
+export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM' | 'NO_VEHICLE' | 'INVALID_CORRECTION'
 
 export class PortalServiceError extends Error {
   constructor(public readonly code: PortalServiceErrorCode) {
@@ -134,6 +137,10 @@ async function assertPortalVehicle(db: Db, customerId: string, vehicleId: string
 
 async function assertPortalInvoiceOptional(db: Db, customerId: string, invoiceId: string | null | undefined) {
   if (!invoiceId) return
+  await assertPortalInvoiceForChangeRequest(db, customerId, invoiceId)
+}
+
+async function assertPortalInvoiceForChangeRequest(db: Db, customerId: string, invoiceId: string) {
   const [row] = await db.select({
     id: invoices.id,
     customerId: invoices.customerId,
@@ -143,7 +150,9 @@ async function assertPortalInvoiceOptional(db: Db, customerId: string, invoiceId
     .where(and(eq(invoices.id, invoiceId), isNull(invoices.archivedAt)))
     .limit(1)
   if (!row || row.customerId !== customerId) throw new PortalServiceError('INVALID_INVOICE')
-  if (row.status === 'draft' || row.status === 'void') throw new PortalServiceError('INVALID_INVOICE')
+  if (!PORTAL_INVOICE_STATUSES.includes(row.status as typeof PORTAL_INVOICE_STATUSES[number])) {
+    throw new PortalServiceError('INVALID_INVOICE')
+  }
 }
 
 async function countPendingPortalRequests(db: Db, customerId: string): Promise<number> {
@@ -338,9 +347,6 @@ function vehicleLabelFromRow(row: {
   if (row.unitTag) return `${type} · ${row.unitTag}`
   return type
 }
-
-/** Customer-visible invoice statuses — drafts/voids are staff-only. */
-const PORTAL_INVOICE_STATUSES = ['approved', 'sent', 'paid'] as const
 
 export async function getPortalCustomer(db: Db, customerId: string) {
   const [row] = await db.select().from(customers)
@@ -749,10 +755,17 @@ export async function createInvoiceChangeRequest(
   input: PortalInvoiceChangeRequestInput,
 ) {
   await getPortalCustomer(db, customerId)
-  await assertPortalInvoiceOptional(db, customerId, input.invoiceId)
 
   let description = input.description?.trim() ?? ''
   let correctionPayload: PortalInvoiceCorrectionPayload | null = null
+
+  if (input.lineItemCorrection || input.vehicleCorrection) {
+    if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
+    await assertPortalInvoiceForChangeRequest(db, customerId, input.invoiceId)
+  }
+  else {
+    await assertPortalInvoiceOptional(db, customerId, input.invoiceId)
+  }
 
   const [invoiceRow] = input.invoiceId
     ? await db.select({ invoiceNumber: invoices.invoiceNumber })
@@ -762,8 +775,7 @@ export async function createInvoiceChangeRequest(
     : []
 
   if (input.lineItemCorrection) {
-    if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
-    const lines = await listInvoiceLineItems(db, input.invoiceId)
+    const lines = await listInvoiceLineItems(db, input.invoiceId!)
     const sourceLine = lines.find(line => line.id === input.lineItemCorrection!.lineItemId)
     if (!sourceLine) throw new PortalServiceError('INVALID_LINE_ITEM')
 
@@ -789,8 +801,7 @@ export async function createInvoiceChangeRequest(
     )
   }
   else if (input.vehicleCorrection) {
-    if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
-    const snapshot = await resolveInvoiceVehicleSnapshotForCorrection(db, input.invoiceId)
+    const snapshot = await resolveInvoiceVehicleSnapshotForCorrection(db, input.invoiceId!)
     const original = vehicleSnapshotToCorrectionFields(snapshot)
     const proposed = proposedVehicleCorrectionFields(original, input.vehicleCorrection)
 
@@ -807,7 +818,7 @@ export async function createInvoiceChangeRequest(
     )
   }
 
-  if (!description) throw new PortalServiceError('INVALID_INVOICE')
+  if (!description) throw new PortalServiceError('INVALID_CORRECTION')
 
   const [row] = await db.insert(invoiceChangeRequests).values({
     customerId,
