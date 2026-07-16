@@ -203,7 +203,7 @@ export function emailHighlight(highlight) {
     `<div style="font-size:12px;color:${EMAIL_TOKENS.muted};padding-bottom:7px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.label)}</div>`,
     `<div style="color:${EMAIL_TOKENS.ink};font-size:34px;line-height:40px;font-weight:750;letter-spacing:-0.6px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.value)}</div>`,
     `</td>`,
-    statusHtml ? `<td align="right" valign="middle">${statusHtml}</td>` : '',
+    statusHtml ? `<td align="right" valign="middle" class="highlight-status">${statusHtml}</td>` : '',
     `</tr></table>`,
   ].join('')
 }
@@ -214,31 +214,42 @@ export function emailHighlight(highlight) {
  */
 export function emailDetails(rows) {
   if (!rows?.length) return ''
-  const pairs = []
-  for (let i = 0; i < rows.length; i += 2) {
-    const left = rows[i]
-    const right = rows[i + 1]
-    const isLast = i + 2 >= rows.length
-    const pad = isLast ? '0' : '20px'
-    pairs.push([
+  const valueStyle = [
+    `color:${EMAIL_TOKENS.ink}`,
+    'font-size:14px',
+    'font-weight:600',
+    'line-height:20px',
+    `font-family:${EMAIL_TOKENS.font}`,
+    'word-break:break-word',
+    '-webkit-hyphens:none',
+    'hyphens:none',
+  ].join(';')
+  const labelStyle = [
+    `color:${EMAIL_TOKENS.muted}`,
+    'font-size:12px',
+    'line-height:20px',
+    `font-family:${EMAIL_TOKENS.font}`,
+    'padding-right:12px',
+    'white-space:nowrap',
+  ].join(';')
+
+  const items = rows.map((row, index) => {
+    const isLast = index === rows.length - 1
+    return [
       `<tr>`,
-      `<td width="50%" style="padding:0 12px ${pad} 0;" class="mobile-block">`,
-      `<div class="data-label" style="color:${EMAIL_TOKENS.muted};font-size:12px;line-height:18px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(left.label)}</div>`,
-      `<div class="data-value" style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:600;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(left.value)}</div>`,
+      `<td style="padding:0 0 ${isLast ? '0' : '14px'} 0;">`,
+      `<table role="presentation" width="100%"><tr>`,
+      `<td class="detail-label" width="34%" valign="top" style="${labelStyle}">${escapeHtml(row.label)}</td>`,
+      `<td class="detail-value" valign="top" style="${valueStyle}">${escapeHtml(row.value)}</td>`,
+      `</tr></table>`,
       `</td>`,
-      right
-        ? `<td width="50%" style="padding:0 0 ${pad} 12px;" class="mobile-block mobile-top-space">
-            <div class="data-label" style="color:${EMAIL_TOKENS.muted};font-size:12px;line-height:18px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(right.label)}</div>
-            <div class="data-value" style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:600;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(right.value)}</div>
-          </td>`
-        : `<td width="50%" style="padding:0 0 ${pad} 12px;"></td>`,
       `</tr>`,
-    ].join(''))
-  }
+    ].join('')
+  })
 
   return [
     `<div style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:700;padding-bottom:16px;font-family:${EMAIL_TOKENS.font};">Details</div>`,
-    `<table role="presentation" width="100%">${pairs.join('')}</table>`,
+    `<table role="presentation" width="100%">${items.join('')}</table>`,
   ].join('')
 }
 
@@ -365,12 +376,15 @@ export function wrapEmailHtml(opts) {
     }
     .secondary-link { font-size: 13px; font-weight: 600; color: #4b5563; }
     .data-label { color: ${t.muted}; font-size: 12px; line-height: 18px; }
-    .data-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; }
+    .data-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; word-break: break-word; }
+    .detail-label { color: ${t.muted}; font-size: 12px; line-height: 20px; }
+    .detail-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; word-break: break-word; }
     @media screen and (max-width: 620px) {
       .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
-      .mobile-block { display: block !important; width: 100% !important; }
       .mobile-align-left { text-align: left !important; }
-      .mobile-top-space { padding-top: 14px !important; }
+      .detail-label { width: 32% !important; white-space: normal !important; }
+      .detail-value { width: 68% !important; }
+      .highlight-status { padding-top: 12px !important; text-align: left !important; }
     }
   </style>
 </head>
