@@ -285,7 +285,7 @@ async function submitSignup() {
             </div>
             <div class="fld">
               <label for="signup-email">Email</label>
-              <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@dorinc.local" autocomplete="email" required>
+              <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@gmail.com" autocomplete="email" required>
             </div>
             <div class="fld">
               <label for="signup-password">Password</label>
