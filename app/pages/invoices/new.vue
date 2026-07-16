@@ -561,7 +561,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
 </script>
 
 <template>
-  <section class="page active sl-page">
+  <section class="page active sl-page inv-wizard-page">
     <StaffPageHead subtitle="Step-by-step billing · save a draft at any step">
       <template #title>
         New invoice
@@ -627,7 +627,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
           <span class="av teal">{{ initials(c.displayName) }}</span>
           <span class="nm">
             <b>{{ c.displayName }}</b>
-            <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
+            <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }} · {{ paymentTermsLabel(c.paymentTerms) }}</small>
           </span>
           <span class="chk" />
         </button>
@@ -743,39 +743,77 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         </button>
       </div>
 
-      <div v-else-if="lineEntryMode === 'guided'" class="inv-guided-lines">
-        <CommonLineItemWizard
-          ref="lineWizardRef"
-          v-model:lines="wizardLines"
-        />
-        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+      <div v-else-if="lineEntryMode === 'guided'" class="card inv-line-editor">
+        <div class="cbody inv-guided-lines">
+          <CommonLineItemWizard
+            ref="lineWizardRef"
+            v-model:lines="wizardLines"
+          />
+          <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+        </div>
       </div>
 
       <template v-else>
-        <div class="inv-line-actions">
-          <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
-          <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
-        </div>
-        <div class="tscroll inv-line-table">
-          <table class="ed-lines">
-            <thead>
-              <tr>
-                <th style="width:110px">Type</th>
-                <th>Description</th>
-                <th style="width:90px">Qty / Hrs</th>
-                <th style="width:110px">Rate</th>
-                <th style="width:110px; text-align:right">Amount</th>
-                <th style="width:36px" />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in lines" :key="line.localId">
-                <td>
-                  <select v-model="line.lineType">
-                    <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                  </select>
-                </td>
-                <td>
+        <div class="card inv-line-editor">
+          <div class="chead inv-line-editor-head">
+            <div class="right inv-line-actions">
+              <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+              <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
+            </div>
+          </div>
+          <div class="cbody">
+            <div class="tscroll inv-line-table inv-line-table--desktop">
+              <table class="ed-lines">
+                <thead>
+                  <tr>
+                    <th style="width:110px">Type</th>
+                    <th>Description</th>
+                    <th style="width:90px">Qty / Hrs</th>
+                    <th style="width:110px">Rate</th>
+                    <th style="width:110px; text-align:right">Amount</th>
+                    <th style="width:36px" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="line in lines" :key="line.localId">
+                    <td>
+                      <select v-model="line.lineType">
+                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <CatalogLineAutocomplete
+                        :ref="(el) => setLineAcRef(line.localId, el)"
+                        v-model="line.description"
+                        v-model:line-type="line.lineType"
+                        @typed="onLineDescriptionTyped(line)"
+                        @blur="onLineFieldBlur(line)"
+                        @select="applyCatalogToLine(line, $event)"
+                      />
+                    </td>
+                    <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)"></td>
+                    <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)"></td>
+                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
+                    <td>
+                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="inv-line-cards inv-line-table--mobile">
+              <article v-for="line in lines" :key="`card-${line.localId}`" class="inv-line-card">
+                <div class="inv-line-card-head">
+                  <label class="fld inv-line-card-type">
+                    <span>Type</span>
+                    <select v-model="line.lineType">
+                      <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </label>
+                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                </div>
+                <label class="fld">
+                  <span>Description</span>
                   <CatalogLineAutocomplete
                     :ref="(el) => setLineAcRef(line.localId, el)"
                     v-model="line.description"
@@ -784,18 +822,26 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                     @blur="onLineFieldBlur(line)"
                     @select="applyCatalogToLine(line, $event)"
                   />
-                </td>
-                <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)"></td>
-                <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)"></td>
-                <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
-                <td>
-                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </label>
+                <div class="inv-line-card-nums">
+                  <label class="fld">
+                    <span>Qty / Hrs</span>
+                    <input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)">
+                  </label>
+                  <label class="fld">
+                    <span>Rate</span>
+                    <input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)">
+                  </label>
+                  <div class="inv-line-card-amt">
+                    <span class="k">Amount</span>
+                    <span class="v">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          </div>
         </div>
-        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
       </template>
 
       <div v-if="lineEntryMode" class="ed-sums inv-wizard-sums">
@@ -857,8 +903,9 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       >
         Save draft &amp; open full editor
       </button>
-      <div class="sl-foot">
+      <div class="sl-foot inv-wizard-review-foot">
         <button type="button" class="btn" :disabled="busy" @click="prevStep">Back</button>
+        <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
         <button
           type="button"
           class="btn primary"
@@ -902,11 +949,103 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+.inv-line-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.inv-line-editor .cbody {
+  padding-top: 12px;
+}
+
+.inv-line-table--desktop {
+  margin-bottom: 8px;
+}
+
+.inv-line-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.inv-line-table {
-  margin-bottom: 8px;
+.inv-line-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.inv-line-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.inv-line-card-type {
+  flex: 1;
+  margin: 0;
+}
+
+.inv-line-card-nums {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.inv-line-card-nums .fld {
+  margin: 0;
+}
+
+.inv-line-card-amt {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.inv-line-card-amt .k {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inv-line-card-amt .v {
+  font-size: 16px;
+  font-weight: 800;
+  color: #4f46e5;
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-wizard-review-foot {
+  flex-wrap: wrap;
+}
+
+.inv-wizard-review-foot .btn.primary {
+  flex: 1.4;
+  min-width: 140px;
+}
+
+@media (max-width: 720px) {
+  .inv-line-table--desktop {
+    display: none;
+  }
+
+  .inv-line-cards {
+    display: flex;
+  }
 }
 
 .inv-wizard-sums {

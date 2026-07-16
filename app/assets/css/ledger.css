@@ -756,6 +756,18 @@ a{ color:#4f46e5; }
 
 /* ---------- Service log create wizard (mobile-first) ---------- */
 .sl-page{ padding:16px 16px 80px; max-width:520px; margin:0 auto; }
+.sl-page.inv-wizard-page{
+  max-width:min(960px, calc(100vw - 32px));
+  padding-left:24px;
+  padding-right:24px;
+}
+@media (max-width:720px){
+  .sl-page.inv-wizard-page{
+    max-width:none;
+    padding-left:16px;
+    padding-right:16px;
+  }
+}
 .sl-page .pagehead{ margin-bottom:16px; }
 .sl-page .pagehead h2{ font-size:19px; }
 .sl-progress{
