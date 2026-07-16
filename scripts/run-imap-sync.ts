@@ -24,7 +24,7 @@ async function main() {
     await refreshAppConfigCache(db)
     await refreshImapConfigCache(db)
     const result = await syncImapInbox(db, { full: process.argv.includes('--full') })
-    console.log(`[imap-sync] fetched=${result.fetched} ingested=${result.ingested} skipped=${result.skipped} errors=${result.errors}`)
+    console.log(`[imap-sync] fetched=${result.fetched} ingested=${result.ingested} skipped=${result.skipped} repaired=${result.repaired} errors=${result.errors}`)
   }
   finally {
     await pool.end()

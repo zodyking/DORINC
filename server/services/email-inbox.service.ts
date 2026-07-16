@@ -11,8 +11,8 @@ import {
   emailMessageMeta,
   emailThreads,
 } from '../db/schema/email-inbox'
-import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
+import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/email-inline-images'
 import { sendBrandedMail } from '../mail/branded-mail'
 import {
   buildOutboundEmailBodies,
@@ -112,6 +112,8 @@ export interface InboundEmailAttachment {
   contentType: string
   content: Buffer
   related?: boolean
+  cid?: string | null
+  contentId?: string | null
 }
 
 function safeInboundAttachmentName(filename: string | null | undefined, index: number): string {
@@ -129,17 +131,93 @@ function safeInboundAttachmentName(filename: string | null | undefined, index: n
   return (leaf || `attachment-${index + 1}`).slice(0, 240)
 }
 
+function attachmentContentId(attachment: InboundEmailAttachment): string | null {
+  const raw = attachment.cid ?? attachment.contentId
+  if (!raw?.trim()) return null
+  return normalizeContentId(raw)
+}
+
+function isPersistableImageBytes(content: Buffer, mimeType: string): boolean {
+  const normalizedMime = mimeType.toLowerCase()
+  if (!ALLOWED_UPLOAD_MIMES.has(normalizedMime) || !normalizedMime.startsWith('image/')) return false
+  const sniffed = sniffMime(content)
+  if (!sniffed?.startsWith('image/')) return false
+  if (normalizedMime === 'image/heif') return sniffed === 'image/heic' || sniffed === 'image/heif'
+  return sniffed === normalizedMime
+}
+
 async function persistInboundAttachments(
   db: Db,
   messageId: string,
   attachments: InboundEmailAttachment[],
-): Promise<void> {
+  opts: { skipExisting?: boolean } = {},
+): Promise<number> {
   const maxTotalBytes = maxUploadBytes() * 2
   let totalBytes = 0
+  let persisted = 0
+
+  let existingInlineCids = new Set<string>()
+  let existingAttachmentCount = 0
+  if (opts.skipExisting) {
+    const inlineFiles = await listFilesByOwner(db, {
+      ownerEntityType: 'message',
+      ownerEntityId: messageId,
+      fileKind: 'inline',
+    })
+    existingInlineCids = new Set(
+      inlineFiles.map(file => file.contentId).filter(Boolean).map(id => normalizeContentId(id!)),
+    )
+    const regularFiles = await listFilesByOwner(db, {
+      ownerEntityType: 'message',
+      ownerEntityId: messageId,
+      fileKind: 'attachment',
+    })
+    existingAttachmentCount = regularFiles.length
+  }
 
   for (const [index, attachment] of attachments.slice(0, 20).entries()) {
-    // Related MIME parts are already embedded by mailparser in the HTML body.
-    if (attachment.related || !attachment.content.length) continue
+    if (!attachment.content.length) continue
+
+    if (attachment.related) {
+      const contentId = attachmentContentId(attachment)
+      if (!contentId || !isPersistableImageBytes(attachment.content, attachment.contentType)) continue
+      if (opts.skipExisting && existingInlineCids.has(contentId)) continue
+
+      totalBytes += attachment.content.length
+      if (totalBytes > maxTotalBytes) {
+        console.warn('[email-inbox] inline image total exceeded limit for message', messageId)
+        break
+      }
+
+      try {
+        await uploadFile(db, {
+          ownerEntityType: 'message',
+          ownerEntityId: messageId,
+          fileKind: 'inline',
+          originalFilename: safeInboundAttachmentName(attachment.filename, index),
+          mimeType: attachment.contentType.toLowerCase(),
+          data: attachment.content,
+          contentId,
+        }, null)
+        persisted++
+        existingInlineCids.add(contentId)
+      }
+      catch (err) {
+        if (err instanceof FilesServiceError) {
+          console.warn('[email-inbox] skipped unsafe inline image', {
+            messageId,
+            contentId,
+            reason: err.code,
+          })
+          continue
+        }
+        throw err
+      }
+      continue
+    }
+
+    if (opts.skipExisting && existingAttachmentCount > 0) continue
+
     totalBytes += attachment.content.length
     if (totalBytes > maxTotalBytes) {
       console.warn('[email-inbox] attachment total exceeded limit for message', messageId)
@@ -155,6 +233,7 @@ async function persistInboundAttachments(
         mimeType: attachment.contentType.toLowerCase(),
         data: attachment.content,
       }, null)
+      persisted++
     }
     catch (err) {
       if (err instanceof FilesServiceError) {
@@ -168,6 +247,18 @@ async function persistInboundAttachments(
       throw err
     }
   }
+
+  return persisted
+}
+
+/** Backfill inline images and missing file attachments when re-syncing existing messages. */
+export async function repairInboundEmailMedia(
+  db: Db,
+  messageId: string,
+  input: { attachments?: InboundEmailAttachment[] },
+): Promise<number> {
+  if (!input.attachments?.length) return 0
+  return persistInboundAttachments(db, messageId, input.attachments, { skipExisting: true })
 }
 
 export async function isEmailInboxReady(db: Db): Promise<boolean> {
@@ -530,6 +621,7 @@ export async function getEmailMessageHtml(db: Db, conversationId: string, messag
 
   // Re-render our own outbound emails from the current template so historical
   // messages reflect the latest signature/branding, not the HTML stored at send time.
+  let htmlBody: string | null
   if (row.direction === 'outbound' && row.senderName) {
     const { html } = await buildOutboundEmailBodies(db, {
       staffName: row.senderName,
@@ -537,10 +629,32 @@ export async function getEmailMessageHtml(db: Db, conversationId: string, messag
       bodyText: row.body,
       subject: thread.subject,
     })
-    return { htmlBody: html }
+    htmlBody = html
+  }
+  else {
+    htmlBody = row.htmlBody
   }
 
-  return { htmlBody: row.htmlBody }
+  if (htmlBody?.trim() && /\bcid:/i.test(htmlBody)) {
+    const inlineFiles = await listFilesByOwner(db, {
+      ownerEntityType: 'message',
+      ownerEntityId: messageId,
+      fileKind: 'inline',
+    })
+    if (inlineFiles.length) {
+      const cidToUrl = new Map<string, string>()
+      for (const file of inlineFiles) {
+        if (!file.contentId) continue
+        cidToUrl.set(
+          normalizeContentId(file.contentId),
+          `/api/conversations/${conversationId}/messages/${messageId}/attachments/${file.id}/preview`,
+        )
+      }
+      htmlBody = rewriteEmailHtmlCidSources(htmlBody, cid => cidToUrl.get(cid) ?? null)
+    }
+  }
+
+  return { htmlBody }
 }
 
 export async function markEmailConversationRead(db: Db, conversationId: string, userId: string) {
@@ -806,7 +920,10 @@ export async function ingestInboundEmail(db: Db, input: {
     .from(emailMessageMeta)
     .where(eq(emailMessageMeta.internetMessageId, normalizedId))
     .limit(1)
-  if (existing) return { skipped: true as const, reason: 'duplicate' as const }
+  if (existing) {
+    const repaired = await repairInboundEmailMedia(db, existing.messageId, input)
+    return { skipped: true as const, reason: 'duplicate' as const, repaired }
+  }
 
   const from = normalizeEmailAddress(input.from)
   const companyInboxes = buildCompanyInboxAddresses()
