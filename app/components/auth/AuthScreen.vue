@@ -124,7 +124,7 @@ async function submitSignup() {
 </script>
 
 <template>
-  <main id="main-content" class="auth-screen" :class="{ 'auth-screen--customer': card === 'customer' }">
+  <main id="main-content" class="auth-screen">
     <div class="auth-wrap">
       <!-- Customer portal card -->
       <div v-if="card === 'customer'" class="auth-card">
