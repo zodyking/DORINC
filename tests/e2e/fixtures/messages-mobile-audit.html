@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Messages mobile audit fixture</title>
+  <link rel="stylesheet" href="../../../app/assets/css/ledger.css" />
+  <link rel="stylesheet" href="../../../app/assets/css/overrides.css" />
+  <style>
+    html, body { margin:0; height:100%; }
+  </style>
+</head>
+<body>
+  <div class="app" style="grid-template-columns:1fr">
+    <div class="main">
+      <header class="topbar">
+        <button class="burger" style="display:grid">☰</button>
+        <span class="crumb">Workspace / <b>Messages</b></span>
+        <span class="spacer"></span>
+        <div class="notif-wrap"><button class="iconbtn dm-header-btn" aria-label="Messages">✉<span class="dm-header-badge">4</span></button></div>
+        <div class="notif-wrap"><button class="iconbtn" aria-label="Notifications">🔔</button></div>
+        <div class="acct"><button class="avbtn"><span class="av indigo">BK</span></button></div>
+      </header>
+      <main class="main-body">
+        <section class="page active dm-page">
+          <div class="pagehead">
+            <div class="pagehead__main">
+              <div class="pagehead__title-row"><h2>Messages</h2></div>
+            </div>
+          </div>
+          <div class="dm-layout">
+            <aside class="dm-sidebar">
+              <div class="dm-sidebar-head">
+                <div class="dm-sidebar-actions">
+                  <button type="button" class="btn primary">New message</button>
+                  <button type="button" class="btn">New email</button>
+                </div>
+                <div class="dm-channel-tabs" role="tablist">
+                  <button type="button" class="dm-channel-tab on">All</button>
+                  <button type="button" class="dm-channel-tab">Team</button>
+                  <button type="button" class="dm-channel-tab">Email</button>
+                </div>
+                <input class="dm-search" placeholder="Search conversations…" />
+              </div>
+              <div class="dm-conv-list">
+                <button type="button" class="dm-conv-item is-email unread">
+                  <span class="dm-conv-av indigo">BB</span>
+                  <span class="dm-conv-main">
+                    <span class="dm-conv-top"><b>Brandon</b><time>4:22 PM</time></span>
+                    <span class="dm-conv-subject">Re: Service appointment</span>
+                    <span class="dm-conv-preview">Can you confirm Thursday morning works?</span>
+                    <small class="dm-conv-email">brandon@example.com</small>
+                  </span>
+                  <span class="dm-conv-badge">2</span>
+                </button>
+                <button type="button" class="dm-conv-item is-email">
+                  <span class="dm-conv-av teal">KG</span>
+                  <span class="dm-conv-main">
+                    <span class="dm-conv-top"><b>Kolel Beis Baruch Gribov</b><time>Yesterday</time></span>
+                    <span class="dm-conv-subject">Invoice question about parts</span>
+                    <span class="dm-conv-preview">You: Thanks — I’ll send the revised quote shortly.</span>
+                    <small class="dm-conv-email">office@long-domain-name.example.org</small>
+                  </span>
+                </button>
+                <button type="button" class="dm-conv-item">
+                  <span class="dm-conv-av rose">KD</span>
+                  <span class="dm-conv-main">
+                    <span class="dm-conv-top"><b>Kayla D.</b><time>Mon</time></span>
+                    <span class="dm-conv-preview">Ping me when you’re free to review the log</span>
+                  </span>
+                </button>
+              </div>
+            </aside>
+            <div class="dm-main"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

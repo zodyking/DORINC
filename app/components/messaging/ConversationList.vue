@@ -50,6 +50,20 @@ const subjectLine = computed(() =>
     ? props.conversation.subject
     : '',
 )
+
+const itemAriaLabel = computed(() => {
+  if (!isEmail.value) return displayName.value
+  const parts = [displayName.value]
+  if (subjectLine.value) parts.push(subjectLine.value)
+  if (displayEmail.value) parts.push(displayEmail.value)
+  return parts.join(', ')
+})
+
+const unreadAriaLabel = computed(() =>
+  props.conversation.unreadCount
+    ? `${props.conversation.unreadCount} unread`
+    : '',
+)
 </script>
 
 <template>
@@ -57,9 +71,10 @@ const subjectLine = computed(() =>
     type="button"
     class="dm-conv-item"
     :class="{ on: active, unread: conversation.unreadCount > 0, 'is-email': isEmail }"
+    :aria-label="itemAriaLabel"
     @click="emit('select', conversation.id)"
   >
-    <span class="dm-conv-av" :class="avCls">{{ avInitials }}</span>
+    <span class="dm-conv-av" :class="avCls" aria-hidden="true">{{ avInitials }}</span>
     <span class="dm-conv-main">
       <span class="dm-conv-top">
         <b>{{ displayName }}</b>
@@ -69,6 +84,8 @@ const subjectLine = computed(() =>
       <span class="dm-conv-preview">{{ preview }}</span>
       <small v-if="isEmail && displayEmail" class="dm-conv-email">{{ displayEmail }}</small>
     </span>
-    <span v-if="conversation.unreadCount" class="dm-conv-badge">{{ conversation.unreadCount }}</span>
+    <span v-if="conversation.unreadCount" class="dm-conv-badge" :aria-label="unreadAriaLabel">
+      {{ conversation.unreadCount }}
+    </span>
   </button>
 </template>
