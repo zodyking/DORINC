@@ -94,6 +94,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.signup': 'New user registered',
   'auth.verify_email': 'Email verified',
   'auth.resend_verification': 'Verification email resent',
+  'auth.forgot_password': 'Password reset requested',
+  'auth.reset_password': 'Password reset completed',
   'users.approve': 'User approved',
   'users.reject': 'User rejected',
   'users.update': 'User updated',

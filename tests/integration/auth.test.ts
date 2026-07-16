@@ -9,12 +9,14 @@ import {
   AuthError,
   login,
   logout,
+  requestPasswordReset,
+  resetPasswordWithToken,
   resendVerificationEmail,
   resolveSession,
   signup,
   verifyEmail,
 } from '../../server/auth/auth.service'
-import { emailVerificationTokens, sessions, users } from '../../server/db/schema/auth'
+import { emailVerificationTokens, passwordResetTokens, sessions, users } from '../../server/db/schema/auth'
 
 config()
 
@@ -100,6 +102,58 @@ describe('P1-02 signup + email verification', () => {
       .where(eq(emailVerificationTokens.userId, user.id))
 
     await expect(verifyEmail(db, verificationToken)).rejects.toThrow('TOKEN_EXPIRED')
+  })
+})
+
+describe('P1-02 password reset', () => {
+  async function makeApprovedUser(tag: string) {
+    const email = emailFor(tag)
+    const { user, verificationToken } = await signup(db, {
+      name: `User ${tag}`,
+      email,
+      password: 'a-long-password-123',
+      requestedAccountType: 'accountant',
+    })
+    await verifyEmail(db, verificationToken)
+    await db.update(users).set({ approvedAt: new Date() }).where(eq(users.id, user.id))
+    return { email, userId: user.id, password: 'a-long-password-123' }
+  }
+
+  it('sends a reset token for verified staff users and resets password', async () => {
+    const { email, userId, password } = await makeApprovedUser('reset')
+
+    const result = await requestPasswordReset(db, email)
+    expect(result?.resetToken.length).toBeGreaterThan(20)
+
+    await resetPasswordWithToken(db, result!.resetToken, 'new-password-456789')
+    await expect(login(db, email, password, { portal: 'staff' })).rejects.toThrow('INVALID_CREDENTIALS')
+
+    const session = await login(db, email, 'new-password-456789', { portal: 'staff' })
+    expect(session.user.id).toBe(userId)
+  })
+
+  it('returns null for unknown emails without revealing absence', async () => {
+    const result = await requestPasswordReset(db, emailFor('missing-reset'))
+    expect(result).toBeNull()
+  })
+
+  it('rejects expired reset tokens', async () => {
+    const { email } = await makeApprovedUser('reset-expired')
+    const { resetToken } = (await requestPasswordReset(db, email))!
+
+    await db.update(passwordResetTokens)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(passwordResetTokens.userId, (await db.select({ id: users.id }).from(users).where(eq(users.email, email)))[0]!.id))
+
+    await expect(resetPasswordWithToken(db, resetToken, 'new-password-456789')).rejects.toThrow('TOKEN_EXPIRED')
+  })
+
+  it('rejects reset token reuse', async () => {
+    const { email } = await makeApprovedUser('reset-reuse')
+    const { resetToken } = (await requestPasswordReset(db, email))!
+
+    await resetPasswordWithToken(db, resetToken, 'new-password-456789')
+    await expect(resetPasswordWithToken(db, resetToken, 'another-password-789012')).rejects.toThrow('INVALID_TOKEN')
   })
 })
 

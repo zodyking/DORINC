@@ -42,6 +42,38 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
   })
 }
 
+export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, brand }) {
+  const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
+  const subject = `Reset your ${resolvedBrand} password`
+  const text = [
+    `Hi ${name},`,
+    '',
+    `We received a request to reset your ${resolvedBrand} staff password.`,
+    resetUrl,
+    '',
+    'The link expires in 1 hour. If you did not request this, you can ignore this email.',
+  ].join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Password reset',
+    headline: 'Reset your password',
+    lead: `Use the button below to choose a new password for your ${resolvedBrand} staff account.`,
+    details: [
+      { label: 'Recipient', value: name },
+      { label: 'Expires', value: '1 hour' },
+    ],
+    note: {
+      title: 'Did not request this?',
+      body: 'You can safely ignore this email — your password will not change unless you use the link above.',
+    },
+    primaryAction: { href: resetUrl, label: 'Reset password' },
+    appUrl,
+    brand,
+  })
+}
+
 export function buildSmtpTestEmail({
   brandName,
   source,

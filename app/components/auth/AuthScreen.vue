@@ -59,6 +59,13 @@ const resendVerificationLink = computed(() => {
     : '/auth/resend-verification'
 })
 
+const staffForgotPasswordLink = computed(() => {
+  const email = loginEmail.value.trim()
+  return email
+    ? `/auth/forgot-password?email=${encodeURIComponent(email)}`
+    : '/auth/forgot-password'
+})
+
 async function submitLogin(identifier: string, password: string) {
   busy.value = true
   error.value = ''
@@ -165,7 +172,9 @@ async function submitSignup() {
               </div>
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
-            <div class="auth-foot"><button type="button" class="auth-link">Forgot password?</button></div>
+            <div class="auth-foot">
+              <NuxtLink to="/auth/forgot-password?portal=customer" class="auth-link">Forgot password?</NuxtLink>
+            </div>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
               {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>
@@ -238,7 +247,9 @@ async function submitSignup() {
               </NuxtLink>
             </div>
 
-            <div class="auth-foot"><button type="button" class="auth-link">Forgot password?</button></div>
+            <div class="auth-foot">
+              <NuxtLink :to="staffForgotPasswordLink" class="auth-link">Forgot password?</NuxtLink>
+            </div>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
               {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>

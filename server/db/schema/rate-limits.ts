@@ -3,6 +3,7 @@ import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 export const RATE_LIMIT_SCOPES = [
   'login',
   'verify_email',
+  'password_reset',
   'credential_send',
   'ai',
   'upload',

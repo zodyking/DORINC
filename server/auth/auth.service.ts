@@ -4,6 +4,7 @@ import {
   accountTypePermissions,
   accountTypes,
   emailVerificationTokens,
+  passwordResetTokens,
   permissions,
   sessions,
   userPermissionOverrides,
@@ -16,6 +17,7 @@ import type { AccountType, PermissionKey } from '../../shared/permissions/keys'
 import type { PermissionOverrides, PermissionUser } from '../../shared/permissions/evaluate'
 
 export const VERIFICATION_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 // 24h
+export const PASSWORD_RESET_TOKEN_TTL_MS = 1000 * 60 * 60 // 1h
 export const SESSION_ABSOLUTE_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 export const SESSION_INACTIVITY_TTL_MS = 1000 * 60 * 60 // 60 min
 
@@ -137,6 +139,77 @@ export async function verifyEmail(db: Db, token: string) {
     .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
     .where(eq(users.id, row.userId))
     .returning()
+
+  return user!
+}
+
+/** Invalidate prior unused tokens and mint a fresh password reset link. */
+export async function issuePasswordResetToken(db: Db, userId: string): Promise<string> {
+  await db.update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(and(
+      eq(passwordResetTokens.userId, userId),
+      isNull(passwordResetTokens.usedAt),
+    ))
+
+  const { token, tokenHash } = generateToken()
+  await db.insert(passwordResetTokens).values({
+    userId,
+    tokenHash,
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+  })
+  return token
+}
+
+/**
+ * Request a staff password reset email. Returns null when no email should be sent
+ * (unknown email, customer account, disabled, etc.) without revealing which case applied.
+ */
+export async function requestPasswordReset(db: Db, email: string) {
+  const normalized = email.trim().toLowerCase()
+
+  const [row] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.email, normalized))
+
+  if (!row) return null
+  if (row.accountTypeKey === 'customer') return null
+  if (!row.user.isActive) return null
+  if (row.user.rejectedAt) return null
+  if (!row.user.emailVerifiedAt) return null
+
+  const resetToken = await issuePasswordResetToken(db, row.user.id)
+  return { user: row.user, resetToken }
+}
+
+export async function resetPasswordWithToken(db: Db, token: string, newPassword: string) {
+  const tokenHash = hashToken(token)
+  const [row] = await db.select().from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.tokenHash, tokenHash), isNull(passwordResetTokens.usedAt)))
+  if (!row) throw new AuthError('INVALID_TOKEN')
+  if (row.expiresAt.getTime() < Date.now()) throw new AuthError('TOKEN_EXPIRED')
+
+  await db.update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(passwordResetTokens.id, row.id))
+
+  const passwordHash = await hashPassword(newPassword)
+
+  const [user] = await db.update(users)
+    .set({
+      passwordHash,
+      mustChangePassword: false,
+      tempPasswordExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, row.userId))
+    .returning()
+
+  await db.update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(sessions.userId, row.userId), isNull(sessions.revokedAt)))
 
   return user!
 }

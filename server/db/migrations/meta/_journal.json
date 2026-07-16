@@ -288,6 +288,13 @@
       "when": 1783579000000,
       "tag": "0040_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1783580000000,
+      "tag": "0041_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }
