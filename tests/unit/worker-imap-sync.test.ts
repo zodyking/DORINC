@@ -8,7 +8,7 @@ import {
 import {
   safeAttachmentName,
   sniffAttachmentMime,
-} from '../../server/workers/lib/imap-inbox-sync.mjs'
+} from '../../server/workers/lib/imap-attachments.mjs'
 
 describe('worker email-thread helpers', () => {
   it('normalizes wrapped addresses', () => {
