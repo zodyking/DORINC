@@ -4,7 +4,7 @@ import {
   portalInvoiceDetailStatus,
   portalInvoicePdfUrl,
 } from '~/utils/portal-invoices-ui'
-import { odoDisplay, unitTypeLabel, type VehicleDisplay } from '~/utils/vehicles-ui'
+import { odoDisplay, type VehicleDisplay } from '~/utils/vehicles-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
 
@@ -82,13 +82,6 @@ function openCorrection(line: PortalInvoiceDetail['lineItems'][number]) {
 function downloadPdf() {
   window.location.href = portalInvoicePdfUrl(id.value)
 }
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
 </script>
 
 <template>
@@ -142,85 +135,45 @@ function formatTimestamp(value: string | null): string {
     <div class="stack">
       <div class="card">
         <div class="chead"><h3>Invoice &amp; vehicle</h3></div>
-        <div class="detail-grid">
-          <div class="detail-field">
-            <span class="detail-field__label">Status</span>
-            <span class="detail-field__value"><span :class="statusPill.cls">{{ statusPill.label }}</span></span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Total</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.total) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Amount paid</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.amountPaid) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Subtotal</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.subtotal) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Tax</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.taxAmount) }}</span>
-          </div>
-          <div v-if="Number.parseFloat(invoice.discountAmount) > 0" class="detail-field">
-            <span class="detail-field__label">Discount</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.discountAmount) }}</span>
-          </div>
-          <div v-if="Number.parseFloat(invoice.feesAmount) > 0" class="detail-field">
-            <span class="detail-field__label">Fees</span>
-            <span class="detail-field__value">{{ moneyDisplay(invoice.feesAmount) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">PO number</span>
-            <span class="detail-field__value">{{ invoice.poNumber || '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Service location</span>
-            <span class="detail-field__value">{{ invoice.serviceLocation || '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Sent</span>
-            <span class="detail-field__value">{{ formatTimestamp(invoice.sentAt) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Paid</span>
-            <span class="detail-field__value">{{ formatTimestamp(invoice.paidAt) }}</span>
+        <div class="detail-panels">
+          <div class="detail-panel">
+            <h4 class="detail-panel__title">Invoice</h4>
+            <dl class="compact-kv">
+              <dt>Total</dt>
+              <dd>{{ moneyDisplay(invoice.total) }}</dd>
+              <dt>Amount paid</dt>
+              <dd>{{ moneyDisplay(invoice.amountPaid) }}</dd>
+              <dt v-if="Number.parseFloat(invoice.discountAmount) > 0">Discount</dt>
+              <dd v-if="Number.parseFloat(invoice.discountAmount) > 0">{{ moneyDisplay(invoice.discountAmount) }}</dd>
+              <dt v-if="Number.parseFloat(invoice.feesAmount) > 0">Fees</dt>
+              <dd v-if="Number.parseFloat(invoice.feesAmount) > 0">{{ moneyDisplay(invoice.feesAmount) }}</dd>
+              <dt>PO number</dt>
+              <dd>{{ invoice.poNumber || '—' }}</dd>
+              <dt>Service location</dt>
+              <dd>{{ invoice.serviceLocation || '—' }}</dd>
+            </dl>
           </div>
 
-          <div class="detail-field">
-            <span class="detail-field__label">Unit type</span>
-            <span class="detail-field__value">{{ invoice.vehicle ? unitTypeLabel(invoice.vehicle.unitType) : '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Unit #</span>
-            <span class="detail-field__value">{{ vehicleUnitNumber(invoice.vehicle) }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Year</span>
-            <span class="detail-field__value">{{ invoice.vehicle?.year ?? '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Make</span>
-            <span class="detail-field__value">{{ invoice.vehicle?.make || '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Model</span>
-            <span class="detail-field__value">{{ invoice.vehicle?.model || '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">VIN</span>
-            <span class="detail-field__value mono">{{ invoice.vehicle?.vin || '—' }}</span>
-          </div>
-          <div class="detail-field">
-            <span class="detail-field__label">Plate</span>
-            <span class="detail-field__value">{{ invoice.vehicle?.plate || '—' }}</span>
-          </div>
-          <div v-if="invoice.vehicle?.odometer" class="detail-field">
-            <span class="detail-field__label">Odometer</span>
-            <span class="detail-field__value">
-              {{ odoDisplay(invoice.vehicle.odometer, invoice.vehicle.odometerUnit ?? 'mi') }}
-            </span>
+          <div class="detail-panel">
+            <h4 class="detail-panel__title">Vehicle</h4>
+            <dl class="compact-kv">
+              <dt>Unit #</dt>
+              <dd>{{ vehicleUnitNumber(invoice.vehicle) }}</dd>
+              <dt>Year</dt>
+              <dd>{{ invoice.vehicle?.year ?? '—' }}</dd>
+              <dt>Make</dt>
+              <dd>{{ invoice.vehicle?.make || '—' }}</dd>
+              <dt>Model</dt>
+              <dd>{{ invoice.vehicle?.model || '—' }}</dd>
+              <dt>VIN</dt>
+              <dd class="mono">{{ invoice.vehicle?.vin || '—' }}</dd>
+              <dt>Plate</dt>
+              <dd>{{ invoice.vehicle?.plate || '—' }}</dd>
+              <template v-if="invoice.vehicle?.odometer">
+                <dt>Odometer</dt>
+                <dd>{{ odoDisplay(invoice.vehicle.odometer, invoice.vehicle.odometerUnit ?? 'mi') }}</dd>
+              </template>
+            </dl>
           </div>
         </div>
       </div>
@@ -309,27 +262,38 @@ function formatTimestamp(value: string | null): string {
   flex-direction: column;
   gap: 16px;
 }
-.portal-invoice-detail .detail-grid {
+.portal-invoice-detail .detail-panels {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 32px;
   padding: 0 18px 18px;
 }
-.portal-invoice-detail .detail-field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+.portal-invoice-detail .detail-panel__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
 }
-.portal-invoice-detail .detail-field__label {
+.portal-invoice-detail .compact-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  font-size: 14px;
+}
+.portal-invoice-detail .compact-kv dt {
+  margin: 0;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #94a3b8;
+  white-space: nowrap;
 }
-.portal-invoice-detail .detail-field__value {
-  font-size: 14px;
+.portal-invoice-detail .compact-kv dd {
+  margin: 0;
   font-weight: 600;
   color: #0f172a;
   overflow-wrap: anywhere;
@@ -338,5 +302,10 @@ function formatTimestamp(value: string | null): string {
   width: 160px;
   text-align: right;
   vertical-align: middle;
+}
+@media (max-width: 720px) {
+  .portal-invoice-detail .detail-panels {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
