@@ -298,6 +298,7 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
       channel: 'email' as const,
       direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
       htmlBody: r.htmlBody,
+      fromAddress: r.fromAddress,
       entityRefs: [],
     })),
   }
@@ -486,6 +487,7 @@ export async function replyToEmailThread(
     channel: 'email' as const,
     direction: 'outbound' as const,
     htmlBody: html,
+    fromAddress: normalizeEmailAddress(getSmtpConfig()!.from),
     entityRefs: [],
   }
 }

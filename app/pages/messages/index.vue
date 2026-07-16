@@ -133,6 +133,7 @@ async function pickStaffUser(userId: string) {
 
 async function submitNewEmail() {
   emailStartError.value = ''
+  if (dm.sending) return
   if (!emailForm.customerId || !emailForm.toEmail || !emailForm.subject.trim() || !emailForm.body.trim()) {
     emailStartError.value = 'Customer, subject, and message are required'
     return
@@ -280,6 +281,7 @@ async function setEmailShowAll(showAll: boolean) {
         :conversation="dm.activeConversation"
         :messages="dm.messages"
         :loading="dm.loadingMessages"
+        :sending="dm.sending"
         :current-user-id="auth.user?.id"
         @back="onBack"
         @send="onSend"
@@ -367,8 +369,8 @@ async function setEmailShowAll(showAll: boolean) {
       </div>
       <footer class="dm-modal-footer">
         <p v-if="emailStartError" class="dm-fetch-error" style="margin:0;">{{ emailStartError }}</p>
-        <button type="button" class="btn primary" :disabled="customerLoading" @click="submitNewEmail">
-          Send email
+        <button type="button" class="btn primary" :disabled="customerLoading || dm.sending" @click="submitNewEmail">
+          {{ dm.sending ? 'Sending…' : 'Send email' }}
         </button>
       </footer>
     </div>

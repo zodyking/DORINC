@@ -48,6 +48,7 @@ export interface ChatMessage {
   channel?: 'email'
   direction?: 'inbound' | 'outbound'
   htmlBody?: string | null
+  fromAddress?: string | null
 }
 
 export type MessageChannel = 'all' | 'dm' | 'email'
@@ -71,6 +72,19 @@ export function useDirectMessages() {
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let lastMessageId: string | null = null
   let pollingStarted = false
+
+  function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+    if (!incoming.length) return existing
+    const seen = new Set(existing.map(m => m.id))
+    const merged = [...existing]
+    for (const msg of incoming) {
+      if (!seen.has(msg.id)) {
+        merged.push(msg)
+        seen.add(msg.id)
+      }
+    }
+    return merged
+  }
 
   const canUseMessages = computed(() => auth.can('messages.read.own'))
   const activeConversation = computed(() =>
@@ -130,7 +144,7 @@ export function useDirectMessages() {
       })
       if (afterId) {
         if (res.items.length) {
-          messages.value = [...messages.value, ...res.items]
+          messages.value = mergeMessages(messages.value, res.items)
         }
       }
       else {
@@ -176,14 +190,21 @@ export function useDirectMessages() {
   }
 
   async function startEmailThread(input: { customerId: string, toEmail: string, subject: string, body: string }) {
-    const conv = await $fetch<{ conversationId: string }>('/api/conversations/email', {
-      method: 'POST',
-      body: input,
-    })
-    messageChannel.value = 'email'
-    await fetchConversations()
-    await openConversation(conv.conversationId)
-    return conv
+    if (sending.value) return
+    sending.value = true
+    try {
+      const conv = await $fetch<{ conversationId: string }>('/api/conversations/email', {
+        method: 'POST',
+        body: input,
+      })
+      messageChannel.value = 'email'
+      await fetchConversations()
+      await openConversation(conv.conversationId)
+      return conv
+    }
+    finally {
+      sending.value = false
+    }
   }
 
   async function sendMessage(body: string) {
@@ -194,7 +215,7 @@ export function useDirectMessages() {
         method: 'POST',
         body: { body: body.trim() },
       })
-      messages.value.push(msg)
+      messages.value = mergeMessages(messages.value, [msg])
       lastMessageId = msg.id
       await fetchConversations({ silent: true })
       await fetchUnreadCount()

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanPlainEmailText,
   emailBodyForDisplay,
+  emailBodyForThreadDisplay,
   emailPreviewText,
   linkifyPlainEmailText,
   normalizeInboundEmailText,
@@ -48,5 +49,26 @@ describe('email-display', () => {
     const result = emailBodyForDisplay('fallback', '<p><strong>Alert</strong></p>')
     expect(result.mode).toBe('html')
     expect(result.content).toContain('<strong>Alert</strong>')
+  })
+
+  it('shows compose text for outbound thread messages', () => {
+    const result = emailBodyForThreadDisplay(
+      'Its working!',
+      '<div><p>Its working!</p><hr>footer</div>',
+      'outbound',
+    )
+    expect(result.mode).toBe('text')
+    expect(result.content).toContain('Its working!')
+    expect(result.content).not.toContain('footer')
+  })
+
+  it('prefers html for inbound thread messages', () => {
+    const result = emailBodyForThreadDisplay(
+      '',
+      '<p><strong>Customer note</strong></p>',
+      'inbound',
+    )
+    expect(result.mode).toBe('html')
+    expect(result.content).toContain('<strong>Customer note</strong>')
   })
 })
