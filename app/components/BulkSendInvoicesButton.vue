@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { invoiceDateDisplay, isInvoiceEmailable, isInvoiceResend, moneyDisplay, type InvoiceStatus } from '~/utils/invoices-ui'
+import { invoiceDateDisplay, isInvoiceResend, moneyDisplay, type InvoiceStatus } from '~/utils/invoices-ui'
 
 const BULK_SEND_STATUSES = 'draft,pending_manager_approval,sent,paid'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   buttonClass?: string
   disabled?: boolean
   hideTrigger?: boolean
