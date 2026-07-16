@@ -506,16 +506,37 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
 }
 
 export async function getEmailMessageHtml(db: Db, conversationId: string, messageId: string) {
-  await getEmailThread(db, conversationId)
-  const [row] = await db.select({ htmlBody: emailMessageMeta.htmlBody })
+  const thread = await getEmailThread(db, conversationId)
+  const [row] = await db.select({
+    body: messages.body,
+    direction: emailMessageMeta.direction,
+    htmlBody: emailMessageMeta.htmlBody,
+    senderName: users.name,
+    accountTypeKey: accountTypes.key,
+  })
     .from(messages)
     .innerJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+    .leftJoin(users, eq(users.id, messages.senderUserId))
+    .leftJoin(accountTypes, eq(accountTypes.id, users.accountTypeId))
     .where(and(
       eq(messages.id, messageId),
       eq(messages.conversationId, conversationId),
     ))
     .limit(1)
   if (!row) throw new EmailInboxError('NOT_FOUND')
+
+  // Re-render our own outbound emails from the current template so historical
+  // messages reflect the latest signature/branding, not the HTML stored at send time.
+  if (row.direction === 'outbound' && row.senderName) {
+    const { html } = await buildOutboundEmailBodies(db, {
+      staffName: row.senderName,
+      accountTypeKey: row.accountTypeKey,
+      bodyText: row.body,
+      subject: thread.subject,
+    })
+    return { htmlBody: html }
+  }
+
   return { htmlBody: row.htmlBody }
 }
 
