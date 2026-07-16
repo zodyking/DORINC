@@ -84,4 +84,15 @@ describe('email-display', () => {
     expect(result.content).toContain('footer')
     expect(shouldRenderEmailAsHtml(result.content, 'outbound')).toBe(true)
   })
+
+  it('strips height constraints from email styles and inline styles in iframe doc', () => {
+    const doc = prepareEmailHtmlIframeDocument(`
+      <style>body { height: 120px; overflow: auto; } div.msg { max-height: 100px; }</style>
+      <div style="height: 150px; overflow: scroll">Please see the attached check.</div>
+    `)
+    expect(doc).not.toMatch(/height\s*:\s*120px/)
+    expect(doc).not.toMatch(/overflow\s*:\s*auto/)
+    expect(doc).toContain('height: auto !important')
+    expect(doc).toContain('Please see the attached check.')
+  })
 })

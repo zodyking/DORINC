@@ -1759,7 +1759,7 @@ section.page.active.dm-page{
 }
 .dm-email-html-frame{
   display:block; width:100%; max-width:100%; border:0; background:#fff;
-  border-radius:8px; overflow:hidden;
+  border-radius:8px; overflow:visible;
 }
 .dm-email-msg-body--html .dm-email-html :where(p, ul, ol, blockquote, pre, table){ margin:0 0 .75em; }
 .dm-email-msg-body--html .dm-email-html :where(p:last-child, ul:last-child, ol:last-child){ margin-bottom:0; }

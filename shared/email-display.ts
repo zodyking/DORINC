@@ -86,9 +86,26 @@ export function linkifyPlainEmailText(text: string): string {
   })
 }
 
+function stripLayoutConstraintsFromStyle(style: string): string {
+  return style
+    .replace(/(?:^|;)\s*(?:height|min-height|max-height|overflow(?:-[xy])?)\s*:[^;]*/gi, '')
+    .replace(/;\s*;/g, ';')
+    .replace(/^\s*;+|\s*;+$/g, '')
+    .trim()
+}
+
+const INLINE_STYLE_ATTR_RE = /\sstyle\s*=\s*("([^"]*)"|'([^']*)')/gi
+
 function sanitizeTagAttributes(tag: string): string {
   let safe = tag.replace(JAVASCRIPT_URL_RE, '')
   safe = safe.replace(GLOBAL_FORBIDDEN_ATTR_RE, '')
+  safe = safe.replace(INLINE_STYLE_ATTR_RE, (_match, _quote, doubleQuoted, singleQuoted) => {
+    const raw = doubleQuoted ?? singleQuoted ?? ''
+    const cleaned = stripLayoutConstraintsFromStyle(raw)
+    if (!cleaned) return ''
+    const quote = doubleQuoted !== undefined ? '"' : '\''
+    return ` style=${quote}${cleaned}${quote}`
+  })
   return safe
 }
 
@@ -117,10 +134,11 @@ export function sanitizeEmailStyleBlock(css: string): string {
     .replace(/behavior\s*:/gi, '')
     .replace(/-moz-binding/gi, '')
     .replace(/binding\s*:/gi, '')
+    .replace(/\b(?:height|min-height|max-height|overflow(?:-[xy])?)\s*:\s*[^;{}]+;?/gi, '')
 }
 
 const EMAIL_IFRAME_BASE_STYLES = `
-  html, body { margin: 0; padding: 0; background: #fff; width: 100%; }
+  html, body { margin: 0; padding: 0; background: #fff; width: 100%; height: auto; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 15px;
@@ -128,17 +146,34 @@ const EMAIL_IFRAME_BASE_STYLES = `
     color: #202124;
     word-wrap: break-word;
     overflow-wrap: anywhere;
+    overflow: visible;
   }
   img { max-width: 100% !important; height: auto !important; }
   table { max-width: 100% !important; width: 100% !important; }
   td, th { word-break: break-word; }
-  pre { white-space: pre-wrap; overflow-x: auto; }
+  pre { white-space: pre-wrap; overflow-x: auto; overflow-y: visible; }
   a { color: #1a73e8; }
   blockquote {
     margin: 0 0 1em;
     padding-left: 12px;
     border-left: 3px solid #dadce0;
     color: #5f6368;
+  }
+`
+
+/** Applied last so inbound email CSS cannot crunch the iframe viewport. */
+const EMAIL_IFRAME_LAYOUT_GUARDS = `
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body, body * {
+    max-height: none !important;
+  }
+  body div, body p, body pre, body blockquote, body table, body td, body th {
+    overflow: visible !important;
   }
 `
 
@@ -168,7 +203,7 @@ export function prepareEmailHtmlIframeDocument(html: string): string {
   const sanitizedBody = sanitizeEmailHtml(bodySource)
   if (!sanitizedBody.trim()) return ''
 
-  const styles = [EMAIL_IFRAME_BASE_STYLES, ...styleBlocks].join('\n')
+  const styles = [...styleBlocks, EMAIL_IFRAME_BASE_STYLES, EMAIL_IFRAME_LAYOUT_GUARDS].join('\n')
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"><style>${styles}</style></head><body>${sanitizedBody}</body></html>`
 }
 
