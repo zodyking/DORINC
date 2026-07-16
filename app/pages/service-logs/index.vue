@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
+import { serviceLogInvoicePreviewPdfHref } from '~/utils/invoice-pdf'
 
 definePageMeta({ layout: 'staff', permission: ['service_logs.read.all', 'service_logs.read.own'] })
 
@@ -18,12 +19,15 @@ interface ServiceLogRow {
   logNumber: number
   status: string
   workType: string
+  serviceDate: string
   customerName: string
   submitterName: string
   createdAt: string
   fileCount: number
   invoiceId: string | null
-  vehicle: VehicleBits
+  invoiceNumberFormatted: string | null
+  customerRequested: boolean
+  vehicle: VehicleBits | null
 }
 
 const auth = useAuthStore()
@@ -88,6 +92,17 @@ const pageSubtitle = computed(() => {
 function openLog(id: string) {
   navigateTo(`/service-logs/${id}`)
 }
+
+function vehicleLabel(vehicle: VehicleBits | null): string {
+  if (!vehicle) return '—'
+  return vehicleTag(vehicle)
+}
+
+function rowActionLabel(log: ServiceLogRow): string {
+  if (canReview.value && log.status !== 'converted_to_invoice') return 'Review'
+  if (log.invoiceId) return 'Open log'
+  return 'View'
+}
 </script>
 
 <template>
@@ -127,40 +142,83 @@ function openLog(id: string) {
     </ListFilterBar>
 
     <div class="card">
-      <div v-if="items.length" id="log-queue">
-        <div
-          v-for="log in items"
-          :key="log.id"
-          class="qitem sl-row"
-          style="cursor:pointer"
-          @click="openLog(log.id)"
-        >
-          <div class="thumb">{{ log.fileCount ? '🖼' : '📄' }}</div>
-          <div class="info">
-            <b>{{ logTitle(log.logNumber, log.vehicle, log.workType) }}</b>
-            <div class="sub">{{ logSubtitle(log.customerName, log.createdAt, log.submitterName, log.fileCount) }}</div>
-            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-              <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).cls">
-                {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).label }}
-              </span>
-              <span v-if="log.customerRequested" class="pill info">{{ CUSTOMER_REQUESTED_SERVICE_NOTE }}</span>
-            </div>
-          </div>
-          <div class="qa" @click.stop>
-            <template v-if="canReview && log.status !== 'converted_to_invoice'">
-              <button class="btn sm primary" type="button" @click="openLog(log.id)">Review &amp; invoice</button>
-              <button class="btn sm" type="button" @click="openLog(log.id)">Open</button>
-            </template>
-            <template v-else-if="log.status === 'converted_to_invoice' && log.invoiceId">
-              <NuxtLink :to="`/invoices/${log.invoiceId}`" class="btn sm" @click.stop>View invoice</NuxtLink>
-            </template>
-            <template v-else>
-              <button class="btn sm" type="button" @click="openLog(log.id)">View log</button>
-            </template>
-          </div>
-        </div>
+      <div class="tscroll">
+        <table v-if="items.length" class="tbl sl-list-tbl">
+          <thead>
+            <tr>
+              <th class="col-log">Log</th>
+              <th class="col-customer">Customer</th>
+              <th class="col-vehicle">Vehicle</th>
+              <th class="col-date">Service date</th>
+              <th class="col-work">Work</th>
+              <th class="col-status">Status</th>
+              <th class="col-invoice">Invoice</th>
+              <th class="col-actions" aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody id="log-queue">
+            <tr
+              v-for="log in items"
+              :key="log.id"
+              class="click sl-list-row"
+              @click="openLog(log.id)"
+            >
+              <td class="col-log" data-label="Log">
+                <span class="lead">{{ logNumberDisplay(log.logNumber) }}</span>
+                <span v-if="log.fileCount" class="sub">{{ log.fileCount === 1 ? '1 photo' : `${log.fileCount} photos` }}</span>
+              </td>
+              <td class="col-customer" data-label="Customer">
+                <span class="lead">{{ log.customerName }}</span>
+                <span class="sub">{{ log.submitterName }}</span>
+              </td>
+              <td class="col-vehicle" data-label="Vehicle">
+                <span class="lead">{{ vehicleLabel(log.vehicle) }}</span>
+                <span v-if="log.vehicle" class="sub">{{ vehicleSub(log.vehicle) }}</span>
+              </td>
+              <td class="col-date" data-label="Service date">
+                {{ serviceLogServiceDateDisplay(log.serviceDate) }}
+              </td>
+              <td class="col-work" data-label="Work">
+                {{ workTypeLabel(log.workType) }}
+              </td>
+              <td class="col-status" data-label="Status">
+                <div class="sl-list-badges">
+                  <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).cls">
+                    {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).label }}
+                  </span>
+                  <span v-if="log.customerRequested" class="pill info sl-list-cust-req">Customer request</span>
+                </div>
+              </td>
+              <td class="col-invoice" data-label="Invoice">
+                <a
+                  v-if="log.invoiceId && log.invoiceNumberFormatted"
+                  :href="serviceLogInvoicePreviewPdfHref(log.id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="sl-inv-pdf-link"
+                  :title="`Open ${log.invoiceNumberFormatted} PDF in a new tab`"
+                  @click.stop
+                >
+                  {{ log.invoiceNumberFormatted }}
+                  <span class="sl-inv-pdf-icon" aria-hidden="true">↗</span>
+                </a>
+                <span v-else class="muted">—</span>
+              </td>
+              <td class="col-actions" data-label="Actions">
+                <button
+                  type="button"
+                  class="btn sm"
+                  :class="{ primary: canReview && log.status !== 'converted_to_invoice' }"
+                  @click.stop="openLog(log.id)"
+                >
+                  {{ rowActionLabel(log) }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else id="log-queue-empty" class="empty">No service logs match your search.</div>
       </div>
-      <div v-else id="log-queue-empty" class="empty">No service logs match your search.</div>
 
       <div v-if="total > 0" class="cfoot">
         <span>{{ rangeLabel }}</span>
@@ -181,3 +239,108 @@ function openLog(id: string) {
     </div>
   </section>
 </template>
+
+<style scoped>
+.sl-list-tbl .col-log { width: 8%; min-width: 88px; }
+.sl-list-tbl .col-customer { width: 18%; min-width: 140px; }
+.sl-list-tbl .col-vehicle { width: 18%; min-width: 140px; }
+.sl-list-tbl .col-date { width: 11%; min-width: 108px; white-space: nowrap; }
+.sl-list-tbl .col-work { width: 14%; min-width: 120px; }
+.sl-list-tbl .col-status { width: 14%; min-width: 130px; }
+.sl-list-tbl .col-invoice { width: 11%; min-width: 100px; }
+.sl-list-tbl .col-actions { width: 8%; min-width: 88px; text-align: right; }
+
+.sl-list-tbl .lead {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.sl-list-tbl .sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.sl-list-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.sl-list-cust-req {
+  font-size: 10px;
+  padding: 1px 7px;
+}
+
+.sl-inv-pdf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #4f46e5;
+  text-decoration: none;
+}
+
+.sl-inv-pdf-link:hover {
+  text-decoration: underline;
+  color: #4338ca;
+}
+
+.sl-inv-pdf-icon {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.sl-list-row td.col-actions {
+  vertical-align: middle;
+}
+
+@media (max-width: 960px) {
+  .sl-list-tbl thead {
+    display: none;
+  }
+
+  .sl-list-tbl tbody tr {
+    display: block;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .sl-list-tbl tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .sl-list-tbl td {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 4px 12px;
+    padding: 4px 0;
+    border: none;
+  }
+
+  .sl-list-tbl td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .sl-list-tbl td.col-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+  }
+
+  .sl-list-tbl td.col-actions::before {
+    display: none;
+  }
+}
+</style>
