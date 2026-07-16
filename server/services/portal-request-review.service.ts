@@ -25,6 +25,7 @@ import { notifyPortalRequestStatus } from './customer-notifications.service'
 import {
   portalCorrectionPayloadKind,
   vehicleCorrectionFieldsToSnapshot,
+  type PortalInvoiceCorrectionPayload,
 } from '../../shared/portal-invoice-correction'
 
 export type PortalRequestReviewErrorCode
@@ -57,6 +58,7 @@ export interface StaffPortalRequestRow {
   resultVehicleId: string | null
   reviewedAt: string | null
   reviewReason: string | null
+  correctionPayload: PortalInvoiceCorrectionPayload | null
 }
 
 export interface ListStaffPortalRequestsFilter {
@@ -145,6 +147,7 @@ async function mapServiceRows(db: Db, statusFilter?: string): Promise<StaffPorta
     resultVehicleId: null,
     reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
     reviewReason: r.request.reviewReason,
+    correctionPayload: null,
   }))
 }
 
@@ -156,11 +159,17 @@ async function mapInvoiceChangeRows(db: Db, statusFilter?: string): Promise<Staf
     submitterName: users.name,
     submitterEmail: users.email,
     invoiceNumber: invoices.invoiceNumber,
+    invoiceVehicleId: invoices.vehicleId,
+    busNumber: vehicles.busNumber,
+    unitTag: vehicles.unitTag,
+    make: vehicles.make,
+    model: vehicles.model,
   })
     .from(invoiceChangeRequests)
     .innerJoin(customers, eq(invoiceChangeRequests.customerId, customers.id))
     .innerJoin(users, eq(invoiceChangeRequests.submittedBy, users.id))
     .leftJoin(invoices, eq(invoiceChangeRequests.invoiceId, invoices.id))
+    .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(invoiceChangeRequests.createdAt))
 
@@ -174,17 +183,22 @@ async function mapInvoiceChangeRows(db: Db, statusFilter?: string): Promise<Staf
     submittedByEmail: r.submitterEmail,
     createdAt: r.request.createdAt.toISOString(),
     title: r.request.topic,
-    summary: r.request.description,
-    detail: null,
+    summary: r.request.correctionPayload
+      ? (portalCorrectionPayloadKind(r.request.correctionPayload) === 'line_item'
+          ? 'Structured line item correction'
+          : 'Structured vehicle correction')
+      : r.request.description,
+    detail: r.request.correctionPayload ? r.request.description : null,
     urgency: null,
     invoiceId: r.request.invoiceId,
     invoiceNumberFormatted: r.invoiceNumber != null ? formatInvoiceNumber(r.invoiceNumber) : null,
-    vehicleId: null,
-    vehicleLabel: null,
+    vehicleId: r.invoiceVehicleId ?? null,
+    vehicleLabel: vehicleLabel(r.busNumber, r.unitTag, r.make, r.model),
     resultInvoiceId: r.request.resultInvoiceId,
     resultVehicleId: null,
     reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
     reviewReason: r.request.reviewReason,
+    correctionPayload: r.request.correctionPayload ?? null,
   }))
 }
 
@@ -228,6 +242,7 @@ async function mapVehicleChangeRows(db: Db, statusFilter?: string): Promise<Staf
     resultVehicleId: null,
     reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
     reviewReason: r.request.reviewReason,
+    correctionPayload: null,
   }))
 }
 
@@ -266,6 +281,7 @@ async function mapGeneralRows(db: Db, statusFilter?: string): Promise<StaffPorta
     resultVehicleId: null,
     reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
     reviewReason: r.request.reviewReason,
+    correctionPayload: null,
   }))
 }
 
@@ -304,6 +320,7 @@ async function mapNewVehicleRows(db: Db, statusFilter?: string): Promise<StaffPo
     resultVehicleId: r.request.resultVehicleId,
     reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
     reviewReason: r.request.reviewReason,
+    correctionPayload: null,
   }))
 }
 
@@ -442,7 +459,7 @@ export async function approveInvoiceChangeRequest(
   const [pending] = await db.select().from(invoiceChangeRequests).where(eq(invoiceChangeRequests.id, id))
   await assertPending(pending)
 
-  if (pending!.invoiceId) {
+  if (pending!.invoiceId && pending!.correctionPayload) {
     const source = await getInvoice(db, pending!.invoiceId)
     if (!REVISION_SOURCE_STATUSES.includes(source.status)) {
       throw new PortalRequestReviewError('INVALID_INVOICE')
@@ -457,7 +474,7 @@ export async function approveInvoiceChangeRequest(
   if (!claimed) throw new PortalRequestReviewError('NOT_PENDING')
 
   let revision = null
-  if (claimed.invoiceId) {
+  if (claimed.invoiceId && claimed.correctionPayload) {
     const source = await getInvoice(db, claimed.invoiceId)
     revision = await createInvoiceRevision(db, claimed.invoiceId, actorId)
     const noteBlock = [
@@ -471,31 +488,29 @@ export async function approveInvoiceChangeRequest(
       customerNotes: [source.customerNotes, `Customer correction request: ${claimed.topic}`].filter(Boolean).join('\n\n'),
     }, actorId)
 
-    if (claimed.correctionPayload) {
-      const payload = claimed.correctionPayload
-      if (portalCorrectionPayloadKind(payload) === 'line_item') {
-        const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
-        const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
-        if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+    const payload = claimed.correctionPayload
+    if (portalCorrectionPayloadKind(payload) === 'line_item') {
+      const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
+      const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
+      if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
-        const revisionLines = await listInvoiceLineItems(db, revision.id)
-        const revisionLine = revisionLines.find(line => line.sortOrder === sourceLine.sortOrder)
-        if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+      const revisionLines = await listInvoiceLineItems(db, revision.id)
+      const revisionLine = revisionLines.find(line => line.sortOrder === sourceLine.sortOrder)
+      if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
-        await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
-          description: payload.proposed.description,
-          quantity: payload.proposed.quantity,
-          unitPrice: payload.proposed.unitPrice,
-        }, actorId)
-      }
-      else {
-        const baseSnapshot = source.vehicleSnapshot
-        if (!baseSnapshot) throw new PortalRequestReviewError('INVALID_INVOICE')
+      await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
+        description: payload.proposed.description,
+        quantity: payload.proposed.quantity,
+        unitPrice: payload.proposed.unitPrice,
+      }, actorId)
+    }
+    else {
+      const baseSnapshot = source.vehicleSnapshot
+      if (!baseSnapshot) throw new PortalRequestReviewError('INVALID_INVOICE')
 
-        await updateInvoiceDraft(db, revision.id, {
-          vehicleSnapshot: vehicleCorrectionFieldsToSnapshot(baseSnapshot, payload.proposed),
-        }, actorId)
-      }
+      await updateInvoiceDraft(db, revision.id, {
+        vehicleSnapshot: vehicleCorrectionFieldsToSnapshot(baseSnapshot, payload.proposed),
+      }, actorId)
     }
 
     revision = await getInvoice(db, revision.id)

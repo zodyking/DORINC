@@ -1,13 +1,18 @@
 <script setup lang="ts">
 // Staff portal request review queues (mockup: Review queue / P2-09, P2-10).
+import type { PortalInvoiceCorrectionPayload } from '#shared/portal-invoice-correction'
 import type { PortalRequestReviewKind } from '~/shared/validators/portal-request-review'
 import {
   STAFF_REQUEST_TABS,
+  staffRequestActionType,
   staffRequestApproveHint,
   staffRequestApproveLabel,
   staffRequestKindLabel,
+  staffRequestOutcomeSummary,
+  staffRequestPreviewText,
   staffRequestStatusPill,
   staffRequestSubmitter,
+  staffRequestTypeBadge,
   staffRequestUrgencyPill,
   staffRequestWhen,
 } from '~/utils/portal-request-review-ui'
@@ -37,6 +42,7 @@ interface StaffRequestRow {
   resultVehicleId: string | null
   reviewedAt: string | null
   reviewReason: string | null
+  correctionPayload: PortalInvoiceCorrectionPayload | null
 }
 
 const auth = useAuthStore()
@@ -108,6 +114,13 @@ function closeModal() {
   modalOpen.value = false
   modalRow.value = null
 }
+
+const modalApproveLabel = computed(() => modalRow.value ? staffRequestApproveLabel(modalRow.value) : 'Approve')
+const modalActionType = computed(() => modalRow.value ? staffRequestActionType(modalRow.value) : null)
+const modalIsStructuredCorrection = computed(() => {
+  const type = modalActionType.value
+  return type === 'line_correction' || type === 'vehicle_correction'
+})
 
 async function submitModal() {
   const row = modalRow.value
@@ -212,19 +225,35 @@ async function submitModal() {
           <div v-for="row in items" :key="rowKey(row)" class="modrow">
             <span class="av" :class="avColor(row.customerName)">{{ initials(row.customerName) }}</span>
             <div class="nm">
-              <b>{{ row.title }}</b>
+              <div class="row-title">
+                <b>{{ row.title }}</b>
+                <span :class="staffRequestTypeBadge(row).cls">{{ staffRequestTypeBadge(row).label }}</span>
+              </div>
               <small>
                 {{ row.customerName }} · {{ staffRequestKindLabel(row.kind) }}
                 · {{ staffRequestSubmitter(row.submittedByName, row.submittedByEmail) }}
                 · {{ staffRequestWhen(row.createdAt) }}
               </small>
-              <div style="margin-top:6px; font-size:13px; color:#cbd5e1;">{{ row.summary }}</div>
-              <div v-if="row.detail" style="margin-top:4px; font-size:12px; color:#94a3b8;">{{ row.detail }}</div>
-              <div v-if="row.vehicleLabel" style="margin-top:4px; font-size:12px; color:#94a3b8;">Vehicle: {{ row.vehicleLabel }}</div>
-              <div v-if="row.invoiceNumberFormatted" style="margin-top:4px; font-size:12px; color:#94a3b8;">
-                Invoice: {{ row.invoiceNumberFormatted }}
+
+              <StaffPortalRequestCorrectionDiff
+                v-if="row.correctionPayload"
+                :payload="row.correctionPayload"
+                compact
+              />
+              <div v-else class="request-preview">{{ staffRequestPreviewText(row) }}</div>
+
+              <div class="request-meta">
+                <span v-if="row.vehicleLabel">Vehicle: {{ row.vehicleLabel }}</span>
+                <span v-if="row.invoiceNumberFormatted">
+                  Invoice:
+                  <NuxtLink v-if="row.invoiceId" :to="`/invoices/${row.invoiceId}`" class="link">
+                    {{ row.invoiceNumberFormatted }}
+                  </NuxtLink>
+                  <template v-else>{{ row.invoiceNumberFormatted }}</template>
+                </span>
               </div>
-              <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+
+              <div class="request-badges">
                 <span :class="staffRequestStatusPill(row.status).cls">{{ staffRequestStatusPill(row.status).label }}</span>
                 <span v-if="staffRequestUrgencyPill(row.urgency)" :class="staffRequestUrgencyPill(row.urgency)!.cls">
                   {{ staffRequestUrgencyPill(row.urgency)!.label }}
@@ -233,7 +262,6 @@ async function submitModal() {
                   v-if="row.resultInvoiceId"
                   :to="`/invoices/${row.resultInvoiceId}`"
                   class="btn sm"
-                  style="margin-left:4px;"
                 >
                   View result invoice
                 </NuxtLink>
@@ -245,7 +273,7 @@ async function submitModal() {
                   View vehicle
                 </NuxtLink>
               </div>
-              <div v-if="row.reviewReason && row.status !== 'pending'" style="margin-top:6px; font-size:12px; color:#94a3b8;">
+              <div v-if="row.reviewReason && row.status !== 'pending'" class="review-note">
                 Staff note: {{ row.reviewReason }}
               </div>
             </div>
@@ -256,7 +284,7 @@ async function submitModal() {
                 :disabled="busyKey === rowKey(row)"
                 @click="openModal(row, 'approve')"
               >
-                {{ staffRequestApproveLabel(row.kind) }}
+                {{ staffRequestApproveLabel(row) }}
               </button>
               <button
                 class="btn sm"
@@ -289,18 +317,59 @@ async function submitModal() {
       </div>
     </template>
 
-    <div v-if="modalOpen && modalRow" class="modal open" role="dialog" aria-modal="true">
-      <div class="sheet">
-        <div class="chead">
-          <h3>{{ modalMode === 'approve' ? staffRequestApproveLabel(modalRow.kind) : 'Reject request' }}</h3>
-          <button type="button" class="btn sm" @click="closeModal">Close</button>
+    <div
+      v-if="modalOpen && modalRow"
+      class="modal-scrim open"
+      @click.self="closeModal"
+    >
+      <div class="modal staff-req-modal" role="dialog" aria-modal="true" @click.stop>
+        <div class="mhead">
+          <div>
+            <h3>{{ modalMode === 'approve' ? modalApproveLabel : 'Reject request' }}</h3>
+            <p v-if="modalMode === 'approve'">{{ staffRequestApproveHint(modalRow) }}</p>
+            <p v-else>Tell the customer why this request was declined.</p>
+          </div>
+          <button type="button" class="close" aria-label="Close" @click="closeModal">×</button>
         </div>
-        <div class="cbody">
-          <p style="font-size:13px; color:#94a3b8; margin:0 0 12px;">
-            {{ modalMode === 'approve' ? staffRequestApproveHint(modalRow.kind) : 'Tell the customer why this request was declined.' }}
-          </p>
-          <p style="margin:0 0 12px;"><b>{{ modalRow.title }}</b> — {{ modalRow.customerName }}</p>
-          <label class="fld">
+
+        <div class="mbody">
+          <div class="staff-req-modal-context">
+            <p class="staff-req-modal-title"><b>{{ modalRow.title }}</b> — {{ modalRow.customerName }}</p>
+            <p class="staff-req-modal-meta">
+              {{ staffRequestKindLabel(modalRow.kind) }}
+              · {{ staffRequestSubmitter(modalRow.submittedByName, modalRow.submittedByEmail) }}
+              · {{ staffRequestWhen(modalRow.createdAt) }}
+            </p>
+            <p v-if="modalMode === 'approve'" class="callout info staff-req-outcome">
+              {{ staffRequestOutcomeSummary(modalRow) }}
+            </p>
+          </div>
+
+          <StaffPortalRequestCorrectionDiff
+            v-if="modalRow.correctionPayload"
+            :payload="modalRow.correctionPayload"
+          />
+
+          <div v-else class="staff-req-message">
+            <p class="staff-req-message-label">Customer message</p>
+            <div class="staff-req-message-body">{{ staffRequestPreviewText(modalRow) }}</div>
+            <p v-if="modalRow.detail && modalRow.detail !== modalRow.summary" class="staff-req-message-extra">
+              {{ modalRow.detail }}
+            </p>
+          </div>
+
+          <div v-if="modalRow.invoiceNumberFormatted || modalRow.vehicleLabel" class="staff-req-links">
+            <span v-if="modalRow.invoiceNumberFormatted">
+              Invoice:
+              <NuxtLink v-if="modalRow.invoiceId" :to="`/invoices/${modalRow.invoiceId}`" class="link">
+                {{ modalRow.invoiceNumberFormatted }}
+              </NuxtLink>
+              <template v-else>{{ modalRow.invoiceNumberFormatted }}</template>
+            </span>
+            <span v-if="modalRow.vehicleLabel">Vehicle: {{ modalRow.vehicleLabel }}</span>
+          </div>
+
+          <label class="fld" style="margin-top:16px;">
             <span>{{ modalMode === 'reject' ? 'Rejection reason' : 'Staff note (optional)' }}</span>
             <textarea
               v-model="modalReason"
@@ -309,68 +378,130 @@ async function submitModal() {
               :placeholder="modalMode === 'reject' ? 'Required — visible in audit log' : 'Optional internal note'"
             />
           </label>
-          <p v-if="actionError" style="color:#f87171; font-size:13px; margin:8px 0 0;">{{ actionError }}</p>
-          <div style="display:flex; gap:8px; margin-top:16px;">
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="busyKey === rowKey(modalRow)"
-              @click="submitModal"
-            >
-              {{ modalMode === 'approve' ? 'Confirm approve' : 'Confirm reject' }}
-            </button>
-            <button type="button" class="btn" @click="closeModal">Cancel</button>
-          </div>
+          <p v-if="actionError" class="staff-req-error">{{ actionError }}</p>
+        </div>
+
+        <div class="mfoot">
+          <button type="button" class="btn" @click="closeModal">Cancel</button>
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="busyKey === rowKey(modalRow)"
+            @click="submitModal"
+          >
+            {{
+              modalMode === 'approve'
+                ? (modalIsStructuredCorrection ? 'Confirm apply' : 'Confirm resolve')
+                : 'Confirm reject'
+            }}
+          </button>
         </div>
       </div>
-      <button class="modal-scrim" aria-label="Close dialog" @click="closeModal" />
     </div>
   </section>
 </template>
 
 <style scoped>
-.chiprow {
+.modrow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 16px 12px;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: flex-start;
 }
-.chip {
-  border: 1px solid #334155;
-  background: transparent;
-  color: #cbd5e1;
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.chip.on {
-  background: #1e293b;
-  border-color: #64748b;
-  color: #f8fafc;
-}
-.modal.open {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
+.modrow:last-child { border-bottom: none; }
+.modrow .nm { flex: 1; min-width: 0; }
+.row-title {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
 }
-.modal-scrim {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(2, 6, 23, 0.72);
+.row-title b { font-size: 14px; }
+.modrow .nm small { color: #94a3b8; font-size: 12px; }
+.modrow .acts { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.request-preview {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
-.sheet {
-  position: relative;
-  z-index: 1;
-  width: min(520px, 100%);
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 12px;
-  overflow: hidden;
+.request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+.request-badges {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.review-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.staff-req-modal {
+  width: min(640px, 100%);
+}
+.staff-req-modal-context {
+  margin-bottom: 12px;
+}
+.staff-req-modal-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.staff-req-modal-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+.staff-req-outcome {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.staff-req-message-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.staff-req-message-body {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: #334155;
+}
+.staff-req-message-extra {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  white-space: pre-wrap;
+}
+.staff-req-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+.staff-req-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin: 8px 0 0;
 }
 </style>

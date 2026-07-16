@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import type { PortalLineItemCorrectionPayload } from '#shared/portal-invoice-correction'
 import {
+  staffRequestActionType,
+  staffRequestApproveHint,
   staffRequestApproveLabel,
   staffRequestKindLabel,
+  staffRequestOutcomeSummary,
+  staffRequestPreviewText,
   staffRequestStatusPill,
   staffRequestSubmitter,
+  staffRequestTypeBadge,
   staffRequestUrgencyPill,
 } from '../../app/utils/portal-request-review-ui'
 
@@ -26,9 +32,30 @@ describe('portal-request-review-ui helpers (P2-09)', () => {
   })
 
   it('uses action-specific approve labels', () => {
-    expect(staffRequestApproveLabel('service')).toBe('Create draft invoice')
-    expect(staffRequestApproveLabel('invoice_change')).toBe('Approve & revise')
-    expect(staffRequestApproveLabel('general')).toBe('Approve')
+    expect(staffRequestApproveLabel({ kind: 'service' })).toBe('Create draft invoice')
+    expect(staffRequestApproveLabel({ kind: 'invoice_change' })).toBe('Mark resolved')
+    expect(staffRequestApproveLabel({ kind: 'general' })).toBe('Mark resolved')
+
+    const linePayload: PortalLineItemCorrectionPayload = {
+      kind: 'line_item',
+      lineItemId: 'line-1',
+      original: { description: 'Oil', quantity: '1', unitPrice: '60.00' },
+      proposed: { description: 'Oil', quantity: '1', unitPrice: '55.00' },
+    }
+    expect(staffRequestApproveLabel({ kind: 'invoice_change', correctionPayload: linePayload })).toBe('Apply to invoice')
+    expect(staffRequestActionType({ kind: 'invoice_change', correctionPayload: linePayload })).toBe('line_correction')
+  })
+
+  it('describes billing inquiries separately from structured corrections', () => {
+    const inquiry = {
+      kind: 'invoice_change',
+      invoiceId: 'inv-1',
+      invoiceNumberFormatted: 'INV-000105',
+    }
+    expect(staffRequestTypeBadge(inquiry).label).toBe('Billing inquiry')
+    expect(staffRequestApproveHint(inquiry)).toContain('without changing the invoice')
+    expect(staffRequestOutcomeSummary(inquiry)).toContain('invoice unchanged')
+    expect(staffRequestPreviewText({ kind: 'general', summary: 'hello' })).toBe('hello')
   })
 
   it('reuses portal status pills', () => {

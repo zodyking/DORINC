@@ -192,7 +192,7 @@ describe('P2-09 staff portal request review queue', () => {
 })
 
 describe('P2-10 invoice correction revision flow', () => {
-  it('creates a revision draft when an invoice-linked correction is approved', async () => {
+  it('approves invoice-linked inquiries without creating a revision', async () => {
     const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
       invoiceId: sourceInvoiceId,
       topic: 'Line item clarification',
@@ -200,28 +200,18 @@ describe('P2-10 invoice correction revision flow', () => {
     })
 
     const original = await getInvoice(db, sourceInvoiceId)
-    const originalLines = await listInvoiceLineItems(db, sourceInvoiceId)
 
-    const { request: approved, revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR, 'Revision opened')
+    const { request: approved, revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR, 'Answered by phone')
     expect(approved.status).toBe('approved')
-    expect(revision).not.toBeNull()
-    createdInvoiceIds.push(revision!.id)
-
-    expect(revision!.creationSource).toBe('revision')
-    expect(revision!.sourceInvoiceId).toBe(sourceInvoiceId)
-    expect(revision!.status).toBe('draft')
+    expect(revision).toBeNull()
+    expect(approved.resultInvoiceId).toBeNull()
 
     const unchanged = await getInvoice(db, sourceInvoiceId)
     expect(unchanged.status).toBe(original.status)
     expect(unchanged.invoiceNumber).toBe(original.invoiceNumber)
-
-    const revLines = await listInvoiceLineItems(db, revision!.id)
-    expect(revLines.length).toBe(originalLines.length)
-    expect(revision!.internalNotes).toContain('Portal correction')
-    expect(revision!.internalNotes).toContain('Revision opened')
   })
 
-  it('auto-applies structured line item corrections on approval', async () => {
+  it('creates a revision draft when a structured line correction is approved', async () => {
     const sourceLines = await listInvoiceLineItems(db, sourceInvoiceId)
     const sourceLine = sourceLines[0]!
 
@@ -307,7 +297,7 @@ describe('P2-10 invoice correction revision flow', () => {
     expect(approved.resultInvoiceId).toBeNull()
   })
 
-  it('rejects revision when source invoice is not revisable', async () => {
+  it('rejects structured corrections when source invoice is not revisable', async () => {
     const draft = await createInvoice(db, {
       customerId: customer.id,
       vehicleId: vehicle.id,
@@ -315,14 +305,44 @@ describe('P2-10 invoice correction revision flow', () => {
     }, ACTOR)
     createdInvoiceIds.push(draft.id)
 
-    const [request] = await db.insert(invoiceChangeRequests).values({
-      customerId: customer.id,
-      submittedBy: portalUser.id,
-      invoiceId: draft.id,
-      topic: 'Should fail',
-      description: 'Draft invoices cannot spawn revisions',
-    }).returning()
+    const sourceLine = await addInvoiceLineItem(db, draft.id, {
+      description: 'Draft labor',
+      quantity: '1',
+      unitPrice: '100.00',
+      lineType: 'labor',
+      taxable: true,
+    }, ACTOR)
 
-    await expect(approveInvoiceChangeRequest(db, request!.id, ACTOR)).rejects.toMatchObject({ code: 'INVALID_INVOICE' })
+    const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
+      invoiceId: draft.id,
+      topic: 'Line item correction',
+      lineItemCorrection: {
+        lineItemId: sourceLine.id,
+        description: 'Draft labor (adjusted)',
+        quantity: '1',
+        unitPrice: '90.00',
+      },
+    })
+
+    await expect(approveInvoiceChangeRequest(db, request.id, ACTOR)).rejects.toMatchObject({ code: 'INVALID_INVOICE' })
+  })
+
+  it('approves invoice-linked inquiries on draft invoices without a revision', async () => {
+    const draft = await createInvoice(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      invoiceDate: '2026-07-03',
+    }, ACTOR)
+    createdInvoiceIds.push(draft.id)
+
+    const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
+      invoiceId: draft.id,
+      topic: 'Payment question',
+      description: 'When will this draft be finalized?',
+    })
+
+    const { request: approved, revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR)
+    expect(approved.status).toBe('approved')
+    expect(revision).toBeNull()
   })
 })
