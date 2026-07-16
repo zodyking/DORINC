@@ -221,11 +221,18 @@ export interface LoginResult {
   sessionExpiresAt: Date
 }
 
+export interface LoginGeoMeta {
+  latitude: number
+  longitude: number
+  accuracyM?: number | null
+  locationLabel?: string | null
+}
+
 export async function login(
   db: Db,
   identifier: string,
   password: string,
-  meta: { ipAddress?: string | null, userAgent?: string | null, portal?: LoginPortal } = {},
+  meta: { ipAddress?: string | null, userAgent?: string | null, portal?: LoginPortal, geo?: LoginGeoMeta | null } = {},
 ): Promise<LoginResult> {
   const portal = meta.portal ?? 'staff'
   const trimmed = identifier.trim()
@@ -292,6 +299,10 @@ export async function login(
     expiresAt,
     ipAddress: meta.ipAddress ?? null,
     userAgent: meta.userAgent ?? null,
+    geoLatitude: meta.geo?.latitude ?? null,
+    geoLongitude: meta.geo?.longitude ?? null,
+    geoAccuracyM: meta.geo?.accuracyM ?? null,
+    locationLabel: meta.geo?.locationLabel ?? null,
   })
 
   return {

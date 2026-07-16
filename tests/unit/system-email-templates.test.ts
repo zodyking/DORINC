@@ -111,7 +111,9 @@ describe('system email templates', () => {
       portal: 'staff',
       signedInAt: '2026-07-10T20:00:00.000Z',
       ipAddress: '203.0.113.10',
-      location: 'Austin, Texas',
+      location: 'Brooklyn, NY',
+      ipLocation: 'Queens, NY',
+      locationAccuracyM: 42,
       device: 'iPhone - Safari',
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)',
       appUrl,
@@ -121,12 +123,14 @@ describe('system email templates', () => {
     expect(mail.html).toContain('Sign-in alert')
     expect(mail.html).toContain('Alex')
     expect(mail.html).toContain('alex@example.com')
-    expect(mail.html).toContain('Austin, Texas')
+    expect(mail.html).toContain('Brooklyn, NY')
+    expect(mail.html).toContain('Queens, NY')
+    expect(mail.html).toContain('~42 m')
     expect(mail.html).toContain('iPhone - Safari')
     expect(mail.html).toContain('203.0.113.10')
     expect(mail.text).toContain('If this was not you')
     expect(mail.text).toContain('alex@example.com')
-    expect(mail.text).toContain('Austin, Texas')
+    expect(mail.text).toContain('Brooklyn, NY')
   })
 
   it('builds deletion request submitted and result emails', () => {

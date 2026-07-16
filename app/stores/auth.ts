@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
 import { loginPathForRoute, redirectToLogin } from '~/utils/auth-session'
+import type { StaffLoginGeo } from '#shared/validators/auth'
 
 export interface AuthUser {
   id: string
@@ -54,10 +55,10 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async login(identifier: string, password: string, portal: 'customer' | 'staff') {
+    async login(identifier: string, password: string, portal: 'customer' | 'staff', geo?: StaffLoginGeo) {
       const body = portal === 'customer'
         ? { username: identifier, password, portal }
-        : { email: identifier, password, portal }
+        : { email: identifier, password, portal, geo }
       const res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
         method: 'POST',
         body,

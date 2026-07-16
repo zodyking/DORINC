@@ -2,6 +2,7 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
 import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
+import { mapStaffLoginGeoError, requestStaffLoginGeo } from '~/utils/staff-login-geo'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -72,14 +73,24 @@ async function submitLogin(identifier: string, password: string) {
   loginBlockedReason.value = null
   resetResend()
   try {
-    const user = await auth.login(identifier, password, card.value)
+    let geo
+    if (card.value === 'staff') {
+      geo = await requestStaffLoginGeo()
+    }
+    const user = await auth.login(identifier, password, card.value, geo)
     await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
   }
   catch (err) {
-    error.value = messageFrom(err)
-    loginBlockedReason.value = authErrorReason(err)
-    const hintedEmail = authErrorEmail(err)
-    if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
+    const geoMessage = mapStaffLoginGeoError(err)
+    if ((err as Error)?.message?.startsWith('GEO_')) {
+      error.value = geoMessage
+    }
+    else {
+      error.value = messageFrom(err)
+      loginBlockedReason.value = authErrorReason(err)
+      const hintedEmail = authErrorEmail(err)
+      if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
+    }
   }
   finally {
     busy.value = false
@@ -216,6 +227,9 @@ async function submitSignup() {
                 </button>
               </div>
             </div>
+            <p class="auth-hint">
+              Staff sign-in requires your device location for security alerts. Your browser will ask for permission.
+            </p>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
 
             <div v-if="loginBlockedReason === 'not_verified'" class="auth-callout">
@@ -251,7 +265,7 @@ async function submitSignup() {
               <NuxtLink :to="staffForgotPasswordLink" class="auth-link">Forgot password?</NuxtLink>
             </div>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              {{ busy ? 'Signing in…' : 'Sign in' }}
+              {{ busy ? 'Getting location…' : 'Sign in' }}
             </button>
           </form>
         </div>

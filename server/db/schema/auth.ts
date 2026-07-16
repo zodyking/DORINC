@@ -1,4 +1,4 @@
-import { boolean, index, inet, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, doublePrecision, index, inet, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 /** Account types — fixed bundles, no roles layer (SPEC §4). */
 export const accountTypes = pgTable('account_types', {
@@ -83,6 +83,10 @@ export const sessions = pgTable('sessions', {
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
+  geoLatitude: doublePrecision('geo_latitude'),
+  geoLongitude: doublePrecision('geo_longitude'),
+  geoAccuracyM: doublePrecision('geo_accuracy_m'),
+  locationLabel: text('location_label'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   stepUpVerifiedAt: timestamp('step_up_verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
