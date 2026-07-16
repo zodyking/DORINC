@@ -44,7 +44,7 @@ function downloadPdf(event: Event, invoiceId: string) {
 <template>
   <section class="page active portal-page">
     <div v-if="error" class="card portal-card">
-      <p>Unable to load invoices.</p>
+      <p class="portal-empty">Unable to load invoices.</p>
     </div>
 
     <div v-else-if="pending && !items.length" class="card portal-card">

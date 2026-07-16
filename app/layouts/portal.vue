@@ -80,6 +80,7 @@ watch(() => route.path, () => {
         <span class="ico" aria-hidden="true"><StaffNavIcon :name="item.icon" /></span>
         <span class="nav-label">{{ item.label }}</span>
       </NuxtLink>
+      <div class="side-spacer" aria-hidden="true" />
     </nav>
 
     <button
@@ -154,13 +155,5 @@ watch(() => route.path, () => {
 .menu-link:hover {
   background: #f1f5f9;
   color: #0f172a;
-}
-.portal-pwa-wrap {
-  padding: 12px 28px 0;
-}
-@media (max-width: 960px) {
-  .portal-pwa-wrap {
-    padding: 12px 16px 0;
-  }
 }
 </style>

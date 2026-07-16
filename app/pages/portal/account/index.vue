@@ -87,7 +87,7 @@ async function updatePassword() {
     </div>
 
     <div v-if="error" class="card portal-card">
-      <p>Unable to load account details.</p>
+      <p class="portal-empty">Unable to load account details.</p>
     </div>
 
     <div v-else-if="data" class="portal-account-stack">

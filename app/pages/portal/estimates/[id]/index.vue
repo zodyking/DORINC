@@ -79,8 +79,16 @@ async function respond(action: 'approve' | 'reject') {
 </script>
 
 <template>
-  <section v-if="error" class="page active portal-page">
-    <div class="empty">Estimate not found or you do not have access.</div>
+  <section v-if="pending && !estimate" class="page active portal-page">
+    <div class="card portal-card">
+      <p class="portal-muted" style="padding: 18px; margin: 0;">Loading estimate…</p>
+    </div>
+  </section>
+
+  <section v-else-if="error" class="page active portal-page">
+    <div class="card portal-card">
+      <p class="portal-empty">Estimate not found or you do not have access.</p>
+    </div>
   </section>
 
   <section v-else-if="estimate" class="page active portal-page">
@@ -95,42 +103,45 @@ async function respond(action: 'approve' | 'reject') {
       </div>
     </div>
 
-    <div v-if="estimate.canRespond" class="card" style="margin-bottom:16px;border-color:#f59e0b;">
+    <div v-if="estimate.canRespond" class="card portal-card portal-action">
       <div class="chead">
         <h3>Your response</h3>
         <span class="pill warn">Action required</span>
       </div>
-      <p style="font-size:13px;color:#64748b;margin-bottom:12px;">
+      <p class="portal-muted">
         Review the line items below, then approve or decline this estimate.
         <span v-if="estimate.validUntil"> Valid until {{ invoiceDateDisplay(estimate.validUntil) }}.</span>
       </p>
-      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Notes (optional)</label>
-      <textarea
-        v-model="responseNotes"
-        rows="3"
-        style="width:100%;margin-bottom:12px;"
-        placeholder="Questions or comments for the shop…"
-      />
-      <p v-if="actionError" style="color:#dc2626;font-size:13px;margin-bottom:8px;">{{ actionError }}</p>
-      <div class="actions">
-        <button type="button" class="btn" :disabled="acting" @click="respond('approve')">
-          Approve estimate
-        </button>
-        <button type="button" class="btn sm" :disabled="acting" @click="respond('reject')">
-          Decline
-        </button>
+      <div class="portal-form">
+        <label class="fld">
+          <span>Notes (optional)</span>
+          <textarea
+            v-model="responseNotes"
+            rows="3"
+            placeholder="Questions or comments for the shop…"
+          />
+        </label>
+        <p v-if="actionError" class="portal-error">{{ actionError }}</p>
+        <div class="actions">
+          <button type="button" class="btn primary" :disabled="acting" @click="respond('approve')">
+            Approve estimate
+          </button>
+          <button type="button" class="btn" :disabled="acting" @click="respond('reject')">
+            Decline
+          </button>
+        </div>
       </div>
     </div>
 
-    <div v-else-if="estimate.status === 'converted' && estimate.convertedInvoiceId" class="card" style="margin-bottom:16px;">
-      <p style="font-size:13px;">
+    <div v-else-if="estimate.status === 'converted' && estimate.convertedInvoiceId" class="card portal-card">
+      <p class="portal-muted" style="padding: 16px 18px; margin: 0;">
         This estimate was approved and converted to an invoice.
         <NuxtLink :to="`/portal/invoices/${estimate.convertedInvoiceId}`">View invoice →</NuxtLink>
       </p>
     </div>
 
     <div class="cols">
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead">
           <h3>Summary</h3>
           <span :class="statusPill.cls">{{ statusPill.label }}</span>
@@ -147,12 +158,12 @@ async function respond(action: 'approve' | 'reject') {
           <dt>Total</dt>
           <dd style="color:#4f46e5;font-weight:700;">{{ moneyDisplay(estimate.total) }}</dd>
         </dl>
-        <p v-if="estimate.customerNotes" style="margin-top:12px;font-size:13px;color:#64748b;">
+        <p v-if="estimate.customerNotes" class="portal-muted" style="padding: 0 18px 18px; margin: 0;">
           {{ estimate.customerNotes }}
         </p>
       </div>
 
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead"><h3>Line items</h3></div>
         <div class="tscroll">
           <table class="tbl">

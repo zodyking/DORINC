@@ -19,6 +19,17 @@ export function portalMoney(value: string | null | undefined): string {
   return moneyDisplay(value)
 }
 
+/** Show invoice total when paid; otherwise balance due. */
+export function portalRecentInvoiceAmount(
+  status: string,
+  total: string,
+  balanceDue: string,
+): string {
+  const due = Number.parseFloat(balanceDue || '0')
+  if (status === 'paid' || due <= 0) return portalMoney(total)
+  return portalMoney(balanceDue)
+}
+
 export function portalInvoiceStatus(
   status: string,
   dueDate?: string | null,

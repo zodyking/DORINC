@@ -58,11 +58,15 @@ function downloadPdf() {
 
 <template>
   <section v-if="pending && !invoice" class="page active portal-page">
-    <div class="empty">Loading invoice…</div>
+    <div class="card portal-card">
+      <p class="portal-muted" style="padding: 18px; margin: 0;">Loading invoice…</p>
+    </div>
   </section>
 
   <section v-else-if="error" class="page active portal-page">
-    <div class="empty">Invoice not found or you do not have access.</div>
+    <div class="card portal-card">
+      <p class="portal-empty">Invoice not found or you do not have access.</p>
+    </div>
   </section>
 
   <section v-else-if="invoice" class="page active portal-page">
@@ -81,7 +85,7 @@ function downloadPdf() {
     </div>
 
     <div class="cols">
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead">
           <h3>Summary</h3>
           <span :class="statusPill.cls">{{ statusPill.label }}</span>
@@ -98,7 +102,7 @@ function downloadPdf() {
         </dl>
       </div>
 
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead"><h3>Line items</h3></div>
         <div class="tscroll">
           <table class="tbl">

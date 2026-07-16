@@ -39,6 +39,7 @@ export interface PortalDashboardInvoice {
   sublabel: string
   vehicleLabel: string
   status: string
+  total: string
   balanceDue: string
 }
 
@@ -435,6 +436,7 @@ export async function getPortalDashboard(db: Db, customerId: string, userName: s
       sublabel: invoiceSublabel(r.invoice.status, r.invoice.dueDate, r.invoice.paidAt),
       vehicleLabel: vehicleLabelFromRow(r.vehicle?.busNumber || r.vehicle?.unitTag ? r.vehicle : null),
       status: r.invoice.status,
+      total: r.invoice.total,
       balanceDue: r.invoice.balanceDue,
     })),
     openRequests,

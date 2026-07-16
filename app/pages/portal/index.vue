@@ -3,6 +3,7 @@ import {
   portalInvoiceStatus,
   portalMoney,
   portalOpenBalanceSub,
+  portalRecentInvoiceAmount,
 } from '~/utils/portal-dashboard-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
@@ -24,24 +25,22 @@ interface PortalDashboardPayload {
     sublabel: string
     vehicleLabel: string
     status: string
+    total: string
     balanceDue: string
   }>
 }
 
-const { data: dash, error } = useClientFetch<PortalDashboardPayload>('/api/portal/dashboard')
-
-const quickLinks = [
-  { label: 'Invoices', to: '/portal/invoices', hint: 'View & download PDFs' },
-  { label: 'Estimates', to: '/portal/estimates', hint: 'Approve repair quotes' },
-  { label: 'Fleet', to: '/portal/vehicles', hint: 'Your vehicles on file' },
-  { label: 'Contact shop', to: '/portal/requests', hint: 'Service or billing help' },
-]
+const { data: dash, error, pending } = useClientFetch<PortalDashboardPayload>('/api/portal/dashboard')
 </script>
 
 <template>
   <section class="page active portal-page">
     <div v-if="error" class="card portal-card">
-      <p>Unable to load your dashboard.</p>
+      <p class="portal-empty">Unable to load your dashboard.</p>
+    </div>
+
+    <div v-else-if="pending && !dash" class="card portal-card">
+      <p class="portal-muted" style="padding: 18px; margin: 0;">Loading dashboard…</p>
     </div>
 
     <template v-else-if="dash">
@@ -68,13 +67,6 @@ const quickLinks = [
         </div>
       </div>
 
-      <div class="portal-quick-links">
-        <NuxtLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="portal-quick-link">
-          <b>{{ link.label }}</b>
-          <span>{{ link.hint }}</span>
-        </NuxtLink>
-      </div>
-
       <div class="card portal-card">
         <div class="chead">
           <h3>Recent invoices</h3>
@@ -98,7 +90,7 @@ const quickLinks = [
               <span :class="portalInvoiceStatus(inv.status, null, inv.balanceDue).cls">
                 {{ portalInvoiceStatus(inv.status, null, inv.balanceDue).label }}
               </span>
-              <strong>{{ portalMoney(inv.balanceDue) }}</strong>
+              <strong>{{ portalRecentInvoiceAmount(inv.status, inv.total, inv.balanceDue) }}</strong>
             </div>
           </NuxtLink>
         </div>
