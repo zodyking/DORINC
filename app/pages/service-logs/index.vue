@@ -111,6 +111,11 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
   if (!vehicle) return '—'
   return vehicleTag(vehicle)
 }
+
+/** Customer portal requests stay highlighted until the log is sent to invoice. */
+function showCustomerRequestGlow(log: ServiceLogRow): boolean {
+  return log.customerRequested && log.status !== 'converted_to_invoice'
+}
 </script>
 
 <template>
@@ -171,6 +176,7 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
               v-for="log in items"
               :key="log.id"
               class="click sl-list-row"
+              :class="{ 'sl-cust-req-pulse': showCustomerRequestGlow(log) }"
               @click="openLog(log.id)"
             >
               <td class="col-log" data-label="Log">

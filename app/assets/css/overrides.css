@@ -516,6 +516,23 @@ section.page.active.page--invoice-pdf {
   padding: 0;
 }
 
+.sl-list-tbl tr.sl-cust-req-pulse {
+  outline: 2px solid rgba(220, 38, 38, 0.65);
+  outline-offset: -2px;
+  animation: sl-cust-req-outline-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sl-cust-req-outline-pulse {
+  0%, 100% {
+    outline-color: rgba(220, 38, 38, 0.4);
+    background-color: rgba(254, 242, 242, 0.25);
+  }
+  50% {
+    outline-color: rgba(220, 38, 38, 0.95);
+    background-color: rgba(254, 226, 226, 0.65);
+  }
+}
+
 /* Customer portal — shell tweaks + staff design alignment */
 .portal-app {
   min-height: 100dvh;

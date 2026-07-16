@@ -118,10 +118,6 @@ function onSendClick() {
   display: flex;
   justify-content: flex-end;
 }
-.inv-row-actions :deep(.page-actions__panel) {
-  right: 0;
-  left: auto;
-}
 .inv-row-actions :deep(.page-actions__panel .btn:disabled) {
   opacity: 0.55;
   cursor: not-allowed;

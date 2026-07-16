@@ -26,8 +26,4 @@ function downloadPdf() {
   display: flex;
   justify-content: flex-end;
 }
-.inv-row-actions :deep(.page-actions__panel) {
-  right: 0;
-  left: auto;
-}
 </style>
