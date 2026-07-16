@@ -62,7 +62,7 @@ export function portalInvoiceFilterLabel(filter: PortalInvoiceFilter): string {
 }
 
 export function portalInvoiceIsOpen(status: string, balanceDue: string): boolean {
-  return (status === 'sent' || status === 'approved') && Number.parseFloat(balanceDue) > 0
+  return status === 'sent' && Number.parseFloat(balanceDue) > 0
 }
 
 export function portalInvoiceMatchesFilter(

@@ -11,7 +11,7 @@ export interface InvoiceVehicleSnapshotDisplay extends VehicleDisplay {
   odometerUnit?: string
 }
 
-export type InvoiceStatus = 'draft' | 'pending_manager_approval' | 'approved' | 'sent' | 'paid' | 'void'
+export type InvoiceStatus = 'draft' | 'pending_manager_approval' | 'sent' | 'paid' | 'void'
 export type InvoiceLineType = LineItemType
 
 export const PAYMENT_TERMS_LABELS: Record<string, string> = {
@@ -70,9 +70,7 @@ export function invoiceStatusPill(
     case 'draft':
       return { cls: 'pill draft', label: 'Draft' }
     case 'pending_manager_approval':
-      return { cls: 'pill warn', label: 'Pending approval', hint: 'Awaiting manager sign-off' }
-    case 'approved':
-      return { cls: 'pill info', label: 'Approved' }
+      return { cls: 'pill warn', label: 'Pending approval', hint: 'Awaiting manager sign-off before send' }
     case 'sent':
       return { cls: 'pill sent', label: 'Sent', hint: 'Awaiting payment' }
     case 'paid':

@@ -50,7 +50,6 @@ export async function getRevenueReport(db: Db, range?: Partial<ReportsDateRange>
     or(
       eq(invoices.status, 'sent'),
       eq(invoices.status, 'paid'),
-      eq(invoices.status, 'approved'),
     ),
   )
 
@@ -139,7 +138,7 @@ export async function getAgingReport(db: Db): Promise<AgingReport> {
     .innerJoin(customers, eq(customers.id, invoices.customerId))
     .where(and(
       isNull(invoices.archivedAt),
-      or(eq(invoices.status, 'sent'), eq(invoices.status, 'approved')),
+      eq(invoices.status, 'sent'),
       gt(invoices.balanceDue, '0'),
     ))
     .orderBy(desc(invoices.dueDate))

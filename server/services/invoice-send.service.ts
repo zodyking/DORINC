@@ -8,6 +8,7 @@ import { listContacts } from './customers.service'
 import { enqueueJob } from './jobs.service'
 import { generateInvoicePdf } from './invoice-pdf.service'
 import {
+  assertInvoiceSendable,
   getInvoice,
   InvoicesServiceError,
   transitionInvoice,
@@ -16,6 +17,7 @@ import {
 export type InvoiceSendServiceErrorCode
   = 'NOT_FOUND'
     | 'INVALID_TRANSITION'
+    | 'MANAGER_APPROVAL_REQUIRED'
     | 'NO_RECIPIENT'
     | 'ALREADY_QUEUED'
     | 'PDF_FAILED'
@@ -106,12 +108,13 @@ export interface InvoiceSendOverrides {
   message?: string | null
 }
 
-/** Queue PDF generation + email delivery. Invoice stays approved until email succeeds. */
+/** Queue PDF generation + email delivery. Invoice becomes sent after email succeeds. */
 export async function queueInvoiceSend(
   db: Db,
   invoiceId: string,
   actorId: string,
   overrides?: InvoiceSendOverrides,
+  actorAccountType?: string | null,
 ): Promise<QueueInvoiceSendResult> {
   const { isNotificationEnabled } = await import('./workspace-settings.service')
   if (!(await isNotificationEnabled(db, 'invoiceEmail'))) {
@@ -129,8 +132,16 @@ export async function queueInvoiceSend(
     throw err
   }
 
-  if (invoice.status !== 'approved') {
-    throw new InvoiceSendServiceError('INVALID_TRANSITION')
+  try {
+    await assertInvoiceSendable(db, invoice, actorAccountType)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError) {
+      if (err.code === 'NOT_FOUND') throw new InvoiceSendServiceError('NOT_FOUND')
+      if (err.code === 'MANAGER_APPROVAL_REQUIRED') throw new InvoiceSendServiceError('MANAGER_APPROVAL_REQUIRED')
+      if (err.code === 'INVALID_TRANSITION') throw new InvoiceSendServiceError('INVALID_TRANSITION')
+    }
+    throw err
   }
 
   let recipient = await resolveInvoiceSendRecipient(db, invoice.customerId)
@@ -209,7 +220,7 @@ export async function getInvoiceSendPreview(db: Db, invoiceId: string) {
     message: defaults.message,
     notificationEnabled: await isNotificationEnabled(db, 'invoiceEmail'),
     alreadyQueued: !!pending,
-    sendable: invoice.status === 'approved',
+    sendable: ['draft', 'pending_manager_approval'].includes(invoice.status),
   }
 }
 
@@ -223,7 +234,8 @@ export interface BulkInvoiceSendResult {
 
 const SEND_ERROR_MESSAGES: Record<InvoiceSendServiceErrorCode, string> = {
   NOT_FOUND: 'Invoice not found',
-  INVALID_TRANSITION: 'Only approved invoices can be sent',
+  INVALID_TRANSITION: 'Only draft or manager-approved invoices can be sent',
+  MANAGER_APPROVAL_REQUIRED: 'Manager approval is required before sending this invoice',
   NO_RECIPIENT: 'No billing email on file',
   ALREADY_QUEUED: 'Already queued for delivery',
   PDF_FAILED: 'PDF generation failed',
@@ -278,7 +290,7 @@ export async function markInvoiceSentAfterDelivery(db: Db, invoiceId: string, ac
   if (before.status === 'sent' || before.status === 'paid') {
     return { invoice: before, before, alreadySent: true as const }
   }
-  if (before.status !== 'approved') {
+  if (!['draft', 'pending_manager_approval'].includes(before.status)) {
     throw new InvoiceSendServiceError('INVALID_TRANSITION')
   }
   const { invoice } = await transitionInvoice(db, invoiceId, 'sent', actorId)

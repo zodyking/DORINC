@@ -12,10 +12,9 @@ import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { vehicles } from '../../server/db/schema/vehicles'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
-  sendInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { createCustomer } from '../../server/services/customers.service'
 import {
   createPortalUser,
@@ -92,8 +91,7 @@ async function seedSentInvoice() {
     sortOrder: 1,
   }, ACTOR)
 
-  await approveInvoice(db, invoice.id, ACTOR)
-  await sendInvoice(db, invoice.id, ACTOR)
+  await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
   invoiceAId = invoice.id
   return invoice.id
 }

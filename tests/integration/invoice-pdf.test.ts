@@ -8,9 +8,10 @@ import { waitForPdfJobDone } from '../helpers/pdf-render'
 import { createCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
+  transitionInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import {
   generateInvoicePdf,
   getInvoicePdfDownload,
@@ -78,7 +79,7 @@ async function approvedInvoice() {
     sortOrder: 1,
   }, ACTOR)
 
-  await approveInvoice(db, invoice.id, ACTOR)
+  await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
   return invoice.id
 }
 
@@ -134,7 +135,7 @@ describe('P1-29 invoice PDF generate + download', () => {
       invoiceDate: '2026-07-08',
       creationSource: 'customer',
     }, ACTOR)
-    await approveInvoice(db, invoice.id, ACTOR)
+    await transitionInvoice(db, invoice.id, 'sent', ACTOR)
 
     await expect(getInvoicePdfDownload(db, invoice.id))
       .rejects.toMatchObject({ code: 'NO_PDF' })

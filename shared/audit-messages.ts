@@ -72,7 +72,7 @@ const ACTION_LABELS: Record<string, string> = {
   'vehicles.reassign': 'Vehicle reassigned',
   'invoices.create': 'Invoice created',
   'invoices.update': 'Invoice details updated',
-  'invoices.approve': 'Invoice approved for sending',
+  'invoices.submit_for_manager_approval': 'Invoice submitted for manager approval before send',
   'invoices.send': 'Invoice finalized and sent',
   'invoices.send_queued': 'Invoice queued for email delivery',
   'invoices.mark_paid': 'Payment recorded',

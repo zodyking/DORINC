@@ -96,7 +96,7 @@ describe('P4-04 load smoke — pdf-worker concurrency', () => {
           invoiceNumberFormatted: `LOAD-${stamp}-${i + 1}`,
           invoiceDate: '2026-07-08',
           paymentTerms: 'net_30',
-          status: 'approved',
+          status: 'sent',
           lineItems: [{
             description: `Load smoke line ${i + 1}`,
             lineType: 'labor',

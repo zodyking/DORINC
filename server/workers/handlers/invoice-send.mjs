@@ -137,8 +137,13 @@ async function loadFailedPdfJob(pool, invoiceId) {
 async function markInvoiceSent(pool, invoiceId, actorId) {
   const { rowCount } = await pool.query(
     `UPDATE invoices
-     SET status = 'sent', sent_at = now(), updated_by = $2, updated_at = now()
-     WHERE id = $1 AND status = 'approved'`,
+     SET status = 'sent',
+         sent_at = now(),
+         approved_at = COALESCE(approved_at, now()),
+         approved_by = COALESCE(approved_by, $2),
+         updated_by = $2,
+         updated_at = now()
+     WHERE id = $1 AND status IN ('draft', 'pending_manager_approval')`,
     [invoiceId, actorId],
   )
   return rowCount > 0
@@ -232,7 +237,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         continue
       }
 
-      if (invoice.status !== 'approved') {
+      if (!['draft', 'pending_manager_approval'].includes(invoice.status)) {
         throw new Error(`Invoice cannot be sent from status ${invoice.status}`)
       }
 

@@ -5,11 +5,8 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createCustomer } from '../../server/services/customers.service'
-import {
-  approveInvoice,
-  createInvoice,
-  sendInvoice,
-} from '../../server/services/invoices.service'
+import { createInvoice } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import {
   getAgingReport,
   getMechanicProductivityReport,
@@ -62,8 +59,7 @@ describe('P3-06 reports module', () => {
       invoiceDate: '2026-07-01',
       dueDate: '2026-07-31',
     }, ACTOR)
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
 
     const report = await getRevenueReport(db, { from: '2026-07-01', to: '2026-07-31' })
     expect(report.summary.invoiceCount).toBeGreaterThanOrEqual(1)

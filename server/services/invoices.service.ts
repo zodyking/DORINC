@@ -36,19 +36,21 @@ export class InvoicesServiceError extends Error {
 
 /** Allowed status transitions (SPEC §6.5). */
 export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
-  draft: ['pending_manager_approval', 'approved'],
-  pending_manager_approval: ['approved'],
-  approved: ['sent'],
+  draft: ['pending_manager_approval', 'sent'],
+  pending_manager_approval: ['sent'],
   sent: ['paid'],
   paid: [],
   void: [],
 }
 
-/** Only draft invoices may be edited (finalized = approved and beyond). */
+/** Only draft invoices may be edited. */
 export const DRAFT_EDITABLE_STATUSES: InvoiceStatus[] = ['draft']
 
 /** Statuses eligible for correction via revision. */
-export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['approved', 'sent', 'paid']
+export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
+
+/** Statuses from which an invoice may be emailed to the customer. */
+export const INVOICE_SENDABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval']
 
 export interface CreateInvoiceInput {
   customerId?: string
@@ -478,11 +480,11 @@ export async function getInvoiceListStats(db: Db): Promise<InvoiceListStats> {
         and ${invoices.balanceDue} > 0
     )`,
     outstandingCount: sql<number>`count(*) filter (
-      where ${invoices.status} in ('sent', 'approved')
+      where ${invoices.status} = 'sent'
         and ${invoices.balanceDue} > 0
     )`,
     outstandingTotal: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
-      where ${invoices.status} in ('sent', 'approved')
+      where ${invoices.status} = 'sent'
         and ${invoices.balanceDue} > 0
     ), 0)`,
     overdueTotal: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
@@ -883,10 +885,6 @@ export async function transitionInvoice(
     throw new InvoicesServiceError('INVALID_TRANSITION')
   }
 
-  if (to === 'approved') {
-    await recalculateInvoiceTotals(db, id, actorId)
-  }
-
   const changes: Record<string, unknown> = {
     status: to,
     updatedBy: actorId,
@@ -898,11 +896,12 @@ export async function transitionInvoice(
     changes.submittedForApprovalBy = actorId
   }
 
-  if (to === 'approved') {
+  if (to === 'sent') {
+    if (before.status === 'draft' || before.status === 'pending_manager_approval') {
+      await recalculateInvoiceTotals(db, id, actorId)
+    }
     changes.approvedBy = actorId
     changes.approvedAt = new Date()
-  }
-  if (to === 'sent') {
     changes.sentAt = new Date()
   }
   if (to === 'paid') {
@@ -930,6 +929,29 @@ export async function transitionInvoice(
   return { invoice: updated!, before }
 }
 
+export async function assertInvoiceSendable(
+  db: Db,
+  invoice: Awaited<ReturnType<typeof getInvoice>>,
+  actorAccountType?: AccountType | string | null,
+) {
+  if (!INVOICE_SENDABLE_STATUSES.includes(invoice.status)) {
+    throw new InvoicesServiceError('INVALID_TRANSITION')
+  }
+
+  if (invoice.status === 'pending_manager_approval') {
+    if (!canManagerApproveInvoices(actorAccountType)) {
+      throw new InvoicesServiceError('MANAGER_APPROVAL_REQUIRED')
+    }
+    return
+  }
+
+  const threshold = await getManagerApprovalThreshold(db)
+  const requiresManager = compareMoney(invoice.total, threshold) >= 0
+  if (requiresManager && !canManagerApproveInvoices(actorAccountType)) {
+    throw new InvoicesServiceError('MANAGER_APPROVAL_REQUIRED')
+  }
+}
+
 export async function approveInvoice(
   db: Db,
   id: string,
@@ -938,13 +960,6 @@ export async function approveInvoice(
 ) {
   const before = await getInvoice(db, id)
 
-  if (before.status === 'pending_manager_approval') {
-    if (!canManagerApproveInvoices(actorAccountType)) {
-      throw new InvoicesServiceError('MANAGER_APPROVAL_REQUIRED')
-    }
-    return transitionInvoice(db, id, 'approved', actorId)
-  }
-
   if (before.status !== 'draft') {
     throw new InvoicesServiceError('INVALID_TRANSITION')
   }
@@ -952,24 +967,33 @@ export async function approveInvoice(
   const threshold = await getManagerApprovalThreshold(db)
   const requiresManager = compareMoney(before.total, threshold) >= 0
 
-  if (requiresManager && !canManagerApproveInvoices(actorAccountType)) {
-    const result = await transitionInvoice(db, id, 'pending_manager_approval', actorId)
-    try {
-      const { notifyInvoicePendingApproval } = await import('./staff-notifications.service')
-      await notifyInvoicePendingApproval(db, id, actorId)
-    }
-    catch (err) {
-      console.warn('[mail] invoice pending approval notification failed:', (err as Error).message)
-    }
-    return result
+  if (!requiresManager) {
+    throw new InvoicesServiceError('INVALID_TRANSITION')
   }
 
-  return transitionInvoice(db, id, 'approved', actorId)
+  if (canManagerApproveInvoices(actorAccountType)) {
+    throw new InvoicesServiceError('INVALID_TRANSITION')
+  }
+
+  const result = await transitionInvoice(db, id, 'pending_manager_approval', actorId)
+  try {
+    const { notifyInvoicePendingApproval } = await import('./staff-notifications.service')
+    await notifyInvoicePendingApproval(db, id, actorId)
+  }
+  catch (err) {
+    console.warn('[mail] invoice pending approval notification failed:', (err as Error).message)
+  }
+  return result
 }
 
-export async function sendInvoice(db: Db, id: string, actorId: string) {
+export async function sendInvoice(
+  db: Db,
+  id: string,
+  actorId: string,
+  actorAccountType?: AccountType | string | null,
+) {
   const { queueInvoiceSend } = await import('./invoice-send.service')
-  const result = await queueInvoiceSend(db, id, actorId)
+  const result = await queueInvoiceSend(db, id, actorId, undefined, actorAccountType)
   return { invoice: result.invoice, before: result.invoice }
 }
 

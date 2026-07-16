@@ -104,7 +104,6 @@ const PAYMENT_TERMS_LABELS: Record<string, string> = {
 const INVOICE_STATUS_LABELS: Record<string, string> = {
   draft: 'DRAFT',
   pending_manager_approval: 'PENDING APPROVAL',
-  approved: 'APPROVED',
   sent: 'SENT',
   paid: 'PAID',
   void: 'VOID',

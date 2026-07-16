@@ -17,7 +17,6 @@ export const serviceLogStatusSchema = z.enum([
   'ready_for_review',
   'in_review',
   'needs_info',
-  'approved_for_invoice',
   'converted_to_invoice',
   'rejected',
   'archived',

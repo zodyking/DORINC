@@ -21,16 +21,17 @@ const canSendPerm = computed(() => auth.can('invoices.send.all'))
 const canUpdatePerm = computed(() => auth.can('invoices.update.all'))
 const canDeletePerm = computed(() => auth.can('deletion_requests.submit.all'))
 
-const sendAllowed = computed(() => canSendPerm.value && props.status === 'approved')
+const sendAllowed = computed(() =>
+  canSendPerm.value && (props.status === 'draft' || props.status === 'pending_manager_approval'),
+)
 const editAllowed = computed(() => canUpdatePerm.value && props.status === 'draft')
 const deleteAllowed = computed(() => canDeletePerm.value && props.status !== 'void' && props.status !== 'paid')
 
 const sendTitle = computed(() => {
   if (!canSendPerm.value) return 'You do not have permission to send invoices'
   if (sendAllowed.value) return 'Email invoice PDF to customer'
+  if (props.status === 'draft' || props.status === 'pending_manager_approval') return 'Send invoice to customer'
   if (props.status === 'sent' || props.status === 'paid') return 'Invoice already sent'
-  if (props.status === 'draft') return 'Approve the invoice before sending'
-  if (props.status === 'pending_manager_approval') return 'Awaiting manager approval'
   if (props.status === 'void') return 'Void invoices cannot be sent'
   return 'Send is not available for this invoice'
 })

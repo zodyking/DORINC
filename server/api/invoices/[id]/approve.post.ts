@@ -13,9 +13,7 @@ export default defineEventHandler(async (event) => {
   try {
     const { invoice, before } = await approveInvoice(useDb(), id, actor.id, actor.accountType)
 
-    const auditAction = invoice.status === 'pending_manager_approval'
-      ? 'invoices.submit_for_manager_approval'
-      : 'invoices.approve'
+    const auditAction = 'invoices.submit_for_manager_approval'
 
     await writeAudit(event, {
       entityType: 'invoice',
@@ -42,7 +40,7 @@ export default defineEventHandler(async (event) => {
         throw apiError(event, 'FORBIDDEN', 'Manager approval is required for this invoice')
       }
       if (err.code === 'INVALID_TRANSITION') {
-        throw apiError(event, 'CONFLICT', 'This invoice cannot be approved from its current status')
+        throw apiError(event, 'CONFLICT', 'This invoice cannot be submitted for manager approval from its current status')
       }
     }
     throw err

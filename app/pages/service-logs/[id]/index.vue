@@ -333,22 +333,13 @@ const pill = computed(() => log.value ? serviceLogStatusPill(log.value.status) :
           Reject
         </button>
         <button
-          v-if="canReview && ['in_review', 'ready_for_review'].includes(log.status)"
-          class="btn"
-          type="button"
-          :disabled="busy"
-          @click="changeStatus('approved_for_invoice')"
-        >
-          Approve for invoice
-        </button>
-        <button
-          v-if="canConvert && log.status === 'approved_for_invoice'"
+          v-if="canConvert && log.status === 'in_review'"
           class="btn primary"
           type="button"
           :disabled="busy"
           @click="convertToInvoice"
         >
-          Convert to invoice
+          Create invoice
         </button>
         <NuxtLink
           v-if="log.status === 'converted_to_invoice' && log.invoiceId"

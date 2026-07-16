@@ -17,12 +17,11 @@ import { vehicles } from '../../server/db/schema/vehicles'
 import { createCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
   getInvoice,
   listInvoiceLineItems,
-  sendInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import {
   approveInvoiceChangeRequest,
   approveServiceRequest,
@@ -94,8 +93,7 @@ async function seedSentInvoice() {
     lineType: 'labor',
     taxable: true,
   }, ACTOR)
-  await approveInvoice(db, invoice.id, ACTOR)
-  await sendInvoice(db, invoice.id, ACTOR)
+  await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
   sourceInvoiceId = invoice.id
   createdInvoiceIds.push(invoice.id)
 }

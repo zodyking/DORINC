@@ -10,7 +10,6 @@ import { createCatalogItem, createCategory } from '../../server/services/catalog
 import { createCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
   createInvoiceRevision,
   deleteInvoiceLineItem,
@@ -19,7 +18,6 @@ import {
   listInvoiceLineItems,
   markInvoicePaid,
   recalculateInvoiceTotals,
-  sendInvoice,
   transitionInvoice,
   updateInvoiceDraft,
   updateInvoiceLineItem,
@@ -31,7 +29,7 @@ import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { users } from '../../server/db/schema/auth'
-import { flushInvoiceSendPipeline } from '../helpers/invoice-send'
+import { flushInvoiceSendPipeline, sendAndDeliverInvoice } from '../helpers/invoice-send'
 
 config()
 
@@ -251,7 +249,7 @@ describe('P1-21 draft editing + line item CRUD', () => {
 
   it('rejects edits on finalized invoices', async () => {
     const invoice = await draftWithLine()
-    await approveInvoice(db, invoice.id, ACTOR)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
     await expect(updateInvoiceDraft(db, invoice.id, { poNumber: 'X' }, ACTOR))
       .rejects.toThrow('NOT_EDITABLE')
     const lines = await listInvoiceLineItems(db, invoice.id)
@@ -269,16 +267,12 @@ describe('P1-21 draft editing + line item CRUD', () => {
 })
 
 describe('P1-21 status transitions (SPEC §6.5)', () => {
-  it('walks draft → approved → sent → paid', async () => {
+  it('walks draft → sent → paid', async () => {
     const invoice = await draftWithLine()
-    const { invoice: approved } = await approveInvoice(db, invoice.id, ACTOR)
-    expect(approved.status).toBe('approved')
-    expect(approved.approvedAt).not.toBeNull()
-
-    await sendInvoice(db, invoice.id, ACTOR)
-    const sent = await flushInvoiceSendPipeline(pool, db, invoice.id)
+    const sent = await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
     expect(sent.status).toBe('sent')
     expect(sent.sentAt).not.toBeNull()
+    expect(sent.approvedAt).not.toBeNull()
 
     const { invoice: paid } = await markInvoicePaid(db, invoice.id, ACTOR)
     expect(paid.status).toBe('paid')
@@ -288,14 +282,10 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
 
   it('rejects invalid transitions', async () => {
     const invoice = await draftWithLine()
-    await expect(transitionInvoice(db, invoice.id, 'sent', ACTOR))
-      .rejects.toThrow('INVALID_TRANSITION')
     await expect(transitionInvoice(db, invoice.id, 'paid', ACTOR))
       .rejects.toThrow('INVALID_TRANSITION')
 
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
-    await flushInvoiceSendPipeline(pool, db, invoice.id)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
     await markInvoicePaid(db, invoice.id, ACTOR)
     await expect(transitionInvoice(db, invoice.id, 'draft', ACTOR))
       .rejects.toThrow('INVALID_TRANSITION')
@@ -303,9 +293,7 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
 
   it('creates a revision from a paid invoice (original stays immutable)', async () => {
     const invoice = await draftWithLine()
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
-    await flushInvoiceSendPipeline(pool, db, invoice.id)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
     await markInvoicePaid(db, invoice.id, ACTOR)
 
     const revision = await createInvoiceRevision(db, invoice.id, ACTOR)
@@ -327,8 +315,7 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
 
   it('records partial payment and keeps sent status until fully paid (P1-25)', async () => {
     const invoice = await draftWithLine()
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
 
     const sent = await getInvoiceDetail(db, invoice.id)
     const partial = '100.00'
@@ -347,8 +334,7 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
 
   it('rejects overpayment (P1-25)', async () => {
     const invoice = await draftWithLine()
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
     const sent = await getInvoiceDetail(db, invoice.id)
 
     await expect(markInvoicePaid(db, invoice.id, ACTOR, {

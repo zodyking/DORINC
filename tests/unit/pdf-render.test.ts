@@ -36,7 +36,7 @@ describe('document PDF payload', () => {
     invoiceNumberFormatted: 'INV-000081',
     invoiceDate: '2026-07-08',
     paymentTerms: 'due_on_receipt',
-    status: 'approved',
+    status: 'sent',
     complaint: 'Engine noise',
     customerName: 'Jane Doe',
     customerSnapshot: {

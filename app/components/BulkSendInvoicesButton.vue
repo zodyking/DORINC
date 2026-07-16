@@ -82,7 +82,7 @@ const {
   key: 'bulk-send-invoices',
   query: computed(() => ({
     customerId: customerId.value || undefined,
-    status: 'approved',
+    status: 'draft',
     pageSize: 100,
     sort: 'newest',
   })),

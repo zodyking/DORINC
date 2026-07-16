@@ -18,10 +18,7 @@ import {
   getEstimateDetail,
   sendEstimate,
 } from '../../server/services/estimates.service'
-import {
-  approveInvoice,
-  sendInvoice,
-} from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { createPortalUser } from '../../server/services/portal.service'
 import {
   getAgingReport,
@@ -144,11 +141,8 @@ describe('P3-14 Phase 3 gate — estimate + report E2E', () => {
     expect(invoice.estimateId).toBe(estimate.id)
     expect(invoice.status).toBe('draft')
 
-    const finalized = await approveInvoice(db, invoice.id, ACTOR, 'manager')
-    expect(finalized.invoice.status).toBe('approved')
-
-    const mailed = await sendInvoice(db, finalized.invoice.id, ACTOR)
-    expect(mailed.invoice.status).toBe('sent')
+    const mailed = await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR, 'manager')
+    expect(mailed.status).toBe('sent')
 
     const revenue = await getRevenueReport(db, { from: '2026-07-01', to: '2026-07-31' })
     expect(revenue.summary.invoiceCount).toBeGreaterThanOrEqual(1)

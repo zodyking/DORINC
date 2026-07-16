@@ -13,10 +13,10 @@ import { vehicles } from '../../server/db/schema/vehicles'
 import { seedInvoiceTemplates } from '../../server/db/seed-invoice-templates'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
-  sendInvoice,
+  transitionInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { createCustomer } from '../../server/services/customers.service'
 import { generateInvoicePdf } from '../../server/services/invoice-pdf.service'
 import {
@@ -108,8 +108,7 @@ async function seedSentInvoice() {
     sortOrder: 1,
   }, ACTOR)
 
-  await approveInvoice(db, invoice.id, ACTOR)
-  await sendInvoice(db, invoice.id, ACTOR)
+  await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
   invoiceAId = invoice.id
   return invoice.id
 }
@@ -193,8 +192,7 @@ describe('P2-05 portal invoice PDF download (IDOR)', () => {
       invoiceDate: '2026-07-09',
       creationSource: 'blank',
     }, ACTOR)
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
+    await transitionInvoice(db, invoice.id, 'sent', ACTOR)
 
     await expect(getPortalInvoicePdfDownload(db, customerA.id, invoice.id))
       .rejects.toMatchObject({ code: 'NO_PDF' })

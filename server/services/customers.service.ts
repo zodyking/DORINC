@@ -285,17 +285,17 @@ export async function listCustomers(db: Db, filter: ListCustomersFilter) {
     : []
   const vehiclesByCustomer = new Map(vehicleCounts.map(v => [v.customerId, Number(v.value)]))
 
-  // Invoice totals for the page — open = sent/approved with balance due > 0 (same rule as invoice KPIs).
+  // Invoice totals for the page — open = sent with balance due > 0 (same rule as invoice KPIs).
   const invoiceStats = ids.length
     ? await db.select({
         customerId: invoices.customerId,
         invoiceCount: count(),
         openInvoiceCount: sql<number>`count(*) filter (
-          where ${invoices.status} in ('sent', 'approved')
+          where ${invoices.status} = 'sent'
             and ${invoices.balanceDue} > 0
         )`,
         openBalance: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
-          where ${invoices.status} in ('sent', 'approved')
+          where ${invoices.status} = 'sent'
             and ${invoices.balanceDue} > 0
         ), 0)`,
         lifetimeBilled: sql<string>`coalesce(sum(${invoices.total}) filter (
@@ -364,11 +364,11 @@ export async function getCustomerBillingSummary(db: Db, customerId: string) {
   const [row] = await db.select({
     invoiceCount: count(),
     openInvoiceCount: sql<number>`count(*) filter (
-      where ${invoices.status} in ('sent', 'approved')
+      where ${invoices.status} = 'sent'
         and ${invoices.balanceDue} > 0
     )`,
     openBalance: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
-      where ${invoices.status} in ('sent', 'approved')
+      where ${invoices.status} = 'sent'
         and ${invoices.balanceDue} > 0
     ), 0)`,
     lifetimeBilled: sql<string>`coalesce(sum(${invoices.total}) filter (

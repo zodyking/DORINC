@@ -330,7 +330,7 @@ export async function getTemplatePreviewInvoice(db: Db) {
     .from(invoices)
     .where(and(
       isNull(invoices.archivedAt),
-      inArray(invoices.status, ['sent', 'paid', 'approved']),
+      inArray(invoices.status, ['sent', 'paid']),
     ))
     .orderBy(desc(invoices.updatedAt), desc(invoices.createdAt))
     .limit(1)

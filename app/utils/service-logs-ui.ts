@@ -5,7 +5,7 @@ import { vehicleSub, vehicleTag, type VehicleDisplay } from './vehicles-ui'
 
 export type ServiceLogStatus
   = 'uploaded' | 'ocr_processing' | 'ai_processing' | 'ready_for_review' | 'in_review'
-    | 'needs_info' | 'approved_for_invoice' | 'converted_to_invoice' | 'rejected' | 'archived'
+    | 'needs_info' | 'converted_to_invoice' | 'rejected' | 'archived'
 
 export const WORK_TYPE_LABELS: Record<string, string> = {
   preventive_maintenance: 'Preventive maintenance',
@@ -36,8 +36,6 @@ export function serviceLogStatusPill(status: ServiceLogStatus): { cls: string, l
       return { cls: 'pill warn', label: 'Awaiting review' }
     case 'needs_info':
       return { cls: 'pill warn', label: 'Needs info' }
-    case 'approved_for_invoice':
-      return { cls: 'pill ok', label: 'Approved for invoice' }
     case 'converted_to_invoice':
       return { cls: 'pill ok', label: 'Invoiced' }
     case 'rejected':

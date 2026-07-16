@@ -9,7 +9,8 @@ import { accountTypes, users } from '../../../server/db/schema/auth'
 import { approveUser } from '../../../server/services/users.service'
 import { createCustomer } from '../../../server/services/customers.service'
 import { createVehicle } from '../../../server/services/vehicles.service'
-import { approveInvoice, createInvoiceDraft, sendInvoice } from '../../../server/services/invoices.service'
+import { createInvoiceDraft } from '../../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../../helpers/invoice-send'
 import { createServiceLog } from '../../../server/services/service-logs.service'
 import { createPortalUser } from '../../../server/services/portal.service'
 import { createEstimate, sendEstimate } from '../../../server/services/estimates.service'
@@ -146,8 +147,7 @@ export async function ensureE2EFixtures(): Promise<E2EFixtures> {
     creationSource: 'blank',
   }, staffUser.id)
 
-  await approveInvoice(database, invoice.id, staffUser.id, 'super_admin')
-  await sendInvoice(database, invoice.id, staffUser.id)
+  await sendAndDeliverInvoice(database, pool!, invoice.id, staffUser.id, 'super_admin')
   await sendEstimate(database, estimate.id, staffUser.id)
 
   const portalUser = await createPortalUser(database, {

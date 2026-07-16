@@ -13,10 +13,9 @@ import { vehicles } from '../../server/db/schema/vehicles'
 import { addContact, createCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
-  sendInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { rejectPortalRequest } from '../../server/services/portal-request-review.service'
 import { setPortalAccess } from '../../server/services/portal-access.service'
 import { createPortalUser, createServiceRequest } from '../../server/services/portal.service'
@@ -118,8 +117,7 @@ describe('P2-19 customer-facing email notifications', () => {
       lineType: 'labor',
       taxable: true,
     }, ACTOR)
-    await approveInvoice(db, invoice.id, ACTOR)
-    await sendInvoice(db, invoice.id, ACTOR)
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
 
     const job = await latestNotificationJob('invoice_sent')
     expect(job).toBeTruthy()

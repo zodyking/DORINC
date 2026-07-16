@@ -114,7 +114,7 @@ describe('P1-15 service logs create + read', () => {
 describe('P1-15 status transitions (SPEC §6.4)', () => {
   it('walks the happy path to converted_to_invoice', async () => {
     const log = await makeLog()
-    for (const to of ['ready_for_review', 'in_review', 'approved_for_invoice', 'converted_to_invoice'] as const) {
+    for (const to of ['ready_for_review', 'in_review', 'converted_to_invoice'] as const) {
       const { log: next } = await transitionServiceLog(db, log.id, to)
       expect(next.status).toBe(to)
     }
@@ -159,7 +159,6 @@ describe('P1-15 status transitions (SPEC §6.4)', () => {
 
     await transitionServiceLog(db, log.id, 'ready_for_review')
     await transitionServiceLog(db, log.id, 'in_review')
-    await transitionServiceLog(db, log.id, 'approved_for_invoice')
     await transitionServiceLog(db, log.id, 'converted_to_invoice')
     await expect(transitionServiceLog(db, log.id, 'ready_for_review'))
       .rejects.toThrow('INVALID_TRANSITION')
@@ -208,7 +207,7 @@ describe('P1-15 updates + list scope', () => {
     const done = await makeLog()
     await transitionServiceLog(db, done.id, 'ready_for_review')
     await transitionServiceLog(db, done.id, 'in_review')
-    await transitionServiceLog(db, done.id, 'approved_for_invoice')
+    await convertServiceLogToInvoice(db, done.id, MECHANIC)
 
     const queue = await listServiceLogs(db, {
       queue: 'review',
@@ -243,7 +242,6 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
     const log = await makeLog()
     await transitionServiceLog(db, log.id, 'ready_for_review')
     await transitionServiceLog(db, log.id, 'in_review')
-    await transitionServiceLog(db, log.id, 'approved_for_invoice')
     return log
   }
 

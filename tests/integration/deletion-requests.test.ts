@@ -20,7 +20,6 @@ import {
 } from '../../server/services/deletion-requests.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
   createInvoice,
   getInvoice,
 } from '../../server/services/invoices.service'
@@ -147,7 +146,6 @@ describe('deletion request workflow', () => {
       lineType: 'labor',
       taxable: true,
     }, ACTOR)
-    await approveInvoice(db, paidInvoice.id, ACTOR)
 
     await db.update(invoices)
       .set({ status: 'paid', amountPaid: '100.00', balanceDue: '0.00' })

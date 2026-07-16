@@ -18,8 +18,8 @@ import {
 import type { PortalInvoiceChangeRequestInput, PortalVehicleCorrectionInput } from '../../shared/validators/portal'
 import type { InvoiceVehicleSnapshot } from '../db/schema/invoices'
 
-/** Customer-visible invoice statuses — drafts/voids are staff-only. */
-const PORTAL_INVOICE_STATUSES = ['approved', 'sent', 'paid'] as const
+/** Customer-visible invoice statuses — only mailed invoices appear in the portal. */
+const PORTAL_INVOICE_STATUSES = ['sent', 'paid'] as const
 
 export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM' | 'NO_VEHICLE' | 'INVALID_CORRECTION'
 
@@ -637,7 +637,7 @@ export async function getPortalDashboard(db: Db, customerId: string, userName: s
 
   const outstandingWhere = and(
     baseInvoice,
-    or(eq(invoices.status, 'sent'), eq(invoices.status, 'approved')),
+    eq(invoices.status, 'sent'),
     gt(invoices.balanceDue, '0'),
   )
   const [outstanding] = await db.select({

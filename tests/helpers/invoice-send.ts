@@ -6,6 +6,19 @@ import { processPdfRenderJobById } from '../../server/workers/handlers/pdf-rende
 // @ts-expect-error plain-JS worker handler has no type declarations
 import { processInvoiceSendJobs } from '../../server/workers/handlers/invoice-send.mjs'
 
+/** Queue send and run workers until the invoice is marked sent (integration tests). */
+export async function sendAndDeliverInvoice(
+  db: Db,
+  pool: Pool,
+  invoiceId: string,
+  actorId: string,
+  actorAccountType?: string | null,
+) {
+  const { sendInvoice } = await import('../../server/services/invoices.service')
+  await sendInvoice(db, invoiceId, actorId, actorAccountType)
+  return flushInvoiceSendPipeline(pool, db, invoiceId)
+}
+
 /** Run pdf-worker + general worker steps until invoice reaches sent (integration tests). */
 export async function flushInvoiceSendPipeline(
   pool: Pool,

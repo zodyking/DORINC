@@ -411,7 +411,7 @@ async function auditorDashboard(db: Db): Promise<{
     .innerJoin(customers, eq(invoices.customerId, customers.id))
     .where(and(
       isNull(invoices.archivedAt),
-      inArray(invoices.status, ['sent', 'paid', 'approved']),
+      inArray(invoices.status, ['sent', 'paid']),
     ))
     .orderBy(desc(invoices.invoiceDate))
     .limit(8)

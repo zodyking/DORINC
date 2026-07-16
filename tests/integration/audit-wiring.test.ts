@@ -154,7 +154,7 @@ describe('P1-32 Phase 1 audit wiring', () => {
       { entityType: 'catalog_category', entityId: category.id, action: 'catalog.categories.create' },
       { entityType: 'catalog_item', entityId: catalogItem.id, action: 'catalog.items.create' },
       { entityType: 'service_log', entityId: serviceLog.id, action: 'service_logs.create' },
-      { entityType: 'service_log', entityId: serviceLog.id, action: 'service_logs.status.approved_for_invoice' },
+      { entityType: 'service_log', entityId: serviceLog.id, action: 'service_logs.status.in_review' },
       { entityType: 'invoice', entityId: invoice.id, action: 'invoices.create' },
       { entityType: 'invoice', entityId: invoice.id, action: 'invoices.generate_pdf' },
       { entityType: 'invoice', entityId: invoice.id, action: 'invoices.pdf_download' },

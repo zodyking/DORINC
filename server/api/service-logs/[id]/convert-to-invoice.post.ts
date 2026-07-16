@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof ServiceLogsServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Service log not found')
       if (err.code === 'INVALID_TRANSITION') {
-        throw apiError(event, 'CONFLICT', 'Only logs approved for invoice can be converted')
+        throw apiError(event, 'CONFLICT', 'Only service logs in review can be converted to an invoice')
       }
       if (err.code === 'ALREADY_CONVERTED') {
         throw apiError(event, 'CONFLICT', 'This service log has already been converted to an invoice')

@@ -15,7 +15,9 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
     case 'NOT_FOUND':
       throw apiError(event, 'NOT_FOUND', 'Invoice not found')
     case 'INVALID_TRANSITION':
-      throw apiError(event, 'CONFLICT', 'Only approved invoices can be sent')
+      throw apiError(event, 'CONFLICT', 'Only draft or manager-approved invoices can be sent')
+    case 'MANAGER_APPROVAL_REQUIRED':
+      throw apiError(event, 'FORBIDDEN', 'Manager approval is required before sending this invoice')
     case 'NO_RECIPIENT':
       throw apiError(event, 'VALIDATION_ERROR', 'No billing email is on file for this customer')
     case 'ALREADY_QUEUED':
@@ -37,7 +39,7 @@ export default defineEventHandler(async (event) => {
   const overrides = parsedBody.success ? parsedBody.data : {}
 
   try {
-    const result = await queueInvoiceSend(useDb(), id, actor.id, overrides)
+    const result = await queueInvoiceSend(useDb(), id, actor.id, overrides, actor.accountType)
 
     await writeAudit(event, {
       entityType: 'invoice',

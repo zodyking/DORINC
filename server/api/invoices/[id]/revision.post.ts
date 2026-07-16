@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
       if (err.code === 'INVALID_TRANSITION') {
-        throw apiError(event, 'CONFLICT', 'A revision can only be created from an approved, sent, or paid invoice')
+        throw apiError(event, 'CONFLICT', 'A revision can only be created from a sent or paid invoice')
       }
     }
     throw err

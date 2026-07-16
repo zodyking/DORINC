@@ -15,7 +15,6 @@ import { estimates } from './estimates'
 export const INVOICE_STATUSES = [
   'draft',
   'pending_manager_approval',
-  'approved',
   'sent',
   'paid',
   'void',

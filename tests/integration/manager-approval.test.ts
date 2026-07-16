@@ -10,10 +10,12 @@ import {
   approveInvoice,
   canManagerApproveInvoices,
   createInvoice,
+  sendInvoice,
 } from '../../server/services/invoices.service'
 import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { customers } from '../../server/db/schema/customers'
 import { users } from '../../server/db/schema/auth'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 
 config()
 
@@ -67,18 +69,18 @@ describe('P3-13 manager approval workflow', () => {
     expect(invoice.submittedForApprovalAt).toBeTruthy()
   })
 
-  it('lets managers finalize pending_manager_approval invoices', async () => {
+  it('lets managers send pending_manager_approval invoices', async () => {
     const draft = await highValueDraft()
     await approveInvoice(db, draft.id, ACTOR, 'accountant')
-    const { invoice } = await approveInvoice(db, draft.id, ACTOR, 'manager')
-    expect(invoice.status).toBe('approved')
-    expect(invoice.approvedAt).toBeTruthy()
+    const sent = await sendAndDeliverInvoice(db, pool, draft.id, ACTOR, 'manager')
+    expect(sent.status).toBe('sent')
+    expect(sent.approvedAt).toBeTruthy()
   })
 
-  it('lets managers approve high-value drafts directly', async () => {
+  it('lets managers send high-value drafts directly', async () => {
     const draft = await highValueDraft()
-    const { invoice } = await approveInvoice(db, draft.id, ACTOR, 'manager')
-    expect(invoice.status).toBe('approved')
+    const sent = await sendAndDeliverInvoice(db, pool, draft.id, ACTOR, 'manager')
+    expect(sent.status).toBe('sent')
   })
 
   it('identifies manager approval account types', () => {

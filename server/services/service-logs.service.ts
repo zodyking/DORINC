@@ -26,9 +26,8 @@ export const SERVICE_LOG_TRANSITIONS: Record<ServiceLogStatus, ServiceLogStatus[
   ocr_processing: ['ai_processing', 'ready_for_review'],
   ai_processing: ['ready_for_review'],
   ready_for_review: ['in_review', 'archived'],
-  in_review: ['needs_info', 'approved_for_invoice', 'rejected', 'ready_for_review'],
+  in_review: ['needs_info', 'rejected', 'ready_for_review', 'converted_to_invoice'],
   needs_info: ['ready_for_review', 'in_review', 'archived'],
-  approved_for_invoice: ['converted_to_invoice', 'in_review'],
   rejected: ['ready_for_review', 'archived'],
   converted_to_invoice: [],
   archived: ['ready_for_review'],
@@ -221,7 +220,7 @@ export async function transitionServiceLog(
   return { log: updated!, before }
 }
 
-/** Creates a draft invoice from an approved log and marks the log converted (SPEC §6.4, §6.5). */
+/** Creates a draft invoice from a reviewed log and marks the log converted (SPEC §6.4, §6.5). */
 export async function convertServiceLogToInvoice(
   db: Db,
   id: string,
@@ -233,7 +232,7 @@ export async function convertServiceLogToInvoice(
   if (before.invoiceId || before.status === 'converted_to_invoice') {
     throw new ServiceLogsServiceError('ALREADY_CONVERTED')
   }
-  if (before.status !== 'approved_for_invoice') {
+  if (before.status !== 'in_review') {
     throw new ServiceLogsServiceError('INVALID_TRANSITION')
   }
 

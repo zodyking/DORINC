@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof InvoicePdfServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
       if (err.code === 'NOT_FINALIZED') {
-        throw apiError(event, 'CONFLICT', 'Official PDFs can only be generated for approved, sent, or paid invoices')
+        throw apiError(event, 'CONFLICT', 'Official PDFs can only be generated for sent or paid invoices')
       }
     }
     throw err

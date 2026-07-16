@@ -142,7 +142,7 @@ const history = computed(() =>
 const sendDelivery = computed(() => data.value?.sendDelivery)
 const lines = computed(() => invoice.value?.lineItems ?? [])
 const isPdfEligible = computed(() =>
-  !!invoice.value && ['approved', 'sent', 'paid'].includes(invoice.value.status),
+  !!invoice.value && ['sent', 'paid'].includes(invoice.value.status),
 )
 
 const loadErrorMessage = computed(() => {
@@ -154,13 +154,20 @@ const loadErrorMessage = computed(() => {
 })
 
 const sendInProgress = computed(() =>
-  invoice.value?.status === 'approved'
+  !!invoice.value
+  && ['draft', 'pending_manager_approval'].includes(invoice.value.status)
   && sendDelivery.value
   && ['queued', 'processing'].includes(sendDelivery.value.status),
 )
 const sendFailed = computed(() =>
-  invoice.value?.status === 'approved'
+  !!invoice.value
+  && ['draft', 'pending_manager_approval'].includes(invoice.value.status)
   && sendDelivery.value?.status === 'failed',
+)
+
+const canSendNow = computed(() =>
+  !!invoice.value
+  && (invoice.value.status === 'draft' || invoice.value.status === 'pending_manager_approval'),
 )
 
 const savedNotice = ref('')
@@ -359,25 +366,16 @@ const summaryRows = computed(() => {
           Send reminder
         </button>
         <button
-          v-if="canApprove && invoice.status === 'draft'"
+          v-if="canApprove && !canManagerApprove && invoice.status === 'draft'"
           type="button"
           class="btn"
           :disabled="busy"
           @click="runAction(`/api/invoices/${id}/approve`)"
         >
-          Approve
-        </button>
-        <button
-          v-if="canApprove && canManagerApprove && invoice.status === 'pending_manager_approval'"
-          type="button"
-          class="btn primary"
-          :disabled="busy"
-          @click="runAction(`/api/invoices/${id}/approve`)"
-        >
-          Manager approve
+          Submit for manager approval
         </button>
         <SendInvoiceButton
-          v-if="canSend && invoice.status === 'approved' && !sendInProgress"
+          v-if="canSend && canSendNow && !sendInProgress"
           :invoice-id="id"
           :disabled="busy"
           @sent="refresh()"

@@ -17,9 +17,9 @@ import {
 } from '../../server/services/invoice-templates.service'
 import { users } from '../../server/db/schema/auth'
 import {
-  approveInvoice,
   createInvoice,
 } from '../../server/services/invoices.service'
+import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { createCustomer } from '../../server/services/customers.service'
 import { createVehicle } from '../../server/services/vehicles.service'
 import { customers } from '../../server/db/schema/customers'
@@ -112,7 +112,7 @@ describe('P3-05 advanced template designer', () => {
       vehicleId: veh.id,
       invoiceDate: '2026-07-08',
     }, actor!.id)
-    await approveInvoice(db, inv.id, actor!.id)
+    await sendAndDeliverInvoice(db, pool, inv.id, actor!.id)
 
     const { template } = await seedInvoiceTemplates(db)
     const bladeSource = await readBuiltInInvoiceBladeSource()

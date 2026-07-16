@@ -13,7 +13,6 @@ export const SERVICE_LOG_STATUSES = [
   'ready_for_review',
   'in_review',
   'needs_info',
-  'approved_for_invoice',
   'converted_to_invoice',
   'rejected',
   'archived',

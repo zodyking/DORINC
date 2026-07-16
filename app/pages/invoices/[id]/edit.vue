@@ -795,7 +795,7 @@ const aiPopStyle = computed(() => {
           <InvoicePdfActions
             :invoice-id="id"
             :invoice-label="invoice.invoiceNumberFormatted"
-            :allow-official-download="['approved', 'sent', 'paid'].includes(invoice.status)"
+            :allow-official-download="['sent', 'paid'].includes(invoice.status)"
             :can-generate-pdf="auth.can('invoices.generate_pdf.all')"
           />
           <ReassignEntityButton

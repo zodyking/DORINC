@@ -55,7 +55,7 @@ describe('P1-28 pdf render pipeline', () => {
       invoiceNumberFormatted: `INV-SMOKE-${stamp}`,
       invoiceDate: '2026-07-08',
       paymentTerms: 'due_on_receipt',
-      status: 'approved',
+      status: 'sent',
       complaint: `Smoke test ${stamp}`,
       customerName: owner.displayName,
       customerSnapshot: {

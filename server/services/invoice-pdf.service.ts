@@ -32,7 +32,7 @@ export class InvoicePdfServiceError extends Error {
 }
 
 /** Finalized invoices eligible for official PDF generation (SPEC §9). */
-export const PDF_ELIGIBLE_STATUSES: InvoiceStatus[] = ['approved', 'sent', 'paid']
+export const PDF_ELIGIBLE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
 
 function pdfOptionsFromTemplate(template: InvoicePdfTemplateSource) {
   return pdfRenderOptionsFromTemplate(template)

@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Portal request not found')
       if (err.code === 'NOT_PENDING') throw apiError(event, 'CONFLICT', 'This request has already been reviewed')
       if (err.code === 'INVALID_INVOICE') {
-        throw apiError(event, 'CONFLICT', 'A revision can only be created from an approved, sent, or paid invoice')
+        throw apiError(event, 'CONFLICT', 'A revision can only be created from a sent or paid invoice')
       }
       if (err.code === 'INVALID_CORRECTION') {
         throw apiError(event, 'VALIDATION_ERROR', 'Correction apply values do not match this request type')
