@@ -116,6 +116,8 @@ async function deleteActivePhoto() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
+  flex: 1;
 }
 
 .sl-photo-empty {

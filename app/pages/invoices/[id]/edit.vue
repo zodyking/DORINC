@@ -1237,6 +1237,12 @@ const aiPopStyle = computed(() => {
 .ed-log-photos-card {
   margin-bottom: 16px;
 }
+
+.ed-log-photos-card .cbody {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
 @media (max-width: 640px) {
   .ed-details-grid {
     grid-template-columns: 1fr;

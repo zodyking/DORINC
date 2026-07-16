@@ -409,8 +409,23 @@ section.page.active.page--invoice-pdf {
 }
 
 /* Fallback floor so the viewer never fully collapses even if flex chain breaks. */
-.page--invoice-pdf .invoice-pdf-tab {
+.page--invoice-pdf .invoice-pdf-tab,
+.page--invoice-pdf .invoice-photos-tab {
   min-height: 60vh;
+}
+
+.page--invoice-pdf .invoice-photos-tab .card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page--invoice-pdf .invoice-photos-tab .cbody {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Edit page PDF pane — override .ed-pane.active { display:block } from ledger.css. */

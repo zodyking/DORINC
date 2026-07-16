@@ -58,8 +58,6 @@ const {
   dragging,
   transformStyle,
   resetView,
-  fitToContainer,
-  observeContainer,
   zoomIn,
   zoomOut,
   onWheel,
@@ -76,7 +74,6 @@ const zoomHint = computed(() =>
 
 onMounted(() => {
   isCoarsePointer.value = window.matchMedia('(pointer: coarse)').matches
-  if (zoomEnabled.value) observeContainer()
 })
 
 watch(imageFiles, () => {
@@ -86,15 +83,6 @@ watch(imageFiles, () => {
 watch(activeFile, () => {
   resetView()
 })
-
-watch(zoomEnabled, (enabled) => {
-  if (enabled) observeContainer()
-})
-
-function onImageLoad() {
-  if (!zoomEnabled.value) return
-  fitToContainer(imageRef.value)
-}
 
 function onImageError(fileId: string) {
   const next = new Set(displayErrors.value)
@@ -195,6 +183,7 @@ function onKeydown(event: KeyboardEvent) {
         <div
           v-else-if="activeFile && activePreview"
           class="sl-gallery__zoom-wrap"
+          :class="{ 'sl-gallery__zoom-wrap--active': zoomEnabled }"
           :style="zoomEnabled ? transformStyle : undefined"
         >
           <img
@@ -203,8 +192,8 @@ function onKeydown(event: KeyboardEvent) {
             :src="activePreview"
             :alt="activeFile.originalFilename"
             class="sl-gallery__img"
+            :class="{ 'sl-gallery__img--zoomable': zoomEnabled }"
             draggable="false"
-            @load="onImageLoad"
             @error="onImageError(activeFile.id)"
           >
         </div>
@@ -288,6 +277,8 @@ function onKeydown(event: KeyboardEvent) {
   flex-direction: column;
   gap: 14px;
   outline: none;
+  min-height: 0;
+  flex: 1;
 }
 
 .sl-gallery__frame {
@@ -296,6 +287,10 @@ function onKeydown(event: KeyboardEvent) {
   overflow: hidden;
   background: #fff;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
 .sl-gallery__zoombar {
@@ -344,10 +339,12 @@ function onKeydown(event: KeyboardEvent) {
 
 .sl-gallery__stage {
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  flex: 1 1 auto;
   min-height: 300px;
   height: min(58vh, 520px);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 16px;
   overflow: hidden;
   touch-action: none;
@@ -368,24 +365,43 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .sl-gallery__zoom-wrap {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   transform-origin: center center;
   will-change: transform;
 }
 
+.sl-gallery__zoom-wrap--active {
+  width: 100%;
+  height: 100%;
+}
+
 .sl-gallery__img {
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  pointer-events: none;
+}
+
+.sl-gallery__img--zoomable {
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
-  display: block;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  pointer-events: none;
+}
+
+.sl-gallery:not(.sl-gallery--compact) .sl-gallery__img:not(.sl-gallery__img--zoomable) {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .sl-gallery--compact .sl-gallery__img {
