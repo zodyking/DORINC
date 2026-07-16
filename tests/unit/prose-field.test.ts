@@ -32,5 +32,11 @@ describe('prose field formatting', () => {
 
   it('compresses voice dictation to shorthand like blur', () => {
     expect(formatVoiceText('install stop arm rear right', 'prose')).toBe('Install Stop Arm R/R')
+    expect(formatVoiceText('replace right front headlight', 'prose')).toBe('Replace F/R Headlight')
+  })
+
+  it('capitalizes letters after periods while typing', () => {
+    expect(formatLiveFieldText('L.E.D')).toBe('L.E.D')
+    expect(formatLiveFieldText('l.e.d bulb')).toBe('L.E.D Bulb')
   })
 })

@@ -21,6 +21,10 @@ function phrasePattern(full: string): RegExp {
   return new RegExp(`\\b${words.join('\\s+')}\\b`, 'gi')
 }
 
+function reversedPhrase(full: string): string {
+  return full.split(/\s+/).reverse().join(' ')
+}
+
 function abbrPattern(abbr: string): RegExp {
   const [a, b] = abbr.split('/')
   return new RegExp(`\\b${a}\\s*[\\/\\-]\\s*${b}\\b`, 'gi')
@@ -32,6 +36,10 @@ export function abbreviatePhrases(value: string): string {
   const sorted = [...LOCATION_ABBREVIATIONS].sort((a, b) => b.full.length - a.full.length)
   for (const { abbr, full } of sorted) {
     out = out.replace(phrasePattern(full), abbr)
+    const reversed = reversedPhrase(full)
+    if (reversed !== full) {
+      out = out.replace(phrasePattern(reversed), abbr)
+    }
   }
   for (const { abbr } of LOCATION_ABBREVIATIONS) {
     out = out.replace(abbrPattern(abbr), abbr)

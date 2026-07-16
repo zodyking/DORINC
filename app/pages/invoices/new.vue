@@ -30,6 +30,7 @@ import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 import { invoiceWizardStepHint, invoiceWizardStepHintClass } from '~/utils/invoice-wizard-ui'
+import { useProseField } from '~/composables/useProseField'
 import {
   draftLineToWizard,
   wizardLinesToDraftLines,
@@ -112,6 +113,13 @@ const dueDate = ref(dueDateFromTerms(new Date().toISOString().slice(0, 10), 'net
 const dueDateManual = ref(false)
 const paymentTerms = ref('net_30')
 const poNumber = ref('')
+const complaint = ref('')
+
+const {
+  inputAttrs: complaintInputAttrs,
+  onInput: onComplaintInput,
+  onBlur: onComplaintBlur,
+} = useProseField(complaint, 'prose')
 
 const lines = ref<DraftLine[]>([])
 type LineEntryMode = 'guided' | 'manual' | null
@@ -229,7 +237,7 @@ watch([invoiceDate, paymentTerms], () => {
   }
 })
 
-watch([customerId, vehicleId, serviceLogId, invoiceDate, dueDate, paymentTerms, poNumber, lines], () => {
+watch([customerId, vehicleId, serviceLogId, invoiceDate, dueDate, paymentTerms, poNumber, complaint, lines], () => {
   if (!dirtyReady.value) return
   dirty.value = true
 }, { deep: true })
@@ -330,7 +338,12 @@ function onServiceLogPick(logId: string) {
   serviceLogId.value = logId
   if (!logId) return
   const log = serviceLogOptions.value.find(l => l.id === logId)
-  if (log) vehicleId.value = log.vehicleId
+  if (log) {
+    vehicleId.value = log.vehicleId
+    if (log.complaint && !complaint.value.trim()) {
+      complaint.value = log.complaint
+    }
+  }
 }
 
 function addLine() {
@@ -471,6 +484,7 @@ async function ensureDraft(): Promise<string> {
     dueDate: dueDate.value || null,
     paymentTerms: paymentTerms.value,
     poNumber: poNumber.value || null,
+    complaint: complaint.value.trim() || null,
   }
 
   if (invoiceId.value) {
@@ -746,6 +760,20 @@ async function saveDraftAndFinish() {
     <!-- Step 4: Line items -->
     <div v-show="step === 4" class="sl-panel active">
       <h3>Line items</h3>
+
+      <label class="fld inv-wizard-complaint">
+        <span>Customer complaint / symptoms</span>
+        <textarea
+          :value="complaint"
+          rows="3"
+          placeholder="What the customer reported — printed on invoice PDF"
+          v-bind="complaintInputAttrs"
+          @input="onComplaintInput"
+          @blur="onComplaintBlur"
+        />
+        <span class="help">Shown on customer-facing PDF under Symptoms / Complaints</span>
+      </label>
+
       <p v-if="!lineEntryMode" class="sl-hint">How do you want to add charges?</p>
 
       <div v-if="!lineEntryMode" class="sl-picks sl-log-modes">
@@ -1002,6 +1030,30 @@ async function saveDraftAndFinish() {
 
 .inv-wizard-steps .sl-step.done .sl-step-sub:not(.pending) {
   color: #059669;
+}
+
+.inv-wizard-complaint {
+  margin: 0 0 18px;
+}
+
+.inv-wizard-complaint textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 16px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  resize: vertical;
+  min-height: 84px;
+}
+
+.inv-wizard-complaint textarea:focus {
+  outline: none;
+  border-color: #a5b4fc;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
 .inv-wizard-error {

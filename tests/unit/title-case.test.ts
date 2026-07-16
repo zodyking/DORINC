@@ -20,6 +20,11 @@ describe('title-case format', () => {
     expect(titleCaseSegment('McDONALD')).toBe('McDONALD')
   })
 
+  it('capitalizes dotted abbreviations', () => {
+    expect(toTitleCase('l.e.d bulb')).toBe('L.E.D Bulb')
+    expect(titleCaseSegment('l.e.d')).toBe('L.E.D')
+  })
+
   it('preserves hyphenated segments', () => {
     expect(toTitleCase('mary-jane watson')).toBe('Mary-Jane Watson')
   })

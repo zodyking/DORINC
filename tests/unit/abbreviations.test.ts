@@ -7,6 +7,8 @@ describe('abbreviations', () => {
     expect(abbreviatePhrases('brake Front Left and right side')).toBe('brake F/L and R/S')
     expect(abbreviatePhrases('rear right door')).toBe('R/R door')
     expect(abbreviatePhrases('rear left mirror')).toBe('R/L mirror')
+    expect(abbreviatePhrases('Replace Right Front headlight')).toBe('Replace F/R headlight')
+    expect(abbreviatePhrases('Right Front headlight')).toBe('F/R headlight')
   })
 
   it('normalizes typed shorthand to canonical form', () => {

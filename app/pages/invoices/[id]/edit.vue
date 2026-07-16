@@ -33,6 +33,7 @@ import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
+import { useProseField } from '~/composables/useProseField'
 
 definePageMeta({ layout: 'staff' })
 
@@ -171,6 +172,17 @@ const poNumber = ref('')
 const complaint = ref('')
 const internalNotes = ref('')
 const lines = ref<LineItem[]>([])
+
+const {
+  inputAttrs: complaintInputAttrs,
+  onInput: onComplaintInput,
+  onBlur: onComplaintBlur,
+} = useProseField(complaint, 'prose')
+
+async function onComplaintFieldBlur() {
+  onComplaintBlur()
+  await patchHeader()
+}
 
 function focusLineQty(lineId: string) {
   focusVisibleLineInput(lineId, 'quantity')
@@ -917,11 +929,13 @@ const aiPopStyle = computed(() => {
                 <label class="fld">
                   Customer complaint / symptoms
                   <textarea
-                    v-model="complaint"
+                    :value="complaint"
                     rows="4"
                     placeholder="What the customer reported — printed on invoice PDF"
                     :disabled="!editable"
-                    @blur="patchHeader"
+                    v-bind="complaintInputAttrs"
+                    @input="onComplaintInput"
+                    @blur="onComplaintFieldBlur"
                   />
                   <span class="help">Shown on customer-facing PDF under Symptoms / Complaints</span>
                 </label>

@@ -2,6 +2,13 @@
 export function titleCaseSegment(segment: string): string {
   if (!segment) return ''
 
+  if (segment.includes('.')) {
+    return segment
+      .split('.')
+      .map(part => titleCaseSegment(part))
+      .join('.')
+  }
+
   const chars = [
     segment.charAt(0).toLocaleUpperCase('en-US'),
     ...segment.slice(1).toLocaleLowerCase('en-US').split(''),
