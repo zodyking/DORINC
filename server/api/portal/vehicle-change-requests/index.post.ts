@@ -1,6 +1,15 @@
-import { createVehicleChangeRequest, PortalServiceError } from '../../../services/portal.service'
+import { eq } from 'drizzle-orm'
+import { vehicles } from '../../../db/schema/vehicles'
+import {
+  createVehicleChangeRequest,
+  getPortalCustomer,
+  PortalServiceError,
+} from '../../../services/portal.service'
 import { useDb } from '../../../db/client'
 import { writeAudit } from '../../../services/audit.service'
+import { notifyCustomerChangeRequestSubmitted } from '../../../services/staff-notifications.service'
+import { buildVehicleSnapshot } from '../../../services/entity-snapshots'
+import { formatPdfVehicleUnitDisplay } from '../../../../shared/document-pdf-payload'
 import { apiError } from '../../../utils/api-error'
 import { requirePortalCustomer } from '../../../utils/require-portal'
 import { requirePermission } from '../../../utils/require-permission'
@@ -13,7 +22,9 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, portalVehicleChangeRequestSchema)
 
   try {
-    const request = await createVehicleChangeRequest(useDb(), user.customerId, user.id, body)
+    const db = useDb()
+    const request = await createVehicleChangeRequest(db, user.customerId, user.id, body)
+    const customer = await getPortalCustomer(db, user.customerId)
 
     await writeAudit(event, {
       entityType: 'vehicle_change_request',
@@ -26,6 +37,20 @@ export default defineEventHandler(async (event) => {
       },
       permissionKey: 'portal.requests.own',
     })
+
+    let vehicleLabel: string | null = null
+    const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.id, request.vehicleId)).limit(1)
+    if (vehicle) vehicleLabel = formatPdfVehicleUnitDisplay(buildVehicleSnapshot(vehicle))
+
+    void notifyCustomerChangeRequestSubmitted(db, {
+      requestId: request.id,
+      customerId: user.customerId,
+      customerName: customer.displayName,
+      requestKind: 'vehicle_change',
+      topic: request.subject,
+      message: request.description,
+      vehicleLabel,
+    }).catch(() => {})
 
     return {
       id: request.id,

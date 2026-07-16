@@ -1,6 +1,8 @@
 import { createServiceRequest, PortalServiceError } from '../../../services/portal.service'
 import { useDb } from '../../../db/client'
 import { writeAudit } from '../../../services/audit.service'
+import { notifyCustomerServiceRequestSubmitted } from '../../../services/staff-notifications.service'
+import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
 import { apiError } from '../../../utils/api-error'
 import { requirePortalCustomer } from '../../../utils/require-portal'
 import { requirePermission } from '../../../utils/require-permission'
@@ -28,6 +30,16 @@ export default defineEventHandler(async (event) => {
       },
       permissionKey: 'portal.requests.own',
     })
+
+    void notifyCustomerServiceRequestSubmitted(useDb(), {
+      logId: log.id,
+      customerId: user.customerId,
+      customerName: resolveCustomerDisplayName(null, log.customerSnapshot),
+      vehicleSnapshot: log.vehicleSnapshot,
+      serviceCategory: body.serviceCategory,
+      urgency: body.urgency,
+      message: body.description.trim(),
+    }).catch(() => {})
 
     return {
       id: log.id,

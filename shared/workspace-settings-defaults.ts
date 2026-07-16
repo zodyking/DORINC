@@ -91,6 +91,12 @@ export interface NotificationSettings {
   userSignupPendingApproval: boolean
   /** Notify invoice approvers when an invoice needs manager approval. */
   invoicePendingApproval: boolean
+  /** Email all team members when a customer submits a portal service request. */
+  customerServiceRequestSubmitted: boolean
+  /** Email all accountants when a customer submits a billing or vehicle change request. */
+  customerChangeRequestSubmitted: boolean
+  /** Email all team members when a new customer email arrives in the inbox. */
+  customerEmailReceived: boolean
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -105,6 +111,9 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   backupResult: true,
   userSignupPendingApproval: true,
   invoicePendingApproval: true,
+  customerServiceRequestSubmitted: true,
+  customerChangeRequestSubmitted: true,
+  customerEmailReceived: true,
 }
 
 export const NOTIFICATION_SETTING_META: Array<{
@@ -147,6 +156,24 @@ export const NOTIFICATION_SETTING_META: Array<{
     key: 'invoicePendingApproval',
     label: 'Invoice pending approval',
     description: 'Notify approvers when an invoice needs manager approval.',
+    group: 'workflow',
+  },
+  {
+    key: 'customerServiceRequestSubmitted',
+    label: 'Customer service request',
+    description: 'Email all team members when a customer submits a portal service request.',
+    group: 'workflow',
+  },
+  {
+    key: 'customerChangeRequestSubmitted',
+    label: 'Customer change request',
+    description: 'Email all accountants when a customer submits a billing or vehicle correction request.',
+    group: 'workflow',
+  },
+  {
+    key: 'customerEmailReceived',
+    label: 'Customer email received',
+    description: 'Email all team members when a new customer email is synced into Messages.',
     group: 'workflow',
   },
   {

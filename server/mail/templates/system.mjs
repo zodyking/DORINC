@@ -492,3 +492,156 @@ export function buildInvoicePendingApprovalEmail({
     brand,
   })
 }
+
+function truncateEmailNote(text, max = 1200) {
+  const trimmed = String(text ?? '').trim()
+  if (trimmed.length <= max) return trimmed
+  return `${trimmed.slice(0, max - 1)}…`
+}
+
+export function buildCustomerServiceRequestStaffEmail({
+  recipientName,
+  customerName,
+  vehicleUnit,
+  vehicleDetails,
+  serviceCategory,
+  urgency,
+  message,
+  detailUrl,
+  appUrl,
+  brand,
+}) {
+  const subject = `Customer Service Request — ${customerName}`
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    `${customerName} submitted a service request through the customer portal.`,
+    '',
+    `Vehicle: ${vehicleUnit}`,
+    vehicleDetails ? `Details: ${vehicleDetails}` : '',
+    `Category: ${serviceCategory}`,
+    `Urgency: ${urgency}`,
+    '',
+    'Customer message:',
+    message,
+    '',
+    `Open in DORINC: ${detailUrl}`,
+  ].filter(Boolean).join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Portal request',
+    headline: 'New customer service request',
+    lead: `${customerName} submitted a service request. Check the portal for full details and next steps.`,
+    details: [
+      { label: 'Customer', value: customerName },
+      { label: 'Vehicle', value: vehicleUnit },
+      vehicleDetails ? { label: 'Vehicle details', value: vehicleDetails } : null,
+      { label: 'Category', value: serviceCategory },
+      { label: 'Urgency', value: urgency },
+      { label: 'Notified', value: recipientName },
+    ].filter(Boolean),
+    note: { title: 'Customer message', body: truncateEmailNote(message) },
+    primaryAction: { href: detailUrl, label: 'View in portal' },
+    footerNote: 'You received this because a customer submitted a service request in the portal.',
+    appUrl,
+    brand,
+  })
+}
+
+export function buildCustomerChangeRequestStaffEmail({
+  recipientName,
+  customerName,
+  requestKindLabel,
+  topic,
+  message,
+  invoiceNumber,
+  vehicleLabel,
+  detailUrl,
+  appUrl,
+  brand,
+}) {
+  const subject = `Customer Change Request — ${customerName}`
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    `${customerName} submitted a ${requestKindLabel.toLowerCase()} through the customer portal.`,
+    '',
+    `Topic: ${topic}`,
+    invoiceNumber ? `Invoice: ${invoiceNumber}` : '',
+    vehicleLabel ? `Vehicle: ${vehicleLabel}` : '',
+    '',
+    'Customer message:',
+    message,
+    '',
+    `Review in DORINC: ${detailUrl}`,
+  ].filter(Boolean).join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Portal request',
+    headline: 'New customer change request',
+    lead: `${customerName} submitted a ${requestKindLabel.toLowerCase()}. Review the request in the portal.`,
+    details: [
+      { label: 'Customer', value: customerName },
+      { label: 'Request type', value: requestKindLabel },
+      { label: 'Topic', value: topic },
+      invoiceNumber ? { label: 'Invoice', value: invoiceNumber } : null,
+      vehicleLabel ? { label: 'Vehicle', value: vehicleLabel } : null,
+      { label: 'Notified', value: recipientName },
+    ].filter(Boolean),
+    note: { title: 'Customer message', body: truncateEmailNote(message) },
+    primaryAction: { href: detailUrl, label: 'Review in portal' },
+    footerNote: 'You received this because a customer submitted a change request in the portal.',
+    appUrl,
+    brand,
+  })
+}
+
+export function buildCustomerEmailReceivedStaffEmail({
+  recipientName,
+  customerName,
+  customerEmail,
+  subject,
+  messagePreview,
+  messagesUrl,
+  appUrl,
+  brand,
+}) {
+  const mailSubject = subject?.trim()
+    ? `Customer Email — ${subject.trim()}`
+    : `Customer Email — ${customerName}`
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    `A new email arrived from ${customerName} (${customerEmail}).`,
+    subject?.trim() ? `Subject: ${subject.trim()}` : '',
+    '',
+    messagePreview,
+    '',
+    `Respond in DORINC: ${messagesUrl}`,
+  ].filter(Boolean).join('\n')
+
+  return buildStyledEmail({
+    subject: mailSubject,
+    text,
+    eyebrow: 'Customer email',
+    headline: 'New customer email received',
+    lead: `${customerName} sent a new email to your company inbox. Open Messages to review and respond.`,
+    details: [
+      { label: 'Customer', value: customerName },
+      { label: 'Email', value: customerEmail },
+      subject?.trim() ? { label: 'Subject', value: subject.trim() } : null,
+      { label: 'Notified', value: recipientName },
+    ].filter(Boolean),
+    note: messagePreview
+      ? { title: 'Message preview', body: truncateEmailNote(messagePreview, 800) }
+      : undefined,
+    primaryAction: { href: messagesUrl, label: 'Open Messages' },
+    footerNote: 'You received this because a customer email was synced into Messages.',
+    appUrl,
+    brand,
+  })
+}

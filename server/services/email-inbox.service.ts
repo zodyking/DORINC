@@ -22,6 +22,7 @@ import {
 } from '../mail/email-thread'
 import { getImapFilters } from './imap-config.service'
 import { getSmtpConfig } from './app-config.service'
+import { notifyCustomerEmailReceived } from './staff-notifications.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
@@ -589,6 +590,15 @@ export async function ingestInboundEmail(db: Db, input: {
 
   await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId))
   await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversationId))
+
+  void notifyCustomerEmailReceived(db, {
+    conversationId,
+    customerName: customer?.displayName ?? counterpartEmail,
+    customerEmail: counterpartEmail,
+    subject: input.subject.trim() || '(No subject)',
+    messageBody: message!.body,
+    htmlBody: input.html ?? null,
+  }).catch(() => {})
 
   return { skipped: false as const, conversationId, messageId: message!.id }
 }

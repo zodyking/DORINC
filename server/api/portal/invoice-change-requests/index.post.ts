@@ -1,6 +1,10 @@
-import { createInvoiceChangeRequest, PortalServiceError } from '../../../services/portal.service'
+import { eq } from 'drizzle-orm'
+import { invoices } from '../../../db/schema/invoices'
+import { createInvoiceChangeRequest, getPortalCustomer, PortalServiceError } from '../../../services/portal.service'
 import { useDb } from '../../../db/client'
 import { writeAudit } from '../../../services/audit.service'
+import { notifyCustomerChangeRequestSubmitted } from '../../../services/staff-notifications.service'
+import { formatInvoiceNumber } from '../../../db/schema/invoices'
 import { apiError } from '../../../utils/api-error'
 import { requirePortalCustomer } from '../../../utils/require-portal'
 import { requirePermission } from '../../../utils/require-permission'
@@ -13,7 +17,9 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, portalInvoiceChangeRequestSchema)
 
   try {
-    const request = await createInvoiceChangeRequest(useDb(), user.customerId, user.id, body)
+    const db = useDb()
+    const request = await createInvoiceChangeRequest(db, user.customerId, user.id, body)
+    const customer = await getPortalCustomer(db, user.customerId)
 
     await writeAudit(event, {
       entityType: 'invoice_change_request',
@@ -26,6 +32,25 @@ export default defineEventHandler(async (event) => {
       },
       permissionKey: 'portal.requests.own',
     })
+
+    let invoiceNumber: string | null = null
+    if (request.invoiceId) {
+      const [invoice] = await db.select({ invoiceNumber: invoices.invoiceNumber })
+        .from(invoices)
+        .where(eq(invoices.id, request.invoiceId))
+        .limit(1)
+      if (invoice) invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
+    }
+
+    void notifyCustomerChangeRequestSubmitted(db, {
+      requestId: request.id,
+      customerId: user.customerId,
+      customerName: customer.displayName,
+      requestKind: 'invoice_change',
+      topic: request.topic,
+      message: request.description,
+      invoiceNumber,
+    }).catch(() => {})
 
     return {
       id: request.id,

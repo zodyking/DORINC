@@ -1,21 +1,31 @@
 import type { Db } from '../db/client'
 import type { DeletionEntityType } from '../db/schema/deletion-requests'
-import { formatInvoiceNumber } from '../db/schema/invoices'
+import { formatInvoiceNumber, type InvoiceVehicleSnapshot } from '../db/schema/invoices'
 import {
   buildDeletionRequestResultEmail,
   buildDeletionRequestSubmittedEmail,
+  buildCustomerChangeRequestStaffEmail,
+  buildCustomerEmailReceivedStaffEmail,
+  buildCustomerServiceRequestStaffEmail,
   buildInvoicePendingApprovalEmail,
   buildUserSignupPendingEmail,
 } from '../mail/templates/system'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import {
+  listAccountants,
+  listAllTeamMembers,
   listPermissionRecipients,
 } from './notification-recipients.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { getInvoice } from './invoices.service'
 import { getCustomer } from './customers.service'
+import {
+  formatPdfVehicleUnitDisplay,
+  formatPdfVehicleYearMakeModel,
+} from '../../shared/document-pdf-payload'
+import { emailPreviewText } from '../../shared/email-display'
 
 const ENTITY_TYPE_LABELS: Record<DeletionEntityType, string> = {
   customer: 'Customer',
@@ -191,6 +201,155 @@ export async function notifyInvoicePendingApproval(db: Db, invoiceId: string, ac
       notificationKind: 'invoice_pending_approval',
       invoiceId: invoice.id,
       recipientUserId: approver.id,
+    })
+    queued++
+  }
+
+  return { queued, reason: queued ? undefined : 'no_recipients' as const }
+}
+
+export async function notifyCustomerServiceRequestSubmitted(
+  db: Db,
+  opts: {
+    logId: string
+    customerId: string
+    customerName: string
+    vehicleSnapshot: InvoiceVehicleSnapshot | null
+    serviceCategory: string
+    urgency: string
+    message: string
+  },
+) {
+  if (!(await isNotificationEnabled(db, 'customerServiceRequestSubmitted'))) {
+    return { queued: 0 as const, reason: 'disabled' as const }
+  }
+
+  const brand = await resolveEmailBrand(db)
+  const appUrl = brand.appUrl || getAppUrl()
+  const detailUrl = `${appUrl.replace(/\/$/, '')}/service-logs/${opts.logId}`
+  const vehicleUnit = opts.vehicleSnapshot
+    ? formatPdfVehicleUnitDisplay(opts.vehicleSnapshot)
+    : 'Unknown vehicle'
+  const vehicleDetails = opts.vehicleSnapshot
+    ? formatPdfVehicleYearMakeModel(opts.vehicleSnapshot)
+    : null
+  const recipients = await listAllTeamMembers(db)
+
+  let queued = 0
+  for (const recipient of recipients) {
+    const mail = buildCustomerServiceRequestStaffEmail({
+      recipientName: recipient.name,
+      customerName: opts.customerName,
+      vehicleUnit,
+      vehicleDetails,
+      serviceCategory: opts.serviceCategory,
+      urgency: opts.urgency,
+      message: opts.message,
+      detailUrl,
+      appUrl,
+      brand,
+    })
+    await enqueueHtmlMail(db, recipient.email, mail, {
+      notificationKind: 'customer_service_request_submitted',
+      serviceLogId: opts.logId,
+      customerId: opts.customerId,
+      recipientUserId: recipient.id,
+    })
+    queued++
+  }
+
+  return { queued, reason: queued ? undefined : 'no_recipients' as const }
+}
+
+export async function notifyCustomerChangeRequestSubmitted(
+  db: Db,
+  opts: {
+    requestId: string
+    customerId: string
+    customerName: string
+    requestKind: 'invoice_change' | 'vehicle_change'
+    topic: string
+    message: string
+    invoiceNumber?: string | null
+    vehicleLabel?: string | null
+  },
+) {
+  if (!(await isNotificationEnabled(db, 'customerChangeRequestSubmitted'))) {
+    return { queued: 0 as const, reason: 'disabled' as const }
+  }
+
+  const brand = await resolveEmailBrand(db)
+  const appUrl = brand.appUrl || getAppUrl()
+  const detailUrl = `${appUrl.replace(/\/$/, '')}/portal-requests`
+  const requestKindLabel = opts.requestKind === 'invoice_change'
+    ? 'Billing correction request'
+    : 'Vehicle correction request'
+  const recipients = await listAccountants(db)
+
+  let queued = 0
+  for (const recipient of recipients) {
+    const mail = buildCustomerChangeRequestStaffEmail({
+      recipientName: recipient.name,
+      customerName: opts.customerName,
+      requestKindLabel,
+      topic: opts.topic,
+      message: opts.message,
+      invoiceNumber: opts.invoiceNumber ?? null,
+      vehicleLabel: opts.vehicleLabel ?? null,
+      detailUrl,
+      appUrl,
+      brand,
+    })
+    await enqueueHtmlMail(db, recipient.email, mail, {
+      notificationKind: 'customer_change_request_submitted',
+      requestId: opts.requestId,
+      requestKind: opts.requestKind,
+      customerId: opts.customerId,
+      recipientUserId: recipient.id,
+    })
+    queued++
+  }
+
+  return { queued, reason: queued ? undefined : 'no_recipients' as const }
+}
+
+export async function notifyCustomerEmailReceived(
+  db: Db,
+  opts: {
+    conversationId: string
+    customerName: string
+    customerEmail: string
+    subject: string
+    messageBody: string
+    htmlBody?: string | null
+  },
+) {
+  if (!(await isNotificationEnabled(db, 'customerEmailReceived'))) {
+    return { queued: 0 as const, reason: 'disabled' as const }
+  }
+
+  const brand = await resolveEmailBrand(db)
+  const appUrl = brand.appUrl || getAppUrl()
+  const messagesUrl = `${appUrl.replace(/\/$/, '')}/messages?conversation=${opts.conversationId}`
+  const messagePreview = emailPreviewText(opts.messageBody, opts.htmlBody)
+  const recipients = await listAllTeamMembers(db)
+
+  let queued = 0
+  for (const recipient of recipients) {
+    const mail = buildCustomerEmailReceivedStaffEmail({
+      recipientName: recipient.name,
+      customerName: opts.customerName,
+      customerEmail: opts.customerEmail,
+      subject: opts.subject,
+      messagePreview,
+      messagesUrl,
+      appUrl,
+      brand,
+    })
+    await enqueueHtmlMail(db, recipient.email, mail, {
+      notificationKind: 'customer_email_received',
+      conversationId: opts.conversationId,
+      recipientUserId: recipient.id,
     })
     queued++
   }

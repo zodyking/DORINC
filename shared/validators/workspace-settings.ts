@@ -42,4 +42,7 @@ export const notificationSettingsSchema = z.object({
   backupResult: z.boolean().default(true),
   userSignupPendingApproval: z.boolean().default(true),
   invoicePendingApproval: z.boolean().default(true),
+  customerServiceRequestSubmitted: z.boolean().default(true),
+  customerChangeRequestSubmitted: z.boolean().default(true),
+  customerEmailReceived: z.boolean().default(true),
 })

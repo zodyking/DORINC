@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildBackupNotificationEmail,
+  buildCustomerChangeRequestStaffEmail,
+  buildCustomerEmailReceivedStaffEmail,
+  buildCustomerServiceRequestStaffEmail,
   buildDeletionRequestResultEmail,
   buildDeletionRequestSubmittedEmail,
   buildInvoiceAttachedEmail,
@@ -173,5 +176,48 @@ describe('system email templates', () => {
     expect(signup.html).toContain('awaiting approval')
     expect(approval.html).toContain('INV-000099')
     expect(approval.html).toContain('needs approval')
+  })
+
+  it('builds portal and customer email staff alerts', () => {
+    const service = buildCustomerServiceRequestStaffEmail({
+      recipientName: 'Alex',
+      customerName: 'Fleet Co',
+      vehicleUnit: 'Bus #616',
+      vehicleDetails: '2023 IC BUS PB105',
+      serviceCategory: 'Preventive maintenance',
+      urgency: 'soon',
+      message: 'Please inspect brakes before next route.',
+      detailUrl: `${appUrl}/service-logs/abc`,
+      appUrl,
+      brand,
+    })
+    const change = buildCustomerChangeRequestStaffEmail({
+      recipientName: 'Pat',
+      customerName: 'Fleet Co',
+      requestKindLabel: 'Billing correction request',
+      topic: 'Wrong mileage',
+      message: 'The odometer reading on invoice INV-000711 is incorrect.',
+      invoiceNumber: 'INV-000711',
+      vehicleLabel: null,
+      detailUrl: `${appUrl}/portal-requests`,
+      appUrl,
+      brand,
+    })
+    const inbound = buildCustomerEmailReceivedStaffEmail({
+      recipientName: 'Sam',
+      customerName: 'Fleet Co',
+      customerEmail: 'fleet@example.com',
+      subject: 'Question about invoice',
+      messagePreview: 'Can you confirm the total on the latest invoice?',
+      messagesUrl: `${appUrl}/messages?conversation=abc`,
+      appUrl,
+      brand,
+    })
+    expect(service.html).toContain('Bus #616')
+    expect(service.html).toContain('View in portal')
+    expect(change.html).toContain('Billing correction request')
+    expect(change.html).toContain('Review in portal')
+    expect(inbound.html).toContain('Open Messages')
+    expect(inbound.text).toContain('fleet@example.com')
   })
 })

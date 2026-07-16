@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import {
   accountTypePermissions,
@@ -95,4 +95,48 @@ export function uniqueEmails(recipients: Array<{ email: string }>): string[] {
     out.push(r.email.trim())
   }
   return out
+}
+
+/** Active approved staff (everyone except portal customers). */
+export async function listAllTeamMembers(
+  db: Db,
+  excludeUserId?: string | null,
+): Promise<StaffNotifyRecipient[]> {
+  const rows = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(and(
+      eq(users.isActive, true),
+      isNotNull(users.approvedAt),
+      ne(accountTypes.key, 'customer'),
+    ))
+
+  if (!excludeUserId) return rows.filter(r => r.email?.trim())
+  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+}
+
+/** Active approved users with the accountant account type. */
+export async function listAccountants(
+  db: Db,
+  excludeUserId?: string | null,
+): Promise<StaffNotifyRecipient[]> {
+  const rows = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(and(
+      eq(users.isActive, true),
+      isNotNull(users.approvedAt),
+      eq(accountTypes.key, 'accountant'),
+    ))
+
+  if (!excludeUserId) return rows.filter(r => r.email?.trim())
+  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
 }
