@@ -71,9 +71,6 @@ watch(() => props.conversation?.id, () => {
         ←
       </button>
       <div class="dm-thread-peer">
-        <span v-if="isEmail" class="dm-thread-gmail-badge" aria-hidden="true">
-          <img src="/icons/gmail.svg" alt="" width="16" height="16">
-        </span>
         <div>
           <b>{{ peerName }}</b>
           <small>{{ peerEmail }}</small>

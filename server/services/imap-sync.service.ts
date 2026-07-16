@@ -5,10 +5,11 @@ import { imapSyncState } from '../db/schema/email-inbox'
 import { eq } from 'drizzle-orm'
 import { getImapConfig } from './imap-config.service'
 import {
-  buildAllowedFilterAddresses,
+  buildCompanyInboxAddresses,
+  buildCustomerEmailAddresses,
   ensureEmailInboxReady,
   ingestInboundEmail,
-  messageMatchesFilter,
+  messageMatchesCustomerInboxFilter,
 } from './email-inbox.service'
 import { extractEmailAddresses } from '../mail/email-thread'
 
@@ -55,7 +56,8 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
   const [state] = await db.select().from(imapSyncState).where(eq(imapSyncState.id, 'default')).limit(1)
   const lastUid = opts.full ? 0 : Number(state?.lastUid ?? 0)
 
-  const allowed = await buildAllowedFilterAddresses(db)
+  const companyInboxes = buildCompanyInboxAddresses()
+  const customerEmails = await buildCustomerEmailAddresses(db)
   const client = new ImapFlow({
     host: config.host,
     port: config.port,
@@ -87,7 +89,7 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
           const to = extractEmailAddresses(parsed.to?.value?.map(v => v.address ?? '') ?? msg.envelope?.to?.map(v => v.address ?? '') ?? [])
           const cc = extractEmailAddresses(parsed.cc?.value?.map(v => v.address ?? '') ?? msg.envelope?.cc?.map(v => v.address ?? '') ?? [])
 
-          if (!messageMatchesFilter(allowed, from, to, cc)) {
+          if (!messageMatchesCustomerInboxFilter(companyInboxes, customerEmails, from, to, cc)) {
             result.skipped++
             continue
           }

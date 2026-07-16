@@ -168,6 +168,10 @@ function onBack() {
 async function setChannel(channel: 'all' | 'dm' | 'email') {
   await dm.setChannel(channel)
 }
+
+async function setEmailShowAll(showAll: boolean) {
+  await dm.setEmailShowAll(showAll)
+}
 </script>
 
 <template>
@@ -175,7 +179,6 @@ async function setChannel(channel: 'all' | 'dm' | 'email') {
     <StaffPageHead title="Messages" subtitle="Team chat and shared customer email threads">
       <template #actions>
         <button type="button" class="btn" @click="openNewEmail">
-          <img src="/icons/gmail.svg" alt="" width="16" height="16" style="vertical-align:-3px;margin-right:4px;">
           New email
         </button>
         <button type="button" class="btn primary" @click="openNewDm">
@@ -221,10 +224,20 @@ async function setChannel(channel: 'all' | 'dm' | 'email') {
               :aria-selected="dm.messageChannel === 'email'"
               @click="setChannel('email')"
             >
-              <img src="/icons/gmail.svg" alt="" width="14" height="14">
               Email
             </button>
           </div>
+          <label
+            v-if="dm.messageChannel === 'email' || dm.messageChannel === 'all'"
+            class="dm-email-filter"
+          >
+            <input
+              type="checkbox"
+              :checked="dm.emailShowAll"
+              @change="setEmailShowAll(($event.target as HTMLInputElement).checked)"
+            >
+            Show all synced mail (not just customer → company)
+          </label>
           <input
             v-model="dm.conversationSearch"
             type="search"

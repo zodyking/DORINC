@@ -191,7 +191,8 @@ async function runSync() {
 
         <h4 style="margin:0 0 8px;font-size:14px;">Message filtering</h4>
         <p class="settings-help" style="margin:0 0 12px;">
-          Only emails involving these addresses are imported. Customer emails are added automatically when enabled.
+          Only imports mail sent <b>from a customer email</b> to your company inbox addresses below.
+          Google alerts, newsletters, and other senders are skipped automatically.
         </p>
 
         <label class="fld">
