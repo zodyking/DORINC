@@ -921,7 +921,7 @@ const aiPopStyle = computed(() => {
                   <span class="help">{{ vehicleHelp }}</span>
                 </label>
                 <label class="fld">
-                  Issue date
+                  Invoice Date
                   <input v-model="invoiceDate" type="date" :disabled="!editable" @change="patchHeader">
                 </label>
                 <label class="fld">
