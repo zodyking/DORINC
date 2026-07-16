@@ -1,3 +1,4 @@
+import { getClientIp } from '../../../../utils/client-ip'
 import {
   BackupsServiceError,
   restoreBackupFromRun,
@@ -57,7 +58,13 @@ export default defineEventHandler(async (event) => {
       accountType: user.accountType,
     }, body.reason, event)
 
-    await recordBackupRestoreAlert(db, { id: user.id, email: user.email }, id, body.reason)
+    await recordBackupRestoreAlert(
+      db,
+      { id: user.id, email: user.email, name: user.name },
+      id,
+      body.reason,
+      getClientIp(event),
+    )
     await clearStepUp(db, auth.sessionId)
 
     return {

@@ -1,4 +1,5 @@
 import { readMultipartFormData } from 'h3'
+import { getClientIp } from '../../../utils/client-ip'
 import {
   BackupsServiceError,
   restoreBackupFromUploadedFile,
@@ -81,7 +82,13 @@ export default defineEventHandler(async (event) => {
       event,
     )
 
-    await recordBackupRestoreAlert(db, { id: user.id, email: user.email }, result.safetyBackupRunId, reason)
+    await recordBackupRestoreAlert(
+      db,
+      { id: user.id, email: user.email, name: user.name },
+      result.safetyBackupRunId,
+      reason,
+      getClientIp(event),
+    )
     await clearStepUp(db, auth.sessionId)
 
     return {

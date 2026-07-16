@@ -183,6 +183,35 @@ export function suspiciousAlertRuleLabel(ruleKey: string): string {
   }
 }
 
+export interface SuspiciousAlertActorView {
+  actorUserId?: string | null
+  actorName?: string | null
+  actorEmail?: string | null
+}
+
+export interface SuspiciousAlertIpView {
+  ipAddress?: string | null
+  ipAddresses?: string[]
+}
+
+export function formatSuspiciousAlertUser(alert: SuspiciousAlertActorView): string {
+  if (alert.actorName && alert.actorEmail) return `${alert.actorName} (${alert.actorEmail})`
+  if (alert.actorEmail) return alert.actorEmail
+  if (alert.actorName) return alert.actorName
+  if (alert.actorUserId) return alert.actorUserId
+  return '—'
+}
+
+export function formatSuspiciousAlertIps(alert: SuspiciousAlertIpView): string {
+  const ips = alert.ipAddresses?.length
+    ? alert.ipAddresses
+    : alert.ipAddress
+      ? [alert.ipAddress]
+      : []
+  if (!ips.length) return '—'
+  return ips.join(', ')
+}
+
 export interface SystemMonitorStatusInput {
   database: 'ok' | 'error'
   dbLatencyMs: number | null

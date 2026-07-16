@@ -142,9 +142,14 @@ describe('P3-10 suspicious activity detection', () => {
       description: 'Integration test alert',
       metadata: { dedupeKey: `test-${stamp}` },
       actorUserId: testUserId,
+      actorEmail: testEmail,
+      ipAddress: '203.0.113.10',
+      ipAddresses: ['203.0.113.10', '203.0.113.11'],
     })
 
     expect(alert.status).toBe('open')
+    expect(alert.actorEmail).toBe(testEmail)
+    expect(alert.ipAddresses).toEqual(['203.0.113.10', '203.0.113.11'])
 
     const open = await listSuspiciousActivityAlerts(db, { status: 'open' })
     expect(open.some(item => item.id === alert.id)).toBe(true)
@@ -158,12 +163,15 @@ describe('P3-10 suspicious activity detection', () => {
 
     const alert = await recordBackupRestoreAlert(
       db,
-      { id: testUserId, email: testEmail },
+      { id: testUserId, email: testEmail, name: 'Test Admin' },
       '00000000-0000-0000-0000-000000000001',
       'Disaster recovery drill',
+      '198.51.100.42',
     )
 
     expect(alert.ruleKey).toBe('backup.restore_attempt')
+    expect(alert.ipAddress).toBe('198.51.100.42')
+    expect(alert.ipAddresses).toEqual(['198.51.100.42'])
 
     const scanned = await scanSuspiciousActivity(db)
     expect(scanned).toBeTypeOf('number')

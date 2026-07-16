@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
+import { users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
 import { rateLimitEvents } from '../db/schema/rate-limits'
 import {
@@ -16,7 +17,10 @@ export interface SuspiciousActivityAlertView {
   description: string
   metadata: Record<string, unknown>
   actorUserId: string | null
+  actorName: string | null
+  actorEmail: string | null
   ipAddress: string | null
+  ipAddresses: string[]
   status: SuspiciousAlertStatus
   dismissedAt: Date | null
   dismissedBy: string | null
@@ -30,7 +34,10 @@ export interface CreateSuspiciousAlertInput {
   description: string
   metadata?: Record<string, unknown>
   actorUserId?: string | null
+  actorName?: string | null
+  actorEmail?: string | null
   ipAddress?: string | null
+  ipAddresses?: string[]
 }
 
 const FAILED_LOGIN_BURST_THRESHOLD = 5
@@ -38,16 +45,71 @@ const FAILED_LOGIN_BURST_WINDOW_MS = 15 * 60 * 1000
 const OFF_HOURS_START = 22 // 10 PM UTC
 const OFF_HOURS_END = 6 // 6 AM UTC
 
-function mapAlert(row: typeof suspiciousActivityAlerts.$inferSelect): SuspiciousActivityAlertView {
+function normalizeIp(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = String(value).trim()
+  return trimmed || null
+}
+
+export function collectUniqueIps(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const ip = normalizeIp(value)
+    if (!ip || seen.has(ip)) continue
+    seen.add(ip)
+    out.push(ip)
+  }
+  return out
+}
+
+function ipFromRateLimitKey(key: string): string | null {
+  if (key.startsWith('ip:')) return normalizeIp(key.slice(3))
+  return null
+}
+
+function buildAlertMetadata(
+  input: CreateSuspiciousAlertInput,
+): { metadata: Record<string, unknown>, ipAddress: string | null } {
+  const metadata = { ...(input.metadata ?? {}) }
+  const ipAddresses = collectUniqueIps([
+    ...(input.ipAddresses ?? []),
+    input.ipAddress,
+    ...(Array.isArray(metadata.ipAddresses) ? metadata.ipAddresses as string[] : []),
+  ])
+
+  if (input.actorEmail) metadata.actorEmail = input.actorEmail
+  if (input.actorName) metadata.actorName = input.actorName
+  if (ipAddresses.length) metadata.ipAddresses = ipAddresses
+
+  return {
+    metadata,
+    ipAddress: ipAddresses[0] ?? normalizeIp(input.ipAddress),
+  }
+}
+
+function mapAlert(
+  row: typeof suspiciousActivityAlerts.$inferSelect,
+  actor?: { name: string | null, email: string | null } | null,
+): SuspiciousActivityAlertView {
+  const metadata = (row.metadata ?? {}) as Record<string, unknown>
+  const ipAddresses = collectUniqueIps([
+    ...(Array.isArray(metadata.ipAddresses) ? metadata.ipAddresses as string[] : []),
+    row.ipAddress ? String(row.ipAddress) : null,
+  ])
+
   return {
     id: row.id,
     ruleKey: row.ruleKey,
     severity: row.severity as SuspiciousAlertSeverity,
     title: row.title,
     description: row.description,
-    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+    metadata,
     actorUserId: row.actorUserId,
-    ipAddress: row.ipAddress,
+    actorName: actor?.name ?? (typeof metadata.actorName === 'string' ? metadata.actorName : null),
+    actorEmail: actor?.email ?? (typeof metadata.actorEmail === 'string' ? metadata.actorEmail : null),
+    ipAddress: ipAddresses[0] ?? null,
+    ipAddresses,
     status: row.status as SuspiciousAlertStatus,
     dismissedAt: row.dismissedAt,
     dismissedBy: row.dismissedBy,
@@ -59,17 +121,21 @@ export async function createSuspiciousActivityAlert(
   db: Db,
   input: CreateSuspiciousAlertInput,
 ): Promise<SuspiciousActivityAlertView> {
+  const { metadata, ipAddress } = buildAlertMetadata(input)
   const [row] = await db.insert(suspiciousActivityAlerts).values({
     ruleKey: input.ruleKey,
     severity: input.severity ?? 'medium',
     title: input.title,
     description: input.description,
-    metadata: input.metadata ?? {},
+    metadata,
     actorUserId: input.actorUserId ?? null,
-    ipAddress: input.ipAddress ?? null,
+    ipAddress,
   }).returning()
 
-  return mapAlert(row!)
+  return mapAlert(row!, {
+    name: input.actorName ?? null,
+    email: input.actorEmail ?? null,
+  })
 }
 
 export async function listSuspiciousActivityAlerts(
@@ -79,13 +145,18 @@ export async function listSuspiciousActivityAlerts(
   const limit = opts.limit ?? 50
   const conditions = opts.status ? eq(suspiciousActivityAlerts.status, opts.status) : undefined
 
-  const rows = await db.select()
+  const rows = await db.select({
+    alert: suspiciousActivityAlerts,
+    actorName: users.name,
+    actorEmail: users.email,
+  })
     .from(suspiciousActivityAlerts)
+    .leftJoin(users, eq(users.id, suspiciousActivityAlerts.actorUserId))
     .where(conditions)
     .orderBy(desc(suspiciousActivityAlerts.createdAt))
     .limit(limit)
 
-  return rows.map(mapAlert)
+  return rows.map(row => mapAlert(row.alert, { name: row.actorName, email: row.actorEmail }))
 }
 
 export async function dismissSuspiciousActivityAlert(
@@ -150,13 +221,15 @@ async function scanFailedLoginBursts(db: Db): Promise<number> {
     const dedupeKey = row.key
     if (await hasOpenAlert(db, 'auth.failed_login_burst', dedupeKey, FAILED_LOGIN_BURST_WINDOW_MS)) continue
 
+    const ip = ipFromRateLimitKey(row.key)
     await createSuspiciousActivityAlert(db, {
       ruleKey: 'auth.failed_login_burst',
       severity: 'high',
       title: 'Repeated failed login attempts',
-      description: `${row.attempts} failed login attempts from ${row.key} in the last 15 minutes.`,
+      description: `${row.attempts} failed login attempts from ${ip ?? row.key} in the last 15 minutes.`,
       metadata: { dedupeKey, attempts: row.attempts, key: row.key },
-      ipAddress: row.key.startsWith('ip:') ? row.key.slice(3) : null,
+      ipAddress: ip,
+      ipAddresses: ip ? [ip] : [],
     })
     created++
   }
@@ -170,6 +243,7 @@ async function scanOffHoursAdminActions(db: Db): Promise<number> {
     action: auditLogs.action,
     actorUserId: auditLogs.actorUserId,
     actorEmail: auditLogs.actorEmail,
+    ipAddress: auditLogs.ipAddress,
     createdAt: auditLogs.createdAt,
   })
     .from(auditLogs)
@@ -188,6 +262,7 @@ async function scanOffHoursAdminActions(db: Db): Promise<number> {
     const dedupeKey = `${row.action}:${row.id}`
     if (await hasOpenAlert(db, 'auth.off_hours_admin', dedupeKey, 60 * 60 * 1000)) continue
 
+    const ip = row.ipAddress ? String(row.ipAddress) : null
     await createSuspiciousActivityAlert(db, {
       ruleKey: 'auth.off_hours_admin',
       severity: 'medium',
@@ -195,6 +270,9 @@ async function scanOffHoursAdminActions(db: Db): Promise<number> {
       description: `Super Admin ${row.actorEmail ?? row.actorUserId ?? 'unknown'} performed "${row.action}" outside business hours (UTC).`,
       metadata: { dedupeKey, action: row.action, auditLogId: row.id },
       actorUserId: row.actorUserId,
+      actorEmail: row.actorEmail ?? undefined,
+      ipAddress: ip,
+      ipAddresses: ip ? [ip] : [],
     })
     created++
   }
@@ -222,6 +300,16 @@ async function scanHighRiskAuditBurst(db: Db): Promise<number> {
     const dedupeKey = row.actorUserId
     if (await hasOpenAlert(db, 'audit.high_risk_burst', dedupeKey, 5 * 60 * 1000)) continue
 
+    const ipRows = await db.select({ ipAddress: auditLogs.ipAddress })
+      .from(auditLogs)
+      .where(and(
+        gte(auditLogs.createdAt, since),
+        eq(auditLogs.riskLevel, 'high'),
+        eq(auditLogs.actorUserId, row.actorUserId),
+      ))
+
+    const ipAddresses = collectUniqueIps(ipRows.map(r => (r.ipAddress ? String(r.ipAddress) : null)))
+
     await createSuspiciousActivityAlert(db, {
       ruleKey: 'audit.high_risk_burst',
       severity: 'high',
@@ -229,6 +317,9 @@ async function scanHighRiskAuditBurst(db: Db): Promise<number> {
       description: `${row.count} high-risk audit events by ${row.actorEmail ?? row.actorUserId} in 5 minutes.`,
       metadata: { dedupeKey, count: row.count },
       actorUserId: row.actorUserId,
+      actorEmail: row.actorEmail ?? undefined,
+      ipAddress: ipAddresses[0] ?? null,
+      ipAddresses,
     })
     created++
   }
@@ -237,17 +328,23 @@ async function scanHighRiskAuditBurst(db: Db): Promise<number> {
 
 export async function recordBackupRestoreAlert(
   db: Db,
-  actor: { id: string, email?: string | null },
+  actor: { id: string, email?: string | null, name?: string | null },
   backupRunId: string,
   reason: string,
+  ipAddress?: string | null,
 ): Promise<SuspiciousActivityAlertView> {
+  const ip = normalizeIp(ipAddress)
   return createSuspiciousActivityAlert(db, {
     ruleKey: 'backup.restore_attempt',
     severity: 'high',
     title: 'Database restore initiated',
-    description: `Super Admin ${actor.email ?? actor.id} initiated a database restore from backup ${backupRunId}.`,
+    description: `Super Admin ${actor.email ?? actor.id} initiated a database restore from backup ${backupRunId}. Reason: ${reason}`,
     metadata: { backupRunId, reason, dedupeKey: backupRunId },
     actorUserId: actor.id,
+    actorEmail: actor.email ?? undefined,
+    actorName: actor.name ?? undefined,
+    ipAddress: ip,
+    ipAddresses: ip ? [ip] : [],
   })
 }
 
@@ -269,12 +366,14 @@ export async function recordFailedLoginAlert(
   if (attempts < FAILED_LOGIN_BURST_THRESHOLD) return
   if (await hasOpenAlert(db, 'auth.failed_login_burst', key, FAILED_LOGIN_BURST_WINDOW_MS)) return
 
+  const ip = normalizeIp(ipAddress)
   await createSuspiciousActivityAlert(db, {
     ruleKey: 'auth.failed_login_burst',
     severity: 'high',
     title: 'Repeated failed login attempts',
-    description: `${attempts} failed login attempts from ${ipAddress ?? 'unknown IP'} in the last 15 minutes.`,
+    description: `${attempts} failed login attempts from ${ip ?? 'unknown IP'} in the last 15 minutes.`,
     metadata: { dedupeKey: key, attempts, key },
-    ipAddress,
+    ipAddress: ip,
+    ipAddresses: ip ? [ip] : [],
   })
 }

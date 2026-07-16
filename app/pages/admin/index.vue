@@ -23,6 +23,8 @@ import {
   smtpHealthTone,
   suspiciousAlertRuleLabel,
   suspiciousAlertSeverityClass,
+  formatSuspiciousAlertUser,
+  formatSuspiciousAlertIps,
   workerQueueStatusLabel,
 } from '~/utils/admin-panel-ui'
 
@@ -130,6 +132,11 @@ interface SuspiciousAlertItem {
   severity: string
   title: string
   description: string
+  actorUserId: string | null
+  actorName: string | null
+  actorEmail: string | null
+  ipAddress: string | null
+  ipAddresses: string[]
   status: string
   createdAt: string
 }
@@ -608,6 +615,8 @@ async function testAiConnection() {
                       <th>When</th>
                       <th>Rule</th>
                       <th>Severity</th>
+                      <th>User</th>
+                      <th>IP address(es)</th>
                       <th>Summary</th>
                       <th />
                     </tr>
@@ -617,7 +626,14 @@ async function testAiConnection() {
                       <td><span class="mono" style="font-size:12px">{{ formatBackupWhen(alert.createdAt) }}</span></td>
                       <td>{{ suspiciousAlertRuleLabel(alert.ruleKey) }}</td>
                       <td><span class="pill" :class="suspiciousAlertSeverityClass(alert.severity)">{{ alert.severity }}</span></td>
-                      <td>{{ alert.title }}</td>
+                      <td>{{ formatSuspiciousAlertUser(alert) }}</td>
+                      <td><span class="mono" style="font-size:12px">{{ formatSuspiciousAlertIps(alert) }}</span></td>
+                      <td>
+                        <div>{{ alert.title }}</div>
+                        <div v-if="alert.description" style="font-size:12px; color:#64748b; margin-top:2px;">
+                          {{ alert.description }}
+                        </div>
+                      </td>
                       <td>
                         <button
                           class="btn sm"
