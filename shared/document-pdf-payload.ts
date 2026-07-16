@@ -119,6 +119,46 @@ const ESTIMATE_STATUS_LABELS: Record<string, string> = {
   void: 'VOID',
 }
 
+const PDF_UNIT_TYPE_LABELS: Record<string, string> = {
+  truck: 'Truck',
+  bus: 'Bus',
+  equipment: 'Equipment',
+  tractor: 'Tractor',
+  other: 'Unit',
+}
+
+export type PdfVehicleSnapshotInput = {
+  unitType?: string | null
+  busNumber?: string | null
+  unitTag?: string | null
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  trim?: string | null
+  vin?: string | null
+  plate?: string | null
+}
+
+function pdfUnitTypeLabel(unitType: string | null | undefined): string {
+  return PDF_UNIT_TYPE_LABELS[unitType ?? 'other'] ?? 'Unit'
+}
+
+/** Fleet unit line for PDF templates — e.g. "Bus #606". */
+export function formatPdfVehicleUnitDisplay(vehicle: PdfVehicleSnapshotInput): string {
+  const fleet = vehicle.busNumber?.trim()
+  if (fleet) return `${pdfUnitTypeLabel(vehicle.unitType)} #${fleet}`
+  const tag = vehicle.unitTag?.trim()
+  if (tag) return `${pdfUnitTypeLabel(vehicle.unitType)} · ${tag}`
+  const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
+  return ymm || '—'
+}
+
+/** Year / make / model string — shown where templates previously displayed plate. */
+export function formatPdfVehicleYearMakeModel(vehicle: PdfVehicleSnapshotInput): string {
+  const ymm = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(' ')
+  return ymm || '—'
+}
+
 function moneyDisplay(value: string): string {
   return `$${formatMoney(parseMoney(value))}`
 }
@@ -229,15 +269,7 @@ export interface BuildInvoicePdfPayloadInput {
     billingAddress?: DocumentPdfAddressInput
     serviceAddress?: DocumentPdfAddressInput
   } | null
-  vehicleSnapshot?: {
-    busNumber?: string | null
-    unitTag?: string | null
-    year?: number | null
-    make?: string | null
-    model?: string | null
-    vin?: string | null
-    plate?: string | null
-  } | null
+  vehicleSnapshot?: PdfVehicleSnapshotInput | null
   lineItems: Array<{
     description: string
     lineType: string
@@ -303,11 +335,11 @@ export function buildInvoicePdfData(
     },
     vehicle: vehicle
       ? {
-          unitNumber: vehicle.busNumber ?? vehicle.unitTag ?? '—',
+          unitNumber: formatPdfVehicleUnitDisplay(vehicle),
           year: vehicle.year != null ? String(vehicle.year) : '—',
           makeModel: [vehicle.make, vehicle.model].filter(Boolean).join(' ') || '—',
           vin: vehicle.vin ?? '—',
-          plate: vehicle.plate ?? 'Not on file',
+          plate: formatPdfVehicleYearMakeModel(vehicle),
         }
       : null,
     lineItems: detail.lineItems.map(line => ({

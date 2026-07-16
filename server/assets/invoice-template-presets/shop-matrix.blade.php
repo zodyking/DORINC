@@ -665,7 +665,7 @@
           <th>YEAR</th>
           <th>MAKE / MODEL</th>
           <th>VIN</th>
-          <th>LICENSE</th>
+          <th>VEHICLE</th>
           <th>MILEAGE IN / OUT</th>
           <th>BUS NO.</th>
         </tr>
@@ -686,7 +686,7 @@
           </td>
 
           <td class="center">
-            {{ strtoupper($vehicle['plate'] ?? '') }}
+            {{ $vehicle['plate'] ?? '' }}
           </td>
 
           <td class="center">
@@ -700,7 +700,7 @@
           </td>
 
           <td class="center">
-            {{ strtoupper($busNumber) }}
+            {{ $vehicle['unitNumber'] ?? '' }}
           </td>
         </tr>
       </table>

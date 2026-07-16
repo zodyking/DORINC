@@ -226,9 +226,9 @@
         <td width="{{ $sectionVisible('customer') ? '36%' : '55%' }}">
           <div class="label">{{ $sectionLabel('vehicle', 'Vehicle / unit') }}</div>
           <table class="kv">
-            <tr><td class="k">Unit</td><td class="v">{{ $vehicle['unitNumber'] ?? '—' }} · {{ $vehicle['year'] ?? '—' }} {{ $vehicle['makeModel'] ?? '' }}</td></tr>
+            <tr><td class="k">Unit</td><td class="v">{{ $vehicle['unitNumber'] ?? '—' }}</td></tr>
             <tr><td class="k">VIN</td><td class="v mono">{{ $vehicle['vin'] ?? '—' }}</td></tr>
-            <tr><td class="k">Plate</td><td class="v">{{ $vehicle['plate'] ?? '—' }}</td></tr>
+            <tr><td class="k">Vehicle</td><td class="v">{{ $vehicle['plate'] ?? '—' }}</td></tr>
           </table>
         </td>
       @endif
