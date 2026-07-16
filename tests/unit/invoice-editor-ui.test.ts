@@ -124,7 +124,7 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
   })
 
   it('formats audit history rows', () => {
-    expect(formatHistoryChange('invoices.line_items.create', { description: 'NOx sensor' }))
-      .toBe('Added line · NOx sensor')
+    expect(formatHistoryChange('invoices.line_items.create', { description: 'NOx sensor', lineAmount: '145.00' }))
+      .toBe('Added line "NOx sensor" ($145.00)')
   })
 })

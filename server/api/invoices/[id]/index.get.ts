@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       action: auditLogs.action,
       actorName: auditLogs.actorName,
       changedFields: auditLogs.changedFields,
+      beforeData: auditLogs.beforeData,
       afterData: auditLogs.afterData,
       createdAt: auditLogs.createdAt,
     })

@@ -21,7 +21,7 @@ describe('system-logs-ui helpers (P1-33)', () => {
 
   it('maps known actions to readable labels', () => {
     expect(auditActionLabel('customers.create')).toBe('Customer created')
-    expect(auditActionLabel('auth.login')).toBe('Staff login')
+    expect(auditActionLabel('auth.login')).toBe('Staff signed in')
   })
 
   it('assigns pill classes like the mockup', () => {
@@ -29,7 +29,7 @@ describe('system-logs-ui helpers (P1-33)', () => {
     expect(auditActionPill('auth.login').cls).toBe('pill gray')
     expect(auditActionPill('backup.completed').cls).toBe('pill ok')
     expect(auditActionPill('flags.updated').cls).toBe('pill warn')
-    expect(auditActionPill('invoices.create').label).toBe('invoices.create')
+    expect(auditActionPill('invoices.create').label).toBe('Invoice created')
   })
 
   it('summarizes audit detail from afterData', () => {
@@ -40,8 +40,9 @@ describe('system-logs-ui helpers (P1-33)', () => {
       changedFields: null,
       afterData: { displayName: 'Hollis Logistics LLC' },
       beforeData: null,
+      actorName: 'Devon R.',
     })
-    expect(detail).toBe('Hollis Logistics LLC')
+    expect(detail).toBe('Customer created — Hollis Logistics LLC')
   })
 
   it('formats IP addresses', () => {

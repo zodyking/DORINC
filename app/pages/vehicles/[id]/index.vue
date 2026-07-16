@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Vehicle detail (mockup: PAGE: VEHICLE DETAIL).
+import { formatAuditChangeMessage } from '#shared/audit-messages'
 definePageMeta({ layout: 'staff' })
 
 interface Vehicle {
@@ -32,6 +33,8 @@ interface HistoryRow {
   action: string
   actorName: string | null
   changedFields: string[] | null
+  beforeData?: Record<string, unknown> | null
+  afterData?: Record<string, unknown> | null
   createdAt: string
 }
 
@@ -86,18 +89,13 @@ async function toggleArchive() {
   }
 }
 
-const HIST_LABELS: Record<string, string> = {
-  'vehicles.create': 'Unit registered',
-  'vehicles.update': 'Unit updated',
-  'vehicles.archive': 'Unit archived',
-  'vehicles.restore': 'Unit restored',
-  'vehicles.decode_vin': 'VIN decoded',
-}
-
 function histChange(h: HistoryRow): string {
-  const label = HIST_LABELS[h.action] ?? h.action
-  const fields = h.changedFields?.length ? ` · ${h.changedFields.join(', ')}` : ''
-  return label + fields
+  return formatAuditChangeMessage({
+    action: h.action,
+    changedFields: h.changedFields,
+    beforeData: h.beforeData,
+    afterData: h.afterData,
+  })
 }
 
 function histWhen(iso: string): string {

@@ -15,13 +15,20 @@ export default defineEventHandler(async (event) => {
   await requireEditSession(event, db, 'invoice', id, actor.id)
 
   try {
-    await deleteInvoiceLineItem(db, id, lineId, actor.id)
+    const { deleted } = await deleteInvoiceLineItem(db, id, lineId, actor.id)
 
     await writeAudit(event, {
       entityType: 'invoice',
       entityId: id,
       action: 'invoices.line_items.delete',
-      afterData: { lineId },
+      beforeData: {
+        lineId,
+        description: deleted.description,
+        lineType: deleted.lineType,
+        quantity: deleted.quantity,
+        unitPrice: deleted.unitPrice,
+        lineAmount: deleted.lineAmount,
+      },
       permissionKey: 'invoices.update.all',
     })
 

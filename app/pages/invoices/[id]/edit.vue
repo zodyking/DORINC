@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   applyCatalogItemToLineFields,
   autosavedLabel,
-  catalogItemSub,
-  catalogTypeToLineType,
   customerTermsHelp,
   editorSummaryRows,
   formatHistoryChange,
@@ -74,17 +73,10 @@ interface HistoryRow {
   id: string
   action: string
   actorName: string | null
-  afterData: Record<string, unknown> | null
+  changedFields?: string[] | null
+  beforeData?: Record<string, unknown> | null
+  afterData?: Record<string, unknown> | null
   createdAt: string
-}
-
-interface CatalogRow {
-  id: string
-  itemType: string
-  sku: string | null
-  name: string
-  defaultPrice: string | null
-  uom: string
 }
 
 interface VehiclePick extends VehicleDisplay {
@@ -144,7 +136,9 @@ watch([() => auth.loaded, () => auth.can('invoices.read.all'), idValid], () => {
 })
 
 const invoice = computed(() => data.value?.invoice)
-const history = computed(() => data.value?.history ?? [])
+const history = computed(() =>
+  (data.value?.history ?? []).filter(row => !isEditingSessionNoise(row.action)),
+)
 const isDraft = computed(() => invoice.value?.status === 'draft')
 
 const loadErrorMessage = computed(() => {
@@ -175,7 +169,6 @@ const complaint = ref('')
 const internalNotes = ref('')
 const lines = ref<LineItem[]>([])
 
-const catalogQ = ref('')
 const busy = ref(false)
 const saveError = ref('')
 const lastSavedAt = ref<Date | null>(null)
@@ -303,15 +296,6 @@ const vehicleHelp = computed(() => {
   if (snap) return vehicleSub(snap)
   return 'Select a vehicle for this invoice'
 })
-
-const { data: catalogData } = useClientFetch<{ items: CatalogRow[] }>(
-  '/api/catalog/items',
-  {
-    query: computed(() => ({ q: catalogQ.value || undefined, pageSize: 8, sort: 'name-asc' as const })),
-  },
-)
-
-const catalogItems = computed(() => catalogData.value?.items ?? [])
 
 const serviceLogId = computed(() => invoice.value?.serviceLogId ?? null)
 
@@ -511,33 +495,6 @@ async function addEmptyLine() {
       await acquireEditSession()
     }
     saveError.value = syncFetchErrorMessage(e, 'Could not add line')
-  }
-  finally {
-    busy.value = false
-  }
-}
-
-async function addFromCatalog(item: CatalogRow) {
-  if (!editable.value) return
-  busy.value = true
-  saveError.value = ''
-  try {
-    const { line } = await $fetch<{ line: LineItem }>(`/api/invoices/${id}/line-items`, {
-      method: 'POST',
-      body: {
-        lineType: catalogTypeToLineType(item.itemType),
-        catalogItemId: item.id,
-        description: item.name,
-        quantity: '1',
-        unitPrice: item.defaultPrice ?? '0',
-        sortOrder: lines.value.length,
-      },
-    })
-    lines.value = [...lines.value, { ...line }]
-    void refreshInvoice()
-  }
-  catch (e: unknown) {
-    saveError.value = syncFetchErrorMessage(e, 'Could not add catalog item')
   }
   finally {
     busy.value = false
@@ -1074,36 +1031,6 @@ const aiPopStyle = computed(() => {
 
           <div class="stack">
             <div class="card">
-              <div class="chead"><h3>Quick add from catalog</h3></div>
-              <div class="cbody" style="padding:10px 12px;">
-                <div class="search" style="max-width:none; margin-bottom:8px;">
-                  <span class="gl">⌕</span>
-                  <input v-model="catalogQ" type="search" placeholder="Search catalog items…" aria-label="Search catalog items">
-                </div>
-                <div v-if="catalogItems.length">
-                  <div v-for="item in catalogItems" :key="item.id" class="qitem" style="padding:10px 6px;">
-                    <div class="info">
-                      <b>{{ item.name }}</b>
-                      <div class="sub">{{ catalogItemSub(item) }}</div>
-                    </div>
-                    <div class="qa">
-                      <button type="button" class="btn sm" :disabled="!editable || busy" @click="addFromCatalog(item)">Add</button>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="empty" style="padding:16px 6px;">No catalog items found.</div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="chead"><h3>PDF output</h3></div>
-              <dl class="kv">
-                <dt>Paper</dt><dd>Letter · 0.75in margins</dd>
-                <dt>Delivery</dt><dd>Portal + email</dd>
-              </dl>
-            </div>
-
-            <div class="card">
               <div class="chead">
                 <h3>Change history</h3>
               </div>
@@ -1116,7 +1043,7 @@ const aiPopStyle = computed(() => {
                     <tr v-for="row in history" :key="row.id">
                       <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
                       <td class="who">{{ row.actorName ?? '—' }}</td>
-                      <td class="chg">{{ formatHistoryChange(row.action, row.afterData) }}</td>
+                      <td class="chg">{{ formatHistoryChange(row.action, row.afterData ?? null, { changedFields: row.changedFields, beforeData: row.beforeData }) }}</td>
                     </tr>
                     <tr v-if="!history.length">
                       <td colspan="3" class="empty" style="display:table-cell;">No history yet.</td>

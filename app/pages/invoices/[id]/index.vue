@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Invoice detail — line items, API totals, status actions, PDF preview.
+import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   auditWhenDisplay,
   formatInvoiceAuditAction,
@@ -73,6 +74,7 @@ interface HistoryRow {
   action: string
   actorName: string | null
   changedFields: string[] | null
+  beforeData?: Record<string, unknown> | null
   afterData: Record<string, unknown> | null
   createdAt: string
 }
@@ -133,7 +135,9 @@ watch([canRead, id], () => {
 })
 
 const invoice = computed(() => data.value?.invoice)
-const history = computed(() => data.value?.history ?? [])
+const history = computed(() =>
+  (data.value?.history ?? []).filter(row => !isEditingSessionNoise(row.action)),
+)
 const sendDelivery = computed(() => data.value?.sendDelivery)
 const lines = computed(() => invoice.value?.lineItems ?? [])
 const isPdfEligible = computed(() =>
@@ -652,7 +656,7 @@ const summaryRows = computed(() => {
                 <tr v-for="row in history" :key="row.id">
                   <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
                   <td class="who">{{ row.actorName ?? 'system' }}</td>
-                  <td class="chg">{{ formatInvoiceAuditAction(row.action) }}</td>
+                  <td class="chg">{{ formatInvoiceAuditAction(row.action, row) }}</td>
                 </tr>
                 <tr v-if="!history.length">
                   <td class="when">—</td>

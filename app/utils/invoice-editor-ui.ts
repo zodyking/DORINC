@@ -1,6 +1,7 @@
 // Invoice editor helpers (mockup: PAGE: INVOICE EDITOR / P1-24).
 
 import { addMoney, subtractMoney } from '#shared/money'
+import { formatAuditChangeMessage, type AuditMessageInput } from '#shared/audit-messages'
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
 import { getLineTypeVerbsCache } from './detection-settings-store'
@@ -129,14 +130,14 @@ export function customerTermsHelp(terms: string, accountKind?: string | null): s
   return `Terms from account: ${parts.join(' · ')}`
 }
 
-export function formatHistoryChange(action: string, afterData: Record<string, unknown> | null): string {
-  if (action === 'invoices.create') return 'Invoice created'
-  if (action === 'invoices.update') return 'Autosaved draft · header updated'
-  if (action === 'invoices.line_items.create') {
-    const desc = afterData?.description
-    return typeof desc === 'string' ? `Added line · ${desc}` : 'Added line item'
-  }
-  if (action === 'invoices.line_items.update') return 'Line items recalculated'
-  if (action === 'invoices.line_items.delete') return 'Removed line item'
-  return action.replace(/\./g, ' ')
+export function formatHistoryChange(
+  action: string,
+  afterData: Record<string, unknown> | null,
+  opts: Omit<AuditMessageInput, 'action' | 'afterData'> = {},
+): string {
+  return formatAuditChangeMessage({
+    action,
+    afterData,
+    ...opts,
+  })
 }

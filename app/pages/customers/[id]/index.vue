@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAuditChangeMessage } from '#shared/audit-messages'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,
@@ -42,6 +43,8 @@ interface HistoryRow {
   action: string
   actorName: string | null
   changedFields: string[] | null
+  beforeData?: Record<string, unknown> | null
+  afterData?: Record<string, unknown> | null
   createdAt: string
 }
 
@@ -274,23 +277,13 @@ function histWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-const HIST_LABELS: Record<string, string> = {
-  'customers.create': 'Account created',
-  'customers.update': 'Account updated',
-  'customers.archive': 'Account archived',
-  'customers.restore': 'Account restored',
-  'customers.contact_add': 'Contact added',
-  'customers.contact_update': 'Contact updated',
-  'customers.contact_archive': 'Contact archived',
-  'customers.portal_enable': 'Portal enabled',
-  'customers.portal_disable': 'Portal disabled',
-  'customers.credential_email_send': 'Credential email sent',
-}
-
 function histChange(h: HistoryRow): string {
-  const label = HIST_LABELS[h.action] ?? h.action
-  const fields = h.changedFields?.length ? ` · ${h.changedFields.join(', ')}` : ''
-  return label + fields
+  return formatAuditChangeMessage({
+    action: h.action,
+    changedFields: h.changedFields,
+    beforeData: h.beforeData,
+    afterData: h.afterData,
+  })
 }
 
 function credWhen(iso: string): string {

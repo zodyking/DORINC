@@ -815,19 +815,20 @@ export async function updateInvoiceLineItem(
     .returning()
 
   await recalculateInvoiceTotals(db, invoiceId, actorId)
-  return { line: updated!, changedFields }
+  return { line: updated!, changedFields, before: existing }
 }
 
 export async function deleteInvoiceLineItem(db: Db, invoiceId: string, lineId: string, actorId: string) {
   const invoice = await getInvoice(db, invoiceId)
   assertDraftEditable(invoice)
 
-  const [existing] = await db.select({ id: invoiceLineItems.id }).from(invoiceLineItems)
+  const [existing] = await db.select().from(invoiceLineItems)
     .where(and(eq(invoiceLineItems.id, lineId), eq(invoiceLineItems.invoiceId, invoiceId)))
   if (!existing) throw new InvoicesServiceError('LINE_NOT_FOUND')
 
   await db.delete(invoiceLineItems).where(eq(invoiceLineItems.id, lineId))
   await recalculateInvoiceTotals(db, invoiceId, actorId)
+  return { deleted: existing }
 }
 
 export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorId: string) {

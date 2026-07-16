@@ -16,14 +16,29 @@ export default defineEventHandler(async (event) => {
   await requireEditSession(event, db, 'invoice', id, actor.id)
 
   try {
-    const { line, changedFields } = await updateInvoiceLineItem(db, id, lineId, patch, actor.id)
+    const { line, changedFields, before } = await updateInvoiceLineItem(db, id, lineId, patch, actor.id)
 
     if (changedFields.length) {
       await writeAudit(event, {
         entityType: 'invoice',
         entityId: id,
         action: 'invoices.line_items.update',
-        afterData: { lineId, changedFields, lineAmount: line.lineAmount },
+        beforeData: {
+          lineId,
+          description: before.description,
+          lineType: before.lineType,
+          quantity: before.quantity,
+          unitPrice: before.unitPrice,
+          lineAmount: before.lineAmount,
+        },
+        afterData: {
+          lineId,
+          description: line.description,
+          lineType: line.lineType,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineAmount: line.lineAmount,
+        },
         changedFields,
         permissionKey: 'invoices.update.all',
       })

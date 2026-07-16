@@ -1,5 +1,6 @@
 // Presentation helpers for service logs (mockup: PAGE: SERVICE LOGS / DETAIL).
 
+import { formatAuditChangeMessage } from '#shared/audit-messages'
 import { vehicleSub, vehicleTag, type VehicleDisplay } from './vehicles-ui'
 
 export type ServiceLogStatus
@@ -73,18 +74,22 @@ export function fileThumbEmoji(mimeType: string, fileKind: string): string {
   return '📎'
 }
 
-export function formatAuditAction(action: string): string {
-  if (action === 'service_logs.create') return 'Log created'
-  if (action === 'service_logs.update') return 'Log updated'
-  if (action.startsWith('ai.')) {
-    if (action === 'ai.extraction.queued') return 'AI extraction queued'
-    if (action === 'ai.suggestion.accepted') return 'AI extraction accepted'
-    if (action === 'ai.suggestion.edited') return 'AI suggestion edited & applied'
-    if (action === 'ai.suggestion.rejected') return 'AI suggestion rejected'
-  }
+export function formatAuditAction(
+  action: string,
+  row: {
+    changedFields?: string[] | null
+    beforeData?: unknown
+    afterData?: unknown
+  } = {},
+): string {
   if (action.startsWith('service_logs.status.')) {
     const status = action.replace('service_logs.status.', '')
-    return `Status → ${serviceLogStatusPill(status as ServiceLogStatus).label}`
+    return `Changed status to ${serviceLogStatusPill(status as ServiceLogStatus).label}`
   }
-  return action.replace(/\./g, ' ')
+  return formatAuditChangeMessage({
+    action,
+    changedFields: row.changedFields ?? null,
+    beforeData: row.beforeData,
+    afterData: row.afterData,
+  })
 }
