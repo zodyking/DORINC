@@ -57,15 +57,6 @@ function onSendClick() {
 <template>
   <div v-if="ready" class="inv-row-actions" @click.stop>
     <PageActionsMenu>
-      <button
-        type="button"
-        class="btn"
-        :disabled="!sendAllowed"
-        :title="sendTitle"
-        @click="onSendClick"
-      >
-        {{ sendLabel }}
-      </button>
       <NuxtLink
         v-if="editAllowed"
         :to="`/invoices/${invoiceId}/edit`"
@@ -82,6 +73,15 @@ function onSendClick() {
         :title="editTitle"
       >
         Edit
+      </button>
+      <button
+        type="button"
+        class="btn"
+        :disabled="!sendAllowed"
+        :title="sendTitle"
+        @click="onSendClick"
+      >
+        {{ sendLabel }}
       </button>
       <DeleteEntityButton
         v-if="canDeletePerm"
