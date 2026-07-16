@@ -31,6 +31,14 @@ export function serviceLogInvoiceLinkReleased(statusReason: string | null | unde
   return statusReason === INVOICE_LINK_RELEASED_REASON
 }
 
+export const SERVICE_LOG_SENDABLE_STATUSES: ServiceLogStatus[] = ['ready_for_review', 'in_review']
+
+export function isServiceLogSendable(status: ServiceLogStatus): boolean {
+  return SERVICE_LOG_SENDABLE_STATUSES.includes(status)
+}
+
+export const CUSTOMER_REQUESTED_TRIAGE_STATUSES: ServiceLogStatus[] = ['draft', 'uploaded']
+
 export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceId?: string | null }): { cls: string, label: string } {
   if (status === 'converted_to_invoice' && !opts?.invoiceId) {
     return { cls: 'pill warn', label: 'Awaiting review' }

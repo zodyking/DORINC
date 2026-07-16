@@ -362,10 +362,12 @@ export async function createInvoiceDraft(
 ) {
   let customerSnapshot: InvoiceCustomerSnapshot
   let paymentTerms: string
+  let taxExempt: boolean
 
   if (snapshotOverrides?.customerSnapshot) {
     customerSnapshot = snapshotOverrides.customerSnapshot
     paymentTerms = input.paymentTerms ?? snapshotOverrides.customerSnapshot.paymentTerms
+    taxExempt = snapshotOverrides.customerSnapshot.taxExempt
   }
   else {
     let customer
@@ -377,6 +379,7 @@ export async function createInvoiceDraft(
     }
     customerSnapshot = buildCustomerSnapshot(customer)
     paymentTerms = input.paymentTerms ?? customer.paymentTerms
+    taxExempt = customer.taxExempt
   }
 
   const vehicleSnapshot = snapshotOverrides?.vehicleSnapshot !== undefined
@@ -384,7 +387,7 @@ export async function createInvoiceDraft(
     : await resolveVehicleForCustomer(db, input.customerId, input.vehicleId)
 
   const [row] = await db.insert(invoices).values({
-    customerId: input.customerId!,
+    customerId: input.customerId ?? null,
     vehicleId: input.vehicleId ?? null,
     serviceLogId: input.serviceLogId ?? null,
     serviceRequestId: input.serviceRequestId ?? null,
@@ -400,7 +403,7 @@ export async function createInvoiceDraft(
     complaint: input.complaint ?? null,
     internalNotes: input.internalNotes ?? null,
     customerNotes: input.customerNotes ?? null,
-    taxExempt: customer.taxExempt,
+    taxExempt,
     taxRate: input.taxRate ?? '0',
     shopSuppliesPercent: input.shopSuppliesPercent ?? null,
     feesAmount: input.feesAmount ?? '0',

@@ -2,6 +2,7 @@ import { useDb } from '../../../db/client'
 import {
   getServiceLog,
   isServiceLogEditable,
+  promoteCustomerRequestedLog,
   ServiceLogsServiceError,
   updateServiceLog,
 } from '../../../services/service-logs.service'
@@ -39,7 +40,9 @@ export default defineEventHandler(async (event) => {
       if (!isOwner) throw apiError(event, 'FORBIDDEN', 'You do not have permission to edit this service log')
     }
 
-    const { log, before, changedFields } = await updateServiceLog(db, id, patch)
+    const { log: updated, before, changedFields } = await updateServiceLog(db, id, patch)
+    let log = updated
+    const allChangedFields = [...changedFields]
 
     if (changedFields.length) {
       await writeAudit(event, {
@@ -53,7 +56,24 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    return { log, changedFields }
+    if (isReviewer) {
+      const { log: promoted, promoted: didPromote } = await promoteCustomerRequestedLog(db, id)
+      if (didPromote) {
+        log = promoted
+        if (!allChangedFields.includes('status')) allChangedFields.push('status')
+        await writeAudit(event, {
+          entityType: 'service_log',
+          entityId: id,
+          action: 'service_logs.status.ready_for_review',
+          beforeData: { status: before.status },
+          afterData: { status: log.status },
+          changedFields: ['status'],
+          permissionKey: 'service_logs.review.all',
+        })
+      }
+    }
+
+    return { log, changedFields: allChangedFields, customerRequestPromoted: isReviewer && log.status === 'ready_for_review' && before.status !== 'ready_for_review' && before.customerRequested }
   }
   catch (err) {
     if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {

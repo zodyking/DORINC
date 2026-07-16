@@ -13,6 +13,15 @@ interface ServiceLogActionRow {
   invoiceId: string | null
 }
 
+/** Whether the actor may move a draft/uploaded log into the send-to-invoice queue. */
+export function canMarkServiceLogReady(event: H3Event, log: ServiceLogActionRow): boolean {
+  if (!['draft', 'uploaded'].includes(log.status)) return false
+  const auth = event.context.auth as AuthContext | undefined
+  if (!auth?.user) return false
+  return hasPermission(event, 'service_logs.review.all')
+    || hasPermission(event, 'service_logs.upload.own', { ownsRecord: log.submittedBy === auth.user.id })
+}
+
 export function canSendServiceLogToInvoice(event: H3Event, log: ServiceLogActionRow): boolean {
   if (!isServiceLogSendable(log.status)) return false
   const auth = event.context.auth as AuthContext | undefined

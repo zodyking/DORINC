@@ -31,6 +31,7 @@ interface ServiceLogRow {
   vehicle: VehicleBits | null
   canSendToInvoice?: boolean
   canRevertInvoice?: boolean
+  canMarkReady?: boolean
 }
 
 const auth = useAuthStore()
@@ -228,6 +229,7 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
                   :invoice-id="log.invoiceId"
                   :can-send-to-invoice="log.canSendToInvoice"
                   :can-revert-invoice="log.canRevertInvoice"
+                  :can-mark-ready="log.canMarkReady"
                   @changed="onRowChanged"
                   @error="onRowActionError"
                 />

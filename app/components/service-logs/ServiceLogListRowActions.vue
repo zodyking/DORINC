@@ -10,6 +10,7 @@ const props = defineProps<{
   invoiceId: string | null
   canSendToInvoice?: boolean
   canRevertInvoice?: boolean
+  canMarkReady?: boolean
   busy?: boolean
 }>()
 
@@ -17,6 +18,24 @@ const emit = defineEmits<{ changed: [], error: [message: string] }>()
 
 const actionBusy = ref(false)
 const isBusy = computed(() => props.busy || actionBusy.value)
+
+async function markReadyToInvoice() {
+  if (!props.canMarkReady || isBusy.value) return
+  actionBusy.value = true
+  try {
+    await $fetch(`/api/service-logs/${props.logId}/status`, {
+      method: 'POST',
+      body: { status: 'ready_for_review' },
+    })
+    emit('changed')
+  }
+  catch (e: unknown) {
+    emit('error', syncFetchErrorMessage(e, 'Could not mark log ready to invoice'))
+  }
+  finally {
+    actionBusy.value = false
+  }
+}
 
 async function sendToInvoice() {
   if (!props.canSendToInvoice || isBusy.value) return
@@ -48,6 +67,7 @@ async function undoSendToInvoice() {
   }
 }
 
+const showMarkReady = computed(() => !!props.canMarkReady)
 const showSend = computed(() => !!props.canSendToInvoice)
 const showUndo = computed(() => !!props.canRevertInvoice)
 const showViewInvoice = computed(() =>
@@ -58,6 +78,15 @@ const showViewInvoice = computed(() =>
 <template>
   <div class="sl-row-actions" @click.stop>
     <PageActionsMenu>
+      <button
+        v-if="showMarkReady"
+        type="button"
+        class="btn"
+        :disabled="isBusy"
+        @click="markReadyToInvoice"
+      >
+        {{ isBusy ? 'Updating…' : 'Mark ready to invoice' }}
+      </button>
       <button
         v-if="showSend"
         type="button"

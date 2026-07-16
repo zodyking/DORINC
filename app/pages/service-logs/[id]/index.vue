@@ -294,7 +294,7 @@ const pill = computed(() => log.value
           Resubmit for review
         </button>
         <button
-          v-if="(canReview || (isOwner && canUpload)) && log.status === 'draft'"
+          v-if="(canReview || (isOwner && canUpload)) && ['draft', 'uploaded'].includes(log.status)"
           class="btn primary"
           type="button"
           :disabled="busy"
@@ -362,7 +362,16 @@ const pill = computed(() => log.value
       class="flash info"
       style="margin:-8px 0 16px;"
     >
-      {{ CUSTOMER_REQUESTED_SERVICE_NOTE }} — review the customer complaint and complete the log before invoicing.
+      {{ CUSTOMER_REQUESTED_SERVICE_NOTE }}
+      <template v-if="['draft', 'uploaded'].includes(log.status) && canReview">
+        — save your review to enable send to invoice (the row stays highlighted until invoiced).
+      </template>
+      <template v-else-if="isServiceLogSendable(log.status)">
+        — complete the log and use send to invoice when ready.
+      </template>
+      <template v-else>
+        — review the customer complaint and complete the log before invoicing.
+      </template>
     </p>
     <p
       v-if="log && serviceLogInvoiceLinkReleased(log.statusReason)"

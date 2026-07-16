@@ -10,6 +10,7 @@ import {
   convertServiceLogToInvoice,
   getServiceLog,
   listServiceLogs,
+  promoteCustomerRequestedLog,
   revertServiceLogInvoice,
   transitionServiceLog,
   updateServiceLog,
@@ -431,5 +432,30 @@ describe('P1-29 change service log vehicle', () => {
     const log = await makeLog()
     await expect(reassignServiceLogVehicle(db, log.id, { vehicleId: unit.id }, MECHANIC))
       .rejects.toMatchObject({ code: 'SAME_VEHICLE' })
+  })
+})
+
+describe('P1-30 customer-requested triage + send to invoice', () => {
+  it('promotes customer-requested draft logs to ready_for_review', async () => {
+    const log = await makeLog({ customerRequested: true })
+    expect(log.status).toBe('draft')
+
+    const { log: promoted, promoted: didPromote } = await promoteCustomerRequestedLog(db, log.id)
+    expect(didPromote).toBe(true)
+    expect(promoted.status).toBe('ready_for_review')
+  })
+
+  it('does not promote normal draft logs', async () => {
+    const log = await makeLog()
+    const { promoted: didPromote } = await promoteCustomerRequestedLog(db, log.id)
+    expect(didPromote).toBe(false)
+  })
+
+  it('converts customer-requested logs after triage', async () => {
+    const log = await makeLog({ customerRequested: true })
+    await promoteCustomerRequestedLog(db, log.id)
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    expect(converted.status).toBe('converted_to_invoice')
+    expect(invoice.complaint).toBe('Rough idle at cold start')
   })
 })

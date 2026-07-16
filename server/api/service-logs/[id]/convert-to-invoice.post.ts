@@ -82,6 +82,7 @@ export default defineEventHandler(async (event) => {
         throw apiError(event, 'VALIDATION_ERROR', 'Unable to create invoice from this service log')
       }
     }
-    throw err
+    console.error('[convert-to-invoice]', id, err)
+    throw apiError(event, 'INTERNAL_ERROR', 'Unable to send this service log to invoice')
   }
 })

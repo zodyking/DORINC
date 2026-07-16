@@ -54,6 +54,25 @@ export function isServiceLogSendable(status: ServiceLogStatus): boolean {
   return SERVICE_LOG_SENDABLE_STATUSES.includes(status)
 }
 
+/** Customer portal intakes stay in draft/uploaded until staff saves — then they enter the normal queue. */
+export const CUSTOMER_REQUESTED_TRIAGE_STATUSES: ServiceLogStatus[] = ['draft', 'uploaded']
+
+export function shouldPromoteCustomerRequestedLog(
+  log: { customerRequested: boolean, status: ServiceLogStatus },
+): boolean {
+  return log.customerRequested && CUSTOMER_REQUESTED_TRIAGE_STATUSES.includes(log.status)
+}
+
+/** Moves a customer-requested log into ready_for_review after staff triage. */
+export async function promoteCustomerRequestedLog(db: Db, id: string) {
+  const before = await getServiceLog(db, id)
+  if (!shouldPromoteCustomerRequestedLog(before)) {
+    return { log: before, before, promoted: false as const }
+  }
+  const { log, before: prior } = await transitionServiceLog(db, id, 'ready_for_review')
+  return { log, before: prior, promoted: true as const }
+}
+
 /** Field edits are allowed on any log that has not been invoiced. */
 export function isServiceLogEditable(status: ServiceLogStatus): boolean {
   return status !== 'converted_to_invoice'
