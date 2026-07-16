@@ -74,16 +74,25 @@ const { data, refresh, error } = useClientFetch<{
   log: ServiceLog
   files: FileMeta[]
   history: HistoryRow[]
+  actions: {
+    canSendToInvoice: boolean
+    canRevertInvoice: boolean
+    revertBlockReason: string | null
+  }
 }>(`/api/service-logs/${id}`)
 
 const log = computed(() => data.value?.log)
 const files = computed(() => data.value?.files ?? [])
 const history = computed(() => data.value?.history ?? [])
+const actions = computed(() => data.value?.actions ?? {
+  canSendToInvoice: false,
+  canRevertInvoice: false,
+  revertBlockReason: null,
+})
 const draftLines = computed(() => (Array.isArray(log.value?.draftLineItems) ? log.value!.draftLineItems! : []))
 
 const canReview = computed(() => auth.can('service_logs.review.all'))
 const canExtract = computed(() => auth.can('ai.extract.all') && canReview.value)
-const canConvert = computed(() => auth.can('service_logs.convert.all'))
 const canUpload = computed(() => auth.can('service_logs.upload.own'))
 const isOwner = computed(() => log.value?.submittedBy === auth.user?.id)
 const canEditLog = computed(() => {
@@ -178,6 +187,23 @@ async function changeStatus(status: ServiceLogStatus, reason?: string) {
   }
 }
 
+async function revertInvoice() {
+  if (!log.value || !actions.value.canRevertInvoice) return
+  busy.value = true
+  actionError.value = ''
+  convertFlash.value = ''
+  try {
+    await $fetch(`/api/service-logs/${id}/revert-invoice`, { method: 'POST' })
+    await refresh()
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed'
+  }
+  finally {
+    busy.value = false
+  }
+}
+
 async function convertToInvoice() {
   if (!log.value) return
   busy.value = true
@@ -230,6 +256,24 @@ const pill = computed(() => log.value
       </template>
       <template #actions>
         <button
+          v-if="actions.canSendToInvoice"
+          class="btn primary"
+          type="button"
+          :disabled="busy"
+          @click="convertToInvoice"
+        >
+          Send to invoice
+        </button>
+        <button
+          v-if="actions.canRevertInvoice"
+          class="btn"
+          type="button"
+          :disabled="busy"
+          @click="revertInvoice"
+        >
+          Undo send to invoice
+        </button>
+        <button
           v-if="canExtract && imageFiles.length"
           type="button"
           class="btn"
@@ -263,16 +307,7 @@ const pill = computed(() => log.value
           :disabled="busy"
           @click="changeStatus('ready_for_review')"
         >
-          Submit for review
-        </button>
-        <button
-          v-if="canReview && log.status === 'ready_for_review'"
-          class="btn"
-          type="button"
-          :disabled="busy"
-          @click="changeStatus('in_review')"
-        >
-          Start review
+          Mark ready to invoice
         </button>
         <button
           v-if="canReview && log.status === 'in_review'"
@@ -283,24 +318,15 @@ const pill = computed(() => log.value
         >
           Reject
         </button>
-        <button
-          v-if="canConvert && log.status === 'in_review'"
-          class="btn primary"
-          type="button"
-          :disabled="busy"
-          @click="convertToInvoice"
-        >
-          Create invoice
-        </button>
         <NuxtLink
-          v-if="log.status === 'converted_to_invoice' && log.invoiceId"
+          v-if="log.status === 'converted_to_invoice' && log.invoiceId && !actions.canRevertInvoice"
           :to="`/invoices/${log.invoiceId}`"
           class="btn"
         >
           View invoice
         </NuxtLink>
         <NuxtLink
-          v-if="log.status === 'converted_to_invoice' && log.invoiceId"
+          v-if="log.status === 'converted_to_invoice' && log.invoiceId && canReview"
           :to="`/invoices/${log.invoiceId}/edit`"
           class="btn primary"
         >
@@ -340,10 +366,10 @@ const pill = computed(() => log.value
       class="flash warn"
       style="margin:-8px 0 16px;"
     >
-      The linked invoice was deleted. This log is back in review — create a new invoice when ready.
+      The linked invoice was deleted. This log is ready to send to invoice again.
     </p>
     <p v-if="convertFlash" class="flash ok" style="margin:-8px 0 16px;">
-      Invoice created and linked to this service log. The log stays on file.
+      Sent to invoice — draft created and linked to this service log.
       <NuxtLink :to="`/invoices/${convertFlash}`">View invoice</NuxtLink>
       ·
       <NuxtLink :to="`/invoices/${convertFlash}/edit`">Edit invoice</NuxtLink>
@@ -353,8 +379,16 @@ const pill = computed(() => log.value
       class="flash ok"
       style="margin:-8px 0 16px;"
     >
-      This service log is linked to an invoice and remains on file.
+      This service log was sent to invoice and remains on file.
       <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
+      <template v-if="actions.canRevertInvoice"> · You can undo send to make this log editable again.</template>
+    </p>
+    <p
+      v-if="log.status === 'converted_to_invoice' && !actions.canRevertInvoice && actions.revertBlockReason"
+      class="help"
+      style="margin:-8px 0 16px;"
+    >
+      {{ revertInvoiceBlockLabel(actions.revertBlockReason) }}
     </p>
     <p v-if="log.statusReason" class="help" style="margin:-8px 0 16px;">
       Review note: {{ log.statusReason }}

@@ -5,7 +5,7 @@ import { invoiceChangeRequests, serviceRequests } from '../db/schema/portal-requ
 import { serviceLogs } from '../db/schema/service-logs'
 
 /** Shown on service logs when their linked invoice was removed. */
-export const INVOICE_LINK_RELEASED_REASON = 'Linked invoice was deleted; returned to review'
+export const INVOICE_LINK_RELEASED_REASON = 'Linked invoice was deleted; ready to send to invoice again'
 
 /**
  * Clears FK blockers and restores dependent entity statuses before an invoice is hard-deleted.
@@ -15,7 +15,7 @@ export async function releaseInvoiceDependents(db: Db, invoiceId: string) {
 
   await db.update(serviceLogs)
     .set({
-      status: 'in_review',
+      status: 'ready_for_review',
       invoiceId: null,
       statusReason: INVOICE_LINK_RELEASED_REASON,
       updatedAt: now,

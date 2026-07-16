@@ -251,7 +251,7 @@ describe('deletion request workflow', () => {
     await approveDeletionRequest(db, delReq.id, ACTOR)
 
     const restored = await getServiceLog(db, log.id)
-    expect(restored.status).toBe('in_review')
+    expect(restored.status).toBe('ready_for_review')
     expect(restored.invoiceId).toBeNull()
     expect(restored.statusReason).toBe(INVOICE_LINK_RELEASED_REASON)
   })

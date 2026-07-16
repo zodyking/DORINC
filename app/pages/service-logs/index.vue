@@ -24,6 +24,8 @@ interface ServiceLogRow {
   fileCount: number
   invoiceId: string | null
   vehicle: VehicleBits
+  canSendToInvoice?: boolean
+  canRevertInvoice?: boolean
 }
 
 const auth = useAuthStore()
@@ -47,7 +49,44 @@ const query = computed(() => ({
   sort: fSort.value,
 }))
 
-const { data } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
+const actionBusyId = ref<string | null>(null)
+const actionError = ref('')
+
+async function sendToInvoice(log: ServiceLogRow, event?: Event) {
+  event?.stopPropagation()
+  if (!log.canSendToInvoice || actionBusyId.value) return
+  actionBusyId.value = log.id
+  actionError.value = ''
+  try {
+    await $fetch(`/api/service-logs/${log.id}/convert-to-invoice`, { method: 'POST', body: {} })
+    await refresh()
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Send to invoice failed'
+  }
+  finally {
+    actionBusyId.value = null
+  }
+}
+
+async function undoSendToInvoice(log: ServiceLogRow, event?: Event) {
+  event?.stopPropagation()
+  if (!log.canRevertInvoice || actionBusyId.value) return
+  actionBusyId.value = log.id
+  actionError.value = ''
+  try {
+    await $fetch(`/api/service-logs/${log.id}/revert-invoice`, { method: 'POST' })
+    await refresh()
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed'
+  }
+  finally {
+    actionBusyId.value = null
+  }
+}
+
+const { data, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
   { query },
 )
@@ -80,8 +119,8 @@ const listCountLabel = computed(() => {
 })
 
 const pageSubtitle = computed(() => {
-  if (isMechanicScope.value) return 'Your field uploads and their review status'
-  if (fView.value === 'review') return 'Logs awaiting accountant review before invoicing'
+  if (isMechanicScope.value) return 'Your field uploads — send to invoice when ready'
+  if (fView.value === 'review') return 'Logs awaiting accountant action before invoicing'
   return 'All field service logs — including those already linked to invoices'
 })
 
@@ -126,6 +165,8 @@ function openLog(id: string) {
       </template>
     </ListFilterBar>
 
+    <p v-if="actionError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ actionError }}</p>
+
     <div class="card">
       <div v-if="items.length" id="log-queue">
         <div
@@ -147,9 +188,34 @@ function openLog(id: string) {
             </div>
           </div>
           <div class="qa" @click.stop>
-            <template v-if="canReview && log.status !== 'converted_to_invoice'">
-              <button class="btn sm primary" type="button" @click="openLog(log.id)">Review &amp; invoice</button>
+            <template v-if="log.canSendToInvoice">
+              <button
+                class="btn sm primary"
+                type="button"
+                :disabled="actionBusyId === log.id"
+                @click="sendToInvoice(log, $event)"
+              >
+                {{ actionBusyId === log.id ? 'Sending…' : 'Send to invoice' }}
+              </button>
               <button class="btn sm" type="button" @click="openLog(log.id)">Open</button>
+            </template>
+            <template v-else-if="log.canRevertInvoice">
+              <button
+                class="btn sm"
+                type="button"
+                :disabled="actionBusyId === log.id"
+                @click="undoSendToInvoice(log, $event)"
+              >
+                {{ actionBusyId === log.id ? 'Undoing…' : 'Undo send' }}
+              </button>
+              <NuxtLink
+                v-if="log.invoiceId"
+                :to="`/invoices/${log.invoiceId}`"
+                class="btn sm"
+                @click.stop
+              >
+                View invoice
+              </NuxtLink>
             </template>
             <template v-else-if="log.status === 'converted_to_invoice' && log.invoiceId">
               <NuxtLink :to="`/invoices/${log.invoiceId}`" class="btn sm" @click.stop>View invoice</NuxtLink>

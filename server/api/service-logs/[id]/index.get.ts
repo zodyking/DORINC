@@ -1,9 +1,10 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
-import { getServiceLog, ServiceLogsServiceError } from '../../../services/service-logs.service'
+import { getServiceLog, ServiceLogsServiceError, getInvoiceRevertStatus } from '../../../services/service-logs.service'
 import { listUserUploadsByOwner } from '../../../services/files.service'
 import { apiError } from '../../../utils/api-error'
+import { canRevertServiceLogInvoice, canSendServiceLogToInvoice } from '../../../utils/service-log-actions'
 import { hasPermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
@@ -42,7 +43,22 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(auditLogs.createdAt))
       .limit(25)
 
-    return { log, files, history }
+    const canSendToInvoice = canSendServiceLogToInvoice(event, log)
+    const canRevertInvoice = await canRevertServiceLogInvoice(event, db, log)
+    const revertBlockReason = log.invoiceId && !canRevertInvoice
+      ? (await getInvoiceRevertStatus(db, log.invoiceId)).reason
+      : null
+
+    return {
+      log,
+      files,
+      history,
+      actions: {
+        canSendToInvoice,
+        canRevertInvoice,
+        revertBlockReason,
+      },
+    }
   }
   catch (err) {
     if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {
