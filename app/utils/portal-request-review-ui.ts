@@ -5,6 +5,7 @@ import {
   portalCorrectionPayloadKind,
   type PortalInvoiceCorrectionPayload,
   type PortalVehicleCorrectionFields,
+  type PortalVehicleCorrectionPayload,
 } from '#shared/portal-invoice-correction'
 import { portalRequestKindLabel, portalRequestStatusPill } from './portal-requests-ui'
 
@@ -128,9 +129,9 @@ export function staffRequestApproveHint(row: StaffRequestActionRow): string {
     case 'service_draft':
       return 'Opens a draft invoice pre-filled from the customer request.'
     case 'line_correction':
-      return 'Creates a revision draft and applies the requested line item changes.'
+      return 'Creates a revision draft. Choose what to apply per field — keep current, accept requested, or enter a custom value.'
     case 'vehicle_correction':
-      return 'Creates a revision draft with the updated vehicle snapshot for this invoice only.'
+      return 'Creates a revision draft. Adjust any field before applying — you can partially accept or override the customer request.'
     case 'billing_inquiry':
       return row.invoiceId
         ? 'Closes the request without changing the invoice. Reply to the customer separately if needed.'
@@ -243,4 +244,236 @@ export function staffCorrectionPayloadKind(
 ): 'line_item' | 'vehicle' | null {
   if (!payload) return null
   return portalCorrectionPayloadKind(payload)
+}
+
+export interface StaffCorrectionApplyField {
+  key: string
+  label: string
+  original: string
+  proposed: string
+  apply: string
+  inputType: 'text' | 'number' | 'money'
+  changed: boolean
+}
+
+export interface StaffCorrectionApplySummary {
+  keptCount: number
+  acceptedCount: number
+  customCount: number
+  label: string
+}
+
+function defaultApplyValue(original: string, proposed: string): string {
+  return original === proposed ? original : proposed
+}
+
+export function staffLineItemApplyFields(
+  payload: Extract<PortalInvoiceCorrectionPayload, { lineItemId: string }>,
+): StaffCorrectionApplyField[] {
+  const { original, proposed } = payload
+  const rows: Omit<StaffCorrectionApplyField, 'changed'>[] = [
+    {
+      key: 'description',
+      label: 'Description',
+      original: original.description,
+      proposed: proposed.description,
+      apply: defaultApplyValue(original.description, proposed.description),
+      inputType: 'text',
+    },
+    {
+      key: 'quantity',
+      label: 'Qty / hrs',
+      original: original.quantity,
+      proposed: proposed.quantity,
+      apply: defaultApplyValue(original.quantity, proposed.quantity),
+      inputType: 'number',
+    },
+    {
+      key: 'unitPrice',
+      label: 'Rate',
+      original: staffMoney(original.unitPrice),
+      proposed: staffMoney(proposed.unitPrice),
+      apply: defaultApplyValue(original.unitPrice, proposed.unitPrice),
+      inputType: 'money',
+    },
+  ]
+
+  return rows.map(row => ({
+    ...row,
+    changed: row.original !== row.proposed,
+  }))
+}
+
+export function staffVehicleApplyFields(payload: PortalVehicleCorrectionPayload): StaffCorrectionApplyField[] {
+  const { original, proposed } = payload
+  const rows: Omit<StaffCorrectionApplyField, 'changed'>[] = [
+    {
+      key: 'unitNumber',
+      label: 'Unit #',
+      original: vehicleUnitNumberFromFields(original),
+      proposed: vehicleUnitNumberFromFields(proposed),
+      apply: defaultApplyValue(vehicleUnitNumberFromFields(original), vehicleUnitNumberFromFields(proposed)),
+      inputType: 'text',
+    },
+    {
+      key: 'year',
+      label: 'Year',
+      original: original.year != null ? String(original.year) : '',
+      proposed: proposed.year != null ? String(proposed.year) : '',
+      apply: defaultApplyValue(
+        original.year != null ? String(original.year) : '',
+        proposed.year != null ? String(proposed.year) : '',
+      ),
+      inputType: 'number',
+    },
+    {
+      key: 'make',
+      label: 'Make',
+      original: original.make ?? '',
+      proposed: proposed.make ?? '',
+      apply: defaultApplyValue(original.make ?? '', proposed.make ?? ''),
+      inputType: 'text',
+    },
+    {
+      key: 'model',
+      label: 'Model',
+      original: original.model ?? '',
+      proposed: proposed.model ?? '',
+      apply: defaultApplyValue(original.model ?? '', proposed.model ?? ''),
+      inputType: 'text',
+    },
+    {
+      key: 'vin',
+      label: 'VIN',
+      original: original.vin ?? '',
+      proposed: proposed.vin ?? '',
+      apply: defaultApplyValue(original.vin ?? '', proposed.vin ?? ''),
+      inputType: 'text',
+    },
+    {
+      key: 'plate',
+      label: 'Plate',
+      original: original.plate ?? '',
+      proposed: proposed.plate ?? '',
+      apply: defaultApplyValue(original.plate ?? '', proposed.plate ?? ''),
+      inputType: 'text',
+    },
+    {
+      key: 'odometer',
+      label: 'Odometer',
+      original: original.odometer ?? '',
+      proposed: proposed.odometer ?? '',
+      apply: defaultApplyValue(original.odometer ?? '', proposed.odometer ?? ''),
+      inputType: 'number',
+    },
+  ]
+
+  return rows.map(row => ({
+    ...row,
+    changed: row.original !== row.proposed,
+  }))
+}
+
+function normalizeApplyFieldValue(field: StaffCorrectionApplyField): string {
+  return field.inputType === 'money'
+    ? field.apply.trim().replace(/^\$/, '')
+    : field.apply.trim()
+}
+
+function rawApplyFieldValue(field: StaffCorrectionApplyField): string {
+  if (field.key === 'unitPrice') return normalizeApplyFieldValue(field)
+  if (field.key === 'quantity' || field.key === 'odometer' || field.key === 'year') {
+    return normalizeApplyFieldValue(field)
+  }
+  return field.apply.trim()
+}
+
+export function staffCorrectionApplySummary(fields: StaffCorrectionApplyField[]): StaffCorrectionApplySummary {
+  let keptCount = 0
+  let acceptedCount = 0
+  let customCount = 0
+
+  for (const field of fields) {
+    const apply = rawApplyFieldValue(field)
+    const original = field.key === 'unitPrice'
+      ? field.original.replace(/^\$/, '')
+      : field.original
+    const proposed = field.key === 'unitPrice'
+      ? field.proposed.replace(/^\$/, '')
+      : field.proposed
+
+    if (apply === original) keptCount++
+    else if (apply === proposed) acceptedCount++
+    else customCount++
+  }
+
+  const parts: string[] = []
+  if (acceptedCount) parts.push(`${acceptedCount} accepted`)
+  if (keptCount) parts.push(`${keptCount} kept`)
+  if (customCount) parts.push(`${customCount} custom`)
+
+  return {
+    keptCount,
+    acceptedCount,
+    customCount,
+    label: parts.length ? parts.join(' · ') : 'No changes selected',
+  }
+}
+
+export function staffValidateCorrectionApplyFields(fields: StaffCorrectionApplyField[]): string | null {
+  for (const field of fields) {
+    const value = rawApplyFieldValue(field)
+    if (field.key === 'description' && !value) return 'Description is required.'
+    if ((field.key === 'quantity' || field.key === 'unitPrice') && value && !/^\d+(\.\d{1,2})?$/.test(value)) {
+      return `${field.label} must be a valid number.`
+    }
+    if (field.key === 'year' && value && !/^\d{4}$/.test(value)) return 'Year must be four digits.'
+  }
+  return null
+}
+
+export function staffBuildLineItemCorrectionApply(
+  fields: StaffCorrectionApplyField[],
+): { kind: 'line_item', description: string, quantity: string, unitPrice: string } {
+  const byKey = Object.fromEntries(fields.map(field => [field.key, rawApplyFieldValue(field)]))
+  return {
+    kind: 'line_item',
+    description: byKey.description ?? '',
+    quantity: byKey.quantity ?? '0',
+    unitPrice: byKey.unitPrice ?? '0',
+  }
+}
+
+export function staffBuildVehicleCorrectionApply(
+  payload: PortalVehicleCorrectionPayload,
+  fields: StaffCorrectionApplyField[],
+): {
+  kind: 'vehicle'
+  unitNumber: string | null
+  year: number | null
+  make: string | null
+  model: string | null
+  vin: string | null
+  plate: string | null
+  odometer: string | null
+  odometerUnit: string
+} {
+  const byKey = Object.fromEntries(fields.map(field => [field.key, rawApplyFieldValue(field)]))
+  return {
+    kind: 'vehicle',
+    unitNumber: byKey.unitNumber || null,
+    year: byKey.year ? Number.parseInt(byKey.year, 10) : payload.original.year,
+    make: byKey.make || null,
+    model: byKey.model || null,
+    vin: byKey.vin || null,
+    plate: byKey.plate || null,
+    odometer: byKey.odometer || null,
+    odometerUnit: payload.original.odometerUnit ?? 'mi',
+  }
+}
+
+function vehicleUnitNumberFromFields(fields: PortalVehicleCorrectionFields): string {
+  if (fields.busNumber) return fields.busNumber
+  if (fields.unitTag) return fields.unitTag
+  return ''
 }

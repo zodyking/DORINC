@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, portalRequestApproveSchema)
 
   try {
-    const result = await approvePortalRequest(useDb(), kind, id, actor.id, body.reason)
+    const result = await approvePortalRequest(useDb(), kind, id, actor.id, body.reason, body.correctionApply)
 
     const entityType = kind === 'invoice_change'
       ? 'invoice_change_request'
@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
         kind,
         status: 'approved',
         reviewReason: body.reason ?? null,
+        correctionApply: body.correctionApply ?? null,
         resultInvoiceId: 'invoice' in result ? result.invoice.id : ('revision' in result ? result.revision?.id ?? null : null),
         resultVehicleId: 'vehicle' in result ? result.vehicle.id : null,
         sourceInvoiceId: 'sourceInvoiceId' in result ? result.sourceInvoiceId : null,
@@ -111,6 +112,9 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_PENDING') throw apiError(event, 'CONFLICT', 'This request has already been reviewed')
       if (err.code === 'INVALID_INVOICE') {
         throw apiError(event, 'CONFLICT', 'A revision can only be created from an approved, sent, or paid invoice')
+      }
+      if (err.code === 'INVALID_CORRECTION') {
+        throw apiError(event, 'VALIDATION_ERROR', 'Correction apply values do not match this request type')
       }
       if (err.code === 'DUPLICATE_BUS_NUMBER') {
         throw apiError(event, 'CONFLICT', 'A vehicle with this fleet tag already exists for this customer')

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { PortalLineItemCorrectionPayload } from '#shared/portal-invoice-correction'
 import {
+  staffBuildLineItemCorrectionApply,
+  staffCorrectionApplySummary,
+  staffLineItemApplyFields,
   staffRequestActionType,
   staffRequestApproveHint,
   staffRequestApproveLabel,
@@ -11,6 +14,7 @@ import {
   staffRequestSubmitter,
   staffRequestTypeBadge,
   staffRequestUrgencyPill,
+  staffValidateCorrectionApplyFields,
 } from '../../app/utils/portal-request-review-ui'
 
 describe('portal-request-review-ui helpers (P2-09)', () => {
@@ -56,6 +60,25 @@ describe('portal-request-review-ui helpers (P2-09)', () => {
     expect(staffRequestApproveHint(inquiry)).toContain('without changing the invoice')
     expect(staffRequestOutcomeSummary(inquiry)).toContain('invoice unchanged')
     expect(staffRequestPreviewText({ kind: 'general', summary: 'hello' })).toBe('hello')
+  })
+
+  it('builds partial line item apply payloads', () => {
+    const payload: PortalLineItemCorrectionPayload = {
+      kind: 'line_item',
+      lineItemId: 'line-1',
+      original: { description: 'Change Oil', quantity: '1.00', unitPrice: '60.00' },
+      proposed: { description: 'Change Oil', quantity: '1.00', unitPrice: '55.00' },
+    }
+    const fields = staffLineItemApplyFields(payload)
+    fields.find(field => field.key === 'unitPrice')!.apply = '57.50'
+    expect(staffBuildLineItemCorrectionApply(fields)).toEqual({
+      kind: 'line_item',
+      description: 'Change Oil',
+      quantity: '1.00',
+      unitPrice: '57.50',
+    })
+    expect(staffCorrectionApplySummary(fields).customCount).toBe(1)
+    expect(staffValidateCorrectionApplyFields(fields)).toBeNull()
   })
 
   it('reuses portal status pills', () => {

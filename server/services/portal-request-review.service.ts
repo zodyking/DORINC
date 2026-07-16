@@ -24,12 +24,18 @@ import { createVehicle, getVehicle, updateVehicle } from './vehicles.service'
 import { notifyPortalRequestStatus } from './customer-notifications.service'
 import {
   portalCorrectionPayloadKind,
+  vehicleCorrectionFieldsFromStaffApply,
   vehicleCorrectionFieldsToSnapshot,
+  describeStaffLineItemApplyAdjustments,
+  describeStaffVehicleApplyAdjustments,
   type PortalInvoiceCorrectionPayload,
+  type PortalLineItemCorrectionPayload,
+  type PortalVehicleCorrectionPayload,
 } from '../../shared/portal-invoice-correction'
+import type { PortalCorrectionApplyInput } from '../../shared/validators/portal-request-review'
 
 export type PortalRequestReviewErrorCode
-  = 'NOT_FOUND' | 'NOT_PENDING' | 'INVALID_INVOICE' | 'DUPLICATE_BUS_NUMBER' | 'VEHICLE_NOT_FOUND'
+  = 'NOT_FOUND' | 'NOT_PENDING' | 'INVALID_INVOICE' | 'INVALID_CORRECTION' | 'DUPLICATE_BUS_NUMBER' | 'VEHICLE_NOT_FOUND'
 
 export class PortalRequestReviewError extends Error {
   constructor(public readonly code: PortalRequestReviewErrorCode) {
@@ -455,6 +461,7 @@ export async function approveInvoiceChangeRequest(
   id: string,
   actorId: string,
   reason?: string | null,
+  correctionApply?: PortalCorrectionApplyInput | null,
 ) {
   const [pending] = await db.select().from(invoiceChangeRequests).where(eq(invoiceChangeRequests.id, id))
   await assertPending(pending)
@@ -463,6 +470,13 @@ export async function approveInvoiceChangeRequest(
     const source = await getInvoice(db, pending!.invoiceId)
     if (!REVISION_SOURCE_STATUSES.includes(source.status)) {
       throw new PortalRequestReviewError('INVALID_INVOICE')
+    }
+  }
+
+  if (correctionApply && pending!.correctionPayload) {
+    const expectedKind = portalCorrectionPayloadKind(pending!.correctionPayload)
+    if (correctionApply.kind !== expectedKind) {
+      throw new PortalRequestReviewError('INVALID_CORRECTION')
     }
   }
 
@@ -477,9 +491,23 @@ export async function approveInvoiceChangeRequest(
   if (claimed.invoiceId && claimed.correctionPayload) {
     const source = await getInvoice(db, claimed.invoiceId)
     revision = await createInvoiceRevision(db, claimed.invoiceId, actorId)
+    const payload = claimed.correctionPayload
+    const adjustmentLines = correctionApply?.kind === 'line_item'
+      ? describeStaffLineItemApplyAdjustments(payload as PortalLineItemCorrectionPayload, correctionApply)
+      : correctionApply?.kind === 'vehicle'
+        ? describeStaffVehicleApplyAdjustments(
+            payload as PortalVehicleCorrectionPayload,
+            vehicleCorrectionFieldsFromStaffApply(
+              (payload as PortalVehicleCorrectionPayload).original,
+              correctionApply,
+            ),
+          )
+        : []
+
     const noteBlock = [
       `Portal correction: ${claimed.topic}`,
       claimed.description,
+      adjustmentLines.length ? ['Staff adjustments:', ...adjustmentLines.map(line => `  ${line}`)].join('\n') : null,
       reason?.trim() ? `Staff note: ${reason.trim()}` : null,
     ].filter(Boolean).join('\n\n')
 
@@ -488,10 +516,14 @@ export async function approveInvoiceChangeRequest(
       customerNotes: [source.customerNotes, `Customer correction request: ${claimed.topic}`].filter(Boolean).join('\n\n'),
     }, actorId)
 
-    const payload = claimed.correctionPayload
     if (portalCorrectionPayloadKind(payload) === 'line_item') {
+      const linePayload = payload as PortalLineItemCorrectionPayload
+      const applied = correctionApply?.kind === 'line_item'
+        ? correctionApply
+        : linePayload.proposed
+
       const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
-      const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
+      const sourceLine = sourceLines.find(line => line.id === linePayload.lineItemId)
       if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
       const revisionLines = await listInvoiceLineItems(db, revision.id)
@@ -499,17 +531,22 @@ export async function approveInvoiceChangeRequest(
       if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
       await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
-        description: payload.proposed.description,
-        quantity: payload.proposed.quantity,
-        unitPrice: payload.proposed.unitPrice,
+        description: applied.description,
+        quantity: applied.quantity,
+        unitPrice: applied.unitPrice,
       }, actorId)
     }
     else {
+      const vehiclePayload = payload as PortalVehicleCorrectionPayload
       const baseSnapshot = source.vehicleSnapshot
       if (!baseSnapshot) throw new PortalRequestReviewError('INVALID_INVOICE')
 
+      const appliedFields = correctionApply?.kind === 'vehicle'
+        ? vehicleCorrectionFieldsFromStaffApply(vehiclePayload.original, correctionApply)
+        : vehiclePayload.proposed
+
       await updateInvoiceDraft(db, revision.id, {
-        vehicleSnapshot: vehicleCorrectionFieldsToSnapshot(baseSnapshot, payload.proposed),
+        vehicleSnapshot: vehicleCorrectionFieldsToSnapshot(baseSnapshot, appliedFields),
       }, actorId)
     }
 
@@ -619,10 +656,11 @@ export async function approvePortalRequest(
   id: string,
   actorId: string,
   reason?: string | null,
+  correctionApply?: PortalCorrectionApplyInput | null,
 ) {
   switch (kind) {
     case 'service': return approveServiceRequest(db, id, actorId, reason)
-    case 'invoice_change': return approveInvoiceChangeRequest(db, id, actorId, reason)
+    case 'invoice_change': return approveInvoiceChangeRequest(db, id, actorId, reason, correctionApply)
     case 'vehicle_change': return approveVehicleChangeRequest(db, id, actorId, reason)
     case 'general': return approveGeneralRequest(db, id, actorId, reason)
     case 'new_vehicle': return approveNewVehicleRequest(db, id, actorId, reason)

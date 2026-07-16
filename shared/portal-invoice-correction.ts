@@ -134,3 +134,92 @@ export function vehicleCorrectionFieldsToSnapshot(
     odometerUnit: fields.odometerUnit,
   }
 }
+
+export function vehicleUnitNumberFromFields(fields: PortalVehicleCorrectionFields): string {
+  if (fields.busNumber) return fields.busNumber
+  if (fields.unitTag) return fields.unitTag
+  return ''
+}
+
+export interface PortalVehicleCorrectionApplyInput {
+  unitNumber?: string | null
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  vin?: string | null
+  plate?: string | null
+  odometer?: string | null
+  odometerUnit?: string
+}
+
+export function vehicleCorrectionFieldsFromStaffApply(
+  original: PortalVehicleCorrectionFields,
+  input: PortalVehicleCorrectionApplyInput,
+): PortalVehicleCorrectionFields {
+  const unitNumber = input.unitNumber?.trim().replace(/^#/, '') || null
+  const usesBusNumber = Boolean(original.busNumber) || (!original.unitTag && Boolean(unitNumber))
+  return {
+    busNumber: usesBusNumber ? unitNumber : null,
+    unitTag: usesBusNumber ? null : unitNumber,
+    year: input.year ?? original.year,
+    make: input.make?.trim() || null,
+    model: input.model?.trim() || null,
+    vin: input.vin?.trim().toUpperCase() || null,
+    plate: input.plate?.trim() || null,
+    odometer: input.odometer?.trim() || null,
+    odometerUnit: input.odometerUnit ?? original.odometerUnit ?? 'mi',
+  }
+}
+
+export function describeStaffLineItemApplyAdjustments(
+  payload: PortalLineItemCorrectionPayload,
+  applied: { description: string, quantity: string, unitPrice: string },
+): string[] {
+  const lines: string[] = []
+  if (applied.description !== payload.proposed.description) {
+    lines.push(`Description: staff applied "${applied.description}" (customer requested "${payload.proposed.description}")`)
+  }
+  if (applied.quantity !== payload.proposed.quantity) {
+    lines.push(`Qty/hrs: staff applied ${applied.quantity} (customer requested ${payload.proposed.quantity})`)
+  }
+  if (applied.unitPrice !== payload.proposed.unitPrice) {
+    lines.push(`Rate: staff applied ${moneyDisplay(applied.unitPrice)} (customer requested ${moneyDisplay(payload.proposed.unitPrice)})`)
+  }
+  return lines
+}
+
+export function describeStaffVehicleApplyAdjustments(
+  payload: PortalVehicleCorrectionPayload,
+  applied: PortalVehicleCorrectionFields,
+): string[] {
+  const checks: { label: string, before: string, requested: string, finalValue: string }[] = [
+    {
+      label: 'Unit',
+      before: vehicleLine(payload.original),
+      requested: vehicleLine(payload.proposed),
+      finalValue: vehicleLine(applied),
+    },
+    {
+      label: 'VIN',
+      before: payload.original.vin || '—',
+      requested: payload.proposed.vin || '—',
+      finalValue: applied.vin || '—',
+    },
+    {
+      label: 'Plate',
+      before: payload.original.plate || '—',
+      requested: payload.proposed.plate || '—',
+      finalValue: applied.plate || '—',
+    },
+    {
+      label: 'Odometer',
+      before: payload.original.odometer ? `${payload.original.odometer} ${payload.original.odometerUnit}` : '—',
+      requested: payload.proposed.odometer ? `${payload.proposed.odometer} ${payload.proposed.odometerUnit}` : '—',
+      finalValue: applied.odometer ? `${applied.odometer} ${applied.odometerUnit}` : '—',
+    },
+  ]
+
+  return checks
+    .filter(row => row.before !== row.requested && row.finalValue !== row.requested)
+    .map(row => `${row.label}: staff applied ${row.finalValue} (customer requested ${row.requested}, current ${row.before})`)
+}

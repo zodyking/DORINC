@@ -248,6 +248,37 @@ describe('P2-10 invoice correction revision flow', () => {
     expect(updatedLine?.lineAmount).toBe('200.00')
   })
 
+  it('applies staff overrides when approving a structured line correction', async () => {
+    const sourceLines = await listInvoiceLineItems(db, sourceInvoiceId)
+    const sourceLine = sourceLines[0]!
+
+    const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
+      invoiceId: sourceInvoiceId,
+      topic: 'Line item correction',
+      lineItemCorrection: {
+        lineItemId: sourceLine.id,
+        description: 'Brake service (adjusted)',
+        quantity: '0.50',
+        unitPrice: '400.00',
+        notes: 'Customer wants half rate',
+      },
+    })
+
+    const { revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR, 'Split difference', {
+      kind: 'line_item',
+      description: 'Brake service (adjusted)',
+      quantity: '0.50',
+      unitPrice: '425.00',
+    })
+    createdInvoiceIds.push(revision!.id)
+
+    const revLines = await listInvoiceLineItems(db, revision!.id)
+    const updatedLine = revLines.find(line => line.sortOrder === sourceLine.sortOrder)
+    expect(updatedLine?.unitPrice).toBe('425.00')
+    expect(revision!.internalNotes).toContain('Staff adjustments')
+    expect(revision!.internalNotes).toContain('425.00')
+  })
+
   it('auto-applies vehicle corrections to the invoice revision snapshot only', async () => {
     const source = await getInvoice(db, sourceInvoiceId)
     const liveBefore = await getVehicle(db, vehicle.id)

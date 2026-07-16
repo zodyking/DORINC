@@ -97,6 +97,7 @@ const modalMode = ref<'approve' | 'reject'>('approve')
 const modalRow = ref<StaffRequestRow | null>(null)
 const modalReason = ref('')
 const actionError = ref('')
+const applyFormRef = ref<{ validate: () => string | null, buildApplyPayload: () => Record<string, unknown> | null } | null>(null)
 
 function rowKey(row: StaffRequestRow) {
   return `${row.kind}:${row.id}`
@@ -107,12 +108,14 @@ function openModal(row: StaffRequestRow, mode: 'approve' | 'reject') {
   modalMode.value = mode
   modalReason.value = ''
   actionError.value = ''
+  applyFormRef.value = null
   modalOpen.value = true
 }
 
 function closeModal() {
   modalOpen.value = false
   modalRow.value = null
+  applyFormRef.value = null
 }
 
 const modalApproveLabel = computed(() => modalRow.value ? staffRequestApproveLabel(modalRow.value) : 'Approve')
@@ -130,6 +133,16 @@ async function submitModal() {
     return
   }
 
+  let correctionApply: Record<string, unknown> | undefined
+  if (modalMode.value === 'approve' && modalIsStructuredCorrection.value && applyFormRef.value) {
+    const validationError = applyFormRef.value.validate()
+    if (validationError) {
+      actionError.value = validationError
+      return
+    }
+    correctionApply = applyFormRef.value.buildApplyPayload() ?? undefined
+  }
+
   const key = rowKey(row)
   busyKey.value = key
   actionError.value = ''
@@ -137,7 +150,10 @@ async function submitModal() {
     const path = `/api/portal-requests/${row.kind}/${row.id}/${modalMode.value}`
     const body = modalMode.value === 'reject'
       ? { reason: modalReason.value.trim() }
-      : modalReason.value.trim() ? { reason: modalReason.value.trim() } : {}
+      : {
+          ...(modalReason.value.trim() ? { reason: modalReason.value.trim() } : {}),
+          ...(correctionApply ? { correctionApply } : {}),
+        }
 
     const result = await $fetch<{ invoice?: { id: string }, revision?: { id: string }, vehicle?: { id: string } }>(path, {
       method: 'POST',
@@ -345,8 +361,13 @@ async function submitModal() {
             </p>
           </div>
 
+          <StaffPortalRequestCorrectionApplyForm
+            v-if="modalMode === 'approve' && modalRow.correctionPayload"
+            ref="applyFormRef"
+            :payload="modalRow.correctionPayload"
+          />
           <StaffPortalRequestCorrectionDiff
-            v-if="modalRow.correctionPayload"
+            v-else-if="modalRow.correctionPayload"
             :payload="modalRow.correctionPayload"
           />
 
