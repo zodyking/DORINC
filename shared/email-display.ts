@@ -10,7 +10,7 @@ const ALLOWED_TAGS = new Set([
   'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
 ])
 
-const GLOBAL_FORBIDDEN_ATTR_RE = /\s(on\w+|style|srcdoc)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi
+const GLOBAL_FORBIDDEN_ATTR_RE = /\s(on\w+|srcdoc)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi
 const JAVASCRIPT_URL_RE = /\s(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi
 
 export function stripHtmlToText(html: string): string {
@@ -115,4 +115,18 @@ export function emailBodyForDisplay(body: string, html?: string | null): { mode:
   }
   if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
   return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
+}
+
+/** Prefer compose text for staff outbound; full HTML for inbound customer mail. */
+export function emailBodyForThreadDisplay(
+  body: string,
+  html: string | null | undefined,
+  direction: 'inbound' | 'outbound' | undefined,
+): { mode: 'html' | 'text', content: string } {
+  if (direction === 'outbound') {
+    const plain = cleanPlainEmailText(body)
+    if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
+    return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
+  }
+  return emailBodyForDisplay(body, html)
 }

@@ -301,7 +301,9 @@ export function emailActions(actions) {
  *   detailsHtml?: string,
  *   noteHtml?: string,
  *   actionsHtml?: string,
- *   footerNote?: string,
+ *   footerNote?: string | null,
+ *   footerLinks?: boolean,
+ *   headerBadge?: string,
  *   appUrl?: string,
  *   brand?: EmailBrandOpts,
  *   logoUrl?: string | null,
@@ -325,9 +327,13 @@ export function wrapEmailHtml(opts) {
     brand.email,
   ].filter(Boolean).map(line => escapeHtml(line)).join('<br>')
 
-  const footerNote = opts.footerNote
-    ? escapeHtml(opts.footerNote)
-    : `This notification was sent because activity occurred in your ${brandName} accounting workspace.`
+  const footerNote = opts.footerNote === null
+    ? ''
+    : (opts.footerNote !== undefined
+        ? escapeHtml(opts.footerNote)
+        : `This notification was sent because activity occurred in your ${brandName} accounting workspace.`)
+  const headerBadge = opts.headerBadge !== undefined ? escapeHtml(opts.headerBadge) : 'Notification'
+  const showFooterLinks = opts.footerLinks !== false
 
   const mainIntro = [
     opts.eyebrow ? `<div style="margin-bottom:0;">${emailEyebrow(opts.eyebrow)}</div>` : '',
@@ -417,7 +423,7 @@ export function wrapEmailHtml(opts) {
                     </table>
                   </td>
                   <td align="right" valign="middle" style="font-size:12px; color:${t.faint}; font-family:${t.font};">
-                    Notification
+                    ${headerBadge}
                   </td>
                 </tr>
               </table>
@@ -495,14 +501,14 @@ export function wrapEmailHtml(opts) {
           <!-- Footer -->
           <tr>
             <td class="mobile-padding" style="padding-top:24px; padding-bottom:36px; color:${t.faint}; font-size:11px; line-height:18px; font-family:${t.font};">
-              <p style="margin:0;">${footerNote}</p>
-              <p style="margin:10px 0 0;">
+              ${footerNote ? `<p style="margin:0;">${footerNote}</p>` : ''}
+              ${showFooterLinks ? `<p style="margin:10px 0 0;">
                 <a href="${escapeHtml(brand.settingsUrl)}" style="color:#6b7280;">Notification settings</a>
                 &nbsp;&nbsp;·&nbsp;&nbsp;
                 <a href="${escapeHtml(brand.helpUrl)}" style="color:#6b7280;">Help center</a>
                 &nbsp;&nbsp;·&nbsp;&nbsp;
                 <a href="${escapeHtml(brand.signInUrl)}" style="color:#6b7280;">Sign in</a>
-              </p>
+              </p>` : ''}
               ${addressBlock ? `<p style="margin:16px 0 0;">${addressBlock}</p>` : ''}
             </td>
           </tr>

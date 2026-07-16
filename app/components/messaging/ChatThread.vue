@@ -11,8 +11,10 @@ const props = defineProps<{
     htmlBody?: string | null
     createdAt: string
     direction?: 'inbound' | 'outbound'
+    fromAddress?: string | null
   }>
   loading?: boolean
+  sending?: boolean
   currentUserId?: string
 }>()
 
@@ -85,15 +87,24 @@ watch(() => props.conversation?.id, () => {
       <span>Choose a thread from the list or start a new message.</span>
     </div>
 
-    <div v-else ref="msgsEl" class="dm-thread-msgs">
+    <div v-else ref="msgsEl" class="dm-thread-msgs" :class="{ 'is-email': isEmail }">
       <div v-if="loading" class="dm-thread-loading">Loading messages…</div>
-      <MessagingMessageBubble
-        v-for="msg in messages"
-        :key="msg.id"
-        :message="msg"
-        :is-own="isOwnMessage(msg)"
-        :is-email="isEmail"
-      />
+      <template v-else-if="isEmail">
+        <MessagingEmailThreadMessage
+          v-for="msg in messages"
+          :key="msg.id"
+          :message="msg"
+          :peer-email="peerEmail"
+        />
+      </template>
+      <template v-else>
+        <MessagingMessageBubble
+          v-for="msg in messages"
+          :key="msg.id"
+          :message="msg"
+          :is-own="isOwnMessage(msg)"
+        />
+      </template>
       <div v-if="!loading && !messages.length" class="dm-thread-loading">
         {{ isEmail ? 'No emails in this thread yet.' : `Say hello to ${peerName.split(' ')[0]}.` }}
       </div>
@@ -101,7 +112,7 @@ watch(() => props.conversation?.id, () => {
 
     <MessagingMessageComposer
       v-if="conversation"
-      :disabled="loading"
+      :disabled="loading || sending"
       :mode="isEmail ? 'email' : 'dm'"
       @send="emit('send', $event)"
     />

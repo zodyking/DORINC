@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { formatPersonNameShort } from '../../shared/format/person-name'
 import { resolveEmailBrand } from '../services/email-branding.service'
 import type { Db } from '../db/client'
+import { emailParagraph, escapeHtml, wrapEmailHtml } from './email-layout'
 
 export function buildStaffEmailFooter(staffName: string, brandLegal: string): string {
   const short = formatPersonNameShort(staffName)
@@ -14,11 +15,12 @@ export function buildStaffEmailHtmlFooter(staffName: string, brand: Awaited<Retu
   const line = short ? `${short} · ${brand.brandLegal}` : brand.brandLegal
   const contact = [brand.phone, brand.email, brand.website].filter(Boolean).join(' · ')
   return `
-<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px;">
-<p style="margin:0;font-size:13px;color:#64748b;line-height:1.5;">
-  ${line}<br>
-  ${contact}
-</p>`
+<table role="presentation" width="100%" style="margin-top:24px;border-top:1px solid #e5e7eb;">
+  <tr><td style="padding-top:16px;font-size:13px;color:#64748b;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
+    <strong style="color:#374151;">${escapeHtml(line)}</strong><br>
+    ${escapeHtml(contact)}
+  </td></tr>
+</table>`
 }
 
 export async function buildOutboundEmailBodies(
@@ -27,17 +29,24 @@ export async function buildOutboundEmailBodies(
   bodyText: string,
 ): Promise<{ text: string, html: string }> {
   const brand = await resolveEmailBrand(db)
+  const trimmed = bodyText.trim()
   const textFooter = buildStaffEmailFooter(staffName, brand.brandLegal)
-  const htmlFooter = buildStaffEmailHtmlFooter(staffName, brand)
-  const escaped = bodyText
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+  const messageHtml = emailParagraph(escapeHtml(trimmed).replace(/\n/g, '<br>'))
+  const signatureHtml = buildStaffEmailHtmlFooter(staffName, brand)
+
+  const html = wrapEmailHtml({
+    appUrl: brand.appUrl,
+    brand,
+    preheader: trimmed.slice(0, 120),
+    bodyHtml: `${messageHtml}${signatureHtml}`,
+    headerBadge: 'Message',
+    footerNote: null,
+    footerLinks: false,
+  })
 
   return {
-    text: `${bodyText.trim()}${textFooter}`,
-    html: `<div style="font-family:system-ui,sans-serif;font-size:14px;color:#0f172a;line-height:1.6;"><p style="margin:0;">${escaped}</p>${htmlFooter}</div>`,
+    text: `${trimmed}${textFooter}`,
+    html,
   }
 }
 
