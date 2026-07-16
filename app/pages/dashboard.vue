@@ -160,96 +160,45 @@ const showAuditor = computed(() => dash.value?.view === 'auditor' && dash.value.
           </div>
         </div>
 
-        <div class="cols">
-          <div class="card">
-            <div class="chead">
-              <h3>Needs attention</h3>
-              <div class="right">
-                <NuxtLink to="/invoices" class="btn ghost sm">All invoices →</NuxtLink>
-              </div>
-            </div>
-            <div class="tscroll">
-              <table v-if="dash.billing.needsAttention.length" class="tbl">
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>Customer</th>
-                    <th>Status</th>
-                    <th class="num">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in dash.billing.needsAttention"
-                    :key="row.id"
-                    class="click"
-                    @click="navigateTo(row.status === 'draft' ? `/invoices/${row.id}/edit` : `/invoices/${row.id}`)"
-                  >
-                    <td>
-                      <span class="lead">{{ row.invoiceNumberFormatted }}</span>
-                      <span v-if="row.sublabel" class="sub">{{ row.sublabel }}</span>
-                    </td>
-                    <td>{{ row.customerName }}</td>
-                    <td>
-                      <span :class="dashboardInvoiceStatusPill(row.status).cls">
-                        {{ dashboardInvoiceStatusPill(row.status).label }}
-                      </span>
-                    </td>
-                    <td class="num">{{ dashboardMoney(row.total) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty">Nothing needs attention right now.</div>
+        <div class="card">
+          <div class="chead">
+            <h3>Needs attention</h3>
+            <div class="right">
+              <NuxtLink to="/invoices" class="btn ghost sm">All invoices →</NuxtLink>
             </div>
           </div>
-
-          <div class="stack">
-            <div class="card">
-              <div class="chead"><h3>Recent activity</h3></div>
-              <div v-if="dash.billing.recentActivity.length" class="timeline">
-                <div
-                  v-for="item in dash.billing.recentActivity"
-                  :key="item.id"
-                  class="tl"
-                  :class="{ hot: item.hot }"
+          <div class="tscroll">
+            <table v-if="dash.billing.needsAttention.length" class="tbl">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Customer</th>
+                  <th>Status</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in dash.billing.needsAttention"
+                  :key="row.id"
+                  class="click"
+                  @click="navigateTo(row.status === 'draft' ? `/invoices/${row.id}/edit` : `/invoices/${row.id}`)"
                 >
-                  <b>{{ item.title }}</b>
-                  <span>{{ item.detail || dashboardActivityWhen(item.createdAt) }}</span>
-                </div>
-              </div>
-              <div v-else class="cbody" style="color:#64748b; font-size:13px;">No recent activity yet.</div>
-            </div>
-
-            <div class="card">
-              <div class="chead">
-                <h3>Review queue</h3>
-                <div class="right">
-                  <span v-if="dash.billing.reviewQueue.total" class="pill warn">
-                    {{ dash.billing.reviewQueue.total }} pending
-                  </span>
-                </div>
-              </div>
-              <dl class="kv">
-                <dt>Service logs</dt>
-                <dd>{{ dash.billing.reviewQueue.serviceLogs }} to review</dd>
-                <dt>Portal requests</dt>
-                <dd>
-                  <NuxtLink to="/portal-requests">{{ dash.billing.reviewQueue.portalRequests }} pending</NuxtLink>
-                </dd>
-                <dt>Deletion requests</dt>
-                <dd>
-                  <NuxtLink to="/deletion-requests">{{ dash.billing.reviewQueue.deletionRequests }} pending</NuxtLink>
-                </dd>
-                <dt>AI extractions</dt>
-                <dd>{{ dash.billing.reviewQueue.aiExtractions }} to approve</dd>
-                <dt>Manager approvals</dt>
-                <dd>
-                  <NuxtLink to="/invoices?status=pending_manager_approval">
-                    {{ dash.billing.reviewQueue.managerApprovals }} pending
-                  </NuxtLink>
-                </dd>
-              </dl>
-            </div>
+                  <td>
+                    <span class="lead">{{ row.invoiceNumberFormatted }}</span>
+                    <span v-if="row.sublabel" class="sub">{{ row.sublabel }}</span>
+                  </td>
+                  <td>{{ row.customerName }}</td>
+                  <td>
+                    <span :class="dashboardInvoiceStatusPill(row.status).cls">
+                      {{ dashboardInvoiceStatusPill(row.status).label }}
+                    </span>
+                  </td>
+                  <td class="num">{{ dashboardMoney(row.total) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty">Nothing needs attention right now.</div>
           </div>
         </div>
       </div>
