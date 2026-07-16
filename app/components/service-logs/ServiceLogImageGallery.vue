@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ServiceLogPhotoFile } from '~/composables/useServiceLogPhotoPreviews'
+import { useImageZoomPan } from '~/composables/useImageZoomPan'
 
 const props = withDefaults(defineProps<{
   serviceLogId: string
@@ -8,11 +9,13 @@ const props = withDefaults(defineProps<{
   compact?: boolean
   editable?: boolean
   deleteBusy?: boolean
+  zoomable?: boolean
 }>(), {
   modelValue: 0,
   compact: false,
   editable: false,
   deleteBusy: false,
+  zoomable: true,
 })
 
 const emit = defineEmits<{
@@ -45,10 +48,29 @@ const activePreview = computed(() => (activeFile.value ? previewUrl(activeFile.v
 const hasMultiple = computed(() => imageFiles.value.length > 1)
 
 const displayErrors = ref(new Set<string>())
+const stageRef = ref<HTMLElement | null>(null)
+const zoomEnabled = computed(() => props.zoomable && !props.compact)
+
+const {
+  zoomPercent,
+  dragging,
+  transformStyle,
+  resetView,
+  zoomIn,
+  zoomOut,
+  onWheel,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+} = useImageZoomPan(stageRef)
 
 watch(imageFiles, () => {
   displayErrors.value = new Set()
 }, { deep: true })
+
+watch(activeFile, () => {
+  resetView()
+})
 
 function onImageError(fileId: string) {
   const next = new Set(displayErrors.value)
@@ -92,6 +114,18 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault()
     goNext()
   }
+  else if (zoomEnabled.value && (event.key === '+' || event.key === '=')) {
+    event.preventDefault()
+    zoomIn()
+  }
+  else if (zoomEnabled.value && event.key === '-') {
+    event.preventDefault()
+    zoomOut()
+  }
+  else if (zoomEnabled.value && event.key === '0') {
+    event.preventDefault()
+    resetView()
+  }
 }
 </script>
 
@@ -104,19 +138,48 @@ function onKeydown(event: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <div class="sl-gallery__frame">
-      <div class="sl-gallery__stage">
+      <div
+        v-if="zoomEnabled && !showLoading && !showError && activePreview"
+        class="sl-gallery__zoombar"
+        role="toolbar"
+        aria-label="Photo zoom"
+      >
+        <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom out" @click="zoomOut">−</button>
+        <span class="sl-gallery__zoom-pct" aria-live="polite">{{ zoomPercent }}%</span>
+        <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom in" @click="zoomIn">+</button>
+        <button type="button" class="btn sm sl-gallery__zoom-reset" @click="resetView">Reset</button>
+        <span class="sl-gallery__zoom-hint">Scroll to zoom · drag to pan</span>
+      </div>
+
+      <div
+        ref="stageRef"
+        class="sl-gallery__stage"
+        :class="{ 'sl-gallery__stage--dragging': dragging }"
+        @wheel="zoomEnabled ? onWheel($event) : undefined"
+        @pointerdown="zoomEnabled ? onPointerDown($event) : undefined"
+        @pointermove="zoomEnabled ? onPointerMove($event) : undefined"
+        @pointerup="zoomEnabled ? onPointerUp($event) : undefined"
+        @pointercancel="zoomEnabled ? onPointerUp($event) : undefined"
+        @pointerleave="zoomEnabled ? onPointerUp($event) : undefined"
+      >
         <p v-if="showLoading" class="sl-gallery__placeholder">Loading photo…</p>
         <p v-else-if="showError" class="sl-gallery__placeholder sl-gallery__placeholder--error">
           Could not load this photo.
         </p>
-        <img
+        <div
           v-else-if="activeFile && activePreview"
-          :key="activeFile.id"
-          :src="activePreview"
-          :alt="activeFile.originalFilename"
-          class="sl-gallery__img"
-          @error="onImageError(activeFile.id)"
+          class="sl-gallery__zoom-wrap"
+          :style="zoomEnabled ? transformStyle : undefined"
         >
+          <img
+            :key="activeFile.id"
+            :src="activePreview"
+            :alt="activeFile.originalFilename"
+            class="sl-gallery__img"
+            draggable="false"
+            @error="onImageError(activeFile.id)"
+          >
+        </div>
       </div>
 
       <div class="sl-gallery__footer">
@@ -176,6 +239,7 @@ function onKeydown(event: KeyboardEvent) {
           :src="previewUrl(file.id)"
           :alt="file.originalFilename"
           loading="lazy"
+          draggable="false"
         >
         <span v-else class="sl-gallery__thumb-fallback">{{ index + 1 }}</span>
       </button>
@@ -199,17 +263,72 @@ function onKeydown(event: KeyboardEvent) {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
+.sl-gallery__zoombar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.sl-gallery__zoom-btn {
+  min-width: 34px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 10px;
+}
+
+.sl-gallery__zoom-pct {
+  min-width: 48px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.sl-gallery__zoom-reset {
+  margin-left: 2px;
+}
+
+.sl-gallery__zoom-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .sl-gallery__stage {
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   min-height: 300px;
+  height: min(58vh, 520px);
   display: grid;
   place-items: center;
   padding: 16px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.sl-gallery__stage--dragging {
+  cursor: grabbing;
 }
 
 .sl-gallery--compact .sl-gallery__stage {
   min-height: 240px;
+  height: auto;
   padding: 12px;
+  cursor: default;
+  touch-action: auto;
+}
+
+.sl-gallery__zoom-wrap {
+  display: grid;
+  place-items: center;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .sl-gallery__img {
@@ -221,6 +340,7 @@ function onKeydown(event: KeyboardEvent) {
   display: block;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  pointer-events: none;
 }
 
 .sl-gallery--compact .sl-gallery__img {
@@ -325,6 +445,11 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 @media (max-width: 640px) {
+  .sl-gallery__zoom-hint {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .sl-gallery__footer {
     grid-template-columns: 1fr 1fr;
     text-align: center;
@@ -341,6 +466,7 @@ function onKeydown(event: KeyboardEvent) {
 
   .sl-gallery__stage {
     min-height: 220px;
+    height: 44vh;
   }
 }
 </style>

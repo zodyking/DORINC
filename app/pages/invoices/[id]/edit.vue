@@ -154,7 +154,7 @@ const loadErrorMessage = computed(() => {
   return null
 })
 
-const activeTab = ref<'invoice' | 'servicelog' | 'photos' | 'pdf'>('invoice')
+const activeTab = ref<'invoice' | 'servicelog' | 'pdf'>('invoice')
 const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
 
 watch(activeTab, async (tab) => {
@@ -869,18 +869,7 @@ const aiPopStyle = computed(() => {
           >
             Service log
             <span v-if="serviceLogData?.log" class="ed-tab-pill">{{ logNumberDisplay(serviceLogData?.log?.logNumber ?? 0) }}</span>
-          </button>
-          <button
-            v-if="hasServiceLogPhotos"
-            type="button"
-            class="ed-tab"
-            :class="{ on: activeTab === 'photos' }"
-            role="tab"
-            :aria-selected="activeTab === 'photos'"
-            @click="activeTab = 'photos'"
-          >
-            Photos
-            <span class="ed-tab-pill">{{ serviceLogImages.length }}</span>
+            <span v-if="hasServiceLogPhotos" class="ed-tab-pill">{{ serviceLogImages.length }} photos</span>
           </button>
           <button
             v-if="canGeneratePdf"
@@ -894,7 +883,7 @@ const aiPopStyle = computed(() => {
             PDF preview
           </button>
         </div>
-        <p v-if="invoice.serviceLogId" class="ed-tab-hint">Mechanic photos and field notes attach to this invoice — switch tabs to reference while building line items.</p>
+        <p v-if="invoice.serviceLogId" class="ed-tab-hint">Field photos and mechanic notes from the linked service log — reference while building line items.</p>
       </div>
 
       <div v-show="activeTab === 'invoice'" class="ed-pane" :class="{ active: activeTab === 'invoice' }">
@@ -1122,6 +1111,26 @@ const aiPopStyle = computed(() => {
       </div>
 
       <div v-show="activeTab === 'servicelog' && serviceLogData?.log" class="ed-pane" :class="{ active: activeTab === 'servicelog' }">
+        <div v-if="hasServiceLogPhotos && invoice.serviceLogId" class="card ed-log-photos-card">
+          <div class="chead">
+            <h3>Field photos · {{ serviceLogImages.length }}</h3>
+            <div class="right">
+              <NuxtLink
+                :to="`/service-logs/${invoice.serviceLogId}`"
+                class="btn ghost sm"
+              >
+                Open log →
+              </NuxtLink>
+            </div>
+          </div>
+          <div class="cbody">
+            <ServiceLogPhotoManager
+              :service-log-id="invoice.serviceLogId"
+              :files="serviceLogImages"
+            />
+          </div>
+        </div>
+
         <div class="cols">
           <div class="stack">
             <div class="card">
@@ -1150,14 +1159,6 @@ const aiPopStyle = computed(() => {
               <div class="chead"><h3>Draft line items from log</h3></div>
               <div class="cbody" style="padding-top:0; display:flex; gap:8px; flex-wrap:wrap;">
                 <button type="button" class="btn sm" :disabled="!editable" @click="copyComplaintFromLog">Copy notes to invoice</button>
-                <button
-                  v-if="hasServiceLogPhotos"
-                  type="button"
-                  class="btn sm"
-                  @click="activeTab = 'photos'"
-                >
-                  View photos
-                </button>
                 <NuxtLink
                   v-if="invoice.serviceLogId"
                   :to="`/service-logs/${invoice.serviceLogId}`"
@@ -1167,30 +1168,6 @@ const aiPopStyle = computed(() => {
                 </NuxtLink>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-show="activeTab === 'photos' && hasServiceLogPhotos" class="ed-pane" :class="{ active: activeTab === 'photos' }">
-        <div class="card">
-          <div class="chead">
-            <h3>Service log photos · {{ serviceLogImages.length }}</h3>
-            <div class="right">
-              <NuxtLink
-                v-if="invoice.serviceLogId"
-                :to="`/service-logs/${invoice.serviceLogId}`"
-                class="btn ghost sm"
-              >
-                Open log →
-              </NuxtLink>
-            </div>
-          </div>
-          <div class="cbody">
-            <ServiceLogPhotoManager
-              v-if="invoice.serviceLogId"
-              :service-log-id="invoice.serviceLogId"
-              :files="serviceLogImages"
-            />
           </div>
         </div>
       </div>
@@ -1256,6 +1233,9 @@ const aiPopStyle = computed(() => {
 }
 .ed-po-span {
   grid-column: 1 / -1;
+}
+.ed-log-photos-card {
+  margin-bottom: 16px;
 }
 @media (max-width: 640px) {
   .ed-details-grid {
