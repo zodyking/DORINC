@@ -121,12 +121,22 @@ export function canProceedWizardStep(
 }
 
 /** Live line total while typing — matches server rounding. */
-export function previewLineAmount(quantity: string, unitPrice: string): string {
+function coerceAmountField(value: string | number | null | undefined): string {
+  if (value == null || value === '') return ''
+  return String(value).trim()
+}
+
+export function previewLineAmount(
+  quantity: string | number,
+  unitPrice: string | number,
+): string {
   try {
-    if (!quantity.trim() || !unitPrice.trim()) return ''
-    if (Number.parseFloat(quantity) <= 0) return ''
-    if (Number.parseFloat(unitPrice) < 0) return ''
-    return multiplyMoney(quantity, unitPrice)
+    const qty = coerceAmountField(quantity)
+    const price = coerceAmountField(unitPrice)
+    if (!qty || !price) return ''
+    if (Number.parseFloat(qty) <= 0) return ''
+    if (Number.parseFloat(price) < 0) return ''
+    return multiplyMoney(qty, price)
   }
   catch {
     return ''
@@ -164,9 +174,12 @@ export interface LineForBreakdown {
 function lineAmountForBreakdown(line: LineForBreakdown): string {
   if (line.lineAmount?.trim()) return line.lineAmount
   if (!line.description.trim()) return ''
-  if (Number.parseFloat(line.quantity) <= 0) return ''
-  if (Number.parseFloat(line.unitPrice) < 0) return ''
-  return previewLineAmount(line.quantity, line.unitPrice)
+  const qty = coerceAmountField(line.quantity)
+  const price = coerceAmountField(line.unitPrice)
+  if (!qty || !price) return ''
+  if (Number.parseFloat(qty) <= 0) return ''
+  if (Number.parseFloat(price) < 0) return ''
+  return previewLineAmount(qty, price)
 }
 
 /** Sum line amounts by parts, labor, and fees for summary breakdowns. */

@@ -156,6 +156,7 @@ function onFocus() {
 
 function onBlur() {
   proseOnBlur()
+  syncInferredLineType()
   blurTimer = setTimeout(() => {
     closeSuggestions()
     emit('blur')

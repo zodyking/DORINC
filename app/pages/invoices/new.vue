@@ -30,6 +30,7 @@ import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   draftLineToWizard,
   wizardLinesToDraftLines,
+  applyInferredLineType,
   type WizardLineDraft,
 } from '~/utils/line-item-wizard-ui'
 
@@ -379,6 +380,10 @@ function applyCatalogToLine(line: DraftLine, item: CatalogQuickItem) {
 
 function onLineDescriptionTyped(line: DraftLine) {
   line.catalogItemId = null
+}
+
+function onLineFieldBlur(line: DraftLine) {
+  applyInferredLineType(line)
 }
 
 function setLineAcRef(localId: string, el: unknown) {
@@ -776,11 +781,12 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
                     v-model="line.description"
                     v-model:line-type="line.lineType"
                     @typed="onLineDescriptionTyped(line)"
+                    @blur="onLineFieldBlur(line)"
                     @select="applyCatalogToLine(line, $event)"
                   />
                 </td>
-                <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0"></td>
-                <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0"></td>
+                <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)"></td>
+                <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)"></td>
                 <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
                 <td>
                   <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>

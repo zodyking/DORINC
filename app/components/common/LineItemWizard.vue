@@ -27,6 +27,10 @@ watch(() => manualDraft.value.description, () => {
   applyInferredLineType(manualDraft.value)
 })
 
+function onManualFieldBlur() {
+  applyInferredLineType(manualDraft.value)
+}
+
 const {
   active,
   supported,
@@ -233,15 +237,15 @@ defineExpose({ openWizard: openSession })
         </label>
         <label class="fld">
           <span>Description</span>
-          <input v-model="manualDraft.description" data-prose="prose" type="text" placeholder="What was done?">
+          <input v-model="manualDraft.description" data-prose="prose" type="text" placeholder="What was done?" @blur="onManualFieldBlur">
         </label>
         <label class="fld">
           <span>{{ manualDraft.lineType === 'labor' ? 'Hours' : 'Quantity' }}</span>
-          <input v-model="manualDraft.qty" type="text" inputmode="decimal">
+          <input v-model="manualDraft.qty" type="text" inputmode="decimal" @blur="onManualFieldBlur">
         </label>
         <label class="fld">
           <span>Rate</span>
-          <input v-model="manualDraft.rate" type="text" inputmode="decimal">
+          <input v-model="manualDraft.rate" type="text" inputmode="decimal" @blur="onManualFieldBlur">
         </label>
         <div class="li-manual-actions">
           <button type="button" class="btn primary" @click="saveManualLine(true)">Save &amp; add another</button>

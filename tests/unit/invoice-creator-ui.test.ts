@@ -46,6 +46,7 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     line.quantity = '2'
     line.unitPrice = '145.00'
     expect(previewLineAmount('2', '145.00')).toBe('290.00')
+    expect(previewLineAmount(1, 145)).toBe('145.00')
     expect(previewLinesSubtotal([line])).toBe('290.00')
   })
 
