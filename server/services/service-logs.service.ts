@@ -1,18 +1,21 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or } from 'drizzle-orm'
+import { isEditingSessionNoise } from '../../shared/audit-messages'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import type { Db } from '../db/client'
 import type { ServiceLogStatus, ServiceLogWorkType } from '../db/schema/service-logs'
 import { serviceLogs } from '../db/schema/service-logs'
-import { invoices, formatInvoiceNumber } from '../db/schema/invoices'
+import { invoices, invoiceLineItems, formatInvoiceNumber } from '../db/schema/invoices'
 import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { users } from '../db/schema/auth'
 import { appFiles } from '../db/schema/files'
+import { auditLogs } from '../db/schema/audit'
 import { INVOICE_LINK_RELEASED_REASON } from './invoice-dependents.service'
+import { getActiveEditingSession } from './editing-sessions.service'
 
 export type ServiceLogsServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'VEHICLE_CUSTOMER_MISMATCH'
-    | 'INVALID_TRANSITION' | 'NOT_EDITABLE' | 'ALREADY_CONVERTED'
+    | 'INVALID_TRANSITION' | 'NOT_EDITABLE' | 'ALREADY_CONVERTED' | 'NOT_REVERTIBLE'
 
 export class ServiceLogsServiceError extends Error {
   constructor(public readonly code: ServiceLogsServiceErrorCode) {
@@ -29,7 +32,7 @@ export const SERVICE_LOG_TRANSITIONS: Record<ServiceLogStatus, ServiceLogStatus[
   uploaded: ['ocr_processing', 'ai_processing', 'ready_for_review', 'archived', 'draft'],
   ocr_processing: ['ai_processing', 'ready_for_review'],
   ai_processing: ['ready_for_review'],
-  ready_for_review: ['in_review', 'archived', 'draft'],
+  ready_for_review: ['in_review', 'converted_to_invoice', 'archived', 'draft'],
   in_review: ['needs_info', 'rejected', 'ready_for_review', 'converted_to_invoice', 'draft'],
   needs_info: ['ready_for_review', 'in_review', 'archived', 'draft'],
   rejected: ['ready_for_review', 'archived'],
@@ -43,6 +46,13 @@ export const MECHANIC_TRANSITIONS: Array<{ from: ServiceLogStatus, to: ServiceLo
   { from: 'uploaded', to: 'ready_for_review' },
   { from: 'needs_info', to: 'ready_for_review' },
 ]
+
+/** Statuses that may be sent straight to a draft invoice (review step optional). */
+export const SERVICE_LOG_SENDABLE_STATUSES: ServiceLogStatus[] = ['ready_for_review', 'in_review']
+
+export function isServiceLogSendable(status: ServiceLogStatus): boolean {
+  return SERVICE_LOG_SENDABLE_STATUSES.includes(status)
+}
 
 /** Field edits are allowed on any log that has not been invoiced. */
 export function isServiceLogEditable(status: ServiceLogStatus): boolean {
@@ -127,7 +137,7 @@ export async function reconcileServiceLogInvoiceLink(
 
   const [updated] = await db.update(serviceLogs)
     .set({
-      status: 'in_review',
+      status: 'ready_for_review',
       invoiceId: null,
       statusReason: INVOICE_LINK_RELEASED_REASON,
       updatedAt: new Date(),
@@ -279,7 +289,7 @@ export async function convertServiceLogToInvoice(
   if (before.status === 'converted_to_invoice' && before.invoiceId) {
     throw new ServiceLogsServiceError('ALREADY_CONVERTED')
   }
-  if (before.status !== 'in_review') {
+  if (!isServiceLogSendable(before.status)) {
     throw new ServiceLogsServiceError('INVALID_TRANSITION')
   }
 
@@ -292,6 +302,80 @@ export async function convertServiceLogToInvoice(
 
   const { log } = await transitionServiceLog(db, id, 'converted_to_invoice', { invoiceId: invoice.id })
   return { invoice, log, before }
+}
+
+export type InvoiceRevertBlockReason
+  = 'INVOICE_NOT_DRAFT' | 'INVOICE_SENT' | 'EDIT_SESSION_ACTIVE' | 'INVOICE_MODIFIED' | 'HAS_LINE_ITEMS'
+
+/** Whether the auto-created draft invoice can be undone so the mechanic can edit the log again. */
+export async function getInvoiceRevertStatus(db: Db, invoiceId: string) {
+  const invoice = await db.select({
+    id: invoices.id,
+    status: invoices.status,
+  }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1)
+  const row = invoice[0]
+  if (!row) return { revertible: false as const, reason: 'INVOICE_NOT_DRAFT' as const }
+
+  if (row.status !== 'draft') {
+    return { revertible: false as const, reason: 'INVOICE_SENT' as const }
+  }
+
+  const session = await getActiveEditingSession(db, 'invoice', invoiceId)
+  if (session) {
+    return { revertible: false as const, reason: 'EDIT_SESSION_ACTIVE' as const }
+  }
+
+  const edits = await db.select({ action: auditLogs.action })
+    .from(auditLogs)
+    .where(and(
+      eq(auditLogs.entityType, 'invoice'),
+      eq(auditLogs.entityId, invoiceId),
+      ne(auditLogs.action, 'invoices.create'),
+    ))
+
+  if (edits.some(e => !isEditingSessionNoise(e.action))) {
+    return { revertible: false as const, reason: 'INVOICE_MODIFIED' as const }
+  }
+
+  const [lineCount] = await db.select({ value: count() })
+    .from(invoiceLineItems)
+    .where(eq(invoiceLineItems.invoiceId, invoiceId))
+
+  if (Number(lineCount?.value ?? 0) > 0) {
+    return { revertible: false as const, reason: 'HAS_LINE_ITEMS' as const }
+  }
+
+  return { revertible: true as const, reason: null }
+}
+
+/** Undo send-to-invoice — deletes pristine draft and returns the log to ready_for_review. */
+export async function revertServiceLogInvoice(db: Db, id: string) {
+  const log = await getServiceLog(db, id)
+  if (log.status !== 'converted_to_invoice' || !log.invoiceId) {
+    throw new ServiceLogsServiceError('INVALID_TRANSITION')
+  }
+
+  const revertStatus = await getInvoiceRevertStatus(db, log.invoiceId)
+  if (!revertStatus.revertible) {
+    throw new ServiceLogsServiceError('NOT_REVERTIBLE')
+  }
+
+  const invoiceId = log.invoiceId
+  const before = { ...log }
+
+  await db.update(serviceLogs)
+    .set({
+      status: 'ready_for_review',
+      invoiceId: null,
+      statusReason: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(serviceLogs.id, id))
+
+  await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId))
+  await db.delete(invoices).where(eq(invoices.id, invoiceId))
+
+  return { log: await getServiceLog(db, id), before, invoiceId }
 }
 
 export interface ListServiceLogsFilter {

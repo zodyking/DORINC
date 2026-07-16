@@ -33,6 +33,8 @@ export const PERMISSIONS = {
   'service_logs.upload.own': 'Upload own service logs',
   'service_logs.review.all': 'Review service logs',
   'service_logs.convert.all': 'Convert service logs to invoices',
+  'service_logs.convert.own': 'Send own service logs to invoice',
+  'service_logs.revert_invoice.own': 'Undo send to invoice on own service logs',
 
   // Invoices
   'invoices.read.all': 'View all invoices',
@@ -163,6 +165,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'customers.read.all',
     'vehicles.read.all',
     'service_logs.read.own', 'service_logs.upload.own',
+    'service_logs.convert.own', 'service_logs.revert_invoice.own',
     'files.upload.all',
     'ai.help.all',
     'deletion_requests.submit.all',

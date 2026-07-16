@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type {
   CatalogSnapshot,
@@ -21,6 +21,9 @@ import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
 import { serviceRequests } from '../db/schema/portal-requests'
+import { serviceLogs } from '../db/schema/service-logs'
+import { appFiles } from '../db/schema/files'
+import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 
 export type InvoicesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
@@ -538,6 +541,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
   const rows = await db.select({
     invoice: invoices,
     customerName: customers.displayName,
+    serviceLogNumber: serviceLogs.logNumber,
     vehicle: {
       busNumber: vehicles.busNumber,
       make: vehicles.make,
@@ -547,6 +551,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     .from(invoices)
     .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
+    .leftJoin(serviceLogs, eq(invoices.serviceLogId, serviceLogs.id))
     .where(where)
     .orderBy(orderBy)
     .limit(filter.pageSize)
@@ -557,6 +562,26 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .where(where)
+
+  const serviceLogIds = rows
+    .map(r => r.invoice.serviceLogId)
+    .filter((id): id is string => !!id)
+  const serviceLogPhotoCounts = new Map<string, number>()
+  if (serviceLogIds.length) {
+    const counts = await db.select({
+      ownerId: appFiles.ownerEntityId,
+      value: count(),
+    })
+      .from(appFiles)
+      .where(and(
+        eq(appFiles.ownerEntityType, 'service_log'),
+        inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
+        isNull(appFiles.archivedAt),
+        inArray(appFiles.ownerEntityId, serviceLogIds),
+      ))
+      .groupBy(appFiles.ownerEntityId)
+    for (const c of counts) serviceLogPhotoCounts.set(c.ownerId, Number(c.value))
+  }
 
   const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
 
@@ -599,6 +624,12 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
         customerName,
         vehicleSnapshot,
         vehicle: liveVehicle,
+        creationSource: r.invoice.creationSource,
+        serviceLogId: r.invoice.serviceLogId,
+        serviceLogNumber: r.serviceLogNumber ?? null,
+        serviceLogPhotoCount: r.invoice.serviceLogId
+          ? (serviceLogPhotoCounts.get(r.invoice.serviceLogId) ?? 0)
+          : 0,
       }
     }),
     total: Number(total?.value ?? 0),

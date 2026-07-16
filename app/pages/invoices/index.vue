@@ -9,6 +9,7 @@ import {
   type InvoiceStatus,
   type InvoiceVehicleSnapshotDisplay,
 } from '~/utils/invoices-ui'
+import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.read.all' })
@@ -26,6 +27,10 @@ interface InvoiceRow {
   balanceDue: string
   customerName: string
   vehicleSnapshot: InvoiceVehicleSnapshotDisplay | null
+  creationSource?: string
+  serviceLogId: string | null
+  serviceLogNumber: number | null
+  serviceLogPhotoCount: number
 }
 
 interface InvoiceStats {
@@ -166,6 +171,11 @@ function openInvoice(id: string) {
   navigateTo(`/invoices/${id}`)
 }
 
+function openServiceLog(event: Event, serviceLogId: string) {
+  event.stopPropagation()
+  navigateTo(`/service-logs/${serviceLogId}`)
+}
+
 async function retryLoad() {
   await Promise.all([refreshList(), refreshStats()])
 }
@@ -302,7 +312,27 @@ async function exportCsv() {
               class="click"
               @click="openInvoice(row.id)"
             >
-              <td class="col-inv"><span class="lead">{{ row.invoiceNumberFormatted }}</span></td>
+              <td class="col-inv">
+                <span class="lead">{{ row.invoiceNumberFormatted }}</span>
+                <span
+                  v-if="row.serviceLogId && row.serviceLogNumber"
+                  class="inv-source-row"
+                >
+                  <button
+                    type="button"
+                    class="inv-source-link"
+                    @click="openServiceLog($event, row.serviceLogId!)"
+                  >
+                    {{ logNumberDisplay(row.serviceLogNumber) }}
+                  </button>
+                  <span
+                    v-if="row.serviceLogPhotoCount > 0"
+                    class="pill info inv-photo-pill"
+                  >
+                    {{ row.serviceLogPhotoCount === 1 ? '1 photo' : `${row.serviceLogPhotoCount} photos` }}
+                  </span>
+                </span>
+              </td>
               <td class="col-cust">
                 {{ row.customerName }}
                 <span class="sub">{{ vehicleSnapshotSub(row.vehicleSnapshot) }}</span>

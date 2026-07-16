@@ -25,7 +25,7 @@ export function workTypeLabel(key: string): string {
   return WORK_TYPE_LABELS[key] ?? key
 }
 
-export const INVOICE_LINK_RELEASED_REASON = 'Linked invoice was deleted; returned to review'
+export const INVOICE_LINK_RELEASED_REASON = 'Linked invoice was deleted; ready to send to invoice again'
 
 export function serviceLogInvoiceLinkReleased(statusReason: string | null | undefined): boolean {
   return statusReason === INVOICE_LINK_RELEASED_REASON
@@ -45,8 +45,9 @@ export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceI
     case 'ai_processing':
       return { cls: 'pill info', label: 'AI processing' }
     case 'ready_for_review':
+      return { cls: 'pill warn', label: 'Ready to invoice' }
     case 'in_review':
-      return { cls: 'pill warn', label: 'Awaiting review' }
+      return { cls: 'pill warn', label: 'Ready to invoice' }
     case 'needs_info':
       return { cls: 'pill warn', label: 'Needs info' }
     case 'converted_to_invoice':
@@ -90,6 +91,21 @@ export function fileThumbEmoji(mimeType: string, fileKind: string): string {
   if (mimeType.startsWith('image/')) return '🖼'
   if (mimeType === 'application/pdf' || fileKind === 'pdf') return '📄'
   return '📎'
+}
+
+export function revertInvoiceBlockLabel(reason: string | null | undefined): string | null {
+  switch (reason) {
+    case 'EDIT_SESSION_ACTIVE':
+      return 'An accountant is editing this invoice — undo is not available.'
+    case 'INVOICE_MODIFIED':
+      return 'The invoice draft has been saved with changes — undo is not available.'
+    case 'HAS_LINE_ITEMS':
+      return 'The invoice has line items — undo is not available.'
+    case 'INVOICE_SENT':
+      return 'This invoice has already been sent — undo is not available.'
+    default:
+      return null
+  }
 }
 
 export function formatAuditAction(

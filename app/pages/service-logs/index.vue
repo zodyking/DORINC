@@ -28,6 +28,8 @@ interface ServiceLogRow {
   invoiceNumberFormatted: string | null
   customerRequested: boolean
   vehicle: VehicleBits | null
+  canSendToInvoice?: boolean
+  canRevertInvoice?: boolean
 }
 
 const auth = useAuthStore()
@@ -51,7 +53,44 @@ const query = computed(() => ({
   sort: fSort.value,
 }))
 
-const { data } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
+const actionBusyId = ref<string | null>(null)
+const actionError = ref('')
+
+async function sendToInvoice(log: ServiceLogRow, event?: Event) {
+  event?.stopPropagation()
+  if (!log.canSendToInvoice || actionBusyId.value) return
+  actionBusyId.value = log.id
+  actionError.value = ''
+  try {
+    await $fetch(`/api/service-logs/${log.id}/convert-to-invoice`, { method: 'POST', body: {} })
+    await refresh()
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Send to invoice failed'
+  }
+  finally {
+    actionBusyId.value = null
+  }
+}
+
+async function undoSendToInvoice(log: ServiceLogRow, event?: Event) {
+  event?.stopPropagation()
+  if (!log.canRevertInvoice || actionBusyId.value) return
+  actionBusyId.value = log.id
+  actionError.value = ''
+  try {
+    await $fetch(`/api/service-logs/${log.id}/revert-invoice`, { method: 'POST' })
+    await refresh()
+  }
+  catch (e: unknown) {
+    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed'
+  }
+  finally {
+    actionBusyId.value = null
+  }
+}
+
+const { data, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
   { query },
 )
@@ -84,8 +123,8 @@ const listCountLabel = computed(() => {
 })
 
 const pageSubtitle = computed(() => {
-  if (isMechanicScope.value) return 'Your field uploads and their review status'
-  if (fView.value === 'review') return 'Logs awaiting accountant review before invoicing'
+  if (isMechanicScope.value) return 'Your field uploads — send to invoice when ready'
+  if (fView.value === 'review') return 'Logs awaiting accountant action before invoicing'
   return 'All field service logs — including those already linked to invoices'
 })
 
@@ -96,12 +135,6 @@ function openLog(id: string) {
 function vehicleLabel(vehicle: VehicleBits | null): string {
   if (!vehicle) return '—'
   return vehicleTag(vehicle)
-}
-
-function rowActionLabel(log: ServiceLogRow): string {
-  if (canReview.value && log.status !== 'converted_to_invoice') return 'Review'
-  if (log.invoiceId) return 'Open log'
-  return 'View'
 }
 </script>
 
@@ -140,6 +173,8 @@ function rowActionLabel(log: ServiceLogRow): string {
         </label>
       </template>
     </ListFilterBar>
+
+    <p v-if="actionError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ actionError }}</p>
 
     <div class="card">
       <div class="tscroll">
@@ -205,14 +240,42 @@ function rowActionLabel(log: ServiceLogRow): string {
                 <span v-else class="muted">—</span>
               </td>
               <td class="col-actions" data-label="Actions">
-                <button
-                  type="button"
-                  class="btn sm"
-                  :class="{ primary: canReview && log.status !== 'converted_to_invoice' }"
-                  @click.stop="openLog(log.id)"
-                >
-                  {{ rowActionLabel(log) }}
-                </button>
+                <div class="sl-list-actions" @click.stop>
+                  <template v-if="log.canSendToInvoice">
+                    <button
+                      type="button"
+                      class="btn sm primary"
+                      :disabled="actionBusyId === log.id"
+                      @click="sendToInvoice(log, $event)"
+                    >
+                      {{ actionBusyId === log.id ? 'Sending…' : 'Send to invoice' }}
+                    </button>
+                    <button type="button" class="btn sm" @click="openLog(log.id)">Open</button>
+                  </template>
+                  <template v-else-if="log.canRevertInvoice">
+                    <button
+                      type="button"
+                      class="btn sm"
+                      :disabled="actionBusyId === log.id"
+                      @click="undoSendToInvoice(log, $event)"
+                    >
+                      {{ actionBusyId === log.id ? 'Undoing…' : 'Undo send' }}
+                    </button>
+                    <NuxtLink
+                      v-if="log.invoiceId"
+                      :to="`/invoices/${log.invoiceId}`"
+                      class="btn sm"
+                    >
+                      View invoice
+                    </NuxtLink>
+                  </template>
+                  <template v-else-if="log.status === 'converted_to_invoice' && log.invoiceId">
+                    <NuxtLink :to="`/invoices/${log.invoiceId}`" class="btn sm">View invoice</NuxtLink>
+                  </template>
+                  <template v-else>
+                    <button type="button" class="btn sm" @click="openLog(log.id)">View log</button>
+                  </template>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -248,7 +311,7 @@ function rowActionLabel(log: ServiceLogRow): string {
 .sl-list-tbl .col-work { width: 14%; min-width: 120px; }
 .sl-list-tbl .col-status { width: 14%; min-width: 130px; }
 .sl-list-tbl .col-invoice { width: 11%; min-width: 100px; }
-.sl-list-tbl .col-actions { width: 8%; min-width: 88px; text-align: right; }
+.sl-list-tbl .col-actions { width: 12%; min-width: 120px; text-align: right; }
 
 .sl-list-tbl .lead {
   display: block;
@@ -299,6 +362,13 @@ function rowActionLabel(log: ServiceLogRow): string {
 
 .sl-list-row td.col-actions {
   vertical-align: middle;
+}
+
+.sl-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 @media (max-width: 960px) {

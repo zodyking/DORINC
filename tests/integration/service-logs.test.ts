@@ -10,6 +10,7 @@ import {
   convertServiceLogToInvoice,
   getServiceLog,
   listServiceLogs,
+  revertServiceLogInvoice,
   transitionServiceLog,
   updateServiceLog,
 } from '../../server/services/service-logs.service'
@@ -268,9 +269,17 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
     expect(draft.invoiceDate).toBe('2026-07-07')
   })
 
-  it('rejects conversion from non-approved statuses', async () => {
+  it('allows direct conversion from ready_for_review (skips in_review)', async () => {
     const log = await makeLog()
     await transitionServiceLog(db, log.id, 'ready_for_review')
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    expect(converted.status).toBe('converted_to_invoice')
+    expect(converted.invoiceId).toBe(invoice.id)
+    expect(invoice.status).toBe('draft')
+  })
+
+  it('rejects conversion from draft', async () => {
+    const log = await makeLog()
     await expect(convertServiceLogToInvoice(db, log.id, MECHANIC))
       .rejects.toThrow('INVALID_TRANSITION')
   })
@@ -313,13 +322,13 @@ describe('P1-27 invoice deletion restores service log status', () => {
     return { log: converted, invoice }
   }
 
-  it('returns converted logs to in_review when their invoice is hard-deleted', async () => {
+  it('returns converted logs to ready_for_review when their invoice is hard-deleted', async () => {
     const { log, invoice } = await convertedLog()
 
     await hardDeleteInvoice(db, invoice.id)
 
     const restored = await getServiceLog(db, log.id)
-    expect(restored.status).toBe('in_review')
+    expect(restored.status).toBe('ready_for_review')
     expect(restored.invoiceId).toBeNull()
     expect(restored.statusReason).toBe(INVOICE_LINK_RELEASED_REASON)
     await expect(getInvoice(db, invoice.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
@@ -332,11 +341,44 @@ describe('P1-27 invoice deletion restores service log status', () => {
     await db.delete(invoices).where(eq(invoices.id, invoice.id))
 
     const reconciled = await getServiceLog(db, log.id)
-    expect(reconciled.status).toBe('in_review')
+    expect(reconciled.status).toBe('ready_for_review')
     expect(reconciled.invoiceId).toBeNull()
 
     const { invoice: newInvoice, log: reconverted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
     expect(reconverted.status).toBe('converted_to_invoice')
     expect(reconverted.invoiceId).toBe(newInvoice.id)
+  })
+})
+
+describe('P1-28 revert send to invoice', () => {
+  it('undoes a pristine draft invoice and restores log editability', async () => {
+    const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+
+    const { log: reverted, invoiceId } = await revertServiceLogInvoice(db, log.id)
+    expect(reverted.status).toBe('ready_for_review')
+    expect(reverted.invoiceId).toBeNull()
+    expect(invoiceId).toBe(invoice.id)
+    await expect(getInvoice(db, invoice.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    const { log: updated } = await updateServiceLog(db, log.id, { complaint: 'Edited after undo' })
+    expect(updated.complaint).toBe('Edited after undo')
+  })
+
+  it('rejects revert when invoice has line items', async () => {
+    const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    await db.insert(invoiceLineItems).values({
+      invoiceId: invoice.id,
+      lineType: 'labor',
+      description: 'Test line',
+      quantity: '1',
+      unitPrice: '100.00',
+      taxable: true,
+      sortOrder: 0,
+    })
+    await expect(revertServiceLogInvoice(db, log.id)).rejects.toThrow('NOT_REVERTIBLE')
   })
 })
