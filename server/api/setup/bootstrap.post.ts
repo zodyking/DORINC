@@ -1,4 +1,5 @@
-import { getHeader, getRequestIP } from 'h3'
+import { getHeader } from 'h3'
+import { getClientIp } from '../../utils/client-ip'
 import { z } from 'zod'
 import { login } from '../../auth/auth.service'
 import { setSessionCookie } from '../../auth/session-cookie'
@@ -58,7 +59,7 @@ export default defineEventHandler(async (event) => {
 
     // Sign the new Super Admin straight in
     const result = await login(db, user.email, body.password, {
-      ipAddress: getRequestIP(event, { xForwardedFor: true }),
+      ipAddress: getClientIp(event),
       userAgent: getHeader(event, 'user-agent'),
       portal: 'staff',
     })

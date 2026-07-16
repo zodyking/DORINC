@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { H3Event } from 'h3'
-import { getHeader, getRequestIP } from 'h3'
+import { getHeader } from 'h3'
+import { getClientIp } from '../utils/client-ip'
 import { desc, sql } from 'drizzle-orm'
 import { useDb, type Db } from '../db/client'
 import { auditLogs } from '../db/schema/audit'
@@ -68,7 +69,7 @@ export async function writeAudit(event: H3Event | null, entry: AuditEntry): Prom
   }
 
   const id = randomUUID()
-  const ipAddress = event ? getRequestIP(event, { xForwardedFor: true }) ?? null : null
+  const ipAddress = event ? getClientIp(event) : null
   const userAgent = event ? getHeader(event, 'user-agent') ?? null : null
   const requestId = entry.requestId !== undefined
     ? entry.requestId

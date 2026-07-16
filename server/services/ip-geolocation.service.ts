@@ -1,13 +1,6 @@
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^::1$/,
-  /^fc00:/i,
-  /^fe80:/i,
-  /^localhost$/i,
-]
+import { isPrivateIp, normalizeClientIp } from '../utils/client-ip'
+
+export { normalizeClientIp } from '../utils/client-ip'
 
 const US_STATE_ABBREVS: Record<string, string> = {
   Alabama: 'AL',
@@ -90,34 +83,6 @@ interface IpApiResponse {
 export interface IpLocationResult {
   label: string
   network?: string | null
-}
-
-function isPrivateIp(ip: string): boolean {
-  return PRIVATE_IP_PATTERNS.some(pattern => pattern.test(ip))
-}
-
-/** Normalize forwarded / IPv6-mapped client IPs before lookup. */
-export function normalizeClientIp(ip: string | null | undefined): string | null {
-  if (!ip) return null
-  let cleaned = ip.trim()
-  if (!cleaned) return null
-
-  if (cleaned.includes(',')) {
-    cleaned = cleaned.split(',')[0]?.trim() ?? ''
-  }
-
-  if (cleaned.startsWith('::ffff:')) {
-    cleaned = cleaned.slice('::ffff:'.length)
-  }
-
-  if (/^\[.+\](:\d+)?$/.test(cleaned)) {
-    cleaned = cleaned.replace(/^\[(.+)\](?::\d+)?$/, '$1')
-  }
-  else if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(cleaned)) {
-    cleaned = cleaned.split(':')[0] ?? cleaned
-  }
-
-  return cleaned || null
 }
 
 function abbreviateRegion(region: string, regionCode?: string, countryCode?: string): string {

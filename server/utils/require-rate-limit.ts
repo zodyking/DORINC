@@ -1,4 +1,4 @@
-import { getRequestIP } from 'h3'
+import { getClientIp } from './client-ip'
 import type { H3Event } from 'h3'
 import { useDb } from '../db/client'
 import { RateLimitError, consumeRateLimit } from '../services/rate-limit.service'
@@ -27,7 +27,7 @@ export async function requireRateLimit(
 }
 
 export function rateLimitKeyFromIp(event: H3Event, suffix = 'ip') {
-  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const ip = getClientIp(event) ?? 'unknown'
   return `${suffix}:${ip}`
 }
 

@@ -1,4 +1,5 @@
-import { getHeader, getRequestIP } from 'h3'
+import { getHeader } from 'h3'
+import { getClientIp } from '../utils/client-ip'
 import { z } from 'zod'
 import { AuthError, login } from '../../auth/auth.service'
 import { setSessionCookie } from '../../auth/session-cookie'
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const result = await login(useDb(), identifier, body.password, {
-      ipAddress: getRequestIP(event, { xForwardedFor: true }),
+      ipAddress: getClientIp(event),
       userAgent: getHeader(event, 'user-agent'),
       portal: body.portal,
     })
@@ -59,7 +60,7 @@ export default defineEventHandler(async (event) => {
         to: result.user.email,
         name: result.user.name,
         portal: body.portal,
-        ipAddress: getRequestIP(event, { xForwardedFor: true }),
+        ipAddress: getClientIp(event),
         userAgent: getHeader(event, 'user-agent'),
       }))
       .catch((err) => {
@@ -85,7 +86,7 @@ export default defineEventHandler(async (event) => {
           const { recordFailedLoginAlert } = await import('../../services/suspicious-activity.service')
           await recordFailedLoginAlert(
             useDb(),
-            getRequestIP(event, { xForwardedFor: true }) ?? null,
+            getClientIp(event),
           )
         }
         catch {

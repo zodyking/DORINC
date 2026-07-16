@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeClientIp } from '../../server/services/ip-geolocation.service'
+import { normalizeClientIp } from '../../server/utils/client-ip'
 
 describe('ip geolocation helpers', () => {
   it('normalizes forwarded IPv4 addresses', () => {
