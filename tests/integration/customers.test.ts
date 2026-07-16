@@ -70,6 +70,26 @@ describe('P1-07 customers CRUD + archive + search', () => {
     expect(noop.changedFields).toEqual([])
   })
 
+  it('syncs primary contact when individual account name/email/phone change', async () => {
+    const c = await createCustomer(db, {
+      displayName: 'Brandon',
+      accountKind: 'individual',
+      email: `brandon-${stamp}@custtest.dorinc.local`,
+      phone: '555-0000',
+    }, CREATOR)
+
+    await updateCustomer(db, c.id, {
+      displayName: 'Brandon King',
+      email: `brandon-new-${stamp}@custtest.dorinc.local`,
+      phone: '555-1111',
+    })
+
+    const contacts = await listContacts(db, c.id)
+    expect(contacts[0]?.name).toBe('Brandon King')
+    expect(contacts[0]?.email).toBe(`brandon-new-${stamp}@custtest.dorinc.local`)
+    expect(contacts[0]?.phone).toBe('555-1111')
+  })
+
   it('archives and restores; archived hidden from default list', async () => {
     const c = await makeCustomer('archive')
     await archiveCustomer(db, c.id)

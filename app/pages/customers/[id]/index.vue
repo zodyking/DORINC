@@ -70,6 +70,7 @@ interface RecentInvoiceRow {
 }
 
 const customerId = computed(() => String(route.params.id || ''))
+const customerFetchKey = computed(() => `customer-detail-${customerId.value}`)
 
 const { data, refresh, error } = useClientFetch<{
   customer: Customer
@@ -77,7 +78,11 @@ const { data, refresh, error } = useClientFetch<{
   history: HistoryRow[]
   billing: BillingSummary
   recentInvoices: RecentInvoiceRow[]
-}>(() => `/api/customers/${customerId.value}`, { watch: [customerId] })
+}>(() => `/api/customers/${customerId.value}`, { watch: [customerId], key: customerFetchKey })
+
+onMounted(() => {
+  void refresh()
+})
 
 const customer = computed(() => data.value?.customer)
 const contacts = computed(() => data.value?.contacts ?? [])
@@ -494,9 +499,9 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
           <div class="card">
             <div class="chead"><h3>Account</h3></div>
             <dl class="kv">
-              <dt>Primary contact</dt><dd>{{ primary?.name ?? '—' }}</dd>
-              <dt>Email</dt><dd>{{ primary?.email ?? customer.email ?? '—' }}</dd>
-              <dt>Phone</dt><dd>{{ phoneDisplay(primary?.phone ?? customer.phone) }}</dd>
+              <dt>Primary contact</dt><dd>{{ customer.accountKind === 'individual' ? customer.displayName : (primary?.name ?? customer.displayName ?? '—') }}</dd>
+              <dt>Email</dt><dd>{{ customer.accountKind === 'individual' ? (customer.email ?? primary?.email ?? '—') : (primary?.email ?? customer.email ?? '—') }}</dd>
+              <dt>Phone</dt><dd>{{ phoneDisplay(customer.accountKind === 'individual' ? (customer.phone ?? primary?.phone) : (primary?.phone ?? customer.phone)) }}</dd>
               <dt>Terms</dt><dd>{{ TERMS_LABELS[customer.paymentTerms] ?? customer.paymentTerms }}{{ customer.taxExempt ? ' · Tax exempt' : '' }}</dd>
               <dt>Billing address</dt><dd>{{ addressLine(customer.billingAddress) }}</dd>
               <dt>Service address</dt><dd>{{ addressLine(customer.serviceAddress) }}</dd>

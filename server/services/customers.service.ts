@@ -84,7 +84,43 @@ export async function updateCustomer(db: Db, id: string, patch: Partial<Customer
     .where(eq(customers.id, id))
     .returning()
 
+  await syncPrimaryContactFromAccount(db, id, updated!, changedFields)
+
   return { customer: updated!, before, changedFields }
+}
+
+/** Keep the primary contact aligned when individual account fields change in Edit account. */
+async function syncPrimaryContactFromAccount(
+  db: Db,
+  customerId: string,
+  customer: typeof customers.$inferSelect,
+  changedFields: string[],
+) {
+  const syncFields = ['displayName', 'email', 'phone'] as const
+  if (customer.accountKind !== 'individual') return
+  if (!changedFields.some(field => syncFields.includes(field as typeof syncFields[number]))) return
+
+  const contacts = await listContacts(db, customerId)
+  const primary = contacts.find(c => c.isPrimary) ?? contacts[0]
+  if (!primary) {
+    if (customer.email) {
+      await addContact(db, customerId, {
+        name: customer.displayName,
+        email: customer.email,
+        phone: customer.phone,
+        isPrimary: true,
+      })
+    }
+    return
+  }
+
+  const patch: Partial<ContactInput> = {}
+  if (changedFields.includes('displayName')) patch.name = customer.displayName
+  if (changedFields.includes('email')) patch.email = customer.email
+  if (changedFields.includes('phone')) patch.phone = customer.phone
+  if (Object.keys(patch).length) {
+    await updateContact(db, customerId, primary.id, patch)
+  }
 }
 
 export async function archiveCustomer(db: Db, id: string) {

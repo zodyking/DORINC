@@ -22,10 +22,11 @@ interface Customer {
 const route = useRoute()
 const auth = useAuthStore()
 const customerId = computed(() => String(route.params.id || ''))
+const customerFetchKey = computed(() => `customer-detail-${customerId.value}`)
 
 const { data, error, refresh } = useClientFetch<{ customer: Customer }>(
   () => `/api/customers/${customerId.value}`,
-  { watch: [customerId] },
+  { watch: [customerId], key: customerFetchKey },
 )
 
 const customer = computed(() => data.value?.customer)
@@ -83,6 +84,7 @@ async function submit() {
         notes: form.notes || null,
       },
     })
+    await clearNuxtData(customerFetchKey.value)
     await navigateTo(`/customers/${route.params.id}`)
   }
   catch (err) {
