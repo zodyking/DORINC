@@ -1,4 +1,5 @@
 import { useDb } from '../../db/client'
+import { resolveServiceLogInvoiceLinkStatuses } from '../../services/invoice-link-status.service'
 import { listServiceLogs } from '../../services/service-logs.service'
 import { apiError } from '../../utils/api-error'
 import { canMarkServiceLogReady, canRevertServiceLogInvoice, canSendServiceLogToInvoice } from '../../utils/service-log-actions'
@@ -26,8 +27,14 @@ export default defineEventHandler(async (event) => {
     submittedBy: readAll ? undefined : auth.user.id,
   })
 
+  const invoiceIds = result.items
+    .map(log => log.invoiceId)
+    .filter((id): id is string => !!id)
+  const invoiceLinkStatuses = await resolveServiceLogInvoiceLinkStatuses(db, invoiceIds)
+
   const items = await Promise.all(result.items.map(async (log) => ({
     ...log,
+    invoiceLinkStatus: log.invoiceId ? invoiceLinkStatuses.get(log.invoiceId) ?? null : null,
     canMarkReady: canMarkServiceLogReady(event, log),
     canSendToInvoice: canSendServiceLogToInvoice(event, log),
     canRevertInvoice: await canRevertServiceLogInvoice(event, db, log),

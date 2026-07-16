@@ -3,6 +3,10 @@
 import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref } from '~/utils/invoice-pdf'
+import {
+  serviceLogInvoiceLinkStatusClass,
+  type ServiceLogInvoiceLinkStatus,
+} from '~/utils/service-log-invoice-status'
 
 definePageMeta({ layout: 'staff', permission: ['service_logs.read.all', 'service_logs.read.own'] })
 
@@ -27,6 +31,7 @@ interface ServiceLogRow {
   fileCount: number
   invoiceId: string | null
   invoiceNumberFormatted: string | null
+  invoiceLinkStatus: ServiceLogInvoiceLinkStatus | null
   customerRequested: boolean
   vehicle: VehicleBits | null
   canSendToInvoice?: boolean
@@ -207,18 +212,25 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
                 </div>
               </td>
               <td class="col-invoice" data-label="Invoice">
-                <a
-                  v-if="log.invoiceId && log.invoiceNumberFormatted"
-                  :href="serviceLogInvoicePreviewPdfHref(log.id)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="sl-inv-pdf-link"
-                  :title="`Open ${log.invoiceNumberFormatted} PDF in a new tab`"
-                  @click.stop
-                >
-                  {{ log.invoiceNumberFormatted }}
-                  <span class="sl-inv-pdf-icon" aria-hidden="true">↗</span>
-                </a>
+                <div v-if="log.invoiceId && log.invoiceNumberFormatted" class="sl-inv-cell">
+                  <a
+                    :href="serviceLogInvoicePreviewPdfHref(log.id)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="sl-inv-pdf-link"
+                    :title="`Open ${log.invoiceNumberFormatted} PDF in a new tab`"
+                    @click.stop
+                  >
+                    {{ log.invoiceNumberFormatted }}
+                    <span class="sl-inv-pdf-icon" aria-hidden="true">↗</span>
+                  </a>
+                  <span
+                    v-if="log.invoiceLinkStatus"
+                    :class="serviceLogInvoiceLinkStatusClass(log.invoiceLinkStatus.key)"
+                  >
+                    {{ log.invoiceLinkStatus.label }}
+                  </span>
+                </div>
                 <span v-else class="muted">—</span>
               </td>
               <td class="col-actions">
@@ -288,6 +300,13 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
   padding: 1px 7px;
 }
 
+.sl-inv-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .sl-inv-pdf-link {
   display: inline-flex;
   align-items: center;
@@ -306,5 +325,23 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
 .sl-inv-pdf-icon {
   font-size: 11px;
   opacity: 0.85;
+}
+
+.sl-inv-status {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.sl-inv-status--queued {
+  color: #94a3b8;
+}
+
+.sl-inv-status--in_progress {
+  color: #d97706;
+}
+
+.sl-inv-status--sent {
+  color: #16a34a;
 }
 </style>
