@@ -37,6 +37,13 @@ export interface EmailConversationSummary {
 
 export type ConversationSummary = DmConversationSummary | EmailConversationSummary
 
+export interface EmailAttachment {
+  id: string
+  filename: string
+  mimeType: string
+  fileSizeBytes: number
+}
+
 export interface ChatMessage {
   id: string
   conversationId: string
@@ -50,6 +57,7 @@ export interface ChatMessage {
   hasHtmlBody?: boolean
   htmlBody?: string | null
   fromAddress?: string | null
+  attachments?: EmailAttachment[]
 }
 
 export type MessageChannel = 'all' | 'dm' | 'email'

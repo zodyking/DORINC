@@ -29,6 +29,12 @@ import {
   shouldAutoRespondToInbound,
   shouldSkipAutoResponder,
 } from './email-auto-responder.service'
+import {
+  FilesServiceError,
+  listFilesByOwner,
+  maxUploadBytes,
+  uploadFile,
+} from './files.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
@@ -36,6 +42,69 @@ export type EmailInboxErrorCode
 export class EmailInboxError extends Error {
   constructor(public readonly code: EmailInboxErrorCode) {
     super(code)
+  }
+}
+
+export interface InboundEmailAttachment {
+  filename?: string | null
+  contentType: string
+  content: Buffer
+  related?: boolean
+}
+
+function safeInboundAttachmentName(filename: string | null | undefined, index: number): string {
+  const leaf = String(filename || `attachment-${index + 1}`)
+    .split(/[\\/]/)
+    .pop()!
+    .replace(/[\u202a-\u202e\u2066-\u2069]/g, '_')
+    .split('')
+    .map(char => {
+      const code = char.charCodeAt(0)
+      return code < 32 || code === 127 ? '_' : char
+    })
+    .join('')
+    .trim()
+  return (leaf || `attachment-${index + 1}`).slice(0, 240)
+}
+
+async function persistInboundAttachments(
+  db: Db,
+  messageId: string,
+  attachments: InboundEmailAttachment[],
+): Promise<void> {
+  const maxTotalBytes = maxUploadBytes() * 2
+  let totalBytes = 0
+
+  for (const [index, attachment] of attachments.slice(0, 20).entries()) {
+    // Related MIME parts are already embedded by mailparser in the HTML body.
+    if (attachment.related || !attachment.content.length) continue
+    totalBytes += attachment.content.length
+    if (totalBytes > maxTotalBytes) {
+      console.warn('[email-inbox] attachment total exceeded limit for message', messageId)
+      break
+    }
+
+    try {
+      await uploadFile(db, {
+        ownerEntityType: 'message',
+        ownerEntityId: messageId,
+        fileKind: 'attachment',
+        originalFilename: safeInboundAttachmentName(attachment.filename, index),
+        mimeType: attachment.contentType.toLowerCase(),
+        data: attachment.content,
+      }, null)
+    }
+    catch (err) {
+      if (err instanceof FilesServiceError) {
+        console.warn('[email-inbox] skipped unsafe attachment', {
+          messageId,
+          filename: attachment.filename,
+          reason: err.code,
+        })
+        continue
+      }
+      throw err
+    }
   }
 }
 
@@ -342,23 +411,36 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
     .limit(filter.pageSize)
     .offset((filter.page - 1) * filter.pageSize)
 
+  const items = await Promise.all(rows.map(async (r) => {
+    const attachments = await listFilesByOwner(db, {
+      ownerEntityType: 'message',
+      ownerEntityId: r.id,
+      fileKind: 'attachment',
+    })
+
+    return {
+      id: r.id,
+      conversationId: r.conversationId,
+      body: r.body,
+      senderUserId: r.senderUserId,
+      senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
+      createdAt: r.createdAt.toISOString(),
+      channel: 'email' as const,
+      direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
+      hasHtmlBody: !!r.htmlBody?.trim(),
+      fromAddress: r.fromAddress,
+      entityRefs: [],
+      attachments: attachments.map(file => ({
+        id: file.id,
+        filename: file.originalFilename,
+        mimeType: file.mimeType,
+        fileSizeBytes: file.fileSizeBytes,
+      })),
+    }
+  }))
+
   return {
-    items: rows.map((r) => {
-      const hasHtmlBody = !!r.htmlBody?.trim()
-      return {
-        id: r.id,
-        conversationId: r.conversationId,
-        body: r.body,
-        senderUserId: r.senderUserId,
-        senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
-        createdAt: r.createdAt.toISOString(),
-        channel: 'email' as const,
-        direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
-        hasHtmlBody,
-        fromAddress: r.fromAddress,
-        entityRefs: [],
-      }
-    }),
+    items,
   }
 }
 
@@ -585,6 +667,7 @@ export async function ingestInboundEmail(db: Db, input: {
   receivedAt?: Date
   autoSubmitted?: string | null
   precedence?: string | null
+  attachments?: InboundEmailAttachment[]
 }) {
   const normalizedId = input.internetMessageId.trim()
   if (!normalizedId) return { skipped: true as const, reason: 'missing_message_id' as const }
@@ -650,6 +733,8 @@ export async function ingestInboundEmail(db: Db, input: {
     body: normalizeInboundEmailText(input.text, input.html),
     createdAt: input.receivedAt ?? new Date(),
   }).returning()
+
+  await persistInboundAttachments(db, message!.id, input.attachments ?? [])
 
   await db.insert(emailMessageMeta).values({
     messageId: message!.id,

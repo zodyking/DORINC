@@ -119,6 +119,12 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
             receivedAt: msg.internalDate ?? parsed.date ?? new Date(),
             autoSubmitted: headerValue(parsed, 'auto-submitted'),
             precedence: headerValue(parsed, 'precedence'),
+            attachments: parsed.attachments.map(attachment => ({
+              filename: attachment.filename,
+              contentType: attachment.contentType,
+              content: attachment.content,
+              related: attachment.related,
+            })),
           })
 
           if (ingest.skipped) result.skipped++

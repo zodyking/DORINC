@@ -10,14 +10,14 @@ export const EMAIL_BRAND_LEGAL = 'Devon On Site Repairs Inc.'
 
 /** Design tokens — keep in sync with email-styles.scss */
 export const EMAIL_TOKENS = {
-  bg: '#ffffff',
+  bg: '#f4f7fb',
   surface: '#ffffff',
   ink: '#111827',
   muted: '#6b7280',
   faint: '#9ca3af',
-  accent: '#2563eb',
-  accentStrong: '#1d4ed8',
-  accentSoft: '#dbe3ee',
+  accent: '#4f46e5',
+  accentStrong: '#4338ca',
+  accentSoft: '#eef2ff',
   accentLine: '#e5e7eb',
   line: '#eef0f3',
   border: '#e5e7eb',
@@ -303,6 +303,7 @@ export function emailActions(actions) {
  *   actionsHtml?: string,
  *   footerNote?: string | null,
  *   footerLinks?: boolean,
+ *   footerAddress?: boolean,
  *   headerBadge?: string,
  *   appUrl?: string,
  *   brand?: EmailBrandOpts,
@@ -334,6 +335,8 @@ export function wrapEmailHtml(opts) {
         : `This notification was sent because activity occurred in your ${brandName} accounting workspace.`)
   const headerBadge = opts.headerBadge !== undefined ? escapeHtml(opts.headerBadge) : 'Notification'
   const showFooterLinks = opts.footerLinks !== false
+  const showFooterAddress = opts.footerAddress !== false
+  const showFooter = Boolean(footerNote || showFooterLinks || (showFooterAddress && addressBlock))
 
   const mainIntro = [
     opts.eyebrow ? `<div style="margin-bottom:0;">${emailEyebrow(opts.eyebrow)}</div>` : '',
@@ -368,7 +371,17 @@ export function wrapEmailHtml(opts) {
     img { display: block; border: 0; max-width: 100%; }
     a { color: ${t.accent}; text-decoration: none; }
     .email-shell { width: 100%; background: ${t.bg}; }
-    .email-container { width: 100%; max-width: 620px; margin: 0 auto; }
+    .email-outer { padding: 28px 12px; }
+    .email-container {
+      width: 100%;
+      max-width: 620px;
+      margin: 0 auto;
+      background: ${t.surface};
+      border: 1px solid ${t.border};
+      border-radius: 18px;
+      box-shadow: 0 12px 36px rgba(15, 23, 42, 0.07);
+      overflow: hidden;
+    }
     .mobile-padding { padding-left: 28px; padding-right: 28px; }
     .button {
       display: inline-block;
@@ -386,6 +399,13 @@ export function wrapEmailHtml(opts) {
     .detail-label { color: ${t.muted}; font-size: 12px; line-height: 20px; }
     .detail-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; word-break: break-word; }
     @media screen and (max-width: 620px) {
+      .email-outer { padding: 0 !important; }
+      .email-container {
+        border-left: 0 !important;
+        border-right: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
       .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
       .mobile-align-left { text-align: left !important; }
       .detail-label { width: 32% !important; white-space: normal !important; }
@@ -399,8 +419,8 @@ export function wrapEmailHtml(opts) {
 
   <table role="presentation" width="100%" class="email-shell">
     <tr>
-      <td align="center">
-        <table role="presentation" width="100%" class="email-container">
+      <td align="center" class="email-outer">
+        <table role="presentation" width="100%" class="email-container" style="background:${t.surface};border:1px solid ${t.border};border-radius:18px;box-shadow:0 12px 36px rgba(15,23,42,.07);">
 
           <!-- Header -->
           <tr>
@@ -491,7 +511,8 @@ export function wrapEmailHtml(opts) {
           </tr>`
             : `<tr><td style="padding-bottom:38px;"></td></tr>`}
 
-          <!-- Footer divider -->
+          ${showFooter
+            ? `<!-- Footer divider -->
           <tr>
             <td class="mobile-padding">
               <div style="height:1px; background:${t.line};"></div>
@@ -509,9 +530,11 @@ export function wrapEmailHtml(opts) {
                 &nbsp;&nbsp;·&nbsp;&nbsp;
                 <a href="${escapeHtml(brand.signInUrl)}" style="color:#6b7280;">Sign in</a>
               </p>` : ''}
-              ${addressBlock ? `<p style="margin:16px 0 0;">${addressBlock}</p>` : ''}
+              ${showFooterAddress && addressBlock ? `<p style="margin:16px 0 0;">${addressBlock}</p>` : ''}
             </td>
           </tr>
+          `
+            : ''}
 
         </table>
       </td>
@@ -539,6 +562,8 @@ export function wrapEmailHtml(opts) {
  *   primaryAction?: { href: string, label: string },
  *   secondaryAction?: { href: string, label: string },
  *   footerNote?: string,
+ *   footerLinks?: boolean,
+ *   footerAddress?: boolean,
  *   appUrl?: string,
  *   brand?: EmailBrandOpts,
  * }} opts
@@ -564,6 +589,8 @@ export function buildStyledEmail(opts) {
         secondary: opts.secondaryAction,
       }) || undefined,
       footerNote: opts.footerNote,
+      footerLinks: opts.footerLinks,
+      footerAddress: opts.footerAddress,
       appUrl: brand.appUrl,
       brand,
     }),

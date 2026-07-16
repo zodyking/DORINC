@@ -1785,9 +1785,43 @@ section.page.active.dm-page{
 .dm-email-msg-body--html .dm-email-html a{ color:#2563eb; text-decoration:underline; text-underline-offset:2px; }
 .dm-email-msg-body--html .dm-email-html img{ max-width:100%; height:auto; border-radius:6px; }
 .dm-email-text{ white-space:pre-wrap; }
+.dm-email-attachments{
+  margin:18px 0 0 52px; padding-top:14px; border-top:1px solid #e2e8f0;
+}
+.dm-email-attachments-title{
+  margin-bottom:9px; color:#64748b; font-size:11px; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+.dm-email-attachment-list{ display:flex; flex-wrap:wrap; gap:10px; }
+.dm-email-attachment{
+  display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:10px;
+  width:min(100%, 430px); min-height:58px; padding:8px 10px;
+  border:1px solid #e2e8f0; border-radius:10px; background:#f8fafc;
+}
+.dm-email-attachment-preview{
+  display:block; width:52px; height:52px; overflow:hidden; border-radius:7px; background:#e2e8f0;
+}
+.dm-email-attachment-preview img{ display:block; width:100%; height:100%; object-fit:cover; }
+.dm-email-attachment-icon{
+  display:grid; place-items:center; width:38px; height:38px; border-radius:8px;
+  background:#eef2ff; font-size:18px;
+}
+.dm-email-attachment-meta{ min-width:0; }
+.dm-email-attachment-meta span{
+  display:block; overflow:hidden; color:#0f172a; font-size:13px; font-weight:600;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.dm-email-attachment-meta small{ display:block; margin-top:2px; color:#64748b; font-size:11px; }
+.dm-email-attachment-download{
+  min-height:36px; display:inline-flex; align-items:center; padding:0 8px;
+  color:#4f46e5; font-size:12px; font-weight:700; text-decoration:none;
+}
+.dm-email-attachment-download:hover{ text-decoration:underline; }
 @media (max-width: 640px){
   .dm-email-msg{ padding:16px; }
   .dm-email-msg-body{ margin-left:0; margin-top:8px; }
+  .dm-email-attachments{ margin-left:0; }
+  .dm-email-attachment{ width:100%; }
 }
 .dm-thread-empty, .dm-thread-loading, .dm-list-empty{
   padding:24px 16px; text-align:center; color:#64748b; font-size:13px;

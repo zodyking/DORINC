@@ -76,5 +76,11 @@ const rendered = computed(() =>
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div v-else class="dm-email-text" v-html="rendered.content" />
     </div>
+    <MessagingEmailMessageAttachments
+      v-if="message.attachments?.length"
+      :conversation-id="message.conversationId"
+      :message-id="message.id"
+      :attachments="message.attachments"
+    />
   </article>
 </template>

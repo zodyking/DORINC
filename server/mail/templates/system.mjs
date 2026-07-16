@@ -337,7 +337,7 @@ export function buildCustomerAutoResponderEmail({
     .map(p => p.trim())
     .filter(Boolean)
   const bodyHtml = bodyParagraphs
-    .map(p => `<p style="margin:0 0 12px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .map(p => `<p style="margin:0 0 14px;color:#334155;font-size:16px;line-height:27px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
     .join('')
   const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
 
@@ -352,7 +352,8 @@ export function buildCustomerAutoResponderEmail({
       title: 'What happens next',
       body: `A member of the ${resolvedBrand} team will review your message and reply as soon as possible.`,
     },
-    footerNote: `This is an automated confirmation from ${resolvedBrand}. Please do not reply to this message unless you have a new request.`,
+    footerNote: null,
+    footerLinks: false,
     appUrl,
     brand,
   })

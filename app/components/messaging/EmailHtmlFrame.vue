@@ -48,7 +48,7 @@ function resizeFrame() {
   const doc = frameRef.value?.contentDocument
   if (!doc) return
   const height = measureFrameHeight(doc)
-  frameHeight.value = Math.min(Math.max(height + 8, 48), 16000)
+  frameHeight.value = Math.min(Math.max(height + 8, 48), 50000)
 }
 
 function clearResizeTimers() {
