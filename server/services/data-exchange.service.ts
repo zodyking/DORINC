@@ -1,4 +1,5 @@
 import { and, count, eq, ilike, inArray, isNull, sql } from 'drizzle-orm'
+import { syncInvoiceNumberSequence } from '../db/sync-sequences'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { auditLogs } from '../db/schema/audit'
@@ -884,6 +885,10 @@ async function importInvoices(
       })))
     }
     inserted++
+  }
+
+  if (inserted > 0 || updated > 0) {
+    await syncInvoiceNumberSequence(db)
   }
 
   return { total: rows.length, inserted, updated, skipped, errors }

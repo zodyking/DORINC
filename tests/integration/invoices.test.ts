@@ -2,7 +2,7 @@
 // line items with catalog snapshots, server-side totals, status transitions,
 // creation paths, finalized immutability, duplicate + revision.
 import { config } from 'dotenv'
-import { eq, inArray, like } from 'drizzle-orm'
+import { eq, inArray, like, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -208,6 +208,24 @@ describe('P1-21 creation paths', () => {
     expect(invoice.complaint).toBe('DPF fault code active')
     expect(invoice.internalNotes).toBe('Needs regen cycle')
     expect(invoice.serviceLocation).toBe('Bay 3')
+  })
+
+  it('allocates the next invoice number from MAX even when the sequence is stale', async () => {
+    const [{ max }] = await db.select({
+      max: sql<number>`COALESCE(MAX(${invoices.invoiceNumber}), 0)`,
+    }).from(invoices)
+    const currentMax = Number(max)
+
+    await db.execute(sql`SELECT setval('invoice_number_seq', ${currentMax + 50}, true)`)
+
+    const invoice = await createInvoice(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      creationSource: 'blank',
+      invoiceDate: '2026-07-09',
+    }, ACTOR)
+
+    expect(invoice.invoiceNumber).toBe(currentMax + 1)
   })
 
   it('duplicates an invoice with line items', async () => {
