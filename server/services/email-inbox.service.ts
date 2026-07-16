@@ -23,6 +23,10 @@ import {
 import { getImapFilters } from './imap-config.service'
 import { getSmtpConfig } from './app-config.service'
 import { notifyCustomerEmailReceived } from './staff-notifications.service'
+import {
+  sendCustomerAutoResponderIfEnabled,
+  shouldSkipAutoResponder,
+} from './email-auto-responder.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
@@ -512,6 +516,8 @@ export async function ingestInboundEmail(db: Db, input: {
   inReplyTo?: string | null
   references?: string | null
   receivedAt?: Date
+  autoSubmitted?: string | null
+  precedence?: string | null
 }) {
   const normalizedId = input.internetMessageId.trim()
   if (!normalizedId) return { skipped: true as const, reason: 'missing_message_id' as const }
@@ -530,6 +536,7 @@ export async function ingestInboundEmail(db: Db, input: {
   }
 
   let conversationId: string | null = null
+  let isNewThread = false
   if (input.inReplyTo) {
     const [parent] = await db.select({ conversationId: messages.conversationId })
       .from(emailMessageMeta)
@@ -557,6 +564,7 @@ export async function ingestInboundEmail(db: Db, input: {
   const counterpartEmail = from
 
   if (!conversationId) {
+    isNewThread = true
     const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
     conversationId = conversation!.id
     await db.insert(emailThreads).values({
@@ -599,6 +607,28 @@ export async function ingestInboundEmail(db: Db, input: {
     messageBody: message!.body,
     htmlBody: input.html ?? null,
   }).catch(() => {})
+
+  if (
+    isNewThread
+    && !shouldSkipAutoResponder({
+      subject: input.subject,
+      autoSubmitted: input.autoSubmitted,
+      precedence: input.precedence,
+    })
+  ) {
+    try {
+      await sendCustomerAutoResponderIfEnabled(db, {
+        conversationId: conversationId!,
+        toEmail: from,
+        recipientName: customer?.displayName ?? null,
+        inboundSubject: input.subject,
+        inboundMessageId: normalizedId,
+      })
+    }
+    catch (err) {
+      console.warn('[email-inbox] auto-responder failed', err)
+    }
+  }
 
   return { skipped: false as const, conversationId, messageId: message!.id }
 }

@@ -13,6 +13,12 @@ import {
 } from './email-inbox.service'
 import { extractEmailAddresses } from '../mail/email-thread'
 
+function headerValue(parsed: { headers?: Map<string, unknown> }, name: string): string | null {
+  const raw = parsed.headers?.get(name)
+  if (raw == null) return null
+  return String(raw)
+}
+
 export interface ImapSyncResult {
   fetched: number
   ingested: number
@@ -111,6 +117,8 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
             inReplyTo: parsed.inReplyTo ?? null,
             references: Array.isArray(parsed.references) ? parsed.references.join(' ') : (parsed.references ?? null),
             receivedAt: msg.internalDate ?? parsed.date ?? new Date(),
+            autoSubmitted: headerValue(parsed, 'auto-submitted'),
+            precedence: headerValue(parsed, 'precedence'),
           })
 
           if (ingest.skipped) result.skipped++

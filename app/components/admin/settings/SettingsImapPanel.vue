@@ -16,6 +16,11 @@ interface ImapView {
     companyEmail: string
     additionalEmails: string[]
     includeCustomerEmails: boolean
+    autoResponder: {
+      enabled: boolean
+      subject: string
+      message: string
+    }
   }
 }
 
@@ -31,6 +36,9 @@ const form = reactive({
   companyEmail: '',
   additionalEmailsText: '',
   includeCustomerEmails: true,
+  autoResponderEnabled: false,
+  autoResponderSubject: 'We received your message',
+  autoResponderMessage: 'Thanks for contacting us. We received your email and a team member will reply shortly during business hours.',
 })
 
 function hydrateForm(s: ImapView) {
@@ -42,6 +50,9 @@ function hydrateForm(s: ImapView) {
   form.companyEmail = s.filters.companyEmail
   form.additionalEmailsText = s.filters.additionalEmails.join('\n')
   form.includeCustomerEmails = s.filters.includeCustomerEmails
+  form.autoResponderEnabled = s.filters.autoResponder.enabled
+  form.autoResponderSubject = s.filters.autoResponder.subject
+  form.autoResponderMessage = s.filters.autoResponder.message
   form.password = s.hasPassword ? SAVED_PASSWORD_MASK : ''
 }
 
@@ -78,6 +89,11 @@ async function save() {
         companyEmail: form.companyEmail.trim(),
         additionalEmails: parseAdditionalEmails(),
         includeCustomerEmails: form.includeCustomerEmails,
+        autoResponder: {
+          enabled: form.autoResponderEnabled,
+          subject: form.autoResponderSubject.trim(),
+          message: form.autoResponderMessage.trim(),
+        },
       },
     }
     const nextPassword = passwordForSave(form.password, !!imapData.value?.hasPassword)
@@ -211,6 +227,38 @@ async function runSync() {
         <label class="fld" style="display:flex;align-items:center;gap:8px;">
           <input id="imap-include-customers" v-model="form.includeCustomerEmails" type="checkbox">
           <span>Include all customer and contact email addresses in filter</span>
+        </label>
+
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;">
+
+        <h4 style="margin:0 0 8px;font-size:14px;">Customer auto-responder</h4>
+        <p class="settings-help" style="margin:0 0 12px;">
+          Automatically send a branded confirmation when a <b>new</b> customer email thread arrives
+          (matching the filter above). Replies in existing threads are not auto-answered.
+        </p>
+        <label class="fld" style="display:flex;align-items:center;gap:8px;">
+          <input id="imap-auto-responder" v-model="form.autoResponderEnabled" type="checkbox">
+          <span>Enable customer auto-responder</span>
+        </label>
+        <label class="fld">
+          Auto-responder subject
+          <input
+            v-model="form.autoResponderSubject"
+            type="text"
+            maxlength="200"
+            placeholder="We received your message"
+            :disabled="!form.autoResponderEnabled"
+          >
+        </label>
+        <label class="fld">
+          Auto-responder message
+          <textarea
+            v-model="form.autoResponderMessage"
+            rows="5"
+            maxlength="5000"
+            placeholder="Thanks for contacting us…"
+            :disabled="!form.autoResponderEnabled"
+          />
         </label>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
