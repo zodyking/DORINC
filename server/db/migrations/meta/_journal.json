@@ -337,6 +337,13 @@
       "when": 1783586000000,
       "tag": "0047_email_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1784238600000,
+      "tag": "0048_email_ingest_suppressions",
+      "breakpoints": true
     }
   ]
 }

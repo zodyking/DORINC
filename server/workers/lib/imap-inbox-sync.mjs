@@ -16,6 +16,7 @@ import {
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { persistInboundAttachments } from './imap-attachments.mjs'
+import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
 
@@ -258,6 +259,14 @@ function normalizeInboundBody(text, html) {
 async function ingestInboundEmail(pool, input, filters) {
   const normalizedId = String(input.internetMessageId ?? '').trim()
   if (!normalizedId) return { skipped: true, reason: 'missing_message_id' }
+
+  if (await suppressesInboundEmail(pool, {
+    internetMessageId: normalizedId,
+    inReplyTo: input.inReplyTo,
+    references: input.references,
+  })) {
+    return { skipped: true, reason: 'suppressed' }
+  }
 
   const { rows: existing } = await pool.query(
     `SELECT message_id FROM email_message_meta WHERE internet_message_id = $1 LIMIT 1`,
