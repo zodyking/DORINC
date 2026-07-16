@@ -6,7 +6,7 @@ import { formatInvoiceNumber } from '../db/schema/invoices'
 import { buildInvoiceSentEmail } from '../mail/customer-email-templates'
 import { listContacts } from './customers.service'
 import { enqueueJob } from './jobs.service'
-import { generateInvoicePdf } from './invoice-pdf.service'
+import { generateInvoicePdf, InvoicePdfServiceError } from './invoice-pdf.service'
 import {
   assertInvoiceSendable,
   getInvoice,
@@ -165,7 +165,17 @@ export async function queueInvoiceSend(
     }
   }
 
-  const pdfResult = await generateInvoicePdf(db, invoiceId, actorId)
+  let pdfResult
+  try {
+    pdfResult = await generateInvoicePdf(db, invoiceId, actorId, { allowDraft: true })
+  }
+  catch (err) {
+    if (err instanceof InvoicePdfServiceError) {
+      if (err.code === 'NOT_FOUND') throw new InvoiceSendServiceError('NOT_FOUND')
+      throw new InvoiceSendServiceError('PDF_FAILED')
+    }
+    throw err
+  }
   const mailPayload = await buildInvoiceSendMail(db, recipient, invoice, `${formatInvoiceNumber(invoice.invoiceNumber)}.pdf`, {
     subject: overrides?.subject ?? null,
     message: overrides?.message ?? null,

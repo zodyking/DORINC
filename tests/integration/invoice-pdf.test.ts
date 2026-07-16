@@ -95,6 +95,19 @@ describe('P1-29 invoice PDF generate + download', () => {
       .rejects.toMatchObject({ code: 'NOT_FINALIZED' })
   })
 
+  it('enqueues PDF for draft invoices when allowDraft is true', async () => {
+    const draft = await createInvoice(db, {
+      customerId: customer.id,
+      invoiceDate: '2026-07-08',
+      creationSource: 'customer',
+    }, ACTOR)
+
+    const result = await generateInvoicePdf(db, draft.id, ACTOR, { allowDraft: true })
+    expect(result.alreadyExists).toBe(false)
+    expect(result.job?.status).toBe('queued')
+    expect(result.templateVersionId).toBeTruthy()
+  })
+
   it('enqueues render job, stores immutable invoice_files, and downloads PDF', async () => {
     if (!process.env.PDF_RENDER_URL?.trim()) {
       console.warn('[invoice-pdf.test] Skipping — PDF_RENDER_URL not set (laravel-pdf service required)')

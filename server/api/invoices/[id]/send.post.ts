@@ -24,6 +24,8 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
       throw apiError(event, 'CONFLICT', 'This invoice is already queued for delivery')
     case 'NOTIFICATION_DISABLED':
       throw apiError(event, 'VALIDATION_ERROR', 'Invoice emails are disabled in Control Panel → Notifications')
+    case 'PDF_FAILED':
+      throw apiError(event, 'INTERNAL_ERROR', 'PDF generation failed — try again or contact support')
     default:
       throw err
   }
