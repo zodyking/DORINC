@@ -371,7 +371,7 @@ async function setEmailShowAll(showAll: boolean) {
               :key="`${item.customerId}-${item.email}`"
               :value="`${item.customerId}:${item.email}`"
             >
-              {{ item.label }} · {{ item.email }}
+              {{ item.label }}
             </option>
           </select>
         </label>
