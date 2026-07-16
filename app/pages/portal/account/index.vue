@@ -79,51 +79,48 @@ async function updatePassword() {
 
 <template>
   <section class="page active portal-page">
-    <div class="pagehead portal-pagehead">
-      <div>
-        <h2>Account</h2>
-        <p>Your profile and password</p>
-      </div>
+    <PortalPageHead subtitle="Your profile and password">
+      <template #title>Account</template>
+    </PortalPageHead>
+
+    <div v-if="error" class="card">
+      <div class="empty">Unable to load account details.</div>
     </div>
 
-    <div v-if="error" class="card portal-card">
-      <p class="portal-empty">Unable to load account details.</p>
-    </div>
-
-    <div v-else-if="data" class="portal-account-stack">
-      <div class="card portal-card">
+    <div v-else-if="data" class="cols">
+      <div class="card">
         <div class="chead"><h3>Profile</h3></div>
-        <div class="portal-form">
+        <div class="cbody">
           <div class="portal-profile-head">
             <span class="av" :class="avColor(data.user.name)">{{ portalUserInitials(data.user.name) }}</span>
             <div>
               <b>{{ data.user.name }}</b>
-              <div class="portal-muted">{{ portalAccountKindLabel(data.company.accountKind) }}</div>
+              <div class="help">{{ portalAccountKindLabel(data.company.accountKind) }}</div>
             </div>
           </div>
           <label class="fld">
             <span>Username</span>
-            <input type="text" :value="data.user.username ?? '—'" readonly class="readonly">
+            <input type="text" :value="data.user.username ?? '—'" readonly>
           </label>
           <label class="fld">
             <span>Email</span>
-            <input type="email" :value="data.user.email" readonly class="readonly">
+            <input type="email" :value="data.user.email" readonly>
           </label>
           <label class="fld">
             <span>Company</span>
-            <input type="text" :value="data.company.displayName" readonly class="readonly">
+            <input type="text" :value="data.company.displayName" readonly>
           </label>
           <label class="fld">
             <span>Company phone</span>
-            <input type="text" :value="phoneDisplay(data.company.phone)" readonly class="readonly">
+            <input type="text" :value="phoneDisplay(data.company.phone)" readonly>
           </label>
-          <p class="portal-muted">Contact the shop to update billing or company details.</p>
+          <p class="help">Contact the shop to update billing or company details.</p>
         </div>
       </div>
 
-      <div class="card portal-card">
+      <div class="card">
         <div class="chead"><h3>Password</h3></div>
-        <div class="portal-form">
+        <div class="cbody">
           <label class="fld">
             <span>Current password</span>
             <input v-model="currentPassword" type="password" autocomplete="current-password">
@@ -136,9 +133,9 @@ async function updatePassword() {
             <span>Confirm password</span>
             <input v-model="confirmPassword" type="password" autocomplete="new-password">
           </label>
-          <p v-if="mustChangeNote" class="portal-muted">{{ mustChangeNote }}</p>
-          <p v-if="passwordMessage" class="portal-banner success">{{ passwordMessage }}</p>
-          <p v-if="passwordError" class="portal-error">{{ passwordError }}</p>
+          <p v-if="mustChangeNote" class="help">{{ mustChangeNote }}</p>
+          <p v-if="passwordMessage" class="callout info">{{ passwordMessage }}</p>
+          <p v-if="passwordError" class="help" style="color:#dc2626;">{{ passwordError }}</p>
           <button class="btn primary" :disabled="passwordBusy" @click="updatePassword">
             {{ passwordBusy ? 'Updating…' : 'Update password' }}
           </button>
@@ -147,3 +144,28 @@ async function updatePassword() {
     </div>
   </section>
 </template>
+
+<style scoped>
+.portal-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.portal-profile-head .av {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.portal-profile-head b {
+  display: block;
+  font-size: 15px;
+}
+</style>

@@ -54,6 +54,12 @@ export function portalRequestMatchesFilter(
   return !item.isOpen
 }
 
+export function portalRequestHistoryFilterLabel(filter: PortalRequestHistoryFilter): string {
+  if (filter === 'open') return 'Open requests'
+  if (filter === 'resolved') return 'Resolved'
+  return 'All requests'
+}
+
 export function portalTodayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }

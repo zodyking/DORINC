@@ -462,7 +462,7 @@ section.page.active.page--invoice-pdf {
   padding: 0;
 }
 
-/* Customer portal — layout shell + page polish */
+/* Customer portal — shell tweaks + staff design alignment */
 .portal-app {
   min-height: 100dvh;
   height: 100dvh;
@@ -486,6 +486,12 @@ section.page.active.page--invoice-pdf {
   background: #f8fafc;
 }
 
+.portal-app .main-body {
+  background: #f8fafc;
+  flex: 1;
+  min-height: 0;
+}
+
 .portal-app .topbar {
   min-height: 64px;
   align-items: center;
@@ -500,245 +506,27 @@ section.page.active.page--invoice-pdf {
   max-width: none;
 }
 
-.portal-page .pagehead p {
-  color: #64748b;
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.portal-page .portal-pagehead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-.portal-page .portal-pagehead .actions {
+/* Portal keeps inline header actions (staff hides these in favor of ⋮ menu). */
+.portal-page .portal-pagehead .pagehead__title-row .actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   flex-shrink: 0;
 }
 
-.portal-kpis {
-  display: grid;
+.portal-page .kpis.portal-kpis-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.portal-kpis .kpi {
-  min-width: 0;
-}
-
-.portal-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.portal-card .portal-list {
-  padding: 0 18px 14px;
-}
-
-.portal-list-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 0;
-  border-bottom: 1px solid #f1f5f9;
-  text-decoration: none;
-  color: inherit;
-}
-
-.portal-list-row.static {
-  cursor: default;
-}
-
-.portal-list-row:last-child {
-  border-bottom: none;
-}
-
-.portal-list-row:not(.static):hover {
-  background: #f8fafc;
-  margin: 0 -18px;
-  padding-left: 18px;
-  padding-right: 18px;
-}
-
-.portal-list-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.portal-list-main b {
-  font-size: 14.5px;
-  font-weight: 700;
-}
-
-.portal-list-main span {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.portal-list-end {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.portal-list-end strong {
-  font-size: 14.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  min-width: 72px;
-  text-align: right;
-}
-
-.portal-muted {
-  color: #64748b;
-  font-size: 13px;
-  margin: 0 0 12px;
-}
-
-.portal-error {
-  color: #dc2626;
-  font-size: 13px;
-  margin: 0 0 12px;
-}
-
-.portal-banner {
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-
-.portal-banner.success {
-  background: #ecfdf5;
-  color: #065f46;
-}
-
-.portal-empty {
-  text-align: center;
-  padding: 32px 18px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.portal-tab-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.portal-card > .portal-tab-row {
-  padding: 16px 18px 0;
-}
-
-.portal-card > .portal-tab-row + .portal-form {
-  padding-top: 12px;
-}
-
-.portal-tab-row.compact {
-  margin-left: auto;
-}
-
-.portal-tab-row .chip {
-  cursor: pointer;
-}
-
-.portal-card > .portal-form {
-  padding: 16px 18px 18px;
-}
-
-.portal-card > .portal-form .btn.primary {
-  margin-top: 4px;
-}
-
-.portal-form .fld {
-  margin-bottom: 14px;
-}
-
-.portal-form .fld:last-of-type {
-  margin-bottom: 0;
-}
-
-.portal-form input.readonly,
-.portal-form .readonly {
-  background: #f8fafc;
-  color: #64748b;
-  cursor: default;
-}
-
-.portal-account-stack {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  gap: 18px;
-  align-items: start;
-}
-
-.portal-profile-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.portal-profile-head .av {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  color: #fff;
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.portal-card {
   margin-bottom: 18px;
 }
 
-.portal-card:last-child {
-  margin-bottom: 0;
+.portal-page .card + .card,
+.portal-page .list-toolbar + .card {
+  margin-top: 0;
 }
 
-.portal-card > .chead .portal-tab-row.compact {
-  padding: 0;
-}
-
-.portal-card.portal-action {
+.portal-page .portal-action-card {
   border-color: #fcd34d;
-}
-
-.portal-card.portal-action > .portal-muted {
-  padding: 0 18px 12px;
-  margin: 0;
-}
-
-.portal-card.portal-action > .portal-form {
-  padding-top: 0;
-}
-
-.portal-page .cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 16px;
-  align-items: start;
-}
-
-.portal-page .cols .card {
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 
 .portal-page .card .kv {
@@ -752,27 +540,13 @@ section.page.active.page--invoice-pdf {
 }
 
 @media (max-width: 960px) {
-  .portal-kpis {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .portal-pwa-wrap {
     padding: 0 16px;
   }
-
-  .portal-account-stack {
-    grid-template-columns: 1fr;
-  }
 }
 
-@media (max-width: 540px) {
-  .portal-kpis {
+@media (max-width: 640px) {
+  .portal-page .kpis.portal-kpis-row {
     grid-template-columns: 1fr;
-  }
-
-  .portal-list-end {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
   }
 }

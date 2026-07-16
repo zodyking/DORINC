@@ -1,8 +1,6 @@
 <script setup lang="ts">
-// Customer portal vehicles — fleet view + new vehicle request modal (mockup: Portal Vehicles / P2-06).
 import {
   PORTAL_VEHICLE_TYPE_OPTIONS,
-  portalVehicleCountLabel,
   portalVehicleLastService,
   type PortalVehicleType,
 } from '~/utils/portal-vehicles-ui'
@@ -18,9 +16,28 @@ interface PortalVehicleRow {
   lastServiceDate: string | null
 }
 
+const q = ref('')
+
 const { data, error, pending } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
 
 const items = computed(() => data.value?.items ?? [])
+
+const filtered = computed(() => {
+  const needle = q.value.trim().toLowerCase()
+  if (!needle) return items.value
+  return items.value.filter(veh =>
+    veh.tagLabel.toLowerCase().includes(needle)
+    || veh.unitDescription.toLowerCase().includes(needle)
+    || (veh.vin ?? '').toLowerCase().includes(needle),
+  )
+})
+
+const countLabel = computed(() => {
+  if (pending.value && !items.value.length) return 'Loading…'
+  const n = filtered.value.length
+  if (!n) return 'No vehicles'
+  return `${n} vehicle${n === 1 ? '' : 's'}`
+})
 
 const showModal = ref(false)
 const submitting = ref(false)
@@ -89,36 +106,35 @@ async function submitRequest() {
 
 <template>
   <section class="page active portal-page">
-    <div v-if="error" class="card portal-card">
-      <p class="portal-empty">Unable to load vehicles.</p>
-    </div>
-
-    <div v-else-if="pending && !items.length" class="card portal-card">
-      <p class="portal-muted">Loading fleet…</p>
+    <div v-if="error" class="card">
+      <div class="empty">Unable to load vehicles.</div>
     </div>
 
     <template v-else>
-      <div class="pagehead portal-pagehead">
-        <div>
-          <h2>Fleet</h2>
-          <p>Your vehicles on file with the shop</p>
-        </div>
-        <div class="actions">
+      <PortalPageHead subtitle="Your vehicles on file with the shop">
+        <template #title>Fleet</template>
+        <template #actions>
           <button type="button" class="btn primary" @click="openModal">Add vehicle</button>
+        </template>
+      </PortalPageHead>
+
+      <p v-if="submitSuccess" class="callout info" style="margin-bottom: 16px;">
+        {{ submitSuccess }}
+      </p>
+
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search tag, unit, VIN…"
+        search-aria-label="Search fleet"
+        :count-label="countLabel"
+        :has-filters="false"
+      />
+
+      <div class="card">
+        <div v-if="pending && !items.length" class="empty">Loading fleet…</div>
+        <div v-else-if="!filtered.length" class="empty">
+          No vehicles match your search. Use <b>Add vehicle</b> to submit a request.
         </div>
-      </div>
-
-      <p v-if="submitSuccess" class="portal-banner success">{{ submitSuccess }}</p>
-
-      <div class="card portal-card">
-        <div class="chead">
-          <h3>{{ portalVehicleCountLabel(items.length) }}</h3>
-        </div>
-
-        <div v-if="!items.length" class="portal-empty">
-          No vehicles yet. Use <b>Add vehicle</b> to submit a request.
-        </div>
-
         <div v-else class="tscroll">
           <table class="tbl">
             <thead>
@@ -130,13 +146,13 @@ async function submitRequest() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="veh in items" :key="veh.id">
+              <tr v-for="veh in filtered" :key="veh.id">
                 <td>
                   <span class="lead">{{ veh.tagLabel }}</span>
                   <span class="sub">{{ veh.unitTypeLabel }}</span>
                 </td>
                 <td>{{ veh.unitDescription }}</td>
-                <td class="mono" style="font-size:12px">{{ veh.vin ?? '—' }}</td>
+                <td class="mono">{{ veh.vin ?? '—' }}</td>
                 <td>{{ portalVehicleLastService(veh.lastServiceDate) }}</td>
               </tr>
             </tbody>
@@ -186,11 +202,10 @@ async function submitRequest() {
                 maxlength="17"
                 placeholder="17-character VIN"
                 class="mono"
-                style="font-size:13px;"
               >
               <span class="help">Optional — include year, make, and model if known</span>
             </label>
-            <div class="row2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div class="row2">
               <label class="fld">
                 <span>Year</span>
                 <input v-model="form.year" type="number" min="1980" max="2035" placeholder="2022">
@@ -209,7 +224,7 @@ async function submitRequest() {
               <textarea v-model="form.notes" rows="2" placeholder="Mileage, assigned driver, special equipment…" />
             </label>
             <p v-if="submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>
-            <div class="callout" style="margin:0;">
+            <div class="callout">
               <span class="ico">🔒</span>
               <div>Vehicles <b>cannot be deleted</b> from the portal. Contact the shop to retire, sell, or transfer a unit.</div>
             </div>

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// Customer portal estimates list — approve/reject workflow (P3-03).
 import { invoiceDateDisplay, moneyDisplay } from '~/utils/invoices-ui'
 import {
   portalEstimateFilterLabel,
@@ -22,55 +21,99 @@ interface PortalEstimateRow {
   canRespond: boolean
 }
 
+type PortalEstimateSort = 'newest' | 'oldest' | 'amount_high' | 'amount_low'
+
+const q = ref('')
 const filter = ref<PortalEstimateFilter>('all')
+const fSort = ref<PortalEstimateSort>('newest')
 
 const { data, error, pending } = useClientFetch<{ items: PortalEstimateRow[] }>('/api/portal/estimates')
 
 const items = computed(() => data.value?.items ?? [])
 
-const filtered = computed(() =>
-  items.value.filter(est => portalEstimateMatchesFilter(est.status, filter.value)),
+const filtered = computed(() => {
+  const needle = q.value.trim().toLowerCase()
+  let rows = items.value.filter(est => portalEstimateMatchesFilter(est.status, filter.value))
+  if (needle) {
+    rows = rows.filter(est =>
+      est.estimateNumberFormatted.toLowerCase().includes(needle)
+      || est.vehicleLabel.toLowerCase().includes(needle),
+    )
+  }
+  const sorted = [...rows]
+  sorted.sort((a, b) => {
+    if (fSort.value === 'oldest') return a.estimateDate.localeCompare(b.estimateDate)
+    if (fSort.value === 'amount_high') return Number.parseFloat(b.total) - Number.parseFloat(a.total)
+    if (fSort.value === 'amount_low') return Number.parseFloat(a.total) - Number.parseFloat(b.total)
+    return b.estimateDate.localeCompare(a.estimateDate)
+  })
+  return sorted
+})
+
+const statusOptions: PortalEstimateFilter[] = ['all', 'pending', 'approved', 'rejected']
+
+const filtersDirty = computed(() =>
+  filter.value !== 'all' || fSort.value !== 'newest' || !!q.value.trim(),
 )
 
-const chips: PortalEstimateFilter[] = ['all', 'pending', 'approved', 'rejected']
+function clearFilters() {
+  q.value = ''
+  filter.value = 'all'
+  fSort.value = 'newest'
+}
+
+const countLabel = computed(() => {
+  if (pending.value && !items.value.length) return 'Loading…'
+  const n = filtered.value.length
+  if (!n) return 'No estimates'
+  return `${n} estimate${n === 1 ? '' : 's'}`
+})
 </script>
 
 <template>
   <section class="page active portal-page">
-    <div v-if="error" class="card portal-card">
-      <p class="portal-empty">Unable to load estimates.</p>
-    </div>
-
-    <div v-else-if="pending && !items.length" class="card portal-card">
-      <p class="portal-muted">Loading estimates…</p>
+    <div v-if="error" class="card">
+      <div class="empty">Unable to load estimates.</div>
     </div>
 
     <template v-else>
-      <div class="pagehead portal-pagehead">
-        <div>
-          <h2>Estimates</h2>
-          <p>Pending and approved repair quotes</p>
-        </div>
-      </div>
+      <PortalPageHead subtitle="Pending and approved repair quotes">
+        <template #title>Estimates</template>
+      </PortalPageHead>
 
-      <div class="card portal-card">
-        <div class="chead">
-          <button
-            v-for="chip in chips"
-            :key="chip"
-            type="button"
-            class="chip"
-            :class="{ on: filter === chip }"
-            @click="filter = chip"
-          >
-            {{ portalEstimateFilterLabel(chip) }}
-          </button>
-        </div>
+      <ListFilterBar
+        v-model:search="q"
+        search-placeholder="Search estimates, vehicles…"
+        search-aria-label="Search estimates"
+        :count-label="countLabel"
+        :filters-active="filtersDirty"
+        filter-title="Filter estimates"
+        @clear-filters="clearFilters"
+      >
+        <template #filters>
+          <label class="fld">
+            Status
+            <select v-model="filter" aria-label="Estimate status">
+              <option v-for="opt in statusOptions" :key="opt" :value="opt">
+                {{ portalEstimateFilterLabel(opt) }}
+              </option>
+            </select>
+          </label>
+          <label class="fld">
+            Sort by
+            <select v-model="fSort" aria-label="Sort estimates">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="amount_high">Amount: high to low</option>
+              <option value="amount_low">Amount: low to high</option>
+            </select>
+          </label>
+        </template>
+      </ListFilterBar>
 
-        <div v-if="!filtered.length" class="portal-empty">
-          No estimates match this filter.
-        </div>
-
+      <div class="card">
+        <div v-if="pending && !items.length" class="empty">Loading estimates…</div>
+        <div v-else-if="!filtered.length" class="empty">No estimates match your filters.</div>
         <div v-else class="tscroll">
           <table class="tbl">
             <thead>

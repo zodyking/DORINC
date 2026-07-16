@@ -58,34 +58,32 @@ function downloadPdf() {
 
 <template>
   <section v-if="pending && !invoice" class="page active portal-page">
-    <div class="card portal-card">
-      <p class="portal-muted" style="padding: 18px; margin: 0;">Loading invoice…</p>
+    <div class="card">
+      <div class="empty">Loading invoice…</div>
     </div>
   </section>
 
   <section v-else-if="error" class="page active portal-page">
-    <div class="card portal-card">
-      <p class="portal-empty">Invoice not found or you do not have access.</p>
+    <div class="card">
+      <div class="empty">Invoice not found or you do not have access.</div>
     </div>
   </section>
 
   <section v-else-if="invoice" class="page active portal-page">
-    <div class="pagehead portal-pagehead">
-      <div>
-        <h2>{{ invoice.invoiceNumberFormatted }}</h2>
-        <p>
-          <NuxtLink to="/portal/invoices">← Invoices</NuxtLink>
-          · {{ invoice.vehicleLabel }}
-          · issued {{ invoiceDateDisplay(invoice.invoiceDate) }}
-        </p>
-      </div>
-      <div class="actions">
+    <PortalPageHead>
+      <template #title>{{ invoice.invoiceNumberFormatted }}</template>
+      <template #subtitle>
+        <NuxtLink to="/portal/invoices">← Invoices</NuxtLink>
+        · {{ invoice.vehicleLabel }}
+        · issued {{ invoiceDateDisplay(invoice.invoiceDate) }}
+      </template>
+      <template #actions>
         <button type="button" class="btn dl-pdf" @click="downloadPdf">Download PDF</button>
-      </div>
-    </div>
+      </template>
+    </PortalPageHead>
 
     <div class="cols">
-      <div class="card portal-card">
+      <div class="card">
         <div class="chead">
           <h3>Summary</h3>
           <span :class="statusPill.cls">{{ statusPill.label }}</span>
@@ -102,7 +100,7 @@ function downloadPdf() {
         </dl>
       </div>
 
-      <div class="card portal-card">
+      <div class="card">
         <div class="chead"><h3>Line items</h3></div>
         <div class="tscroll">
           <table class="tbl">

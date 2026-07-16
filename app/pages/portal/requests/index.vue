@@ -4,6 +4,7 @@ import {
   PORTAL_SERVICE_CATEGORIES,
   PORTAL_SERVICE_URGENCIES,
   portalInvoiceOptionLabel,
+  portalRequestHistoryFilterLabel,
   portalRequestKindLabel,
   portalRequestMatchesFilter,
   portalRequestStatusPill,
@@ -63,6 +64,20 @@ const tabs: Array<{ id: PortalRequestTab, label: string }> = [
   { id: 'billing', label: 'Billing' },
   { id: 'general', label: 'Message' },
 ]
+
+const historyFilterOptions: PortalRequestHistoryFilter[] = ['open', 'all', 'resolved']
+
+const filtersDirty = computed(() => historyFilter.value !== 'open')
+
+function clearHistoryFilters() {
+  historyFilter.value = 'open'
+}
+
+const historyCountLabel = computed(() => {
+  const n = filteredHistory.value.length
+  if (!n) return 'No requests'
+  return `${n} request${n === 1 ? '' : 's'}`
+})
 
 const serviceForm = reactive({
   vehicleId: '',
@@ -198,154 +213,181 @@ const minDate = portalTodayIso()
 
 <template>
   <section class="page active portal-page">
-    <div v-if="pagePending && !vehicles.length && !history.length" class="card portal-card">
-      <p class="portal-muted">Loading…</p>
+    <div v-if="pagePending && !vehicles.length && !history.length" class="card">
+      <div class="empty">Loading…</div>
     </div>
 
     <template v-else>
-      <div class="pagehead portal-pagehead">
-        <div>
-          <h2>Contact shop</h2>
-          <p>Request service, ask about an invoice, or send a message</p>
+      <PortalPageHead subtitle="Request service, ask about an invoice, or send a message">
+        <template #title>Contact shop</template>
+      </PortalPageHead>
+
+      <p v-if="submitMessage" class="callout info">{{ submitMessage }}</p>
+
+      <div class="card">
+        <div class="chead"><h3>New request</h3></div>
+        <div class="cbody">
+          <div class="ed-tabs-wrap">
+            <div class="ed-tabs" role="tablist" aria-label="Request type">
+              <button
+                v-for="tab in tabs"
+                :key="tab.id"
+                type="button"
+                class="ed-tab"
+                role="tab"
+                :class="{ on: activeTab === tab.id }"
+                :aria-selected="activeTab === tab.id"
+                @click="setTab(tab.id)"
+              >
+                {{ tab.label }}
+              </button>
+            </div>
+          </div>
+
+          <form v-show="activeTab === 'service'" @submit.prevent="submitService">
+            <label class="fld">
+              <span>Vehicle</span>
+              <select v-model="serviceForm.vehicleId" required :disabled="!vehicles.length">
+                <option v-if="!vehicles.length" value="">No vehicles on file</option>
+                <option v-for="veh in vehicles" :key="veh.id" :value="veh.id">{{ veh.tagLabel }}</option>
+              </select>
+            </label>
+            <div class="row2">
+              <label class="fld">
+                <span>Service type</span>
+                <select v-model="serviceForm.serviceCategory">
+                  <option v-for="cat in PORTAL_SERVICE_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+                </select>
+              </label>
+              <label class="fld">
+                <span>Urgency</span>
+                <select v-model="serviceForm.urgency">
+                  <option v-for="opt in PORTAL_SERVICE_URGENCIES" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </label>
+            </div>
+            <label class="fld">
+              <span>Preferred date (optional)</span>
+              <input v-model="serviceForm.preferredDate" type="date" :min="minDate">
+            </label>
+            <label class="fld">
+              <span>What do you need?</span>
+              <textarea v-model="serviceForm.description" rows="4" required placeholder="Describe the work or issue…" />
+            </label>
+            <p v-if="submitError && activeTab === 'service'" class="help" style="color:#dc2626;">{{ submitError }}</p>
+            <button type="submit" class="btn primary" :disabled="submitting || !vehicles.length">
+              {{ submitting ? 'Sending…' : 'Send service request' }}
+            </button>
+          </form>
+
+          <form v-show="activeTab === 'billing'" @submit.prevent="submitBilling">
+            <label class="fld">
+              <span>Invoice (optional)</span>
+              <select v-model="billingForm.invoiceId">
+                <option value="">General billing question</option>
+                <option v-for="inv in invoices" :key="inv.id" :value="inv.id">
+                  {{ portalInvoiceOptionLabel(inv.invoiceNumberFormatted, inv.vehicleLabel, inv.balanceDue, inv.status) }}
+                </option>
+              </select>
+            </label>
+            <label class="fld">
+              <span>Topic</span>
+              <select v-model="billingForm.topic" required>
+                <option value="">Select a topic…</option>
+                <option v-for="topic in PORTAL_BILLING_TOPICS" :key="topic" :value="topic">{{ topic }}</option>
+              </select>
+            </label>
+            <label class="fld">
+              <span>Details</span>
+              <textarea v-model="billingForm.description" rows="4" required placeholder="What do you need clarified?" />
+            </label>
+            <p v-if="submitError && activeTab === 'billing'" class="help" style="color:#dc2626;">{{ submitError }}</p>
+            <button type="submit" class="btn primary" :disabled="submitting || !billingForm.topic">
+              {{ submitting ? 'Sending…' : 'Send billing question' }}
+            </button>
+          </form>
+
+          <form v-show="activeTab === 'general'" @submit.prevent="submitGeneral">
+            <label class="fld">
+              <span>Type</span>
+              <select v-model="generalForm.requestKind">
+                <option value="message">General message</option>
+                <option value="vehicle_correction">Vehicle data correction</option>
+              </select>
+            </label>
+            <label v-if="generalForm.requestKind === 'vehicle_correction'" class="fld">
+              <span>Vehicle</span>
+              <select v-model="generalForm.vehicleId" required :disabled="!vehicles.length">
+                <option v-if="!vehicles.length" value="">No vehicles on file</option>
+                <option v-for="veh in vehicles" :key="veh.id" :value="veh.id">{{ veh.tagLabel }}</option>
+              </select>
+            </label>
+            <label class="fld">
+              <span>Subject</span>
+              <input v-model="generalForm.subject" type="text" required maxlength="120" placeholder="Brief summary">
+            </label>
+            <label class="fld">
+              <span>Message</span>
+              <textarea v-model="generalForm.message" rows="4" required placeholder="How can we help?" />
+            </label>
+            <p v-if="submitError && activeTab === 'general'" class="help" style="color:#dc2626;">{{ submitError }}</p>
+            <button
+              type="submit"
+              class="btn primary"
+              :disabled="submitting || (generalForm.requestKind === 'vehicle_correction' && !vehicles.length)"
+            >
+              {{ submitting ? 'Sending…' : 'Send message' }}
+            </button>
+          </form>
         </div>
       </div>
 
-      <p v-if="submitMessage" class="portal-banner success">{{ submitMessage }}</p>
-
-      <div class="card portal-card">
-        <div class="portal-tab-row" role="tablist" aria-label="Request type">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            type="button"
-            class="chip"
-            role="tab"
-            :class="{ on: activeTab === tab.id }"
-            :aria-selected="activeTab === tab.id"
-            @click="setTab(tab.id)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
-
-        <form v-show="activeTab === 'service'" class="portal-form" @submit.prevent="submitService">
+      <ListFilterBar
+        :show-search="false"
+        :count-label="historyCountLabel"
+        :filters-active="filtersDirty"
+        filter-title="Filter requests"
+        @clear-filters="clearHistoryFilters"
+      >
+        <template #filters>
           <label class="fld">
-            <span>Vehicle</span>
-            <select v-model="serviceForm.vehicleId" required :disabled="!vehicles.length">
-              <option v-if="!vehicles.length" value="">No vehicles on file</option>
-              <option v-for="veh in vehicles" :key="veh.id" :value="veh.id">{{ veh.tagLabel }}</option>
-            </select>
-          </label>
-          <div class="row2">
-            <label class="fld">
-              <span>Service type</span>
-              <select v-model="serviceForm.serviceCategory">
-                <option v-for="cat in PORTAL_SERVICE_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
-              </select>
-            </label>
-            <label class="fld">
-              <span>Urgency</span>
-              <select v-model="serviceForm.urgency">
-                <option v-for="opt in PORTAL_SERVICE_URGENCIES" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </label>
-          </div>
-          <label class="fld">
-            <span>Preferred date (optional)</span>
-            <input v-model="serviceForm.preferredDate" type="date" :min="minDate">
-          </label>
-          <label class="fld">
-            <span>What do you need?</span>
-            <textarea v-model="serviceForm.description" rows="4" required placeholder="Describe the work or issue…" />
-          </label>
-          <p v-if="submitError && activeTab === 'service'" class="portal-error">{{ submitError }}</p>
-          <button type="submit" class="btn primary" :disabled="submitting || !vehicles.length">
-            {{ submitting ? 'Sending…' : 'Send service request' }}
-          </button>
-        </form>
-
-        <form v-show="activeTab === 'billing'" class="portal-form" @submit.prevent="submitBilling">
-          <label class="fld">
-            <span>Invoice (optional)</span>
-            <select v-model="billingForm.invoiceId">
-              <option value="">General billing question</option>
-              <option v-for="inv in invoices" :key="inv.id" :value="inv.id">
-                {{ portalInvoiceOptionLabel(inv.invoiceNumberFormatted, inv.vehicleLabel, inv.balanceDue, inv.status) }}
+            Show
+            <select v-model="historyFilter" aria-label="Request history filter">
+              <option v-for="opt in historyFilterOptions" :key="opt" :value="opt">
+                {{ portalRequestHistoryFilterLabel(opt) }}
               </option>
             </select>
           </label>
-          <label class="fld">
-            <span>Topic</span>
-            <select v-model="billingForm.topic" required>
-              <option value="">Select a topic…</option>
-              <option v-for="topic in PORTAL_BILLING_TOPICS" :key="topic" :value="topic">{{ topic }}</option>
-            </select>
-          </label>
-          <label class="fld">
-            <span>Details</span>
-            <textarea v-model="billingForm.description" rows="4" required placeholder="What do you need clarified?" />
-          </label>
-          <p v-if="submitError && activeTab === 'billing'" class="portal-error">{{ submitError }}</p>
-          <button type="submit" class="btn primary" :disabled="submitting || !billingForm.topic">
-            {{ submitting ? 'Sending…' : 'Send billing question' }}
-          </button>
-        </form>
+        </template>
+      </ListFilterBar>
 
-        <form v-show="activeTab === 'general'" class="portal-form" @submit.prevent="submitGeneral">
-          <label class="fld">
-            <span>Type</span>
-            <select v-model="generalForm.requestKind">
-              <option value="message">General message</option>
-              <option value="vehicle_correction">Vehicle data correction</option>
-            </select>
-          </label>
-          <label v-if="generalForm.requestKind === 'vehicle_correction'" class="fld">
-            <span>Vehicle</span>
-            <select v-model="generalForm.vehicleId" required :disabled="!vehicles.length">
-              <option v-if="!vehicles.length" value="">No vehicles on file</option>
-              <option v-for="veh in vehicles" :key="veh.id" :value="veh.id">{{ veh.tagLabel }}</option>
-            </select>
-          </label>
-          <label class="fld">
-            <span>Subject</span>
-            <input v-model="generalForm.subject" type="text" required maxlength="120" placeholder="Brief summary">
-          </label>
-          <label class="fld">
-            <span>Message</span>
-            <textarea v-model="generalForm.message" rows="4" required placeholder="How can we help?" />
-          </label>
-          <p v-if="submitError && activeTab === 'general'" class="portal-error">{{ submitError }}</p>
-          <button
-            type="submit"
-            class="btn primary"
-            :disabled="submitting || (generalForm.requestKind === 'vehicle_correction' && !vehicles.length)"
-          >
-            {{ submitting ? 'Sending…' : 'Send message' }}
-          </button>
-        </form>
-      </div>
-
-      <div class="card portal-card">
-        <div class="chead">
-          <h3>Your requests</h3>
-          <div class="portal-tab-row compact">
-            <button type="button" class="chip" :class="{ on: historyFilter === 'open' }" @click="historyFilter = 'open'">Open</button>
-            <button type="button" class="chip" :class="{ on: historyFilter === 'all' }" @click="historyFilter = 'all'">All</button>
-            <button type="button" class="chip" :class="{ on: historyFilter === 'resolved' }" @click="historyFilter = 'resolved'">Done</button>
-          </div>
+      <div class="card">
+        <div v-if="filteredHistory.length" class="tscroll">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Request</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="req in filteredHistory" :key="`${req.kind}-${req.id}`">
+                <td>
+                  <span class="lead">{{ req.title }}</span>
+                  <span class="sub">{{ req.meta }}</span>
+                </td>
+                <td>{{ portalRequestKindLabel(req.kind) }}</td>
+                <td>
+                  <span :class="portalRequestStatusPill(req.status).cls">
+                    {{ portalRequestStatusPill(req.status).label }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div v-if="filteredHistory.length" class="portal-list">
-          <div v-for="req in filteredHistory" :key="`${req.kind}-${req.id}`" class="portal-list-row static">
-            <div class="portal-list-main">
-              <b>{{ req.title }}</b>
-              <span>{{ portalRequestKindLabel(req.kind) }} · {{ req.meta }}</span>
-            </div>
-            <span :class="portalRequestStatusPill(req.status).cls">
-              {{ portalRequestStatusPill(req.status).label }}
-            </span>
-          </div>
-        </div>
-        <div v-else class="portal-empty">No requests in this view.</div>
+        <div v-else class="empty">No requests in this view.</div>
       </div>
     </template>
   </section>
