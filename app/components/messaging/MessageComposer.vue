@@ -170,7 +170,7 @@ function onKeydown(e: KeyboardEvent) {
         <div v-else-if="!pickerItems.length" class="dm-entity-picker-empty">No matches</div>
       </div>
     </div>
-    <form class="dm-compose-form" @submit.prevent="submit">
+    <form class="dm-compose-form" :class="{ 'dm-compose-form--email': isEmail }" @submit.prevent="submit">
       <textarea
         ref="textareaEl"
         v-model="text"

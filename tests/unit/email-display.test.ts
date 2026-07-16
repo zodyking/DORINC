@@ -8,6 +8,7 @@ import {
   normalizeInboundEmailText,
   prepareEmailHtmlIframeDocument,
   sanitizeEmailHtml,
+  shouldRenderEmailAsHtml,
   stripHtmlToText,
 } from '../../shared/email-display'
 
@@ -72,14 +73,15 @@ describe('email-display', () => {
     expect(result.content).toContain('<strong>Customer note</strong>')
   })
 
-  it('shows compose text for outbound thread messages', () => {
+  it('prefers html templates for outbound thread messages', () => {
     const result = emailBodyForThreadDisplay(
       'Its working!',
-      '<div><p>Its working!</p><hr>footer</div>',
+      '<div><p>Its working!</p><hr><footer>Devon On Site Repairs Inc.</footer></div>',
       'outbound',
     )
-    expect(result.mode).toBe('text')
+    expect(result.mode).toBe('html')
     expect(result.content).toContain('Its working!')
-    expect(result.content).not.toContain('footer')
+    expect(result.content).toContain('footer')
+    expect(shouldRenderEmailAsHtml(result.content, 'outbound')).toBe(true)
   })
 })

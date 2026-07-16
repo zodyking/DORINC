@@ -120,17 +120,18 @@ export function sanitizeEmailStyleBlock(css: string): string {
 }
 
 const EMAIL_IFRAME_BASE_STYLES = `
-  html, body { margin: 0; padding: 0; background: #fff; }
+  html, body { margin: 0; padding: 0; background: #fff; width: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.6;
     color: #202124;
     word-wrap: break-word;
     overflow-wrap: anywhere;
   }
   img { max-width: 100% !important; height: auto !important; }
-  table { max-width: 100% !important; }
+  table { max-width: 100% !important; width: 100% !important; }
+  td, th { word-break: break-word; }
   pre { white-space: pre-wrap; overflow-x: auto; }
   a { color: #1a73e8; }
   blockquote {
@@ -173,9 +174,9 @@ export function prepareEmailHtmlIframeDocument(html: string): string {
 
 export function shouldRenderEmailAsHtml(
   html: string | null | undefined,
-  direction: 'inbound' | 'outbound' | undefined,
+  _direction?: 'inbound' | 'outbound',
 ): boolean {
-  return direction !== 'outbound' && !!html?.trim()
+  return !!html?.trim() && !!prepareEmailHtmlIframeDocument(html)
 }
 
 export function emailBodyForDisplay(body: string, html?: string | null): { mode: 'html' | 'text', content: string } {
@@ -187,19 +188,11 @@ export function emailBodyForDisplay(body: string, html?: string | null): { mode:
   return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
 }
 
-/** Prefer compose text for staff outbound; full HTML for inbound customer mail. */
+/** Render thread messages with sanitized HTML templates when available. */
 export function emailBodyForThreadDisplay(
   body: string,
   html: string | null | undefined,
-  direction: 'inbound' | 'outbound' | undefined,
+  _direction?: 'inbound' | 'outbound',
 ): { mode: 'html' | 'text', content: string } {
-  if (direction === 'outbound') {
-    const plain = cleanPlainEmailText(body)
-    if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
-    return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
-  }
-  if (shouldRenderEmailAsHtml(html, direction)) {
-    return { mode: 'html', content: html! }
-  }
   return emailBodyForDisplay(body, html)
 }
