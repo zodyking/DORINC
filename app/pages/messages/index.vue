@@ -31,12 +31,19 @@ const emailForm = reactive({
   body: '',
 })
 
+const hasActiveConversation = computed(() => !!dm.activeConversation)
+const showThreadPanel = computed(() => showThread.value && hasActiveConversation.value)
+
+function revealThread() {
+  if (dm.activeConversation) showThread.value = true
+}
+
 onMounted(async () => {
   await dm.fetchConversations()
   const convId = useRoute().query.conversation as string | undefined
   if (convId) {
     await dm.openConversation(convId)
-    showThread.value = true
+    revealThread()
   }
 })
 
@@ -48,6 +55,10 @@ watch(() => dm.conversationSearch, () => {
 
 watch(() => dm.messageChannel, () => {
   showThread.value = false
+})
+
+watch(() => dm.activeConversationId, (id) => {
+  if (!id) showThread.value = false
 })
 
 async function loadStaffUsers() {
@@ -124,7 +135,7 @@ async function pickStaffUser(userId: string) {
   try {
     await dm.startConversation(userId)
     newDmOpen.value = false
-    showThread.value = true
+    revealThread()
   }
   catch (e: unknown) {
     dmStartError.value = syncFetchErrorMessage(e, 'Could not start conversation')
@@ -146,7 +157,7 @@ async function submitNewEmail() {
       body: emailForm.body.trim(),
     })
     newEmailOpen.value = false
-    showThread.value = true
+    revealThread()
   }
   catch (e: unknown) {
     emailStartError.value = syncFetchErrorMessage(e, 'Could not send email')
@@ -155,7 +166,7 @@ async function submitNewEmail() {
 
 async function selectConversation(id: string) {
   await dm.openConversation(id)
-  showThread.value = true
+  revealThread()
 }
 
 async function onSend(body: string) {
@@ -193,9 +204,17 @@ async function setEmailShowAll(showAll: boolean) {
       <button type="button" class="btn sm" @click="dm.fetchConversations()">Retry</button>
     </div>
 
-    <div class="dm-layout" :class="{ 'show-thread': showThread }">
+    <div class="dm-layout" :class="{ 'show-thread': showThreadPanel }">
       <aside class="dm-sidebar">
         <div class="dm-sidebar-head">
+          <div class="dm-sidebar-actions">
+            <button type="button" class="btn primary" @click="openNewDm">
+              New message
+            </button>
+            <button type="button" class="btn" @click="openNewEmail">
+              New email
+            </button>
+          </div>
           <div class="dm-channel-tabs" role="tablist" aria-label="Message channels">
             <button
               type="button"
@@ -276,16 +295,17 @@ async function setEmailShowAll(showAll: boolean) {
         </div>
       </aside>
 
-      <MessagingChatThread
-        class="dm-main"
-        :conversation="dm.activeConversation"
-        :messages="dm.messages"
-        :loading="dm.loadingMessages"
-        :sending="dm.sending"
-        :current-user-id="auth.user?.id"
-        @back="onBack"
-        @send="onSend"
-      />
+      <div class="dm-main">
+        <MessagingChatThread
+          :conversation="dm.activeConversation"
+          :messages="dm.messages"
+          :loading="dm.loadingMessages"
+          :sending="dm.sending"
+          :current-user-id="auth.user?.id"
+          @back="onBack"
+          @send="onSend"
+        />
+      </div>
     </div>
 
     <div v-if="newDmOpen" class="dm-modal-scrim" @click="newDmOpen = false" />

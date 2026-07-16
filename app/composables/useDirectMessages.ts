@@ -271,11 +271,25 @@ export function useDirectMessages() {
     }
   }
 
+  function onVisibilityChange() {
+    if (typeof document === 'undefined') return
+    if (document.hidden) stopPolling()
+    else if (canUseMessages.value) startPolling()
+  }
+
   onMounted(() => {
     if (canUseMessages.value) startPolling()
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange)
+    }
   })
 
-  onUnmounted(stopPolling)
+  onUnmounted(() => {
+    stopPolling()
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  })
 
   watch(canUseMessages, (allowed) => {
     if (allowed) startPolling()
