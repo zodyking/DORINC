@@ -36,6 +36,8 @@ export async function sendLoginNotificationEmail(
     ipAddress?: string | null
     userAgent?: string | null
     signedInAt?: Date
+    deviceLocation?: string | null
+    deviceAccuracyM?: number | null
   },
 ) {
   const to = opts.to.trim()
@@ -49,7 +51,8 @@ export async function sendLoginNotificationEmail(
   const brand = await resolveEmailBrand(db)
   const deviceLabel = buildDeviceLabel(opts.userAgent)
   const ipAddress = normalizeClientIp(opts.ipAddress)
-  const location = await resolveIpLocation(ipAddress)
+  const ipLocation = await resolveIpLocation(ipAddress)
+  const location = opts.deviceLocation || ipLocation
 
   const mail = buildLoginNotificationEmail({
     name: opts.name,
@@ -58,6 +61,8 @@ export async function sendLoginNotificationEmail(
     signedInAt: (opts.signedInAt ?? new Date()).toISOString(),
     ipAddress,
     location,
+    ipLocation: opts.deviceLocation ? ipLocation : null,
+    locationAccuracyM: opts.deviceAccuracyM ?? null,
     device: deviceLabel,
     userAgent: opts.userAgent ?? null,
     appUrl: brand.appUrl || getAppUrl(),

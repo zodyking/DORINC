@@ -124,7 +124,7 @@ function refineCityLabel(
   return trimmedCity
 }
 
-function formatLocationParts(parts: {
+export function formatLocationParts(parts: {
   city?: string | null
   region?: string | null
   regionCode?: string | null

@@ -267,6 +267,8 @@ export function buildLoginNotificationEmail({
   signedInAt,
   ipAddress,
   location,
+  ipLocation,
+  locationAccuracyM,
   device,
   userAgent,
   appUrl,
@@ -279,6 +281,9 @@ export function buildLoginNotificationEmail({
     : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
   const subject = 'New Sign-In Detected'
   const deviceLabel = device || userAgent || null
+  const accuracyLabel = locationAccuracyM != null && Number.isFinite(locationAccuracyM)
+    ? `~${Math.round(locationAccuracyM)} m`
+    : null
   const text = [
     `Hi ${name},`,
     '',
@@ -286,7 +291,9 @@ export function buildLoginNotificationEmail({
     '',
     `When: ${when}`,
     email ? `Email: ${email}` : '',
-    location ? `Location: ${location}` : '',
+    location ? `Device location: ${location}` : '',
+    ipLocation ? `Network location: ${ipLocation}` : '',
+    accuracyLabel ? `Location accuracy: ${accuracyLabel}` : '',
     ipAddress ? `IP address: ${ipAddress}` : '',
     deviceLabel ? `Device: ${deviceLabel}` : '',
     '',
@@ -306,7 +313,9 @@ export function buildLoginNotificationEmail({
       { label: 'When', value: when },
       { label: 'User', value: name },
       email ? { label: 'Email', value: email } : null,
-      location ? { label: 'Location', value: location } : null,
+      location ? { label: 'Device location', value: location } : null,
+      ipLocation ? { label: 'Network location', value: ipLocation } : null,
+      accuracyLabel ? { label: 'Location accuracy', value: accuracyLabel } : null,
       ipAddress ? { label: 'IP address', value: ipAddress } : null,
       deviceLabel ? { label: 'Device', value: deviceLabel } : null,
     ].filter(Boolean),

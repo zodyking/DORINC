@@ -1,38 +1,42 @@
 import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
-import { z } from 'zod'
 import { AuthError, login } from '../../auth/auth.service'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
+import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
-import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
-
-const loginSchema = z.discriminatedUnion('portal', [
-  z.object({
-    portal: z.literal('customer'),
-    username: nonEmptyString.max(32),
-    password: z.string().min(1).max(200),
-  }),
-  z.object({
-    portal: z.literal('staff'),
-    email: emailSchema,
-    password: z.string().min(1).max(200),
-  }),
-])
+import { loginBodySchema } from '../../../shared/validators/auth'
 
 export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event))
-  const body = await validateBody(event, loginSchema)
+  const body = await validateBody(event, loginBodySchema)
   const identifier = body.portal === 'customer' ? body.username : body.email
+
+  let deviceLocationLabel: string | null = null
+  if (body.portal === 'staff') {
+    deviceLocationLabel = await resolveBrowserLocation({
+      latitude: body.geo.latitude,
+      longitude: body.geo.longitude,
+      accuracyM: body.geo.accuracyM,
+    })
+  }
 
   try {
     const result = await login(useDb(), identifier, body.password, {
       ipAddress: getClientIp(event),
       userAgent: getHeader(event, 'user-agent'),
       portal: body.portal,
+      geo: body.portal === 'staff'
+        ? {
+            latitude: body.geo.latitude,
+            longitude: body.geo.longitude,
+            accuracyM: body.geo.accuracyM ?? null,
+            locationLabel: deviceLocationLabel,
+          }
+        : null,
     })
 
     setSessionCookie(event, result.sessionToken)
@@ -62,6 +66,8 @@ export default defineEventHandler(async (event) => {
         portal: body.portal,
         ipAddress: getClientIp(event),
         userAgent: getHeader(event, 'user-agent'),
+        deviceLocation: deviceLocationLabel,
+        deviceAccuracyM: body.portal === 'staff' ? body.geo.accuracyM ?? null : null,
       }))
       .catch((err) => {
         console.warn('[mail] login notification failed:', (err as Error).message)
