@@ -15,6 +15,7 @@ import {
 } from './email-thread.mjs'
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
+import { persistInboundAttachments } from './imap-attachments.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
 
@@ -336,6 +337,8 @@ async function ingestInboundEmail(pool, input, filters) {
   )
   const messageId = messageRows[0].id
 
+  const attachmentCount = await persistInboundAttachments(pool, messageId, input.attachments)
+
   await pool.query(
     `INSERT INTO email_message_meta (
        message_id, direction, internet_message_id, in_reply_to, email_references,
@@ -378,7 +381,7 @@ async function ingestInboundEmail(pool, input, filters) {
     }
   }
 
-  return { skipped: false, conversationId, isNewThread }
+  return { skipped: false, conversationId, isNewThread, attachmentCount }
 }
 
 /**
@@ -387,7 +390,7 @@ async function ingestInboundEmail(pool, input, filters) {
  */
 export async function runImapInboxSync(pool, opts = {}) {
   if (syncInProgress) {
-    return { fetched: 0, ingested: 0, skipped: 0, errors: 0, busy: true }
+    return { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, busy: true }
   }
 
   const config = await loadImapConfig(pool)
@@ -413,7 +416,7 @@ export async function runImapInboxSync(pool, opts = {}) {
       logger: false,
     })
 
-    const result = { fetched: 0, ingested: 0, skipped: 0, errors: 0, busy: false }
+    const result = { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, busy: false }
     let maxUid = lastUid
 
     await client.connect()
@@ -469,10 +472,14 @@ export async function runImapInboxSync(pool, opts = {}) {
               receivedAt: msg.internalDate ?? parsed.date ?? new Date(),
               autoSubmitted: headerValue(parsed, 'auto-submitted'),
               precedence: headerValue(parsed, 'precedence'),
+              attachments: parsed.attachments,
             }, filters)
 
             if (ingest.skipped) result.skipped++
-            else result.ingested++
+            else {
+              result.ingested++
+              result.attachments += ingest.attachmentCount ?? 0
+            }
           }
           catch (err) {
             result.errors++
@@ -514,7 +521,7 @@ export async function runImapInboxSync(pool, opts = {}) {
     }
 
     if (result.ingested > 0) {
-      console.log(`[imap-sync] ingested=${result.ingested} skipped=${result.skipped} errors=${result.errors}`)
+      console.log(`[imap-sync] ingested=${result.ingested} attachments=${result.attachments} skipped=${result.skipped} errors=${result.errors}`)
     }
 
     return result
