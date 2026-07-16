@@ -27,7 +27,7 @@ const APP_URL = 'https://app.dorinc.example.com'
 const brand = {
   brandName: 'Devon On Site Repairs',
   brandLegal: 'Devon On Site Repairs Inc.',
-  brandTagline: 'Accounting workspace',
+  brandTagline: 'Onsite repairs',
   logoUrl: `${APP_URL}/images/dorinc-icon-trans.png`,
   logoInitial: 'D',
   addressLines: ['123 Business Avenue', 'New York, NY 10001'],

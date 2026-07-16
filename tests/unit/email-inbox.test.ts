@@ -1,15 +1,45 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  buildOutboundEmailBodies,
   buildReferences,
   buildStaffEmailFooter,
+  buildStaffEmailHtmlFooter,
+  CUSTOMER_EMAIL_TAGLINE,
   extractEmailAddresses,
   normalizeEmailAddress,
   subjectWithRePrefix,
+  toCustomerEmailBrand,
 } from '../../server/mail/email-thread'
 import {
   messageMatchesCustomerInboxFilter,
   shouldIngestInboundEmail,
 } from '../../server/services/email-inbox.service'
+import type { EmailBrandContext } from '../../server/services/email-branding.service'
+
+vi.mock('../../server/services/email-branding.service', async () => {
+  const actual = await vi.importActual<typeof import('../../server/services/email-branding.service')>(
+    '../../server/services/email-branding.service',
+  )
+  return {
+    ...actual,
+    resolveEmailBrand: vi.fn(async () => ({
+      brandName: 'Devon Onsite Repairs INC',
+      brandLegal: 'Devon Onsite Repairs INC',
+      brandTagline: 'Accounting workspace',
+      logoUrl: 'https://example.com/logo.png',
+      logoFileId: null,
+      logoInitial: 'D',
+      addressLines: ['387 Van Siclen Ave', 'Brooklyn, NY 11207'],
+      phone: '(646) 731 7021',
+      email: 'accounting@devononsiterepairs.com',
+      website: 'https://devononsiterepairs.com/',
+      appUrl: 'https://devononsiterepairs.com',
+      settingsUrl: 'https://devononsiterepairs.com/admin?tab=notifications',
+      helpUrl: 'https://devononsiterepairs.com/help',
+      signInUrl: 'https://devononsiterepairs.com/auth/login',
+    } satisfies EmailBrandContext)),
+  }
+})
 
 vi.mock('../../server/services/imap-config.service', () => ({
   getImapFilters: vi.fn(() => ({
@@ -48,6 +78,66 @@ describe('email-thread helpers', () => {
   it('formats staff footer with first name and last initial', () => {
     expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Jane D.')
     expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Devon Onsite Repairs Inc')
+  })
+
+  it('uses a customer-facing brand tagline for outbound mail', () => {
+    const brand = toCustomerEmailBrand({
+      brandName: 'Devon Onsite Repairs INC',
+      brandLegal: 'Devon Onsite Repairs INC',
+      brandTagline: 'Accounting workspace',
+      logoUrl: null,
+      logoInitial: 'D',
+      addressLines: [],
+      phone: '',
+      email: '',
+      website: '',
+      appUrl: 'https://example.com',
+      settingsUrl: 'https://example.com/admin',
+      helpUrl: 'https://example.com/help',
+      signInUrl: 'https://example.com/login',
+    })
+    expect(brand.brandTagline).toBe(CUSTOMER_EMAIL_TAGLINE)
+    expect(brand.brandTagline).not.toBe('Accounting workspace')
+  })
+
+  it('renders a polished staff signature card', () => {
+    const html = buildStaffEmailHtmlFooter('Brandon King', {
+      brandName: 'Devon Onsite Repairs INC',
+      brandLegal: 'Devon Onsite Repairs INC',
+      brandTagline: CUSTOMER_EMAIL_TAGLINE,
+      logoUrl: null,
+      logoInitial: 'D',
+      addressLines: ['387 Van Siclen Ave'],
+      phone: '(646) 731 7021',
+      email: 'accounting@devononsiterepairs.com',
+      website: 'https://devononsiterepairs.com/',
+      appUrl: 'https://devononsiterepairs.com',
+      settingsUrl: 'https://devononsiterepairs.com/admin',
+      helpUrl: 'https://devononsiterepairs.com/help',
+      signInUrl: 'https://devononsiterepairs.com/auth/login',
+    })
+    expect(html).toContain('Brandon K.')
+    expect(html).toContain('mailto:accounting@devononsiterepairs.com')
+    expect(html).toContain('tel:6467317021')
+    expect(html).toContain('border-radius:12px')
+  })
+
+  it('builds outbound HTML without the internal workspace label', async () => {
+    const { html, text, brand } = await buildOutboundEmailBodies(
+      {} as never,
+      'Brandon King',
+      'great\n\nThanks for confirming.',
+    )
+    expect(brand.brandTagline).toBe(CUSTOMER_EMAIL_TAGLINE)
+    expect(html).toContain('Onsite repairs')
+    expect(html).not.toContain('Accounting workspace')
+    expect(html).not.toContain('>Message<')
+    expect(html).toContain('great')
+    expect(html).toContain('Thanks for confirming.')
+    expect(html).toContain('Brandon K.')
+    expect(html).toContain('color:#111827')
+    expect(text).toContain('great')
+    expect(text).toContain('Brandon K.')
   })
 })
 

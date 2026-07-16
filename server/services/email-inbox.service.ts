@@ -11,7 +11,8 @@ import {
   emailMessageMeta,
   emailThreads,
 } from '../db/schema/email-inbox'
-import { sendMail } from '../mail/mailer'
+import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
+import { sendBrandedMail } from '../mail/branded-mail'
 import {
   buildOutboundEmailBodies,
   buildReferences,
@@ -181,8 +182,6 @@ export interface EmailConversationSummary {
   unreadCount: number
   updatedAt: string
 }
-
-import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
 
 function previewBody(body: string, html?: string | null): string {
   return emailPreviewText(body, html)
@@ -449,7 +448,7 @@ export async function startEmailThread(
   if (!actor) throw new EmailInboxError('NOT_FOUND')
 
   const internetMessageId = generateInternetMessageId()
-  const { text, html } = await buildOutboundEmailBodies(db, actor.name, input.body)
+  const { text, html, brand } = await buildOutboundEmailBodies(db, actor.name, input.body)
 
   const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
   await db.insert(emailThreads).values({
@@ -478,13 +477,13 @@ export async function startEmailThread(
     sentByUserId: actorUserId,
   })
 
-  const delivered = await sendMail({
+  const delivered = await sendBrandedMail(db, {
     to: toEmail,
     subject: input.subject.trim(),
     text,
     html,
     messageId: internetMessageId,
-  })
+  }, brand)
   if (!delivered.delivered && process.env.NODE_ENV === 'production') {
     throw new EmailInboxError('SEND_FAILED')
   }
@@ -513,7 +512,7 @@ export async function replyToEmailThread(
   const inReplyTo = parent?.internetMessageId ?? thread.rootMessageId
   const references = buildReferences(parent?.emailReferences, inReplyTo)
   const subject = subjectWithRePrefix(thread.subject)
-  const { text, html } = await buildOutboundEmailBodies(db, actor.name, body)
+  const { text, html, brand } = await buildOutboundEmailBodies(db, actor.name, body)
 
   const [message] = await db.insert(messages).values({
     conversationId,
@@ -534,7 +533,7 @@ export async function replyToEmailThread(
     sentByUserId: actorUserId,
   })
 
-  const delivered = await sendMail({
+  const delivered = await sendBrandedMail(db, {
     to: thread.counterpartEmail,
     subject,
     text,
@@ -542,7 +541,7 @@ export async function replyToEmailThread(
     messageId: internetMessageId,
     inReplyTo: inReplyTo ?? undefined,
     references: references ?? undefined,
-  })
+  }, brand)
   if (!delivered.delivered && process.env.NODE_ENV === 'production') {
     throw new EmailInboxError('SEND_FAILED')
   }

@@ -61,7 +61,7 @@ export function buildEmailBrandFromProfile(
   return {
     brandName,
     brandLegal,
-    brandTagline: 'Accounting workspace',
+    brandTagline: 'Onsite repairs',
     logoUrl,
     logoFileId: opts.logoFileId ?? null,
     logoInitial,

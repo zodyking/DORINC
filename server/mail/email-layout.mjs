@@ -90,7 +90,7 @@ export function normalizeEmailBrand(brand, appUrl = '') {
   return {
     brandName,
     brandLegal: brand?.brandLegal?.trim() || EMAIL_BRAND_LEGAL,
-    brandTagline: brand?.brandTagline?.trim() || 'Accounting workspace',
+    brandTagline: brand?.brandTagline?.trim() || 'Onsite repairs',
     logoUrl: brand?.logoUrl ?? (base ? `${base}/images/dorinc-icon-trans.png` : null),
     logoInitial: brand?.logoInitial?.trim() || brandName.charAt(0).toUpperCase() || 'D',
     addressLines: Array.isArray(brand?.addressLines) ? brand.addressLines.filter(Boolean) : [],

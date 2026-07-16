@@ -55,7 +55,7 @@ async function loadEmailBrand(pool) {
   return {
     brandName: businessName,
     brandLegal: businessName,
-    brandTagline: 'Accounting workspace',
+    brandTagline: 'Onsite repairs',
     logoUrl: logoFileId
       ? `${appUrl}/api/files/${logoFileId}/preview`
       : `${appUrl}/images/dorinc-icon-trans.png`,
