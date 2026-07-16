@@ -1,8 +1,12 @@
 import { useDb } from '../../db/client'
 import { resolveServiceLogInvoiceLinkStatuses } from '../../services/invoice-link-status.service'
-import { listServiceLogs } from '../../services/service-logs.service'
+import { batchGetInvoiceRevertStatus, listServiceLogs } from '../../services/service-logs.service'
 import { apiError } from '../../utils/api-error'
-import { canMarkServiceLogReady, canRevertServiceLogInvoice, canSendServiceLogToInvoice } from '../../utils/service-log-actions'
+import {
+  canMarkServiceLogReady,
+  canSendServiceLogToInvoice,
+  hasRevertServiceLogInvoicePermission,
+} from '../../utils/service-log-actions'
 import { hasPermission } from '../../utils/require-permission'
 import { validateQuery } from '../../utils/validate'
 import { serviceLogListQuerySchema } from '../../../shared/validators/service-logs'
@@ -30,15 +34,22 @@ export default defineEventHandler(async (event) => {
   const invoiceIds = result.items
     .map(log => log.invoiceId)
     .filter((id): id is string => !!id)
-  const invoiceLinkStatuses = await resolveServiceLogInvoiceLinkStatuses(db, invoiceIds)
+  const [invoiceLinkStatuses, revertStatuses] = await Promise.all([
+    resolveServiceLogInvoiceLinkStatuses(db, invoiceIds),
+    batchGetInvoiceRevertStatus(db, result.items
+      .filter(log => hasRevertServiceLogInvoicePermission(event, log) && log.invoiceId)
+      .map(log => log.invoiceId!)),
+  ])
 
-  const items = await Promise.all(result.items.map(async (log) => ({
+  const items = result.items.map((log) => ({
     ...log,
     invoiceLinkStatus: log.invoiceId ? invoiceLinkStatuses.get(log.invoiceId) ?? null : null,
     canMarkReady: canMarkServiceLogReady(event, log),
     canSendToInvoice: canSendServiceLogToInvoice(event, log),
-    canRevertInvoice: await canRevertServiceLogInvoice(event, db, log),
-  })))
+    canRevertInvoice: !!log.invoiceId
+      && hasRevertServiceLogInvoicePermission(event, log)
+      && (revertStatuses.get(log.invoiceId)?.revertible ?? false),
+  }))
 
   return { ...result, items }
 })

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { syncInvoiceNumberSequence, syncNumberSequences } from '../../server/db/sync-sequences'
+import {
+  ensureInvoiceNumberSequence,
+  syncInvoiceNumberSequence,
+  syncNumberSequences,
+} from '../../server/db/sync-sequences'
 
 describe('sync-sequences', () => {
   it('reads invoice setval from db.execute rows', async () => {
@@ -23,5 +27,29 @@ describe('sync-sequences', () => {
       serviceLogNumber: 1007,
       estimateNumber: 42,
     })
+  })
+
+  it('skips setval when the sequence already points at MAX + 1', async () => {
+    const db = {
+      execute: vi.fn().mockResolvedValue({
+        rows: [{ max_num: '711', seq_val: '711', seq_called: true }],
+      }),
+    }
+
+    await ensureInvoiceNumberSequence(db as never)
+    expect(db.execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs setval when the sequence is stale', async () => {
+    const db = {
+      execute: vi.fn()
+        .mockResolvedValueOnce({
+          rows: [{ max_num: '711', seq_val: '760', seq_called: false }],
+        })
+        .mockResolvedValueOnce({ rows: [{ setval: '711' }] }),
+    }
+
+    await ensureInvoiceNumberSequence(db as never)
+    expect(db.execute).toHaveBeenCalledTimes(2)
   })
 })

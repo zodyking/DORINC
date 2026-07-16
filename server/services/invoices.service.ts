@@ -25,7 +25,7 @@ import { serviceRequests } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { appFiles } from '../db/schema/files'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
-import { syncInvoiceNumberSequence } from '../db/sync-sequences'
+import { ensureInvoiceNumberSequence, syncInvoiceNumberSequence } from '../db/sync-sequences'
 import { isPgUniqueViolation } from '../utils/pg-errors'
 
 export type InvoicesServiceErrorCode
@@ -424,7 +424,12 @@ export async function createInvoiceDraft(
 
   let row: typeof invoices.$inferSelect | undefined
   for (let attempt = 0; attempt < 2; attempt++) {
-    await syncInvoiceNumberSequence(db)
+    if (attempt === 0) {
+      await ensureInvoiceNumberSequence(db)
+    }
+    else {
+      await syncInvoiceNumberSequence(db)
+    }
     try {
       ;[row] = await db.insert(invoices).values(draftValues).returning()
       break

@@ -11,7 +11,7 @@ import { users } from '../db/schema/auth'
 import { appFiles } from '../db/schema/files'
 import { auditLogs } from '../db/schema/audit'
 import { INVOICE_LINK_RELEASED_REASON } from './invoice-dependents.service'
-import { getActiveEditingSession } from './editing-sessions.service'
+import { editingSessions } from '../db/schema/editing-sessions'
 
 export type ServiceLogsServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'VEHICLE_CUSTOMER_MISMATCH'
@@ -327,44 +327,98 @@ export type InvoiceRevertBlockReason
   = 'INVOICE_NOT_DRAFT' | 'INVOICE_SENT' | 'EDIT_SESSION_ACTIVE' | 'INVOICE_MODIFIED' | 'HAS_LINE_ITEMS'
 
 /** Whether the auto-created draft invoice can be undone so the mechanic can edit the log again. */
-export async function getInvoiceRevertStatus(db: Db, invoiceId: string) {
-  const invoice = await db.select({
+export async function batchGetInvoiceRevertStatus(
+  db: Db,
+  invoiceIds: string[],
+): Promise<Map<string, { revertible: boolean, reason: InvoiceRevertBlockReason | null }>> {
+  const result = new Map<string, { revertible: boolean, reason: InvoiceRevertBlockReason | null }>()
+  const uniqueIds = [...new Set(invoiceIds.filter(Boolean))]
+  if (!uniqueIds.length) return result
+
+  const invoiceRows = await db.select({
     id: invoices.id,
     status: invoices.status,
-  }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1)
-  const row = invoice[0]
-  if (!row) return { revertible: false as const, reason: 'INVOICE_NOT_DRAFT' as const }
+  })
+    .from(invoices)
+    .where(inArray(invoices.id, uniqueIds))
 
-  if (row.status !== 'draft') {
-    return { revertible: false as const, reason: 'INVOICE_SENT' as const }
+  const foundIds = new Set(invoiceRows.map(r => r.id))
+  for (const id of uniqueIds) {
+    if (!foundIds.has(id)) {
+      result.set(id, { revertible: false, reason: 'INVOICE_NOT_DRAFT' })
+    }
   }
 
-  const session = await getActiveEditingSession(db, 'invoice', invoiceId)
-  if (session) {
-    return { revertible: false as const, reason: 'EDIT_SESSION_ACTIVE' as const }
+  const draftIds: string[] = []
+  for (const row of invoiceRows) {
+    if (row.status !== 'draft') {
+      result.set(row.id, { revertible: false, reason: 'INVOICE_SENT' })
+      continue
+    }
+    draftIds.push(row.id)
   }
 
-  const edits = await db.select({ action: auditLogs.action })
+  if (!draftIds.length) return result
+
+  const activeSessions = await db.select({ entityId: editingSessions.entityId })
+    .from(editingSessions)
+    .where(and(
+      eq(editingSessions.entityType, 'invoice'),
+      inArray(editingSessions.entityId, draftIds),
+      isNull(editingSessions.releasedAt),
+    ))
+  const activeSessionIds = new Set(activeSessions.map(s => s.entityId))
+
+  const edits = await db.select({
+    entityId: auditLogs.entityId,
+    action: auditLogs.action,
+  })
     .from(auditLogs)
     .where(and(
       eq(auditLogs.entityType, 'invoice'),
-      eq(auditLogs.entityId, invoiceId),
+      inArray(auditLogs.entityId, draftIds),
       ne(auditLogs.action, 'invoices.create'),
     ))
 
-  if (edits.some(e => !isEditingSessionNoise(e.action))) {
-    return { revertible: false as const, reason: 'INVOICE_MODIFIED' as const }
+  const modifiedIds = new Set<string>()
+  for (const row of edits) {
+    if (!isEditingSessionNoise(row.action)) {
+      modifiedIds.add(row.entityId)
+    }
   }
 
-  const [lineCount] = await db.select({ value: count() })
+  const lineCounts = await db.select({
+    invoiceId: invoiceLineItems.invoiceId,
+    value: count(),
+  })
     .from(invoiceLineItems)
-    .where(eq(invoiceLineItems.invoiceId, invoiceId))
+    .where(inArray(invoiceLineItems.invoiceId, draftIds))
+    .groupBy(invoiceLineItems.invoiceId)
+  const lineCountByInvoice = new Map(lineCounts.map(r => [r.invoiceId, Number(r.value)]))
 
-  if (Number(lineCount?.value ?? 0) > 0) {
-    return { revertible: false as const, reason: 'HAS_LINE_ITEMS' as const }
+  for (const id of draftIds) {
+    if (activeSessionIds.has(id)) {
+      result.set(id, { revertible: false, reason: 'EDIT_SESSION_ACTIVE' })
+      continue
+    }
+    if (modifiedIds.has(id)) {
+      result.set(id, { revertible: false, reason: 'INVOICE_MODIFIED' })
+      continue
+    }
+    if ((lineCountByInvoice.get(id) ?? 0) > 0) {
+      result.set(id, { revertible: false, reason: 'HAS_LINE_ITEMS' })
+      continue
+    }
+    result.set(id, { revertible: true, reason: null })
   }
 
-  return { revertible: true as const, reason: null }
+  return result
+}
+
+/** Whether the auto-created draft invoice can be undone so the mechanic can edit the log again. */
+export async function getInvoiceRevertStatus(db: Db, invoiceId: string) {
+  const statuses = await batchGetInvoiceRevertStatus(db, [invoiceId])
+  return statuses.get(invoiceId) ?? { revertible: false as const, reason: 'INVOICE_NOT_DRAFT' as const }
 }
 
 /** Undo send-to-invoice — deletes pristine draft and returns the log to ready_for_review. */
@@ -485,7 +539,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
         eq(appFiles.ownerEntityType, 'service_log'),
         inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
         isNull(appFiles.archivedAt),
-        or(...logIds.map((lid: string) => eq(appFiles.ownerEntityId, lid))),
+        inArray(appFiles.ownerEntityId, logIds),
       ))
       .groupBy(appFiles.ownerEntityId)
     for (const c of counts) fileCounts.set(c.ownerId, Number(c.value))
