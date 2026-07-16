@@ -1,11 +1,14 @@
 import { useDb } from '../../../db/client'
-import { getImapConfig, getImapFilters, isImapEnvLocked } from '../../../services/imap-config.service'
+import { getImapConfig, getImapFilters, isImapEnvLocked, refreshImapConfigCache } from '../../../services/imap-config.service'
 import { requirePermission } from '../../../utils/require-permission'
 import { parseSmtpFromHeader } from '../../../../shared/format/smtp-from'
-import { getSmtpConfig } from '../../../services/app-config.service'
+import { getSmtpConfig, refreshAppConfigCache } from '../../../services/app-config.service'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'system.admin.all')
+  const db = useDb()
+  await refreshAppConfigCache(db)
+  await refreshImapConfigCache(db)
   const config = getImapConfig()
   const filters = getImapFilters()
   const smtp = getSmtpConfig()

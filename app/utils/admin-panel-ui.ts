@@ -24,7 +24,7 @@ export function formatDbLatency(ms: number | null): string {
 }
 
 export function smtpSummary(host: string | null, port: number, configured: boolean): string {
-  if (!configured || !host) return 'Not configured — set SMTP_HOST and SMTP_FROM'
+  if (!configured || !host) return 'Not configured — set up SMTP in Control Panel → Email'
   return `${host}:${port} · TLS`
 }
 

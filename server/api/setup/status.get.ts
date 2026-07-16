@@ -10,7 +10,8 @@ function envSnapshot() {
     envLocked: {
       security: !!(process.env.ENCRYPTION_MASTER_KEY || process.env.SESSION_SECRET),
       appUrl: isAppUrlEnvLocked(),
-      smtp: !!(process.env.SMTP_HOST && process.env.SMTP_FROM),
+      smtp: !!(process.env.SMTP_FORCE_ENV === 'true'
+        || (process.env.SMTP_HOST?.trim() && process.env.SMTP_FROM?.trim() && process.env.SMTP_PASS)),
     },
   }
 }
