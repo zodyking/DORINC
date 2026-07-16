@@ -87,4 +87,25 @@ describe('app-config UI setup storage', () => {
     expect(row?.encryptedValue).toBeTruthy()
     expect(row?.encryptedValue).not.toContain('secret')
   })
+
+  it('auto-provisions encryption keys when saving SMTP without prior security step', async () => {
+    if (hadEnvSmtp || hadEnvSecurity) return
+
+    await db.delete(appSettings).where(inArray(appSettings.key, TEST_KEYS))
+    await refreshAppConfigCache(db)
+
+    await saveSmtpConfig(db, {
+      host: 'smtp.auto.local',
+      port: 587,
+      user: 'mailer',
+      pass: 'secret',
+      from: 'Shop <mailer@auto.local>',
+    })
+
+    await refreshAppConfigCache(db)
+
+    expect(getMasterKeyHex()).toMatch(/^[0-9a-f]{64}$/i)
+    expect(getSessionSecret()).toBeTruthy()
+    expect(getSmtpConfig()?.host).toBe('smtp.auto.local')
+  })
 })

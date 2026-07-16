@@ -238,6 +238,34 @@ export function isAppUrlEnvLocked(): boolean {
   return !!envAppUrl()
 }
 
+/** Auto-provision encryption keys when saving UI-managed secrets (SMTP, IMAP, etc.). */
+export async function ensureEncryptionReadyForSettings(db: Db): Promise<string> {
+  const existing = getMasterKeyHex()
+  if (existing) {
+    configureMasterKey(existing)
+    return existing
+  }
+
+  const masterKeyHex = hexKey()
+  await upsertSetting(db, APP_CONFIG_KEYS.masterKey, { value: { hex: masterKeyHex } })
+
+  if (!getSessionSecret() && !envSessionSecret()) {
+    const sessionSecretHex = hexKey()
+    await upsertSetting(db, APP_CONFIG_KEYS.sessionSecret, { value: { hex: sessionSecretHex } })
+    cache.sessionSecretHex = sessionSecretHex
+  }
+
+  const urlRow = await readSetting(db, APP_CONFIG_KEYS.appUrl)
+  if (!urlRow && !envAppUrl()) {
+    await upsertSetting(db, APP_CONFIG_KEYS.appUrl, { value: { url: 'http://localhost:3000' } })
+    cache.appUrl = 'http://localhost:3000'
+  }
+
+  configureMasterKey(masterKeyHex)
+  cache.masterKeyHex = masterKeyHex
+  return masterKeyHex
+}
+
 export async function saveSecurityConfig(
   db: Db,
   input: {
@@ -293,11 +321,7 @@ export async function saveSmtpConfig(db: Db, input: SmtpConfig, updatedBy?: stri
     throw new Error('SMTP host and from address are required')
   }
 
-  const masterKey = getMasterKeyHex()
-  if (!masterKey) {
-    throw new Error('Configure security settings (master key) before SMTP')
-  }
-  configureMasterKey(masterKey)
+  await ensureEncryptionReadyForSettings(db)
 
   const encrypted = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
   await upsertSetting(db, APP_CONFIG_KEYS.smtp, { encryptedValue: encrypted, updatedBy: updatedBy ?? null })

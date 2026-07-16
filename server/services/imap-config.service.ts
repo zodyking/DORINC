@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { configureMasterKey, decryptBuffer, encryptBuffer } from './encryption.service'
-import { getMasterKeyHex, getSmtpConfig } from './app-config.service'
+import { ensureEncryptionReadyForSettings, getMasterKeyHex, getSmtpConfig } from './app-config.service'
 
 export const IMAP_CONFIG_KEY = 'imap.config'
 export const IMAP_FILTERS_KEY = 'imap.filters'
@@ -118,10 +118,7 @@ export function isImapEnvLocked(): boolean {
 
 export async function saveImapConfig(db: Db, config: ImapConfig, actorId: string | null) {
   if (isImapEnvLocked()) throw new Error('IMAP is locked by environment variables on this server')
-  const keyHex = getMasterKeyHex()
-  if (!keyHex) throw new Error('Encryption master key is not configured')
-
-  configureMasterKey(keyHex)
+  await ensureEncryptionReadyForSettings(db)
   const encryptedValue = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
 
   const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, IMAP_CONFIG_KEY)).limit(1)
