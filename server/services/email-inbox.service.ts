@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { users } from '../db/schema/auth'
+import { accountTypes, users } from '../db/schema/auth'
 import { customerContacts, customers } from '../db/schema/customers'
 import {
   conversations,
@@ -12,6 +12,7 @@ import {
   emailThreads,
 } from '../db/schema/email-inbox'
 import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
+import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { sendBrandedMail } from '../mail/branded-mail'
 import {
   buildOutboundEmailBodies,
@@ -30,20 +31,80 @@ import {
   shouldSkipAutoResponder,
 } from './email-auto-responder.service'
 import {
+  ALLOWED_UPLOAD_MIMES,
   FilesServiceError,
   listFilesByOwner,
   maxUploadBytes,
+  sniffMime,
   uploadFile,
 } from './files.service'
 import { suppressesInboundEmail } from './email-ingest-suppression.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
+    | 'INVALID_ATTACHMENT' | 'ATTACHMENT_TOO_LARGE'
 
 export class EmailInboxError extends Error {
   constructor(public readonly code: EmailInboxErrorCode) {
     super(code)
   }
+}
+
+export interface OutboundAttachmentInput {
+  filename: string
+  mimeType: string
+  data: Buffer
+}
+
+const HEIC_EQUIVALENTS = new Set(['image/heic', 'image/heif'])
+
+/** Validate outbound attachments up-front so we never persist a half-sent message. */
+function assertValidOutboundAttachments(attachments: OutboundAttachmentInput[]): void {
+  const limit = maxUploadBytes()
+  for (const att of attachments) {
+    if (!att.data.length) throw new EmailInboxError('INVALID_ATTACHMENT')
+    if (att.data.length > limit) throw new EmailInboxError('ATTACHMENT_TOO_LARGE')
+    const mime = att.mimeType.toLowerCase()
+    if (!ALLOWED_UPLOAD_MIMES.has(mime)) throw new EmailInboxError('INVALID_ATTACHMENT')
+    const sniffed = sniffMime(att.data)
+    const accepted = HEIC_EQUIVALENTS.has(mime) ? HEIC_EQUIVALENTS : new Set([mime])
+    if (!sniffed || !accepted.has(sniffed)) throw new EmailInboxError('INVALID_ATTACHMENT')
+  }
+}
+
+/** Persist validated outbound attachments against a message and return their metadata. */
+async function persistOutboundAttachments(
+  db: Db,
+  messageId: string,
+  actorUserId: string,
+  attachments: OutboundAttachmentInput[],
+): Promise<Array<{ id: string, filename: string, mimeType: string, fileSizeBytes: number }>> {
+  const saved: Array<{ id: string, filename: string, mimeType: string, fileSizeBytes: number }> = []
+  for (const att of attachments) {
+    const file = await uploadFile(db, {
+      ownerEntityType: 'message',
+      ownerEntityId: messageId,
+      fileKind: 'attachment',
+      originalFilename: att.filename,
+      mimeType: att.mimeType.toLowerCase(),
+      data: att.data,
+    }, actorUserId)
+    saved.push({
+      id: file.id,
+      filename: file.originalFilename,
+      mimeType: file.mimeType,
+      fileSizeBytes: file.fileSizeBytes,
+    })
+  }
+  return saved
+}
+
+function toMailAttachments(attachments: OutboundAttachmentInput[]) {
+  return attachments.map(att => ({
+    filename: att.filename,
+    content: att.data,
+    contentType: att.mimeType.toLowerCase(),
+  }))
 }
 
 export interface InboundEmailAttachment {
@@ -448,16 +509,37 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
 }
 
 export async function getEmailMessageHtml(db: Db, conversationId: string, messageId: string) {
-  await getEmailThread(db, conversationId)
-  const [row] = await db.select({ htmlBody: emailMessageMeta.htmlBody })
+  const thread = await getEmailThread(db, conversationId)
+  const [row] = await db.select({
+    body: messages.body,
+    direction: emailMessageMeta.direction,
+    htmlBody: emailMessageMeta.htmlBody,
+    senderName: users.name,
+    accountTypeKey: accountTypes.key,
+  })
     .from(messages)
     .innerJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+    .leftJoin(users, eq(users.id, messages.senderUserId))
+    .leftJoin(accountTypes, eq(accountTypes.id, users.accountTypeId))
     .where(and(
       eq(messages.id, messageId),
       eq(messages.conversationId, conversationId),
     ))
     .limit(1)
   if (!row) throw new EmailInboxError('NOT_FOUND')
+
+  // Re-render our own outbound emails from the current template so historical
+  // messages reflect the latest signature/branding, not the HTML stored at send time.
+  if (row.direction === 'outbound' && row.senderName) {
+    const { html } = await buildOutboundEmailBodies(db, {
+      staffName: row.senderName,
+      accountTypeKey: row.accountTypeKey,
+      bodyText: row.body,
+      subject: thread.subject,
+    })
+    return { htmlBody: html }
+  }
+
   return { htmlBody: row.htmlBody }
 }
 
@@ -504,8 +586,11 @@ export async function startEmailThread(
   db: Db,
   actorUserId: string,
   input: { customerId: string, toEmail: string, subject: string, body: string },
+  attachments: OutboundAttachmentInput[] = [],
 ) {
   if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
+
+  assertValidOutboundAttachments(attachments)
 
   const toEmail = input.toEmail.trim().toLowerCase()
   const [customer] = await db.select({
@@ -528,12 +613,17 @@ export async function startEmailThread(
   }
   if (!allowedEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
 
-  const [actor] = await db.select({ id: users.id, name: users.name }).from(users)
-    .where(eq(users.id, actorUserId)).limit(1)
-  if (!actor) throw new EmailInboxError('NOT_FOUND')
+  const actor = await getActorForOutbound(db, actorUserId)
 
+  const subject = input.subject.trim()
+  const normalizedBody = normalizeOutgoingMessage(input.body.trim())
   const internetMessageId = generateInternetMessageId()
-  const { text, html, brand } = await buildOutboundEmailBodies(db, actor.name, input.body)
+  const { text, html, brand } = await buildOutboundEmailBodies(db, {
+    staffName: actor.name,
+    accountTypeKey: actor.accountTypeKey,
+    bodyText: normalizedBody,
+    subject,
+  })
 
   const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
   await db.insert(emailThreads).values({
@@ -541,15 +631,17 @@ export async function startEmailThread(
     customerId: customer.id,
     counterpartEmail: toEmail,
     counterpartName: customer.displayName,
-    subject: input.subject.trim(),
+    subject,
     rootMessageId: internetMessageId,
   })
 
   const [message] = await db.insert(messages).values({
     conversationId: conversation!.id,
     senderUserId: actorUserId,
-    body: input.body.trim(),
+    body: normalizedBody,
   }).returning()
+
+  await persistOutboundAttachments(db, message!.id, actorUserId, attachments)
 
   await db.insert(emailMessageMeta).values({
     messageId: message!.id,
@@ -564,10 +656,11 @@ export async function startEmailThread(
 
   const delivered = await sendBrandedMail(db, {
     to: toEmail,
-    subject: input.subject.trim(),
+    subject,
     text,
     html,
     messageId: internetMessageId,
+    attachments: toMailAttachments(attachments),
   }, brand)
   if (!delivered.delivered && process.env.NODE_ENV === 'production') {
     throw new EmailInboxError('SEND_FAILED')
@@ -579,31 +672,55 @@ export async function startEmailThread(
   return { conversationId: conversation!.id, messageId: message!.id }
 }
 
+/** Load the sending staff member with their account-type key for the signature. */
+async function getActorForOutbound(db: Db, actorUserId: string) {
+  const [actor] = await db.select({
+    id: users.id,
+    name: users.name,
+    accountTypeKey: accountTypes.key,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(accountTypes.id, users.accountTypeId))
+    .where(eq(users.id, actorUserId))
+    .limit(1)
+  if (!actor) throw new EmailInboxError('NOT_FOUND')
+  return actor
+}
+
 export async function replyToEmailThread(
   db: Db,
   conversationId: string,
   actorUserId: string,
   body: string,
+  attachments: OutboundAttachmentInput[] = [],
 ) {
   if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
 
+  assertValidOutboundAttachments(attachments)
+
   const thread = await getEmailThread(db, conversationId)
-  const [actor] = await db.select({ id: users.id, name: users.name }).from(users)
-    .where(eq(users.id, actorUserId)).limit(1)
-  if (!actor) throw new EmailInboxError('NOT_FOUND')
+  const actor = await getActorForOutbound(db, actorUserId)
 
   const parent = await getLatestThreadHeaders(db, conversationId)
   const internetMessageId = generateInternetMessageId()
   const inReplyTo = parent?.internetMessageId ?? thread.rootMessageId
   const references = buildReferences(parent?.emailReferences, inReplyTo)
   const subject = subjectWithRePrefix(thread.subject)
-  const { text, html, brand } = await buildOutboundEmailBodies(db, actor.name, body)
+  const normalizedBody = normalizeOutgoingMessage(body.trim())
+  const { text, html, brand } = await buildOutboundEmailBodies(db, {
+    staffName: actor.name,
+    accountTypeKey: actor.accountTypeKey,
+    bodyText: normalizedBody,
+    subject,
+  })
 
   const [message] = await db.insert(messages).values({
     conversationId,
     senderUserId: actorUserId,
-    body: body.trim(),
+    body: normalizedBody,
   }).returning()
+
+  const savedAttachments = await persistOutboundAttachments(db, message!.id, actorUserId, attachments)
 
   await db.insert(emailMessageMeta).values({
     messageId: message!.id,
@@ -626,6 +743,7 @@ export async function replyToEmailThread(
     messageId: internetMessageId,
     inReplyTo: inReplyTo ?? undefined,
     references: references ?? undefined,
+    attachments: toMailAttachments(attachments),
   }, brand)
   if (!delivered.delivered && process.env.NODE_ENV === 'production') {
     throw new EmailInboxError('SEND_FAILED')
@@ -646,6 +764,7 @@ export async function replyToEmailThread(
     htmlBody: html,
     fromAddress: normalizeEmailAddress(getSmtpConfig()!.from),
     entityRefs: [],
+    attachments: savedAttachments,
   }
 }
 

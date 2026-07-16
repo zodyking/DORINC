@@ -204,13 +204,16 @@ export function useDirectMessages() {
     return conv
   }
 
-  async function startEmailThread(input: { customerId: string, toEmail: string, subject: string, body: string }) {
+  async function startEmailThread(
+    input: { customerId: string, toEmail: string, subject: string, body: string },
+    files?: File[],
+  ) {
     if (sending.value) return
     sending.value = true
     try {
       const conv = await $fetch<{ conversationId: string }>('/api/conversations/email', {
         method: 'POST',
-        body: input,
+        body: files?.length ? buildEmailFormData(input, files) : input,
       })
       messageChannel.value = 'email'
       await fetchConversations()
@@ -222,13 +225,24 @@ export function useDirectMessages() {
     }
   }
 
-  async function sendMessage(body: string) {
+  async function sendMessage(body: string, files?: File[]) {
     if (!activeConversationId.value || !body.trim() || sending.value) return
     sending.value = true
     try {
+      let payload: FormData | { body: string }
+      if (files?.length) {
+        const form = new FormData()
+        form.append('body', body.trim())
+        for (const file of files) form.append('files', file, file.name)
+        payload = form
+      }
+      else {
+        payload = { body: body.trim() }
+      }
+
       const msg = await $fetch<ChatMessage>(`/api/conversations/${activeConversationId.value}/messages`, {
         method: 'POST',
-        body: { body: body.trim() },
+        body: payload,
       })
       messages.value = mergeMessages(messages.value, [msg])
       lastMessageId = msg.id
@@ -238,6 +252,19 @@ export function useDirectMessages() {
     finally {
       sending.value = false
     }
+  }
+
+  function buildEmailFormData(
+    input: { customerId: string, toEmail: string, subject: string, body: string },
+    files: File[],
+  ): FormData {
+    const form = new FormData()
+    form.append('customerId', input.customerId)
+    form.append('toEmail', input.toEmail)
+    form.append('subject', input.subject)
+    form.append('body', input.body)
+    for (const file of files) form.append('files', file, file.name)
+    return form
   }
 
   async function setChannel(channel: MessageChannel) {

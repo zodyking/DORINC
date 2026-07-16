@@ -11,6 +11,12 @@ export interface BrandedMailMessage {
   messageId?: string
   inReplyTo?: string
   references?: string
+  attachments?: Array<{
+    filename: string
+    content: Buffer
+    contentType?: string
+    cid?: string
+  }>
 }
 
 function patchHtmlLogoToCid(html: string, logoUrl: string | null | undefined, cid: string): string {
@@ -30,14 +36,15 @@ export async function sendBrandedMail(
   message: BrandedMailMessage,
   brand: EmailBrandContext,
 ) {
-  const attachment = await loadInlineLogoAttachment(db, brand)
-  if (!attachment) {
+  const userAttachments = message.attachments ?? []
+  const logo = await loadInlineLogoAttachment(db, brand)
+  if (!logo) {
     return sendMail(message)
   }
 
   return sendMail({
     ...message,
     html: patchHtmlLogoToCid(message.html, brand.logoUrl, EMAIL_INLINE_LOGO_CID),
-    attachments: [attachment],
+    attachments: [logo, ...userAttachments],
   })
 }

@@ -125,11 +125,18 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!--
+    sandbox="allow-same-origin" keeps scripts, forms, popups and top-navigation
+    disabled while still granting the parent access to contentDocument so the
+    frame can be measured and expanded to its natural height. An empty sandbox
+    gives the frame an opaque origin, which blocks measurement and leaves the
+    email crushed to the initial height.
+  -->
   <iframe
     ref="frameRef"
     class="dm-email-html-frame"
     :style="{ height: `${frameHeight}px` }"
-    sandbox=""
+    sandbox="allow-same-origin"
     referrerpolicy="no-referrer"
     scrolling="no"
     :srcdoc="srcdoc"

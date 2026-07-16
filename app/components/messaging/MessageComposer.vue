@@ -13,11 +13,64 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  send: [body: string]
+  send: [body: string, files: File[]]
 }>()
 
 const text = ref('')
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const fileInputEl = ref<HTMLInputElement | null>(null)
+const attachments = ref<File[]>([])
+const attachmentError = ref('')
+
+const ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf'
+const MAX_ATTACHMENTS = 10
+const MAX_ATTACHMENT_MB = 25
+const ATTACH_ALLOWED = new Set(ATTACH_ACCEPT.split(','))
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function openFilePicker() {
+  attachmentError.value = ''
+  fileInputEl.value?.click()
+}
+
+function onFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const picked = Array.from(input.files ?? [])
+  input.value = ''
+  if (!picked.length) return
+
+  const errors: string[] = []
+  for (const file of picked) {
+    if (attachments.value.length >= MAX_ATTACHMENTS) {
+      errors.push(`Up to ${MAX_ATTACHMENTS} attachments allowed`)
+      break
+    }
+    if (file.type && !ATTACH_ALLOWED.has(file.type)) {
+      errors.push(`${file.name}: unsupported type`)
+      continue
+    }
+    if (file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+      errors.push(`${file.name}: exceeds ${MAX_ATTACHMENT_MB} MB`)
+      continue
+    }
+    if (attachments.value.some(f => f.name === file.name && f.size === file.size)) continue
+    attachments.value.push(file)
+  }
+  attachmentError.value = errors.join(' · ')
+}
+
+function removeAttachment(index: number) {
+  attachments.value.splice(index, 1)
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/')
+}
 const pickerOpen = ref(false)
 const pickerType = ref<MessageEntityType | null>(null)
 const pickerQuery = ref('')
@@ -105,8 +158,10 @@ function insertEntity(item: EntitySearchItem) {
 function submit() {
   const body = text.value.trim()
   if (!body || props.disabled) return
-  emit('send', body)
+  emit('send', body, attachments.value.slice())
   text.value = ''
+  attachments.value = []
+  attachmentError.value = ''
   closePicker()
 }
 
@@ -170,7 +225,48 @@ function onKeydown(e: KeyboardEvent) {
         <div v-else-if="!pickerItems.length" class="dm-entity-picker-empty">No matches</div>
       </div>
     </div>
+    <div v-if="isEmail && attachments.length" class="dm-compose-attachments" aria-label="Pending attachments">
+      <div
+        v-for="(file, i) in attachments"
+        :key="`${file.name}-${file.size}-${i}`"
+        class="dm-compose-chip"
+        :class="{ 'is-image': isImageFile(file) }"
+      >
+        <span class="dm-compose-chip-icon" aria-hidden="true">{{ isImageFile(file) ? '🖼️' : '📎' }}</span>
+        <span class="dm-compose-chip-name" :title="file.name">{{ file.name }}</span>
+        <small class="dm-compose-chip-size">{{ formatFileSize(file.size) }}</small>
+        <button
+          type="button"
+          class="dm-compose-chip-remove"
+          :aria-label="`Remove ${file.name}`"
+          @click="removeAttachment(i)"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+    <p v-if="isEmail && attachmentError" class="dm-compose-attach-error">{{ attachmentError }}</p>
     <form class="dm-compose-form" :class="{ 'dm-compose-form--email': isEmail }" @submit.prevent="submit">
+      <input
+        v-if="isEmail"
+        ref="fileInputEl"
+        type="file"
+        class="dm-compose-file-input"
+        :accept="ATTACH_ACCEPT"
+        multiple
+        @change="onFilesSelected"
+      >
+      <button
+        v-if="isEmail"
+        type="button"
+        class="dm-attach-btn"
+        :disabled="disabled"
+        aria-label="Attach files or images"
+        title="Attach files or images"
+        @click="openFilePicker"
+      >
+        📎
+      </button>
       <textarea
         ref="textareaEl"
         v-model="text"

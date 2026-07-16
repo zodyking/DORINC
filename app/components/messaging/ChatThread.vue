@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: []
-  send: [body: string]
+  send: [body: string, files: File[]]
   'deletion-requested': []
 }>()
 
@@ -127,7 +127,7 @@ watch(() => props.conversation?.id, () => {
       v-if="conversation"
       :disabled="loading || sending"
       :mode="isEmail ? 'email' : 'dm'"
-      @send="emit('send', $event)"
+      @send="(body, files) => emit('send', body, files)"
     />
   </div>
 </template>

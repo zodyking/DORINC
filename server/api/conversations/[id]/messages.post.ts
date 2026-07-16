@@ -7,6 +7,7 @@ import {
 import {
   EmailInboxError,
   getConversationType,
+  type OutboundAttachmentInput,
   replyToEmailThread,
 } from '../../../services/email-inbox.service'
 import { throwMessagesApiError } from '../../../utils/messages-api-errors'
@@ -15,7 +16,8 @@ import { validateBody, validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 import { sendMessageSchema } from '../../../../shared/validators/messages'
 import { emailReplySchema } from '../../../../shared/validators/email-inbox'
-import { apiError } from '../../../utils/api-error'
+import { apiError, validationError } from '../../../utils/api-error'
+import { isMultipartRequest, readEmailComposeForm } from '../../../utils/email-compose-form'
 
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'messages.send.own')
@@ -26,15 +28,30 @@ export default defineEventHandler(async (event) => {
   if (!type) throw apiError(event, 'NOT_FOUND', 'Conversation not found')
 
   if (type === 'email') {
-    const body = await validateBody(event, emailReplySchema)
+    let replyBody: string
+    let attachments: OutboundAttachmentInput[] = []
+    if (isMultipartRequest(event)) {
+      const form = await readEmailComposeForm(event)
+      const parsed = emailReplySchema.safeParse({ body: form?.fields.body ?? '' })
+      if (!parsed.success) throw validationError(event, parsed.error)
+      replyBody = parsed.data.body
+      attachments = form?.attachments ?? []
+    }
+    else {
+      const body = await validateBody(event, emailReplySchema)
+      replyBody = body.body
+    }
+
     try {
-      return await replyToEmailThread(db, id, user.id, body.body)
+      return await replyToEmailThread(db, id, user.id, replyBody, attachments)
     }
     catch (err) {
       if (err instanceof EmailInboxError) {
         if (err.code === 'NOT_CONFIGURED') throw apiError(event, 'SERVICE_UNAVAILABLE', 'SMTP is not configured')
         if (err.code === 'SEND_FAILED') throw apiError(event, 'UPSTREAM_ERROR', 'Email could not be sent')
         if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Conversation not found')
+        if (err.code === 'ATTACHMENT_TOO_LARGE') throw apiError(event, 'VALIDATION_ERROR', 'An attachment exceeds the upload size limit')
+        if (err.code === 'INVALID_ATTACHMENT') throw apiError(event, 'VALIDATION_ERROR', 'Only images and PDF attachments are allowed')
       }
       throw err
     }

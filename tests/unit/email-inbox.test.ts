@@ -3,7 +3,7 @@ import {
   buildOutboundEmailBodies,
   buildReferences,
   buildStaffEmailFooter,
-  buildStaffEmailHtmlFooter,
+  buildStaffEmailSignature,
   CUSTOMER_EMAIL_TAGLINE,
   extractEmailAddresses,
   normalizeEmailAddress,
@@ -75,9 +75,10 @@ describe('email-thread helpers', () => {
     expect(buildReferences(null, '<b@y.com>')).toBe('<b@y.com>')
   })
 
-  it('formats staff footer with first name and last initial', () => {
-    expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Jane D.')
-    expect(buildStaffEmailFooter('Jane Doe', 'Devon Onsite Repairs Inc')).toContain('Devon Onsite Repairs Inc')
+  it('formats staff footer with first name, last initial and role', () => {
+    const footer = buildStaffEmailFooter('Jane Doe', 'Administrator')
+    expect(footer).toContain('— Jane D.')
+    expect(footer).toContain('Administrator')
   })
 
   it('uses a customer-facing brand tagline for outbound mail', () => {
@@ -100,46 +101,46 @@ describe('email-thread helpers', () => {
     expect(brand.brandTagline).not.toBe('Accounting workspace')
   })
 
-  it('renders a polished staff signature card', () => {
-    const html = buildStaffEmailHtmlFooter('Brandon King', {
-      brandName: 'Devon Onsite Repairs INC',
-      brandLegal: 'Devon Onsite Repairs INC',
-      brandTagline: CUSTOMER_EMAIL_TAGLINE,
-      logoUrl: null,
-      logoInitial: 'D',
-      addressLines: ['387 Van Siclen Ave'],
-      phone: '(646) 731 7021',
-      email: 'accounting@devononsiterepairs.com',
-      website: 'https://devononsiterepairs.com/',
-      appUrl: 'https://devononsiterepairs.com',
-      settingsUrl: 'https://devononsiterepairs.com/admin',
-      helpUrl: 'https://devononsiterepairs.com/help',
-      signInUrl: 'https://devononsiterepairs.com/auth/login',
-    })
-    expect(html).toContain('Brandon K.')
-    expect(html).toContain('mailto:accounting@devononsiterepairs.com')
-    expect(html).toContain('tel:6467317021')
-    expect(html).toContain('border-radius:12px')
+  it('renders a simple staff signature with name and role', () => {
+    const html = buildStaffEmailSignature('Brandon King', 'Administrator')
+    expect(html).toContain('— Brandon K.')
+    expect(html).toContain('Administrator')
+    expect(html).toContain('font-weight:700')
+    // Contact details live in the shared footer, not the signature.
+    expect(html).not.toContain('mailto:')
+    expect(html).not.toContain('border-radius:12px')
   })
 
-  it('builds outbound HTML without the internal workspace label', async () => {
+  it('builds outbound HTML with the subject as the header subheading', async () => {
     const { html, text, brand } = await buildOutboundEmailBodies(
       {} as never,
-      'Brandon King',
-      'great\n\nThanks for confirming.',
+      {
+        staffName: 'Brandon King',
+        accountTypeKey: 'admin',
+        bodyText: 'great\n\nThanks for confirming.',
+        subject: 'Invoice question',
+      },
     )
-    expect(brand.brandTagline).toBe(CUSTOMER_EMAIL_TAGLINE)
-    expect(html).toContain('Onsite repairs')
+    expect(brand.brandTagline).toBe('Invoice question')
+    expect(html).toContain('Invoice question')
     expect(html).not.toContain('Accounting workspace')
     expect(html).not.toContain('>Message<')
     expect(html).not.toContain('<h1')
     expect(html).toContain('great')
     expect(html).toContain('Thanks for confirming.')
-    expect(html).toContain('Brandon K.')
-    expect(html).toContain('color:#111827')
-    expect(html).toContain('white-space:nowrap')
+    expect(html).toContain('— Brandon K.')
+    expect(html).toContain('Administrator')
     expect(text).toContain('great')
-    expect(text).toContain('Brandon K.')
+    expect(text).toContain('— Brandon K.')
+    expect(text).toContain('Administrator')
+  })
+
+  it('falls back to a customer-facing tagline when no subject is given', async () => {
+    const { brand } = await buildOutboundEmailBodies(
+      {} as never,
+      { staffName: 'Brandon King', accountTypeKey: 'manager', bodyText: 'hello' },
+    )
+    expect(brand.brandTagline).toBe(CUSTOMER_EMAIL_TAGLINE)
   })
 })
 
