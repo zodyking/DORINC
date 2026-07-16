@@ -9,6 +9,14 @@ export const DELETION_ENTITY_TABS: { key: 'all' | DeletionEntityType, label: str
   { key: 'conversation', label: 'Conversations' },
 ]
 
+export interface DeletionRequestRowView {
+  entityType: DeletionEntityType
+  entityLabel: string
+  reason: string
+  submittedByName?: string | null
+  submittedByEmail?: string | null
+}
+
 export function deletionEntityLabel(type: DeletionEntityType): string {
   switch (type) {
     case 'customer': return 'Customer'
@@ -19,11 +27,73 @@ export function deletionEntityLabel(type: DeletionEntityType): string {
   }
 }
 
+export function deletionPreservationNote(type: DeletionEntityType): string {
+  switch (type) {
+    case 'customer':
+      return 'The customer account is permanently removed. Related invoices, service logs, and vehicles keep their full customer information.'
+    case 'vehicle':
+      return 'The unit is permanently removed. Related invoices and service logs keep their full unit information.'
+    case 'service_log':
+      return 'The service log is permanently removed. Linked invoices keep their line items and customer/vehicle details.'
+    case 'invoice':
+      return 'The invoice is permanently removed. This cannot be undone.'
+    case 'conversation':
+      return 'The conversation and all messages are permanently removed. Linked customers, invoices, and other records are not affected.'
+    default:
+      return 'Related records keep their full information after this record is removed.'
+  }
+}
+
+export function deletionRequestTypeBadge(entityType: DeletionEntityType): { cls: string, label: string } {
+  return { cls: 'pill info', label: deletionEntityLabel(entityType) }
+}
+
+export function deletionRequestSubmitter(name: string | null, email: string | null): string {
+  if (name?.trim() && email?.trim()) return `${name.trim()} · ${email.trim()}`
+  return name?.trim() || email?.trim() || 'Staff'
+}
+
+export function deletionRequestPreviewText(reason: string): string {
+  return reason?.trim() || '—'
+}
+
+export function deletionRequestApproveLabel(entityType: DeletionEntityType): string {
+  switch (entityType) {
+    case 'customer': return 'Confirm delete customer'
+    case 'vehicle': return 'Confirm delete vehicle'
+    case 'service_log': return 'Confirm delete service log'
+    case 'invoice': return 'Confirm delete invoice'
+    case 'conversation': return 'Confirm delete conversation'
+    default: return 'Confirm deletion'
+  }
+}
+
+export function deletionRequestApproveHint(entityType: DeletionEntityType): string {
+  return deletionPreservationNote(entityType)
+}
+
+export function deletionRequestOutcomeSummary(entityType: DeletionEntityType): string {
+  switch (entityType) {
+    case 'customer':
+      return 'Outcome: customer permanently removed; related invoices and logs keep frozen snapshots'
+    case 'vehicle':
+      return 'Outcome: vehicle permanently removed; related invoices and logs keep frozen unit details'
+    case 'service_log':
+      return 'Outcome: service log permanently removed; linked invoices keep line items and customer/vehicle details'
+    case 'invoice':
+      return 'Outcome: invoice permanently removed'
+    case 'conversation':
+      return 'Outcome: conversation and messages permanently removed; other records unchanged'
+    default:
+      return 'Outcome: record permanently removed'
+  }
+}
+
 export function deletionStatusPill(status: string): { cls: string, label: string } {
   switch (status) {
-    case 'pending': return { cls: 'pill warn', label: 'Pending' }
+    case 'pending': return { cls: 'pill warn', label: 'Under review' }
     case 'approved': return { cls: 'pill ok', label: 'Approved' }
-    case 'rejected': return { cls: 'pill bad', label: 'Rejected' }
+    case 'rejected': return { cls: 'pill gray', label: 'Declined' }
     default: return { cls: 'pill gray', label: status }
   }
 }

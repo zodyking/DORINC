@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DeletionEntityType } from '~/server/db/schema/deletion-requests'
+import { deletionPreservationNote } from '~/utils/deletion-requests-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 const props = defineProps<{
@@ -21,22 +22,7 @@ const canSubmit = computed(() => auth.loaded && auth.can('deletion_requests.subm
 const canReview = computed(() => auth.loaded && auth.can('deletion_requests.review.all'))
 const canShow = computed(() => canSubmit.value)
 
-const preservationNote = computed(() => {
-  switch (props.entityType) {
-    case 'customer':
-      return 'The customer account is permanently removed. Related invoices, service logs, and vehicles keep their full customer information.'
-    case 'vehicle':
-      return 'The unit is permanently removed. Related invoices and service logs keep their full unit information.'
-    case 'service_log':
-      return 'The service log is permanently removed. Linked invoices keep their line items and customer/vehicle details.'
-    case 'invoice':
-      return 'The invoice is permanently removed. This cannot be undone.'
-    case 'conversation':
-      return 'The conversation and all messages are permanently removed. Linked customers, invoices, and other records are not affected.'
-    default:
-      return 'Related records keep their full information after this record is removed.'
-  }
-})
+const preservationNote = computed(() => deletionPreservationNote(props.entityType))
 
 const { data: pendingData, refresh: refreshPending } = useFetch<{
   pending: { id: string, status: string, reason: string, createdAt: string } | null

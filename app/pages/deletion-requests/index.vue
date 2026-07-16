@@ -3,6 +3,12 @@ import type { DeletionEntityType } from '~/server/db/schema/deletion-requests'
 import {
   DELETION_ENTITY_TABS,
   deletionEntityLabel,
+  deletionRequestApproveHint,
+  deletionRequestApproveLabel,
+  deletionRequestOutcomeSummary,
+  deletionRequestPreviewText,
+  deletionRequestSubmitter,
+  deletionRequestTypeBadge,
   deletionStatusPill,
   deletionWhen,
 } from '~/utils/deletion-requests-ui'
@@ -80,10 +86,9 @@ const modalRow = ref<DeletionRequestRow | null>(null)
 const modalReason = ref('')
 const actionError = ref('')
 
-function submitterLabel(row: DeletionRequestRow) {
-  if (row.submittedByName) return row.submittedByName
-  return row.submittedByEmail ?? 'Staff'
-}
+const modalApproveLabel = computed(() =>
+  modalRow.value ? deletionRequestApproveLabel(modalRow.value.entityType) : 'Confirm deletion',
+)
 
 function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject') {
   modalRow.value = row
@@ -186,23 +191,33 @@ async function submitModal() {
         <div v-else-if="!items.length" class="cbody" style="color:#94a3b8; font-size:13px;">
           No deletion requests match this filter.
         </div>
-        <div v-else>
+        <div v-else id="deletion-req-queue">
           <div v-for="row in items" :key="row.id" class="modrow">
             <span class="av" :class="avColor(row.entityLabel)">{{ initials(row.entityLabel) }}</span>
             <div class="nm">
-              <b>{{ row.entityLabel }}</b>
+              <div class="row-title">
+                <b>{{ row.entityLabel }}</b>
+                <span :class="deletionRequestTypeBadge(row.entityType).cls">
+                  {{ deletionRequestTypeBadge(row.entityType).label }}
+                </span>
+              </div>
               <small>
                 {{ deletionEntityLabel(row.entityType) }}
-                · {{ submitterLabel(row) }}
+                · {{ deletionRequestSubmitter(row.submittedByName, row.submittedByEmail) }}
                 · {{ deletionWhen(row.createdAt) }}
               </small>
-              <div style="margin-top:6px; font-size:13px; color:#cbd5e1;">{{ row.reason }}</div>
-              <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                <span :class="deletionStatusPill(row.status).cls">{{ deletionStatusPill(row.status).label }}</span>
-                <NuxtLink :to="row.entityHref" class="btn sm">View record</NuxtLink>
+
+              <div class="request-preview">{{ deletionRequestPreviewText(row.reason) }}</div>
+
+              <div class="request-meta">
+                <NuxtLink :to="row.entityHref" class="link">View record</NuxtLink>
               </div>
-              <div v-if="row.reviewReason && row.status !== 'pending'" style="margin-top:6px; font-size:12px; color:#94a3b8;">
-                Admin note{{ row.reviewedByName ? ` (${row.reviewedByName})` : '' }}: {{ row.reviewReason }}
+
+              <div class="request-badges">
+                <span :class="deletionStatusPill(row.status).cls">{{ deletionStatusPill(row.status).label }}</span>
+              </div>
+              <div v-if="row.reviewReason && row.status !== 'pending'" class="review-note">
+                Staff note{{ row.reviewedByName ? ` (${row.reviewedByName})` : '' }}: {{ row.reviewReason }}
               </div>
             </div>
             <div v-if="row.status === 'pending'" class="acts">
@@ -212,7 +227,7 @@ async function submitModal() {
                 :disabled="busyId === row.id"
                 @click="openModal(row, 'approve')"
               >
-                Approve deletion
+                {{ deletionRequestApproveLabel(row.entityType) }}
               </button>
               <button
                 class="btn sm"
@@ -245,45 +260,68 @@ async function submitModal() {
       </div>
     </template>
 
-    <div v-if="modalOpen && modalRow" class="modal open" role="dialog" aria-modal="true">
-      <div class="sheet">
-        <div class="chead">
-          <h3>{{ modalMode === 'approve' ? 'Approve deletion' : 'Reject request' }}</h3>
-          <button type="button" class="btn sm" @click="closeModal">Close</button>
+    <div
+      v-if="modalOpen && modalRow"
+      class="modal-scrim open"
+      @click.self="closeModal"
+    >
+      <div class="modal staff-req-modal" role="dialog" aria-modal="true" @click.stop>
+        <div class="mhead">
+          <div>
+            <h3>{{ modalMode === 'approve' ? modalApproveLabel : 'Reject request' }}</h3>
+            <p v-if="modalMode === 'approve'">{{ deletionRequestApproveHint(modalRow.entityType) }}</p>
+            <p v-else>The record stays active. Tell the requester why deletion was declined.</p>
+          </div>
+          <button type="button" class="close" aria-label="Close" @click="closeModal">×</button>
         </div>
-        <div class="cbody">
-          <p style="font-size:13px; color:#94a3b8; margin:0 0 12px;">
-            {{ modalMode === 'approve'
-              ? 'The record will be permanently deleted. Related invoices and logs keep frozen copies of customer/vehicle details.'
-              : 'The record stays active. Tell the requester why deletion was declined.' }}
-          </p>
-          <p style="margin:0 0 12px;">
-            <b>{{ modalRow.entityLabel }}</b> — {{ deletionEntityLabel(modalRow.entityType) }}
-          </p>
-          <p style="font-size:13px; color:#64748b; margin:0 0 12px;">Reason: {{ modalRow.reason }}</p>
-          <label class="fld">
-            <span>{{ modalMode === 'reject' ? 'Rejection reason' : 'Admin note (optional)' }}</span>
+
+        <div class="mbody">
+          <div class="staff-req-modal-context">
+            <p class="staff-req-modal-title">
+              <b>{{ modalRow.entityLabel }}</b> — {{ deletionEntityLabel(modalRow.entityType) }}
+            </p>
+            <p class="staff-req-modal-meta">
+              {{ deletionRequestSubmitter(modalRow.submittedByName, modalRow.submittedByEmail) }}
+              · {{ deletionWhen(modalRow.createdAt) }}
+            </p>
+            <p v-if="modalMode === 'approve'" class="callout info staff-req-outcome">
+              {{ deletionRequestOutcomeSummary(modalRow.entityType) }}
+            </p>
+          </div>
+
+          <div class="staff-req-message">
+            <p class="staff-req-message-label">Deletion reason</p>
+            <div class="staff-req-message-body">{{ deletionRequestPreviewText(modalRow.reason) }}</div>
+          </div>
+
+          <div class="staff-req-links">
+            <NuxtLink :to="modalRow.entityHref" class="link">View record</NuxtLink>
+          </div>
+
+          <label class="fld" style="margin-top:16px;">
+            <span>{{ modalMode === 'reject' ? 'Rejection reason' : 'Staff note (optional)' }}</span>
             <textarea
               v-model="modalReason"
               rows="4"
+              :required="modalMode === 'reject'"
               :placeholder="modalMode === 'reject' ? 'Required — visible in audit log' : 'Optional internal note'"
             />
           </label>
-          <p v-if="actionError" style="color:#f87171; font-size:13px; margin:8px 0 0;">{{ actionError }}</p>
-          <div style="display:flex; gap:8px; margin-top:16px;">
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="busyId === modalRow.id"
-              @click="submitModal"
-            >
-              {{ modalMode === 'approve' ? 'Confirm approve' : 'Confirm reject' }}
-            </button>
-            <button type="button" class="btn" @click="closeModal">Cancel</button>
-          </div>
+          <p v-if="actionError" class="staff-req-error">{{ actionError }}</p>
+        </div>
+
+        <div class="mfoot">
+          <button type="button" class="btn" @click="closeModal">Cancel</button>
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="busyId === modalRow.id"
+            @click="submitModal"
+          >
+            {{ modalMode === 'approve' ? 'Confirm deletion' : 'Confirm reject' }}
+          </button>
         </div>
       </div>
-      <button class="modal-scrim" aria-label="Close dialog" @click="closeModal" />
     </div>
   </section>
 </template>
@@ -298,7 +336,91 @@ async function submitModal() {
 }
 .modrow:last-child { border-bottom: none; }
 .modrow .nm { flex: 1; min-width: 0; }
-.modrow .nm b { display: block; font-size: 14px; }
+.row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.row-title b { font-size: 14px; }
 .modrow .nm small { color: #94a3b8; font-size: 12px; }
 .modrow .acts { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.request-preview {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+.request-badges {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.review-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.staff-req-modal {
+  width: min(640px, 100%);
+}
+.staff-req-modal-context {
+  margin-bottom: 12px;
+}
+.staff-req-modal-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.staff-req-modal-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+.staff-req-outcome {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.staff-req-message-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.staff-req-message-body {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: #334155;
+}
+.staff-req-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+.staff-req-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin: 8px 0 0;
+}
 </style>
