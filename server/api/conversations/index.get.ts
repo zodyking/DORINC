@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
     q: query.q,
     page: query.page,
     pageSize: query.pageSize,
+    emailScope: query.emailScope,
   }
 
   if (query.channel === 'dm') {

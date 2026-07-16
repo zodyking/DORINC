@@ -15,6 +15,7 @@ export const createConversationSchema = z.object({
 export const conversationListQuerySchema = paginationSchema.extend({
   q: z.string().trim().max(200).optional(),
   channel: z.enum(['all', 'dm', 'email']).default('all'),
+  emailScope: z.enum(['customers', 'all']).default('customers'),
 })
 
 export const messageListQuerySchema = paginationSchema.extend({

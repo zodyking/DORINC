@@ -50,52 +50,58 @@ export async function ensureEmailInboxReady(db: Db): Promise<void> {
   }
 }
 
-export async function buildAllowedFilterAddresses(db: Db): Promise<Set<string>> {
+export async function buildCustomerEmailAddresses(db: Db): Promise<Set<string>> {
   const filters = getImapFilters()
-  const allowed = new Set<string>()
+  const emails = new Set<string>()
+  if (!filters.includeCustomerEmails) return emails
+
+  const customerRows = await db.select({ email: customers.email }).from(customers)
+    .where(isNull(customers.archivedAt))
+  for (const row of customerRows) {
+    if (row.email) emails.add(row.email.toLowerCase())
+  }
+
+  const contactRows = await db.select({ email: customerContacts.email }).from(customerContacts)
+    .where(isNull(customerContacts.archivedAt))
+  for (const row of contactRows) {
+    if (row.email) emails.add(row.email.toLowerCase())
+  }
+
+  return emails
+}
+
+export function buildCompanyInboxAddresses(): Set<string> {
+  const filters = getImapFilters()
+  const inboxes = new Set<string>()
 
   for (const addr of [filters.companyEmail, ...filters.additionalEmails]) {
-    if (addr) allowed.add(addr.toLowerCase())
+    if (addr) inboxes.add(addr.toLowerCase())
   }
 
   const smtp = getSmtpConfig()
   if (smtp?.from) {
-    for (const addr of extractEmailAddresses(smtp.from)) allowed.add(addr)
+    for (const addr of extractEmailAddresses(smtp.from)) inboxes.add(addr)
   }
-  if (smtp?.user) allowed.add(smtp.user.toLowerCase())
+  if (smtp?.user) inboxes.add(smtp.user.toLowerCase())
 
-  if (filters.includeCustomerEmails) {
-    const customerRows = await db.select({ email: customers.email }).from(customers)
-      .where(isNull(customers.archivedAt))
-    for (const row of customerRows) {
-      if (row.email) allowed.add(row.email.toLowerCase())
-    }
-
-    const contactRows = await db.select({ email: customerContacts.email }).from(customerContacts)
-      .where(isNull(customerContacts.archivedAt))
-    for (const row of contactRows) {
-      if (row.email) allowed.add(row.email.toLowerCase())
-    }
-  }
-
-  return allowed
+  return inboxes
 }
 
-export function messageMatchesFilter(
-  allowed: Set<string>,
+/** Import only customer → company inbox mail (blocks Google alerts, newsletters, etc.). */
+export function messageMatchesCustomerInboxFilter(
+  companyInboxes: Set<string>,
+  customerEmails: Set<string>,
   from: string,
   to: string[],
   cc: string[] = [],
 ): boolean {
-  const participants = new Set([
-    normalizeEmailAddress(from),
-    ...to.map(normalizeEmailAddress),
-    ...cc.map(normalizeEmailAddress),
-  ])
-  for (const addr of participants) {
-    if (allowed.has(addr)) return true
-  }
-  return false
+  if (!companyInboxes.size || !customerEmails.size) return false
+
+  const fromAddr = normalizeEmailAddress(from)
+  if (!customerEmails.has(fromAddr)) return false
+
+  const recipients = [...to, ...cc].map(normalizeEmailAddress)
+  return recipients.some(addr => companyInboxes.has(addr))
 }
 
 export async function resolveCustomerByEmail(db: Db, email: string) {
@@ -151,7 +157,9 @@ export async function listEmailConversations(db: Db, filter: {
   q?: string
   page: number
   pageSize: number
+  emailScope?: 'customers' | 'all'
 }) {
+  const customerEmails = await buildCustomerEmailAddresses(db)
   const rows = await db.select({
     conversation: conversations,
     thread: emailThreads,
@@ -164,6 +172,10 @@ export async function listEmailConversations(db: Db, filter: {
 
   const items: EmailConversationSummary[] = []
   for (const row of rows) {
+    const counterpart = row.thread.counterpartEmail.toLowerCase()
+    const isCustomerThread = !!row.thread.customerId || customerEmails.has(counterpart)
+    if (filter.emailScope !== 'all' && !isCustomerThread) continue
+
     const label = row.customerName || row.thread.counterpartName || row.thread.counterpartEmail
     if (filter.q) {
       const term = filter.q.toLowerCase()
@@ -508,8 +520,9 @@ export async function ingestInboundEmail(db: Db, input: {
   if (existing) return { skipped: true as const, reason: 'duplicate' as const }
 
   const from = normalizeEmailAddress(input.from)
-  const allowed = await buildAllowedFilterAddresses(db)
-  if (!messageMatchesFilter(allowed, from, input.to, input.cc ?? [])) {
+  const companyInboxes = buildCompanyInboxAddresses()
+  const customerEmails = await buildCustomerEmailAddresses(db)
+  if (!messageMatchesCustomerInboxFilter(companyInboxes, customerEmails, from, input.to, input.cc ?? [])) {
     return { skipped: true as const, reason: 'filtered' as const }
   }
 

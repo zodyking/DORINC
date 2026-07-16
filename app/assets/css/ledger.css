@@ -1676,6 +1676,11 @@ section.page.active.dm-page{
 .dm-email-form select, .dm-email-form input, .dm-email-form textarea{
   font:inherit; font-weight:400; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;
 }
+.dm-email-filter{
+  display:flex; align-items:flex-start; gap:8px; font-size:12px; color:#64748b;
+  line-height:1.35; cursor:pointer; user-select:none;
+}
+.dm-email-filter input{ margin-top:2px; flex-shrink:0; accent-color:#4f46e5; }
 .dm-search{
   width:100%; border:1px solid #e2e8f0; border-radius:10px; padding:9px 12px;
   font:inherit; font-size:13px; background:#fff;

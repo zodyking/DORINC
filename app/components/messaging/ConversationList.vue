@@ -59,10 +59,7 @@ const subjectLine = computed(() =>
     :class="{ on: active, unread: conversation.unreadCount > 0, 'is-email': isEmail }"
     @click="emit('select', conversation.id)"
   >
-    <span class="dm-conv-av" :class="[avCls, { 'dm-conv-av-gmail': isEmail }]">
-      <img v-if="isEmail" src="/icons/gmail.svg" alt="" class="dm-gmail-icon" width="18" height="18">
-      <template v-else>{{ avInitials }}</template>
-    </span>
+    <span class="dm-conv-av" :class="avCls">{{ avInitials }}</span>
     <span class="dm-conv-main">
       <span class="dm-conv-top">
         <b>{{ displayName }}</b>

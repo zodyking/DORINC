@@ -6,7 +6,7 @@ import {
   normalizeEmailAddress,
   subjectWithRePrefix,
 } from '../../server/mail/email-thread'
-import { messageMatchesFilter } from '../../server/services/email-inbox.service'
+import { messageMatchesCustomerInboxFilter } from '../../server/services/email-inbox.service'
 
 describe('email-thread helpers', () => {
   it('normalizes display-name wrapped addresses', () => {
@@ -34,22 +34,57 @@ describe('email-thread helpers', () => {
   })
 })
 
-describe('messageMatchesFilter', () => {
-  const allowed = new Set(['shop@company.com', 'customer@client.com'])
+describe('messageMatchesCustomerInboxFilter', () => {
+  const companyInboxes = new Set(['accounting@company.com'])
+  const customerEmails = new Set(['customer@client.com', 'devononsiterepairsinc@gmail.com'])
 
-  it('matches when company address is in To', () => {
-    expect(messageMatchesFilter(allowed, 'someone@else.com', ['shop@company.com'], [])).toBe(true)
+  it('matches customer email sent to company inbox', () => {
+    expect(messageMatchesCustomerInboxFilter(
+      companyInboxes,
+      customerEmails,
+      'customer@client.com',
+      ['accounting@company.com'],
+      [],
+    )).toBe(true)
   })
 
-  it('matches when customer address is in From', () => {
-    expect(messageMatchesFilter(allowed, 'customer@client.com', ['shop@company.com'], [])).toBe(true)
+  it('matches when company inbox is in Cc', () => {
+    expect(messageMatchesCustomerInboxFilter(
+      companyInboxes,
+      customerEmails,
+      'devononsiterepairsinc@gmail.com',
+      ['other@staff.com'],
+      ['accounting@company.com'],
+    )).toBe(true)
   })
 
-  it('rejects unrelated participants', () => {
-    expect(messageMatchesFilter(allowed, 'spam@junk.com', ['other@junk.com'], [])).toBe(false)
+  it('rejects Google alerts not from a customer', () => {
+    expect(messageMatchesCustomerInboxFilter(
+      companyInboxes,
+      customerEmails,
+      'no-reply@accounts.google.com',
+      ['accounting@company.com'],
+      [],
+    )).toBe(false)
   })
 
-  it('matches Cc participants', () => {
-    expect(messageMatchesFilter(allowed, 'x@y.com', ['a@b.com'], ['customer@client.com'])).toBe(true)
+  it('rejects customer mail not sent to company inbox', () => {
+    expect(messageMatchesCustomerInboxFilter(
+      companyInboxes,
+      customerEmails,
+      'customer@client.com',
+      ['other@junk.com'],
+      [],
+    )).toBe(false)
+  })
+
+  it('rejects when customer or company sets are empty', () => {
+    expect(messageMatchesCustomerInboxFilter(
+      new Set(),
+      customerEmails,
+      'customer@client.com',
+      ['accounting@company.com'],
+      [],
+    )).toBe(false)
   })
 })

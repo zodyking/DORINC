@@ -65,6 +65,7 @@ export function useDirectMessages() {
   const sending = useState('dm-sending', () => false)
   const conversationSearch = useState('dm-conversation-search', () => '')
   const messageChannel = useState<MessageChannel>('dm-message-channel', () => 'all')
+  const emailShowAll = useState('dm-email-show-all', () => false)
   const fetchError = useState<string | null>('dm-fetch-error', () => null)
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -100,6 +101,7 @@ export function useDirectMessages() {
         query: {
           q: conversationSearch.value || undefined,
           channel: messageChannel.value,
+          emailScope: emailShowAll.value ? 'all' : 'customers',
           page: 1,
           pageSize: 50,
         },
@@ -210,6 +212,14 @@ export function useDirectMessages() {
     await fetchConversations()
   }
 
+  async function setEmailShowAll(showAll: boolean) {
+    if (emailShowAll.value === showAll) return
+    emailShowAll.value = showAll
+    activeConversationId.value = null
+    messages.value = []
+    await fetchConversations()
+  }
+
   async function pollActive() {
     if (!canUseMessages.value) return
     await fetchUnreadCount()
@@ -263,6 +273,7 @@ export function useDirectMessages() {
     sending,
     conversationSearch,
     messageChannel,
+    emailShowAll,
     fetchError,
     canUseMessages,
     fetchConversations,
@@ -273,6 +284,7 @@ export function useDirectMessages() {
     sendMessage,
     markRead,
     setChannel,
+    setEmailShowAll,
     startPolling,
     stopPolling,
   })
