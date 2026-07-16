@@ -82,9 +82,7 @@ const {
   refresh: refreshStats,
   error: statsError,
   pending: statsPending,
-} = useFetch<InvoiceStats>('/api/invoices/stats', {
-  server: false,
-  lazy: true,
+} = useClientFetch<InvoiceStats>('/api/invoices/stats', {
   immediate: false,
 })
 
@@ -93,10 +91,8 @@ const {
   refresh: refreshList,
   error: listError,
   pending: listPending,
-} = useFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', {
+} = useClientFetch<{ items: InvoiceRow[], total: number }>('/api/invoices', {
   query,
-  server: false,
-  lazy: true,
   immediate: false,
 })
 

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
+import { loginPathForRoute, redirectToLogin } from '~/utils/auth-session'
 
 export interface AuthUser {
   id: string
@@ -27,6 +28,9 @@ export const useAuthStore = defineStore('auth', {
 
   actions: {
     loginPath(): string {
+      if (import.meta.client) {
+        return loginPathForRoute(window.location.pathname)
+      }
       if (this.isCustomer) return '/auth/login'
       return '/auth/login?card=staff'
     },
@@ -38,12 +42,16 @@ export const useAuthStore = defineStore('auth', {
         const res = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
         this.user = res.user
         this.permissions = res.permissions
+        return true
       }
       catch {
         this.user = null
         this.permissions = []
+        return false
       }
-      this.loaded = true
+      finally {
+        this.loaded = true
+      }
     },
 
     async login(identifier: string, password: string, portal: 'customer' | 'staff') {
@@ -89,7 +97,8 @@ export const useAuthStore = defineStore('auth', {
       this.permissions = []
       this.loaded = true
       if (redirect) {
-        await navigateTo(this.loginPath(), { replace: true })
+        const path = import.meta.client ? window.location.pathname : this.loginPath()
+        await redirectToLogin(path)
       }
     },
 

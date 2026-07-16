@@ -10,6 +10,7 @@ import {
   validateNewPassword,
 } from '~/utils/account-ui'
 import { accountTypeLabel, accountTypePill, avColor, initials } from '~/utils/users-ui'
+import { redirectToLogin } from '~/utils/auth-session'
 
 definePageMeta({ layout: 'staff' })
 
@@ -132,7 +133,7 @@ async function revokeSession(sessionId: string) {
       auth.user = null
       auth.permissions = []
       auth.loaded = true
-      await navigateTo('/auth/login?card=staff', { replace: true })
+      await redirectToLogin('/account')
       return
     }
     await refresh()

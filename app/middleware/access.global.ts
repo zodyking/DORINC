@@ -8,8 +8,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const auth = useAuthStore()
 
-  // Ensure auth is loaded
+  // Ensure auth is loaded and re-validate cookie on client navigations.
   if (!auth.loaded) {
+    await auth.fetchMe()
+  }
+  else if (import.meta.client && auth.isSignedIn) {
     await auth.fetchMe()
   }
 
