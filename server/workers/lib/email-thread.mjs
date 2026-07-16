@@ -27,6 +27,18 @@ export function buildReferences(existing, parentId) {
   return parts.length ? parts.join(' ') : null
 }
 
+export function buildReplyThreadHeaders(input) {
+  const baseSubject = String(input.subject ?? '').trim()
+    || String(input.fallbackSubject ?? '').trim()
+    || '(No subject)'
+  const inReplyTo = String(input.parentMessageId ?? '').trim() || null
+  return {
+    subject: subjectWithRePrefix(baseSubject),
+    inReplyTo,
+    references: buildReferences(input.existingReferences, inReplyTo),
+  }
+}
+
 export function messageIdDomain(fromAddress) {
   const normalized = normalizeEmailAddress(fromAddress)
   return normalized.split('@')[1] || 'dorinc.local'

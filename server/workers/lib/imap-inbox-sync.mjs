@@ -6,12 +6,11 @@ import { ensureEmailInboxSchema } from '../../lib/ensure-email-inbox-schema.mjs'
 import { loadImapConfig, loadSmtpConfig } from './app-config.mjs'
 import { loadImapFilters } from './imap-filters.mjs'
 import {
-  buildReferences,
+  buildReplyThreadHeaders,
   extractEmailAddresses,
   generateInternetMessageId,
   messageIdDomain,
   normalizeEmailAddress,
-  subjectWithRePrefix,
 } from './email-thread.mjs'
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
@@ -179,7 +178,12 @@ async function sendAutoResponder(pool, input) {
 
   const brand = await loadEmailBrand(pool)
   const autoSubject = auto.subject.trim() || 'We received your message'
-  const replySubject = subjectWithRePrefix(autoSubject)
+  const { subject: replySubject, inReplyTo, references } = buildReplyThreadHeaders({
+    subject: input.inboundSubject,
+    fallbackSubject: autoSubject,
+    parentMessageId: input.inboundMessageId,
+    existingReferences: input.inboundReferences,
+  })
   const mail = buildCustomerAutoResponderEmail({
     recipientName: input.recipientName,
     subject: replySubject,
@@ -190,7 +194,6 @@ async function sendAutoResponder(pool, input) {
 
   const { transport, from, config } = await getSmtpTransport(pool)
   const internetMessageId = generateInternetMessageId(messageIdDomain(from))
-  const references = buildReferences(null, input.inboundMessageId)
   const prepared = await embedInlineLogoInHtml(mail.html)
 
   try {
@@ -201,7 +204,7 @@ async function sendAutoResponder(pool, input) {
       text: mail.text,
       html: prepared.html,
       messageId: internetMessageId,
-      inReplyTo: input.inboundMessageId,
+      inReplyTo: inReplyTo ?? undefined,
       references: references ?? undefined,
       attachments: prepared.attachments,
     })
@@ -227,13 +230,16 @@ async function sendAutoResponder(pool, input) {
     [
       messageId,
       internetMessageId,
-      input.inboundMessageId,
+      inReplyTo,
       references,
       normalizeEmailAddress(config.from),
       JSON.stringify([to]),
       mail.html,
     ],
   )
+
+  await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [input.conversationId])
+  await pool.query(`UPDATE email_threads SET updated_at = now() WHERE conversation_id = $1`, [input.conversationId])
 
   console.info('[imap-sync] auto-responder sent to', to)
   return { sent: true }
@@ -386,6 +392,8 @@ async function ingestInboundEmail(pool, input, filters) {
         toEmail: from,
         recipientName: customer?.displayName ?? null,
         inboundMessageId: normalizedId,
+        inboundSubject: input.subject,
+        inboundReferences: input.references,
       })
     }
     catch (err) {

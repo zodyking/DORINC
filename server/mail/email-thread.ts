@@ -130,3 +130,19 @@ export function buildReferences(existing: string | null | undefined, parentId: s
   if (parentId && !parts.includes(parentId)) parts.push(parentId)
   return parts.length ? parts.join(' ') : null
 }
+
+/** Build RFC threading headers consistently for staff replies and automatic replies. */
+export function buildReplyThreadHeaders(input: {
+  subject: string
+  fallbackSubject?: string
+  parentMessageId: string | null | undefined
+  existingReferences?: string | null
+}) {
+  const baseSubject = input.subject.trim() || input.fallbackSubject?.trim() || '(No subject)'
+  const inReplyTo = input.parentMessageId?.trim() || null
+  return {
+    subject: subjectWithRePrefix(baseSubject),
+    inReplyTo,
+    references: buildReferences(input.existingReferences, inReplyTo),
+  }
+}

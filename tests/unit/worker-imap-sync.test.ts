@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildReferences,
+  buildReplyThreadHeaders,
   generateInternetMessageId,
   normalizeEmailAddress,
   subjectWithRePrefix,
@@ -23,6 +24,19 @@ describe('worker email-thread helpers', () => {
 
   it('builds references chain', () => {
     expect(buildReferences('<a@x.com>', '<b@y.com>')).toBe('<a@x.com> <b@y.com>')
+  })
+
+  it('keeps automatic replies in the inbound email thread', () => {
+    expect(buildReplyThreadHeaders({
+      subject: 'Service request',
+      fallbackSubject: 'We received your message',
+      parentMessageId: '<inbound@customer.test>',
+      existingReferences: '<root@customer.test>',
+    })).toEqual({
+      subject: 'Re: Service request',
+      inReplyTo: '<inbound@customer.test>',
+      references: '<root@customer.test> <inbound@customer.test>',
+    })
   })
 
   it('generates internet message ids', () => {

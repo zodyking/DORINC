@@ -16,11 +16,10 @@ import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/ema
 import { sendBrandedMail } from '../mail/branded-mail'
 import {
   buildOutboundEmailBodies,
-  buildReferences,
+  buildReplyThreadHeaders,
   extractEmailAddresses,
   generateInternetMessageId,
   normalizeEmailAddress,
-  subjectWithRePrefix,
 } from '../mail/email-thread'
 import { getImapFilters } from './imap-config.service'
 import { getSmtpConfig } from './app-config.service'
@@ -817,9 +816,11 @@ export async function replyToEmailThread(
 
   const parent = await getLatestThreadHeaders(db, conversationId)
   const internetMessageId = generateInternetMessageId()
-  const inReplyTo = parent?.internetMessageId ?? thread.rootMessageId
-  const references = buildReferences(parent?.emailReferences, inReplyTo)
-  const subject = subjectWithRePrefix(thread.subject)
+  const { subject, inReplyTo, references } = buildReplyThreadHeaders({
+    subject: thread.subject,
+    parentMessageId: parent?.internetMessageId ?? thread.rootMessageId,
+    existingReferences: parent?.emailReferences,
+  })
   const normalizedBody = normalizeOutgoingMessage(body.trim())
   const { text, html, brand } = await buildOutboundEmailBodies(db, {
     staffName: actor.name,
@@ -1023,6 +1024,7 @@ export async function ingestInboundEmail(db: Db, input: {
         recipientName: customer?.displayName ?? null,
         inboundSubject: input.subject,
         inboundMessageId: normalizedId,
+        inboundReferences: input.references,
       })
     }
     catch (err) {
