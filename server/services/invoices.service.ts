@@ -25,6 +25,8 @@ import { serviceRequests } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { appFiles } from '../db/schema/files'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
+import { syncNumberSequences } from '../db/sync-sequences'
+import { isPgUniqueViolation } from '../utils/pg-errors'
 
 export type InvoicesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
@@ -386,7 +388,7 @@ export async function createInvoiceDraft(
     ? snapshotOverrides.vehicleSnapshot
     : await resolveVehicleForCustomer(db, input.customerId, input.vehicleId)
 
-  const [row] = await db.insert(invoices).values({
+  const draftValues = {
     customerId: input.customerId ?? null,
     vehicleId: input.vehicleId ?? null,
     serviceLogId: input.serviceLogId ?? null,
@@ -410,7 +412,22 @@ export async function createInvoiceDraft(
     discountAmount: input.discountAmount ?? '0',
     createdBy: actorId,
     updatedBy: actorId,
-  }).returning()
+  }
+
+  let row: typeof invoices.$inferSelect | undefined
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      ;[row] = await db.insert(invoices).values(draftValues).returning()
+      break
+    }
+    catch (err) {
+      if (attempt === 0 && isPgUniqueViolation(err, 'invoices_invoice_number_unique')) {
+        await syncNumberSequences(db)
+        continue
+      }
+      throw err
+    }
+  }
 
   return row!
 }
