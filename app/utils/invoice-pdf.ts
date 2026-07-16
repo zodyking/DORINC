@@ -1,4 +1,12 @@
-/** Client helpers for invoice PDF preview, download, and generation. */
+/** URL for opening a live invoice PDF preview in a new browser tab. */
+export function invoicePreviewPdfHref(invoiceId: string): string {
+  return `/api/invoices/${invoiceId}/preview-pdf`
+}
+
+/** Scoped preview for invoices linked to a service log (mechanics + staff list). */
+export function serviceLogInvoicePreviewPdfHref(serviceLogId: string): string {
+  return `/api/service-logs/${serviceLogId}/invoice-preview-pdf`
+}
 
 export async function fetchInvoicePreviewPdf(invoiceId: string): Promise<Blob> {
   return await $fetch<Blob>(`/api/invoices/${invoiceId}/preview-pdf`, {

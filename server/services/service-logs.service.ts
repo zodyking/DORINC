@@ -3,7 +3,7 @@ import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import type { Db } from '../db/client'
 import type { ServiceLogStatus, ServiceLogWorkType } from '../db/schema/service-logs'
 import { serviceLogs } from '../db/schema/service-logs'
-import { invoices } from '../db/schema/invoices'
+import { invoices, formatInvoiceNumber } from '../db/schema/invoices'
 import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { users } from '../db/schema/auth'
@@ -342,6 +342,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     log: serviceLogs,
     customerName: customers.displayName,
     submitterName: users.name,
+    invoiceNumber: invoices.invoiceNumber,
     vehicle: {
       unitType: vehicles.unitType,
       busNumber: vehicles.busNumber,
@@ -354,6 +355,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     .from(serviceLogs)
     .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
     .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+    .leftJoin(invoices, eq(serviceLogs.invoiceId, invoices.id))
     .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
     .orderBy(orderBy)
@@ -408,6 +410,9 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
               }
             : null,
         fileCount: fileCounts.get(r.log.id) ?? 0,
+        invoiceNumberFormatted: r.invoiceNumber != null
+          ? formatInvoiceNumber(r.invoiceNumber)
+          : null,
       }
     }),
     total: Number(total!.value),

@@ -23,7 +23,7 @@ import { appFiles } from '../../server/db/schema/files'
 import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
-import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
+import { formatInvoiceNumber, invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { users } from '../../server/db/schema/auth'
 
 config()
@@ -291,6 +291,16 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
 
     const review = await listServiceLogs(db, { customerId: owner.id, queue: 'review', page: 1, pageSize: 50 })
     expect(review.items.some(i => i.id === converted.id)).toBe(false)
+  })
+
+  it('includes formatted invoice number on list rows when linked', async () => {
+    const log = await approvedLog()
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+
+    const listed = await listServiceLogs(db, { customerId: owner.id, page: 1, pageSize: 50 })
+    const row = listed.items.find(i => i.id === converted.id)
+    expect(row?.invoiceId).toBe(invoice.id)
+    expect(row?.invoiceNumberFormatted).toBe(formatInvoiceNumber(invoice.invoiceNumber))
   })
 })
 

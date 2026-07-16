@@ -64,6 +64,13 @@ export function logTitle(logNumber: number, vehicle: VehicleDisplay, workType: s
   return `${logNumberDisplay(logNumber)} — ${vehicleTag(vehicle)} · ${workTypeLabel(workType)}`
 }
 
+export function serviceLogServiceDateDisplay(isoDate: string | null | undefined): string {
+  if (!isoDate) return '—'
+  const d = new Date(`${isoDate}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return isoDate
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export function logSubtitle(
   customerName: string,
   createdAt: string,
