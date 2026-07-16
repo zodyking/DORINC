@@ -44,12 +44,24 @@ const activeFile = computed(() => imageFiles.value[activeIndex.value] ?? null)
 const activePreview = computed(() => (activeFile.value ? previewUrl(activeFile.value.id) : ''))
 const hasMultiple = computed(() => imageFiles.value.length > 1)
 
+const displayErrors = ref(new Set<string>())
+
+watch(imageFiles, () => {
+  displayErrors.value = new Set()
+}, { deep: true })
+
+function onImageError(fileId: string) {
+  const next = new Set(displayErrors.value)
+  next.add(fileId)
+  displayErrors.value = next
+}
+
 const showLoading = computed(() =>
-  !!activeFile.value && (isLoading(activeFile.value.id) || (!activePreview.value && !hasError(activeFile.value.id))),
+  !!activeFile.value && (isLoading(activeFile.value.id) || (!activePreview.value && !hasError(activeFile.value.id) && !displayErrors.value.has(activeFile.value.id))),
 )
 
 const showError = computed(() =>
-  !!activeFile.value && hasError(activeFile.value.id),
+  !!activeFile.value && (hasError(activeFile.value.id) || displayErrors.value.has(activeFile.value.id)),
 )
 
 function goPrev() {
@@ -103,6 +115,7 @@ function onKeydown(event: KeyboardEvent) {
           :src="activePreview"
           :alt="activeFile.originalFilename"
           class="sl-gallery__img"
+          @error="onImageError(activeFile.id)"
         >
       </div>
 

@@ -196,3 +196,57 @@ export async function archiveFileWithDerivatives(db: Db, id: string) {
   if (!row) throw new FilesServiceError('NOT_FOUND')
   return row
 }
+
+const BROWSER_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+
+/** Returns bytes suitable for inline browser display — prefers webp preview derivatives / converts HEIC. */
+export async function resolveImageDisplayPreview(db: Db, fileId: string) {
+  const original = await getFileWithData(db, fileId)
+
+  const [derivative] = await db.select({ id: appFiles.id })
+    .from(appFiles)
+    .where(and(
+      eq(appFiles.sourceFileId, fileId),
+      eq(appFiles.fileKind, 'preview'),
+      isNull(appFiles.archivedAt),
+    ))
+    .limit(1)
+
+  if (derivative) {
+    const preview = await getFileWithData(db, derivative.id)
+    return {
+      binaryData: preview.binaryData,
+      mimeType: preview.mimeType,
+      fileSizeBytes: preview.fileSizeBytes,
+    }
+  }
+
+  if (BROWSER_IMAGE_MIMES.has(original.mimeType)) {
+    return {
+      binaryData: original.binaryData,
+      mimeType: original.mimeType,
+      fileSizeBytes: original.fileSizeBytes,
+    }
+  }
+
+  if (!original.mimeType.startsWith('image/')) {
+    return {
+      binaryData: original.binaryData,
+      mimeType: original.mimeType,
+      fileSizeBytes: original.fileSizeBytes,
+    }
+  }
+
+  const sharp = (await import('sharp')).default
+  const webp = await sharp(original.binaryData, { failOn: 'error' })
+    .rotate()
+    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toBuffer()
+
+  return {
+    binaryData: webp,
+    mimeType: 'image/webp',
+    fileSizeBytes: webp.length,
+  }
+}

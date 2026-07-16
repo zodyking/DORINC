@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { useDb } from '../../../../../db/client'
 import { appFiles } from '../../../../../db/schema/files'
 import { getServiceLog, ServiceLogsServiceError } from '../../../../../services/service-logs.service'
-import { FilesServiceError, getFileWithData } from '../../../../../services/files.service'
+import { FilesServiceError, getFileWithData, resolveImageDisplayPreview } from '../../../../../services/files.service'
 import { apiError } from '../../../../../utils/api-error'
 import { hasPermission } from '../../../../../utils/require-permission'
 import { validateParams } from '../../../../../utils/validate'
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       .limit(1)
     if (!owned) throw apiError(event, 'NOT_FOUND', 'File not found on this service log')
 
-    const file = await getFileWithData(db, fileId)
+    const file = await resolveImageDisplayPreview(db, fileId)
 
     setHeaders(event, {
       'Content-Type': file.mimeType,

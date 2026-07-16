@@ -897,7 +897,7 @@ const aiPopStyle = computed(() => {
         <p v-if="invoice.serviceLogId" class="ed-tab-hint">Mechanic photos and field notes attach to this invoice — switch tabs to reference while building line items.</p>
       </div>
 
-      <div v-show="activeTab === 'invoice'" class="ed-pane active">
+      <div v-show="activeTab === 'invoice'" class="ed-pane" :class="{ active: activeTab === 'invoice' }">
         <div class="cols">
           <div class="stack">
             <div class="card">
@@ -1121,7 +1121,7 @@ const aiPopStyle = computed(() => {
         </div>
       </div>
 
-      <div v-show="activeTab === 'servicelog' && serviceLogData?.log" class="ed-pane">
+      <div v-show="activeTab === 'servicelog' && serviceLogData?.log" class="ed-pane" :class="{ active: activeTab === 'servicelog' }">
         <div class="cols">
           <div class="stack">
             <div class="card">
@@ -1171,7 +1171,7 @@ const aiPopStyle = computed(() => {
         </div>
       </div>
 
-      <div v-show="activeTab === 'photos' && hasServiceLogPhotos" class="ed-pane">
+      <div v-show="activeTab === 'photos' && hasServiceLogPhotos" class="ed-pane" :class="{ active: activeTab === 'photos' }">
         <div class="card">
           <div class="chead">
             <h3>Service log photos · {{ serviceLogImages.length }}</h3>
@@ -1196,7 +1196,7 @@ const aiPopStyle = computed(() => {
         </div>
       </div>
 
-      <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane active ed-pane--pdf">
+      <div v-show="activeTab === 'pdf' && canGeneratePdf" class="ed-pane ed-pane--pdf" :class="{ active: activeTab === 'pdf' }">
         <InvoicePdfPreviewPane
           ref="pdfPreviewRef"
           :invoice-id="id"
