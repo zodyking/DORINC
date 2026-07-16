@@ -202,7 +202,7 @@
         <td width="8%"><span class="cap">Year</span><span class="val">{{ $vehicle['year'] ?? '—' }}</span></td>
         <td width="24%"><span class="cap">Make/Model</span><span class="val">{{ $vehicle['makeModel'] ?? '—' }}</span></td>
         <td width="28%"><span class="cap">VIN</span><span class="val">{{ $vehicle['vin'] ?? '—' }}</span></td>
-        <td width="12%"><span class="cap">License</span><span class="val">{{ $vehicle['plate'] ?? '—' }}</span></td>
+        <td width="12%"><span class="cap">Vehicle</span><span class="val">{{ $vehicle['plate'] ?? '—' }}</span></td>
       @endif
       @if($sectionVisible('invoice_meta'))
         <td width="9%"><span class="cap">{{ $doc['dateLabel'] ?? 'Date' }}</span><span class="val">{{ $doc['date'] ?? '—' }}</span></td>

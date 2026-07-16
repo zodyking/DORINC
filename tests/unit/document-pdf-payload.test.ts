@@ -4,6 +4,8 @@ import {
   buildDocumentPdfRenderPayload,
   buildInvoicePdfData,
   businessProfileToDocumentPdfCompany,
+  formatPdfVehicleUnitDisplay,
+  formatPdfVehicleYearMakeModel,
 } from '../../shared/document-pdf-payload'
 
 describe('document-pdf-payload', () => {
@@ -27,7 +29,8 @@ describe('document-pdf-payload', () => {
         },
       },
       vehicleSnapshot: {
-        busNumber: '42',
+        unitType: 'bus',
+        busNumber: '606',
         year: 2018,
         make: 'Freightliner',
         model: 'M2',
@@ -65,6 +68,8 @@ describe('document-pdf-payload', () => {
     expect(data.lineItems[0]?.typeBadge).toBe('P')
     expect(data.customer.addressLines).toEqual(['100 Industrial Way', 'Newark, NJ 07102'])
     expect(data.customer.phone).toBe('(555) 555 0199')
+    expect(data.vehicle?.unitNumber).toBe('Bus #606')
+    expect(data.vehicle?.plate).toBe('2018 Freightliner M2')
 
     const payload = buildDocumentPdfRenderPayload(data, { paper: 'a4', marginInches: 0.75 })
     expect(payload.options.paper).toBe('a4')
@@ -119,6 +124,28 @@ describe('document-pdf-payload', () => {
       '739 E New York Ave',
       'Brooklyn, NY 11213',
     ])
+  })
+
+  it('formats fleet unit and year/make/model for PDF vehicle blocks', () => {
+    expect(formatPdfVehicleUnitDisplay({
+      unitType: 'bus',
+      busNumber: '606',
+      year: 2019,
+      make: 'Blue Bird',
+      model: 'Vision',
+    })).toBe('Bus #606')
+
+    expect(formatPdfVehicleYearMakeModel({
+      year: 2019,
+      make: 'Blue Bird',
+      model: 'Vision',
+      trim: 'FE',
+    })).toBe('2019 Blue Bird Vision FE')
+
+    expect(formatPdfVehicleUnitDisplay({
+      unitType: 'truck',
+      unitTag: 'HL-114',
+    })).toBe('Truck · HL-114')
   })
 
   it('maps business profile settings to PDF company block', () => {
