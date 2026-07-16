@@ -1,5 +1,5 @@
 import { getHeader } from 'h3'
-import { getClientIp } from '../utils/client-ip'
+import { getClientIp } from '../../utils/client-ip'
 import { z } from 'zod'
 import { AuthError, login } from '../../auth/auth.service'
 import { setSessionCookie } from '../../auth/session-cookie'
