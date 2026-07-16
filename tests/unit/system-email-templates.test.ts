@@ -34,7 +34,7 @@ describe('system email templates', () => {
       appUrl,
       brand,
     })
-    expect(mail.subject).toContain('Verify')
+    expect(mail.subject).toBe('Verify Your Email')
     expect(mail.html).toContain('Verify email address')
     expect(mail.html).toContain('Acme Shop')
     expect(mail.text).toContain('Alex')
@@ -113,7 +113,7 @@ describe('system email templates', () => {
       appUrl,
       brand,
     })
-    expect(mail.subject).toContain('New sign-in')
+    expect(mail.subject).toBe('New Sign-In Detected')
     expect(mail.html).toContain('Sign-in alert')
     expect(mail.html).toContain('Alex')
     expect(mail.html).toContain('alex@example.com')

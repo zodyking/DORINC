@@ -10,9 +10,17 @@ function brandNameFrom(opts) {
   return opts?.brand?.brandName || opts?.brandName || EMAIL_BRAND_NAME
 }
 
+function titleCaseStatus(value) {
+  return String(value || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUrl, brand }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
-  const subject = `Verify your ${resolvedBrand} account`
+  const subject = 'Verify Your Email'
   const text = [
     `Hi ${name},`,
     '',
@@ -44,7 +52,7 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
 
 export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, brand }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
-  const subject = `Reset your ${resolvedBrand} password`
+  const subject = 'Reset Your Password'
   const text = [
     `Hi ${name},`,
     '',
@@ -83,7 +91,7 @@ export function buildSmtpTestEmail({
   brand,
 }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
-  const subject = `${resolvedBrand} SMTP test`
+  const subject = 'SMTP Test Successful'
   const text = [
     `This is a test message from the ${resolvedBrand} ${source}.`,
     '',
@@ -114,7 +122,7 @@ export function buildSmtpTestEmail({
 export function buildPortalCredentialEmail({ name, username, tempPassword, appUrl, brand }) {
   const resolvedBrand = brandNameFrom({ brand })
   const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login`
-  const subject = `Your ${resolvedBrand} Customer Portal access`
+  const subject = 'Your Portal Access'
   const text = [
     `Hello ${name},`,
     '',
@@ -158,10 +166,9 @@ export function buildBackupNotificationEmail({
   appUrl,
   brand,
 }) {
-  const resolvedBrand = brandNameFrom({ brand })
   const subject = success
-    ? `${resolvedBrand} backup completed — ${filename}`
-    : `${resolvedBrand} backup failed — ${filename}`
+    ? `Backup Completed — ${filename}`
+    : `Backup Failed — ${filename}`
   const when = new Date().toISOString()
   const lines = [
     success ? 'An encrypted database backup completed successfully.' : 'An encrypted database backup failed.',
@@ -214,7 +221,7 @@ export function buildInvoiceAttachedEmail({
 }) {
   const dueLine = dueDate || null
   const totalLine = total || null
-  const subject = `Invoice ${invoiceNumber} is ready`
+  const subject = `Invoice ${invoiceNumber} Is Ready`
   const text = [
     `Hello ${recipientName},`,
     '',
@@ -269,7 +276,7 @@ export function buildLoginNotificationEmail({
   const when = signedInAt
     ? new Date(signedInAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
     : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
-  const subject = `New sign-in to ${resolvedBrand}`
+  const subject = 'New Sign-In Detected'
   const deviceLabel = device || userAgent || null
   const text = [
     `Hi ${name},`,
@@ -325,7 +332,7 @@ export function buildDeletionRequestSubmittedEmail({
   appUrl,
   brand,
 }) {
-  const subject = `Deletion request pending — ${entityLabel}`
+  const subject = `Deletion Request Pending — ${entityLabel}`
   const text = [
     `Hi ${reviewerName},`,
     '',
@@ -367,7 +374,7 @@ export function buildDeletionRequestResultEmail({
 }) {
   const approved = status === 'approved'
   const statusLabel = approved ? 'approved' : 'denied'
-  const subject = `Deletion request ${statusLabel} — ${entityLabel}`
+  const subject = `Deletion Request ${titleCaseStatus(statusLabel)} — ${entityLabel}`
   const text = [
     `Hi ${requestorName},`,
     '',
@@ -415,7 +422,7 @@ export function buildUserSignupPendingEmail({
   appUrl,
   brand,
 }) {
-  const subject = `New user awaiting approval — ${userName}`
+  const subject = `New User Awaiting Approval — ${userName}`
   const text = [
     `Hi ${adminName},`,
     '',
@@ -451,7 +458,7 @@ export function buildInvoicePendingApprovalEmail({
   appUrl,
   brand,
 }) {
-  const subject = `Invoice pending approval — ${invoiceNumber}`
+  const subject = `Invoice Pending Approval — ${invoiceNumber}`
   const text = [
     `Hi ${approverName},`,
     '',

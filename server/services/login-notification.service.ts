@@ -6,7 +6,7 @@ import { sendMail } from '../mail/mailer'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
-import { resolveIpLocation } from './ip-geolocation.service'
+import { resolveIpLocation, normalizeClientIp } from './ip-geolocation.service'
 
 function buildDeviceLabel(userAgent: string | null | undefined): string | null {
   if (!userAgent) return null
@@ -48,14 +48,15 @@ export async function sendLoginNotificationEmail(
 
   const brand = await resolveEmailBrand(db)
   const deviceLabel = buildDeviceLabel(opts.userAgent)
-  const location = await resolveIpLocation(opts.ipAddress)
+  const ipAddress = normalizeClientIp(opts.ipAddress)
+  const location = await resolveIpLocation(ipAddress)
 
   const mail = buildLoginNotificationEmail({
     name: opts.name,
     email: to,
     portal: opts.portal,
     signedInAt: (opts.signedInAt ?? new Date()).toISOString(),
-    ipAddress: opts.ipAddress ?? null,
+    ipAddress,
     location,
     device: deviceLabel,
     userAgent: opts.userAgent ?? null,

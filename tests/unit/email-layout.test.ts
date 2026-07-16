@@ -73,6 +73,8 @@ describe('email layout', () => {
     expect(mail.html).toContain('Details')
     expect(mail.html).toContain('a@b.com')
     expect(mail.html).toContain('class="button"')
+    expect(mail.html).toContain('detail-label')
+    expect(mail.html).not.toContain('mobile-block')
   })
 
   it('still supports legacy body helpers', () => {

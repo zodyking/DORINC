@@ -71,4 +71,19 @@ $font: Arial, Helvetica, sans-serif;
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+  word-break: break-word;
+}
+
+.detail-label {
+  color: $muted;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.detail-value {
+  color: $ink;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  word-break: break-word;
 }

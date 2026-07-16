@@ -44,7 +44,7 @@ export interface InvoiceSentTemplateInput {
 /** Editable defaults surfaced to the send-compose UI (subject + message body). */
 export function invoiceSendEditableDefaults(invoiceNumber: string) {
   return {
-    subject: `Invoice ${invoiceNumber} is ready`,
+    subject: `Invoice ${invoiceNumber} Is Ready`,
     message: `Invoice ${invoiceNumber} has been sent and is available in your customer portal.`,
   }
 }
@@ -115,7 +115,7 @@ export interface RequestStatusTemplateInput {
 export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
   const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
   const kindLabel = REQUEST_KIND_LABELS[input.requestKind]
-  const statusLabel = input.status === 'approved' ? 'approved' : 'rejected'
+  const statusLabel = input.status === 'approved' ? 'Approved' : 'Rejected'
   const subject = `${kindLabel} ${statusLabel}`
   const reasonLine = input.reviewReason?.trim() || null
   const requestsUrl = portalUrl('/requests', appUrl)
@@ -169,7 +169,7 @@ export interface EstimateSentTemplateInput {
 export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
   const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
   const detailUrl = portalUrl(`/estimates/${input.estimateId}`, appUrl)
-  const subject = `Estimate ${input.estimateNumber} is ready for review`
+  const subject = `Estimate ${input.estimateNumber} Ready For Review`
   const text = [
     `Hello ${input.recipientName},`,
     '',
