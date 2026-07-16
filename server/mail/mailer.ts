@@ -39,6 +39,9 @@ export interface MailMessage {
   subject: string
   text: string
   html?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string
 }
 
 /**
@@ -58,7 +61,16 @@ export async function sendMail(message: MailMessage): Promise<{ delivered: boole
   }
 
   try {
-    await getTransport().sendMail({ from: config.from, ...message })
+    await getTransport().sendMail({
+      from: config.from,
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      messageId: message.messageId,
+      inReplyTo: message.inReplyTo,
+      references: message.references,
+    })
     return { delivered: true }
   }
   catch (err) {

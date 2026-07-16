@@ -1,0 +1,174 @@
+import { eq } from 'drizzle-orm'
+import type { Db } from '../db/client'
+import { appSettings } from '../db/schema/settings'
+import { configureMasterKey, decryptBuffer, encryptBuffer } from './encryption.service'
+import { getMasterKeyHex, getSmtpConfig } from './app-config.service'
+
+export const IMAP_CONFIG_KEY = 'imap.config'
+export const IMAP_FILTERS_KEY = 'imap.filters'
+
+export interface ImapConfig {
+  host: string
+  port: number
+  user: string
+  pass: string
+  mailbox: string
+  useTls: boolean
+}
+
+export interface ImapFilterConfig {
+  companyEmail: string
+  additionalEmails: string[]
+  includeCustomerEmails: boolean
+}
+
+interface CachedImap {
+  config: ImapConfig | null
+  filters: ImapFilterConfig | null
+}
+
+let cache: CachedImap = { config: null, filters: null }
+
+function envImapConfig(): ImapConfig | null {
+  const host = process.env.IMAP_HOST?.trim()
+  const user = process.env.IMAP_USER?.trim()
+  if (!host || !user) return null
+  return {
+    host,
+    port: Number(process.env.IMAP_PORT ?? 993),
+    user,
+    pass: process.env.IMAP_PASS ?? '',
+    mailbox: process.env.IMAP_MAILBOX?.trim() || 'INBOX',
+    useTls: process.env.IMAP_TLS !== 'false',
+  }
+}
+
+function parseImapPayload(payload: Buffer): ImapConfig {
+  const parsed = JSON.parse(payload.toString('utf8')) as ImapConfig
+  if (!parsed.host?.trim() || !parsed.user?.trim()) {
+    throw new Error('Invalid IMAP config payload')
+  }
+  return {
+    host: parsed.host.trim(),
+    port: Number(parsed.port ?? 993),
+    user: parsed.user.trim(),
+    pass: parsed.pass ?? '',
+    mailbox: parsed.mailbox?.trim() || 'INBOX',
+    useTls: parsed.useTls !== false,
+  }
+}
+
+function defaultFilters(): ImapFilterConfig {
+  const smtp = getSmtpConfig()
+  const fromMatch = smtp?.from.match(/<([^>]+)>/)
+  const companyEmail = fromMatch?.[1]?.trim() || smtp?.from?.trim() || ''
+  return {
+    companyEmail,
+    additionalEmails: [],
+    includeCustomerEmails: true,
+  }
+}
+
+export async function refreshImapConfigCache(db: Db): Promise<void> {
+  const rows = await db.select().from(appSettings)
+    .where(eq(appSettings.key, IMAP_CONFIG_KEY))
+  const filterRows = await db.select().from(appSettings)
+    .where(eq(appSettings.key, IMAP_FILTERS_KEY))
+
+  let config: ImapConfig | null = null
+  const configRow = rows[0]
+  if (configRow?.encryptedValue) {
+    try {
+      const keyHex = getMasterKeyHex()
+      if (keyHex) {
+        configureMasterKey(keyHex)
+        config = parseImapPayload(decryptBuffer(Buffer.from(configRow.encryptedValue, 'base64')))
+      }
+    }
+    catch {
+      config = null
+    }
+  }
+
+  let filters: ImapFilterConfig | null = null
+  const filterRow = filterRows[0]
+  if (filterRow?.value) {
+    const raw = filterRow.value as ImapFilterConfig
+    filters = {
+      companyEmail: raw.companyEmail?.trim().toLowerCase() ?? '',
+      additionalEmails: (raw.additionalEmails ?? []).map(e => e.trim().toLowerCase()).filter(Boolean),
+      includeCustomerEmails: raw.includeCustomerEmails !== false,
+    }
+  }
+
+  cache = { config, filters }
+}
+
+export function getImapConfig(): ImapConfig | null {
+  return envImapConfig() ?? cache.config
+}
+
+export function getImapFilters(): ImapFilterConfig {
+  return cache.filters ?? defaultFilters()
+}
+
+export function isImapEnvLocked(): boolean {
+  return !!(process.env.IMAP_HOST?.trim() && process.env.IMAP_USER?.trim())
+}
+
+export async function saveImapConfig(db: Db, config: ImapConfig, actorId: string | null) {
+  if (isImapEnvLocked()) throw new Error('IMAP is locked by environment variables on this server')
+  const keyHex = getMasterKeyHex()
+  if (!keyHex) throw new Error('Encryption master key is not configured')
+
+  configureMasterKey(keyHex)
+  const encryptedValue = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
+
+  const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, IMAP_CONFIG_KEY)).limit(1)
+  if (existing) {
+    await db.update(appSettings).set({
+      encryptedValue,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    }).where(eq(appSettings.key, IMAP_CONFIG_KEY))
+  }
+  else {
+    await db.insert(appSettings).values({
+      key: IMAP_CONFIG_KEY,
+      encryptedValue,
+      updatedBy: actorId,
+    })
+  }
+
+  cache.config = config
+}
+
+export async function saveImapFilters(db: Db, filters: ImapFilterConfig, actorId: string | null) {
+  const normalized: ImapFilterConfig = {
+    companyEmail: filters.companyEmail.trim().toLowerCase(),
+    additionalEmails: filters.additionalEmails.map(e => e.trim().toLowerCase()).filter(Boolean),
+    includeCustomerEmails: filters.includeCustomerEmails,
+  }
+
+  const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, IMAP_FILTERS_KEY)).limit(1)
+  if (existing) {
+    await db.update(appSettings).set({
+      value: normalized,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    }).where(eq(appSettings.key, IMAP_FILTERS_KEY))
+  }
+  else {
+    await db.insert(appSettings).values({
+      key: IMAP_FILTERS_KEY,
+      value: normalized,
+      updatedBy: actorId,
+    })
+  }
+
+  cache.filters = normalized
+}
+
+export function clearImapConfigCache(): void {
+  cache = { config: null, filters: null }
+}

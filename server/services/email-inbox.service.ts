@@ -1,0 +1,627 @@
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
+import type { Db } from '../db/client'
+import { users } from '../db/schema/auth'
+import { customerContacts, customers } from '../db/schema/customers'
+import {
+  conversations,
+  messages,
+} from '../db/schema/messages'
+import {
+  emailConversationReads,
+  emailMessageMeta,
+  emailThreads,
+} from '../db/schema/email-inbox'
+import { sendMail } from '../mail/mailer'
+import {
+  buildOutboundEmailBodies,
+  buildReferences,
+  extractEmailAddresses,
+  generateInternetMessageId,
+  normalizeEmailAddress,
+  subjectWithRePrefix,
+} from '../mail/email-thread'
+import { getImapFilters } from './imap-config.service'
+import { getSmtpConfig } from './app-config.service'
+
+export type EmailInboxErrorCode
+  = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
+
+export class EmailInboxError extends Error {
+  constructor(public readonly code: EmailInboxErrorCode) {
+    super(code)
+  }
+}
+
+export async function buildAllowedFilterAddresses(db: Db): Promise<Set<string>> {
+  const filters = getImapFilters()
+  const allowed = new Set<string>()
+
+  for (const addr of [filters.companyEmail, ...filters.additionalEmails]) {
+    if (addr) allowed.add(addr.toLowerCase())
+  }
+
+  const smtp = getSmtpConfig()
+  if (smtp?.from) {
+    for (const addr of extractEmailAddresses(smtp.from)) allowed.add(addr)
+  }
+  if (smtp?.user) allowed.add(smtp.user.toLowerCase())
+
+  if (filters.includeCustomerEmails) {
+    const customerRows = await db.select({ email: customers.email }).from(customers)
+      .where(isNull(customers.archivedAt))
+    for (const row of customerRows) {
+      if (row.email) allowed.add(row.email.toLowerCase())
+    }
+
+    const contactRows = await db.select({ email: customerContacts.email }).from(customerContacts)
+      .where(isNull(customerContacts.archivedAt))
+    for (const row of contactRows) {
+      if (row.email) allowed.add(row.email.toLowerCase())
+    }
+  }
+
+  return allowed
+}
+
+export function messageMatchesFilter(
+  allowed: Set<string>,
+  from: string,
+  to: string[],
+  cc: string[] = [],
+): boolean {
+  const participants = new Set([
+    normalizeEmailAddress(from),
+    ...to.map(normalizeEmailAddress),
+    ...cc.map(normalizeEmailAddress),
+  ])
+  for (const addr of participants) {
+    if (allowed.has(addr)) return true
+  }
+  return false
+}
+
+export async function resolveCustomerByEmail(db: Db, email: string) {
+  const normalized = email.toLowerCase()
+  const [customer] = await db.select({ id: customers.id, displayName: customers.displayName, email: customers.email })
+    .from(customers)
+    .where(and(eq(customers.email, normalized), isNull(customers.archivedAt)))
+    .limit(1)
+  if (customer) return customer
+
+  const [contact] = await db.select({
+    customerId: customerContacts.customerId,
+    displayName: customers.displayName,
+    email: customerContacts.email,
+  })
+    .from(customerContacts)
+    .innerJoin(customers, eq(customers.id, customerContacts.customerId))
+    .where(and(eq(customerContacts.email, normalized), isNull(customerContacts.archivedAt)))
+    .limit(1)
+
+  if (contact) {
+    return { id: contact.customerId, displayName: contact.displayName, email: contact.email }
+  }
+  return null
+}
+
+export interface EmailConversationSummary {
+  id: string
+  type: 'email'
+  customer: { id: string | null, name: string, email: string } | null
+  subject: string
+  lastMessage: {
+    id: string
+    body: string
+    senderUserId: string | null
+    senderName: string | null
+    direction: 'inbound' | 'outbound'
+    createdAt: string
+    preview: string
+  } | null
+  unreadCount: number
+  updatedAt: string
+}
+
+function previewBody(body: string): string {
+  return body.replace(/\s+/g, ' ').trim().slice(0, 140)
+}
+
+export async function listEmailConversations(db: Db, filter: {
+  userId: string
+  q?: string
+  page: number
+  pageSize: number
+}) {
+  const rows = await db.select({
+    conversation: conversations,
+    thread: emailThreads,
+    customerName: customers.displayName,
+  })
+    .from(emailThreads)
+    .innerJoin(conversations, eq(conversations.id, emailThreads.conversationId))
+    .leftJoin(customers, eq(customers.id, emailThreads.customerId))
+    .orderBy(desc(emailThreads.updatedAt))
+
+  const items: EmailConversationSummary[] = []
+  for (const row of rows) {
+    const label = row.customerName || row.thread.counterpartName || row.thread.counterpartEmail
+    if (filter.q) {
+      const term = filter.q.toLowerCase()
+      const hay = `${label} ${row.thread.subject} ${row.thread.counterpartEmail}`.toLowerCase()
+      if (!hay.includes(term)) continue
+    }
+
+    const [lastMessage] = await db.select({
+      id: messages.id,
+      body: messages.body,
+      senderUserId: messages.senderUserId,
+      createdAt: messages.createdAt,
+      direction: emailMessageMeta.direction,
+      senderName: users.name,
+    })
+      .from(messages)
+      .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+      .leftJoin(users, eq(users.id, messages.senderUserId))
+      .where(eq(messages.conversationId, row.conversation.id))
+      .orderBy(desc(messages.createdAt))
+      .limit(1)
+
+    const [readRow] = await db.select({ lastReadAt: emailConversationReads.lastReadAt })
+      .from(emailConversationReads)
+      .where(and(
+        eq(emailConversationReads.conversationId, row.conversation.id),
+        eq(emailConversationReads.userId, filter.userId),
+      ))
+      .limit(1)
+
+    let unreadCount = 0
+    if (lastMessage) {
+      const [{ value }] = await db.select({ value: count() })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, row.conversation.id),
+          readRow?.lastReadAt ? gt(messages.createdAt, readRow.lastReadAt) : sql`true`,
+        ))
+      unreadCount = Number(value)
+    }
+
+    items.push({
+      id: row.conversation.id,
+      type: 'email',
+      customer: row.thread.customerId
+        ? { id: row.thread.customerId, name: label, email: row.thread.counterpartEmail }
+        : { id: null, name: label, email: row.thread.counterpartEmail },
+      subject: row.thread.subject,
+      lastMessage: lastMessage
+        ? {
+            id: lastMessage.id,
+            body: lastMessage.body,
+            senderUserId: lastMessage.senderUserId,
+            senderName: lastMessage.senderName,
+            direction: (lastMessage.direction ?? 'outbound') as 'inbound' | 'outbound',
+            createdAt: lastMessage.createdAt.toISOString(),
+            preview: previewBody(lastMessage.body),
+          }
+        : null,
+      unreadCount,
+      updatedAt: row.thread.updatedAt.toISOString(),
+    })
+  }
+
+  const total = items.length
+  const offset = (filter.page - 1) * filter.pageSize
+  return { items: items.slice(offset, offset + filter.pageSize), total, page: filter.page, pageSize: filter.pageSize }
+}
+
+export async function getEmailThread(db: Db, conversationId: string) {
+  const [row] = await db.select().from(emailThreads)
+    .where(eq(emailThreads.conversationId, conversationId))
+    .limit(1)
+  if (!row) throw new EmailInboxError('NOT_FOUND')
+  return row
+}
+
+export async function listEmailMessages(db: Db, conversationId: string, filter: {
+  page: number
+  pageSize: number
+  afterId?: string
+}) {
+  await getEmailThread(db, conversationId)
+
+  const conditions = [eq(messages.conversationId, conversationId)]
+  if (filter.afterId) {
+    const [anchor] = await db.select({ createdAt: messages.createdAt })
+      .from(messages).where(eq(messages.id, filter.afterId)).limit(1)
+    if (anchor) conditions.push(gt(messages.createdAt, anchor.createdAt))
+  }
+
+  const rows = await db.select({
+    id: messages.id,
+    conversationId: messages.conversationId,
+    body: messages.body,
+    senderUserId: messages.senderUserId,
+    senderName: users.name,
+    createdAt: messages.createdAt,
+    direction: emailMessageMeta.direction,
+    fromAddress: emailMessageMeta.fromAddress,
+    htmlBody: emailMessageMeta.htmlBody,
+  })
+    .from(messages)
+    .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+    .leftJoin(users, eq(users.id, messages.senderUserId))
+    .where(and(...conditions))
+    .orderBy(asc(messages.createdAt))
+    .limit(filter.pageSize)
+    .offset((filter.page - 1) * filter.pageSize)
+
+  return {
+    items: rows.map(r => ({
+      id: r.id,
+      conversationId: r.conversationId,
+      body: r.body,
+      senderUserId: r.senderUserId,
+      senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
+      createdAt: r.createdAt.toISOString(),
+      channel: 'email' as const,
+      direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
+      htmlBody: r.htmlBody,
+      entityRefs: [],
+    })),
+  }
+}
+
+export async function markEmailConversationRead(db: Db, conversationId: string, userId: string) {
+  await getEmailThread(db, conversationId)
+  const now = new Date()
+  const [existing] = await db.select().from(emailConversationReads)
+    .where(and(
+      eq(emailConversationReads.conversationId, conversationId),
+      eq(emailConversationReads.userId, userId),
+    ))
+    .limit(1)
+
+  if (existing) {
+    await db.update(emailConversationReads).set({ lastReadAt: now })
+      .where(and(
+        eq(emailConversationReads.conversationId, conversationId),
+        eq(emailConversationReads.userId, userId),
+      ))
+  }
+  else {
+    await db.insert(emailConversationReads).values({
+      conversationId,
+      userId,
+      lastReadAt: now,
+    })
+  }
+}
+
+async function getLatestThreadHeaders(db: Db, conversationId: string) {
+  const [row] = await db.select({
+    internetMessageId: emailMessageMeta.internetMessageId,
+    emailReferences: emailMessageMeta.emailReferences,
+  })
+    .from(messages)
+    .innerJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(desc(messages.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
+export async function startEmailThread(
+  db: Db,
+  actorUserId: string,
+  input: { customerId: string, toEmail: string, subject: string, body: string },
+) {
+  if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
+
+  const toEmail = input.toEmail.trim().toLowerCase()
+  const [customer] = await db.select({
+    id: customers.id,
+    displayName: customers.displayName,
+    email: customers.email,
+  })
+    .from(customers)
+    .where(and(eq(customers.id, input.customerId), isNull(customers.archivedAt)))
+    .limit(1)
+  if (!customer) throw new EmailInboxError('INVALID_RECIPIENT')
+
+  const allowedEmails = new Set<string>()
+  if (customer.email) allowedEmails.add(customer.email.toLowerCase())
+  const contactRows = await db.select({ email: customerContacts.email })
+    .from(customerContacts)
+    .where(and(eq(customerContacts.customerId, customer.id), isNull(customerContacts.archivedAt)))
+  for (const row of contactRows) {
+    if (row.email) allowedEmails.add(row.email.toLowerCase())
+  }
+  if (!allowedEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
+
+  const [actor] = await db.select({ id: users.id, name: users.name }).from(users)
+    .where(eq(users.id, actorUserId)).limit(1)
+  if (!actor) throw new EmailInboxError('NOT_FOUND')
+
+  const internetMessageId = generateInternetMessageId()
+  const { text, html } = await buildOutboundEmailBodies(db, actor.name, input.body)
+
+  const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
+  await db.insert(emailThreads).values({
+    conversationId: conversation!.id,
+    customerId: customer.id,
+    counterpartEmail: toEmail,
+    counterpartName: customer.displayName,
+    subject: input.subject.trim(),
+    rootMessageId: internetMessageId,
+  })
+
+  const [message] = await db.insert(messages).values({
+    conversationId: conversation!.id,
+    senderUserId: actorUserId,
+    body: input.body.trim(),
+  }).returning()
+
+  await db.insert(emailMessageMeta).values({
+    messageId: message!.id,
+    direction: 'outbound',
+    internetMessageId,
+    fromAddress: normalizeEmailAddress(getSmtpConfig()!.from),
+    toAddresses: [toEmail],
+    ccAddresses: [],
+    htmlBody: html,
+    sentByUserId: actorUserId,
+  })
+
+  const delivered = await sendMail({
+    to: toEmail,
+    subject: input.subject.trim(),
+    text,
+    html,
+    messageId: internetMessageId,
+  })
+  if (!delivered.delivered && process.env.NODE_ENV === 'production') {
+    throw new EmailInboxError('SEND_FAILED')
+  }
+
+  await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversation!.id))
+  await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversation!.id))
+
+  return { conversationId: conversation!.id, messageId: message!.id }
+}
+
+export async function replyToEmailThread(
+  db: Db,
+  conversationId: string,
+  actorUserId: string,
+  body: string,
+) {
+  if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
+
+  const thread = await getEmailThread(db, conversationId)
+  const [actor] = await db.select({ id: users.id, name: users.name }).from(users)
+    .where(eq(users.id, actorUserId)).limit(1)
+  if (!actor) throw new EmailInboxError('NOT_FOUND')
+
+  const parent = await getLatestThreadHeaders(db, conversationId)
+  const internetMessageId = generateInternetMessageId()
+  const inReplyTo = parent?.internetMessageId ?? thread.rootMessageId
+  const references = buildReferences(parent?.emailReferences, inReplyTo)
+  const subject = subjectWithRePrefix(thread.subject)
+  const { text, html } = await buildOutboundEmailBodies(db, actor.name, body)
+
+  const [message] = await db.insert(messages).values({
+    conversationId,
+    senderUserId: actorUserId,
+    body: body.trim(),
+  }).returning()
+
+  await db.insert(emailMessageMeta).values({
+    messageId: message!.id,
+    direction: 'outbound',
+    internetMessageId,
+    inReplyTo: inReplyTo ?? null,
+    emailReferences: references,
+    fromAddress: normalizeEmailAddress(getSmtpConfig()!.from),
+    toAddresses: [thread.counterpartEmail],
+    ccAddresses: [],
+    htmlBody: html,
+    sentByUserId: actorUserId,
+  })
+
+  const delivered = await sendMail({
+    to: thread.counterpartEmail,
+    subject,
+    text,
+    html,
+    messageId: internetMessageId,
+    inReplyTo: inReplyTo ?? undefined,
+    references: references ?? undefined,
+  })
+  if (!delivered.delivered && process.env.NODE_ENV === 'production') {
+    throw new EmailInboxError('SEND_FAILED')
+  }
+
+  await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId))
+  await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversationId))
+
+  return {
+    id: message!.id,
+    conversationId: message!.conversationId,
+    body: message!.body,
+    senderUserId: message!.senderUserId,
+    senderName: actor.name,
+    createdAt: message!.createdAt.toISOString(),
+    channel: 'email' as const,
+    direction: 'outbound' as const,
+    htmlBody: html,
+    entityRefs: [],
+  }
+}
+
+export async function getConversationType(db: Db, conversationId: string): Promise<'dm' | 'email' | null> {
+  const [row] = await db.select({ type: conversations.type })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return (row?.type as 'dm' | 'email' | undefined) ?? null
+}
+
+export async function ingestInboundEmail(db: Db, input: {
+  from: string
+  to: string[]
+  cc?: string[]
+  subject: string
+  text: string
+  html?: string | null
+  internetMessageId: string
+  inReplyTo?: string | null
+  references?: string | null
+  receivedAt?: Date
+}) {
+  const normalizedId = input.internetMessageId.trim()
+  if (!normalizedId) return { skipped: true as const, reason: 'missing_message_id' as const }
+
+  const [existing] = await db.select({ messageId: emailMessageMeta.messageId })
+    .from(emailMessageMeta)
+    .where(eq(emailMessageMeta.internetMessageId, normalizedId))
+    .limit(1)
+  if (existing) return { skipped: true as const, reason: 'duplicate' as const }
+
+  const from = normalizeEmailAddress(input.from)
+  const allowed = await buildAllowedFilterAddresses(db)
+  if (!messageMatchesFilter(allowed, from, input.to, input.cc ?? [])) {
+    return { skipped: true as const, reason: 'filtered' as const }
+  }
+
+  let conversationId: string | null = null
+  if (input.inReplyTo) {
+    const [parent] = await db.select({ conversationId: messages.conversationId })
+      .from(emailMessageMeta)
+      .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
+      .where(eq(emailMessageMeta.internetMessageId, input.inReplyTo))
+      .limit(1)
+    conversationId = parent?.conversationId ?? null
+  }
+
+  if (!conversationId && input.references) {
+    for (const ref of input.references.split(/\s+/).filter(Boolean)) {
+      const [parent] = await db.select({ conversationId: messages.conversationId })
+        .from(emailMessageMeta)
+        .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
+        .where(eq(emailMessageMeta.internetMessageId, ref))
+        .limit(1)
+      if (parent) {
+        conversationId = parent.conversationId
+        break
+      }
+    }
+  }
+
+  const customer = await resolveCustomerByEmail(db, from)
+  const counterpartEmail = from
+
+  if (!conversationId) {
+    const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
+    conversationId = conversation!.id
+    await db.insert(emailThreads).values({
+      conversationId,
+      customerId: customer?.id ?? null,
+      counterpartEmail,
+      counterpartName: customer?.displayName ?? null,
+      subject: input.subject.trim() || '(No subject)',
+      rootMessageId: normalizedId,
+    })
+  }
+
+  const [message] = await db.insert(messages).values({
+    conversationId,
+    senderUserId: null,
+    body: input.text.trim() || '(empty message)',
+    createdAt: input.receivedAt ?? new Date(),
+  }).returning()
+
+  await db.insert(emailMessageMeta).values({
+    messageId: message!.id,
+    direction: 'inbound',
+    internetMessageId: normalizedId,
+    inReplyTo: input.inReplyTo ?? null,
+    emailReferences: input.references ?? null,
+    fromAddress: from,
+    toAddresses: input.to,
+    ccAddresses: input.cc ?? [],
+    htmlBody: input.html ?? null,
+  })
+
+  await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId))
+  await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversationId))
+
+  return { skipped: false as const, conversationId, messageId: message!.id }
+}
+
+export async function listCustomerEmailRecipients(db: Db, q?: string) {
+  const term = q?.trim().toLowerCase()
+  const rows = await db.select({
+    id: customers.id,
+    displayName: customers.displayName,
+    email: customers.email,
+  })
+    .from(customers)
+    .where(and(isNull(customers.archivedAt), sql`${customers.email} is not null`))
+    .orderBy(asc(customers.displayName))
+
+  const contacts = await db.select({
+    customerId: customerContacts.customerId,
+    displayName: customers.displayName,
+    email: customerContacts.email,
+    contactName: customerContacts.name,
+  })
+    .from(customerContacts)
+    .innerJoin(customers, eq(customers.id, customerContacts.customerId))
+    .where(and(isNull(customerContacts.archivedAt), sql`${customerContacts.email} is not null`))
+
+  const items: Array<{ customerId: string, label: string, email: string }> = []
+  const seen = new Set<string>()
+
+  for (const row of rows) {
+    if (!row.email) continue
+    const key = row.email.toLowerCase()
+    if (seen.has(key)) continue
+    const label = `${row.displayName} · ${row.email}`
+    if (term && !label.toLowerCase().includes(term)) continue
+    seen.add(key)
+    items.push({ customerId: row.id, label: row.displayName, email: row.email })
+  }
+
+  for (const row of contacts) {
+    if (!row.email) continue
+    const key = row.email.toLowerCase()
+    if (seen.has(key)) continue
+    const label = `${row.displayName}${row.contactName ? ` (${row.contactName})` : ''} · ${row.email}`
+    if (term && !label.toLowerCase().includes(term)) continue
+    seen.add(key)
+    items.push({ customerId: row.customerId, label, email: row.email })
+  }
+
+  return items
+}
+
+export async function countEmailUnread(db: Db, userId: string): Promise<number> {
+  const threads = await db.select({ conversationId: emailThreads.conversationId }).from(emailThreads)
+  let total = 0
+  for (const thread of threads) {
+    const [readRow] = await db.select({ lastReadAt: emailConversationReads.lastReadAt })
+      .from(emailConversationReads)
+      .where(and(
+        eq(emailConversationReads.conversationId, thread.conversationId),
+        eq(emailConversationReads.userId, userId),
+      ))
+      .limit(1)
+    const [{ value }] = await db.select({ value: count() })
+      .from(messages)
+      .where(and(
+        eq(messages.conversationId, thread.conversationId),
+        readRow?.lastReadAt ? gt(messages.createdAt, readRow.lastReadAt) : sql`true`,
+      ))
+    total += Number(value)
+  }
+  return total
+}

@@ -4,6 +4,7 @@ import { useDb } from '../db/client'
 import { applyPendingMigrations } from '../db/migrate-runtime'
 import { syncAuthRegistry } from '../db/seed'
 import { refreshAppConfigCache } from '../services/app-config.service'
+import { refreshImapConfigCache } from '../services/imap-config.service'
 
 export default defineNitroPlugin(async () => {
   if (!hasDatabaseConfig()) return
@@ -23,6 +24,7 @@ export default defineNitroPlugin(async () => {
 
   try {
     await refreshAppConfigCache(db)
+    await refreshImapConfigCache(db)
   }
   catch (err) {
     console.warn(`[app-config] cache warm skipped: ${(err as Error).message}`)

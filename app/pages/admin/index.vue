@@ -8,6 +8,7 @@ import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMoni
 import OpenRouterModelSelector from '~/components/admin/OpenRouterModelSelector.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
+import SettingsImapPanel from '~/components/admin/settings/SettingsImapPanel.vue'
 import SettingsNotificationsPanel from '~/components/admin/settings/SettingsNotificationsPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
@@ -375,14 +376,15 @@ async function testAiConnection() {
 
         <ControlPanelSection
           id="email"
-          title="Email (SMTP)"
+          title="Email"
           icon="✉️"
-          subtitle="Outbound mail and test delivery"
+          subtitle="Outbound SMTP, inbound IMAP, and test delivery"
           :status-tone="smtpHealthTone(status.smtp.configured)"
           :open="openSections.email"
           @update:open="setSectionOpen('email', $event)"
         >
           <SettingsEmailPanel @saved="refresh()" />
+          <SettingsImapPanel @saved="refresh()" />
         </ControlPanelSection>
 
         <ControlPanelSection

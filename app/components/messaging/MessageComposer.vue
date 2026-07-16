@@ -9,6 +9,7 @@ import type { MessageEntityType } from '~/server/db/schema/messages'
 
 const props = defineProps<{
   disabled?: boolean
+  mode?: 'dm' | 'email'
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +26,8 @@ const pickerEnd = ref(0)
 const pickerItems = ref<EntitySearchItem[]>([])
 const pickerLoading = ref(false)
 const pickerHighlight = ref(0)
+
+const isEmail = computed(() => props.mode === 'email')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -56,6 +59,7 @@ function closePicker() {
 }
 
 function onInput() {
+  if (isEmail.value) return
   const el = textareaEl.value
   if (!el) return
   const trigger = detectEntityTrigger(text.value, el.selectionStart)
@@ -171,7 +175,7 @@ function onKeydown(e: KeyboardEvent) {
         ref="textareaEl"
         v-model="text"
         rows="2"
-        placeholder="Write a message… Type invoice, customer, vehicle, or service log to link records"
+        :placeholder="isEmail ? 'Write your reply…' : 'Write a message… Type invoice, customer, vehicle, or service log to link records'"
         :disabled="disabled"
         aria-label="Message"
         @input="onInput"
@@ -182,7 +186,7 @@ function onKeydown(e: KeyboardEvent) {
         ↑
       </button>
     </form>
-    <div class="dm-compose-hint">
+    <div v-if="!isEmail" class="dm-compose-hint">
       Tip: type <code>invoice</code>, <code>customer</code>, <code>vehicle</code>, or <code>service log</code> to attach links
     </div>
   </div>
