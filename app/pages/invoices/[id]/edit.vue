@@ -214,24 +214,12 @@ const autosaveText = computed(() => {
   return autosavedLabel(lastSavedAt.value)
 })
 
-const customerFilterQ = ref('')
-const customerSearchQ = ref('')
-
-let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
-watch(customerFilterQ, (q) => {
-  if (customerSearchTimer) clearTimeout(customerSearchTimer)
-  customerSearchTimer = setTimeout(() => {
-    customerSearchQ.value = q.trim()
-  }, 300)
-})
-
 const { data: customersData, pending: customersPending } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
   {
     query: computed(() => ({
-      pageSize: 50,
+      pageSize: 100,
       sort: 'name-asc' as const,
-      q: customerSearchQ.value || undefined,
     })),
   },
 )
@@ -911,14 +899,6 @@ const aiPopStyle = computed(() => {
               <div class="cbody ed-details-grid">
                 <label class="fld">
                   Customer
-                  <input
-                    v-model="customerFilterQ"
-                    type="search"
-                    placeholder="Search customers…"
-                    aria-label="Search customers"
-                    autocomplete="off"
-                    :disabled="!editable"
-                  >
                   <select v-model="customerId" :disabled="!editable" @change="onCustomerChange">
                     <option v-if="!customerOptions.length" value="" disabled>
                       {{ customersPending ? 'Loading customers…' : 'No customers found' }}
