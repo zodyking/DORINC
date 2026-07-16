@@ -6,6 +6,7 @@ import {
 } from '#shared/validators/fleet-number'
 
 const model = defineModel<string>({ default: '' })
+const { showAppAlert } = useAppAlert()
 
 defineProps<{
   required?: boolean
@@ -18,7 +19,7 @@ function rejectInput(event: Event) {
   const input = event.target as HTMLInputElement
   model.value = ''
   input.value = ''
-  window.alert(FLEET_NUMBER_REJECT_MESSAGE)
+  showAppAlert(FLEET_NUMBER_REJECT_MESSAGE, 'Invalid fleet number')
 }
 
 function onInput(event: Event) {

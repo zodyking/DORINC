@@ -135,6 +135,7 @@ watch(() => route.path, () => {
 
       <SuiteFooter />
     </div>
+    <AppAlertHost />
   </div>
 </template>
 

@@ -241,6 +241,7 @@ watch(() => route.path, () => {
     </div>
 
     <HelpPlatformHelpWidget />
+    <AppAlertHost />
   </div>
 </template>
 
