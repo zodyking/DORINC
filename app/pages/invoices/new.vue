@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
-import { applyCatalogItemToLineFields, editorSummaryRows, invoiceDisplayTotal, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
   buildInvoiceLinePatchBody,
   canProceedWizardStep,
@@ -20,7 +20,6 @@ import {
 } from '~/utils/invoice-creator-ui'
 import {
   auditWhenDisplay,
-  invoiceDateDisplay,
   moneyDisplay,
   paymentTermsLabel,
 } from '~/utils/invoices-ui'
@@ -76,18 +75,18 @@ interface SavedInvoiceTotals {
 
 const auth = useAuthStore()
 
-const canApprove = computed(() => auth.can('invoices.approve.all'))
-const canSend = computed(() => auth.can('invoices.send.all'))
-
 const step = ref(1)
 const busy = ref(false)
+const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
+
+const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 
 const INVOICE_NARRATIONS: Record<number, string> = {
   1: 'Pick who you are billing.',
   2: 'Choose the vehicle for this invoice.',
   3: 'Set the invoice date, due date, and payment terms.',
   4: 'Add your line items and charges.',
-  5: 'Review totals, then save or send.',
+  5: 'Preview the invoice PDF, then save your draft.',
 }
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
@@ -265,12 +264,11 @@ const summaryRows = computed(() => {
   })
 })
 
-const reviewTotal = computed(() => {
-  const breakdown = previewLineTypeBreakdown(lines.value)
-  const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
-    taxExempt: selectedCustomer.value?.taxExempt,
-  })
-  return invoiceDisplayTotal(inv, breakdown)
+watch(step, async (n) => {
+  if (n !== 5 || !invoiceId.value) return
+  await nextTick()
+  pdfPreviewRef.value?.refresh()
+  pdfPreviewRef.value?.refit()
 })
 
 async function ensureEditingSession(id: string) {
@@ -535,34 +533,12 @@ async function saveDraft(): Promise<boolean> {
   }
 }
 
-async function saveAndContinueEditing() {
+async function saveDraftAndFinish() {
   const ok = await saveDraft()
-  if (ok && invoiceId.value) await navigateTo(`/invoices/${invoiceId.value}/edit`)
+  if (ok) await navigateTo('/invoices')
 }
 
-async function finalizeAndSend() {
-  if (!canApprove.value || !canSend.value) {
-    submitError.value = 'You need approve and send permissions to finalize and email this invoice.'
-    return
-  }
-  const ok = await saveDraft()
-  if (!ok || !invoiceId.value) return
-  busy.value = true
-  submitError.value = ''
-  try {
-    if (canApprove.value) await $fetch(`/api/invoices/${invoiceId.value}/approve`, { method: 'POST' })
-    if (canSend.value) await $fetch(`/api/invoices/${invoiceId.value}/send`, { method: 'POST' })
-    await navigateTo(`/invoices/${invoiceId.value}`)
-  }
-  catch (e: unknown) {
-    submitError.value = syncFetchErrorMessage(e, 'Finalize failed')
-  }
-  finally {
-    busy.value = false
-  }
-}
 
-const validLines = computed(() => lines.value.filter(isDraftLineValid))
 </script>
 
 <template>
@@ -889,50 +865,28 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
     </div>
 
     <!-- Step 5: Review -->
-    <div v-show="step === 5" class="sl-panel active">
+    <div v-show="step === 5" class="sl-panel active inv-wizard-review">
       <h3>Review &amp; finish</h3>
-      <p class="sl-hint">Confirm details before saving or sending the invoice.</p>
-      <div class="sl-review">
-        <div class="r">
-          <span class="k">Invoice</span>
-          <span class="v">{{ invoiceNumberFormatted ?? 'Assigned when saved' }}</span>
-        </div>
-        <div class="r"><span class="k">Customer</span><span class="v">{{ selectedCustomer?.displayName ?? '—' }}</span></div>
-        <div class="r"><span class="k">Vehicle</span><span class="v">{{ selectedVehicle ? vehicleTag(selectedVehicle) : '—' }}</span></div>
-        <div class="r">
-          <span class="k">Issue / due</span>
-          <span class="v">{{ invoiceDateDisplay(invoiceDate) }} → {{ invoiceDateDisplay(dueDate) }}</span>
-        </div>
-        <div class="r"><span class="k">Terms</span><span class="v">{{ paymentTermsLabel(paymentTerms) }}</span></div>
-        <div class="r"><span class="k">Line items</span><span class="v">{{ validLines.length }}</span></div>
-        <div class="r">
-          <span class="k">Total</span>
-          <span class="v" style="color:#4f46e5;">{{ moneyDisplay(reviewTotal) }}</span>
-        </div>
-        <div class="r stack">
-          <span class="k">On finalize</span>
-          <span class="v">Generate PDF and email the customer. Portal access is updated immediately.</span>
-        </div>
+      <p class="sl-hint">Preview how this invoice will look as a PDF, then save your draft.</p>
+      <div v-if="invoiceId && invoiceNumberFormatted" class="inv-wizard-pdf">
+        <InvoicePdfPreviewPane
+          ref="pdfPreviewRef"
+          :invoice-id="invoiceId"
+          :invoice-label="invoiceNumberFormatted"
+          :can-generate-pdf="canGeneratePdf"
+          :show-download="false"
+        />
       </div>
-      <button
-        type="button"
-        class="btn ghost sm sl-change-mode"
-        :disabled="busy || !invoiceId"
-        @click="saveAndContinueEditing"
-      >
-        Save draft &amp; open full editor
-      </button>
+      <p v-else class="help inv-wizard-pdf-empty">Save your line items first to preview the PDF.</p>
       <div class="sl-foot inv-wizard-review-foot">
         <button type="button" class="btn" :disabled="busy" @click="prevStep">Back</button>
-        <button type="button" class="btn" :disabled="busy" @click="saveDraft">Save draft</button>
         <button
           type="button"
           class="btn primary"
-          :disabled="busy || !invoiceId || !canApprove || !canSend"
-          :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
-          @click="finalizeAndSend"
+          :disabled="busy || !invoiceId"
+          @click="saveDraftAndFinish"
         >
-          {{ busy ? 'Sending…' : 'Finalize & send' }}
+          {{ busy ? 'Saving…' : 'Save draft' }}
         </button>
       </div>
     </div>
@@ -1055,6 +1009,22 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
 .inv-wizard-review-foot .btn.primary {
   flex: 1.4;
   min-width: 140px;
+}
+
+.inv-wizard-pdf {
+  min-height: min(72vh, 820px);
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-wizard-pdf-empty {
+  margin: 0 0 16px;
+  padding: 32px 16px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
 @media (max-width: 720px) {
