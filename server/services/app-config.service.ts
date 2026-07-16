@@ -88,6 +88,41 @@ function envSmtpConfig(): SmtpConfig | null {
   }
 }
 
+function decryptWithMasterKeys(
+  encryptedB64: string,
+  dbMasterHex: string | null,
+  envKey: string | null,
+): Buffer | null {
+  const keys = [...new Set([dbMasterHex, envKey].filter(Boolean))] as string[]
+  for (const keyHex of keys) {
+    try {
+      configureMasterKey(keyHex)
+      return decryptBuffer(Buffer.from(encryptedB64, 'base64'))
+    }
+    catch {
+      // try next key candidate
+    }
+  }
+  if (keys.length) {
+    console.warn('[app-config] could not decrypt encrypted app setting (master key mismatch)')
+  }
+  return null
+}
+
+/** True when env must override UI-managed SMTP (complete env config or explicit force flag). */
+export function isSmtpEnvLocked(): boolean {
+  if (process.env.SMTP_FORCE_ENV === 'true') return true
+  const env = envSmtpConfig()
+  return !!(env?.host && env.from && env.pass)
+}
+
+export function decryptEncryptedAppSetting(
+  encryptedB64: string,
+  dbMasterHex: string | null,
+): Buffer | null {
+  return decryptWithMasterKeys(encryptedB64, dbMasterHex, envMasterKey())
+}
+
 async function readSetting(db: Db, key: string) {
   const [row] = await db.select()
     .from(appSettings)
@@ -160,26 +195,26 @@ export async function refreshAppConfigCache(db: Db): Promise<void> {
   let smtp: SmtpConfig | null = null
   const smtpRow = byKey.get(APP_CONFIG_KEYS.smtp)
   if (smtpRow?.encryptedValue) {
-    try {
-      const keyHex = envMasterKey() ?? masterHex
-      if (keyHex) {
-        configureMasterKey(keyHex)
-        smtp = parseSmtpPayload(decryptBuffer(Buffer.from(smtpRow.encryptedValue, 'base64')))
+    const decrypted = decryptWithMasterKeys(smtpRow.encryptedValue, masterHex, envMasterKey())
+    if (decrypted) {
+      try {
+        smtp = parseSmtpPayload(decrypted)
       }
-    }
-    catch {
-      smtp = null
+      catch {
+        console.warn('[app-config] SMTP config payload in database is invalid')
+        smtp = null
+      }
     }
   }
 
   cache = { masterKeyHex: masterHex, sessionSecretHex: sessionHex, appUrl, maxUploadMb, smtp, notifyEmail }
 
-  const effectiveMaster = envMasterKey() ?? masterHex
+  const effectiveMaster = masterHex ?? envMasterKey()
   if (effectiveMaster) configureMasterKey(effectiveMaster)
 }
 
 export function getMasterKeyHex(): string | null {
-  return envMasterKey() ?? cache.masterKeyHex
+  return cache.masterKeyHex ?? envMasterKey()
 }
 
 export function getSessionSecret(): string | null {
@@ -195,7 +230,7 @@ export function getMaxUploadMb(): number {
 }
 
 export function getSmtpConfig(): SmtpConfig | null {
-  return envSmtpConfig() ?? cache.smtp
+  return cache.smtp ?? envSmtpConfig()
 }
 
 export function getNotifyEmail(): string | null {
@@ -240,10 +275,21 @@ export function isAppUrlEnvLocked(): boolean {
 
 /** Auto-provision encryption keys when saving UI-managed secrets (SMTP, IMAP, etc.). */
 export async function ensureEncryptionReadyForSettings(db: Db): Promise<string> {
-  const existing = getMasterKeyHex()
-  if (existing) {
-    configureMasterKey(existing)
-    return existing
+  const masterRow = await readSetting(db, APP_CONFIG_KEYS.masterKey)
+  const dbHex = (masterRow?.value as { hex?: string } | null)?.hex?.trim() || null
+  const envKey = envMasterKey()
+
+  if (dbHex) {
+    configureMasterKey(dbHex)
+    cache.masterKeyHex = dbHex
+    return dbHex
+  }
+
+  if (envKey) {
+    await upsertSetting(db, APP_CONFIG_KEYS.masterKey, { value: { hex: envKey } })
+    configureMasterKey(envKey)
+    cache.masterKeyHex = envKey
+    return envKey
   }
 
   const masterKeyHex = hexKey()
@@ -305,7 +351,7 @@ export async function saveSecurityConfig(
 }
 
 export async function saveSmtpConfig(db: Db, input: SmtpConfig, updatedBy?: string): Promise<void> {
-  if (envSmtpConfig()) {
+  if (isSmtpEnvLocked()) {
     throw new Error('SMTP settings are locked by environment variables')
   }
 

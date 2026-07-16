@@ -5,6 +5,7 @@ import { Pool } from 'pg'
 import * as schema from '../server/db/schema'
 import { syncImapInbox } from '../server/services/imap-sync.service'
 import { refreshImapConfigCache } from '../server/services/imap-config.service'
+import { refreshAppConfigCache } from '../server/services/app-config.service'
 import { getDatabaseUrl } from '../server/services/runtime-config.service'
 
 config()
@@ -20,6 +21,7 @@ async function main() {
   const db = drizzle({ client: pool, schema })
 
   try {
+    await refreshAppConfigCache(db)
     await refreshImapConfigCache(db)
     const result = await syncImapInbox(db, { full: process.argv.includes('--full') })
     console.log(`[imap-sync] fetched=${result.fetched} ingested=${result.ingested} skipped=${result.skipped} errors=${result.errors}`)

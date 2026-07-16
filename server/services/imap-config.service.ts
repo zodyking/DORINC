@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
-import { configureMasterKey, decryptBuffer, encryptBuffer } from './encryption.service'
-import { ensureEncryptionReadyForSettings, getMasterKeyHex, getSmtpConfig } from './app-config.service'
+import { encryptBuffer } from './encryption.service'
+import { ensureEncryptionReadyForSettings, getSmtpConfig, decryptEncryptedAppSetting, APP_CONFIG_KEYS } from './app-config.service'
 
 export const IMAP_CONFIG_KEY = 'imap.config'
 export const IMAP_FILTERS_KEY = 'imap.filters'
@@ -74,19 +74,23 @@ export async function refreshImapConfigCache(db: Db): Promise<void> {
     .where(eq(appSettings.key, IMAP_CONFIG_KEY))
   const filterRows = await db.select().from(appSettings)
     .where(eq(appSettings.key, IMAP_FILTERS_KEY))
+  const masterRows = await db.select().from(appSettings)
+    .where(eq(appSettings.key, APP_CONFIG_KEYS.masterKey))
+
+  const masterHex = (masterRows[0]?.value as { hex?: string } | null)?.hex?.trim() || null
 
   let config: ImapConfig | null = null
   const configRow = rows[0]
   if (configRow?.encryptedValue) {
-    try {
-      const keyHex = getMasterKeyHex()
-      if (keyHex) {
-        configureMasterKey(keyHex)
-        config = parseImapPayload(decryptBuffer(Buffer.from(configRow.encryptedValue, 'base64')))
+    const decrypted = decryptEncryptedAppSetting(configRow.encryptedValue, masterHex)
+    if (decrypted) {
+      try {
+        config = parseImapPayload(decrypted)
       }
-    }
-    catch {
-      config = null
+      catch {
+        console.warn('[imap-config] IMAP config payload in database is invalid')
+        config = null
+      }
     }
   }
 
@@ -105,7 +109,7 @@ export async function refreshImapConfigCache(db: Db): Promise<void> {
 }
 
 export function getImapConfig(): ImapConfig | null {
-  return envImapConfig() ?? cache.config
+  return cache.config ?? envImapConfig()
 }
 
 export function getImapFilters(): ImapFilterConfig {
@@ -113,7 +117,9 @@ export function getImapFilters(): ImapFilterConfig {
 }
 
 export function isImapEnvLocked(): boolean {
-  return !!(process.env.IMAP_HOST?.trim() && process.env.IMAP_USER?.trim())
+  if (process.env.IMAP_FORCE_ENV === 'true') return true
+  const env = envImapConfig()
+  return !!(env?.host && env.user && env.pass)
 }
 
 export async function saveImapConfig(db: Db, config: ImapConfig, actorId: string | null) {
