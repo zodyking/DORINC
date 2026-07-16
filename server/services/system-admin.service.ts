@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { getSmtpConfig } from './app-config.service'
-import { sendMail } from '../mail/mailer'
+import { sendBrandedMail } from '../mail/branded-mail'
 import { buildSmtpTestEmail } from '../mail/templates/system'
 import { getBackupHealth } from './backups.service'
 import { getAiHealth, getMonthlyUsageCost } from './ai-provider.service'
@@ -109,5 +109,5 @@ export async function sendSmtpTest(db: Db, to: string, actorName: string): Promi
     appUrl: brand.appUrl,
     brand,
   })
-  return sendMail({ to, ...mail })
+  return sendBrandedMail(db, { to, ...mail }, brand)
 }

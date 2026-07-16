@@ -1,5 +1,5 @@
 import type { Db } from '../db/client'
-import { sendMail } from '../mail/mailer'
+import { sendBrandedMail } from '../mail/branded-mail'
 import { buildSignupVerificationEmail } from '../mail/templates/system'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
@@ -22,5 +22,5 @@ export async function sendVerificationEmail(
     appUrl,
     brand,
   })
-  await sendMail({ to: input.to, ...mail })
+  await sendBrandedMail(db, { to: input.to, ...mail }, brand)
 }

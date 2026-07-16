@@ -1,6 +1,7 @@
 // email_send handler — delivers queued SMTP messages (SPEC §18).
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
+import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 
 let _transport
 let _transportKey
@@ -120,9 +121,17 @@ async function deliverEmail(pool, payload) {
   if (!to || !subject) throw new Error('email_send payload missing to/subject')
 
   const { transport, from } = await getTransport(pool)
+  const prepared = await embedInlineLogoInHtml(html)
 
   try {
-    await transport.sendMail({ from, to, subject, text, html })
+    await transport.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html: prepared.html,
+      attachments: prepared.attachments,
+    })
   }
   catch (err) {
     if (process.env.NODE_ENV === 'production') throw err

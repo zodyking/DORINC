@@ -11,6 +11,7 @@ export interface EmailBrandContext {
   brandLegal: string
   brandTagline: string
   logoUrl: string | null
+  logoFileId?: string | null
   logoInitial: string
   addressLines: string[]
   phone: string
@@ -62,6 +63,7 @@ export function buildEmailBrandFromProfile(
     brandLegal,
     brandTagline: 'Accounting workspace',
     logoUrl,
+    logoFileId: opts.logoFileId ?? null,
     logoInitial,
     addressLines: formatAddressLines(profile),
     phone: formatPhoneDisplay(profile.phone?.trim() || ''),

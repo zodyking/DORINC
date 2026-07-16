@@ -2,6 +2,7 @@
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
+import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 
 function workerAppUrl() {
   return process.env.APP_URL?.trim() || 'http://localhost:3000'
@@ -159,18 +160,22 @@ async function deliverInvoiceEmail(pool, payload, pdfRow) {
   if (!to || !subject) throw new Error('invoice_send payload missing recipient/subject')
 
   const { transport, from } = await getTransport(pool)
+  const prepared = await embedInlineLogoInHtml(html)
 
   await transport.sendMail({
     from,
     to,
     subject,
     text,
-    html,
-    attachments: [{
-      filename,
-      content: pdfRow.binary_data,
-      contentType: pdfRow.mime_type ?? 'application/pdf',
-    }],
+    html: prepared.html,
+    attachments: [
+      {
+        filename,
+        content: pdfRow.binary_data,
+        contentType: pdfRow.mime_type ?? 'application/pdf',
+      },
+      ...prepared.attachments,
+    ],
   })
 }
 

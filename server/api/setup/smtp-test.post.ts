@@ -1,7 +1,8 @@
 import { useDb } from '../../db/client'
 import { isBootstrapped } from '../../services/setup.service'
 import { saveSmtpConfig } from '../../services/app-config.service'
-import { sendMail, resetMailTransport } from '../../mail/mailer'
+import { resetMailTransport } from '../../mail/mailer'
+import { sendBrandedMail } from '../../mail/branded-mail'
 import { buildSmtpTestEmail } from '../../mail/templates/system'
 import { hasDatabaseConfig } from '../../services/runtime-config.service'
 import { apiError } from '../../utils/api-error'
@@ -39,7 +40,7 @@ export default defineEventHandler(async (event) => {
       appUrl: brand.appUrl,
       brand,
     })
-    const result = await sendMail({ to: body.to, ...mail })
+    const result = await sendBrandedMail(db, { to: body.to, ...mail }, brand)
 
     return {
       ok: true,
