@@ -7,6 +7,7 @@ import { getImapConfig } from './imap-config.service'
 import {
   buildAllowedFilterAddresses,
   ingestInboundEmail,
+  isEmailInboxReady,
   messageMatchesFilter,
 } from './email-inbox.service'
 import { extractEmailAddresses } from '../mail/email-thread'
@@ -49,6 +50,9 @@ export async function testImapConnection(): Promise<{ ok: true, mailbox: string,
 export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Promise<ImapSyncResult> {
   const config = getImapConfig()
   if (!config) throw new Error('IMAP is not configured')
+  if (!(await isEmailInboxReady(db))) {
+    throw new Error('Email inbox tables are not ready yet. Restart the app after deploy to apply database migration 0047.')
+  }
 
   const [state] = await db.select().from(imapSyncState).where(eq(imapSyncState.id, 'default')).limit(1)
   const lastUid = opts.full ? 0 : Number(state?.lastUid ?? 0)

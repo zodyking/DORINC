@@ -32,6 +32,13 @@ export class EmailInboxError extends Error {
   }
 }
 
+export async function isEmailInboxReady(db: Db): Promise<boolean> {
+  const result = await db.execute<{ reg: string | null }>(
+    sql`SELECT to_regclass('public.email_threads') AS reg`,
+  )
+  return Boolean(result.rows[0]?.reg)
+}
+
 export async function buildAllowedFilterAddresses(db: Db): Promise<Set<string>> {
   const filters = getImapFilters()
   const allowed = new Set<string>()
@@ -605,6 +612,8 @@ export async function listCustomerEmailRecipients(db: Db, q?: string) {
 }
 
 export async function countEmailUnread(db: Db, userId: string): Promise<number> {
+  if (!(await isEmailInboxReady(db))) return 0
+
   const threads = await db.select({ conversationId: emailThreads.conversationId }).from(emailThreads)
   let total = 0
   for (const thread of threads) {

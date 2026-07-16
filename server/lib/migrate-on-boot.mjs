@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import pg from 'pg'
 import { getDatabaseUrl } from './runtime-config.mjs'
+import { ensureEmailInboxSchema } from './ensure-email-inbox-schema.mjs'
 
 async function resolveMigrationsFolder() {
   const candidates = [
@@ -35,6 +36,7 @@ export async function applyPendingMigrationsOnBoot() {
     const db = drizzle({ client: pool })
     const migrationsFolder = await resolveMigrationsFolder()
     await migrate(db, { migrationsFolder })
+    await ensureEmailInboxSchema(pool)
     console.log('[migrate] pending migrations applied on boot')
   }
   finally {

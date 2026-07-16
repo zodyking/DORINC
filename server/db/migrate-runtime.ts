@@ -2,6 +2,7 @@ import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import type { Db } from './client'
+import { usePool } from './client'
 
 async function resolveMigrationsFolder(): Promise<string> {
   const candidates = [
@@ -35,4 +36,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
     console.error(`[migrate] failed applying migrations from ${migrationsFolder}`, err)
     throw err
   }
+
+  const { ensureEmailInboxSchema } = await import('../lib/ensure-email-inbox-schema.mjs')
+  await ensureEmailInboxSchema(usePool())
 }
