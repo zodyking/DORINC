@@ -40,22 +40,26 @@ describe('worker IMAP attachment helpers', () => {
     expect(safeAttachmentName('../checks/check\r\n.pdf', 0)).toBe('check__.pdf')
   })
 
-  it('persists safe non-inline attachments and skips embedded images', async () => {
+  it('persists inline related images and regular attachments separately', async () => {
     const query = vi.fn(async (sql: string, _params?: unknown[]) => {
       if (sql.includes('SELECT value FROM app_settings')) return { rows: [{ value: { mb: 25 } }] }
+      if (sql.includes('COUNT(*)')) return { rows: [{ count: 0 }] }
+      if (sql.includes('content_id FROM app_files')) return { rows: [] }
       return { rows: [] }
     })
+    const png = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0])
     const pdf = Buffer.from('%PDF-1.7 test', 'latin1')
 
     const count = await persistInboundAttachments({ query }, 'message-1', [
-      { filename: 'inline.png', contentType: 'image/png', content: Buffer.from('x'), related: true },
+      { filename: 'inline.png', contentType: 'image/png', content: png, related: true, cid: 'logo@mailer' },
       { filename: 'check.pdf', contentType: 'application/pdf', content: pdf, related: false },
     ])
 
-    expect(count).toBe(1)
-    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO app_files'))
-    expect(insert?.[1]?.[0]).toBe('message-1')
-    expect(insert?.[1]?.[1]).toBe('check.pdf')
-    expect(insert?.[1]?.[2]).toBe('application/pdf')
+    expect(count).toBe(2)
+    const inserts = query.mock.calls.filter(([sql]) => sql.includes('INSERT INTO app_files'))
+    expect(inserts).toHaveLength(2)
+    expect(inserts[0]?.[1]?.[1]).toBe('inline')
+    expect(inserts[0]?.[1]?.[7]).toBe('logo@mailer')
+    expect(inserts[1]?.[1]?.[1]).toBe('attachment')
   })
 })

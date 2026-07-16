@@ -15,7 +15,7 @@ import {
 } from './email-thread.mjs'
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
-import { persistInboundAttachments } from './imap-attachments.mjs'
+import { persistInboundAttachments, repairInboundEmailMedia } from './imap-attachments.mjs'
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
@@ -272,7 +272,10 @@ async function ingestInboundEmail(pool, input, filters) {
     `SELECT message_id FROM email_message_meta WHERE internet_message_id = $1 LIMIT 1`,
     [normalizedId],
   )
-  if (existing[0]) return { skipped: true, reason: 'duplicate' }
+  if (existing[0]) {
+    const repaired = await repairInboundEmailMedia(pool, existing[0].message_id, input)
+    return { skipped: true, reason: 'duplicate', repaired }
+  }
 
   const from = normalizeEmailAddress(input.from)
   const smtp = await loadSmtpConfig(pool)
@@ -399,7 +402,7 @@ async function ingestInboundEmail(pool, input, filters) {
  */
 export async function runImapInboxSync(pool, opts = {}) {
   if (syncInProgress) {
-    return { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, busy: true }
+    return { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, repaired: 0, busy: true }
   }
 
   const config = await loadImapConfig(pool)
@@ -425,7 +428,7 @@ export async function runImapInboxSync(pool, opts = {}) {
       logger: false,
     })
 
-    const result = { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, busy: false }
+    const result = { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, repaired: 0, busy: false }
     let maxUid = lastUid
 
     await client.connect()
@@ -484,7 +487,10 @@ export async function runImapInboxSync(pool, opts = {}) {
               attachments: parsed.attachments,
             }, filters)
 
-            if (ingest.skipped) result.skipped++
+            if (ingest.skipped) {
+              result.skipped++
+              if (ingest.repaired) result.repaired += ingest.repaired
+            }
             else {
               result.ingested++
               result.attachments += ingest.attachmentCount ?? 0

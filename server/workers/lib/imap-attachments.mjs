@@ -23,6 +23,29 @@ export function sniffAttachmentMime(data) {
   return null
 }
 
+export function normalizeContentId(raw) {
+  return String(raw ?? '')
+    .replace(/^cid:/i, '')
+    .replace(/^<|>$/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function attachmentContentId(attachment) {
+  const raw = attachment.cid ?? attachment.contentId
+  if (!raw?.trim()) return null
+  return normalizeContentId(raw)
+}
+
+function isPersistableImageBytes(content, mimeType) {
+  const normalizedMime = String(mimeType || '').toLowerCase()
+  if (!ALLOWED_ATTACHMENT_MIMES.has(normalizedMime) || !normalizedMime.startsWith('image/')) return false
+  const sniffed = sniffAttachmentMime(content)
+  if (!sniffed?.startsWith('image/')) return false
+  if (normalizedMime === 'image/heif') return sniffed === 'image/heic' || sniffed === 'image/heif'
+  return sniffed === normalizedMime
+}
+
 export function safeAttachmentName(filename, index) {
   const leaf = String(filename || `attachment-${index + 1}`)
     .split(/[\\/]/)
@@ -49,15 +72,100 @@ async function maxAttachmentBytes(pool) {
   return (Number.isFinite(configuredMb) && configuredMb > 0 ? configuredMb : 25) * 1024 * 1024
 }
 
-export async function persistInboundAttachments(pool, messageId, attachments = []) {
+async function listExistingInlineCids(pool, messageId) {
+  const { rows } = await pool.query(
+    `SELECT content_id FROM app_files
+     WHERE owner_entity_type = 'message'
+       AND owner_entity_id = $1
+       AND file_kind = 'inline'
+       AND archived_at IS NULL
+       AND content_id IS NOT NULL`,
+    [messageId],
+  )
+  return new Set(rows.map(row => normalizeContentId(row.content_id)))
+}
+
+async function countExistingAttachments(pool, messageId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM app_files
+     WHERE owner_entity_type = 'message'
+       AND owner_entity_id = $1
+       AND file_kind = 'attachment'
+       AND archived_at IS NULL`,
+    [messageId],
+  )
+  return rows[0]?.count ?? 0
+}
+
+async function insertMessageFile(pool, {
+  messageId,
+  fileKind,
+  filename,
+  mimeType,
+  content,
+  contentId = null,
+}) {
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  await pool.query(
+    `INSERT INTO app_files (
+       owner_entity_type, owner_entity_id, file_kind, original_filename,
+       mime_type, file_size_bytes, sha256_hash, binary_data, content_id, created_by
+     ) VALUES ('message', $1, $2, $3, $4, $5, $6, $7, $8, NULL)`,
+    [
+      messageId,
+      fileKind,
+      filename,
+      mimeType,
+      content.length,
+      sha256,
+      content,
+      contentId,
+    ],
+  )
+}
+
+export async function persistInboundAttachments(pool, messageId, attachments = [], opts = {}) {
   const perFileLimit = await maxAttachmentBytes(pool)
   const totalLimit = perFileLimit * 2
   let totalBytes = 0
   let persisted = 0
 
+  let existingInlineCids = new Set()
+  let existingAttachmentCount = 0
+  if (opts.skipExisting) {
+    existingInlineCids = await listExistingInlineCids(pool, messageId)
+    existingAttachmentCount = await countExistingAttachments(pool, messageId)
+  }
+
   for (const [index, attachment] of attachments.slice(0, 20).entries()) {
-    // Mailparser embeds related CID images into the HTML body as data URIs.
-    if (attachment.related || !attachment.content?.length) continue
+    if (!attachment.content?.length) continue
+
+    if (attachment.related) {
+      const contentId = attachmentContentId(attachment)
+      if (!contentId || !isPersistableImageBytes(attachment.content, attachment.contentType)) continue
+      if (opts.skipExisting && existingInlineCids.has(contentId)) continue
+
+      totalBytes += attachment.content.length
+      if (attachment.content.length > perFileLimit || totalBytes > totalLimit) {
+        console.warn('[imap-sync] skipped oversized inline image', { messageId, contentId })
+        if (totalBytes > totalLimit) break
+        continue
+      }
+
+      await insertMessageFile(pool, {
+        messageId,
+        fileKind: 'inline',
+        filename: safeAttachmentName(attachment.filename, index),
+        mimeType: String(attachment.contentType || '').toLowerCase(),
+        content: attachment.content,
+        contentId,
+      })
+      persisted++
+      existingInlineCids.add(contentId)
+      continue
+    }
+
+    if (opts.skipExisting && existingAttachmentCount > 0) continue
 
     totalBytes += attachment.content.length
     if (attachment.content.length > perFileLimit || totalBytes > totalLimit) {
@@ -83,23 +191,20 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
       continue
     }
 
-    const sha256 = createHash('sha256').update(attachment.content).digest('hex')
-    await pool.query(
-      `INSERT INTO app_files (
-         owner_entity_type, owner_entity_id, file_kind, original_filename,
-         mime_type, file_size_bytes, sha256_hash, binary_data, created_by
-       ) VALUES ('message', $1, 'attachment', $2, $3, $4, $5, $6, NULL)`,
-      [
-        messageId,
-        safeAttachmentName(attachment.filename, index),
-        mimeType,
-        attachment.content.length,
-        sha256,
-        attachment.content,
-      ],
-    )
+    await insertMessageFile(pool, {
+      messageId,
+      fileKind: 'attachment',
+      filename: safeAttachmentName(attachment.filename, index),
+      mimeType,
+      content: attachment.content,
+    })
     persisted++
   }
 
   return persisted
+}
+
+export async function repairInboundEmailMedia(pool, messageId, input = {}) {
+  if (!input.attachments?.length) return 0
+  return persistInboundAttachments(pool, messageId, input.attachments, { skipExisting: true })
 }

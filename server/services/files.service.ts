@@ -66,6 +66,8 @@ export interface UploadFileInput {
   height?: number | null
   /** Trusted server-generated content (PDF renders, thumbnails) skips the MIME allowlist. */
   trusted?: boolean
+  /** Content-ID for inline email images. */
+  contentId?: string | null
 }
 
 /** Columns safe for list views — never the blob (SPEC §8). */
@@ -79,6 +81,7 @@ const META_COLUMNS = {
   mimeType: appFiles.mimeType,
   fileSizeBytes: appFiles.fileSizeBytes,
   sha256Hash: appFiles.sha256Hash,
+  contentId: appFiles.contentId,
   width: appFiles.width,
   height: appFiles.height,
   createdBy: appFiles.createdBy,
@@ -116,6 +119,7 @@ export async function uploadFile(db: Db, input: UploadFileInput, createdBy: stri
     mimeType: input.mimeType,
     fileSizeBytes: input.data.length,
     sha256Hash,
+    contentId: input.contentId ?? null,
     width: input.width ?? null,
     height: input.height ?? null,
     binaryData: input.data,

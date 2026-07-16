@@ -24,6 +24,7 @@ export interface ImapSyncResult {
   ingested: number
   skipped: number
   errors: number
+  repaired: number
 }
 
 export async function testImapConnection(): Promise<{ ok: true, mailbox: string, messageCount: number }> {
@@ -72,7 +73,7 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
     logger: false,
   })
 
-  const result: ImapSyncResult = { fetched: 0, ingested: 0, skipped: 0, errors: 0 }
+  const result: ImapSyncResult = { fetched: 0, ingested: 0, skipped: 0, errors: 0, repaired: 0 }
   let maxUid = lastUid
 
   await client.connect()
@@ -124,10 +125,15 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
               contentType: attachment.contentType,
               content: attachment.content,
               related: attachment.related,
+              cid: attachment.cid ?? null,
+              contentId: attachment.contentId ?? null,
             })),
           })
 
-          if (ingest.skipped) result.skipped++
+          if (ingest.skipped) {
+            result.skipped++
+            if ('repaired' in ingest && ingest.repaired) result.repaired += ingest.repaired
+          }
           else result.ingested++
         }
         catch (err) {

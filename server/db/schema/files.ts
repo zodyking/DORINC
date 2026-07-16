@@ -11,7 +11,7 @@ export const bytea = customType<{ data: Buffer, driverData: Buffer }>({
 export const FILE_OWNER_ENTITY_TYPES = ['service_log', 'invoice', 'estimate', 'customer', 'vehicle', 'request', 'template', 'company', 'message'] as const
 export type FileOwnerEntityType = (typeof FILE_OWNER_ENTITY_TYPES)[number]
 
-export const FILE_KINDS = ['original', 'preview', 'thumbnail', 'pdf', 'attachment'] as const
+export const FILE_KINDS = ['original', 'preview', 'thumbnail', 'pdf', 'attachment', 'inline'] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 
 /**
@@ -32,6 +32,8 @@ export const appFiles = pgTable('app_files', {
   mimeType: text('mime_type').notNull(),
   fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
   sha256Hash: text('sha256_hash').notNull(),
+  /** Content-ID for inline email images (cid: references in HTML). */
+  contentId: text('content_id'),
 
   width: integer('width'),
   height: integer('height'),
