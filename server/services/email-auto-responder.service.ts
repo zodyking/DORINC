@@ -48,8 +48,8 @@ export async function sendCustomerAutoResponderIfEnabled(
   if (!to) return { sent: false }
 
   const brand = await resolveEmailBrand(db)
-  const subject = auto.subject.trim() || 'We received your message'
-  const replySubject = subjectWithRePrefix(input.inboundSubject.trim() || subject)
+  const autoSubject = auto.subject.trim() || 'We received your message'
+  const replySubject = subjectWithRePrefix(autoSubject)
 
   const mail = buildCustomerAutoResponderEmail({
     recipientName: input.recipientName,
@@ -67,12 +67,17 @@ export async function sendCustomerAutoResponderIfEnabled(
     subject: mail.subject,
     text: mail.text,
     html: mail.html,
+    messageId: internetMessageId,
+    inReplyTo: input.inboundMessageId,
+    references: references ?? undefined,
   }, brand)
 
   if (!delivered.delivered && process.env.NODE_ENV === 'production') {
     console.warn('[email-auto-responder] SMTP delivery failed for', to)
     return { sent: false }
   }
+
+  console.info('[email-auto-responder] sent confirmation to', to)
 
   const [message] = await db.insert(messages).values({
     conversationId: input.conversationId,

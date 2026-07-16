@@ -13,11 +13,17 @@ import { maybeEnqueueScheduledBackup, processBackupJobs } from './handlers/backu
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handlers/retention.mjs'
 import { maybeEnqueueImapSync, processImapSyncJobs } from './handlers/imap-sync.mjs'
 import { touchWorkerHeartbeat } from '../lib/worker-heartbeat.mjs'
+import { reclaimStaleWorkerJobs } from '../lib/reclaim-stale-jobs.mjs'
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 1500)
 const MAIL_BATCH = Number(process.env.MAIL_BATCH_SIZE ?? 20)
 
 async function tick(pool) {
+  const reclaimed = await reclaimStaleWorkerJobs(pool)
+  if (reclaimed.length) {
+    console.warn(`[worker] reclaimed ${reclaimed.length} stale job(s):`, reclaimed.map(r => `${r.job_type}:${r.status}`).join(', '))
+  }
+
   await touchWorkerHeartbeat(pool, 'general')
 
   const mail = await drainMailQueue(pool, MAIL_BATCH)

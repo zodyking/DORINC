@@ -102,7 +102,7 @@ export async function processImapSyncJobs(pool, batch = 1) {
     try {
       await runSyncScript()
       await pool.query(
-        `UPDATE worker_jobs SET status = 'done', finished_at = now(), error_message = NULL WHERE id = $1`,
+        `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
         [job.id],
       )
       processed++
@@ -116,7 +116,7 @@ export async function processImapSyncJobs(pool, batch = 1) {
         `UPDATE worker_jobs SET
            status = $2,
            finished_at = CASE WHEN $3 THEN now() ELSE NULL END,
-           error_message = $4,
+           last_error = $4,
            run_after = CASE WHEN $3 THEN run_after ELSE now() + ($5 || ' seconds')::interval END
          WHERE id = $1`,
         [job.id, isFinal ? 'failed' : 'queued', isFinal, String(err?.message ?? err), retryDelaySec],

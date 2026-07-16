@@ -144,7 +144,7 @@ export async function resolveCustomerByEmail(db: Db, email: string) {
   const normalized = email.toLowerCase()
   const [customer] = await db.select({ id: customers.id, displayName: customers.displayName, email: customers.email })
     .from(customers)
-    .where(and(eq(customers.email, normalized), isNull(customers.archivedAt)))
+    .where(and(sql`lower(${customers.email}) = ${normalized}`, isNull(customers.archivedAt)))
     .limit(1)
   if (customer) return customer
 
@@ -155,7 +155,7 @@ export async function resolveCustomerByEmail(db: Db, email: string) {
   })
     .from(customerContacts)
     .innerJoin(customers, eq(customers.id, customerContacts.customerId))
-    .where(and(eq(customerContacts.email, normalized), isNull(customerContacts.archivedAt)))
+    .where(and(sql`lower(${customerContacts.email}) = ${normalized}`, isNull(customerContacts.archivedAt)))
     .limit(1)
 
   if (contact) {

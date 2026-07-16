@@ -8,6 +8,9 @@ export interface BrandedMailMessage {
   subject: string
   text: string
   html: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string
 }
 
 function patchHtmlLogoToCid(html: string, logoUrl: string | null | undefined, cid: string): string {

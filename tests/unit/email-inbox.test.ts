@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildReferences,
   buildStaffEmailFooter,
@@ -6,7 +6,24 @@ import {
   normalizeEmailAddress,
   subjectWithRePrefix,
 } from '../../server/mail/email-thread'
-import { messageMatchesCustomerInboxFilter } from '../../server/services/email-inbox.service'
+import {
+  messageMatchesCustomerInboxFilter,
+  shouldIngestInboundEmail,
+} from '../../server/services/email-inbox.service'
+
+vi.mock('../../server/services/imap-config.service', () => ({
+  getImapFilters: vi.fn(() => ({
+    companyEmail: 'accounting@company.com',
+    additionalEmails: [],
+    includeCustomerEmails: true,
+    autoResponder: {
+      enabled: true,
+      scope: 'all',
+      subject: 'We received your message',
+      message: 'Thanks for contacting us.',
+    },
+  })),
+}))
 
 describe('email-thread helpers', () => {
   it('normalizes display-name wrapped addresses', () => {
@@ -83,6 +100,43 @@ describe('messageMatchesCustomerInboxFilter', () => {
       new Set(),
       customerEmails,
       'customer@client.com',
+      ['accounting@company.com'],
+      [],
+    )).toBe(false)
+  })
+})
+
+describe('shouldIngestInboundEmail', () => {
+  const companyInboxes = new Set(['accounting@company.com'])
+  const customerEmails = new Set(['customer@client.com'])
+
+  it('ingests unknown senders when auto-responder scope is all', () => {
+    expect(shouldIngestInboundEmail(
+      companyInboxes,
+      customerEmails,
+      'stranger@example.com',
+      ['accounting@company.com'],
+      [],
+    )).toBe(true)
+  })
+
+  it('rejects unknown senders when auto-responder scope is customers only', async () => {
+    const { getImapFilters } = await import('../../server/services/imap-config.service')
+    vi.mocked(getImapFilters).mockReturnValueOnce({
+      companyEmail: 'accounting@company.com',
+      additionalEmails: [],
+      includeCustomerEmails: true,
+      autoResponder: {
+        enabled: true,
+        scope: 'customers',
+        subject: 'We received your message',
+        message: 'Thanks for contacting us.',
+      },
+    })
+    expect(shouldIngestInboundEmail(
+      companyInboxes,
+      customerEmails,
+      'stranger@example.com',
       ['accounting@company.com'],
       [],
     )).toBe(false)
