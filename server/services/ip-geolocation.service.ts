@@ -56,6 +56,19 @@ const US_STATE_ABBREVS: Record<string, string> = {
   Wyoming: 'WY',
 }
 
+/** NYC ZIP prefixes map to borough names for more accurate city labels. */
+const NYC_BOROUGH_BY_ZIP_PREFIX: Record<string, string> = {
+  112: 'Brooklyn',
+  113: 'Queens',
+  114: 'Queens',
+  116: 'Queens',
+  104: 'Bronx',
+  103: 'Staten Island',
+  100: 'Manhattan',
+  101: 'Manhattan',
+  102: 'Manhattan',
+}
+
 interface IpWhoResponse {
   success?: boolean
   city?: string
@@ -63,10 +76,7 @@ interface IpWhoResponse {
   region_code?: string
   country?: string
   country_code?: string
-  connection?: {
-    org?: string
-    isp?: string
-  }
+  postal?: string
 }
 
 interface IpApiResponse {
@@ -76,13 +86,11 @@ interface IpApiResponse {
   regionName?: string
   country?: string
   countryCode?: string
-  isp?: string
-  org?: string
+  zip?: string
 }
 
 export interface IpLocationResult {
   label: string
-  network?: string | null
 }
 
 function abbreviateRegion(region: string, regionCode?: string, countryCode?: string): string {
@@ -95,37 +103,49 @@ function abbreviateRegion(region: string, regionCode?: string, countryCode?: str
   return regionCode?.trim() || trimmed
 }
 
+function refineCityLabel(
+  city: string,
+  zip: string | null | undefined,
+  regionCode: string | null | undefined,
+): string {
+  const trimmedCity = city.trim()
+  if (!trimmedCity) return trimmedCity
+
+  const zipPrefix = zip?.trim().slice(0, 3)
+  const isNewYork = regionCode === 'NY'
+    || regionCode === 'New York'
+    || trimmedCity.toLowerCase() === 'new york'
+
+  if (isNewYork && zipPrefix) {
+    const borough = NYC_BOROUGH_BY_ZIP_PREFIX[zipPrefix]
+    if (borough) return borough
+  }
+
+  return trimmedCity
+}
+
 function formatLocationParts(parts: {
   city?: string | null
   region?: string | null
   regionCode?: string | null
   country?: string | null
   countryCode?: string | null
+  zip?: string | null
 }): string | null {
-  const city = parts.city?.trim()
-  if (!city) return null
+  const rawCity = parts.city?.trim()
+  if (!rawCity) return null
 
-  const region = abbreviateRegion(parts.region || '', parts.regionCode || undefined, parts.countryCode || undefined)
-  const country = parts.country?.trim()
-  const countryCode = parts.countryCode?.trim()
+  const regionCode = abbreviateRegion(
+    parts.region || '',
+    parts.regionCode || undefined,
+    parts.countryCode || undefined,
+  )
+  const city = refineCityLabel(rawCity, parts.zip, regionCode || parts.regionCode || parts.region)
 
   const segments = [city]
-  if (region) segments.push(region)
-  if (country && countryCode && countryCode !== 'US') {
-    segments.push(country)
-  }
-  else if (country && !countryCode) {
-    segments.push(country)
-  }
+  if (regionCode) segments.push(regionCode)
 
   return segments.join(', ')
-}
-
-function formatNetwork(org?: string | null, isp?: string | null): string | null {
-  const primary = org?.trim() || isp?.trim()
-  if (!primary) return null
-  const secondary = org?.trim() && isp?.trim() && org.trim() !== isp.trim() ? isp.trim() : null
-  return secondary ? `${primary} (${secondary})` : primary
 }
 
 async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
@@ -144,28 +164,9 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
   }
 }
 
-async function lookupWithIpWho(ip: string): Promise<IpLocationResult | null> {
-  const data = await fetchJson<IpWhoResponse>(`https://ipwho.is/${encodeURIComponent(ip)}`, 3000)
-  if (!data?.success) return null
-
-  const label = formatLocationParts({
-    city: data.city,
-    region: data.region,
-    regionCode: data.region_code,
-    country: data.country,
-    countryCode: data.country_code,
-  })
-  if (!label) return null
-
-  return {
-    label,
-    network: formatNetwork(data.connection?.org, data.connection?.isp),
-  }
-}
-
 async function lookupWithIpApi(ip: string): Promise<IpLocationResult | null> {
   const data = await fetchJson<IpApiResponse>(
-    `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,isp,org`,
+    `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,zip`,
     3000,
   )
   if (data?.status !== 'success' || !data.city) return null
@@ -176,29 +177,55 @@ async function lookupWithIpApi(ip: string): Promise<IpLocationResult | null> {
     regionCode: data.region,
     country: data.country,
     countryCode: data.countryCode,
+    zip: data.zip,
   })
   if (!label) return null
 
-  return {
-    label,
-    network: formatNetwork(data.org, data.isp),
-  }
+  return { label }
 }
 
-/** Resolve a human-readable location label for a public IP address. */
+async function lookupWithIpWho(ip: string): Promise<IpLocationResult | null> {
+  const data = await fetchJson<IpWhoResponse>(`https://ipwho.is/${encodeURIComponent(ip)}`, 3000)
+  if (!data?.success) return null
+
+  const label = formatLocationParts({
+    city: data.city,
+    region: data.region,
+    regionCode: data.region_code,
+    country: data.country,
+    countryCode: data.country_code,
+    zip: data.postal,
+  })
+  if (!label) return null
+
+  return { label }
+}
+
+function pickMoreSpecificLocation(a: IpLocationResult | null, b: IpLocationResult | null): IpLocationResult | null {
+  if (!a) return b
+  if (!b) return a
+
+  const boroughs = new Set(['Brooklyn', 'Queens', 'Bronx', 'Manhattan', 'Staten Island'])
+  const aCity = a.label.split(',')[0]?.trim() ?? ''
+  const bCity = b.label.split(',')[0]?.trim() ?? ''
+
+  if (boroughs.has(aCity) && !boroughs.has(bCity)) return a
+  if (boroughs.has(bCity) && !boroughs.has(aCity)) return b
+  if (aCity.length > bCity.length) return a
+  if (bCity.length > aCity.length) return b
+  return a
+}
+
+/** Resolve a human-readable city/state label for a public IP address. */
 export async function resolveIpLocation(ip: string | null | undefined): Promise<string | null> {
   const normalized = normalizeClientIp(ip)
   if (!normalized || isPrivateIp(normalized)) return null
 
-  const fromIpWho = await lookupWithIpWho(normalized)
-  if (fromIpWho) {
-    return fromIpWho.network ? `${fromIpWho.label} · ${fromIpWho.network}` : fromIpWho.label
-  }
+  const [fromIpApi, fromIpWho] = await Promise.all([
+    lookupWithIpApi(normalized),
+    lookupWithIpWho(normalized),
+  ])
 
-  const fromIpApi = await lookupWithIpApi(normalized)
-  if (fromIpApi) {
-    return fromIpApi.network ? `${fromIpApi.label} · ${fromIpApi.network}` : fromIpApi.label
-  }
-
-  return null
+  const best = pickMoreSpecificLocation(fromIpApi, fromIpWho)
+  return best?.label ?? null
 }

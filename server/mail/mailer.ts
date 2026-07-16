@@ -42,6 +42,12 @@ export interface MailMessage {
   messageId?: string
   inReplyTo?: string
   references?: string
+  attachments?: Array<{
+    filename: string
+    content: Buffer
+    contentType?: string
+    cid?: string
+  }>
 }
 
 /**
@@ -70,6 +76,12 @@ export async function sendMail(message: MailMessage): Promise<{ delivered: boole
       messageId: message.messageId,
       inReplyTo: message.inReplyTo,
       references: message.references,
+      attachments: message.attachments?.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        contentType: att.contentType,
+        cid: att.cid,
+      })),
     })
     return { delivered: true }
   }

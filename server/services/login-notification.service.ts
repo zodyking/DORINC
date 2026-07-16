@@ -2,7 +2,7 @@ import { UAParser } from 'ua-parser-js'
 import type { LoginPortal } from '../auth/auth.service'
 import type { Db } from '../db/client'
 import { buildLoginNotificationEmail } from '../mail/templates/system'
-import { sendMail } from '../mail/mailer'
+import { sendBrandedMail } from '../mail/branded-mail'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
@@ -64,5 +64,5 @@ export async function sendLoginNotificationEmail(
     brand,
   })
 
-  return sendMail({ to, ...mail })
+  return sendBrandedMail(db, { to, ...mail }, brand)
 }
