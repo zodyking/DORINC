@@ -4,6 +4,7 @@
 import {
   EMAIL_BRAND_NAME,
   buildStyledEmail,
+  escapeHtml,
 } from '../email-layout.mjs'
 
 function brandNameFrom(opts) {
@@ -317,6 +318,41 @@ export function buildLoginNotificationEmail({
       href: loginUrl,
       label: portal === 'customer' ? 'Open customer portal' : `Open ${resolvedBrand}`,
     },
+    appUrl,
+    brand,
+  })
+}
+
+export function buildCustomerAutoResponderEmail({
+  recipientName,
+  subject,
+  message,
+  appUrl,
+  brand,
+}) {
+  const resolvedBrand = brandNameFrom({ brand })
+  const greeting = recipientName?.trim() ? `Hi ${recipientName.trim()},` : 'Hello,'
+  const bodyParagraphs = String(message || '')
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+  const bodyHtml = bodyParagraphs
+    .map(p => `<p style="margin:0 0 12px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Message received',
+    headline: 'We got your email',
+    lead: greeting,
+    bodyHtml,
+    note: {
+      title: 'What happens next',
+      body: `A member of the ${resolvedBrand} team will review your message and reply as soon as possible.`,
+    },
+    footerNote: `This is an automated confirmation from ${resolvedBrand}. Please do not reply to this message unless you have a new request.`,
     appUrl,
     brand,
   })

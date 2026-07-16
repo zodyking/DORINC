@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       companyEmail: filters.companyEmail || smtpFrom.fromAddress,
       additionalEmails: filters.additionalEmails,
       includeCustomerEmails: filters.includeCustomerEmails,
+      autoResponder: filters.autoResponder,
     },
   }
 })

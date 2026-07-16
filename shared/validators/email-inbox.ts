@@ -10,10 +10,23 @@ export const imapSettingsSchema = z.object({
   useTls: z.boolean().default(true),
 })
 
+export const DEFAULT_AUTO_RESPONDER_MESSAGE = 'Thanks for contacting us. We received your email and a team member will reply shortly during business hours.'
+
+export const imapAutoResponderSchema = z.object({
+  enabled: z.boolean().default(false),
+  subject: z.string().min(1).max(200).default('We received your message'),
+  message: z.string().min(1).max(5000).default(DEFAULT_AUTO_RESPONDER_MESSAGE),
+})
+
 export const imapFilterSettingsSchema = z.object({
   companyEmail: emailSchema,
   additionalEmails: z.array(emailSchema).default([]),
   includeCustomerEmails: z.boolean().default(true),
+  autoResponder: imapAutoResponderSchema.default({
+    enabled: false,
+    subject: 'We received your message',
+    message: DEFAULT_AUTO_RESPONDER_MESSAGE,
+  }),
 })
 
 export const imapSettingsPatchSchema = imapSettingsSchema.extend({

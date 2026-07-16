@@ -3,6 +3,7 @@ import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { encryptBuffer } from './encryption.service'
 import { ensureEncryptionReadyForSettings, getSmtpConfig, decryptEncryptedAppSetting, APP_CONFIG_KEYS } from './app-config.service'
+import { DEFAULT_AUTO_RESPONDER_MESSAGE } from '../../shared/validators/email-inbox'
 
 export const IMAP_CONFIG_KEY = 'imap.config'
 export const IMAP_FILTERS_KEY = 'imap.filters'
@@ -16,10 +17,17 @@ export interface ImapConfig {
   useTls: boolean
 }
 
+export interface ImapAutoResponderConfig {
+  enabled: boolean
+  subject: string
+  message: string
+}
+
 export interface ImapFilterConfig {
   companyEmail: string
   additionalEmails: string[]
   includeCustomerEmails: boolean
+  autoResponder: ImapAutoResponderConfig
 }
 
 interface CachedImap {
@@ -58,6 +66,22 @@ function parseImapPayload(payload: Buffer): ImapConfig {
   }
 }
 
+function defaultAutoResponder(): ImapAutoResponderConfig {
+  return {
+    enabled: false,
+    subject: 'We received your message',
+    message: DEFAULT_AUTO_RESPONDER_MESSAGE,
+  }
+}
+
+function normalizeAutoResponder(raw: Partial<ImapAutoResponderConfig> | null | undefined): ImapAutoResponderConfig {
+  return {
+    enabled: raw?.enabled === true,
+    subject: raw?.subject?.trim() || 'We received your message',
+    message: raw?.message?.trim() || DEFAULT_AUTO_RESPONDER_MESSAGE,
+  }
+}
+
 function defaultFilters(): ImapFilterConfig {
   const smtp = getSmtpConfig()
   const fromMatch = smtp?.from.match(/<([^>]+)>/)
@@ -66,6 +90,7 @@ function defaultFilters(): ImapFilterConfig {
     companyEmail,
     additionalEmails: [],
     includeCustomerEmails: true,
+    autoResponder: defaultAutoResponder(),
   }
 }
 
@@ -102,6 +127,7 @@ export async function refreshImapConfigCache(db: Db): Promise<void> {
       companyEmail: raw.companyEmail?.trim().toLowerCase() ?? '',
       additionalEmails: (raw.additionalEmails ?? []).map(e => e.trim().toLowerCase()).filter(Boolean),
       includeCustomerEmails: raw.includeCustomerEmails !== false,
+      autoResponder: normalizeAutoResponder(raw.autoResponder),
     }
   }
 
@@ -160,6 +186,7 @@ export async function saveImapFilters(db: Db, filters: ImapFilterConfig, actorId
     companyEmail: filters.companyEmail.trim().toLowerCase(),
     additionalEmails: filters.additionalEmails.map(e => e.trim().toLowerCase()).filter(Boolean),
     includeCustomerEmails: filters.includeCustomerEmails,
+    autoResponder: normalizeAutoResponder(filters.autoResponder),
   }
 
   const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, IMAP_FILTERS_KEY)).limit(1)
