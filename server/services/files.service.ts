@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { FileKind, FileOwnerEntityType } from '../db/schema/files'
 import { appFiles } from '../db/schema/files'
+import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import { getMaxUploadMb } from './app-config.service'
 
 export type FilesServiceErrorCode
@@ -147,6 +148,20 @@ export async function listFilesByOwner(db: Db, filter: ListFilesFilter) {
     eq(appFiles.ownerEntityId, filter.ownerEntityId),
   ]
   if (filter.fileKind) conditions.push(eq(appFiles.fileKind, filter.fileKind))
+  if (!filter.includeArchived) conditions.push(isNull(appFiles.archivedAt))
+
+  return db.select(META_COLUMNS).from(appFiles)
+    .where(and(...conditions))
+    .orderBy(desc(appFiles.createdAt))
+}
+
+/** Lists user-uploaded files only — excludes thumbnail/preview derivatives. */
+export async function listUserUploadsByOwner(db: Db, filter: Omit<ListFilesFilter, 'fileKind'>) {
+  const conditions = [
+    eq(appFiles.ownerEntityType, filter.ownerEntityType),
+    eq(appFiles.ownerEntityId, filter.ownerEntityId),
+    inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
+  ]
   if (!filter.includeArchived) conditions.push(isNull(appFiles.archivedAt))
 
   return db.select(META_COLUMNS).from(appFiles)

@@ -198,10 +198,19 @@ onUnmounted(() => {
   if (sendPollTimer) clearInterval(sendPollTimer)
 })
 
-const { data: linkedLogData } = useFetch<{ log: { logNumber: number } }>(
+const { data: linkedLogData } = useFetch<{
+  log: { logNumber: number }
+  files: { id: string, originalFilename: string, mimeType: string }[]
+}>(
   () => (invoice.value?.serviceLogId ? `/api/service-logs/${invoice.value.serviceLogId}` : null),
   { server: false, lazy: true, watch: [() => invoice.value?.serviceLogId] },
 )
+
+const serviceLogImages = computed(() =>
+  (linkedLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
+)
+const hasServiceLogPhotos = computed(() => !!invoice.value?.serviceLogId && serviceLogImages.value.length > 0)
+const photoGalleryIndex = ref(0)
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canApprove = computed(() => auth.can('invoices.approve.all'))
@@ -246,7 +255,7 @@ const showRecordPayment = computed(() =>
 
 const busy = ref(false)
 const actionError = ref('')
-const viewTab = ref<'detail' | 'pdf'>('detail')
+const viewTab = ref<'detail' | 'photos' | 'pdf'>('detail')
 const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
 
 watch(viewTab, async (tab) => {
@@ -345,7 +354,7 @@ const summaryRows = computed(() => {
     </div>
   </section>
 
-  <section v-else-if="invoice" class="page active" :class="{ 'page--invoice-pdf': viewTab === 'pdf' && canGeneratePdf }">
+  <section v-else-if="invoice" class="page active" :class="{ 'page--invoice-pdf': (viewTab === 'pdf' && canGeneratePdf) || viewTab === 'photos' }">
     <StaffPageHead>
       <template #title>
         {{ invoice.invoiceNumberFormatted }}
@@ -498,7 +507,7 @@ const summaryRows = computed(() => {
     </div>
     <p v-if="forceReleaseError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ forceReleaseError }}</p>
 
-    <div v-if="canGeneratePdf" class="ed-tabs-wrap">
+    <div v-if="canGeneratePdf || hasServiceLogPhotos" class="ed-tabs-wrap">
       <div class="ed-tabs" role="tablist" aria-label="Invoice views">
         <button
           type="button"
@@ -511,6 +520,19 @@ const summaryRows = computed(() => {
           Details
         </button>
         <button
+          v-if="hasServiceLogPhotos"
+          type="button"
+          class="ed-tab"
+          :class="{ on: viewTab === 'photos' }"
+          role="tab"
+          :aria-selected="viewTab === 'photos'"
+          @click="viewTab = 'photos'"
+        >
+          Photos
+          <span class="ed-tab-pill">{{ serviceLogImages.length }}</span>
+        </button>
+        <button
+          v-if="canGeneratePdf"
           type="button"
           class="ed-tab"
           :class="{ on: viewTab === 'pdf' }"
@@ -679,6 +701,29 @@ const summaryRows = computed(() => {
         :can-generate-pdf="canGeneratePdf"
       />
     </div>
+
+    <div v-if="viewTab === 'photos' && hasServiceLogPhotos" class="invoice-photos-tab">
+      <div class="card">
+        <div class="chead">
+          <h3>Service log photos</h3>
+          <div class="right">
+            <NuxtLink
+              v-if="invoice.serviceLogId"
+              :to="`/service-logs/${invoice.serviceLogId}`"
+              class="btn ghost sm"
+            >
+              Open log →
+            </NuxtLink>
+          </div>
+        </div>
+        <div class="cbody">
+          <p class="help" style="margin:0 0 14px;">
+            Photos from {{ logNumberDisplay(linkedLogData?.log?.logNumber ?? 0) }} — use arrow keys or buttons to browse.
+          </p>
+          <ServiceLogImageGallery v-model="photoGalleryIndex" :files="serviceLogImages" />
+        </div>
+      </div>
+    </div>
   </section>
 
   <section v-else class="page active">
@@ -764,7 +809,8 @@ const summaryRows = computed(() => {
   font-weight: 700;
 }
 
-.invoice-pdf-tab {
+.invoice-pdf-tab,
+.invoice-photos-tab {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;

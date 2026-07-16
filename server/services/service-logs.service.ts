@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
+import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import type { Db } from '../db/client'
 import type { ServiceLogStatus, ServiceLogWorkType } from '../db/schema/service-logs'
 import { serviceLogs } from '../db/schema/service-logs'
@@ -377,6 +378,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
       .from(appFiles)
       .where(and(
         eq(appFiles.ownerEntityType, 'service_log'),
+        inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
         isNull(appFiles.archivedAt),
         or(...logIds.map((lid: string) => eq(appFiles.ownerEntityId, lid))),
       ))

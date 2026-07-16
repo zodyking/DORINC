@@ -153,7 +153,7 @@ const loadErrorMessage = computed(() => {
   return null
 })
 
-const activeTab = ref<'invoice' | 'servicelog' | 'pdf'>('invoice')
+const activeTab = ref<'invoice' | 'servicelog' | 'photos' | 'pdf'>('invoice')
 const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
 
 watch(activeTab, async (tab) => {
@@ -343,11 +343,17 @@ const { data: serviceLogData } = useClientFetch<{
     createdAt: string
     vehicle: VehicleDisplay
   }
-  files: { id: string }[]
+  files: { id: string, originalFilename: string, mimeType: string, fileKind: string }[]
 }>(
   () => (serviceLogId.value ? `/api/service-logs/${serviceLogId.value}` : null),
   { watch: [serviceLogId] },
 )
+
+const serviceLogImages = computed(() =>
+  (serviceLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
+)
+const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
+const photoGalleryIndex = ref(0)
 
 const hydratingFromServer = ref(false)
 
@@ -865,6 +871,18 @@ const aiPopStyle = computed(() => {
             <span v-if="serviceLogData?.log" class="ed-tab-pill">{{ logNumberDisplay(serviceLogData?.log?.logNumber ?? 0) }}</span>
           </button>
           <button
+            v-if="hasServiceLogPhotos"
+            type="button"
+            class="ed-tab"
+            :class="{ on: activeTab === 'photos' }"
+            role="tab"
+            :aria-selected="activeTab === 'photos'"
+            @click="activeTab = 'photos'"
+          >
+            Photos
+            <span class="ed-tab-pill">{{ serviceLogImages.length }}</span>
+          </button>
+          <button
             v-if="canGeneratePdf"
             type="button"
             class="ed-tab"
@@ -1107,18 +1125,6 @@ const aiPopStyle = computed(() => {
         <div class="cols">
           <div class="stack">
             <div class="card">
-              <div class="chead">
-                <h3>Uploaded files · {{ serviceLogData?.files?.length ?? 0 }}</h3>
-                <div class="right"><span class="pill info">From mechanic</span></div>
-              </div>
-              <div class="cbody">
-                <div class="photos ed-log-photos">
-                  <div v-for="f in (serviceLogData?.files ?? []).slice(0, 8)" :key="f.id" class="photo">🖼</div>
-                </div>
-                <p class="help" style="margin-top:12px;">Tap to enlarge</p>
-              </div>
-            </div>
-            <div class="card">
               <div class="chead"><h3>Customer complaint / symptoms</h3></div>
               <div class="cbody ed-log-readonly">{{ serviceLogData?.log?.complaint || '—' }}</div>
             </div>
@@ -1132,6 +1138,7 @@ const aiPopStyle = computed(() => {
               <div class="chead"><h3>Log metadata</h3></div>
               <dl class="kv">
                 <dt>Service log</dt><dd>{{ logNumberDisplay(serviceLogData?.log?.logNumber ?? 0) }}</dd>
+                <dt>Photos</dt><dd>{{ serviceLogImages.length || '—' }}</dd>
                 <dt>Submitted by</dt><dd>{{ serviceLogData?.log?.submitterName ?? '—' }}</dd>
                 <dt>Uploaded</dt><dd>{{ serviceLogData?.log?.createdAt ? invoiceDateDisplay(serviceLogData.log.createdAt.slice(0, 10)) : '—' }}</dd>
                 <dt>Service date</dt><dd>{{ serviceLogData?.log?.serviceDate ? invoiceDateDisplay(serviceLogData.log.serviceDate) : '—' }}</dd>
@@ -1143,6 +1150,14 @@ const aiPopStyle = computed(() => {
               <div class="chead"><h3>Draft line items from log</h3></div>
               <div class="cbody" style="padding-top:0; display:flex; gap:8px; flex-wrap:wrap;">
                 <button type="button" class="btn sm" :disabled="!editable" @click="copyComplaintFromLog">Copy notes to invoice</button>
+                <button
+                  v-if="hasServiceLogPhotos"
+                  type="button"
+                  class="btn sm"
+                  @click="activeTab = 'photos'"
+                >
+                  View photos
+                </button>
                 <NuxtLink
                   v-if="invoice.serviceLogId"
                   :to="`/service-logs/${invoice.serviceLogId}`"
@@ -1152,6 +1167,26 @@ const aiPopStyle = computed(() => {
                 </NuxtLink>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'photos' && hasServiceLogPhotos" class="ed-pane">
+        <div class="card">
+          <div class="chead">
+            <h3>Service log photos · {{ serviceLogImages.length }}</h3>
+            <div class="right">
+              <NuxtLink
+                v-if="invoice.serviceLogId"
+                :to="`/service-logs/${invoice.serviceLogId}`"
+                class="btn ghost sm"
+              >
+                Open log →
+              </NuxtLink>
+            </div>
+          </div>
+          <div class="cbody">
+            <ServiceLogImageGallery v-model="photoGalleryIndex" :files="serviceLogImages" />
           </div>
         </div>
       </div>

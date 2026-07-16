@@ -1,6 +1,7 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appFiles } from '../db/schema/files'
+import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import { invoiceLineItems } from '../db/schema/invoices'
 import type { AiFeatureType } from '../db/schema/ai'
 import {
@@ -77,6 +78,7 @@ export async function enqueueServiceLogExtraction(
   }).from(appFiles).where(and(
     eq(appFiles.ownerEntityType, 'service_log'),
     eq(appFiles.ownerEntityId, serviceLogId),
+    inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
     isNull(appFiles.archivedAt),
   ))
 
