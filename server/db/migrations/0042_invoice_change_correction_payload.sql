@@ -1,1 +1,1 @@
-ALTER TABLE "invoice_change_requests" ADD COLUMN "correction_payload" jsonb;
+ALTER TABLE "invoice_change_requests" ADD COLUMN IF NOT EXISTS "correction_payload" jsonb;
