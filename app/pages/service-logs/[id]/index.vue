@@ -366,10 +366,6 @@ const pill = computed(() => log.value
           </div>
           <div class="cbody">
             <ServiceLogImageGallery v-model="galleryIndex" :files="imageFiles" />
-            <p v-if="log.complaint" style="margin:14px 0 0; font-size:13px; color:#475569; line-height:1.55;">
-              <b style="display:block; font-size:11px; color:#94a3b8; margin-bottom:4px;">COMPLAINT</b>
-              {{ log.complaint }}
-            </p>
           </div>
         </div>
 
