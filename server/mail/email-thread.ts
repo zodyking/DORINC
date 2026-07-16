@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { formatPersonNameShort } from '../../shared/format/person-name'
+import { signatureAccountTypeLabel } from '../../shared/format/account-type-label'
 import { resolveEmailBrand, type EmailBrandContext } from '../services/email-branding.service'
 import type { Db } from '../db/client'
 import { EMAIL_TOKENS, escapeHtml, wrapEmailHtml } from './email-layout'
 
-/** Customer-facing tagline — never expose the internal "Accounting workspace" label. */
-export const CUSTOMER_EMAIL_TAGLINE = 'Onsite repairs'
+/**
+ * Fallback header subheading for outbound customer mail when no subject is
+ * available. Kept short and descriptive — the subject line is preferred.
+ */
+export const CUSTOMER_EMAIL_TAGLINE = 'Fleet & onsite repair services'
 
 export function toCustomerEmailBrand(brand: EmailBrandContext): EmailBrandContext {
   return {
@@ -14,79 +18,30 @@ export function toCustomerEmailBrand(brand: EmailBrandContext): EmailBrandContex
   }
 }
 
-export function buildStaffEmailFooter(staffName: string, brandLegal: string): string {
-  const short = formatPersonNameShort(staffName)
-  const line = short ? `${short} · ${brandLegal}` : brandLegal
-  return `\n\n—\n${line}`
+/** Plain-text sign-off: bold-style dash name on its own line, role beneath it. */
+export function buildStaffEmailFooter(staffName: string, accountTypeLabel: string): string {
+  const short = formatPersonNameShort(staffName) || staffName.trim()
+  const nameLine = short ? `— ${short}` : '—'
+  return accountTypeLabel ? `\n\n${nameLine}\n${accountTypeLabel}` : `\n\n${nameLine}`
 }
 
-function contactLinkHtml(brand: EmailBrandContext): string {
-  const linkStyle = `color:${EMAIL_TOKENS.accent};text-decoration:none;white-space:nowrap;`
-  const rows: string[] = []
-  if (brand.phone) {
-    const tel = brand.phone.replace(/[^\d+]/g, '')
-    rows.push(
-      tel
-        ? `<a href="tel:${escapeHtml(tel)}" style="${linkStyle}">${escapeHtml(brand.phone)}</a>`
-        : `<span style="white-space:nowrap;">${escapeHtml(brand.phone)}</span>`,
-    )
-  }
-  if (brand.email) {
-    rows.push(
-      `<a href="mailto:${escapeHtml(brand.email)}" style="${linkStyle}">${escapeHtml(brand.email)}</a>`,
-    )
-  }
-  if (brand.website) {
-    const href = /^https?:\/\//i.test(brand.website) ? brand.website : `https://${brand.website}`
-    const label = brand.website.replace(/^https?:\/\//i, '').replace(/\/$/, '')
-    rows.push(
-      `<a href="${escapeHtml(href)}" style="${linkStyle}">${escapeHtml(label)}</a>`,
-    )
-  }
-  if (!rows.length) return ''
-  return rows
-    .map(row => `<div style="padding-top:4px;line-height:18px;">${row}</div>`)
-    .join('')
-}
-
-export function buildStaffEmailHtmlFooter(staffName: string, brand: EmailBrandContext): string {
-  const short = formatPersonNameShort(staffName) || staffName.trim() || brand.brandName
-  const initial = escapeHtml((short.charAt(0) || brand.logoInitial || 'D').toUpperCase())
-  const contact = contactLinkHtml(brand)
+/**
+ * HTML sign-off appended to the message body: a bold "— First L." line with the
+ * sender's account type underneath. Company contact details already live in the
+ * shared email footer, so they are intentionally omitted here.
+ */
+export function buildStaffEmailSignature(staffName: string, accountTypeLabel: string): string {
+  const short = formatPersonNameShort(staffName) || staffName.trim()
+  const nameLine = short ? `— ${escapeHtml(short)}` : '—'
+  const roleLine = accountTypeLabel
+    ? `<div style="margin-top:2px;color:${EMAIL_TOKENS.muted};font-size:13px;line-height:18px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(accountTypeLabel)}</div>`
+    : ''
 
   return `
-<table role="presentation" width="100%" style="margin-top:28px;border-collapse:separate;">
-  <tr>
-    <td style="padding:0;">
-      <table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:12px;background:#f8fafc;">
-        <tr>
-          <td style="padding:18px 20px;">
-            <table role="presentation" width="100%">
-              <tr>
-                <td valign="top" style="width:44px;">
-                  <div style="width:44px;height:44px;border-radius:999px;background:${EMAIL_TOKENS.accent};color:#ffffff;font-size:16px;font-weight:700;line-height:44px;text-align:center;font-family:${EMAIL_TOKENS.font};">
-                    ${initial}
-                  </div>
-                </td>
-                <td valign="middle" style="padding-left:14px;font-family:${EMAIL_TOKENS.font};">
-                  <div style="color:${EMAIL_TOKENS.ink};font-size:15px;font-weight:700;line-height:20px;">
-                    ${escapeHtml(short)}
-                  </div>
-                  <div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:18px;padding-top:2px;">
-                    ${escapeHtml(brand.brandLegal)}
-                  </div>
-                  ${contact
-                    ? `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;padding-top:6px;">${contact}</div>`
-                    : ''}
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>`
+<div style="margin-top:24px;font-family:${EMAIL_TOKENS.font};">
+  <div style="color:${EMAIL_TOKENS.ink};font-size:15px;font-weight:700;line-height:20px;">${nameLine}</div>
+  ${roleLine}
+</div>`
 }
 
 function buildMessageBodyHtml(bodyText: string): string {
@@ -106,16 +61,30 @@ function buildMessageBodyHtml(bodyText: string): string {
   }).join('')
 }
 
+export interface OutboundEmailInput {
+  staffName: string
+  /** Internal account-type key of the sender (admin, manager, …). */
+  accountTypeKey?: string | null
+  bodyText: string
+  /** Email subject — shown as the header subheading (more relevant than a tagline). */
+  subject?: string
+}
+
 export async function buildOutboundEmailBodies(
   db: Db,
-  staffName: string,
-  bodyText: string,
+  input: OutboundEmailInput,
 ): Promise<{ text: string, html: string, brand: EmailBrandContext }> {
-  const brand = toCustomerEmailBrand(await resolveEmailBrand(db))
-  const trimmed = bodyText.trim()
-  const textFooter = buildStaffEmailFooter(staffName, brand.brandLegal)
+  const resolved = toCustomerEmailBrand(await resolveEmailBrand(db))
+  const subheading = input.subject?.trim()
+  const brand: EmailBrandContext = subheading
+    ? { ...resolved, brandTagline: subheading }
+    : resolved
+
+  const trimmed = input.bodyText.trim()
+  const accountTypeLabel = signatureAccountTypeLabel(input.accountTypeKey)
+  const textFooter = buildStaffEmailFooter(input.staffName, accountTypeLabel)
   const messageHtml = buildMessageBodyHtml(trimmed)
-  const signatureHtml = buildStaffEmailHtmlFooter(staffName, brand)
+  const signatureHtml = buildStaffEmailSignature(input.staffName, accountTypeLabel)
 
   const html = wrapEmailHtml({
     appUrl: brand.appUrl,

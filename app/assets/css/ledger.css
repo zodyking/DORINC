@@ -1881,6 +1881,34 @@ section.page.active.dm-page{
 }
 .dm-compose-hint{ font-size:11px; color:#94a3b8; margin-top:6px; }
 .dm-compose-hint code{ background:#eef2ff; color:#4f46e5; padding:1px 5px; border-radius:4px; }
+.dm-compose-file-input{ display:none; }
+.dm-attach-btn{
+  flex-shrink:0; width:40px; min-height:44px; border:1px solid #e2e8f0; border-radius:10px;
+  background:#fff; color:#475569; font-size:17px; cursor:pointer; line-height:1;
+}
+.dm-attach-btn:hover:not(:disabled){ background:#eef2ff; border-color:#a5b4fc; }
+.dm-attach-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.dm-compose-attachments{
+  display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;
+}
+.dm-compose-chip{
+  display:inline-flex; align-items:center; gap:6px; max-width:100%;
+  padding:6px 8px 6px 10px; border:1px solid #e2e8f0; border-radius:8px;
+  background:#fff; font-size:12px; color:#0f172a;
+}
+.dm-compose-chip.is-image{ border-color:#c7d2fe; background:#f5f7ff; }
+.dm-compose-chip-icon{ flex-shrink:0; font-size:13px; }
+.dm-compose-chip-name{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; font-weight:600;
+}
+.dm-compose-chip-size{ color:#64748b; flex-shrink:0; }
+.dm-compose-chip-remove{
+  flex-shrink:0; border:none; background:transparent; color:#94a3b8; cursor:pointer;
+  font-size:12px; line-height:1; padding:2px 4px; border-radius:4px;
+}
+.dm-compose-chip-remove:hover{ background:#fee2e2; color:#b91c1c; }
+.dm-compose-attach-error{ margin:0 0 8px; color:#b91c1c; font-size:12px; }
+.dm-email-attach-row{ display:flex; }
 .dm-entity-picker{
   position:absolute; left:16px; right:16px; bottom:calc(100% - 4px);
   background:#fff; border:1px solid #e2e8f0; border-radius:12px;
@@ -2156,6 +2184,13 @@ section.page.active.dm-page{
   }
   .dm-compose-form--email textarea{
     min-height:96px;
+  }
+  .dm-compose-form--email .dm-attach-btn{
+    align-self:flex-start;
+    width:48px;
+    min-height:48px;
+    font-size:19px;
+    order:-1;
   }
   .dm-compose-form--email .dm-send-btn.dm-send-btn--labeled{
     width:100%;

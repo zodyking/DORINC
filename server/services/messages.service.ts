@@ -14,6 +14,7 @@ import {
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import type { MessageEntityRefInput } from '../../shared/validators/messages'
+import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 
 export type MessagesServiceErrorCode
   = | 'NOT_FOUND'
@@ -385,14 +386,15 @@ export async function sendMessage(
 ) {
   await assertParticipant(db, conversationId, senderUserId)
 
-  const parsedRefs = parseEntityRefsFromBody(body)
+  const normalizedBody = normalizeOutgoingMessage(body)
+  const parsedRefs = parseEntityRefsFromBody(normalizedBody)
   const refs = explicitRefs?.length ? explicitRefs : parsedRefs
   await validateEntityRefs(db, senderUserId, refs)
 
   const [message] = await db.insert(messages).values({
     conversationId,
     senderUserId,
-    body,
+    body: normalizedBody,
   }).returning()
 
   if (refs.length) {

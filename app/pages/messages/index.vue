@@ -30,6 +30,48 @@ const emailForm = reactive({
   subject: '',
   body: '',
 })
+const emailAttachments = ref<File[]>([])
+const emailAttachError = ref('')
+const emailFileInput = ref<HTMLInputElement | null>(null)
+
+const EMAIL_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf'
+const EMAIL_ATTACH_ALLOWED = new Set(EMAIL_ATTACH_ACCEPT.split(','))
+const EMAIL_MAX_ATTACHMENTS = 10
+const EMAIL_MAX_ATTACH_MB = 25
+
+function formatAttachSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function onEmailFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const picked = Array.from(input.files ?? [])
+  input.value = ''
+  const errors: string[] = []
+  for (const file of picked) {
+    if (emailAttachments.value.length >= EMAIL_MAX_ATTACHMENTS) {
+      errors.push(`Up to ${EMAIL_MAX_ATTACHMENTS} attachments allowed`)
+      break
+    }
+    if (file.type && !EMAIL_ATTACH_ALLOWED.has(file.type)) {
+      errors.push(`${file.name}: unsupported type`)
+      continue
+    }
+    if (file.size > EMAIL_MAX_ATTACH_MB * 1024 * 1024) {
+      errors.push(`${file.name}: exceeds ${EMAIL_MAX_ATTACH_MB} MB`)
+      continue
+    }
+    if (emailAttachments.value.some(f => f.name === file.name && f.size === file.size)) continue
+    emailAttachments.value.push(file)
+  }
+  emailAttachError.value = errors.join(' · ')
+}
+
+function removeEmailAttachment(index: number) {
+  emailAttachments.value.splice(index, 1)
+}
 
 const hasActiveConversation = computed(() => !!dm.activeConversation)
 const showThreadPanel = computed(() => showThread.value && hasActiveConversation.value)
@@ -115,6 +157,8 @@ function openNewEmail() {
   emailForm.toEmail = ''
   emailForm.subject = ''
   emailForm.body = ''
+  emailAttachments.value = []
+  emailAttachError.value = ''
   void loadCustomerRecipients()
 }
 
@@ -155,7 +199,7 @@ async function submitNewEmail() {
       toEmail: emailForm.toEmail,
       subject: emailForm.subject.trim(),
       body: emailForm.body.trim(),
-    })
+    }, emailAttachments.value.slice())
     newEmailOpen.value = false
     revealThread()
   }
@@ -170,8 +214,8 @@ async function selectConversation(id: string) {
   await dm.openConversation(id)
 }
 
-async function onSend(body: string) {
-  await dm.sendMessage(body)
+async function onSend(body: string, files: File[]) {
+  await dm.sendMessage(body, files)
 }
 
 function onBack() {
@@ -393,6 +437,42 @@ async function setEmailShowAll(showAll: boolean) {
           Message
           <textarea v-model="emailForm.body" rows="5" maxlength="50000" placeholder="Write your email…" required />
         </label>
+        <div class="fld">
+          <span>Attachments</span>
+          <div class="dm-email-attach-row">
+            <input
+              ref="emailFileInput"
+              type="file"
+              class="dm-compose-file-input"
+              :accept="EMAIL_ATTACH_ACCEPT"
+              multiple
+              @change="onEmailFilesSelected"
+            >
+            <button type="button" class="btn sm" @click="emailFileInput?.click()">
+              📎 Add files or images
+            </button>
+          </div>
+          <div v-if="emailAttachments.length" class="dm-compose-attachments">
+            <div
+              v-for="(file, i) in emailAttachments"
+              :key="`${file.name}-${file.size}-${i}`"
+              class="dm-compose-chip"
+            >
+              <span class="dm-compose-chip-icon" aria-hidden="true">{{ file.type.startsWith('image/') ? '🖼️' : '📎' }}</span>
+              <span class="dm-compose-chip-name" :title="file.name">{{ file.name }}</span>
+              <small class="dm-compose-chip-size">{{ formatAttachSize(file.size) }}</small>
+              <button
+                type="button"
+                class="dm-compose-chip-remove"
+                :aria-label="`Remove ${file.name}`"
+                @click="removeEmailAttachment(i)"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <p v-if="emailAttachError" class="dm-compose-attach-error">{{ emailAttachError }}</p>
+        </div>
         <div v-if="customerLoading" class="dm-list-empty">Loading customers…</div>
         <div v-else-if="customerError" class="dm-list-empty">{{ customerError }}</div>
       </div>
