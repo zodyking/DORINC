@@ -36,24 +36,24 @@ const chips: PortalEstimateFilter[] = ['all', 'pending', 'approved', 'rejected']
 </script>
 
 <template>
-  <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
+  <section class="page active portal-page">
+    <div v-if="error" class="card portal-card">
       <p>Unable to load estimates.</p>
     </div>
 
-    <div v-else-if="pending && !items.length" class="card" style="padding:24px;">
-      <p style="color:#64748b;font-size:13px;">Loading estimates…</p>
+    <div v-else-if="pending && !items.length" class="card portal-card">
+      <p class="portal-muted">Loading estimates…</p>
     </div>
 
     <template v-else>
-      <div class="pagehead">
+      <div class="pagehead portal-pagehead">
         <div>
           <h2>Estimates</h2>
-          <p>Review and approve repair quotes from DORINC</p>
+          <p>Pending and approved repair quotes</p>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead">
           <button
             v-for="chip in chips"
@@ -67,7 +67,7 @@ const chips: PortalEstimateFilter[] = ['all', 'pending', 'approved', 'rejected']
           </button>
         </div>
 
-        <div v-if="!filtered.length" class="empty" style="padding:24px;color:#64748b;font-size:13px;">
+        <div v-if="!filtered.length" class="portal-empty">
           No estimates match this filter.
         </div>
 

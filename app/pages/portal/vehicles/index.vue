@@ -88,51 +88,35 @@ async function submitRequest() {
 </script>
 
 <template>
-  <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
+  <section class="page active portal-page">
+    <div v-if="error" class="card portal-card">
       <p>Unable to load vehicles.</p>
     </div>
 
-    <div v-else-if="pending && !items.length" class="card" style="padding:24px;">
-      <p style="color:#64748b;font-size:13px;">Loading vehicles…</p>
+    <div v-else-if="pending && !items.length" class="card portal-card">
+      <p class="portal-muted">Loading fleet…</p>
     </div>
 
     <template v-else>
-      <div class="pagehead">
+      <div class="pagehead portal-pagehead">
         <div>
-          <h2>Vehicles</h2>
-          <p>Manage your fleet — request new units anytime; removals are handled by the shop</p>
+          <h2>Fleet</h2>
+          <p>Your vehicles on file with the shop</p>
         </div>
         <div class="actions">
-          <button type="button" class="btn primary" @click="openModal">+ Add vehicle</button>
+          <button type="button" class="btn primary" @click="openModal">Add vehicle</button>
         </div>
       </div>
 
-      <p
-        v-if="submitSuccess"
-        class="callout info"
-        style="margin-bottom:16px;"
-      >
-        <span class="ico">✓</span>
-        <span>{{ submitSuccess }}</span>
-      </p>
+      <p v-if="submitSuccess" class="portal-banner success">{{ submitSuccess }}</p>
 
-      <div class="callout info">
-        <span class="ico">ℹ</span>
-        <div>
-          <b>Request new vehicles</b> — submit fleet tag and VIN details for shop review.
-          <b>Removal is not available here</b>; contact the shop to retire or transfer a unit.
-        </div>
-      </div>
-
-      <div class="card">
+      <div class="card portal-card">
         <div class="chead">
-          <h3>Your fleet · {{ portalVehicleCountLabel(items.length) }}</h3>
-          <span class="pill gray">Read-only</span>
+          <h3>{{ portalVehicleCountLabel(items.length) }}</h3>
         </div>
 
-        <div v-if="!items.length" class="empty" style="padding:24px;color:#64748b;font-size:13px;">
-          No vehicles on file yet. Use <b>+ Add vehicle</b> to submit a request.
+        <div v-if="!items.length" class="portal-empty">
+          No vehicles yet. Use <b>Add vehicle</b> to submit a request.
         </div>
 
         <div v-else class="tscroll">

@@ -1,11 +1,8 @@
 <script setup lang="ts">
-// Customer portal dashboard — KPIs, recent invoices, open requests (mockup: Portal Dashboard / P2-04).
 import {
   portalInvoiceStatus,
   portalMoney,
   portalOpenBalanceSub,
-  portalPendingRequestsSub,
-  portalVehicleSub,
 } from '~/utils/portal-dashboard-ui'
 
 definePageMeta({ layout: 'portal', middleware: 'portal-auth' })
@@ -29,115 +26,81 @@ interface PortalDashboardPayload {
     status: string
     balanceDue: string
   }>
-  openRequests: Array<{
-    id: string
-    type: string
-    title: string
-    meta: string
-    statusLabel: string
-  }>
 }
 
 const { data: dash, error } = useClientFetch<PortalDashboardPayload>('/api/portal/dashboard')
+
+const quickLinks = [
+  { label: 'Invoices', to: '/portal/invoices', hint: 'View & download PDFs' },
+  { label: 'Estimates', to: '/portal/estimates', hint: 'Approve repair quotes' },
+  { label: 'Fleet', to: '/portal/vehicles', hint: 'Your vehicles on file' },
+  { label: 'Contact shop', to: '/portal/requests', hint: 'Service or billing help' },
+]
 </script>
 
 <template>
-  <section class="page active">
-    <div v-if="error" class="card" style="padding:24px;">
-      <p>Unable to load portal dashboard.</p>
+  <section class="page active portal-page">
+    <div v-if="error" class="card portal-card">
+      <p>Unable to load your dashboard.</p>
     </div>
 
     <template v-else-if="dash">
-      <div class="pagehead">
+      <div class="pagehead portal-pagehead">
         <div>
           <h2>{{ dash.greeting }}</h2>
           <p>{{ dash.subtext }}</p>
         </div>
-        <div class="actions">
-          <NuxtLink to="/portal/vehicles" class="btn">+ Add vehicle</NuxtLink>
-          <NuxtLink to="/portal/requests" class="btn">Request service</NuxtLink>
-          <NuxtLink to="/portal/invoices" class="btn primary">View invoices</NuxtLink>
+        <div v-if="dash.kpis.openInvoiceCount" class="actions">
+          <NuxtLink to="/portal/invoices" class="btn primary">View open invoices</NuxtLink>
         </div>
       </div>
 
-      <div class="kpis">
+      <div class="portal-kpis">
         <div class="kpi">
           <div class="l">Open balance</div>
           <div class="v">{{ portalMoney(dash.kpis.openBalance) }}</div>
           <div class="s">{{ portalOpenBalanceSub(dash.kpis.openInvoiceCount) }}</div>
         </div>
         <div class="kpi">
-          <div class="l">Vehicles</div>
+          <div class="l">Fleet units</div>
           <div class="v">{{ dash.kpis.vehicleCount }}</div>
-          <div class="s">{{ portalVehicleSub(dash.kpis.vehicleCount) }}</div>
-        </div>
-        <div class="kpi">
-          <div class="l">Paid YTD</div>
-          <div class="v">{{ portalMoney(dash.kpis.paidYtdTotal) }}</div>
-          <div class="s">{{ dash.kpis.paidYtdLabel }}</div>
-        </div>
-        <div class="kpi">
-          <div class="l">Pending requests</div>
-          <div class="v">{{ dash.kpis.pendingRequestCount }}</div>
-          <div class="s">{{ portalPendingRequestsSub(dash.kpis.pendingRequestCount) }}</div>
+          <div class="s">{{ dash.kpis.pendingRequestCount ? `${dash.kpis.pendingRequestCount} open request(s)` : 'All caught up' }}</div>
         </div>
       </div>
 
-      <div class="cols">
-        <div class="card">
-          <div class="chead">
-            <h3>Recent invoices</h3>
-            <NuxtLink to="/portal/invoices" class="btn sm">View all →</NuxtLink>
-          </div>
-          <div v-if="!dash.recentInvoices.length" class="empty" style="padding:16px;color:#64748b;font-size:13px;">
-            No invoices yet.
-          </div>
-          <div v-else class="tscroll">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Invoice</th>
-                  <th>Vehicle</th>
-                  <th>Status</th>
-                  <th class="num">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="inv in dash.recentInvoices" :key="inv.id">
-                  <td>
-                    <span class="lead">{{ inv.invoiceNumberFormatted }}</span>
-                    <span class="sub">{{ inv.sublabel }}</span>
-                  </td>
-                  <td>{{ inv.vehicleLabel }}</td>
-                  <td>
-                    <span :class="portalInvoiceStatus(inv.status, null, inv.balanceDue).cls">
-                      {{ portalInvoiceStatus(inv.status, null, inv.balanceDue).label }}
-                    </span>
-                  </td>
-                  <td class="num">{{ portalMoney(inv.balanceDue) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div class="portal-quick-links">
+        <NuxtLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="portal-quick-link">
+          <b>{{ link.label }}</b>
+          <span>{{ link.hint }}</span>
+        </NuxtLink>
+      </div>
 
-        <div class="card">
-          <div class="chead"><h3>Open requests</h3></div>
-          <template v-if="dash.openRequests.length">
-            <div
-              v-for="req in dash.openRequests"
-              :key="req.id"
-              class="req-card"
-              data-req-status="open"
-            >
-              <span class="req-type-pill">{{ req.type }}</span>
-              <b>{{ req.title }}</b>
-              <div class="meta">{{ req.meta }} · <span class="pill warn">{{ req.statusLabel }}</span></div>
+      <div class="card portal-card">
+        <div class="chead">
+          <h3>Recent invoices</h3>
+          <NuxtLink to="/portal/invoices" class="btn sm">View all</NuxtLink>
+        </div>
+        <div v-if="!dash.recentInvoices.length" class="portal-empty">
+          No invoices yet.
+        </div>
+        <div v-else class="portal-list">
+          <NuxtLink
+            v-for="inv in dash.recentInvoices"
+            :key="inv.id"
+            :to="`/portal/invoices/${inv.id}`"
+            class="portal-list-row"
+          >
+            <div class="portal-list-main">
+              <b>{{ inv.invoiceNumberFormatted }}</b>
+              <span>{{ inv.vehicleLabel }}</span>
             </div>
-          </template>
-          <div v-else class="req-card" style="color:#94a3b8;font-size:13px;">
-            No open requests.
-          </div>
+            <div class="portal-list-end">
+              <span :class="portalInvoiceStatus(inv.status, null, inv.balanceDue).cls">
+                {{ portalInvoiceStatus(inv.status, null, inv.balanceDue).label }}
+              </span>
+              <strong>{{ portalMoney(inv.balanceDue) }}</strong>
+            </div>
+          </NuxtLink>
         </div>
       </div>
     </template>

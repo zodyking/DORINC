@@ -79,12 +79,12 @@ async function respond(action: 'approve' | 'reject') {
 </script>
 
 <template>
-  <section v-if="error" class="page active">
+  <section v-if="error" class="page active portal-page">
     <div class="empty">Estimate not found or you do not have access.</div>
   </section>
 
-  <section v-else-if="estimate" class="page active">
-    <div class="pagehead">
+  <section v-else-if="estimate" class="page active portal-page">
+    <div class="pagehead portal-pagehead">
       <div>
         <h2>{{ estimate.estimateNumberFormatted }}</h2>
         <p>

@@ -57,16 +57,16 @@ function downloadPdf() {
 </script>
 
 <template>
-  <section v-if="pending && !invoice" class="page active">
+  <section v-if="pending && !invoice" class="page active portal-page">
     <div class="empty">Loading invoice…</div>
   </section>
 
-  <section v-else-if="error" class="page active">
+  <section v-else-if="error" class="page active portal-page">
     <div class="empty">Invoice not found or you do not have access.</div>
   </section>
 
-  <section v-else-if="invoice" class="page active">
-    <div class="pagehead">
+  <section v-else-if="invoice" class="page active portal-page">
+    <div class="pagehead portal-pagehead">
       <div>
         <h2>{{ invoice.invoiceNumberFormatted }}</h2>
         <p>
