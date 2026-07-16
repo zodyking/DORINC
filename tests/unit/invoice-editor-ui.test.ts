@@ -83,6 +83,22 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(rows.find(r => r.grand)?.value).toBe('$952.39')
   })
 
+  it('uses breakdown sum for subtotal and total when fee lines are not yet in server subtotal', () => {
+    const rows = editorSummaryRows({
+      subtotal: '460.00',
+      taxAmount: '0',
+      taxExempt: true,
+      feesAmount: '0',
+      shopSuppliesPercent: null,
+      discountAmount: '0',
+      total: '460.00',
+    }, {
+      breakdown: { parts: '325.00', labor: '135.00', fees: '100.00' },
+    })
+    expect(rows.find(r => r.label === 'Subtotal')?.value).toBe('$560.00')
+    expect(rows.find(r => r.grand)?.value).toBe('$560.00')
+  })
+
   it('includes parts, labor, and fees before subtotal when breakdown is provided', () => {
     const rows = editorSummaryRows({
       subtotal: '360.00',

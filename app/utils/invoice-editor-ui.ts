@@ -1,5 +1,6 @@
 // Invoice editor helpers (mockup: PAGE: INVOICE EDITOR / P1-24).
 
+import { addMoney, subtractMoney } from '#shared/money'
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
 import { getLineTypeVerbsCache } from './detection-settings-store'
@@ -74,20 +75,35 @@ export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
   }
 }
 
+/** Grand total for display — when a line breakdown is present, derive from live lines. */
+export function invoiceDisplayTotal(
+  inv: InvoiceTotalsShape,
+  breakdown?: LineTypeBreakdown,
+): string {
+  if (!breakdown) return inv.total
+  const lineSubtotal = addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
+  return subtractMoney(
+    addMoney(lineSubtotal, inv.feesAmount ?? '0', inv.taxAmount ?? '0'),
+    inv.discountAmount ?? '0',
+  )
+}
+
 /** Server totals rows for editor sidebar — never computed client-side. */
 export function editorSummaryRows(
   inv: InvoiceTotalsShape,
   opts: { breakdown?: LineTypeBreakdown, grandLabel?: string } = {},
 ): { label: string, value: string, grand?: boolean }[] {
   const rows: { label: string, value: string, grand?: boolean }[] = []
+  let lineSubtotal = inv.subtotal
   if (opts.breakdown) {
     rows.push(
       { label: 'Parts', value: moneyDisplay(opts.breakdown.parts) },
       { label: 'Labor', value: moneyDisplay(opts.breakdown.labor) },
       { label: 'Fees', value: moneyDisplay(opts.breakdown.fees) },
     )
+    lineSubtotal = addMoney(opts.breakdown.parts, opts.breakdown.labor, opts.breakdown.fees)
   }
-  rows.push({ label: 'Subtotal', value: moneyDisplay(inv.subtotal) })
+  rows.push({ label: 'Subtotal', value: moneyDisplay(lineSubtotal) })
   if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
     rows.push({ label: 'Shop supplies & fees', value: moneyDisplay(inv.feesAmount) })
   }
@@ -99,7 +115,11 @@ export function editorSummaryRows(
   if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
     rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
   }
-  rows.push({ label: opts.grandLabel ?? 'Total', value: moneyDisplay(inv.total), grand: true })
+  rows.push({
+    label: opts.grandLabel ?? 'Total',
+    value: moneyDisplay(invoiceDisplayTotal(inv, opts.breakdown)),
+    grand: true,
+  })
   return rows
 }
 

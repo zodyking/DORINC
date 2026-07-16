@@ -19,7 +19,6 @@ import {
   isDraftLineValid,
   LINE_TYPE_OPTIONS,
   previewLineAmount,
-  previewLinesSubtotal,
   previewLineTypeBreakdown,
 } from '~/utils/invoice-creator-ui'
 import {
@@ -207,21 +206,7 @@ const summaryRows = computed(() => {
     lineAmount: line.lineAmount,
   }))
   const breakdown = previewLineTypeBreakdown(lineInputs)
-  const liveSubtotal = previewLinesSubtotal(lines.value.map(line => ({
-    localId: line.id,
-    lineType: line.lineType,
-    description: line.description,
-    quantity: line.quantity,
-    unitPrice: line.unitPrice,
-  })))
-  if (liveSubtotal === invoice.value.subtotal) {
-    return editorSummaryRows(invoice.value, { breakdown })
-  }
-  return editorSummaryRows({
-    ...invoice.value,
-    subtotal: liveSubtotal,
-    total: liveSubtotal,
-  }, { breakdown })
+  return editorSummaryRows(invoice.value, { breakdown })
 })
 
 const autosaveText = computed(() => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
-import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import { applyCatalogItemToLineFields, editorSummaryRows, invoiceDisplayTotal, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
   buildInvoiceLinePatchBody,
   canProceedWizardStep,
@@ -255,13 +255,22 @@ const autosaveClass = computed(() => {
 })
 
 const summaryRows = computed(() => {
+  const breakdown = previewLineTypeBreakdown(lines.value)
   const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
     taxExempt: selectedCustomer.value?.taxExempt,
   })
   return editorSummaryRows(inv, {
-    breakdown: previewLineTypeBreakdown(lines.value),
+    breakdown,
     grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
   })
+})
+
+const reviewTotal = computed(() => {
+  const breakdown = previewLineTypeBreakdown(lines.value)
+  const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
+    taxExempt: selectedCustomer.value?.taxExempt,
+  })
+  return invoiceDisplayTotal(inv, breakdown)
 })
 
 async function ensureEditingSession(id: string) {
@@ -898,7 +907,7 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <div class="r"><span class="k">Line items</span><span class="v">{{ validLines.length }}</span></div>
         <div class="r">
           <span class="k">Total</span>
-          <span class="v" style="color:#4f46e5;">{{ moneyDisplay((savedInvoice ?? previewDraftTotals(lines, { taxExempt: selectedCustomer?.taxExempt })).total) }}</span>
+          <span class="v" style="color:#4f46e5;">{{ moneyDisplay(reviewTotal) }}</span>
         </div>
         <div class="r stack">
           <span class="k">On finalize</span>
