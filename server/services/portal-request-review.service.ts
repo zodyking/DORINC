@@ -22,7 +22,10 @@ import {
 } from './invoices.service'
 import { createVehicle, getVehicle, updateVehicle } from './vehicles.service'
 import { notifyPortalRequestStatus } from './customer-notifications.service'
-import type { PortalRequestReviewKind } from '../../shared/validators/portal-request-review'
+import {
+  portalCorrectionPayloadKind,
+  vehicleCorrectionFieldsToSnapshot,
+} from '../../shared/portal-invoice-correction'
 
 export type PortalRequestReviewErrorCode
   = 'NOT_FOUND' | 'NOT_PENDING' | 'INVALID_INVOICE' | 'DUPLICATE_BUS_NUMBER' | 'VEHICLE_NOT_FOUND'
@@ -470,19 +473,29 @@ export async function approveInvoiceChangeRequest(
 
     if (claimed.correctionPayload) {
       const payload = claimed.correctionPayload
-      const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
-      const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
-      if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+      if (portalCorrectionPayloadKind(payload) === 'line_item') {
+        const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
+        const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
+        if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
-      const revisionLines = await listInvoiceLineItems(db, revision.id)
-      const revisionLine = revisionLines.find(line => line.sortOrder === sourceLine.sortOrder)
-      if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+        const revisionLines = await listInvoiceLineItems(db, revision.id)
+        const revisionLine = revisionLines.find(line => line.sortOrder === sourceLine.sortOrder)
+        if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
 
-      await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
-        description: payload.proposed.description,
-        quantity: payload.proposed.quantity,
-        unitPrice: payload.proposed.unitPrice,
-      }, actorId)
+        await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
+          description: payload.proposed.description,
+          quantity: payload.proposed.quantity,
+          unitPrice: payload.proposed.unitPrice,
+        }, actorId)
+      }
+      else {
+        const baseSnapshot = source.vehicleSnapshot
+        if (!baseSnapshot) throw new PortalRequestReviewError('INVALID_INVOICE')
+
+        await updateInvoiceDraft(db, revision.id, {
+          vehicleSnapshot: vehicleCorrectionFieldsToSnapshot(baseSnapshot, payload.proposed),
+        }, actorId)
+      }
     }
 
     revision = await getInvoice(db, revision.id)

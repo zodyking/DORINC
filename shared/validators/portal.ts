@@ -28,23 +28,51 @@ export const portalLineItemCorrectionInputSchema = z.object({
   notes: z.string().trim().max(2000).optional().nullable(),
 })
 
+export const portalVehicleCorrectionInputSchema = z.object({
+  unitNumber: z.string().trim().max(80).optional().nullable(),
+  year: z.coerce.number().int().min(1980).max(2035).optional().nullable(),
+  make: z.string().trim().max(80).optional().nullable(),
+  model: z.string().trim().max(80).optional().nullable(),
+  vin: z.string().trim().max(17).optional().nullable(),
+  plate: z.string().trim().max(20).optional().nullable(),
+  odometer: z.string().trim().max(20).optional().nullable(),
+  odometerUnit: z.enum(['mi', 'hrs']).optional().default('mi'),
+  notes: z.string().trim().max(2000).optional().nullable(),
+})
+
 export const portalInvoiceChangeRequestSchema = z.object({
   invoiceId: z.string().uuid().optional().nullable(),
   topic: nonEmptyString.max(120),
   description: z.string().trim().max(4000).optional().nullable(),
   lineItemCorrection: portalLineItemCorrectionInputSchema.optional(),
+  vehicleCorrection: portalVehicleCorrectionInputSchema.optional(),
 }).superRefine((val, ctx) => {
-  if (!val.lineItemCorrection && !val.description?.trim()) {
+  const structured = Boolean(val.lineItemCorrection || val.vehicleCorrection)
+  if (!structured && !val.description?.trim()) {
     ctx.addIssue({
       code: 'custom',
-      message: 'Description or line item correction is required',
+      message: 'Description or correction details are required',
       path: ['description'],
+    })
+  }
+  if (val.lineItemCorrection && val.vehicleCorrection) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Submit one correction at a time',
+      path: ['vehicleCorrection'],
     })
   }
   if (val.lineItemCorrection && !val.invoiceId) {
     ctx.addIssue({
       code: 'custom',
       message: 'Invoice is required for line item corrections',
+      path: ['invoiceId'],
+    })
+  }
+  if (val.vehicleCorrection && !val.invoiceId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Invoice is required for vehicle corrections',
       path: ['invoiceId'],
     })
   }
@@ -68,6 +96,7 @@ export const portalPasswordSchema = z.object({
 
 export type PortalNewVehicleRequestInput = z.infer<typeof portalNewVehicleRequestSchema>
 export type PortalServiceRequestInput = z.infer<typeof portalServiceRequestSchema>
+export type PortalVehicleCorrectionInput = z.infer<typeof portalVehicleCorrectionInputSchema>
 export type PortalLineItemCorrectionInput = z.infer<typeof portalLineItemCorrectionInputSchema>
 export type PortalInvoiceChangeRequestInput = z.infer<typeof portalInvoiceChangeRequestSchema>
 export type PortalVehicleChangeRequestInput = z.infer<typeof portalVehicleChangeRequestSchema>

@@ -74,6 +74,7 @@ export interface CreateInvoiceInput {
 export interface InvoicePatch {
   customerId?: string
   vehicleId?: string | null
+  vehicleSnapshot?: InvoiceVehicleSnapshot | null
   invoiceDate?: string
   dueDate?: string | null
   paymentTerms?: string
@@ -660,6 +661,11 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
       changes.vehicleSnapshot = null
     }
     changedFields.push('vehicleId')
+  }
+
+  if (patch.vehicleSnapshot !== undefined) {
+    changes.vehicleSnapshot = patch.vehicleSnapshot
+    changedFields.push('vehicleSnapshot')
   }
 
   for (const key of [

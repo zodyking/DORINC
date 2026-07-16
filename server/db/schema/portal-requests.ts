@@ -1,5 +1,5 @@
 import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import type { PortalLineItemCorrectionPayload } from '../../../shared/portal-line-correction'
+import type { PortalInvoiceCorrectionPayload } from '../../../shared/portal-invoice-correction'
 import { customers } from './customers'
 import { users } from './auth'
 import { vehicles } from './vehicles'
@@ -80,7 +80,7 @@ export const invoiceChangeRequests = pgTable('invoice_change_requests', {
 
   topic: text('topic').notNull(),
   description: text('description').notNull(),
-  correctionPayload: jsonb('correction_payload').$type<PortalLineItemCorrectionPayload>(),
+  correctionPayload: jsonb('correction_payload').$type<PortalInvoiceCorrectionPayload>(),
 
   reviewedBy: uuid('reviewed_by').references(() => users.id),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),

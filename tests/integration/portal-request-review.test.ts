@@ -238,6 +238,7 @@ describe('P2-10 invoice correction revision flow', () => {
     })
 
     expect(request.correctionPayload).toMatchObject({
+      kind: 'line_item',
       lineItemId: sourceLine.id,
       proposed: {
         description: 'Brake service (adjusted)',
@@ -255,6 +256,43 @@ describe('P2-10 invoice correction revision flow', () => {
     expect(updatedLine?.quantity).toBe('0.50')
     expect(updatedLine?.unitPrice).toBe('400.00')
     expect(updatedLine?.lineAmount).toBe('200.00')
+  })
+
+  it('auto-applies vehicle corrections to the invoice revision snapshot only', async () => {
+    const source = await getInvoice(db, sourceInvoiceId)
+    const liveBefore = await getVehicle(db, vehicle.id)
+
+    const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
+      invoiceId: sourceInvoiceId,
+      topic: 'Vehicle information correction',
+      vehicleCorrection: {
+        unitNumber: source.vehicleSnapshot?.busNumber ?? vehicle.busNumber,
+        year: source.vehicleSnapshot?.year ?? vehicle.year,
+        make: source.vehicleSnapshot?.make ?? vehicle.make,
+        model: source.vehicleSnapshot?.model ?? vehicle.model,
+        vin: source.vehicleSnapshot?.vin ?? vehicle.vin,
+        plate: 'CORRECTED',
+        notes: 'Plate was wrong on this invoice',
+      },
+    })
+
+    expect(request.correctionPayload).toMatchObject({
+      kind: 'vehicle',
+      proposed: { plate: 'CORRECTED' },
+    })
+
+    const { revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR, 'Updated invoice vehicle snapshot')
+    createdInvoiceIds.push(revision!.id)
+
+    const revised = await getInvoice(db, revision!.id)
+    expect(revised.vehicleSnapshot?.plate).toBe('CORRECTED')
+    expect(revised.vehicleId).toBe(source.vehicleId)
+
+    const unchangedSource = await getInvoice(db, sourceInvoiceId)
+    expect(unchangedSource.vehicleSnapshot?.plate).not.toBe('CORRECTED')
+
+    const liveAfter = await getVehicle(db, vehicle.id)
+    expect(liveAfter.plate).toBe(liveBefore.plate)
   })
 
   it('approves general billing inquiries without a linked invoice', async () => {

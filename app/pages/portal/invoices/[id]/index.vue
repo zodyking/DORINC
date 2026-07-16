@@ -73,10 +73,15 @@ function vehicleUnitNumber(vehicle: PortalVehicleDetail | null): string {
 
 const correctionOpen = ref(false)
 const correctionLine = ref<PortalInvoiceDetail['lineItems'][number] | null>(null)
+const vehicleCorrectionOpen = ref(false)
 
 function openCorrection(line: PortalInvoiceDetail['lineItems'][number]) {
   correctionLine.value = line
   correctionOpen.value = true
+}
+
+function openVehicleCorrection() {
+  vehicleCorrectionOpen.value = true
 }
 
 function downloadPdf() {
@@ -155,7 +160,17 @@ function downloadPdf() {
           </div>
 
           <div class="detail-panel">
-            <h4 class="detail-panel__title">Vehicle</h4>
+            <div class="detail-panel__head">
+              <h4 class="detail-panel__title">Vehicle</h4>
+              <button
+                v-if="invoice.vehicle"
+                type="button"
+                class="btn sm"
+                @click="openVehicleCorrection"
+              >
+                Request correction
+              </button>
+            </div>
             <dl class="compact-kv">
               <dt>Unit #</dt>
               <dd>{{ vehicleUnitNumber(invoice.vehicle) }}</dd>
@@ -223,6 +238,12 @@ function downloadPdf() {
       :invoice-number-formatted="invoice.invoiceNumberFormatted"
       :line="correctionLine"
     />
+
+    <PortalInvoiceVehicleCorrectionModal
+      v-model:open="vehicleCorrectionOpen"
+      :invoice-id="invoice.id"
+      :vehicle="invoice.vehicle"
+    />
   </section>
 </template>
 
@@ -267,6 +288,16 @@ function downloadPdf() {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px 32px;
   padding: 0 18px 18px;
+}
+.portal-invoice-detail .detail-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.portal-invoice-detail .detail-panel__head .detail-panel__title {
+  margin: 0;
 }
 .portal-invoice-detail .detail-panel__title {
   margin: 0 0 10px;

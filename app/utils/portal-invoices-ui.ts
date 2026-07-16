@@ -171,6 +171,77 @@ export function portalInvoiceLineCorrectionTopic(): string {
   return 'Line item correction'
 }
 
+export function portalInvoiceVehicleCorrectionTopic(): string {
+  return 'Vehicle information correction'
+}
+
+export interface PortalVehicleCorrectionForm {
+  unitNumber: string
+  year: string
+  make: string
+  model: string
+  vin: string
+  plate: string
+  odometer: string
+  notes: string
+}
+
+export function portalVehicleUnitNumberInput(vehicle: {
+  busNumber?: string | null
+  unitTag?: string | null
+} | null): string {
+  if (!vehicle) return ''
+  if (vehicle.busNumber) return vehicle.busNumber
+  if (vehicle.unitTag) return vehicle.unitTag
+  return ''
+}
+
+export function portalInvoiceVehicleCorrectionFormFromVehicle(vehicle: {
+  busNumber?: string | null
+  unitTag?: string | null
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  vin?: string | null
+  plate?: string | null
+  odometer?: string | null
+} | null): PortalVehicleCorrectionForm {
+  return {
+    unitNumber: portalVehicleUnitNumberInput(vehicle),
+    year: vehicle?.year != null ? String(vehicle.year) : '',
+    make: vehicle?.make ?? '',
+    model: vehicle?.model ?? '',
+    vin: vehicle?.vin ?? '',
+    plate: vehicle?.plate ?? '',
+    odometer: vehicle?.odometer ?? '',
+    notes: '',
+  }
+}
+
+export function portalInvoiceVehicleCorrectionHasChanges(
+  original: {
+    busNumber?: string | null
+    unitTag?: string | null
+    year?: number | null
+    make?: string | null
+    model?: string | null
+    vin?: string | null
+    plate?: string | null
+    odometer?: string | null
+  } | null,
+  form: PortalVehicleCorrectionForm,
+): boolean {
+  if (!original) return false
+  const origUnit = portalVehicleUnitNumberInput(original)
+  return origUnit !== form.unitNumber.trim()
+    || String(original.year ?? '') !== form.year.trim()
+    || (original.make ?? '') !== form.make.trim()
+    || (original.model ?? '') !== form.model.trim()
+    || (original.vin ?? '') !== form.vin.trim()
+    || (original.plate ?? '') !== form.plate.trim()
+    || (original.odometer ?? '') !== form.odometer.trim()
+}
+
 export interface PortalLineItemCorrectionForm {
   description: string
   quantity: string

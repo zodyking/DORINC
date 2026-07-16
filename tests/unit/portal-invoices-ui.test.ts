@@ -6,6 +6,8 @@ import {
   portalInvoiceIsOpen,
   portalInvoiceLineCorrectionFormFromLine,
   portalInvoiceLineCorrectionHasChanges,
+  portalInvoiceVehicleCorrectionFormFromVehicle,
+  portalInvoiceVehicleCorrectionHasChanges,
   portalInvoiceMatchesFilter,
   type PortalInvoiceListRow,
 } from '../../app/utils/portal-invoices-ui'
@@ -84,5 +86,27 @@ describe('portal-invoices-ui helpers (P2-05)', () => {
     })
     expect(portalInvoiceLineCorrectionHasChanges(line, { ...line })).toBe(false)
     expect(portalInvoiceLineCorrectionHasChanges(line, { ...line, quantity: '0.50' })).toBe(true)
+  })
+
+  it('builds vehicle correction form and detects changes', () => {
+    const vehicle = {
+      busNumber: '616',
+      unitTag: null,
+      year: 2023,
+      make: 'IC BUS',
+      model: 'PB105',
+      vin: 'VIN123',
+      plate: null,
+      odometer: null,
+    }
+    expect(portalInvoiceVehicleCorrectionFormFromVehicle(vehicle)).toMatchObject({
+      unitNumber: '616',
+      year: '2023',
+      make: 'IC BUS',
+    })
+    expect(portalInvoiceVehicleCorrectionHasChanges(vehicle, {
+      ...portalInvoiceVehicleCorrectionFormFromVehicle(vehicle),
+      plate: 'ABC123',
+    })).toBe(true)
   })
 })

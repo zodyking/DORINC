@@ -6,14 +6,19 @@ import { newVehicleRequests, invoiceChangeRequests, portalGeneralRequests, servi
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import { getInvoicePdfDownload, InvoicePdfServiceError } from './invoice-pdf.service'
-import { listInvoiceLineItems } from './invoices.service'
+import { getInvoice, listInvoiceLineItems } from './invoices.service'
+import { buildVehicleSnapshot } from './entity-snapshots'
+import { getVehicle } from './vehicles.service'
 import {
   buildPortalLineItemCorrectionDescription,
-  type PortalLineItemCorrectionPayload,
-} from '../../shared/portal-line-correction'
-import type { PortalInvoiceChangeRequestInput } from '../../shared/validators/portal'
+  buildPortalVehicleCorrectionDescription,
+  type PortalInvoiceCorrectionPayload,
+  type PortalVehicleCorrectionFields,
+} from '../../shared/portal-invoice-correction'
+import type { PortalInvoiceChangeRequestInput, PortalVehicleCorrectionInput } from '../../shared/validators/portal'
+import type { InvoiceVehicleSnapshot } from '../db/schema/invoices'
 
-export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM'
+export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM' | 'NO_VEHICLE'
 
 export class PortalServiceError extends Error {
   constructor(public readonly code: PortalServiceErrorCode) {
@@ -515,31 +520,31 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
   const lines = await listInvoiceLineItems(db, invoiceId)
 
   const snapshot = row.invoice.vehicleSnapshot
-  const vehicleRow = row.vehicle?.busNumber || row.vehicle?.unitTag || row.vehicle?.make
+  const vehicleRow = snapshot
     ? {
-        unitType: row.vehicle.unitType,
-        busNumber: row.vehicle.busNumber,
-        unitTag: row.vehicle.unitTag,
-        year: row.vehicle.year,
-        make: row.vehicle.make,
-        model: row.vehicle.model,
-        vin: row.vehicle.vin ?? snapshot?.vin ?? null,
-        plate: snapshot?.plate ?? null,
-        odometer: snapshot?.odometer ?? null,
-        odometerUnit: snapshot?.odometerUnit ?? 'mi',
+        unitType: snapshot.unitType,
+        busNumber: snapshot.busNumber,
+        unitTag: snapshot.unitTag,
+        year: snapshot.year,
+        make: snapshot.make,
+        model: snapshot.model,
+        vin: snapshot.vin ?? null,
+        plate: snapshot.plate ?? null,
+        odometer: snapshot.odometer ?? null,
+        odometerUnit: snapshot.odometerUnit ?? 'mi',
       }
-    : snapshot
+    : row.vehicle?.busNumber || row.vehicle?.unitTag || row.vehicle?.make
       ? {
-          unitType: snapshot.unitType,
-          busNumber: snapshot.busNumber,
-          unitTag: snapshot.unitTag,
-          year: snapshot.year,
-          make: snapshot.make,
-          model: snapshot.model,
-          vin: snapshot.vin ?? null,
-          plate: snapshot.plate ?? null,
-          odometer: snapshot.odometer ?? null,
-          odometerUnit: snapshot.odometerUnit ?? 'mi',
+          unitType: row.vehicle.unitType,
+          busNumber: row.vehicle.busNumber,
+          unitTag: row.vehicle.unitTag,
+          year: row.vehicle.year,
+          make: row.vehicle.make,
+          model: row.vehicle.model,
+          vin: row.vehicle.vin ?? null,
+          plate: null,
+          odometer: null,
+          odometerUnit: 'mi',
         }
       : null
 
@@ -564,8 +569,8 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
     paidAt: row.invoice.paidAt,
     sentAt: row.invoice.sentAt,
     vehicleId: row.invoice.vehicleId,
-    vehicleLabel: vehicleLabelFromRow(row.vehicle?.busNumber || row.vehicle?.unitTag ? row.vehicle : null)
-      ?? (snapshot ? vehicleLabelFromRow(snapshot) : '—'),
+    vehicleLabel: vehicleLabelFromRow(vehicleRow)
+      ?? '—',
     vehicle: vehicleRow,
     lineItems: lines.map(line => ({
       id: line.id,
@@ -691,6 +696,52 @@ export async function createServiceRequest(
   return row!
 }
 
+function vehicleSnapshotToCorrectionFields(snapshot: InvoiceVehicleSnapshot): PortalVehicleCorrectionFields {
+  return {
+    busNumber: snapshot.busNumber,
+    unitTag: snapshot.unitTag,
+    year: snapshot.year,
+    make: snapshot.make,
+    model: snapshot.model,
+    vin: snapshot.vin,
+    plate: snapshot.plate,
+    odometer: snapshot.odometer,
+    odometerUnit: snapshot.odometerUnit ?? 'mi',
+  }
+}
+
+async function resolveInvoiceVehicleSnapshotForCorrection(
+  db: Db,
+  invoiceId: string,
+): Promise<InvoiceVehicleSnapshot> {
+  const invoice = await getInvoice(db, invoiceId)
+  if (invoice.vehicleSnapshot) return invoice.vehicleSnapshot
+  if (invoice.vehicleId) {
+    const vehicle = await getVehicle(db, invoice.vehicleId)
+    return buildVehicleSnapshot(vehicle)
+  }
+  throw new PortalServiceError('NO_VEHICLE')
+}
+
+function proposedVehicleCorrectionFields(
+  original: PortalVehicleCorrectionFields,
+  input: PortalVehicleCorrectionInput,
+): PortalVehicleCorrectionFields {
+  const unitNumber = input.unitNumber?.trim().replace(/^#/, '') || null
+  const usesBusNumber = Boolean(original.busNumber) || (!original.unitTag && Boolean(unitNumber))
+  return {
+    busNumber: usesBusNumber ? unitNumber : null,
+    unitTag: usesBusNumber ? null : unitNumber,
+    year: input.year ?? original.year,
+    make: input.make?.trim() || null,
+    model: input.model?.trim() || null,
+    vin: input.vin?.trim().toUpperCase() || null,
+    plate: input.plate?.trim() || null,
+    odometer: input.odometer?.trim() || null,
+    odometerUnit: input.odometerUnit ?? original.odometerUnit ?? 'mi',
+  }
+}
+
 export async function createInvoiceChangeRequest(
   db: Db,
   customerId: string,
@@ -701,7 +752,14 @@ export async function createInvoiceChangeRequest(
   await assertPortalInvoiceOptional(db, customerId, input.invoiceId)
 
   let description = input.description?.trim() ?? ''
-  let correctionPayload: PortalLineItemCorrectionPayload | null = null
+  let correctionPayload: PortalInvoiceCorrectionPayload | null = null
+
+  const [invoiceRow] = input.invoiceId
+    ? await db.select({ invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(eq(invoices.id, input.invoiceId))
+      .limit(1)
+    : []
 
   if (input.lineItemCorrection) {
     if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
@@ -710,6 +768,7 @@ export async function createInvoiceChangeRequest(
     if (!sourceLine) throw new PortalServiceError('INVALID_LINE_ITEM')
 
     correctionPayload = {
+      kind: 'line_item',
       lineItemId: input.lineItemCorrection.lineItemId,
       original: {
         description: sourceLine.description,
@@ -724,12 +783,25 @@ export async function createInvoiceChangeRequest(
       notes: input.lineItemCorrection.notes?.trim() || null,
     }
 
-    const [invoiceRow] = await db.select({ invoiceNumber: invoices.invoiceNumber })
-      .from(invoices)
-      .where(eq(invoices.id, input.invoiceId))
-      .limit(1)
-
     description = buildPortalLineItemCorrectionDescription(
+      formatInvoiceNumber(invoiceRow!.invoiceNumber),
+      correctionPayload,
+    )
+  }
+  else if (input.vehicleCorrection) {
+    if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
+    const snapshot = await resolveInvoiceVehicleSnapshotForCorrection(db, input.invoiceId)
+    const original = vehicleSnapshotToCorrectionFields(snapshot)
+    const proposed = proposedVehicleCorrectionFields(original, input.vehicleCorrection)
+
+    correctionPayload = {
+      kind: 'vehicle',
+      original,
+      proposed,
+      notes: input.vehicleCorrection.notes?.trim() || null,
+    }
+
+    description = buildPortalVehicleCorrectionDescription(
       formatInvoiceNumber(invoiceRow!.invoiceNumber),
       correctionPayload,
     )
