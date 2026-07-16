@@ -15,7 +15,7 @@ import {
   transitionServiceLog,
   updateServiceLog,
 } from '../../server/services/service-logs.service'
-import { getInvoice } from '../../server/services/invoices.service'
+import { getInvoice, listInvoiceLineItems } from '../../server/services/invoices.service'
 import { hardDeleteInvoice } from '../../server/services/hard-delete.service'
 import { INVOICE_LINK_RELEASED_REASON } from '../../server/services/invoice-dependents.service'
 import { uploadFile } from '../../server/services/files.service'
@@ -334,6 +334,40 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
     const row = listed.items.find(i => i.id === converted.id)
     expect(row?.invoiceId).toBe(invoice.id)
     expect(row?.invoiceNumberFormatted).toBe(formatInvoiceNumber(invoice.invoiceNumber))
+  })
+
+  it('copies draft line items onto the created invoice', async () => {
+    const log = await makeLog({
+      draftLineItems: [
+        { lineType: 'part', description: 'Replace Tire', qty: '1', rate: '325', amount: '325' },
+        { lineType: 'labor', description: 'Clean Inside Bus', qty: '1', rate: '55', amount: '55' },
+      ],
+    })
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    const lines = await listInvoiceLineItems(db, invoice.id)
+
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatchObject({
+      lineType: 'part',
+      description: 'Replace Tire',
+      quantity: '1',
+      unitPrice: '325',
+      lineAmount: '325',
+      sortOrder: 0,
+    })
+    expect(lines[1]).toMatchObject({
+      lineType: 'labor',
+      description: 'Clean Inside Bus',
+      quantity: '1',
+      unitPrice: '55',
+      lineAmount: '55',
+      sortOrder: 1,
+    })
+
+    const draft = await getInvoice(db, invoice.id)
+    expect(draft.subtotal).toBe('380.00')
   })
 })
 

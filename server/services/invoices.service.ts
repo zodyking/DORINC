@@ -15,6 +15,7 @@ import { getCustomer } from './customers.service'
 import { addMoney, compareMoney, isZeroMoney, subtractMoney } from '../../shared/money'
 import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
+import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import type { AccountType } from '../../shared/permissions/keys'
 import { getManagerApprovalThreshold } from './billing-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
@@ -244,6 +245,37 @@ async function copyLineItems(db: Db, sourceInvoiceId: string, targetInvoiceId: s
   }
 }
 
+async function copyServiceLogDraftLineItems(
+  db: Db,
+  invoiceId: string,
+  draftLineItems: unknown,
+  actorId: string,
+) {
+  const seeds = parseServiceLogDraftLineSeeds(draftLineItems)
+  if (!seeds.length) return
+
+  for (const seed of seeds) {
+    await db.insert(invoiceLineItems).values({
+      invoiceId,
+      lineType: seed.lineType,
+      catalogItemId: null,
+      catalogSnapshot: null,
+      description: seed.description,
+      quantity: seed.quantity,
+      unitPrice: seed.unitPrice,
+      lineAmount: seed.lineAmount,
+      taxable: true,
+      sortOrder: seed.sortOrder,
+      priceOverridden: false,
+      priceOverrideReason: null,
+      createdBy: actorId,
+      updatedBy: actorId,
+    })
+  }
+
+  await recalculateInvoiceTotals(db, invoiceId, actorId)
+}
+
 export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: string) {
   const source = input.creationSource ?? 'blank'
   let resolved: CreateInvoiceInput = { ...input, creationSource: source }
@@ -322,7 +354,10 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       }
 
       const invoice = await createInvoiceDraft(db, resolved, actorId, draftSnapshots)
-      return invoice
+      if (log.draftLineItems) {
+        await copyServiceLogDraftLineItems(db, invoice.id, log.draftLineItems, actorId)
+      }
+      return getInvoice(db, invoice.id)
     }
     catch (err) {
       if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {
