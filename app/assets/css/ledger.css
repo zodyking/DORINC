@@ -1643,7 +1643,7 @@ section.page.active.dm-page{
   white-space:nowrap; overflow:visible; text-overflow:clip;
 }
 .dm-channel-tabs{
-  display:grid; grid-template-columns:repeat(3, minmax(0, 1fr));
+  display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
   gap:6px; margin-bottom:10px; width:100%; min-width:0;
 }
 .dm-channel-tab{
@@ -2075,7 +2075,7 @@ section.page.active.dm-page{
   .dm-conv-email{ display:none; }
   .dm-channel-tabs{
     display:grid;
-    grid-template-columns:repeat(3, minmax(0, 1fr));
+    grid-template-columns:repeat(2, minmax(0, 1fr));
     gap:6px;
     width:100%;
   }
