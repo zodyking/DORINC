@@ -50,4 +50,16 @@ describe('portalInvoiceChangeRequestSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('coerces empty invoice id to null for billing questions', () => {
+    const result = portalInvoiceChangeRequestSchema.safeParse({
+      invoiceId: '',
+      topic: 'Payment or balance question',
+      description: 'Need a copy of the statement',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.invoiceId).toBeNull()
+    }
+  })
 })

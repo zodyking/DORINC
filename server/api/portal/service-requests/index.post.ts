@@ -10,7 +10,7 @@ import { portalServiceRequestSchema } from '../../../../shared/validators/portal
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
   requirePermission(event, 'portal.requests.own')
-  const body = validateBody(event, portalServiceRequestSchema)
+  const body = await validateBody(event, portalServiceRequestSchema)
 
   try {
     const request = await createServiceRequest(useDb(), user.customerId, user.id, body)

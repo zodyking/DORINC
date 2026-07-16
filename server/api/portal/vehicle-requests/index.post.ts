@@ -10,7 +10,7 @@ import { portalNewVehicleRequestSchema } from '../../../../shared/validators/por
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
   requirePermission(event, 'portal.requests.own')
-  const body = validateBody(event, portalNewVehicleRequestSchema)
+  const body = await validateBody(event, portalNewVehicleRequestSchema)
 
   try {
     const request = await createNewVehicleRequest(useDb(), user.customerId, user.id, body)

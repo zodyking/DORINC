@@ -41,7 +41,10 @@ export const portalVehicleCorrectionInputSchema = z.object({
 })
 
 export const portalInvoiceChangeRequestSchema = z.object({
-  invoiceId: z.string().uuid().optional().nullable(),
+  invoiceId: z.preprocess(
+    value => (value === '' ? null : value),
+    z.string().uuid().optional().nullable(),
+  ),
   topic: nonEmptyString.max(120),
   description: z.string().trim().max(4000).optional().nullable(),
   lineItemCorrection: portalLineItemCorrectionInputSchema.optional(),

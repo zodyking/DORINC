@@ -10,7 +10,7 @@ import { portalInvoiceChangeRequestSchema } from '../../../../shared/validators/
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
   requirePermission(event, 'portal.requests.own')
-  const body = validateBody(event, portalInvoiceChangeRequestSchema)
+  const body = await validateBody(event, portalInvoiceChangeRequestSchema)
 
   try {
     const request = await createInvoiceChangeRequest(useDb(), user.customerId, user.id, body)
