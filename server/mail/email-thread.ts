@@ -21,29 +21,32 @@ export function buildStaffEmailFooter(staffName: string, brandLegal: string): st
 }
 
 function contactLinkHtml(brand: EmailBrandContext): string {
-  const parts: string[] = []
+  const linkStyle = `color:${EMAIL_TOKENS.accent};text-decoration:none;white-space:nowrap;`
+  const rows: string[] = []
   if (brand.phone) {
     const tel = brand.phone.replace(/[^\d+]/g, '')
-    parts.push(
+    rows.push(
       tel
-        ? `<a href="tel:${escapeHtml(tel)}" style="color:${EMAIL_TOKENS.accent};text-decoration:none;">${escapeHtml(brand.phone)}</a>`
-        : escapeHtml(brand.phone),
+        ? `<a href="tel:${escapeHtml(tel)}" style="${linkStyle}">${escapeHtml(brand.phone)}</a>`
+        : `<span style="white-space:nowrap;">${escapeHtml(brand.phone)}</span>`,
     )
   }
   if (brand.email) {
-    parts.push(
-      `<a href="mailto:${escapeHtml(brand.email)}" style="color:${EMAIL_TOKENS.accent};text-decoration:none;">${escapeHtml(brand.email)}</a>`,
+    rows.push(
+      `<a href="mailto:${escapeHtml(brand.email)}" style="${linkStyle}">${escapeHtml(brand.email)}</a>`,
     )
   }
   if (brand.website) {
     const href = /^https?:\/\//i.test(brand.website) ? brand.website : `https://${brand.website}`
-    parts.push(
-      `<a href="${escapeHtml(href)}" style="color:${EMAIL_TOKENS.accent};text-decoration:none;">${escapeHtml(brand.website.replace(/^https?:\/\//i, ''))}</a>`,
+    const label = brand.website.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+    rows.push(
+      `<a href="${escapeHtml(href)}" style="${linkStyle}">${escapeHtml(label)}</a>`,
     )
   }
-  return parts.join(
-    `<span style="color:${EMAIL_TOKENS.faint};padding:0 6px;">·</span>`,
-  )
+  if (!rows.length) return ''
+  return rows
+    .map(row => `<div style="padding-top:4px;line-height:18px;">${row}</div>`)
+    .join('')
 }
 
 export function buildStaffEmailHtmlFooter(staffName: string, brand: EmailBrandContext): string {
@@ -73,7 +76,7 @@ export function buildStaffEmailHtmlFooter(staffName: string, brand: EmailBrandCo
                     ${escapeHtml(brand.brandLegal)}
                   </div>
                   ${contact
-                    ? `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;padding-top:8px;">${contact}</div>`
+                    ? `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;padding-top:6px;">${contact}</div>`
                     : ''}
                 </td>
               </tr>
@@ -117,7 +120,7 @@ export async function buildOutboundEmailBodies(
   const html = wrapEmailHtml({
     appUrl: brand.appUrl,
     brand,
-    title: brand.brandName,
+    // Omit title/headline so the message body is the focus (not a repeated brand H1).
     preheader: trimmed.slice(0, 120),
     bodyHtml: `${messageHtml}${signatureHtml}`,
     headerBadge: '',
