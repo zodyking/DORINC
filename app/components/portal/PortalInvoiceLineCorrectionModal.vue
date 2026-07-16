@@ -52,12 +52,12 @@ function close() {
 }
 
 function validate(): string | null {
-  if (!props.line) return 'Line item not found.'
+  if (!props.line) return 'This line item could not be loaded.'
   if (!form.value.description.trim()) return 'Description is required.'
-  if (!form.value.quantity.trim()) return 'Qty/Hours is required.'
+  if (!form.value.quantity.trim()) return 'Qty or hours is required.'
   if (!form.value.unitPrice.trim()) return 'Rate is required.'
   if (!portalInvoiceLineCorrectionHasChanges(props.line, form.value) && !form.value.notes.trim()) {
-    return 'Change at least one field or add notes explaining the correction.'
+    return 'Change at least one field or add a note.'
   }
   return null
 }
@@ -87,13 +87,13 @@ async function submit() {
         },
       },
     })
-    success.value = 'Correction request sent — the shop will review and apply if approved.'
+    success.value = 'Submitted for review.'
     emit('submitted')
     setTimeout(() => close(), 1200)
   }
   catch (err: unknown) {
     const fe = err as { data?: { message?: string, data?: { message?: string } } }
-    error.value = fe.data?.data?.message ?? fe.data?.message ?? 'Unable to submit correction request.'
+    error.value = fe.data?.data?.message ?? fe.data?.message ?? 'Unable to submit your request.'
   }
   finally {
     submitting.value = false
@@ -110,46 +110,65 @@ async function submit() {
   >
     <div
       v-if="line"
-      class="modal"
+      class="modal correction-modal"
       role="dialog"
       aria-labelledby="line-correction-title"
       aria-modal="true"
     >
       <div class="mhead">
         <div>
-          <h3 id="line-correction-title">Request line item correction</h3>
-          <p>{{ line.description }} · {{ moneyDisplay(line.lineAmount) }}</p>
+          <h3 id="line-correction-title">Correct line item</h3>
+          <p>Current: {{ line.description }} · {{ moneyDisplay(line.lineAmount) }}</p>
         </div>
         <button type="button" class="close" aria-label="Close" @click="close">✕</button>
       </div>
       <form @submit.prevent="submit">
         <div class="mbody">
-          <p class="help">
-            Enter the corrected description, qty/hours, and rate. If approved, the shop applies these changes automatically.
+          <p class="correction-lead">
+            Update the line below. Your shop will review the full line before approving.
           </p>
 
-          <div class="correction-grid">
-            <label class="fld">
-              <span>Description</span>
-              <input v-model="form.description" type="text" required maxlength="500">
-            </label>
+          <label class="fld correction-desc">
+            <span>Description</span>
+            <input
+              v-model="form.description"
+              type="text"
+              required
+              maxlength="500"
+              autocomplete="off"
+            >
+          </label>
+
+          <div class="correction-metrics">
             <label class="fld">
               <span>Qty / hours</span>
-              <input v-model="form.quantity" type="text" required inputmode="decimal">
+              <input
+                v-model="form.quantity"
+                type="text"
+                required
+                inputmode="decimal"
+                autocomplete="off"
+              >
             </label>
             <label class="fld">
               <span>Rate</span>
-              <input v-model="form.unitPrice" type="text" required inputmode="decimal">
+              <input
+                v-model="form.unitPrice"
+                type="text"
+                required
+                inputmode="decimal"
+                autocomplete="off"
+              >
             </label>
           </div>
 
           <label class="fld">
-            <span>Additional notes (optional)</span>
+            <span>Notes <span class="fld-optional">optional</span></span>
             <textarea
               v-model="form.notes"
-              rows="3"
+              rows="2"
               maxlength="2000"
-              placeholder="Explain why this line should be corrected…"
+              placeholder="Why should this line change?"
             />
           </label>
 
@@ -159,7 +178,7 @@ async function submit() {
         <div class="mfoot">
           <button type="button" class="btn" @click="close">Cancel</button>
           <button type="button" class="btn primary" :disabled="submitting" @click="submit">
-            {{ submitting ? 'Sending…' : 'Send correction request' }}
+            {{ submitting ? 'Submitting…' : 'Submit for review' }}
           </button>
         </div>
       </form>
@@ -168,14 +187,41 @@ async function submit() {
 </template>
 
 <style scoped>
-.correction-grid {
-  display: grid;
-  grid-template-columns: 1fr 120px 120px;
-  gap: 12px;
-  margin-bottom: 14px;
+.correction-modal {
+  width: min(560px, calc(100vw - 32px));
 }
-@media (max-width: 640px) {
-  .correction-grid {
+
+.correction-lead {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.correction-desc {
+  margin-bottom: 12px;
+}
+
+.correction-desc input {
+  width: 100%;
+}
+
+.correction-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fld-optional {
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+@media (max-width: 480px) {
+  .correction-metrics {
     grid-template-columns: 1fr;
   }
 }
