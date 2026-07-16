@@ -423,7 +423,7 @@ export async function createInvoiceDraft(
   }
 
   let row: typeof invoices.$inferSelect | undefined
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt === 0) {
       await ensureInvoiceNumberSequence(db)
     }
@@ -435,7 +435,7 @@ export async function createInvoiceDraft(
       break
     }
     catch (err) {
-      if (attempt === 0 && isPgUniqueViolation(err, 'invoices_invoice_number_unique')) {
+      if (isPgUniqueViolation(err, 'invoices_invoice_number_unique') && attempt < 2) {
         continue
       }
       throw err

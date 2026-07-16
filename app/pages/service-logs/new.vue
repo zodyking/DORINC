@@ -192,15 +192,11 @@ async function submitLog() {
         draftLineItems: logRecordMode.value === 'digital' && digitalLineItems.value.length
           ? digitalLineItems.value.map(toApiDraftLine)
           : undefined,
+        finalize: true,
       },
     })
 
     if (photos.value.length) await uploadPhotos(log.id)
-
-    await $fetch(`/api/service-logs/${log.id}/status`, {
-      method: 'POST',
-      body: { status: 'ready_for_review' },
-    })
 
     await navigateTo('/service-logs')
   }

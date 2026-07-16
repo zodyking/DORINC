@@ -83,7 +83,7 @@ const showViewInvoice = computed(() =>
         type="button"
         class="btn"
         :disabled="isBusy"
-        @click="markReadyToInvoice"
+        @click.stop="markReadyToInvoice"
       >
         {{ isBusy ? 'Updating…' : 'Mark ready to invoice' }}
       </button>
@@ -92,7 +92,7 @@ const showViewInvoice = computed(() =>
         type="button"
         class="btn primary"
         :disabled="isBusy"
-        @click="sendToInvoice"
+        @click.stop="sendToInvoice"
       >
         {{ isBusy ? 'Sending…' : 'Send to invoice' }}
       </button>
@@ -101,7 +101,7 @@ const showViewInvoice = computed(() =>
         type="button"
         class="btn"
         :disabled="isBusy"
-        @click="undoSendToInvoice"
+        @click.stop="undoSendToInvoice"
       >
         {{ isBusy ? 'Undoing…' : 'Undo send to invoice' }}
       </button>

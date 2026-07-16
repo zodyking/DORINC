@@ -2,6 +2,8 @@ import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or } from 'drizz
 import { isEditingSessionNoise } from '../../shared/audit-messages'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import type { Db } from '../db/client'
+import { ensureServiceLogNumberSequence, syncServiceLogNumberSequence } from '../db/sync-sequences'
+import { isPgUniqueViolation } from '../utils/pg-errors'
 import type { ServiceLogStatus, ServiceLogWorkType } from '../db/schema/service-logs'
 import { serviceLogs } from '../db/schema/service-logs'
 import { invoices, invoiceLineItems, formatInvoiceNumber } from '../db/schema/invoices'
@@ -119,7 +121,7 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
 
   const { buildCustomerSnapshot, buildVehicleSnapshot } = await import('./entity-snapshots')
 
-  const [row] = await db.insert(serviceLogs).values({
+  const draftValues = {
     customerId: input.customerId,
     vehicleId: input.vehicleId,
     submittedBy,
@@ -133,7 +135,23 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     customerRequested: input.customerRequested ?? false,
     customerSnapshot: buildCustomerSnapshot(customer),
     vehicleSnapshot: buildVehicleSnapshot(vehicle),
-  }).returning()
+  }
+
+  let row: typeof serviceLogs.$inferSelect | undefined
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt === 0) await ensureServiceLogNumberSequence(db)
+    else await syncServiceLogNumberSequence(db)
+
+    try {
+      ;[row] = await db.insert(serviceLogs).values(draftValues).returning()
+      break
+    }
+    catch (err) {
+      if (isPgUniqueViolation(err, 'service_logs_log_number_unique') && attempt < 2) continue
+      throw err
+    }
+  }
+
   return row!
 }
 
@@ -303,24 +321,26 @@ export async function convertServiceLogToInvoice(
   actorId: string,
   opts: { invoiceDate?: string } = {},
 ) {
-  const before = await getServiceLog(db, id)
+  return db.transaction(async (tx) => {
+    const before = await getServiceLog(tx, id)
 
-  if (before.status === 'converted_to_invoice' && before.invoiceId) {
-    throw new ServiceLogsServiceError('ALREADY_CONVERTED')
-  }
-  if (!isServiceLogSendable(before.status)) {
-    throw new ServiceLogsServiceError('INVALID_TRANSITION')
-  }
+    if (before.status === 'converted_to_invoice' && before.invoiceId) {
+      throw new ServiceLogsServiceError('ALREADY_CONVERTED')
+    }
+    if (!isServiceLogSendable(before.status)) {
+      throw new ServiceLogsServiceError('INVALID_TRANSITION')
+    }
 
-  const { createInvoice } = await import('./invoices.service')
-  const invoice = await createInvoice(db, {
-    creationSource: 'service_log',
-    serviceLogId: before.id,
-    invoiceDate: opts.invoiceDate ?? before.serviceDate,
-  }, actorId)
+    const { createInvoice } = await import('./invoices.service')
+    const invoice = await createInvoice(tx, {
+      creationSource: 'service_log',
+      serviceLogId: before.id,
+      invoiceDate: opts.invoiceDate ?? before.serviceDate,
+    }, actorId)
 
-  const { log } = await transitionServiceLog(db, id, 'converted_to_invoice', { invoiceId: invoice.id })
-  return { invoice, log, before }
+    const { log } = await transitionServiceLog(tx, id, 'converted_to_invoice', { invoiceId: invoice.id })
+    return { invoice, log, before }
+  })
 }
 
 export type InvoiceRevertBlockReason

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   ensureInvoiceNumberSequence,
+  ensureServiceLogNumberSequence,
   syncInvoiceNumberSequence,
   syncNumberSequences,
 } from '../../server/db/sync-sequences'
@@ -40,7 +41,7 @@ describe('sync-sequences', () => {
     expect(db.execute).toHaveBeenCalledTimes(1)
   })
 
-  it('runs setval when the sequence is stale', async () => {
+  it('runs setval when the invoice sequence is stale', async () => {
     const db = {
       execute: vi.fn()
         .mockResolvedValueOnce({
@@ -51,5 +52,16 @@ describe('sync-sequences', () => {
 
     await ensureInvoiceNumberSequence(db as never)
     expect(db.execute).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips service log setval when the sequence already points at MAX + 1', async () => {
+    const db = {
+      execute: vi.fn().mockResolvedValue({
+        rows: [{ max_num: '1007', seq_val: '1007', seq_called: true }],
+      }),
+    }
+
+    await ensureServiceLogNumberSequence(db as never)
+    expect(db.execute).toHaveBeenCalledTimes(1)
   })
 })

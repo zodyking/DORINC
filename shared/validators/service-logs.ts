@@ -44,6 +44,8 @@ export const serviceLogCreateSchema = z.object({
   complaint: z.string().max(10000).nullish(),
   internalNotes: z.string().max(10000).nullish(),
   draftLineItems: z.array(serviceLogDraftLineSchema).nullish(),
+  /** When true, moves the new log straight into ready_for_review after create. */
+  finalize: z.boolean().optional(),
 })
 
 export const serviceLogUpdateSchema = serviceLogCreateSchema

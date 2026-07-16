@@ -5,13 +5,20 @@ const triggerRef = ref<HTMLButtonElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const panelStyle = ref<Record<string, string>>({})
 
+/** Ignore document taps fired right after a menu action (mobile ghost-click). */
+const GHOST_CLICK_MS = 400
+let lastActionAt = 0
+
 function close() {
   open.value = false
 }
 
 function onPanelClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
-  if (target?.closest('a, button')) close()
+  if (!target?.closest('a, button')) return
+  lastActionAt = Date.now()
+  event.stopPropagation()
+  requestAnimationFrame(() => close())
 }
 
 function updatePanelPosition() {
@@ -39,6 +46,7 @@ function toggle() {
 
 function onDocumentClick(event: MouseEvent) {
   if (!open.value) return
+  if (Date.now() - lastActionAt < GHOST_CLICK_MS) return
   const target = event.target as Node | null
   const inRoot = !!(root.value && target && root.value.contains(target))
   const inPanel = !!(panelRef.value && target && panelRef.value.contains(target))
