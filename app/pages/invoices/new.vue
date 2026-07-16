@@ -3,6 +3,32 @@
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
+  buildInvoiceLinePatchBody,
+  canProceedWizardStep,
+  createEmptyLine,
+  dueDateFromTerms,
+  formatInvoiceNumberDisplay,
+  formatQuantityField,
+  formatUnitPriceField,
+  INVOICE_WIZARD_STEPS,
+  isDraftLineValid,
+  LINE_TYPE_OPTIONS,
+  previewDraftTotals,
+  previewLineAmount,
+  previewLineTypeBreakdown,
+  wizardStateLabel,
+  type DraftLine,
+} from '~/utils/invoice-creator-ui'
+import {
+  auditWhenDisplay,
+  invoiceDateDisplay,
+  moneyDisplay,
+  paymentTermsLabel,
+} from '~/utils/invoices-ui'
+import { logNumberDisplay } from '~/utils/service-logs-ui'
+import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import {
   draftLineToWizard,
   wizardLinesToDraftLines,
   type WizardLineDraft,
@@ -105,31 +131,75 @@ if (typeof route.query.vehicleId === 'string' && route.query.vehicleId) {
 
 const removedServerLineIds = ref<string[]>([])
 
-const { data: customersData } = useClientFetch<{ items: CustomerPick[] }>(
+const customerFilterQ = ref('')
+const customerSearchQ = ref('')
+
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerFilterQ, (q) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => {
+    customerSearchQ.value = q.trim()
+  }, 300)
+})
+
+const {
+  data: customersData,
+  pending: customersPending,
+  error: customersError,
+  refresh: refreshCustomers,
+} = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
-  { query: { pageSize: 200, sort: 'name-asc' } },
-)
-
-const customerOptions = computed(() => customersData.value?.items ?? [])
-
-const { data: vehiclesData, refresh: refreshVehicles } = useClientFetch<{ items: VehiclePick[] }>(
-  '/api/vehicles',
-  { query: computed(() => ({
-    customerId: customerId.value || undefined,
-    pageSize: 100,
-    sort: 'tag-asc',
-  })) },
-)
-
-const { data: serviceLogsData, refresh: refreshServiceLogs } = useClientFetch<{ items: ServiceLogPick[] }>(
-  '/api/service-logs',
   {
     query: computed(() => ({
-      customerId: customerId.value || undefined,
+      pageSize: 100,
+      sort: 'name-asc' as const,
+      q: customerSearchQ.value || undefined,
+    })),
+  },
+)
+
+const { data: presetCustomerData } = useClientFetch<{
+  customer: CustomerPick
+}>(
+  () => (customerId.value ? `/api/customers/${customerId.value}` : null),
+  { watch: [customerId] },
+)
+
+const customerOptions = computed(() => {
+  const merged = new Map<string, CustomerPick>()
+  for (const c of customersData.value?.items ?? []) merged.set(c.id, c)
+  const preset = presetCustomerData.value?.customer
+  if (preset) merged.set(preset.id, preset)
+  return [...merged.values()].sort((a, b) => a.displayName.localeCompare(b.displayName))
+})
+
+const customersLoadError = computed(() =>
+  customersError.value
+    ? syncFetchErrorMessage(customersError.value, 'Could not load customers')
+    : null,
+)
+
+const { data: vehiclesData, pending: vehiclesPending } = useClientFetch<{ items: VehiclePick[] }>(
+  () => (customerId.value ? '/api/vehicles' : null),
+  {
+    query: computed(() => ({
+      customerId: customerId.value,
+      pageSize: 100,
+      sort: 'tag-asc' as const,
+    })),
+    watch: [customerId],
+  },
+)
+
+const { data: serviceLogsData } = useClientFetch<{ items: ServiceLogPick[] }>(
+  () => (customerId.value ? '/api/service-logs' : null),
+  {
+    query: computed(() => ({
+      customerId: customerId.value,
       queue: 'review' as const,
       pageSize: 50,
     })),
-    immediate: false,
+    watch: [customerId],
   },
 )
 
@@ -138,16 +208,16 @@ watch(customerId, (id, oldId) => {
     vehicleId.value = ''
     serviceLogId.value = ''
   }
-  if (id) {
-    refreshVehicles()
-    refreshServiceLogs()
-    const cust = customerOptions.value.find(c => c.id === id)
-    if (cust?.paymentTerms) {
-      paymentTerms.value = cust.paymentTerms
-      if (!dueDateManual.value) dueDate.value = dueDateFromTerms(invoiceDate.value, paymentTerms.value)
-    }
+})
+
+watch([customerId, customerOptions], ([id]) => {
+  if (!id) return
+  const cust = customerOptions.value.find(c => c.id === id)
+  if (cust?.paymentTerms) {
+    paymentTerms.value = cust.paymentTerms
+    if (!dueDateManual.value) dueDate.value = dueDateFromTerms(invoiceDate.value, paymentTerms.value)
   }
-}, { immediate: true })
+})
 
 watch([invoiceDate, paymentTerms], () => {
   if (!dueDateManual.value) {
@@ -192,11 +262,6 @@ const summaryRows = computed(() => {
     grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
   })
 })
-
-function invoiceErrorMessage(err: unknown, fallback: string): string {
-  const e = err as { data?: { message?: string, data?: { message?: string } } }
-  return e.data?.data?.message ?? e.data?.message ?? fallback
-}
 
 async function ensureEditingSession(id: string) {
   if (editingSessionId.value) return
@@ -452,7 +517,7 @@ async function saveDraft(): Promise<boolean> {
     return true
   }
   catch (e: unknown) {
-    submitError.value = invoiceErrorMessage(e, 'Save failed')
+    submitError.value = syncFetchErrorMessage(e, 'Save failed')
     return false
   }
   finally {
@@ -485,7 +550,7 @@ async function finalizeAndSend() {
     await navigateTo(`/invoices/${invoiceId.value}`)
   }
   catch (e: unknown) {
-    submitError.value = invoiceErrorMessage(e, 'Finalize failed')
+    submitError.value = syncFetchErrorMessage(e, 'Finalize failed')
   }
   finally {
     busy.value = false
@@ -534,8 +599,28 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
       <div class="card">
         <div class="chead"><h3>Who is this invoice for?</h3></div>
         <div class="cbody">
-          <p class="sl-hint" style="margin:0 0 14px;">Select the billing account.</p>
-          <div class="sl-picks">
+          <label class="fld" style="margin-bottom:14px;">
+            <span>Search customers</span>
+            <input
+              v-model="customerFilterQ"
+              type="search"
+              placeholder="Type a name to search…"
+              aria-label="Search customers"
+              autocomplete="off"
+            >
+          </label>
+
+          <div v-if="customersPending && !customerOptions.length" class="cp-state" style="padding:16px 0;">
+            Loading customers…
+          </div>
+          <div v-else-if="customersLoadError" style="padding:8px 0;">
+            <p class="help" style="color:#dc2626; margin:0 0 10px;">{{ customersLoadError }}</p>
+            <button type="button" class="btn sm" @click="refreshCustomers()">Retry</button>
+          </div>
+          <p v-else-if="!customerOptions.length" class="sl-empty-veh">
+            No customers found. Try a different search or add a customer first.
+          </p>
+          <div v-else class="sl-picks">
             <button
               v-for="c in customerOptions"
               :key="c.id"
@@ -573,7 +658,10 @@ const validLines = computed(() => lines.value.filter(isDraftLineValid))
         <div class="card">
           <div class="chead"><h3>Vehicle</h3></div>
           <div class="cbody">
-            <div v-if="vehicleOptions.length" class="sl-picks">
+            <div v-if="vehiclesPending && !vehicleOptions.length" class="cp-state" style="padding:12px 0;">
+              Loading vehicles…
+            </div>
+            <div v-else-if="vehicleOptions.length" class="sl-picks">
               <button
                 v-for="v in vehicleOptions"
                 :key="v.id"
