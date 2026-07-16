@@ -1036,3 +1036,46 @@ export async function markInvoicePaid(
     return { invoice: updated!, before }
   })
 }
+
+function formatInvoiceExportVehicle(
+  snapshot: InvoiceVehicleSnapshot | null | undefined,
+): string {
+  if (!snapshot || typeof snapshot !== 'object') return ''
+  const parts = [
+    snapshot.busNumber ? `#${snapshot.busNumber}` : null,
+    [snapshot.year, snapshot.make, snapshot.model].filter(Boolean).join(' '),
+    snapshot.vin?.trim() || null,
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
+
+/** Export invoices matching list filters as CSV (respects current search/status/sort). */
+export async function exportInvoicesListCsv(
+  db: Db,
+  filter: Omit<ListInvoicesFilter, 'page' | 'pageSize'>,
+): Promise<string> {
+  const { rowsToCsv } = await import('#shared/format/csv')
+  const items: Awaited<ReturnType<typeof listInvoices>>['items'] = []
+  let page = 1
+  const pageSize = 500
+
+  while (page <= 50) {
+    const batch = await listInvoices(db, { ...filter, page, pageSize })
+    items.push(...batch.items)
+    if (items.length >= batch.total || !batch.items.length) break
+    page++
+  }
+
+  const rows = items.map(item => ({
+    invoiceNumber: item.invoiceNumberFormatted,
+    customer: item.customerName,
+    vehicle: formatInvoiceExportVehicle(item.vehicleSnapshot),
+    status: item.status,
+    invoiceDate: item.invoiceDate,
+    dueDate: item.dueDate ?? '',
+    total: item.total,
+    balanceDue: item.balanceDue,
+  }))
+
+  return rowsToCsv(rows)
+}

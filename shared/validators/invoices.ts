@@ -115,6 +115,8 @@ export const invoiceListQuerySchema = paginationSchema.extend({
   sort: z.enum(['newest', 'oldest', 'invoice_date', 'status']).optional(),
 })
 
+export const invoiceExportQuerySchema = invoiceListQuerySchema.omit({ page: true, pageSize: true })
+
 export const invoiceLineParamSchema = z.object({
   id: uuidSchema,
   lineId: uuidSchema,

@@ -8,6 +8,7 @@ import {
   type InvoiceStatus,
   type InvoiceVehicleSnapshotDisplay,
 } from '~/utils/invoices-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.read.all' })
 
@@ -167,6 +168,38 @@ function openInvoice(id: string) {
 async function retryLoad() {
   await Promise.all([refreshList(), refreshStats()])
 }
+
+const exportBusy = ref(false)
+const exportError = ref('')
+
+async function exportCsv() {
+  exportBusy.value = true
+  exportError.value = ''
+  try {
+    const params = new URLSearchParams()
+    if (q.value.trim()) params.set('q', q.value.trim())
+    if (fStatus.value === 'overdue') params.set('overdue', 'true')
+    else if (fStatus.value !== 'all') params.set('status', fStatus.value)
+    if (fSort.value !== 'newest') params.set('sort', fSort.value)
+
+    const query = params.toString()
+    const blob = await $fetch<Blob>(`/api/invoices/export${query ? `?${query}` : ''}`, {
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+  catch (e: unknown) {
+    exportError.value = syncFetchErrorMessage(e, 'Could not export invoices')
+  }
+  finally {
+    exportBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -179,10 +212,16 @@ async function retryLoad() {
       <template #title>Invoices</template>
       <template #actions>
         <BulkSendInvoicesButton v-if="canSend" @sent="retryLoad" />
-        <button type="button" class="btn" disabled title="Coming soon">Export CSV</button>
         <NuxtLink v-if="canCreate" to="/invoices/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New Invoice</NuxtLink>
+        <button type="button" class="btn" :disabled="exportBusy" @click="exportCsv">
+          {{ exportBusy ? 'Exporting…' : 'Export CSV' }}
+        </button>
       </template>
     </StaffPageHead>
+
+    <div v-if="exportError" class="card" style="padding:12px 16px; margin-bottom:16px;">
+      <p style="margin:0; color:#dc2626;">{{ exportError }}</p>
+    </div>
 
     <div v-if="pageError" class="card" style="padding:20px; margin-bottom:16px;">
       <p style="margin:0 0 12px; color:#dc2626;">{{ pageError }}</p>
