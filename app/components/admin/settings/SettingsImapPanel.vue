@@ -201,7 +201,7 @@ async function runSync() {
             Mailbox
             <input v-model="form.mailbox" type="text" maxlength="200" placeholder="INBOX" :disabled="imapData?.envLocked">
           </label>
-          <label class="fld" style="display:flex;align-items:flex-end;gap:8px;padding-bottom:4px;">
+          <label class="settings-check">
             <input id="imap-use-tls" v-model="form.useTls" type="checkbox" :disabled="imapData?.envLocked">
             <span>Use TLS (recommended)</span>
           </label>
@@ -228,7 +228,7 @@ async function runSync() {
             placeholder="sales@yourdomain.com&#10;support@yourdomain.com"
           />
         </label>
-        <label class="fld" style="display:flex;align-items:center;gap:8px;">
+        <label class="settings-check">
           <input id="imap-include-customers" v-model="form.includeCustomerEmails" type="checkbox">
           <span>Include all customer and contact email addresses in filter</span>
         </label>
@@ -240,21 +240,21 @@ async function runSync() {
           Automatically send a branded confirmation when a <b>new</b> email thread arrives.
           Replies in existing threads are not auto-answered.
         </p>
-        <label class="fld" style="display:flex;align-items:center;gap:8px;">
+        <label class="settings-check">
           <input id="imap-auto-responder" v-model="form.autoResponderEnabled" type="checkbox">
           <span>Enable auto-responder</span>
         </label>
-        <fieldset class="fld" style="border:none;padding:0;margin:0;" :disabled="!form.autoResponderEnabled">
-          <legend style="font-size:13px;font-weight:600;margin-bottom:8px;">Send auto-replies to</legend>
-          <label class="fld" style="display:flex;align-items:center;gap:8px;font-weight:400;">
+        <fieldset class="settings-radio-group" :disabled="!form.autoResponderEnabled">
+          <legend>Send auto-replies to</legend>
+          <label class="settings-check">
             <input v-model="form.autoResponderScope" type="radio" value="customers">
             <span>Customer emails only</span>
           </label>
-          <label class="fld" style="display:flex;align-items:center;gap:8px;font-weight:400;">
+          <label class="settings-check">
             <input v-model="form.autoResponderScope" type="radio" value="all">
             <span>All new threads to your company inbox</span>
           </label>
-          <p class="settings-help" style="margin:8px 0 0;">
+          <p class="settings-help">
             <template v-if="form.autoResponderScope === 'customers'">
               Only known customer and contact addresses receive an auto-reply.
             </template>
