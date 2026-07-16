@@ -44,16 +44,32 @@ function portalAccountEmail(customer: typeof customers.$inferSelect): string {
   return email
 }
 
+async function getUserAccountTypeKey(db: Db, userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ key: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.id, userId))
+  return row?.key ?? null
+}
+
 async function assertEmailAvailableForPortalUser(
   db: Db,
   email: string,
   customerId: string,
   exceptUserId?: string,
 ) {
-  const [existing] = await db.select().from(users).where(eq(users.email, email))
+  const [existing] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.email, email))
   if (!existing) return
-  if (exceptUserId && existing.id === exceptUserId) return
-  if (existing.customerId && existing.customerId !== customerId) {
+  if (exceptUserId && existing.user.id === exceptUserId) return
+  if (existing.accountTypeKey !== 'customer') {
+    throw new PortalAccessServiceError('EMAIL_IN_USE')
+  }
+  if (existing.user.customerId && existing.user.customerId !== customerId) {
     throw new PortalAccessServiceError('EMAIL_IN_USE')
   }
 }
@@ -236,46 +252,62 @@ async function ensurePortalUser(
   if (contact.portalUserId) {
     const [linked] = await db.select().from(users).where(eq(users.id, contact.portalUserId))
     if (linked) {
-      if (linked.email !== email) {
-        await assertEmailAvailableForPortalUser(db, email, customerId, linked.id)
-        await db.update(users)
-          .set({ email, updatedAt: new Date() })
-          .where(eq(users.id, linked.id))
+      const linkedAccountType = await getUserAccountTypeKey(db, linked.id)
+      if (linkedAccountType !== 'customer') {
+        await db.update(customerContacts)
+          .set({ portalUserId: null, updatedAt: new Date() })
+          .where(eq(customerContacts.id, contact.id))
+        contact = { ...contact, portalUserId: null }
       }
-      const username = await ensurePortalUsername(db, linked.id, customer.displayName, linked.username)
-      await db.update(users)
-        .set({
-          customerId,
-          username,
-          isActive: true,
-          disabledAt: null,
-          emailVerifiedAt: linked.emailVerifiedAt ?? new Date(),
-          approvedAt: linked.approvedAt ?? new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, linked.id))
-      return linked.id
+      else {
+        if (linked.email !== email) {
+          await assertEmailAvailableForPortalUser(db, email, customerId, linked.id)
+          await db.update(users)
+            .set({ email, updatedAt: new Date() })
+            .where(eq(users.id, linked.id))
+        }
+        const username = await ensurePortalUsername(db, linked.id, customer.displayName, linked.username)
+        await db.update(users)
+          .set({
+            customerId,
+            username,
+            isActive: true,
+            disabledAt: null,
+            emailVerifiedAt: linked.emailVerifiedAt ?? new Date(),
+            approvedAt: linked.approvedAt ?? new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, linked.id))
+        return linked.id
+      }
     }
   }
 
-  const [existing] = await db.select().from(users).where(eq(users.email, email))
+  const [existing] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.email, email))
 
   if (existing) {
-    if (existing.customerId && existing.customerId !== customerId) {
+    if (existing.accountTypeKey !== 'customer') {
       throw new PortalAccessServiceError('EMAIL_IN_USE')
     }
-    const username = await ensurePortalUsername(db, existing.id, customer.displayName, existing.username)
+    if (existing.user.customerId && existing.user.customerId !== customerId) {
+      throw new PortalAccessServiceError('EMAIL_IN_USE')
+    }
+    const username = await ensurePortalUsername(db, existing.user.id, customer.displayName, existing.user.username)
     const [updated] = await db.update(users)
       .set({
         customerId,
         username,
         isActive: true,
         disabledAt: null,
-        emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
-        approvedAt: existing.approvedAt ?? new Date(),
+        emailVerifiedAt: existing.user.emailVerifiedAt ?? new Date(),
+        approvedAt: existing.user.approvedAt ?? new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(users.id, existing.id))
+      .where(eq(users.id, existing.user.id))
       .returning()
     portalUserId = updated!.id
   }
@@ -307,6 +339,19 @@ async function ensurePortalUser(
   }
 
   return portalUserId
+}
+
+/** Recreate a dedicated customer portal user after unlinking a hijacked staff account. */
+export async function ensureCustomerPortalUser(
+  db: Db,
+  customerId: string,
+  actorId: string,
+  contactId?: string,
+) {
+  const customer = await getCustomer(db, customerId)
+  const accountEmail = portalAccountEmail(customer)
+  const contact = await resolveContact(db, customerId, contactId)
+  return ensurePortalUser(db, customerId, contact, accountEmail, actorId)
 }
 
 function buildCredentialEmail(

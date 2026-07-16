@@ -2,12 +2,12 @@ import { and, asc, count, desc, eq, exists, ilike, inArray, isNull, or, sql } fr
 import type { Db } from '../db/client'
 import type { Address } from '../db/schema/customers'
 import { customerContacts, customers } from '../db/schema/customers'
-import { users } from '../db/schema/auth'
+import { accountTypes, users } from '../db/schema/auth'
 import { invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
 import { formatFieldText } from '#shared/format/prose-field'
 
-export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED'
+export type CustomersServiceErrorCode = 'NOT_FOUND' | 'ALREADY_ARCHIVED' | 'NOT_ARCHIVED' | 'EMAIL_RESERVED_BY_STAFF'
 
 export class CustomersServiceError extends Error {
   constructor(public readonly code: CustomersServiceErrorCode) {
@@ -27,7 +27,23 @@ export interface CustomerInput {
   notes?: string | null
 }
 
+async function assertCustomerEmailNotStaffReserved(db: Db, email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase()
+  if (!normalized) return
+
+  const [existing] = await db
+    .select({ accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.email, normalized))
+
+  if (existing && existing.accountTypeKey !== 'customer') {
+    throw new CustomersServiceError('EMAIL_RESERVED_BY_STAFF')
+  }
+}
+
 export async function createCustomer(db: Db, input: CustomerInput, createdBy: string) {
+  await assertCustomerEmailNotStaffReserved(db, input.email)
   const displayName = formatFieldText(input.displayName.trim(), 'name')
   const [row] = await db.insert(customers).values({
     displayName,
@@ -64,6 +80,10 @@ export async function getCustomer(db: Db, id: string) {
 export async function updateCustomer(db: Db, id: string, patch: Partial<CustomerInput>) {
   const before = await getCustomer(db, id)
 
+  if (patch.email !== undefined) {
+    await assertCustomerEmailNotStaffReserved(db, patch.email)
+  }
+
   const normalizedPatch = { ...patch }
   if (normalizedPatch.displayName !== undefined) {
     normalizedPatch.displayName = formatFieldText(normalizedPatch.displayName.trim(), 'name')
@@ -99,8 +119,13 @@ async function syncPortalUserEmailFromAccount(
   const normalized = email.trim().toLowerCase()
   if (!normalized) return
 
-  const [linked] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, portalUserId))
-  if (!linked || linked.email === normalized) return
+  const [linked] = await db
+    .select({ id: users.id, email: users.email, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.id, portalUserId))
+  if (!linked || linked.accountTypeKey !== 'customer') return
+  if (linked.email === normalized) return
 
   const [conflict] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalized))
   if (conflict && conflict.id !== portalUserId) return

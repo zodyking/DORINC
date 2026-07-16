@@ -21,6 +21,7 @@
     "db:seed": "tsx server/db/seed.ts",
     "db:migrate": "drizzle-kit migrate",
     "db:backfill-audit-hash": "tsx server/db/backfill-audit-hash.ts",
+    "repair:staff-portal-collision": "tsx scripts/repair-staff-portal-collision.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

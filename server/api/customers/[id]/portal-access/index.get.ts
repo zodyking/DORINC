@@ -17,7 +17,7 @@ function mapPortalError(event: Parameters<typeof apiError>[0], err: PortalAccess
     case 'NO_EMAIL':
       throw apiError(event, 'VALIDATION_ERROR', 'A contact with an email address is required for portal access')
     case 'EMAIL_IN_USE':
-      throw apiError(event, 'CONFLICT', 'That email is already linked to another customer portal account')
+      throw apiError(event, 'CONFLICT', 'That email belongs to a staff account and cannot be used for portal access')
     default:
       throw err
   }

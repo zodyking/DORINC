@@ -33,6 +33,9 @@ export default defineEventHandler(async (event) => {
     if (err instanceof CustomersServiceError && err.code === 'NOT_FOUND') {
       throw apiError(event, 'NOT_FOUND', 'Customer not found')
     }
+    if (err instanceof CustomersServiceError && err.code === 'EMAIL_RESERVED_BY_STAFF') {
+      throw apiError(event, 'CONFLICT', 'That email belongs to a staff account — use a different customer email')
+    }
     throw err
   }
 })
