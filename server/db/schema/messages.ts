@@ -4,7 +4,7 @@ import { users } from './auth'
 export const MESSAGE_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice'] as const
 export type MessageEntityType = (typeof MESSAGE_ENTITY_TYPES)[number]
 
-export const CONVERSATION_TYPES = ['dm'] as const
+export const CONVERSATION_TYPES = ['dm', 'email'] as const
 export type ConversationType = (typeof CONVERSATION_TYPES)[number]
 
 /** Staff direct-message threads. */
@@ -31,7 +31,7 @@ export const conversationParticipants = pgTable('conversation_participants', {
 export const messages = pgTable('messages', {
   id: uuid('id').primaryKey().defaultRandom(),
   conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
-  senderUserId: uuid('sender_user_id').notNull().references(() => users.id),
+  senderUserId: uuid('sender_user_id').references(() => users.id),
   body: text('body').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   editedAt: timestamp('edited_at', { withTimezone: true }),

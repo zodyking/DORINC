@@ -5,10 +5,11 @@ const props = defineProps<{
   conversation: ConversationSummary | null
   messages: Array<{
     id: string
-    senderUserId: string
+    senderUserId: string | null
     senderName: string
     body: string
     createdAt: string
+    direction?: 'inbound' | 'outbound'
   }>
   loading?: boolean
   currentUserId?: string
@@ -23,6 +24,32 @@ const auth = useAuthStore()
 const msgsEl = ref<HTMLElement | null>(null)
 
 const userId = computed(() => props.currentUserId ?? auth.user?.id ?? '')
+const isEmail = computed(() => props.conversation?.type === 'email')
+
+const peerName = computed(() => {
+  if (!props.conversation) return ''
+  if (props.conversation.type === 'email') {
+    return props.conversation.customer?.name || props.conversation.customer?.email || 'Customer'
+  }
+  return props.conversation.participant.name
+})
+
+const peerEmail = computed(() => {
+  if (!props.conversation) return ''
+  if (props.conversation.type === 'email') {
+    return props.conversation.customer?.email ?? ''
+  }
+  return props.conversation.participant.email
+})
+
+const emailSubject = computed(() =>
+  props.conversation?.type === 'email' ? props.conversation.subject : '',
+)
+
+function isOwnMessage(msg: { senderUserId: string | null, direction?: 'inbound' | 'outbound' }) {
+  if (isEmail.value) return msg.direction === 'outbound' || msg.senderUserId === userId.value
+  return msg.senderUserId === userId.value
+}
 
 watch(() => props.messages.length, () => {
   nextTick(() => {
@@ -44,14 +71,20 @@ watch(() => props.conversation?.id, () => {
         ←
       </button>
       <div class="dm-thread-peer">
-        <b>{{ conversation.participant.name }}</b>
-        <small>{{ conversation.participant.email }}</small>
+        <span v-if="isEmail" class="dm-thread-gmail-badge" aria-hidden="true">
+          <img src="/icons/gmail.svg" alt="" width="16" height="16">
+        </span>
+        <div>
+          <b>{{ peerName }}</b>
+          <small>{{ peerEmail }}</small>
+          <small v-if="emailSubject" class="dm-thread-subject">{{ emailSubject }}</small>
+        </div>
       </div>
     </header>
 
     <div v-if="!conversation" class="dm-thread-empty">
       <b>Select a conversation</b>
-      <span>Choose someone from the list or start a new message.</span>
+      <span>Choose a thread from the list or start a new message.</span>
     </div>
 
     <div v-else ref="msgsEl" class="dm-thread-msgs">
@@ -60,16 +93,18 @@ watch(() => props.conversation?.id, () => {
         v-for="msg in messages"
         :key="msg.id"
         :message="msg"
-        :is-own="msg.senderUserId === userId"
+        :is-own="isOwnMessage(msg)"
+        :is-email="isEmail"
       />
       <div v-if="!loading && !messages.length" class="dm-thread-loading">
-        Say hello to {{ conversation.participant.name.split(' ')[0] }}.
+        {{ isEmail ? 'No emails in this thread yet.' : `Say hello to ${peerName.split(' ')[0]}.` }}
       </div>
     </div>
 
     <MessagingMessageComposer
       v-if="conversation"
       :disabled="loading"
+      :mode="isEmail ? 'email' : 'dm'"
       @send="emit('send', $event)"
     />
   </div>

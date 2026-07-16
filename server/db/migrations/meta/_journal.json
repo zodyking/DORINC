@@ -330,6 +330,13 @@
       "when": 1783585000000,
       "tag": "0046_sync_number_sequences",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1783586000000,
+      "tag": "0047_email_inbox",
+      "breakpoints": true
     }
   ]
 }

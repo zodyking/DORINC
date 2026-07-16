@@ -1,8 +1,8 @@
-// Live direct messages — polling, conversations, and unread counts.
+// Live staff messaging — DMs + shared customer email threads.
 
 import { DM_POLL_MS } from '~/utils/messages-ui'
 
-export interface ConversationSummary {
+export interface DmConversationSummary {
   id: string
   type: 'dm'
   participant: { id: string, name: string, email: string }
@@ -17,15 +17,40 @@ export interface ConversationSummary {
   updatedAt: string
 }
 
+export interface EmailConversationSummary {
+  id: string
+  type: 'email'
+  customer: { id: string | null, name: string, email: string } | null
+  subject: string
+  lastMessage: {
+    id: string
+    body: string
+    senderUserId: string | null
+    senderName: string | null
+    direction: 'inbound' | 'outbound'
+    createdAt: string
+    preview: string
+  } | null
+  unreadCount: number
+  updatedAt: string
+}
+
+export type ConversationSummary = DmConversationSummary | EmailConversationSummary
+
 export interface ChatMessage {
   id: string
   conversationId: string
   body: string
-  senderUserId: string
+  senderUserId: string | null
   senderName: string
   createdAt: string
   entityRefs: Array<{ entityType: string, entityId: string, entityLabel: string }>
+  channel?: 'email'
+  direction?: 'inbound' | 'outbound'
+  htmlBody?: string | null
 }
+
+export type MessageChannel = 'all' | 'dm' | 'email'
 
 export function useDirectMessages() {
   const auth = useAuthStore()
@@ -39,6 +64,7 @@ export function useDirectMessages() {
   const loadingMessages = useState('dm-loading-messages', () => false)
   const sending = useState('dm-sending', () => false)
   const conversationSearch = useState('dm-conversation-search', () => '')
+  const messageChannel = useState<MessageChannel>('dm-message-channel', () => 'all')
   const fetchError = useState<string | null>('dm-fetch-error', () => null)
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -49,6 +75,7 @@ export function useDirectMessages() {
   const activeConversation = computed(() =>
     conversations.value.find(c => c.id === activeConversationId.value) ?? null,
   )
+  const activeIsEmail = computed(() => activeConversation.value?.type === 'email')
 
   async function fetchUnreadCount() {
     if (!canUseMessages.value) return
@@ -72,6 +99,7 @@ export function useDirectMessages() {
       const res = await $fetch<{ items: ConversationSummary[] }>('/api/conversations', {
         query: {
           q: conversationSearch.value || undefined,
+          channel: messageChannel.value,
           page: 1,
           pageSize: 50,
         },
@@ -139,8 +167,20 @@ export function useDirectMessages() {
       method: 'POST',
       body: { participantUserId },
     })
+    messageChannel.value = 'dm'
     await fetchConversations()
     await openConversation(conv.id)
+    return conv
+  }
+
+  async function startEmailThread(input: { customerId: string, toEmail: string, subject: string, body: string }) {
+    const conv = await $fetch<{ conversationId: string }>('/api/conversations/email', {
+      method: 'POST',
+      body: input,
+    })
+    messageChannel.value = 'email'
+    await fetchConversations()
+    await openConversation(conv.conversationId)
     return conv
   }
 
@@ -160,6 +200,14 @@ export function useDirectMessages() {
     finally {
       sending.value = false
     }
+  }
+
+  async function setChannel(channel: MessageChannel) {
+    if (messageChannel.value === channel) return
+    messageChannel.value = channel
+    activeConversationId.value = null
+    messages.value = []
+    await fetchConversations()
   }
 
   async function pollActive() {
@@ -203,25 +251,28 @@ export function useDirectMessages() {
     else stopPolling()
   })
 
-  // Refs nested in reactive() auto-unwrap in templates — fixes v-for on dm.conversations.
   return reactive({
     conversations,
     activeConversationId,
     activeConversation,
+    activeIsEmail,
     messages,
     unreadTotal,
     loadingConversations,
     loadingMessages,
     sending,
     conversationSearch,
+    messageChannel,
     fetchError,
     canUseMessages,
     fetchConversations,
     fetchUnreadCount,
     openConversation,
     startConversation,
+    startEmailThread,
     sendMessage,
     markRead,
+    setChannel,
     startPolling,
     stopPolling,
   })

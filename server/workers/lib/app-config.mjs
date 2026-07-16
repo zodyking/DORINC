@@ -3,6 +3,7 @@ import { createDecipheriv, createHash } from 'node:crypto'
 const APP_CONFIG_KEYS = {
   masterKey: 'security.master_key',
   smtp: 'smtp.config',
+  imap: 'imap.config',
 }
 
 function masterKeyFromEnvOrRow(masterHex) {
@@ -62,5 +63,48 @@ export async function loadSmtpConfig(pool) {
     user: json.user ?? '',
     pass: json.pass ?? '',
     from: json.from,
+  }
+}
+
+/**
+ * Load IMAP config from app_settings (UI setup) with env fallback.
+ * @param {import('pg').Pool} pool
+ */
+export async function loadImapConfig(pool) {
+  const envHost = process.env.IMAP_HOST?.trim()
+  const envUser = process.env.IMAP_USER?.trim()
+  if (envHost && envUser) {
+    return {
+      host: envHost,
+      port: Number(process.env.IMAP_PORT ?? 993),
+      user: envUser,
+      pass: process.env.IMAP_PASS ?? '',
+      mailbox: process.env.IMAP_MAILBOX?.trim() || 'INBOX',
+      useTls: process.env.IMAP_TLS !== 'false',
+    }
+  }
+
+  const { rows } = await pool.query(
+    `SELECT key, value, encrypted_value FROM app_settings WHERE key = ANY($1)`,
+    [[APP_CONFIG_KEYS.masterKey, APP_CONFIG_KEYS.imap]],
+  )
+
+  const byKey = new Map(rows.map(r => [r.key, r]))
+  const masterHex = byKey.get(APP_CONFIG_KEYS.masterKey)?.value?.hex
+  const imapRow = byKey.get(APP_CONFIG_KEYS.imap)
+  if (!imapRow?.encrypted_value) return null
+
+  const key = masterKeyFromEnvOrRow(masterHex)
+  if (!key) return null
+
+  const payload = Buffer.from(imapRow.encrypted_value, 'base64')
+  const json = JSON.parse(decryptPayload(key, payload).toString('utf8'))
+  return {
+    host: json.host,
+    port: Number(json.port ?? 993),
+    user: json.user ?? '',
+    pass: json.pass ?? '',
+    mailbox: json.mailbox?.trim() || 'INBOX',
+    useTls: json.useTls !== false,
   }
 }

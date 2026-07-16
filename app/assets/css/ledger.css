@@ -1624,6 +1624,38 @@ section.page.active.dm-page{
   background:#f8fafc;
 }
 .dm-sidebar-head{ padding:12px; border-bottom:1px solid #e2e8f0; }
+.dm-channel-tabs{
+  display:flex; gap:6px; margin-bottom:10px;
+}
+.dm-channel-tab{
+  flex:1; border:1px solid #e2e8f0; background:#fff; border-radius:8px;
+  padding:7px 8px; font-size:12px; font-weight:600; color:#64748b; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:4px;
+}
+.dm-channel-tab.on{ background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+.dm-conv-subject{
+  display:block; font-size:11px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.dm-conv-email{ display:block; font-size:11px; color:#94a3b8; margin-top:2px; }
+.dm-conv-av-gmail{
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#fff !important; border:1px solid #e2e8f0;
+}
+.dm-gmail-icon{ display:block; }
+.dm-thread-gmail-badge{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; border-radius:8px; background:#fff; border:1px solid #e2e8f0;
+  margin-right:8px; flex-shrink:0;
+}
+.dm-thread-subject{ display:block; color:#64748b; font-size:12px; margin-top:2px; }
+.dm-thread-peer{ display:flex; align-items:center; gap:0; }
+.dm-msg.inbound .dm-msg-bubble{ background:#f8fafc; border:1px solid #e2e8f0; }
+.dm-modal-wide{ width:min(520px, calc(100vw - 32px)); }
+.dm-email-form{ padding:12px; display:flex; flex-direction:column; gap:10px; }
+.dm-email-form .fld{ display:flex; flex-direction:column; gap:4px; font-size:13px; font-weight:600; }
+.dm-email-form select, .dm-email-form input, .dm-email-form textarea{
+  font:inherit; font-weight:400; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;
+}
 .dm-search{
   width:100%; border:1px solid #e2e8f0; border-radius:10px; padding:9px 12px;
   font:inherit; font-size:13px; background:#fff;

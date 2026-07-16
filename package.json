@@ -32,6 +32,8 @@
     "@tailwindcss/vite": "^4.3.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "imapflow": "^1.4.7",
+    "mailparser": "^3.9.14",
     "nodemailer": "^9.0.3",
     "nuxt": "^4.4.8",
     "pdfjs-dist": "^4.10.38",

@@ -11,6 +11,7 @@ import { processInvoiceSendJobs } from './handlers/invoice-send.mjs'
 import { processAiJobs } from './handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from './handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from './handlers/retention.mjs'
+import { maybeEnqueueImapSync, processImapSyncJobs } from './handlers/imap-sync.mjs'
 import { touchWorkerHeartbeat } from '../lib/worker-heartbeat.mjs'
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 1500)
@@ -57,6 +58,16 @@ async function tick(pool) {
   const retention = await processRetentionPruneJobs(pool)
   if (retention.processed || retention.failed) {
     console.log(`[worker] backup_retention_prune processed=${retention.processed} failed=${retention.failed}`)
+  }
+
+  const imapScheduled = await maybeEnqueueImapSync(pool)
+  if (imapScheduled) {
+    console.log('[worker] imap_sync scheduled job enqueued')
+  }
+
+  const imap = await processImapSyncJobs(pool)
+  if (imap.processed || imap.failed) {
+    console.log(`[worker] imap_sync processed=${imap.processed} failed=${imap.failed}`)
   }
 }
 

@@ -11,11 +11,25 @@ const dm = useDirectMessages()
 
 const showThread = ref(false)
 const newDmOpen = ref(false)
+const newEmailOpen = ref(false)
 const staffSearch = ref('')
 const staffUsers = ref<Array<{ id: string, name: string, email: string, accountType: string }>>([])
 const staffLoading = ref(false)
 const staffError = ref('')
 const dmStartError = ref('')
+
+const customerSearch = ref('')
+const customerRecipients = ref<Array<{ customerId: string, label: string, email: string }>>([])
+const customerLoading = ref(false)
+const customerError = ref('')
+const emailStartError = ref('')
+const emailForm = reactive({
+  recipientKey: '',
+  customerId: '',
+  toEmail: '',
+  subject: '',
+  body: '',
+})
 
 onMounted(async () => {
   await dm.fetchConversations()
@@ -30,6 +44,10 @@ let conversationSearchTimer: ReturnType<typeof setTimeout> | null = null
 watch(() => dm.conversationSearch, () => {
   if (conversationSearchTimer) clearTimeout(conversationSearchTimer)
   conversationSearchTimer = setTimeout(() => { void dm.fetchConversations() }, 300)
+})
+
+watch(() => dm.messageChannel, () => {
+  showThread.value = false
 })
 
 async function loadStaffUsers() {
@@ -50,6 +68,24 @@ async function loadStaffUsers() {
   }
 }
 
+async function loadCustomerRecipients() {
+  customerLoading.value = true
+  customerError.value = ''
+  try {
+    const res = await $fetch<{ items: typeof customerRecipients.value }>('/api/messages/customer-recipients', {
+      query: { q: customerSearch.value || undefined },
+    })
+    customerRecipients.value = res.items
+  }
+  catch (e: unknown) {
+    customerError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not load customers'
+    customerRecipients.value = []
+  }
+  finally {
+    customerLoading.value = false
+  }
+}
+
 function openNewDm() {
   newDmOpen.value = true
   staffSearch.value = ''
@@ -58,10 +94,29 @@ function openNewDm() {
   void loadStaffUsers()
 }
 
+function openNewEmail() {
+  newEmailOpen.value = true
+  customerSearch.value = ''
+  customerError.value = ''
+  emailStartError.value = ''
+  emailForm.recipientKey = ''
+  emailForm.customerId = ''
+  emailForm.toEmail = ''
+  emailForm.subject = ''
+  emailForm.body = ''
+  void loadCustomerRecipients()
+}
+
 let staffSearchTimer: ReturnType<typeof setTimeout> | null = null
 watch(staffSearch, () => {
   if (staffSearchTimer) clearTimeout(staffSearchTimer)
   staffSearchTimer = setTimeout(() => { void loadStaffUsers() }, 300)
+})
+
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerSearch, () => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => { void loadCustomerRecipients() }, 300)
 })
 
 async function pickStaffUser(userId: string) {
@@ -73,6 +128,27 @@ async function pickStaffUser(userId: string) {
   }
   catch (e: unknown) {
     dmStartError.value = syncFetchErrorMessage(e, 'Could not start conversation')
+  }
+}
+
+async function submitNewEmail() {
+  emailStartError.value = ''
+  if (!emailForm.customerId || !emailForm.toEmail || !emailForm.subject.trim() || !emailForm.body.trim()) {
+    emailStartError.value = 'Customer, subject, and message are required'
+    return
+  }
+  try {
+    await dm.startEmailThread({
+      customerId: emailForm.customerId,
+      toEmail: emailForm.toEmail,
+      subject: emailForm.subject.trim(),
+      body: emailForm.body.trim(),
+    })
+    newEmailOpen.value = false
+    showThread.value = true
+  }
+  catch (e: unknown) {
+    emailStartError.value = syncFetchErrorMessage(e, 'Could not send email')
   }
 }
 
@@ -88,12 +164,20 @@ async function onSend(body: string) {
 function onBack() {
   showThread.value = false
 }
+
+async function setChannel(channel: 'all' | 'dm' | 'email') {
+  await dm.setChannel(channel)
+}
 </script>
 
 <template>
   <section class="page active dm-page">
-    <StaffPageHead title="Messages" subtitle="Direct messages with your team">
+    <StaffPageHead title="Messages" subtitle="Team chat and shared customer email threads">
       <template #actions>
+        <button type="button" class="btn" @click="openNewEmail">
+          <img src="/icons/gmail.svg" alt="" width="16" height="16" style="vertical-align:-3px;margin-right:4px;">
+          New email
+        </button>
         <button type="button" class="btn primary" @click="openNewDm">
           ✉ New message
         </button>
@@ -108,6 +192,39 @@ function onBack() {
     <div class="dm-layout" :class="{ 'show-thread': showThread }">
       <aside class="dm-sidebar">
         <div class="dm-sidebar-head">
+          <div class="dm-channel-tabs" role="tablist" aria-label="Message channels">
+            <button
+              type="button"
+              role="tab"
+              class="dm-channel-tab"
+              :class="{ on: dm.messageChannel === 'all' }"
+              :aria-selected="dm.messageChannel === 'all'"
+              @click="setChannel('all')"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="dm-channel-tab"
+              :class="{ on: dm.messageChannel === 'dm' }"
+              :aria-selected="dm.messageChannel === 'dm'"
+              @click="setChannel('dm')"
+            >
+              Team
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="dm-channel-tab"
+              :class="{ on: dm.messageChannel === 'email' }"
+              :aria-selected="dm.messageChannel === 'email'"
+              @click="setChannel('email')"
+            >
+              <img src="/icons/gmail.svg" alt="" width="14" height="14">
+              Email
+            </button>
+          </div>
           <input
             v-model="dm.conversationSearch"
             type="search"
@@ -127,7 +244,8 @@ function onBack() {
           />
           <div v-if="!dm.loadingConversations && !dm.conversations.length && !dm.fetchError" class="dm-list-empty">
             <b>No conversations yet</b>
-            <span>Start a new message to chat with a teammate.</span>
+            <span v-if="dm.messageChannel === 'email'">Sync your inbox in Control Panel or start a new customer email.</span>
+            <span v-else>Start a new message to chat with a teammate.</span>
           </div>
         </div>
       </aside>
@@ -171,6 +289,62 @@ function onBack() {
         <div v-if="staffLoading" class="dm-list-empty">Loading…</div>
         <div v-else-if="staffError" class="dm-list-empty">{{ staffError }}</div>
         <div v-else-if="!staffUsers.length" class="dm-list-empty">No staff found</div>
+      </div>
+    </div>
+
+    <div v-if="newEmailOpen" class="dm-modal-scrim" @click="newEmailOpen = false" />
+    <div v-if="newEmailOpen" class="dm-modal dm-modal-wide" role="dialog" aria-label="New email">
+      <header class="dm-modal-head">
+        <b>New customer email</b>
+        <button type="button" class="xbtn" aria-label="Close" @click="newEmailOpen = false">✕</button>
+      </header>
+      <div class="dm-email-form">
+        <input
+          v-model="customerSearch"
+          type="search"
+          class="dm-search"
+          placeholder="Search customers…"
+          aria-label="Search customers"
+        >
+        <label class="fld">
+          To
+          <select
+            v-model="emailForm.recipientKey"
+            required
+            aria-label="Customer recipient"
+            @change="(e) => {
+              const key = (e.target as HTMLSelectElement).value
+              const item = customerRecipients.find(r => `${r.customerId}:${r.email}` === key)
+              emailForm.customerId = item?.customerId ?? ''
+              emailForm.toEmail = item?.email ?? ''
+            }"
+          >
+            <option value="" disabled>Select customer…</option>
+            <option
+              v-for="item in customerRecipients"
+              :key="`${item.customerId}-${item.email}`"
+              :value="`${item.customerId}:${item.email}`"
+            >
+              {{ item.label }} · {{ item.email }}
+            </option>
+          </select>
+        </label>
+        <label class="fld">
+          Subject
+          <input v-model="emailForm.subject" type="text" maxlength="500" placeholder="Subject line" required>
+        </label>
+        <label class="fld">
+          Message
+          <textarea v-model="emailForm.body" rows="6" maxlength="50000" placeholder="Write your email…" required />
+        </label>
+        <p v-if="emailStartError" class="dm-fetch-error">{{ emailStartError }}</p>
+        <div class="settings-actions">
+          <button type="button" class="btn primary" :disabled="customerLoading" @click="submitNewEmail">
+            Send email
+          </button>
+        </div>
+        <div v-if="customerLoading" class="dm-list-empty">Loading customers…</div>
+        <div v-else-if="customerError" class="dm-list-empty">{{ customerError }}</div>
       </div>
     </div>
   </section>
