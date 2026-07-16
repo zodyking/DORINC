@@ -628,3 +628,57 @@ section.page.active.page--invoice-pdf {
     grid-template-columns: 1fr;
   }
 }
+
+/* =================================================================
+   Messages (chat + email) — fluid / mobile audit overrides.
+   Rationale: inbox chrome must stay edge-safe, never clip CTAs/tabs,
+   and keep conversation rows scannable on narrow phones.
+   ================================================================= */
+@media (max-width: 960px) {
+  .dm-page,
+  .dm-layout,
+  .dm-sidebar,
+  .dm-sidebar-head,
+  .dm-main,
+  .dm-thread {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dm-sidebar-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .dm-sidebar-actions .btn {
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    justify-content: center;
+  }
+
+  .dm-channel-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    width: 100%;
+  }
+
+  .dm-channel-tab {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* Email address is shown in the open thread; hide from dense list rows. */
+  .dm-conv-email {
+    display: none;
+  }
+
+  .dm-conv-item {
+    align-items: flex-start;
+  }
+}

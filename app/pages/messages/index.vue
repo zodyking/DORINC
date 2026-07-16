@@ -209,10 +209,10 @@ async function setEmailShowAll(showAll: boolean) {
       <aside class="dm-sidebar">
         <div class="dm-sidebar-head">
           <div class="dm-sidebar-actions">
-            <button type="button" class="btn primary" @click="openNewDm">
+            <button type="button" class="btn primary" aria-label="New message" @click="openNewDm">
               New message
             </button>
-            <button type="button" class="btn" @click="openNewEmail">
+            <button type="button" class="btn" aria-label="New email" @click="openNewEmail">
               New email
             </button>
           </div>
