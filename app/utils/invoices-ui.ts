@@ -3,7 +3,7 @@
 import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import { formatAuditChangeMessage } from '#shared/audit-messages'
-import { vehicleSub, type VehicleDisplay } from './vehicles-ui'
+import { vehicleSub, unitTypeLabel, type VehicleDisplay } from './vehicles-ui'
 
 export interface InvoiceVehicleSnapshotDisplay extends VehicleDisplay {
   vin?: string | null
@@ -122,6 +122,10 @@ export function lineQuantityDisplay(quantity: string, lineType: InvoiceLineType)
 export function vehicleSnapshotSub(snapshot: InvoiceVehicleSnapshotDisplay | null | undefined): string {
   if (!snapshot || typeof snapshot !== 'object') return 'No vehicle on invoice'
   try {
+    const fleetNo = typeof snapshot.busNumber === 'string' ? snapshot.busNumber.trim() : ''
+    if (fleetNo) {
+      return `${unitTypeLabel(snapshot.unitType)} ${fleetNo}`
+    }
     const ymm = vehicleSub(snapshot as VehicleDisplay)
     const vin = typeof snapshot.vin === 'string' ? snapshot.vin.trim() : ''
     return vin ? `${ymm} · ${vin}` : ymm

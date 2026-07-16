@@ -8,6 +8,7 @@ const props = defineProps<{
   entityLabel: string
   removed?: boolean
   disabled?: boolean
+  menuItem?: boolean
 }>()
 
 const emit = defineEmits<{ submitted: [] }>()
@@ -95,19 +96,28 @@ function openRequestModal() {
 
 <template>
   <template v-if="!removed && canShow">
-    <span v-if="pending" class="pill warn" style="margin-right:8px;">Deletion pending</span>
+    <span v-if="pending && !menuItem" class="pill warn" style="margin-right:8px;">Deletion pending</span>
+
+    <button
+      v-if="pending && menuItem"
+      type="button"
+      class="btn"
+      disabled
+    >
+      Deletion pending
+    </button>
 
     <button
       v-if="!pending"
       type="button"
-      class="btn danger"
+      :class="menuItem ? 'btn' : 'btn danger'"
       :disabled="disabled || busy"
       @click.stop="openRequestModal"
     >
       Request deletion
     </button>
     <NuxtLink
-      v-if="canReview && pending"
+      v-if="canReview && pending && !menuItem"
       to="/deletion-requests"
       class="btn sm"
     >

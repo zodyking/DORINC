@@ -6,6 +6,7 @@ import {
   lineQuantityDisplay,
   moneyDisplay,
   paymentTermsLabel,
+  vehicleSnapshotSub,
 } from '../../app/utils/invoices-ui'
 
 describe('invoices-ui helpers (P1-22)', () => {
@@ -33,5 +34,29 @@ describe('invoices-ui helpers (P1-22)', () => {
     expect(invoiceDateDisplay('2026-07-03')).toMatch(/Jul/)
     expect(lineQuantityDisplay('2', 'labor')).toBe('2.0 hr')
     expect(lineQuantityDisplay('1', 'fee')).toBe('—')
+  })
+
+  it('shows fleet unit label when bus number is on the snapshot', () => {
+    expect(vehicleSnapshotSub({
+      unitType: 'bus',
+      busNumber: '616',
+      unitTag: null,
+      year: 2023,
+      make: 'IC BUS',
+      model: 'PB105',
+      vin: '4DRBUC8N2PB781791',
+    })).toBe('Bus 616')
+  })
+
+  it('falls back to year/make/model and VIN without a fleet number', () => {
+    expect(vehicleSnapshotSub({
+      unitType: 'truck',
+      busNumber: null,
+      unitTag: null,
+      year: 2019,
+      make: 'Freightliner',
+      model: 'Cascadia',
+      vin: '1FVXXXX',
+    })).toBe('2019 Freightliner Cascadia · 1FVXXXX')
   })
 })
