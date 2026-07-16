@@ -1,13 +1,13 @@
+import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { messages } from '../db/schema/messages'
-import { emailMessageMeta } from '../db/schema/email-inbox'
+import { conversations, messages } from '../db/schema/messages'
+import { emailMessageMeta, emailThreads } from '../db/schema/email-inbox'
 import { buildCustomerAutoResponderEmail } from '../mail/templates/system'
 import { sendBrandedMail } from '../mail/branded-mail'
 import {
-  buildReferences,
+  buildReplyThreadHeaders,
   generateInternetMessageId,
   normalizeEmailAddress,
-  subjectWithRePrefix,
 } from '../mail/email-thread'
 import { getImapFilters, type ImapAutoResponderScope } from './imap-config.service'
 import { getSmtpConfig } from './app-config.service'
@@ -37,6 +37,7 @@ export async function sendCustomerAutoResponderIfEnabled(
     recipientName: string | null
     inboundSubject: string
     inboundMessageId: string
+    inboundReferences?: string | null
   },
 ): Promise<{ sent: boolean }> {
   const filters = getImapFilters()
@@ -49,7 +50,12 @@ export async function sendCustomerAutoResponderIfEnabled(
 
   const brand = await resolveEmailBrand(db)
   const autoSubject = auto.subject.trim() || 'We received your message'
-  const replySubject = subjectWithRePrefix(autoSubject)
+  const { subject: replySubject, inReplyTo, references } = buildReplyThreadHeaders({
+    subject: input.inboundSubject,
+    fallbackSubject: autoSubject,
+    parentMessageId: input.inboundMessageId,
+    existingReferences: input.inboundReferences,
+  })
 
   const mail = buildCustomerAutoResponderEmail({
     recipientName: input.recipientName,
@@ -60,7 +66,6 @@ export async function sendCustomerAutoResponderIfEnabled(
   })
 
   const internetMessageId = generateInternetMessageId()
-  const references = buildReferences(null, input.inboundMessageId)
 
   const delivered = await sendBrandedMail(db, {
     to,
@@ -68,7 +73,7 @@ export async function sendCustomerAutoResponderIfEnabled(
     text: mail.text,
     html: mail.html,
     messageId: internetMessageId,
-    inReplyTo: input.inboundMessageId,
+    inReplyTo: inReplyTo ?? undefined,
     references: references ?? undefined,
   }, brand)
 
@@ -90,7 +95,7 @@ export async function sendCustomerAutoResponderIfEnabled(
     messageId: message!.id,
     direction: 'outbound',
     internetMessageId,
-    inReplyTo: input.inboundMessageId,
+    inReplyTo,
     emailReferences: references,
     fromAddress: normalizeEmailAddress(smtp.from),
     toAddresses: [to],
@@ -98,6 +103,10 @@ export async function sendCustomerAutoResponderIfEnabled(
     htmlBody: mail.html,
     sentByUserId: null,
   })
+
+  const now = new Date()
+  await db.update(conversations).set({ updatedAt: now }).where(eq(conversations.id, input.conversationId))
+  await db.update(emailThreads).set({ updatedAt: now }).where(eq(emailThreads.conversationId, input.conversationId))
 
   return { sent: true }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildOutboundEmailBodies,
   buildReferences,
+  buildReplyThreadHeaders,
   buildStaffEmailFooter,
   buildStaffEmailSignature,
   CUSTOMER_EMAIL_TAGLINE,
@@ -73,6 +74,19 @@ describe('email-thread helpers', () => {
   it('builds references chain', () => {
     expect(buildReferences('<a@x.com>', '<b@y.com>')).toBe('<a@x.com> <b@y.com>')
     expect(buildReferences(null, '<b@y.com>')).toBe('<b@y.com>')
+  })
+
+  it('builds reply headers from the inbound subject and complete reference chain', () => {
+    expect(buildReplyThreadHeaders({
+      subject: 'Invoice question',
+      fallbackSubject: 'We received your message',
+      parentMessageId: '<latest@customer.test>',
+      existingReferences: '<root@customer.test> <previous@customer.test>',
+    })).toEqual({
+      subject: 'Re: Invoice question',
+      inReplyTo: '<latest@customer.test>',
+      references: '<root@customer.test> <previous@customer.test> <latest@customer.test>',
+    })
   })
 
   it('formats staff footer with first name, last initial and role', () => {
