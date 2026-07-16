@@ -28,7 +28,7 @@ interface SendableInvoice {
   dueDate: string | null
 }
 
-interface BulkResult {
+interface BulkApiResult {
   invoiceId: string
   invoiceNumber: string
   queued: boolean
@@ -36,7 +36,18 @@ interface BulkResult {
   error: string | null
 }
 
-type Phase = 'select' | 'sending' | 'results'
+type DeliveryState = 'pending' | 'queued' | 'processing' | 'sent' | 'failed'
+
+interface BulkResultRow {
+  invoiceId: string
+  invoiceNumber: string
+  queueError: string | null
+  alreadyQueued: boolean
+  state: DeliveryState
+  stateError: string | null
+}
+
+type Phase = 'select' | 'progress'
 
 const open = ref(false)
 const phase = ref<Phase>('select')
@@ -47,9 +58,10 @@ const message = ref('')
 const selected = ref<Set<string>>(new Set())
 const busy = ref(false)
 
-const results = ref<BulkResult[]>([])
-const summary = ref<{ requested: number, queued: number, alreadyQueued: number, failed: number } | null>(null)
+const results = ref<BulkResultRow[]>([])
 const sentRecipient = ref<string | null>(null)
+
+let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const {
   data: customersData,
@@ -91,10 +103,42 @@ const recipientEmail = computed(() =>
 const allSelected = computed(() => invoices.value.length > 0 && selected.value.size === invoices.value.length)
 const selectedCount = computed(() => selected.value.size)
 
+const progressSummary = computed(() => {
+  const rows = results.value
+  if (!rows.length) return null
+  const requested = rows.length
+  const sent = rows.filter(r => r.state === 'sent').length
+  const failed = rows.filter(r => r.state === 'failed').length
+  const inFlight = rows.filter(r => ['pending', 'queued', 'processing'].includes(r.state)).length
+  return { requested, sent, failed, inFlight, done: inFlight === 0 }
+})
+
+const progressHeadline = computed(() => {
+  const summary = progressSummary.value
+  if (!summary) return 'Sending invoices…'
+  if (summary.inFlight > 0) {
+    return `Sending ${summary.sent + summary.failed} of ${summary.requested} invoice${summary.requested === 1 ? '' : 's'}…`
+  }
+  if (summary.failed === 0) {
+    return `${summary.sent} of ${summary.requested} invoice${summary.requested === 1 ? '' : 's'} sent`
+  }
+  if (summary.sent === 0) {
+    return `Could not send ${summary.failed} invoice${summary.failed === 1 ? '' : 's'}`
+  }
+  return `${summary.sent} sent · ${summary.failed} failed`
+})
+
 watch(customerId, () => {
   selected.value = new Set()
   if (customerId.value) void refreshInvoices()
 })
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+}
 
 function toggle(id: string) {
   const next = new Set(selected.value)
@@ -107,7 +151,13 @@ function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(invoices.value.map(i => i.id))
 }
 
+function closeModal() {
+  stopPolling()
+  open.value = false
+}
+
 async function openModal() {
+  stopPolling()
   open.value = true
   phase.value = 'select'
   error.value = ''
@@ -115,9 +165,87 @@ async function openModal() {
   message.value = ''
   selected.value = new Set()
   results.value = []
-  summary.value = null
   sentRecipient.value = null
   await refreshCustomers()
+}
+
+function seedProgressRows(ids: string[]) {
+  results.value = ids.map((id) => {
+    const inv = invoices.value.find(i => i.id === id)
+    return {
+      invoiceId: id,
+      invoiceNumber: inv?.invoiceNumberFormatted ?? '',
+      queueError: null,
+      alreadyQueued: false,
+      state: 'pending' as const,
+      stateError: null,
+    }
+  })
+}
+
+function applyQueueResults(apiResults: BulkApiResult[]) {
+  for (const row of apiResults) {
+    const target = results.value.find(r => r.invoiceId === row.invoiceId)
+    if (!target) continue
+    target.invoiceNumber = row.invoiceNumber || target.invoiceNumber
+    target.alreadyQueued = row.alreadyQueued
+    if (row.error) {
+      target.queueError = row.error
+      target.state = 'failed'
+      target.stateError = row.error
+      continue
+    }
+    target.state = 'queued'
+  }
+}
+
+function updateRow(invoiceId: string, patch: Partial<BulkResultRow>) {
+  const row = results.value.find(r => r.invoiceId === invoiceId)
+  if (row) Object.assign(row, patch)
+}
+
+function startPolling() {
+  stopPolling()
+  void pollStatuses()
+  pollTimer = setInterval(() => { void pollStatuses() }, 2000)
+}
+
+async function pollStatuses() {
+  const pending = results.value.filter(r =>
+    !r.queueError && (r.state === 'queued' || r.state === 'processing'),
+  )
+  if (!pending.length) {
+    stopPolling()
+    if (progressSummary.value?.done) emit('sent')
+    return
+  }
+
+  await Promise.all(pending.map(async (row) => {
+    try {
+      const data = await $fetch<{
+        status: string
+        delivery: { status: string, lastError: string | null, recipientEmail: string | null } | null
+      }>(`/api/invoices/${row.invoiceId}/send-status`)
+
+      if (data.status === 'sent' || data.status === 'paid' || data.delivery?.status === 'done') {
+        updateRow(row.invoiceId, { state: 'sent', stateError: null })
+        return
+      }
+      if (data.delivery?.status === 'failed') {
+        updateRow(row.invoiceId, {
+          state: 'failed',
+          stateError: data.delivery.lastError ?? 'Delivery failed',
+        })
+        return
+      }
+      if (data.delivery?.status === 'processing') {
+        updateRow(row.invoiceId, { state: 'processing' })
+      }
+    }
+    catch {
+      // Transient poll error — keep trying.
+    }
+  }))
 }
 
 async function submit() {
@@ -131,12 +259,12 @@ async function submit() {
   }
   busy.value = true
   error.value = ''
-  phase.value = 'sending'
+  phase.value = 'progress'
+  seedProgressRows([...selected.value])
   try {
     const data = await $fetch<{
-      results: BulkResult[]
+      results: BulkApiResult[]
       recipient: { email: string } | null
-      summary: { requested: number, queued: number, alreadyQueued: number, failed: number }
     }>('/api/invoices/bulk-send', {
       method: 'POST',
       body: {
@@ -145,21 +273,39 @@ async function submit() {
         message: message.value.trim() || undefined,
       },
     })
-    results.value = data.results
-    summary.value = data.summary
+    applyQueueResults(data.results)
     sentRecipient.value = data.recipient?.email ?? recipientEmail.value
-    phase.value = 'results'
-    emit('sent')
+    startPolling()
   }
   catch (e: unknown) {
     const err = e as { data?: { message?: string, data?: { message?: string } } }
     error.value = err.data?.data?.message ?? err.data?.message ?? 'Bulk send failed'
     phase.value = 'select'
+    results.value = []
   }
   finally {
     busy.value = false
   }
 }
+
+function rowStatusLabel(row: BulkResultRow): string {
+  if (row.queueError) return row.queueError
+  if (row.state === 'pending') return 'Queuing…'
+  if (row.state === 'queued') return row.alreadyQueued ? 'In progress' : 'Queued'
+  if (row.state === 'processing') return 'Sending…'
+  if (row.state === 'sent') return 'Sent'
+  return row.stateError ?? 'Failed'
+}
+
+function rowStatusClass(row: BulkResultRow): string {
+  if (row.state === 'sent') return 'pill ok'
+  if (row.state === 'failed') return 'pill over'
+  if (row.state === 'processing') return 'pill warn bulk-pill-live'
+  if (row.state === 'queued') return 'pill warn bulk-pill-live'
+  return 'pill gray bulk-pill-live'
+}
+
+onUnmounted(stopPolling)
 </script>
 
 <template>
@@ -174,7 +320,7 @@ async function submit() {
   </button>
 
   <Teleport to="body">
-    <div v-if="open" class="modal-scrim open" @click.self="open = false">
+    <div v-if="open" class="modal-scrim open" @click.self="closeModal">
       <div class="card modal-card" style="max-width:640px; width:100%;">
         <div class="chead"><h3>Bulk send invoices</h3></div>
         <div class="cbody">
@@ -238,29 +384,19 @@ async function submit() {
               >
                 Send {{ selectedCount || '' }} invoice{{ selectedCount === 1 ? '' : 's' }}
               </button>
-              <button type="button" class="btn" :disabled="busy" @click="open = false">Cancel</button>
-            </div>
-          </template>
-
-          <template v-else-if="phase === 'sending'">
-            <div class="send-status">
-              <div class="spinner" aria-hidden="true" />
-              <p style="margin:0; font-weight:600;">Queuing invoices…</p>
-              <p class="help" style="margin:6px 0 0;">Emailing {{ recipientEmail }}.</p>
+              <button type="button" class="btn" :disabled="busy" @click="closeModal">Cancel</button>
             </div>
           </template>
 
           <template v-else>
-            <div v-if="summary" class="bulk-summary">
-              <span class="send-badge ok" aria-hidden="true">✓</span>
+            <div class="bulk-summary">
+              <span v-if="progressSummary?.inFlight" class="spinner" aria-hidden="true" />
+              <span v-else class="send-badge ok" aria-hidden="true">✓</span>
               <div>
-                <p style="margin:0; font-weight:600;">
-                  {{ summary.queued }} of {{ summary.requested }} invoice{{ summary.requested === 1 ? '' : 's' }} queued
-                </p>
+                <p style="margin:0; font-weight:600;">{{ progressHeadline }}</p>
                 <p class="help" style="margin:4px 0 0;">
-                  Sent to {{ sentRecipient ?? 'customer' }}.
-                  <template v-if="summary.alreadyQueued"> {{ summary.alreadyQueued }} already in progress.</template>
-                  <template v-if="summary.failed"> {{ summary.failed }} could not be queued.</template>
+                  <template v-if="sentRecipient">To {{ sentRecipient }}.</template>
+                  <template v-if="progressSummary?.inFlight"> Delivery updates appear below as each invoice completes.</template>
                 </p>
               </div>
             </div>
@@ -268,14 +404,27 @@ async function submit() {
             <ul class="bulk-results">
               <li v-for="r in results" :key="r.invoiceId">
                 <span class="bulk-rows__num">{{ r.invoiceNumber || '—' }}</span>
-                <span v-if="r.error" class="pill over">{{ r.error }}</span>
-                <span v-else-if="r.alreadyQueued" class="pill warn">Already queued</span>
-                <span v-else class="pill ok">Queued</span>
+                <span :class="rowStatusClass(r)">{{ rowStatusLabel(r) }}</span>
               </li>
             </ul>
 
             <div style="display:flex; gap:8px; margin-top:12px;">
-              <button type="button" class="btn primary" @click="open = false">Done</button>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="!!progressSummary?.inFlight"
+                @click="closeModal"
+              >
+                Done
+              </button>
+              <button
+                v-if="progressSummary?.inFlight"
+                type="button"
+                class="btn"
+                @click="closeModal"
+              >
+                Close
+              </button>
             </div>
           </template>
         </div>
@@ -347,16 +496,22 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 8px 12px;
   border-bottom: 1px solid #f1f5f9;
 }
 .bulk-results li:last-child { border-bottom: none; }
-.send-status {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 22px 8px;
+.bulk-pill-live {
+  position: relative;
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid #e2e8f0;
+  border-top-color: #4f46e5;
+  animation: bulk-spin 0.8s linear infinite;
+  flex: none;
 }
 .send-badge {
   width: 36px;
@@ -369,15 +524,6 @@ async function submit() {
   flex: none;
 }
 .send-badge.ok { background: #dcfce7; color: #16a34a; }
-.spinner {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 3px solid #e2e8f0;
-  border-top-color: #4f46e5;
-  animation: bulk-spin 0.8s linear infinite;
-  margin-bottom: 12px;
-}
 @keyframes bulk-spin {
   to { transform: rotate(360deg); }
 }
