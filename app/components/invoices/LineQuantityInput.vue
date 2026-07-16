@@ -6,9 +6,11 @@ const model = defineModel<string>({ required: true })
 const props = withDefaults(defineProps<{
   disabled?: boolean
   ariaLabel?: string
+  lineId?: string
 }>(), {
   disabled: false,
   ariaLabel: 'Quantity',
+  lineId: undefined,
 })
 
 const emit = defineEmits<{
@@ -63,6 +65,8 @@ defineExpose({ focus })
     :value="model"
     :disabled="disabled"
     :aria-label="ariaLabel"
+    :data-line-id="lineId"
+    data-line-field="quantity"
     @input="onInput"
     @blur="onBlur"
     @keydown="onKeydown"

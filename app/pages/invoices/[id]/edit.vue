@@ -32,6 +32,7 @@ import {
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { focusVisibleLineInput } from '~/utils/line-field-focus'
 
 definePageMeta({ layout: 'staff' })
 
@@ -172,27 +173,17 @@ const internalNotes = ref('')
 const lines = ref<LineItem[]>([])
 
 const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
-const lineQtyRefs = ref<Record<string, { focus: () => void } | null>>({})
-const lineRateRefs = ref<Record<string, { focus: () => void } | null>>({})
 
 function setLineAcRef(lineId: string, el: unknown) {
   lineAcRefs.value[lineId] = el as { focus: () => void } | null
 }
 
-function setLineQtyRef(lineId: string, el: unknown) {
-  lineQtyRefs.value[lineId] = el as { focus: () => void } | null
-}
-
-function setLineRateRef(lineId: string, el: unknown) {
-  lineRateRefs.value[lineId] = el as { focus: () => void } | null
-}
-
 function focusLineQty(lineId: string) {
-  lineQtyRefs.value[lineId]?.focus()
+  focusVisibleLineInput(lineId, 'quantity')
 }
 
 function focusLineRate(lineId: string) {
-  lineRateRefs.value[lineId]?.focus()
+  focusVisibleLineInput(lineId, 'rate')
 }
 
 async function onLineRateTabNext(line: LineItem) {
@@ -1013,8 +1004,8 @@ const aiPopStyle = computed(() => {
                       </td>
                       <td>
                         <LineQuantityInput
-                          :ref="(el) => setLineQtyRef(line.id, el)"
                           v-model="line.quantity"
+                          :line-id="line.id"
                           :disabled="!editable"
                           @blur="patchLine(line)"
                           @tab-next="focusLineRate(line.id)"
@@ -1022,8 +1013,8 @@ const aiPopStyle = computed(() => {
                       </td>
                       <td>
                         <LineCurrencyInput
-                          :ref="(el) => setLineRateRef(line.id, el)"
                           v-model="line.unitPrice"
+                          :line-id="line.id"
                           :disabled="!editable"
                           @blur="patchLine(line)"
                           @tab-next="onLineRateTabNext(line)"

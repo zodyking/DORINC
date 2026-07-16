@@ -28,6 +28,7 @@ import {
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { focusVisibleLineInput } from '~/utils/line-field-focus'
 import {
   draftLineToWizard,
   wizardLinesToDraftLines,
@@ -319,8 +320,6 @@ function onServiceLogPick(logId: string) {
 }
 
 const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
-const lineQtyRefs = ref<Record<string, { focus: () => void } | null>>({})
-const lineRateRefs = ref<Record<string, { focus: () => void } | null>>({})
 
 function addLine() {
   lines.value.push(createEmptyLine())
@@ -402,20 +401,12 @@ function setLineAcRef(localId: string, el: unknown) {
   lineAcRefs.value[localId] = el as { focus: () => void } | null
 }
 
-function setLineQtyRef(localId: string, el: unknown) {
-  lineQtyRefs.value[localId] = el as { focus: () => void } | null
-}
-
-function setLineRateRef(localId: string, el: unknown) {
-  lineRateRefs.value[localId] = el as { focus: () => void } | null
-}
-
 function focusLineQty(localId: string) {
-  lineQtyRefs.value[localId]?.focus()
+  focusVisibleLineInput(localId, 'quantity')
 }
 
 function focusLineRate(localId: string) {
-  lineRateRefs.value[localId]?.focus()
+  focusVisibleLineInput(localId, 'rate')
 }
 
 function addLineAndFocusDescription() {
@@ -587,21 +578,22 @@ async function saveDraftAndFinish() {
       </template>
     </StaffPageHead>
 
-    <div class="sl-progress" aria-label="Progress">
-      <div
-        v-for="s in INVOICE_WIZARD_STEPS"
-        :key="s.n"
-        class="sl-step"
-        :class="{ on: step === s.n, done: step > s.n }"
-      >
-        <div class="dot">{{ s.n }}</div>{{ s.label }}
+    <div class="inv-wizard-progress">
+      <div class="sl-progress inv-wizard-steps" aria-label="Progress">
+        <div
+          v-for="s in INVOICE_WIZARD_STEPS"
+          :key="s.n"
+          class="sl-step"
+          :class="{ on: step === s.n, done: step > s.n }"
+        >
+          <div class="dot">{{ s.n }}</div>{{ s.label }}
+        </div>
+      </div>
+      <div v-if="invoiceNumberFormatted || autosaveLabel" class="inv-wizard-progress-extra">
+        <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
+        <span class="autosave" :class="autosaveClass">{{ autosaveLabel }}</span>
       </div>
     </div>
-
-    <p v-if="invoiceNumberFormatted || autosaveLabel" class="inv-wizard-meta">
-      <span v-if="invoiceNumberFormatted" class="pill gray">{{ invoiceNumberFormatted }}</span>
-      <span class="autosave" :class="autosaveClass">{{ autosaveLabel }}</span>
-    </p>
 
     <p v-if="submitError" class="help inv-wizard-error">{{ submitError }}</p>
 
@@ -822,16 +814,16 @@ async function saveDraftAndFinish() {
                     </td>
                     <td>
                       <LineQuantityInput
-                        :ref="(el) => setLineQtyRef(line.localId, el)"
                         v-model="line.quantity"
+                        :line-id="line.localId"
                         @blur="onLineFieldBlur(line)"
                         @tab-next="focusLineRate(line.localId)"
                       />
                     </td>
                     <td>
                       <LineCurrencyInput
-                        :ref="(el) => setLineRateRef(line.localId, el)"
                         v-model="line.unitPrice"
+                        :line-id="line.localId"
                         @blur="onLineFieldBlur(line)"
                         @tab-next="onLineRateTabNext(line)"
                       />
@@ -871,8 +863,8 @@ async function saveDraftAndFinish() {
                   <label class="fld">
                     <span>Qty / Hrs</span>
                     <LineQuantityInput
-                      :ref="(el) => setLineQtyRef(line.localId, el)"
                       v-model="line.quantity"
+                      :line-id="line.localId"
                       @blur="onLineFieldBlur(line)"
                       @tab-next="focusLineRate(line.localId)"
                     />
@@ -880,8 +872,8 @@ async function saveDraftAndFinish() {
                   <label class="fld">
                     <span>Rate</span>
                     <LineCurrencyInput
-                      :ref="(el) => setLineRateRef(line.localId, el)"
                       v-model="line.unitPrice"
+                      :line-id="line.localId"
                       @blur="onLineFieldBlur(line)"
                       @tab-next="onLineRateTabNext(line)"
                     />
@@ -953,22 +945,49 @@ async function saveDraftAndFinish() {
 </template>
 
 <style scoped>
-.inv-wizard-meta {
+.inv-wizard-progress {
+  margin-bottom: 20px;
+}
+
+.inv-wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  overflow: visible;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+}
+
+.inv-wizard-steps .sl-step {
+  flex: none;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  gap: 8px 12px;
-  margin: -8px 0 16px;
+  line-height: 1.25;
+}
+
+.inv-wizard-progress-extra {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
   font-size: 12px;
 }
 
-.inv-wizard-meta .autosave {
-  margin-left: auto;
+.inv-wizard-progress-extra .pill {
+  grid-column: 1;
+  justify-self: center;
+}
+
+.inv-wizard-progress-extra .autosave {
+  grid-column: 5;
+  justify-self: center;
   font-weight: 600;
   color: #059669;
 }
 
-.inv-wizard-meta .autosave.pending {
+.inv-wizard-progress-extra .autosave.pending {
   color: #d97706;
 }
 
