@@ -124,7 +124,7 @@ export function vehicleSnapshotSub(snapshot: InvoiceVehicleSnapshotDisplay | nul
   try {
     const fleetNo = typeof snapshot.busNumber === 'string' ? snapshot.busNumber.trim() : ''
     if (fleetNo) {
-      return `${unitTypeLabel(snapshot.unitType)} ${fleetNo}`
+      return `${unitTypeLabel(snapshot.unitType)} #${fleetNo}`
     }
     const ymm = vehicleSub(snapshot as VehicleDisplay)
     const vin = typeof snapshot.vin === 'string' ? snapshot.vin.trim() : ''

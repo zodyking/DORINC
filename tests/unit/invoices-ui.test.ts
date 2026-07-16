@@ -45,7 +45,7 @@ describe('invoices-ui helpers (P1-22)', () => {
       make: 'IC BUS',
       model: 'PB105',
       vin: '4DRBUC8N2PB781791',
-    })).toBe('Bus 616')
+    })).toBe('Bus #616')
   })
 
   it('falls back to year/make/model and VIN without a fleet number', () => {
