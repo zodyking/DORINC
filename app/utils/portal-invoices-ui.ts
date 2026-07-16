@@ -6,7 +6,7 @@ import {
   buildPortalLineItemCorrectionDescription,
   buildPortalVehicleCorrectionDescription,
   type PortalVehicleCorrectionFields,
-} from '../../shared/portal-invoice-correction'
+} from '#shared/portal-invoice-correction'
 
 export type PortalInvoiceFilter = 'all' | 'open' | 'paid'
 
