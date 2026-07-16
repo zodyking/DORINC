@@ -11,6 +11,7 @@ export const serviceLogWorkTypeSchema = z.enum([
 ])
 
 export const serviceLogStatusSchema = z.enum([
+  'draft',
   'uploaded',
   'ocr_processing',
   'ai_processing',

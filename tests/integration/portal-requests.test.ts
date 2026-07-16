@@ -6,11 +6,11 @@ import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { users } from '../../server/db/schema/auth'
 import { customers } from '../../server/db/schema/customers'
+import { serviceLogs } from '../../server/db/schema/service-logs'
 import {
   invoiceChangeRequests,
   newVehicleRequests,
   portalGeneralRequests,
-  serviceRequests,
   vehicleChangeRequests,
 } from '../../server/db/schema/portal-requests'
 import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
@@ -114,7 +114,7 @@ await seedSentInvoice()
 
 afterAll(async () => {
   const custIds = [customerA.id, customerB.id]
-  await db.delete(serviceRequests).where(inArray(serviceRequests.customerId, custIds))
+  await db.delete(serviceLogs).where(inArray(serviceLogs.customerId, custIds))
   await db.delete(invoiceChangeRequests).where(inArray(invoiceChangeRequests.customerId, custIds))
   await db.delete(vehicleChangeRequests).where(inArray(vehicleChangeRequests.customerId, custIds))
   await db.delete(portalGeneralRequests).where(inArray(portalGeneralRequests.customerId, custIds))
@@ -128,8 +128,8 @@ afterAll(async () => {
 })
 
 describe('P2-07 portal service request', () => {
-  it('creates a pending service request for shop review', async () => {
-    const request = await createServiceRequest(db, customerA.id, portalUserA.id, {
+  it('creates a draft customer-requested service log for the shop', async () => {
+    const log = await createServiceRequest(db, customerA.id, portalUserA.id, {
       vehicleId: vehicleA.id,
       serviceCategory: 'Preventive maintenance',
       urgency: 'urgent',
@@ -138,9 +138,12 @@ describe('P2-07 portal service request', () => {
       description: 'DEF system check needed',
     })
 
-    expect(request.status).toBe('pending')
-    expect(request.vehicleId).toBe(vehicleA.id)
-    expect(request.customerId).toBe(customerA.id)
+    expect(log.status).toBe('draft')
+    expect(log.customerRequested).toBe(true)
+    expect(log.vehicleId).toBe(vehicleA.id)
+    expect(log.customerId).toBe(customerA.id)
+    expect(log.complaint).toBe('DEF system check needed')
+    expect(log.workType).toBe('preventive_maintenance')
   })
 
   it('rejects vehicles outside customer scope', async () => {

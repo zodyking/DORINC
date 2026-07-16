@@ -86,10 +86,10 @@ function makeLog(extra: Record<string, unknown> = {}) {
 }
 
 describe('P1-15 service logs create + read', () => {
-  it('creates a log with an assigned SL number and uploaded status', async () => {
+  it('creates a log with an assigned SL number and draft status', async () => {
     const log = await makeLog()
     expect(log.logNumber).toBeGreaterThan(1000)
-    expect(log.status).toBe('uploaded')
+    expect(log.status).toBe('draft')
 
     const read = await getServiceLog(db, log.id)
     expect(read.customerName).toContain('Fleet Co')
@@ -116,7 +116,8 @@ describe('P1-15 service logs create + read', () => {
 describe('P1-15 status transitions (SPEC §6.4)', () => {
   it('walks the happy path to converted_to_invoice', async () => {
     const log = await makeLog()
-    for (const to of ['ready_for_review', 'in_review', 'converted_to_invoice'] as const) {
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    for (const to of ['in_review', 'converted_to_invoice'] as const) {
       const { log: next } = await transitionServiceLog(db, log.id, to)
       expect(next.status).toBe(to)
     }
@@ -135,6 +136,7 @@ describe('P1-15 status transitions (SPEC §6.4)', () => {
 
   it('supports OCR/AI processing states', async () => {
     const log = await makeLog()
+    await transitionServiceLog(db, log.id, 'uploaded')
     await transitionServiceLog(db, log.id, 'ocr_processing')
     await transitionServiceLog(db, log.id, 'ai_processing')
     const { log: ready } = await transitionServiceLog(db, log.id, 'ready_for_review')

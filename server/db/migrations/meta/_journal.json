@@ -316,6 +316,13 @@
       "when": 1783583000000,
       "tag": "0044_reconcile_invoice_dependent_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1783584000000,
+      "tag": "0045_service_log_draft_status",
+      "breakpoints": true
     }
   ]
 }

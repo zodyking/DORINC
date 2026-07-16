@@ -139,10 +139,11 @@ function openLog(id: string) {
           <div class="info">
             <b>{{ logTitle(log.logNumber, log.vehicle, log.workType) }}</b>
             <div class="sub">{{ logSubtitle(log.customerName, log.createdAt, log.submitterName, log.fileCount) }}</div>
-            <div style="margin-top:6px;">
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).cls">
                 {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).label }}
               </span>
+              <span v-if="log.customerRequested" class="pill info">{{ CUSTOMER_REQUESTED_SERVICE_NOTE }}</span>
             </div>
           </div>
           <div class="qa" @click.stop>

@@ -6,10 +6,10 @@ import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { users } from '../../server/db/schema/auth'
 import { customers } from '../../server/db/schema/customers'
+import { serviceLogs } from '../../server/db/schema/service-logs'
 import {
   invoiceChangeRequests,
   portalGeneralRequests,
-  serviceRequests,
   vehicleChangeRequests,
 } from '../../server/db/schema/portal-requests'
 import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
@@ -23,8 +23,12 @@ import {
 } from '../../server/services/invoices.service'
 import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import {
+  convertServiceLogToInvoice,
+  listServiceLogs,
+  transitionServiceLog,
+} from '../../server/services/service-logs.service'
+import {
   approveInvoiceChangeRequest,
-  approveServiceRequest,
   approveVehicleChangeRequest,
   countPendingPortalRequests,
   listStaffPortalRequests,
@@ -101,7 +105,7 @@ async function seedSentInvoice() {
 await seedSentInvoice()
 
 afterAll(async () => {
-  await db.delete(serviceRequests).where(eq(serviceRequests.customerId, customer.id))
+  await db.delete(serviceLogs).where(eq(serviceLogs.customerId, customer.id))
   await db.delete(invoiceChangeRequests).where(eq(invoiceChangeRequests.customerId, customer.id))
   await db.delete(vehicleChangeRequests).where(eq(vehicleChangeRequests.customerId, customer.id))
   await db.delete(portalGeneralRequests).where(eq(portalGeneralRequests.customerId, customer.id))
@@ -116,7 +120,7 @@ afterAll(async () => {
 })
 
 describe('P2-09 staff portal request review queue', () => {
-  it('lists pending portal requests for staff review', async () => {
+  it('routes customer service requests to draft service logs, not staff portal queue', async () => {
     await createServiceRequest(db, customer.id, portalUser.id, {
       vehicleId: vehicle.id,
       serviceCategory: 'Repair / breakdown',
@@ -124,12 +128,11 @@ describe('P2-09 staff portal request review queue', () => {
       description: 'Unit down at yard',
     })
 
-    const pendingBefore = await countPendingPortalRequests(db)
-    expect(pendingBefore).toBeGreaterThanOrEqual(1)
-
     const list = await listStaffPortalRequests(db, { status: 'pending', kind: 'service' })
-    expect(list.items.some(item => item.summary.includes('Unit down'))).toBe(true)
-    expect(list.items.some(item => item.customerName === customer.displayName)).toBe(true)
+    expect(list.items.some(item => item.summary.includes('Unit down'))).toBe(false)
+
+    const logs = await listServiceLogs(db, { customerId: customer.id, page: 1, pageSize: 50 })
+    expect(logs.items.some(item => item.complaint?.includes('Unit down') && item.customerRequested)).toBe(true)
   })
 
   it('rejects a pending request with reason', async () => {
@@ -143,8 +146,8 @@ describe('P2-09 staff portal request review queue', () => {
     expect(rejected.reviewReason).toBe('Not actionable')
   })
 
-  it('approves a service request by creating a draft invoice', async () => {
-    const request = await createServiceRequest(db, customer.id, portalUser.id, {
+  it('converts customer-requested draft logs through the service log workflow', async () => {
+    const log = await createServiceRequest(db, customer.id, portalUser.id, {
       vehicleId: vehicle.id,
       serviceCategory: 'Preventive maintenance',
       urgency: 'normal',
@@ -152,13 +155,15 @@ describe('P2-09 staff portal request review queue', () => {
       location: 'Main shop',
     })
 
-    const { request: approved, invoice } = await approveServiceRequest(db, request.id, ACTOR, 'Scheduled next week')
+    expect(log.status).toBe('draft')
+    expect(log.customerRequested).toBe(true)
+
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    await transitionServiceLog(db, log.id, 'in_review')
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, ACTOR, {})
     createdInvoiceIds.push(invoice.id)
 
-    expect(approved.status).toBe('approved')
-    expect(approved.resultInvoiceId).toBe(invoice.id)
-    expect(invoice.creationSource).toBe('service_request')
-    expect(invoice.serviceRequestId).toBe(request.id)
+    expect(invoice.creationSource).toBe('service_log')
     expect(invoice.status).toBe('draft')
     expect(invoice.complaint).toBe('Oil change due')
   })

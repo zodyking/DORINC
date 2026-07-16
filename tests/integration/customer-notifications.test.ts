@@ -18,7 +18,7 @@ import {
 import { sendAndDeliverInvoice } from '../helpers/invoice-send'
 import { rejectPortalRequest } from '../../server/services/portal-request-review.service'
 import { setPortalAccess } from '../../server/services/portal-access.service'
-import { createPortalUser, createServiceRequest } from '../../server/services/portal.service'
+import { createGeneralRequest, createPortalUser } from '../../server/services/portal.service'
 import { createVehicle } from '../../server/services/vehicles.service'
 
 config()
@@ -133,27 +133,19 @@ describe('P2-19 customer-facing email notifications', () => {
   })
 
   it('queues request_status mail when staff rejects a portal request', async () => {
-    const vehicle = await createVehicle(db, {
-      customerId,
-      unitType: 'truck',
-      busNumber: `NT2-${stamp}`,
-    }, ACTOR)
-
-    const request = await createServiceRequest(db, customerId, portalUserId, {
-      vehicleId: vehicle.id,
-      serviceCategory: 'Brakes',
-      urgency: 'soon',
-      description: 'Grinding noise on stop',
+    const request = await createGeneralRequest(db, customerId, portalUserId, {
+      subject: 'Hours question',
+      message: 'What are your Saturday hours?',
     })
 
-    await rejectPortalRequest(db, 'service', request.id, ACTOR, 'Not in service area this week')
+    await rejectPortalRequest(db, 'general', request.id, ACTOR, 'Not in service area this week')
 
     const job = await latestNotificationJob('request_status')
     expect(job).toBeTruthy()
     expect(job!.payload).toMatchObject({
       notificationKind: 'request_status',
       to: `portal@${emailDomain}`,
-      requestKind: 'service',
+      requestKind: 'general',
       requestId: request.id,
       requestStatus: 'rejected',
     })

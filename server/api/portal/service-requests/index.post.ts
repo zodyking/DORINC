@@ -13,25 +13,27 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, portalServiceRequestSchema)
 
   try {
-    const request = await createServiceRequest(useDb(), user.customerId, user.id, body)
+    const log = await createServiceRequest(useDb(), user.customerId, user.id, body)
 
     await writeAudit(event, {
-      entityType: 'service_request',
-      entityId: request.id,
+      entityType: 'service_log',
+      entityId: log.id,
       action: 'portal.service_request.create',
       afterData: {
-        vehicleId: request.vehicleId,
-        serviceCategory: request.serviceCategory,
-        urgency: request.urgency,
-        status: request.status,
+        logNumber: log.logNumber,
+        vehicleId: log.vehicleId,
+        workType: log.workType,
+        status: log.status,
+        customerRequested: log.customerRequested,
       },
       permissionKey: 'portal.requests.own',
     })
 
     return {
-      id: request.id,
-      status: request.status,
-      createdAt: request.createdAt,
+      id: log.id,
+      logNumber: log.logNumber,
+      status: log.status,
+      createdAt: log.createdAt,
     }
   }
   catch (err) {

@@ -4,8 +4,10 @@ import { formatAuditChangeMessage } from '#shared/audit-messages'
 import { vehicleSub, vehicleTag, type VehicleDisplay } from './vehicles-ui'
 
 export type ServiceLogStatus
-  = 'uploaded' | 'ocr_processing' | 'ai_processing' | 'ready_for_review' | 'in_review'
+  = 'draft' | 'uploaded' | 'ocr_processing' | 'ai_processing' | 'ready_for_review' | 'in_review'
     | 'needs_info' | 'converted_to_invoice' | 'rejected' | 'archived'
+
+export { CUSTOMER_REQUESTED_SERVICE_NOTE } from '#shared/portal-service-log'
 
 export const WORK_TYPE_LABELS: Record<string, string> = {
   preventive_maintenance: 'Preventive maintenance',
@@ -34,6 +36,8 @@ export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceI
     return { cls: 'pill warn', label: 'Awaiting review' }
   }
   switch (status) {
+    case 'draft':
+      return { cls: 'pill gray', label: 'Draft' }
     case 'uploaded':
       return { cls: 'pill gray', label: 'Uploaded' }
     case 'ocr_processing':

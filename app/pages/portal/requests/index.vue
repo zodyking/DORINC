@@ -127,7 +127,7 @@ async function submitService() {
         description: serviceForm.description,
       },
     })
-    submitMessage.value = 'Service request sent — the shop will follow up.'
+    submitMessage.value = 'Service request submitted — our shop will prepare a service log.'
     serviceForm.description = ''
     serviceForm.preferredDate = ''
     await refreshRequests()

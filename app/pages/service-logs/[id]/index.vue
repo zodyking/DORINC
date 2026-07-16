@@ -35,6 +35,7 @@ interface ServiceLog {
   draftLineItems: DraftLine[] | null
   statusReason: string | null
   invoiceId: string | null
+  customerRequested: boolean
   customerId: string | null
   vehicleId: string | null
   customerName: string
@@ -81,7 +82,64 @@ const draftLines = computed(() => (Array.isArray(log.value?.draftLineItems) ? lo
 const canReview = computed(() => auth.can('service_logs.review.all'))
 const canExtract = computed(() => auth.can('ai.extract.all') && canReview.value)
 const canConvert = computed(() => auth.can('service_logs.convert.all'))
+const canUpload = computed(() => auth.can('service_logs.upload.own'))
 const isOwner = computed(() => log.value?.submittedBy === auth.user?.id)
+const canEditLog = computed(() => {
+  if (!log.value || log.value.status === 'converted_to_invoice') return false
+  if (canReview.value) return true
+  return isOwner.value && canUpload.value
+})
+
+const editBusy = ref(false)
+const editError = ref('')
+const editSaved = ref(false)
+const editForm = reactive({
+  serviceDate: '',
+  odometerReading: '',
+  location: '',
+  workType: 'repair',
+  complaint: '',
+  internalNotes: '',
+})
+
+watch(log, (row) => {
+  if (!row) return
+  editForm.serviceDate = row.serviceDate
+  editForm.odometerReading = row.odometerReading ?? ''
+  editForm.location = row.location ?? ''
+  editForm.workType = row.workType
+  editForm.complaint = row.complaint ?? ''
+  editForm.internalNotes = row.internalNotes ?? ''
+  editSaved.value = false
+}, { immediate: true })
+
+async function saveLogEdits() {
+  if (!canEditLog.value) return
+  editBusy.value = true
+  editError.value = ''
+  editSaved.value = false
+  try {
+    await $fetch(`/api/service-logs/${id}`, {
+      method: 'PATCH',
+      body: {
+        serviceDate: editForm.serviceDate,
+        odometerReading: editForm.odometerReading || null,
+        location: editForm.location || null,
+        workType: editForm.workType,
+        complaint: editForm.complaint || null,
+        internalNotes: editForm.internalNotes || null,
+      },
+    })
+    await refresh()
+    editSaved.value = true
+  }
+  catch (e: unknown) {
+    editError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+  }
+  finally {
+    editBusy.value = false
+  }
+}
 
 const imageFiles = computed(() => files.value.filter(f => f.mimeType.startsWith('image/')))
 const selectedFileId = ref<string | null>(null)
@@ -317,6 +375,15 @@ const pill = computed(() => log.value
           Resubmit for review
         </button>
         <button
+          v-if="(canReview || (isOwner && canUpload)) && log.status === 'draft'"
+          class="btn primary"
+          type="button"
+          :disabled="busy"
+          @click="changeStatus('ready_for_review')"
+        >
+          Submit for review
+        </button>
+        <button
           v-if="canReview && log.status === 'ready_for_review'"
           class="btn"
           type="button"
@@ -379,6 +446,13 @@ const pill = computed(() => log.value
     </StaffPageHead>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
+    <p
+      v-if="log.customerRequested"
+      class="flash info"
+      style="margin:-8px 0 16px;"
+    >
+      {{ CUSTOMER_REQUESTED_SERVICE_NOTE }} — review the customer complaint and complete the log before invoicing.
+    </p>
     <p
       v-if="log && serviceLogInvoiceLinkReleased(log.statusReason)"
       class="flash warn"
@@ -505,14 +579,51 @@ const pill = computed(() => log.value
           </div>
         </div>
 
-        <div class="card">
+        <div v-if="canEditLog" class="card">
+          <div class="chead">
+            <h3>Edit log</h3>
+            <button type="button" class="btn sm primary" :disabled="editBusy" @click="saveLogEdits">
+              {{ editBusy ? 'Saving…' : 'Save changes' }}
+            </button>
+          </div>
+          <div class="cbody stack" style="gap:12px;">
+            <p v-if="editError" class="help" style="color:#dc2626; margin:0;">{{ editError }}</p>
+            <p v-else-if="editSaved" class="help" style="color:#059669; margin:0;">Changes saved.</p>
+            <label class="fld"><span>Service date</span>
+              <input v-model="editForm.serviceDate" type="date">
+            </label>
+            <label class="fld"><span>Odometer or hours</span>
+              <input v-model="editForm.odometerReading" type="text">
+            </label>
+            <label class="fld"><span>Job location</span>
+              <input v-model="editForm.location" type="text">
+            </label>
+            <label class="fld"><span>Work type</span>
+              <select v-model="editForm.workType">
+                <option value="preventive_maintenance">Preventive maintenance</option>
+                <option value="repair">Repair / breakdown</option>
+                <option value="diagnostic">Diagnostic</option>
+                <option value="inspection">Inspection</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label class="fld"><span>Customer complaint / symptoms</span>
+              <textarea v-model="editForm.complaint" rows="3" />
+            </label>
+            <label v-if="canReview" class="fld"><span>Internal notes <span class="fld-badge">Staff only</span></span>
+              <textarea v-model="editForm.internalNotes" rows="3" />
+            </label>
+          </div>
+        </div>
+
+        <div v-else class="card">
           <div class="chead"><h3>Customer complaint / symptoms</h3></div>
           <div class="cbody" style="font-size:13.5px; color:#475569; line-height:1.6;">
             {{ log.complaint || '—' }}
           </div>
         </div>
 
-        <div v-if="canReview" class="card">
+        <div v-if="!canEditLog && canReview" class="card">
           <div class="chead"><h3>Internal notes <span class="fld-badge">Staff only</span></h3></div>
           <div class="cbody" style="font-size:13.5px; color:#475569; line-height:1.6;">
             {{ log.internalNotes || '—' }}

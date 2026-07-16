@@ -8,6 +8,8 @@ import { vehicles } from '../db/schema/vehicles'
 import { getInvoicePdfDownload, InvoicePdfServiceError } from './invoice-pdf.service'
 import { getInvoice, listInvoiceLineItems } from './invoices.service'
 import { buildVehicleSnapshot } from './entity-snapshots'
+import { mapPortalCategoryToWorkType } from '../../shared/portal-service-log'
+import { createServiceLog } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
 import {
   buildPortalLineItemCorrectionDescription,
@@ -118,6 +120,21 @@ function requestStatusLabel(status: string): string {
   return status
 }
 
+function customerServiceLogOpen(status: string): boolean {
+  return !['converted_to_invoice', 'rejected', 'archived'].includes(status)
+}
+
+function customerServiceLogStatusLabel(status: string): string {
+  if (status === 'draft') return 'Submitted to shop'
+  if (['uploaded', 'ocr_processing', 'ai_processing', 'ready_for_review', 'in_review', 'needs_info'].includes(status)) {
+    return 'Shop is working on it'
+  }
+  if (status === 'converted_to_invoice') return 'Invoiced'
+  if (status === 'rejected') return 'Closed'
+  if (status === 'archived') return 'Archived'
+  return status
+}
+
 function formatRequestDate(iso: Date | string): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -156,7 +173,7 @@ async function assertPortalInvoiceForChangeRequest(db: Db, customerId: string, i
 }
 
 async function countPendingPortalRequests(db: Db, customerId: string): Promise<number> {
-  const tables = [serviceRequests, invoiceChangeRequests, vehicleChangeRequests, newVehicleRequests, portalGeneralRequests] as const
+  const tables = [invoiceChangeRequests, vehicleChangeRequests, newVehicleRequests, portalGeneralRequests] as const
   let total = 0
   for (const table of tables) {
     const [row] = await db.select({ value: count() })
@@ -164,7 +181,20 @@ async function countPendingPortalRequests(db: Db, customerId: string): Promise<n
       .where(and(eq(table.customerId, customerId), eq(table.status, 'pending')))
     total += Number(row?.value ?? 0)
   }
-  return total
+
+  const [legacyService] = await db.select({ value: count() })
+    .from(serviceRequests)
+    .where(and(eq(serviceRequests.customerId, customerId), eq(serviceRequests.status, 'pending')))
+
+  const [openCustomerLogs] = await db.select({ value: count() })
+    .from(serviceLogs)
+    .where(and(
+      eq(serviceLogs.customerId, customerId),
+      eq(serviceLogs.customerRequested, true),
+      sql`${serviceLogs.status} NOT IN ('converted_to_invoice', 'rejected', 'archived')`,
+    ))
+
+  return total + Number(legacyService?.value ?? 0) + Number(openCustomerLogs?.value ?? 0)
 }
 
 export interface PortalRequestHistoryItem {
@@ -214,7 +244,20 @@ export interface PortalRequestDetailPayload {
 export async function listPortalRequests(db: Db, customerId: string, limit = 50): Promise<PortalRequestHistoryItem[]> {
   await getPortalCustomer(db, customerId)
 
-  const [serviceRows, billingRows, vehicleRows, vehicleAddRows, generalRows] = await Promise.all([
+  const [customerLogRows, legacyServiceRows, billingRows, vehicleRows, vehicleAddRows, generalRows] = await Promise.all([
+    db.select({
+      log: serviceLogs,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
+    })
+      .from(serviceLogs)
+      .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+      .where(and(eq(serviceLogs.customerId, customerId), eq(serviceLogs.customerRequested, true)))
+      .orderBy(desc(serviceLogs.createdAt))
+      .limit(limit),
     db.select({
       request: serviceRequests,
       vehicle: {
@@ -269,7 +312,26 @@ export async function listPortalRequests(db: Db, customerId: string, limit = 50)
 
   const items: PortalRequestHistoryItem[] = []
 
-  for (const row of serviceRows) {
+  for (const row of customerLogRows) {
+    const veh = vehicleLabelFromRow(row.vehicle)
+    const titleSuffix = row.log.complaint?.trim().slice(0, 60) || workTypeLabelFromKey(row.log.workType)
+    items.push({
+      id: row.log.id,
+      kind: 'service',
+      title: `${veh} — ${titleSuffix}`,
+      meta: `${formatRequestDate(row.log.createdAt)} · ${workTypeLabelFromKey(row.log.workType)}`,
+      status: row.log.status,
+      statusLabel: customerServiceLogStatusLabel(row.log.status),
+      createdAt: row.log.createdAt.toISOString(),
+      isOpen: customerServiceLogOpen(row.log.status),
+      vehicleId: row.log.vehicleId,
+      vehicleLabel: veh,
+      invoiceId: row.log.invoiceId,
+      invoiceNumberFormatted: null,
+    })
+  }
+
+  for (const row of legacyServiceRows) {
     const veh = vehicleLabelFromRow(row.vehicle)
     items.push({
       id: row.request.id,
@@ -374,6 +436,47 @@ export async function getPortalRequestDetail(
   await getPortalCustomer(db, customerId)
 
   if (kind === 'service') {
+    const [logRow] = await db.select({
+      log: serviceLogs,
+      vehicle: {
+        unitType: vehicles.unitType,
+        busNumber: vehicles.busNumber,
+        unitTag: vehicles.unitTag,
+      },
+    })
+      .from(serviceLogs)
+      .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
+      .where(and(
+        eq(serviceLogs.id, id),
+        eq(serviceLogs.customerId, customerId),
+        eq(serviceLogs.customerRequested, true),
+      ))
+      .limit(1)
+
+    if (logRow) {
+      const veh = vehicleLabelFromRow(logRow.vehicle)
+      return {
+        id: logRow.log.id,
+        kind: 'service',
+        status: logRow.log.status,
+        statusLabel: customerServiceLogStatusLabel(logRow.log.status),
+        createdAt: logRow.log.createdAt.toISOString(),
+        isOpen: customerServiceLogOpen(logRow.log.status),
+        reviewedAt: null,
+        reviewReason: logRow.log.statusReason,
+        title: `${veh} — ${logRow.log.complaint?.trim().slice(0, 80) || workTypeLabelFromKey(logRow.log.workType)}`,
+        vehicleId: logRow.log.vehicleId,
+        vehicleLabel: veh,
+        invoiceId: logRow.log.invoiceId,
+        invoiceNumberFormatted: null,
+        serviceCategory: workTypeLabelFromKey(logRow.log.workType),
+        urgency: null,
+        preferredDate: logRow.log.serviceDate,
+        location: logRow.log.location,
+        description: logRow.log.complaint,
+      }
+    }
+
     const [row] = await db.select({
       request: serviceRequests,
       vehicle: {
@@ -570,6 +673,17 @@ function unitTypeLabel(key: string): string {
     truck: 'Truck', bus: 'Bus', equipment: 'Equipment', tractor: 'Tractor', other: 'Unit',
   }
   return labels[key] ?? 'Unit'
+}
+
+function workTypeLabelFromKey(key: string): string {
+  const labels: Record<string, string> = {
+    preventive_maintenance: 'Preventive maintenance',
+    repair: 'Repair / breakdown',
+    diagnostic: 'Diagnostic',
+    inspection: 'Inspection',
+    other: 'Other',
+  }
+  return labels[key] ?? key
 }
 
 function vehicleLabelFromRow(row: {
@@ -924,18 +1038,28 @@ export async function createServiceRequest(
   await getPortalCustomer(db, customerId)
   await assertPortalVehicle(db, customerId, input.vehicleId)
 
-  const [row] = await db.insert(serviceRequests).values({
-    customerId,
-    submittedBy,
-    vehicleId: input.vehicleId,
-    serviceCategory: input.serviceCategory.trim(),
-    urgency: input.urgency,
-    preferredDate: input.preferredDate?.trim() || null,
-    location: input.location?.trim() || null,
-    description: input.description.trim(),
-  }).returning()
+  const preferred = input.preferredDate?.trim()
+  const serviceDate = preferred && /^\d{4}-\d{2}-\d{2}$/.test(preferred)
+    ? preferred
+    : todayIsoDate()
 
-  return row!
+  const internalNotes = [
+    'Portal service request',
+    `Category: ${input.serviceCategory.trim()}`,
+    `Urgency: ${input.urgency}`,
+    preferred ? `Preferred date: ${preferred}` : null,
+  ].filter(Boolean).join('\n')
+
+  return createServiceLog(db, {
+    customerId,
+    vehicleId: input.vehicleId,
+    serviceDate,
+    location: input.location?.trim() || null,
+    workType: mapPortalCategoryToWorkType(input.serviceCategory),
+    complaint: input.description.trim(),
+    internalNotes,
+    customerRequested: true,
+  }, submittedBy)
 }
 
 function vehicleSnapshotToCorrectionFields(snapshot: InvoiceVehicleSnapshot): PortalVehicleCorrectionFields {

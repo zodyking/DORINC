@@ -7,6 +7,7 @@ import type { InvoiceCustomerSnapshot, InvoiceVehicleSnapshot } from './invoices
 
 /** Lifecycle statuses (SPEC §6.4). OCR/AI states are reserved for Phase 2 workers. */
 export const SERVICE_LOG_STATUSES = [
+  'draft',
   'uploaded',
   'ocr_processing',
   'ai_processing',
@@ -53,7 +54,9 @@ export const serviceLogs = pgTable('service_logs', {
   // Staff only — never shown on customer PDF or portal
   internalNotes: text('internal_notes'),
 
-  status: text('status', { enum: SERVICE_LOG_STATUSES }).notNull().default('uploaded'),
+  status: text('status', { enum: SERVICE_LOG_STATUSES }).notNull().default('draft'),
+  /** True when the log was opened from a portal customer service request. */
+  customerRequested: boolean('customer_requested').notNull().default(false),
   // Reviewer note attached to needs_info / rejected transitions
   statusReason: text('status_reason'),
 

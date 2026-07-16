@@ -24,25 +24,35 @@ export class ServiceLogsServiceError extends Error {
  * Phase 2 workers; review-side moves are gated by permissions at the route.
  */
 export const SERVICE_LOG_TRANSITIONS: Record<ServiceLogStatus, ServiceLogStatus[]> = {
-  uploaded: ['ocr_processing', 'ai_processing', 'ready_for_review', 'archived'],
+  draft: ['uploaded', 'ready_for_review', 'archived'],
+  uploaded: ['ocr_processing', 'ai_processing', 'ready_for_review', 'archived', 'draft'],
   ocr_processing: ['ai_processing', 'ready_for_review'],
   ai_processing: ['ready_for_review'],
-  ready_for_review: ['in_review', 'archived'],
-  in_review: ['needs_info', 'rejected', 'ready_for_review', 'converted_to_invoice'],
-  needs_info: ['ready_for_review', 'in_review', 'archived'],
+  ready_for_review: ['in_review', 'archived', 'draft'],
+  in_review: ['needs_info', 'rejected', 'ready_for_review', 'converted_to_invoice', 'draft'],
+  needs_info: ['ready_for_review', 'in_review', 'archived', 'draft'],
   rejected: ['ready_for_review', 'archived'],
   converted_to_invoice: ['in_review'],
-  archived: ['ready_for_review'],
+  archived: ['ready_for_review', 'draft'],
 }
 
 /** Transitions a mechanic may perform on their own log (submit / resubmit). */
 export const MECHANIC_TRANSITIONS: Array<{ from: ServiceLogStatus, to: ServiceLogStatus }> = [
+  { from: 'draft', to: 'ready_for_review' },
   { from: 'uploaded', to: 'ready_for_review' },
   { from: 'needs_info', to: 'ready_for_review' },
 ]
 
-/** Statuses in which the submitting mechanic may still edit their own log. */
-export const MECHANIC_EDITABLE_STATUSES: ServiceLogStatus[] = ['uploaded', 'needs_info']
+/** Field edits are allowed on any log that has not been invoiced. */
+export function isServiceLogEditable(status: ServiceLogStatus): boolean {
+  return status !== 'converted_to_invoice'
+}
+
+/** @deprecated Use isServiceLogEditable — kept for imports that check mechanic-only paths. */
+export const MECHANIC_EDITABLE_STATUSES: ServiceLogStatus[] = [
+  'draft', 'uploaded', 'needs_info', 'ready_for_review', 'in_review',
+  'ocr_processing', 'ai_processing', 'rejected', 'archived',
+]
 
 /** Logs awaiting accountant review (SPEC §6.4 review queue). */
 export const SERVICE_LOG_REVIEW_QUEUE_STATUSES: ServiceLogStatus[] = [
@@ -64,6 +74,7 @@ export interface ServiceLogInput {
   complaint?: string | null
   internalNotes?: string | null
   draftLineItems?: unknown
+  customerRequested?: boolean
 }
 
 export async function createServiceLog(db: Db, input: ServiceLogInput, submittedBy: string) {
@@ -89,6 +100,7 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     complaint: input.complaint ?? null,
     internalNotes: input.internalNotes ?? null,
     draftLineItems: input.draftLineItems ?? null,
+    customerRequested: input.customerRequested ?? false,
     customerSnapshot: buildCustomerSnapshot(customer),
     vehicleSnapshot: buildVehicleSnapshot(vehicle),
   }).returning()

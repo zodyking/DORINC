@@ -1,7 +1,7 @@
 import { useDb } from '../../../db/client'
 import {
   getServiceLog,
-  MECHANIC_EDITABLE_STATUSES,
+  isServiceLogEditable,
   ServiceLogsServiceError,
   updateServiceLog,
 } from '../../../services/service-logs.service'
@@ -28,15 +28,15 @@ export default defineEventHandler(async (event) => {
     const isOwner = current.submittedBy === auth.user.id
       && hasPermission(event, 'service_logs.upload.own', { ownsRecord: true })
 
-    if (!isReviewer) {
-      if (!isOwner) throw apiError(event, 'FORBIDDEN', 'You do not have permission to edit this service log')
-      // Mechanics may only edit while the log is still theirs to fix
-      if (!MECHANIC_EDITABLE_STATUSES.includes(current.status)) {
-        throw apiError(event, 'CONFLICT', 'This log is in review and can no longer be edited by the submitter')
-      }
-    }
     if (current.status === 'converted_to_invoice') {
       throw apiError(event, 'CONFLICT', 'Converted logs are read-only')
+    }
+    if (!isServiceLogEditable(current.status)) {
+      throw apiError(event, 'CONFLICT', 'This service log can no longer be edited')
+    }
+
+    if (!isReviewer) {
+      if (!isOwner) throw apiError(event, 'FORBIDDEN', 'You do not have permission to edit this service log')
     }
 
     const { log, before, changedFields } = await updateServiceLog(db, id, patch)
