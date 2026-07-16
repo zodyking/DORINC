@@ -1,4 +1,4 @@
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq, inArray } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, userPermissionOverrides, users } from '../db/schema/auth'
 import { customerCredentialEmailLogs, customerContacts, customers } from '../db/schema/customers'
@@ -6,7 +6,7 @@ import { entityDeletionRequests } from '../db/schema/deletion-requests'
 import { editingSessions } from '../db/schema/editing-sessions'
 import { estimates, estimateFiles, estimateLineItems } from '../db/schema/estimates'
 import { invoiceFiles, invoiceLineItems, invoices } from '../db/schema/invoices'
-import { messages } from '../db/schema/messages'
+import { conversations, messages } from '../db/schema/messages'
 import {
   invoiceChangeRequests,
   newVehicleRequests,
@@ -26,6 +26,7 @@ import { buildCustomerSnapshot, buildVehicleSnapshot } from './entity-snapshots'
 import { CustomersServiceError, getCustomer } from './customers.service'
 import { releaseInvoiceDependents } from './invoice-dependents.service'
 import { getInvoice, InvoicesServiceError } from './invoices.service'
+import { getConversationDeletionLabel } from './messages.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 
@@ -148,6 +149,25 @@ export async function hardDeleteInvoice(db: Db, id: string) {
 
   await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id))
   await db.delete(invoices).where(eq(invoices.id, id))
+  return { id }
+}
+
+export async function hardDeleteConversation(db: Db, id: string) {
+  await getConversationDeletionLabel(db, id)
+
+  const messageRows = await db.select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.conversationId, id))
+  const messageIds = messageRows.map(r => r.id)
+
+  if (messageIds.length) {
+    await db.delete(appFiles).where(and(
+      eq(appFiles.ownerEntityType, 'message'),
+      inArray(appFiles.ownerEntityId, messageIds),
+    ))
+  }
+
+  await db.delete(conversations).where(eq(conversations.id, id))
   return { id }
 }
 

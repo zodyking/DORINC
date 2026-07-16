@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, gt, ilike, inArray, isNotNull, isNull, ne, o
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { customers } from '../db/schema/customers'
+import { emailThreads } from '../db/schema/email-inbox'
 import { formatInvoiceNumber, invoices } from '../db/schema/invoices'
 import {
   conversationParticipants,
@@ -248,6 +249,37 @@ async function countUnreadSince(
     .from(messages)
     .where(and(...conditions))
   return row?.value ?? 0
+}
+
+export async function getConversationDeletionLabel(db: Db, conversationId: string): Promise<string> {
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId))
+  if (!conversation) throw new MessagesServiceError('NOT_FOUND')
+
+  if (conversation.type === 'email') {
+    const [thread] = await db.select({
+      subject: emailThreads.subject,
+      counterpartName: emailThreads.counterpartName,
+      counterpartEmail: emailThreads.counterpartEmail,
+    })
+      .from(emailThreads)
+      .where(eq(emailThreads.conversationId, conversationId))
+      .limit(1)
+    if (thread?.subject) return thread.subject
+    if (thread?.counterpartName) return `Email: ${thread.counterpartName}`
+    if (thread?.counterpartEmail) return `Email: ${thread.counterpartEmail}`
+    return 'Email thread'
+  }
+
+  const participantRows = await db.select({ name: users.name })
+    .from(conversationParticipants)
+    .innerJoin(users, eq(conversationParticipants.userId, users.id))
+    .where(eq(conversationParticipants.conversationId, conversationId))
+    .orderBy(asc(users.name))
+
+  if (participantRows.length) {
+    return `DM: ${participantRows.map(r => r.name).join(' & ')}`
+  }
+  return 'Direct message'
 }
 
 export async function getConversationDetail(db: Db, conversationId: string, userId: string) {

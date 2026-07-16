@@ -2,7 +2,7 @@ import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/
 import { sql } from 'drizzle-orm'
 import { users } from './auth'
 
-export const DELETION_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice'] as const
+export const DELETION_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice', 'conversation'] as const
 export type DeletionEntityType = (typeof DELETION_ENTITY_TYPES)[number]
 
 export const DELETION_REQUEST_STATUSES = ['pending', 'approved', 'rejected'] as const

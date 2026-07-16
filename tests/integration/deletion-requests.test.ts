@@ -10,6 +10,11 @@ import { entityDeletionRequests } from '../../server/db/schema/deletion-requests
 import { invoiceLineItems, invoices } from '../../server/db/schema/invoices'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { vehicles } from '../../server/db/schema/vehicles'
+import {
+  conversationParticipants,
+  conversations,
+  messages,
+} from '../../server/db/schema/messages'
 import { createCustomer, getCustomer } from '../../server/services/customers.service'
 import {
   approveDeletionRequest,
@@ -26,6 +31,11 @@ import {
 import { convertServiceLogToInvoice, createServiceLog, getServiceLog, transitionServiceLog } from '../../server/services/service-logs.service'
 import { createVehicle, getVehicle } from '../../server/services/vehicles.service'
 import { INVOICE_LINK_RELEASED_REASON } from '../../server/services/invoice-dependents.service'
+import {
+  createOrGetDmConversation,
+  getConversationDeletionLabel,
+  sendMessage,
+} from '../../server/services/messages.service'
 
 config()
 
@@ -35,7 +45,9 @@ const db = drizzle({ client: pool })
 const stamp = Date.now()
 
 const [anyUser] = await db.select({ id: users.id }).from(users).limit(1)
+const [secondUser] = await db.select({ id: users.id }).from(users).offset(1).limit(1)
 const ACTOR = anyUser!.id
+const ACTOR_B = secondUser?.id ?? anyUser!.id
 
 const customer = await createCustomer(db, {
   displayName: `DelReq-${stamp}`,
@@ -76,6 +88,7 @@ await addInvoiceLineItem(db, draftInvoice.id, {
 
 const createdRequestIds: string[] = []
 const createdInvoiceIds = [draftInvoice.id]
+const createdConversationIds: string[] = []
 
 afterAll(async () => {
   if (createdRequestIds.length) {
@@ -89,6 +102,11 @@ afterAll(async () => {
   await db.delete(serviceLogs).where(eq(serviceLogs.customerId, customer.id))
   await db.delete(vehicles).where(eq(vehicles.customerId, customer.id))
   await db.delete(customers).where(eq(customers.id, customer.id))
+  for (const id of createdConversationIds) {
+    await db.delete(messages).where(eq(messages.conversationId, id))
+    await db.delete(conversationParticipants).where(eq(conversationParticipants.conversationId, id))
+    await db.delete(conversations).where(eq(conversations.id, id))
+  }
   await pool.end()
 })
 
@@ -339,5 +357,36 @@ describe('deletion request workflow', () => {
     await db.delete(invoices).where(eq(invoices.id, keepInvoice.id))
     const invIdx = createdInvoiceIds.indexOf(keepInvoice.id)
     if (invIdx >= 0) createdInvoiceIds.splice(invIdx, 1)
+  })
+
+  it('approves conversation deletion and hard-deletes the thread', async () => {
+    const conv = await createOrGetDmConversation(db, ACTOR, ACTOR_B)
+    createdConversationIds.push(conv.id)
+    await sendMessage(db, conv.id, ACTOR, 'Thread scheduled for deletion')
+
+    const label = await getConversationDeletionLabel(db, conv.id)
+    expect(label).toMatch(/^DM:/)
+
+    const created = await createDeletionRequest(
+      db,
+      'conversation',
+      conv.id,
+      'Spam thread no longer needed',
+      ACTOR,
+    )
+    createdRequestIds.push(created.id)
+    expect(created.entityType).toBe('conversation')
+    expect(created.entityLabel).toBe(label)
+
+    const { request } = await approveDeletionRequest(db, created.id, ACTOR, 'Approved cleanup')
+    expect(request.status).toBe('approved')
+
+    const [gone] = await db.select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.id, conv.id))
+    expect(gone).toBeUndefined()
+
+    const convIdx = createdConversationIds.indexOf(conv.id)
+    if (convIdx >= 0) createdConversationIds.splice(convIdx, 1)
   })
 })

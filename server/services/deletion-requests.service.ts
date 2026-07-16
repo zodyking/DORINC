@@ -10,6 +10,7 @@ import { formatInvoiceNumber } from '../db/schema/invoices'
 import { CustomersServiceError, getCustomer } from './customers.service'
 import {
   hardDeleteCustomer,
+  hardDeleteConversation,
   hardDeleteInvoice,
   hardDeleteServiceLog,
   hardDeleteVehicle,
@@ -20,6 +21,7 @@ import {
   ServiceLogsServiceError,
 } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
+import { getConversationDeletionLabel, MessagesServiceError } from './messages.service'
 
 export type DeletionRequestsServiceErrorCode
   = 'NOT_FOUND'
@@ -76,6 +78,7 @@ function entityHref(type: DeletionEntityType, id: string): string {
     case 'vehicle': return `/vehicles/${id}/edit`
     case 'service_log': return `/service-logs/${id}`
     case 'invoice': return `/invoices/${id}/edit`
+    case 'conversation': return `/messages?conversation=${id}`
   }
 }
 
@@ -97,6 +100,8 @@ async function resolveEntityLabel(db: Db, entityType: DeletionEntityType, entity
       const row = await getInvoice(db, entityId)
       return formatInvoiceNumber(row.invoiceNumber)
     }
+    case 'conversation':
+      return getConversationDeletionLabel(db, entityId)
   }
 }
 
@@ -120,6 +125,9 @@ async function assertEntityDeletable(db: Db, entityType: DeletionEntityType, ent
       if (row.status === 'paid') throw new DeletionRequestsServiceError('INVALID_TRANSITION')
       return
     }
+    case 'conversation':
+      await getConversationDeletionLabel(db, entityId)
+      return
   }
 }
 
@@ -136,6 +144,9 @@ async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId:
       return
     case 'invoice':
       await hardDeleteInvoice(db, entityId)
+      return
+    case 'conversation':
+      await hardDeleteConversation(db, entityId)
       return
   }
 }
@@ -219,6 +230,9 @@ export async function createDeletionRequest(
       throw new DeletionRequestsServiceError('ENTITY_NOT_FOUND')
     }
     if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      throw new DeletionRequestsServiceError('ENTITY_NOT_FOUND')
+    }
+    if (err instanceof MessagesServiceError && err.code === 'NOT_FOUND') {
       throw new DeletionRequestsServiceError('ENTITY_NOT_FOUND')
     }
     throw err

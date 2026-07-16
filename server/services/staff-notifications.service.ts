@@ -33,6 +33,7 @@ const ENTITY_TYPE_LABELS: Record<DeletionEntityType, string> = {
   vehicle: 'Vehicle',
   service_log: 'Service log',
   invoice: 'Invoice',
+  conversation: 'Conversation',
 }
 
 async function enqueueHtmlMail(

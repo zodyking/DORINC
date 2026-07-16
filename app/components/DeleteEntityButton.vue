@@ -31,6 +31,8 @@ const preservationNote = computed(() => {
       return 'The service log is permanently removed. Linked invoices keep their line items and customer/vehicle details.'
     case 'invoice':
       return 'The invoice is permanently removed. This cannot be undone.'
+    case 'conversation':
+      return 'The conversation and all messages are permanently removed. Linked customers, invoices, and other records are not affected.'
     default:
       return 'Related records keep their full information after this record is removed.'
   }
