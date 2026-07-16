@@ -6,49 +6,67 @@ const props = defineProps<{
 }>()
 
 const frameRef = ref<HTMLIFrameElement | null>(null)
-const frameHeight = ref(96)
+const frameHeight = ref(120)
 
 let resizeObserver: ResizeObserver | null = null
 let resizeTimers: ReturnType<typeof setTimeout>[] = []
 
 const srcdoc = computed(() => prepareEmailHtmlIframeDocument(props.html))
 
-function measureFrameHeight(doc: Document): number {
+function injectLayoutReset(doc) {
+  if (!doc.head || doc.getElementById('dm-email-layout-reset')) return
+  const style = doc.createElement('style')
+  style.id = 'dm-email-layout-reset'
+  style.textContent = `
+    html, body, body * {
+      max-height: none !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      position: static !important;
+      float: none !important;
+      transform: none !important;
+      clip: auto !important;
+      clip-path: none !important;
+      visibility: visible !important;
+    }
+  `
+  doc.head.appendChild(style)
+}
+
+function measureFrameHeight(doc) {
   const body = doc.body
   const root = doc.documentElement
   if (!body) return 48
 
-  body.style.height = 'auto'
-  body.style.maxHeight = 'none'
-  body.style.overflow = 'visible'
-  if (root) {
-    root.style.height = 'auto'
-    root.style.maxHeight = 'none'
-    root.style.overflow = 'visible'
-  }
+  injectLayoutReset(doc)
 
   let maxBottom = 0
   const bodyTop = body.getBoundingClientRect().top
-  for (const el of body.querySelectorAll('*')) {
+  const nodes = body.querySelectorAll('*')
+  for (const el of nodes) {
     const rect = el.getBoundingClientRect()
     if (rect.height > 0) maxBottom = Math.max(maxBottom, rect.bottom - bodyTop)
   }
 
-  return Math.max(
+  const textHeight = body.getBoundingClientRect().height
+  const scrollHeight = Math.max(
     body.scrollHeight,
     body.offsetHeight,
     root?.scrollHeight ?? 0,
     root?.offsetHeight ?? 0,
     maxBottom,
-    body.getBoundingClientRect().height,
+    textHeight,
   )
+
+  return scrollHeight
 }
 
 function resizeFrame() {
   const doc = frameRef.value?.contentDocument
   if (!doc) return
   const height = measureFrameHeight(doc)
-  frameHeight.value = Math.min(Math.max(height + 8, 48), 50000)
+  frameHeight.value = Math.min(Math.max(height + 12, 72), 20000)
 }
 
 function clearResizeTimers() {
@@ -64,9 +82,11 @@ function scheduleResizes() {
     requestAnimationFrame(resizeFrame)
   })
   resizeTimers.push(
-    setTimeout(resizeFrame, 100),
+    setTimeout(resizeFrame, 50),
+    setTimeout(resizeFrame, 150),
     setTimeout(resizeFrame, 400),
     setTimeout(resizeFrame, 1000),
+    setTimeout(resizeFrame, 2000),
   )
 }
 
@@ -92,7 +112,7 @@ function onFrameLoad() {
 }
 
 watch(srcdoc, () => {
-  frameHeight.value = 96
+  frameHeight.value = 120
   resizeObserver?.disconnect()
   clearResizeTimers()
   nextTick(() => scheduleResizes())

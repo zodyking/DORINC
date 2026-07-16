@@ -135,6 +135,56 @@ export function sanitizeEmailStyleBlock(css: string): string {
     .replace(/-moz-binding/gi, '')
     .replace(/binding\s*:/gi, '')
     .replace(/\b(?:height|min-height|max-height|overflow(?:-[xy])?)\s*:\s*[^;{}]+;?/gi, '')
+    .replace(/\bdisplay\s*:\s*none\s*;?/gi, '')
+}
+
+function htmlTextLength(html: string): number {
+  return cleanPlainEmailText(stripHtmlToText(html)).length
+}
+
+function plainSubstanceMissingFromHtml(plain: string, html: string): boolean {
+  const htmlAsText = cleanPlainEmailText(stripHtmlToText(html)).toLowerCase()
+  const words = cleanPlainEmailText(plain).toLowerCase().split(/\s+/).filter(w => w.length > 2)
+  if (!words.length) return false
+  const missing = words.filter(word => !htmlAsText.includes(word))
+  return missing.length >= Math.max(1, Math.ceil(words.length * 0.5))
+}
+
+/**
+ * Prefer plain text when HTML is mostly signature/boilerplate but the stored
+ * plain body still has the actual customer message (common with Gmail mobile).
+ */
+export function shouldRenderEmailAsHtml(
+  html: string | null | undefined,
+  body?: string | null,
+  _direction?: 'inbound' | 'outbound',
+): boolean {
+  if (!html?.trim() || !prepareEmailHtmlIframeDocument(html)) return false
+
+  const plain = cleanPlainEmailText(body ?? '')
+  if (!plain) return true
+
+  const htmlAsText = htmlTextLength(html)
+  if (!htmlAsText) return false
+
+  if (plain.length >= 8 && htmlAsText >= 24 && plainSubstanceMissingFromHtml(plain, html)) {
+    return false
+  }
+
+  return true
+}
+
+export function emailBodyForDisplay(body: string, html?: string | null): { mode: 'html' | 'text', content: string } {
+  const plain = cleanPlainEmailText(body)
+  if (html?.trim() && shouldRenderEmailAsHtml(html, body)) {
+    return { mode: 'html', content: html }
+  }
+  if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
+  if (html?.trim()) {
+    const fallback = cleanPlainEmailText(stripHtmlToText(html))
+    if (fallback) return { mode: 'text', content: linkifyPlainEmailText(fallback) }
+  }
+  return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
 }
 
 const EMAIL_IFRAME_BASE_STYLES = `
@@ -171,9 +221,16 @@ const EMAIL_IFRAME_LAYOUT_GUARDS = `
   }
   body, body * {
     max-height: none !important;
+    position: static !important;
+    float: none !important;
+    transform: none !important;
+    clip: auto !important;
+    clip-path: none !important;
+    visibility: visible !important;
   }
-  body div, body p, body pre, body blockquote, body table, body td, body th {
+  body div, body p, body pre, body blockquote, body table, body td, body th, body span {
     overflow: visible !important;
+    height: auto !important;
   }
 `
 
@@ -205,22 +262,6 @@ export function prepareEmailHtmlIframeDocument(html: string): string {
 
   const styles = [...styleBlocks, EMAIL_IFRAME_BASE_STYLES, EMAIL_IFRAME_LAYOUT_GUARDS].join('\n')
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank"><style>${styles}</style></head><body>${sanitizedBody}</body></html>`
-}
-
-export function shouldRenderEmailAsHtml(
-  html: string | null | undefined,
-  _direction?: 'inbound' | 'outbound',
-): boolean {
-  return !!html?.trim() && !!prepareEmailHtmlIframeDocument(html)
-}
-
-export function emailBodyForDisplay(body: string, html?: string | null): { mode: 'html' | 'text', content: string } {
-  const plain = cleanPlainEmailText(body)
-  if (html?.trim() && prepareEmailHtmlIframeDocument(html)) {
-    return { mode: 'html', content: html }
-  }
-  if (plain) return { mode: 'text', content: linkifyPlainEmailText(plain) }
-  return { mode: 'text', content: '<span class="dm-email-empty">(empty message)</span>' }
 }
 
 /** Render thread messages with sanitized HTML templates when available. */

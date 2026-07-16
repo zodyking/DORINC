@@ -44,7 +44,7 @@ const addressLabel = computed(() => {
 })
 
 const useHtmlFrame = computed(() =>
-  shouldRenderEmailAsHtml(htmlBody.value, props.message.direction),
+  shouldRenderEmailAsHtml(htmlBody.value, props.message.body, props.message.direction),
 )
 
 const rendered = computed(() =>

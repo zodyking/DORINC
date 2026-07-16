@@ -73,6 +73,18 @@ describe('email-display', () => {
     expect(result.content).toContain('<strong>Customer note</strong>')
   })
 
+  it('prefers plain text when html is mostly signature boilerplate', () => {
+    const html = `
+      <div><table><tr><td><b>Brandon King</b></td></tr>
+      <tr><td>Brooklyn New York, 11207</td></tr></table></div>
+    `
+    const body = 'Wheres the invoice'
+    expect(shouldRenderEmailAsHtml(html, body)).toBe(false)
+    const rendered = emailBodyForThreadDisplay(body, html, 'inbound')
+    expect(rendered.mode).toBe('text')
+    expect(rendered.content).toContain('Wheres the invoice')
+  })
+
   it('prefers html templates for outbound thread messages', () => {
     const result = emailBodyForThreadDisplay(
       'Its working!',
@@ -82,7 +94,7 @@ describe('email-display', () => {
     expect(result.mode).toBe('html')
     expect(result.content).toContain('Its working!')
     expect(result.content).toContain('footer')
-    expect(shouldRenderEmailAsHtml(result.content, 'outbound')).toBe(true)
+    expect(shouldRenderEmailAsHtml(result.content, 'Its working!', 'outbound')).toBe(true)
   })
 
   it('strips height constraints from email styles and inline styles in iframe doc', () => {
