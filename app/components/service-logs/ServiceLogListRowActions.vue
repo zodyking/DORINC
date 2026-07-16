@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import type { ServiceLogStatus } from '~/utils/service-logs-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 const props = defineProps<{
   logId: string
@@ -25,7 +26,7 @@ async function sendToInvoice() {
     emit('changed')
   }
   catch (e: unknown) {
-    emit('error', (e as { data?: { message?: string } })?.data?.message ?? 'Send to invoice failed')
+    emit('error', syncFetchErrorMessage(e, 'Send to invoice failed'))
   }
   finally {
     actionBusy.value = false
@@ -40,7 +41,7 @@ async function undoSendToInvoice() {
     emit('changed')
   }
   catch (e: unknown) {
-    emit('error', (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed')
+    emit('error', syncFetchErrorMessage(e, 'Undo failed'))
   }
   finally {
     actionBusy.value = false

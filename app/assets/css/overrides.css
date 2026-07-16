@@ -466,6 +466,30 @@ section.page.active.page--invoice-pdf {
   padding: 2px 8px;
 }
 
+.inv-tbl tr.inv-from-sl-pulse {
+  outline: 2px solid rgba(220, 38, 38, 0.65);
+  outline-offset: -2px;
+  animation: inv-sl-outline-pulse 1.6s ease-in-out infinite;
+}
+.inv-tbl .inv-sl-submitter {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+@keyframes inv-sl-outline-pulse {
+  0%, 100% {
+    outline-color: rgba(220, 38, 38, 0.4);
+    background-color: rgba(254, 242, 242, 0.25);
+  }
+  50% {
+    outline-color: rgba(220, 38, 38, 0.95);
+    background-color: rgba(254, 226, 226, 0.65);
+  }
+}
+
 /* Service log list — compact row action menu + horizontal scroll on narrow screens. */
 .sl-list-tbl .col-log { min-width: 88px; }
 .sl-list-tbl .col-customer { min-width: 140px; }

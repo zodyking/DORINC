@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPersonName, splitPersonName, toTitleCase } from '../../shared/format/person-name'
+import { formatPersonName, formatPersonNameShort, splitPersonName, toTitleCase } from '../../shared/format/person-name'
 
 describe('person-name format', () => {
   it('title-cases each word', () => {
@@ -11,6 +11,12 @@ describe('person-name format', () => {
   it('combines first and last names', () => {
     expect(formatPersonName('jordan', 'taylor')).toBe('Jordan Taylor')
     expect(formatPersonName('  alicia ', ' m. ')).toBe('Alicia M.')
+  })
+
+  it('formats short attribution labels', () => {
+    expect(formatPersonNameShort('Anthony Parker')).toBe('Anthony P.')
+    expect(formatPersonNameShort('jordan taylor')).toBe('Jordan T.')
+    expect(formatPersonNameShort('Prince')).toBe('Prince')
   })
 
   it('splits stored full names for profile forms', () => {

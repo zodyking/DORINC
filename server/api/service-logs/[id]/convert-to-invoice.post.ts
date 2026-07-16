@@ -77,6 +77,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'CUSTOMER_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Customer not found')
       if (err.code === 'VEHICLE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Vehicle not found')
+      if (err.code === 'SERVICE_LOG_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Service log not found')
       if (err.code === 'INVALID_CREATE') {
         throw apiError(event, 'VALIDATION_ERROR', 'Unable to create invoice from this service log')
       }

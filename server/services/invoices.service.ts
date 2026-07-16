@@ -19,7 +19,8 @@ import type { AccountType } from '../../shared/permissions/keys'
 import { getManagerApprovalThreshold } from './billing-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
-import { getVehicle } from './vehicles.service'
+import { getVehicle, VehiclesServiceError } from './vehicles.service'
+import { users } from '../db/schema/auth'
 import { serviceRequests } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { appFiles } from '../db/schema/files'
@@ -188,17 +189,27 @@ function assertDraftEditable(invoice: { status: InvoiceStatus }) {
   }
 }
 
-async function resolveVehicleForCustomer(db: Db, customerId: string, vehicleId: string | null | undefined) {
+async function resolveVehicleForCustomer(
+  db: Db,
+  customerId: string | null | undefined,
+  vehicleId: string | null | undefined,
+) {
   if (!vehicleId) return null
   try {
     const vehicle = await getVehicle(db, vehicleId)
-    if (vehicle.customerId !== customerId) throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
+    if (customerId && vehicle.customerId !== customerId) throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
     return buildVehicleSnapshot(vehicle)
   }
   catch (err) {
     if (err instanceof InvoicesServiceError) throw err
+    if (err instanceof VehiclesServiceError) throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
     throw new InvoicesServiceError('VEHICLE_NOT_FOUND')
   }
+}
+
+interface InvoiceDraftSnapshotOverrides {
+  customerSnapshot?: InvoiceCustomerSnapshot
+  vehicleSnapshot?: InvoiceVehicleSnapshot | null
 }
 
 async function copyLineItems(db: Db, sourceInvoiceId: string, targetInvoiceId: string, actorId: string) {
@@ -263,13 +274,45 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
     if (!input.serviceLogId) throw new InvoicesServiceError('INVALID_CREATE')
     try {
       const log = await getServiceLog(db, input.serviceLogId)
-      resolved.customerId = log.customerId
+      if (!log.customerId && !log.customerSnapshot) throw new InvoicesServiceError('INVALID_CREATE')
+      resolved.customerId = log.customerId ?? undefined
       resolved.vehicleId = log.vehicleId
       resolved.serviceLogId = log.id
       resolved.invoiceDate = input.invoiceDate ?? log.serviceDate
       resolved.complaint = input.complaint ?? log.complaint
       resolved.internalNotes = input.internalNotes ?? log.internalNotes
       resolved.serviceLocation = input.serviceLocation ?? log.location
+
+      let draftSnapshots: InvoiceDraftSnapshotOverrides | undefined
+      if (!log.customerId && log.customerSnapshot) {
+        draftSnapshots = { customerSnapshot: log.customerSnapshot }
+      }
+
+      let vehicleSnapshot: InvoiceVehicleSnapshot | null = null
+      if (log.vehicleId) {
+        try {
+          vehicleSnapshot = await resolveVehicleForCustomer(db, log.customerId, log.vehicleId)
+        }
+        catch (err) {
+          if (err instanceof InvoicesServiceError && err.code === 'VEHICLE_NOT_FOUND' && log.vehicleSnapshot) {
+            vehicleSnapshot = log.vehicleSnapshot
+          }
+          else {
+            throw err
+          }
+        }
+      }
+      else {
+        vehicleSnapshot = log.vehicleSnapshot ?? null
+      }
+      draftSnapshots = { ...draftSnapshots, vehicleSnapshot }
+
+      if (!resolved.customerId && !draftSnapshots?.customerSnapshot) {
+        throw new InvoicesServiceError('INVALID_CREATE')
+      }
+
+      const invoice = await createInvoiceDraft(db, resolved, actorId, draftSnapshots)
+      return invoice
     }
     catch (err) {
       if (err instanceof ServiceLogsServiceError && err.code === 'NOT_FOUND') {
@@ -311,16 +354,34 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
   return invoice
 }
 
-export async function createInvoiceDraft(db: Db, input: CreateInvoiceInput, actorId: string) {
-  let customer
-  try {
-    customer = await getCustomer(db, input.customerId!)
+export async function createInvoiceDraft(
+  db: Db,
+  input: CreateInvoiceInput,
+  actorId: string,
+  snapshotOverrides?: InvoiceDraftSnapshotOverrides,
+) {
+  let customerSnapshot: InvoiceCustomerSnapshot
+  let paymentTerms: string
+
+  if (snapshotOverrides?.customerSnapshot) {
+    customerSnapshot = snapshotOverrides.customerSnapshot
+    paymentTerms = input.paymentTerms ?? snapshotOverrides.customerSnapshot.paymentTerms
   }
-  catch {
-    throw new InvoicesServiceError('CUSTOMER_NOT_FOUND')
+  else {
+    let customer
+    try {
+      customer = await getCustomer(db, input.customerId!)
+    }
+    catch {
+      throw new InvoicesServiceError('CUSTOMER_NOT_FOUND')
+    }
+    customerSnapshot = buildCustomerSnapshot(customer)
+    paymentTerms = input.paymentTerms ?? customer.paymentTerms
   }
 
-  const vehicleSnapshot = await resolveVehicleForCustomer(db, input.customerId!, input.vehicleId)
+  const vehicleSnapshot = snapshotOverrides?.vehicleSnapshot !== undefined
+    ? snapshotOverrides.vehicleSnapshot
+    : await resolveVehicleForCustomer(db, input.customerId, input.vehicleId)
 
   const [row] = await db.insert(invoices).values({
     customerId: input.customerId!,
@@ -331,8 +392,8 @@ export async function createInvoiceDraft(db: Db, input: CreateInvoiceInput, acto
     creationSource: input.creationSource ?? 'blank',
     invoiceDate: input.invoiceDate,
     dueDate: input.dueDate ?? null,
-    paymentTerms: input.paymentTerms ?? customer.paymentTerms,
-    customerSnapshot: buildCustomerSnapshot(customer),
+    paymentTerms: input.paymentTerms ?? paymentTerms,
+    customerSnapshot,
     vehicleSnapshot,
     serviceLocation: input.serviceLocation ?? null,
     poNumber: input.poNumber ?? null,
@@ -542,6 +603,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     invoice: invoices,
     customerName: customers.displayName,
     serviceLogNumber: serviceLogs.logNumber,
+    serviceLogSubmitterName: users.name,
     vehicle: {
       busNumber: vehicles.busNumber,
       make: vehicles.make,
@@ -552,6 +614,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     .leftJoin(customers, eq(invoices.customerId, customers.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
     .leftJoin(serviceLogs, eq(invoices.serviceLogId, serviceLogs.id))
+    .leftJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
     .orderBy(orderBy)
     .limit(filter.pageSize)
@@ -627,6 +690,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
         creationSource: r.invoice.creationSource,
         serviceLogId: r.invoice.serviceLogId,
         serviceLogNumber: r.serviceLogNumber ?? null,
+        serviceLogSubmitterName: r.serviceLogSubmitterName ?? null,
         serviceLogPhotoCount: r.invoice.serviceLogId
           ? (serviceLogPhotoCounts.get(r.invoice.serviceLogId) ?? 0)
           : 0,

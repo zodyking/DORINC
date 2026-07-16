@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Service log detail — photo gallery + status actions.
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff' })
 
@@ -189,7 +190,7 @@ async function revertInvoice() {
     await refresh()
   }
   catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Undo failed'
+    actionError.value = syncFetchErrorMessage(e, 'Undo failed')
   }
   finally {
     busy.value = false
@@ -210,7 +211,7 @@ async function convertToInvoice() {
     convertFlash.value = invoice.id
   }
   catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Invoice conversion failed'
+    actionError.value = syncFetchErrorMessage(e, 'Invoice conversion failed')
   }
   finally {
     busy.value = false

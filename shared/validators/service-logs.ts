@@ -58,7 +58,7 @@ export const serviceLogStatusChangeSchema = z.object({
 
 export const serviceLogConvertToInvoiceSchema = z.object({
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
-})
+}).default({})
 
 export const serviceLogListQuerySchema = z.object({
   q: z.string().max(200).optional(),

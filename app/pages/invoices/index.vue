@@ -11,6 +11,7 @@ import {
 } from '~/utils/invoices-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { formatPersonNameShort } from '#shared/format/person-name'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.read.all' })
 
@@ -30,6 +31,7 @@ interface InvoiceRow {
   creationSource?: string
   serviceLogId: string | null
   serviceLogNumber: number | null
+  serviceLogSubmitterName: string | null
   serviceLogPhotoCount: number
 }
 
@@ -176,6 +178,18 @@ function openServiceLog(event: Event, serviceLogId: string) {
   navigateTo(`/service-logs/${serviceLogId}`)
 }
 
+const SERVICE_LOG_HIGHLIGHT_STATUSES = new Set<InvoiceStatus>(['draft', 'pending_manager_approval'])
+
+function showServiceLogHighlight(row: InvoiceRow): boolean {
+  return !!row.serviceLogId && SERVICE_LOG_HIGHLIGHT_STATUSES.has(row.status)
+}
+
+function serviceLogSubmitterLabel(name: string | null | undefined): string | null {
+  if (!name?.trim()) return null
+  const short = formatPersonNameShort(name)
+  return short ? `By ${short}` : null
+}
+
 async function retryLoad() {
   await Promise.all([refreshList(), refreshStats()])
 }
@@ -310,10 +324,17 @@ async function exportCsv() {
               v-for="row in items"
               :key="row.id"
               class="click"
+              :class="{ 'inv-from-sl-pulse': showServiceLogHighlight(row) }"
               @click="openInvoice(row.id)"
             >
               <td class="col-inv">
                 <span class="lead">{{ row.invoiceNumberFormatted }}</span>
+                <span
+                  v-if="showServiceLogHighlight(row) && serviceLogSubmitterLabel(row.serviceLogSubmitterName)"
+                  class="inv-sl-submitter"
+                >
+                  {{ serviceLogSubmitterLabel(row.serviceLogSubmitterName) }}
+                </span>
                 <span
                   v-if="row.serviceLogId && row.serviceLogNumber"
                   class="inv-source-row"
