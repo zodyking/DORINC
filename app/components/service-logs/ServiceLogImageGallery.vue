@@ -49,13 +49,17 @@ const hasMultiple = computed(() => imageFiles.value.length > 1)
 
 const displayErrors = ref(new Set<string>())
 const stageRef = ref<HTMLElement | null>(null)
+const imageRef = ref<HTMLImageElement | null>(null)
 const zoomEnabled = computed(() => props.zoomable && !props.compact)
+const isCoarsePointer = ref(false)
 
 const {
   zoomPercent,
   dragging,
   transformStyle,
   resetView,
+  fitToContainer,
+  observeContainer,
   zoomIn,
   zoomOut,
   onWheel,
@@ -64,6 +68,17 @@ const {
   onPointerUp,
 } = useImageZoomPan(stageRef)
 
+const zoomHint = computed(() =>
+  isCoarsePointer.value
+    ? 'Pinch to zoom · drag to pan'
+    : 'Scroll to zoom · drag to pan',
+)
+
+onMounted(() => {
+  isCoarsePointer.value = window.matchMedia('(pointer: coarse)').matches
+  if (zoomEnabled.value) observeContainer()
+})
+
 watch(imageFiles, () => {
   displayErrors.value = new Set()
 }, { deep: true })
@@ -71,6 +86,15 @@ watch(imageFiles, () => {
 watch(activeFile, () => {
   resetView()
 })
+
+watch(zoomEnabled, (enabled) => {
+  if (enabled) observeContainer()
+})
+
+function onImageLoad() {
+  if (!zoomEnabled.value) return
+  fitToContainer(imageRef.value)
+}
 
 function onImageError(fileId: string) {
   const next = new Set(displayErrors.value)
@@ -144,11 +168,13 @@ function onKeydown(event: KeyboardEvent) {
         role="toolbar"
         aria-label="Photo zoom"
       >
-        <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom out" @click="zoomOut">−</button>
-        <span class="sl-gallery__zoom-pct" aria-live="polite">{{ zoomPercent }}%</span>
-        <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom in" @click="zoomIn">+</button>
-        <button type="button" class="btn sm sl-gallery__zoom-reset" @click="resetView">Reset</button>
-        <span class="sl-gallery__zoom-hint">Scroll to zoom · drag to pan</span>
+        <div class="sl-gallery__zoom-controls">
+          <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom out" @click="zoomOut">−</button>
+          <span class="sl-gallery__zoom-pct" aria-live="polite">{{ zoomPercent }}%</span>
+          <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom in" @click="zoomIn">+</button>
+          <button type="button" class="btn sm sl-gallery__zoom-reset" @click="resetView">Reset</button>
+        </div>
+        <span class="sl-gallery__zoom-hint">{{ zoomHint }}</span>
       </div>
 
       <div
@@ -172,30 +198,48 @@ function onKeydown(event: KeyboardEvent) {
           :style="zoomEnabled ? transformStyle : undefined"
         >
           <img
+            ref="imageRef"
             :key="activeFile.id"
             :src="activePreview"
             :alt="activeFile.originalFilename"
             class="sl-gallery__img"
             draggable="false"
+            @load="onImageLoad"
             @error="onImageError(activeFile.id)"
           >
         </div>
       </div>
 
       <div class="sl-gallery__footer">
-        <button
-          type="button"
-          class="btn sm sl-gallery__nav"
-          aria-label="Previous photo"
-          :disabled="!hasMultiple || anyLoading"
-          @click="goPrev"
-        >
-          ‹ Previous
-        </button>
-        <div class="sl-gallery__meta">
-          <span class="sl-gallery__count">Photo {{ activeIndex + 1 }} of {{ imageFiles.length }}</span>
-          <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
+        <div class="sl-gallery__footer-top">
+          <button
+            type="button"
+            class="btn sm sl-gallery__nav sl-gallery__nav--icon"
+            aria-label="Previous photo"
+            :disabled="!hasMultiple || anyLoading"
+            @click="goPrev"
+          >
+            <span class="sl-gallery__nav-glyph" aria-hidden="true">‹</span>
+            <span class="sl-gallery__nav-label">Previous</span>
+          </button>
+
+          <div class="sl-gallery__meta">
+            <span class="sl-gallery__count">Photo {{ activeIndex + 1 }} of {{ imageFiles.length }}</span>
+            <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
+          </div>
+
+          <button
+            type="button"
+            class="btn sm sl-gallery__nav sl-gallery__nav--icon"
+            aria-label="Next photo"
+            :disabled="!hasMultiple || anyLoading"
+            @click="goNext"
+          >
+            <span class="sl-gallery__nav-glyph" aria-hidden="true">›</span>
+            <span class="sl-gallery__nav-label">Next</span>
+          </button>
         </div>
+
         <button
           v-if="editable"
           type="button"
@@ -203,16 +247,7 @@ function onKeydown(event: KeyboardEvent) {
           :disabled="deleteBusy || anyLoading"
           @click="emit('delete')"
         >
-          {{ deleteBusy ? 'Removing…' : 'Remove' }}
-        </button>
-        <button
-          type="button"
-          class="btn sm sl-gallery__nav"
-          aria-label="Next photo"
-          :disabled="!hasMultiple || anyLoading"
-          @click="goNext"
-        >
-          Next ›
+          {{ deleteBusy ? 'Removing…' : 'Remove photo' }}
         </button>
       </div>
     </div>
@@ -266,15 +301,22 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery__zoombar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   padding: 10px 14px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
 }
 
+.sl-gallery__zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sl-gallery__zoom-btn {
-  min-width: 34px;
+  min-width: 36px;
+  min-height: 36px;
   font-size: 18px;
   line-height: 1;
   padding: 4px 10px;
@@ -291,6 +333,7 @@ function onKeydown(event: KeyboardEvent) {
 
 .sl-gallery__zoom-reset {
   margin-left: 2px;
+  min-height: 36px;
 }
 
 .sl-gallery__zoom-hint {
@@ -327,13 +370,15 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery__zoom-wrap {
   display: grid;
   place-items: center;
+  max-width: 100%;
+  max-height: 100%;
   transform-origin: center center;
   will-change: transform;
 }
 
 .sl-gallery__img {
   max-width: 100%;
-  max-height: 480px;
+  max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -358,13 +403,19 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .sl-gallery__footer {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  gap: 12px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 12px 14px;
   border-top: 1px solid #e2e8f0;
   background: #fff;
+}
+
+.sl-gallery__footer-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
 }
 
 .sl-gallery__meta {
@@ -393,7 +444,31 @@ function onKeydown(event: KeyboardEvent) {
   white-space: nowrap;
 }
 
+.sl-gallery__nav--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.sl-gallery__nav-glyph {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.sl-gallery__nav-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .sl-gallery__delete {
+  align-self: center;
+  min-height: 44px;
+  padding-inline: 18px;
   color: #dc2626;
   border-color: #fecaca;
   white-space: nowrap;
@@ -445,28 +520,82 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 @media (max-width: 640px) {
+  .sl-gallery__zoombar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .sl-gallery__zoom-controls {
+    flex: 1;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .sl-gallery__zoom-btn,
+  .sl-gallery__zoom-reset {
+    min-width: 44px;
+    min-height: 44px;
+    flex: 1;
+    padding: 8px;
+  }
+
+  .sl-gallery__zoom-pct {
+    min-width: 52px;
+    font-size: 13px;
+  }
+
   .sl-gallery__zoom-hint {
     width: 100%;
     margin-left: 0;
-  }
-
-  .sl-gallery__footer {
-    grid-template-columns: 1fr 1fr;
     text-align: center;
-  }
-
-  .sl-gallery__meta {
-    grid-column: 1 / -1;
-  }
-
-  .sl-gallery__nav,
-  .sl-gallery__delete {
-    width: 100%;
+    font-size: 11px;
   }
 
   .sl-gallery__stage {
-    min-height: 220px;
-    height: 44vh;
+    min-height: 240px;
+    height: min(52dvh, 480px);
+    padding: 10px;
+  }
+
+  .sl-gallery__footer {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .sl-gallery__footer-top {
+    gap: 8px;
+  }
+
+  .sl-gallery__nav--icon {
+    min-width: 44px;
+    width: 44px;
+    padding: 0;
+  }
+
+  .sl-gallery__nav-label {
+    display: none;
+  }
+
+  .sl-gallery__nav-glyph {
+    font-size: 26px;
+  }
+
+  .sl-gallery__delete {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sl-gallery__count {
+    font-size: 12px;
+  }
+
+  .sl-gallery__name {
+    font-size: 10px;
+  }
+
+  .sl-gallery__thumb {
+    width: 64px;
+    height: 64px;
   }
 }
 </style>
