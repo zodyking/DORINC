@@ -67,8 +67,8 @@ export default defineEventHandler(async (event) => {
     void notifyServiceLogSentToInvoice(db, {
       serviceLogId: log.id,
       logNumber: log.logNumber,
-      mechanicName: auth.user.name,
-      mechanicUserId: auth.user.id,
+      senderName: auth.user.name,
+      senderUserId: auth.user.id,
       customerName: resolveCustomerDisplayName(null, log.customerSnapshot),
       vehicleSnapshot: resolveVehicleDisplay(null, log.vehicleSnapshot),
       invoiceId: invoice.id,

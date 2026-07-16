@@ -225,7 +225,7 @@ describe('system email templates', () => {
   it('builds service log sent to invoice staff alert', () => {
     const mail = buildServiceLogSentToInvoiceStaffEmail({
       recipientName: 'Pat',
-      mechanicName: 'Brandon K.',
+      senderName: 'Brandon K.',
       serviceLogLabel: 'SL-1007',
       customerName: 'Fleet Co',
       vehicleUnit: 'Bus #616',
@@ -236,9 +236,9 @@ describe('system email templates', () => {
       appUrl,
       brand,
     })
-    expect(mail.subject).toBe('Brandon K. needs SL-1007 to be invoiced')
-    expect(mail.html).toContain('SL-1007')
-    expect(mail.html).toContain('Review invoice')
+    expect(mail.subject).toBe('Invoice needs to be completed — INV-000711 (SL-1007)')
+    expect(mail.html).toContain('Invoice needs to be completed')
+    expect(mail.html).toContain('Complete invoice')
     expect(mail.text).toContain('Brandon K.')
   })
 })

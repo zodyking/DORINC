@@ -97,7 +97,7 @@ export interface NotificationSettings {
   customerChangeRequestSubmitted: boolean
   /** Email all team members when a new customer email arrives in the inbox. */
   customerEmailReceived: boolean
-  /** Email accountants and admins when a mechanic sends a service log to invoice. */
+  /** Email staff who review service logs when a log is sent to invoice. */
   serviceLogSentToInvoice: boolean
 }
 
@@ -182,7 +182,7 @@ export const NOTIFICATION_SETTING_META: Array<{
   {
     key: 'serviceLogSentToInvoice',
     label: 'Service log sent to invoice',
-    description: 'Email accountants and admins when a mechanic sends a service log to invoice.',
+    description: 'Notify staff who review service logs when a log is sent to invoice and needs billing completed.',
     group: 'workflow',
   },
   {

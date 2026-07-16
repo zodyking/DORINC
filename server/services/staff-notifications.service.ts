@@ -15,7 +15,6 @@ import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import {
   listAccountants,
-  listAccountingStaff,
   listAllTeamMembers,
   listPermissionRecipients,
 } from './notification-recipients.service'
@@ -368,8 +367,8 @@ export async function notifyServiceLogSentToInvoice(
   opts: {
     serviceLogId: string
     logNumber: number
-    mechanicName: string
-    mechanicUserId: string
+    senderName: string
+    senderUserId: string
     customerName: string
     vehicleSnapshot: InvoiceVehicleSnapshot | null
     invoiceId: string
@@ -393,13 +392,13 @@ export async function notifyServiceLogSentToInvoice(
   const vehicleDetails = opts.vehicleSnapshot
     ? formatPdfVehicleYearMakeModel(opts.vehicleSnapshot)
     : null
-  const recipients = await listAccountingStaff(db, opts.mechanicUserId)
+  const recipients = await listPermissionRecipients(db, 'service_logs.review.all', opts.senderUserId)
 
   let queued = 0
   for (const recipient of recipients) {
     const mail = buildServiceLogSentToInvoiceStaffEmail({
       recipientName: recipient.name,
-      mechanicName: opts.mechanicName,
+      senderName: opts.senderName,
       serviceLogLabel,
       customerName: opts.customerName,
       vehicleUnit,
