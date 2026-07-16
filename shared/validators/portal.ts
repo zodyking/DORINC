@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { nonEmptyString } from './common'
+import { moneySchema, nonEmptyString, uuidSchema } from './common'
 
 export const portalNewVehicleRequestSchema = z.object({
   fleetTag: nonEmptyString.max(120),
@@ -20,10 +20,34 @@ export const portalServiceRequestSchema = z.object({
   description: nonEmptyString.max(4000),
 })
 
+export const portalLineItemCorrectionInputSchema = z.object({
+  lineItemId: uuidSchema,
+  description: z.string().trim().min(1).max(500),
+  quantity: moneySchema,
+  unitPrice: moneySchema,
+  notes: z.string().trim().max(2000).optional().nullable(),
+})
+
 export const portalInvoiceChangeRequestSchema = z.object({
   invoiceId: z.string().uuid().optional().nullable(),
   topic: nonEmptyString.max(120),
-  description: nonEmptyString.max(4000),
+  description: z.string().trim().max(4000).optional().nullable(),
+  lineItemCorrection: portalLineItemCorrectionInputSchema.optional(),
+}).superRefine((val, ctx) => {
+  if (!val.lineItemCorrection && !val.description?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Description or line item correction is required',
+      path: ['description'],
+    })
+  }
+  if (val.lineItemCorrection && !val.invoiceId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Invoice is required for line item corrections',
+      path: ['invoiceId'],
+    })
+  }
 })
 
 export const portalVehicleChangeRequestSchema = z.object({
@@ -44,6 +68,7 @@ export const portalPasswordSchema = z.object({
 
 export type PortalNewVehicleRequestInput = z.infer<typeof portalNewVehicleRequestSchema>
 export type PortalServiceRequestInput = z.infer<typeof portalServiceRequestSchema>
+export type PortalLineItemCorrectionInput = z.infer<typeof portalLineItemCorrectionInputSchema>
 export type PortalInvoiceChangeRequestInput = z.infer<typeof portalInvoiceChangeRequestSchema>
 export type PortalVehicleChangeRequestInput = z.infer<typeof portalVehicleChangeRequestSchema>
 export type PortalGeneralRequestInput = z.infer<typeof portalGeneralRequestSchema>

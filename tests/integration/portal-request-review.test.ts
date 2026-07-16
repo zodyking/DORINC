@@ -221,6 +221,42 @@ describe('P2-10 invoice correction revision flow', () => {
     expect(revision!.internalNotes).toContain('Revision opened')
   })
 
+  it('auto-applies structured line item corrections on approval', async () => {
+    const sourceLines = await listInvoiceLineItems(db, sourceInvoiceId)
+    const sourceLine = sourceLines[0]!
+
+    const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
+      invoiceId: sourceInvoiceId,
+      topic: 'Line item correction',
+      lineItemCorrection: {
+        lineItemId: sourceLine.id,
+        description: 'Brake service (adjusted)',
+        quantity: '0.50',
+        unitPrice: '400.00',
+        notes: 'Labor hours should be half',
+      },
+    })
+
+    expect(request.correctionPayload).toMatchObject({
+      lineItemId: sourceLine.id,
+      proposed: {
+        description: 'Brake service (adjusted)',
+        quantity: '0.50',
+        unitPrice: '400.00',
+      },
+    })
+
+    const { revision } = await approveInvoiceChangeRequest(db, request.id, ACTOR, 'Applied correction')
+    createdInvoiceIds.push(revision!.id)
+
+    const revLines = await listInvoiceLineItems(db, revision!.id)
+    const updatedLine = revLines.find(line => line.sortOrder === sourceLine.sortOrder)
+    expect(updatedLine?.description).toBe('Brake service (adjusted)')
+    expect(updatedLine?.quantity).toBe('0.50')
+    expect(updatedLine?.unitPrice).toBe('400.00')
+    expect(updatedLine?.lineAmount).toBe('200.00')
+  })
+
   it('approves general billing inquiries without a linked invoice', async () => {
     const request = await createInvoiceChangeRequest(db, customer.id, portalUser.id, {
       topic: 'Payment plan / terms',

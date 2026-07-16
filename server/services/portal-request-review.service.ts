@@ -15,8 +15,10 @@ import {
   createInvoice,
   createInvoiceRevision,
   getInvoice,
+  listInvoiceLineItems,
   REVISION_SOURCE_STATUSES,
   updateInvoiceDraft,
+  updateInvoiceLineItem,
 } from './invoices.service'
 import { createVehicle, getVehicle, updateVehicle } from './vehicles.service'
 import { notifyPortalRequestStatus } from './customer-notifications.service'
@@ -465,6 +467,24 @@ export async function approveInvoiceChangeRequest(
       internalNotes: [source.internalNotes, noteBlock].filter(Boolean).join('\n\n'),
       customerNotes: [source.customerNotes, `Customer correction request: ${claimed.topic}`].filter(Boolean).join('\n\n'),
     }, actorId)
+
+    if (claimed.correctionPayload) {
+      const payload = claimed.correctionPayload
+      const sourceLines = await listInvoiceLineItems(db, claimed.invoiceId!)
+      const sourceLine = sourceLines.find(line => line.id === payload.lineItemId)
+      if (!sourceLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+
+      const revisionLines = await listInvoiceLineItems(db, revision.id)
+      const revisionLine = revisionLines.find(line => line.sortOrder === sourceLine.sortOrder)
+      if (!revisionLine) throw new PortalRequestReviewError('INVALID_INVOICE')
+
+      await updateInvoiceLineItem(db, revision.id, revisionLine.id, {
+        description: payload.proposed.description,
+        quantity: payload.proposed.quantity,
+        unitPrice: payload.proposed.unitPrice,
+      }, actorId)
+    }
+
     revision = await getInvoice(db, revision.id)
   }
 

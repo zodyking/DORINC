@@ -168,20 +168,50 @@ export function portalInvoicePdfUrl(invoiceId: string): string {
 }
 
 export function portalInvoiceLineCorrectionTopic(): string {
-  return 'Line item clarification'
+  return 'Line item correction'
+}
+
+export interface PortalLineItemCorrectionForm {
+  description: string
+  quantity: string
+  unitPrice: string
+  notes: string
+}
+
+export function portalInvoiceLineCorrectionFormFromLine(line: {
+  description: string
+  quantity: string
+  unitPrice: string
+}): PortalLineItemCorrectionForm {
+  return {
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    notes: '',
+  }
+}
+
+export function portalInvoiceLineCorrectionHasChanges(
+  original: { description: string, quantity: string, unitPrice: string },
+  form: Pick<PortalLineItemCorrectionForm, 'description' | 'quantity' | 'unitPrice'>,
+): boolean {
+  return original.description.trim() !== form.description.trim()
+    || original.quantity !== form.quantity
+    || original.unitPrice !== form.unitPrice
 }
 
 export function portalInvoiceLineCorrectionDescription(
   invoiceNumberFormatted: string,
-  line: { description: string, quantity: string, lineAmount: string },
+  line: { description: string, quantity: string, lineAmount: string, unitPrice?: string },
   customerMessage: string,
 ): string {
   return [
     `Invoice: ${invoiceNumberFormatted}`,
     `Line item: ${line.description}`,
     `Qty: ${line.quantity}`,
+    line.unitPrice ? `Rate: ${moneyDisplay(line.unitPrice)}` : null,
     `Amount: ${moneyDisplay(line.lineAmount)}`,
     '',
     customerMessage.trim(),
-  ].join('\n')
+  ].filter((part): part is string => Boolean(part)).join('\n')
 }

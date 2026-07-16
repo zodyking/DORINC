@@ -4,6 +4,8 @@ import {
   portalInvoiceDefaultListFilters,
   portalInvoiceDetailStatus,
   portalInvoiceIsOpen,
+  portalInvoiceLineCorrectionFormFromLine,
+  portalInvoiceLineCorrectionHasChanges,
   portalInvoiceMatchesFilter,
   type PortalInvoiceListRow,
 } from '../../app/utils/portal-invoices-ui'
@@ -70,5 +72,17 @@ describe('portal-invoices-ui helpers (P2-05)', () => {
       'Bus #616',
       'Truck #12',
     ])
+  })
+
+  it('builds line correction form and detects changes', () => {
+    const line = { description: 'Oil change', quantity: '1.00', unitPrice: '85.00' }
+    expect(portalInvoiceLineCorrectionFormFromLine(line)).toEqual({
+      description: 'Oil change',
+      quantity: '1.00',
+      unitPrice: '85.00',
+      notes: '',
+    })
+    expect(portalInvoiceLineCorrectionHasChanges(line, { ...line })).toBe(false)
+    expect(portalInvoiceLineCorrectionHasChanges(line, { ...line, quantity: '0.50' })).toBe(true)
   })
 })

@@ -7,8 +7,13 @@ import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import { getInvoicePdfDownload, InvoicePdfServiceError } from './invoice-pdf.service'
 import { listInvoiceLineItems } from './invoices.service'
+import {
+  buildPortalLineItemCorrectionDescription,
+  type PortalLineItemCorrectionPayload,
+} from '../../shared/portal-line-correction'
+import type { PortalInvoiceChangeRequestInput } from '../../shared/validators/portal'
 
-export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE'
+export type PortalServiceErrorCode = 'NOT_FOUND' | 'PORTAL_DISABLED' | 'NO_PDF' | 'INVALID_VEHICLE' | 'INVALID_INVOICE' | 'INVALID_LINE_ITEM'
 
 export class PortalServiceError extends Error {
   constructor(public readonly code: PortalServiceErrorCode) {
@@ -566,6 +571,7 @@ export async function getPortalInvoiceDetail(db: Db, customerId: string, invoice
       id: line.id,
       description: line.description,
       quantity: line.quantity,
+      unitPrice: line.unitPrice,
       lineAmount: line.lineAmount,
       lineType: line.lineType,
     })),
@@ -685,27 +691,59 @@ export async function createServiceRequest(
   return row!
 }
 
-export interface InvoiceChangeRequestInput {
-  invoiceId?: string | null
-  topic: string
-  description: string
-}
-
 export async function createInvoiceChangeRequest(
   db: Db,
   customerId: string,
   submittedBy: string,
-  input: InvoiceChangeRequestInput,
+  input: PortalInvoiceChangeRequestInput,
 ) {
   await getPortalCustomer(db, customerId)
   await assertPortalInvoiceOptional(db, customerId, input.invoiceId)
+
+  let description = input.description?.trim() ?? ''
+  let correctionPayload: PortalLineItemCorrectionPayload | null = null
+
+  if (input.lineItemCorrection) {
+    if (!input.invoiceId) throw new PortalServiceError('INVALID_INVOICE')
+    const lines = await listInvoiceLineItems(db, input.invoiceId)
+    const sourceLine = lines.find(line => line.id === input.lineItemCorrection!.lineItemId)
+    if (!sourceLine) throw new PortalServiceError('INVALID_LINE_ITEM')
+
+    correctionPayload = {
+      lineItemId: input.lineItemCorrection.lineItemId,
+      original: {
+        description: sourceLine.description,
+        quantity: sourceLine.quantity,
+        unitPrice: sourceLine.unitPrice,
+      },
+      proposed: {
+        description: input.lineItemCorrection.description.trim(),
+        quantity: input.lineItemCorrection.quantity,
+        unitPrice: input.lineItemCorrection.unitPrice,
+      },
+      notes: input.lineItemCorrection.notes?.trim() || null,
+    }
+
+    const [invoiceRow] = await db.select({ invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(eq(invoices.id, input.invoiceId))
+      .limit(1)
+
+    description = buildPortalLineItemCorrectionDescription(
+      formatInvoiceNumber(invoiceRow!.invoiceNumber),
+      correctionPayload,
+    )
+  }
+
+  if (!description) throw new PortalServiceError('INVALID_INVOICE')
 
   const [row] = await db.insert(invoiceChangeRequests).values({
     customerId,
     submittedBy,
     invoiceId: input.invoiceId ?? null,
     topic: input.topic.trim(),
-    description: input.description.trim(),
+    description,
+    correctionPayload,
   }).returning()
 
   return row!
