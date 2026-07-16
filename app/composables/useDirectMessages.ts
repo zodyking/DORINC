@@ -47,6 +47,7 @@ export interface ChatMessage {
   entityRefs: Array<{ entityType: string, entityId: string, entityLabel: string }>
   channel?: 'email'
   direction?: 'inbound' | 'outbound'
+  hasHtmlBody?: boolean
   htmlBody?: string | null
   fromAddress?: string | null
 }
@@ -162,8 +163,10 @@ export function useDirectMessages() {
     activeConversationId.value = conversationId
     messages.value = []
     lastMessageId = null
-    await fetchMessages(conversationId)
-    await markRead(conversationId)
+    await Promise.all([
+      fetchMessages(conversationId),
+      markRead(conversationId),
+    ])
   }
 
   async function markRead(conversationId: string) {
@@ -171,7 +174,7 @@ export function useDirectMessages() {
       await $fetch(`/api/conversations/${conversationId}/read`, { method: 'POST' })
       const conv = conversations.value.find(c => c.id === conversationId)
       if (conv) conv.unreadCount = 0
-      await fetchUnreadCount()
+      void fetchUnreadCount()
     }
     catch {
       // non-blocking

@@ -1934,6 +1934,9 @@ section.page.active.dm-page{
   .dm-page .pagehead p{
     display:none;
   }
+  .dm-page .pagehead .page-actions{
+    display:none;
+  }
   .dm-page--in-thread .pagehead{
     display:none;
   }
@@ -1942,6 +1945,11 @@ section.page.active.dm-page{
   }
   .dm-sidebar-actions{
     display:flex;
+    flex-direction:column;
+  }
+  .dm-sidebar-actions .btn{
+    flex:none;
+    width:100%;
   }
   .dm-layout{
     flex:1; min-height:0;
@@ -1970,9 +1978,23 @@ section.page.active.dm-page{
   .dm-back-btn{ display:grid; place-items:center; min-width:44px; min-height:44px; }
   .dm-conv-list{ min-height:0; flex:1; -webkit-overflow-scrolling:touch; }
   .dm-conv-item{ min-height:56px; padding:10px 12px; }
-  .dm-channel-tabs{ gap:4px; }
-  .dm-channel-tab{ min-height:40px; padding:6px 4px; font-size:11px; }
-  .dm-sidebar-head{ padding:10px; }
+  .dm-channel-tabs{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:6px;
+  }
+  .dm-channel-tab{
+    min-height:44px;
+    padding:8px 6px;
+    font-size:12px;
+    white-space:nowrap;
+  }
+  .dm-email-filter-opt{
+    min-height:44px;
+    padding:10px 8px;
+    font-size:12px;
+  }
+  .dm-sidebar-head{ padding:10px 12px; }
   .dm-search, .dm-compose textarea{ font-size:16px; }
   .dm-thread{
     display:flex; flex-direction:column; height:100%; min-height:0;

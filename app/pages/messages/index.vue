@@ -165,8 +165,9 @@ async function submitNewEmail() {
 }
 
 async function selectConversation(id: string) {
-  await dm.openConversation(id)
+  dm.activeConversationId = id
   revealThread()
+  await dm.openConversation(id)
 }
 
 async function onSend(body: string) {

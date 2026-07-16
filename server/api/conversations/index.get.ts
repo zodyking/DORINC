@@ -25,9 +25,10 @@ export default defineEventHandler(async (event) => {
     return listEmailConversations(db, filter)
   }
 
+  const mergeWindow = query.page * query.pageSize
   const [dm, email] = await Promise.all([
-    listConversations(db, { ...filter, page: 1, pageSize: 200 }),
-    listEmailConversations(db, { ...filter, page: 1, pageSize: 200 }),
+    listConversations(db, { ...filter, page: 1, pageSize: mergeWindow }),
+    listEmailConversations(db, { ...filter, page: 1, pageSize: mergeWindow }),
   ])
 
   const merged = [...dm.items, ...email.items]
@@ -36,7 +37,7 @@ export default defineEventHandler(async (event) => {
   const offset = (query.page - 1) * query.pageSize
   return {
     items: merged.slice(offset, offset + query.pageSize),
-    total: merged.length,
+    total: dm.total + email.total,
     page: query.page,
     pageSize: query.pageSize,
   }
