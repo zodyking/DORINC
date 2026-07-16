@@ -62,7 +62,7 @@ const query = computed(() => ({
 
 const actionError = ref('')
 
-const { data, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
+const { data, error, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
   { query },
 )
@@ -161,6 +161,9 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
     </ListFilterBar>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ actionError }}</p>
+    <p v-else-if="error" class="help" style="color:#dc2626; margin:0 0 12px;">
+      Could not load service logs. Try refreshing the page.
+    </p>
 
     <div class="card">
       <div class="tscroll">
@@ -249,6 +252,7 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
             </tr>
           </tbody>
         </table>
+        <div v-else-if="error" id="log-queue-empty" class="empty">Could not load service logs.</div>
         <div v-else id="log-queue-empty" class="empty">No service logs match your search.</div>
       </div>
 
