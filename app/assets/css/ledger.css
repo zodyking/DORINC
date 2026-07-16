@@ -1672,6 +1672,13 @@ section.page.active.dm-page{
 }
 .dm-thread-subject{ display:block; color:#64748b; font-size:12px; margin-top:2px; }
 .dm-thread-peer{ display:flex; align-items:center; gap:0; flex:1; min-width:0; }
+.session-timeout-scrim{ z-index:12000; }
+.session-timeout-card{ max-width:420px; width:100%; }
+.session-timeout-countdown{
+  margin:0 0 16px; font-size:28px; font-weight:700; color:#0f172a; text-align:center;
+}
+.session-timeout-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.session-timeout-actions .btn{ flex:1; min-width:140px; }
 .dm-thread-actions{ flex-shrink:0; margin-left:auto; display:flex; align-items:center; gap:8px; }
 .dm-thread-actions .btn.danger{ padding:6px 10px; font-size:12px; }
 .dm-msg.inbound .dm-msg-bubble{ background:#f8fafc; border:1px solid #e2e8f0; }

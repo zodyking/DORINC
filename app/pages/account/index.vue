@@ -129,10 +129,21 @@ async function revokeSession(sessionId: string) {
       method: 'POST',
     })
     if (res.revokedCurrent) {
-      await auth.logout()
+      auth.user = null
+      auth.permissions = []
+      auth.loaded = true
+      await navigateTo('/auth/login?card=staff', { replace: true })
       return
     }
     await refresh()
+  }
+  catch (e: unknown) {
+    const status = (e as { statusCode?: number })?.statusCode
+    if (status === 401) {
+      await auth.handleSessionExpired()
+      return
+    }
+    throw e
   }
   finally {
     revokeBusy.value = null

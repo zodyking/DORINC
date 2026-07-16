@@ -34,6 +34,10 @@ import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 import { useProseField } from '~/composables/useProseField'
+import {
+  registerSessionSaveHandler,
+  unregisterSessionSaveHandler,
+} from '~/composables/useSessionLogoutHandlers'
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 
 definePageMeta({ layout: 'staff' })
@@ -452,6 +456,18 @@ async function saveDraft() {
     busy.value = false
   }
 }
+
+async function saveOpenWorkForSessionTimeout() {
+  if (!editable.value || !invoice.value) return
+  for (const line of lines.value) {
+    if (!isDraftLineValid(line)) continue
+    await patchLine(line, { refreshAfter: false, manageBusy: false })
+  }
+  await patchHeader({ refreshAfter: false, manageBusy: false })
+}
+
+onMounted(() => registerSessionSaveHandler(saveOpenWorkForSessionTimeout))
+onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout))
 
 async function onCustomerChange() {
   if (!editable.value) return

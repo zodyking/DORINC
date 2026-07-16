@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
 
 export interface AuthUser {
   id: string
@@ -15,6 +16,7 @@ export const useAuthStore = defineStore('auth', {
     user: null as AuthUser | null,
     permissions: [] as string[],
     loaded: false,
+    sessionExpiring: false,
   }),
 
   getters: {
@@ -24,6 +26,11 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
+    loginPath(): string {
+      if (this.isCustomer) return '/auth/login'
+      return '/auth/login?card=staff'
+    },
+
     async fetchMe() {
       // On SSR, plain $fetch does not forward the incoming request's cookies
       const fetcher = import.meta.server ? useRequestFetch() : $fetch
@@ -62,11 +69,46 @@ export const useAuthStore = defineStore('auth', {
       return res.user
     },
 
-    async logout() {
-      await $fetch('/api/auth/logout', { method: 'POST' })
+    async releaseEditingSessions() {
+      try {
+        await $fetch('/api/editing-sessions/release-mine', { method: 'POST' })
+      }
+      catch {
+        // Best-effort before sign-out.
+      }
+    },
+
+    async forceLogout(redirect = true) {
+      try {
+        await $fetch('/api/auth/logout', { method: 'POST' })
+      }
+      catch {
+        // Session may already be revoked (account revoke, server timeout, etc.).
+      }
       this.user = null
       this.permissions = []
-      await navigateTo('/auth/login')
+      this.loaded = true
+      if (redirect) {
+        await navigateTo(this.loginPath(), { replace: true })
+      }
+    },
+
+    async handleSessionExpired() {
+      if (!this.user || this.sessionExpiring) return
+      this.sessionExpiring = true
+      try {
+        await runSessionSaveHandlers()
+        await this.releaseEditingSessions()
+        await this.forceLogout(true)
+      }
+      finally {
+        this.sessionExpiring = false
+      }
+    },
+
+    async logout() {
+      await this.releaseEditingSessions()
+      await this.forceLogout(true)
     },
   },
 })

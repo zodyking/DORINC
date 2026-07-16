@@ -37,6 +37,10 @@ import {
   applyInferredLineType,
   type WizardLineDraft,
 } from '~/utils/line-item-wizard-ui'
+import {
+  registerSessionSaveHandler,
+  unregisterSessionSaveHandler,
+} from '~/composables/useSessionLogoutHandlers'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
@@ -577,6 +581,14 @@ async function saveDraftAndFinish() {
   const ok = await saveDraft()
   if (ok) await navigateTo('/invoices')
 }
+
+async function saveOpenWorkForSessionTimeout() {
+  if (!customerId.value) return
+  await saveDraft()
+}
+
+onMounted(() => registerSessionSaveHandler(saveOpenWorkForSessionTimeout))
+onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout))
 
 
 </script>

@@ -124,6 +124,17 @@ export async function releaseEditingSession(db: Db, sessionId: string, userId: s
   return { ok: true as const }
 }
 
+/** Release every active editing lock held by a user (e.g. auth sign-out). */
+export async function releaseAllEditingSessionsForUser(db: Db, userId: string) {
+  await db.update(editingSessions)
+    .set({ releasedAt: new Date() })
+    .where(and(
+      eq(editingSessions.userId, userId),
+      isNull(editingSessions.releasedAt),
+    ))
+  return { ok: true as const }
+}
+
 /** Admin force-release — breaks another user's lock (SPEC §12). */
 export async function adminForceReleaseEditingSession(
   db: Db,
