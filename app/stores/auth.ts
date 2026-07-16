@@ -48,7 +48,17 @@ export const useAuthStore = defineStore('auth', {
         body,
       })
       this.user = res.user
-      await this.fetchMe()
+      this.loaded = true
+      try {
+        const fetcher = import.meta.server ? useRequestFetch() : $fetch
+        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
+        this.user = me.user
+        this.permissions = me.permissions
+      }
+      catch {
+        // Cookie is set — keep the login response even if /me hiccups on first request.
+        this.permissions = []
+      }
       return res.user
     },
 

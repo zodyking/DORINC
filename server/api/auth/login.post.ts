@@ -36,18 +36,23 @@ export default defineEventHandler(async (event) => {
 
     setSessionCookie(event, result.sessionToken)
 
-    await writeAudit(event, {
-      entityType: 'user',
-      entityId: result.user.id,
-      action: result.accountTypeKey === 'customer' ? 'portal.login' : 'auth.login',
-      actor: {
-        id: result.user.id,
-        accountType: result.accountTypeKey,
-        name: result.user.name,
-        email: result.user.email,
-      },
-      riskLevel: 'sensitive',
-    })
+    try {
+      await writeAudit(event, {
+        entityType: 'user',
+        entityId: result.user.id,
+        action: result.accountTypeKey === 'customer' ? 'portal.login' : 'auth.login',
+        actor: {
+          id: result.user.id,
+          accountType: result.accountTypeKey,
+          name: result.user.name,
+          email: result.user.email,
+        },
+        riskLevel: 'sensitive',
+      })
+    }
+    catch (err) {
+      console.warn('[auth] login audit failed:', (err as Error).message)
+    }
 
     void import('../../services/login-notification.service')
       .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
