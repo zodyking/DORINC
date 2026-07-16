@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Invoices list — KPI cards, status chips, filters, table (mockup: PAGE: INVOICES).
+import InvoiceListRowActions from '~/components/invoices/InvoiceListRowActions.vue'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,

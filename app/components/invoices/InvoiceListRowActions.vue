@@ -12,18 +12,19 @@ const emit = defineEmits<{ changed: [] }>()
 
 const auth = useAuthStore()
 
-const canUpdate = computed(() => auth.can('invoices.update.all'))
-const canSend = computed(() => auth.can('invoices.send.all'))
-const canDelete = computed(() => auth.can('deletion_requests.submit.all'))
+const ready = computed(() => auth.loaded)
+
+const canUpdate = computed(() => ready.value && auth.can('invoices.update.all'))
+const canSend = computed(() => ready.value && auth.can('invoices.send.all'))
+const canDelete = computed(() => ready.value && auth.can('deletion_requests.submit.all'))
 
 const showSend = computed(() => canSend.value && props.status === 'approved')
 const showEdit = computed(() => canUpdate.value && props.status === 'draft')
 const showDelete = computed(() => canDelete.value && props.status !== 'void' && props.status !== 'paid')
-const hasActions = computed(() => showSend.value || showEdit.value || showDelete.value)
 </script>
 
 <template>
-  <div v-if="hasActions" class="inv-row-actions" @click.stop>
+  <div v-if="ready" class="inv-row-actions" @click.stop>
     <PageActionsMenu>
       <SendInvoiceButton
         v-if="showSend"
@@ -47,6 +48,13 @@ const hasActions = computed(() => showSend.value || showEdit.value || showDelete
         menu-item
         @submitted="emit('changed')"
       />
+      <NuxtLink
+        v-if="!showSend && !showEdit && !showDelete"
+        :to="`/invoices/${invoiceId}`"
+        class="btn"
+      >
+        View invoice
+      </NuxtLink>
     </PageActionsMenu>
   </div>
 </template>
