@@ -22,6 +22,7 @@ const emit = defineEmits<{
   typed: []
   blur: []
   focus: []
+  'tab-next': []
 }>()
 
 const { inputAttrs, onInput: proseOnInput, onBlur: proseOnBlur } = useProseField(model, ref('prose'))
@@ -199,6 +200,17 @@ function onKeydown(e: KeyboardEvent) {
       e.preventDefault()
       closeSuggestions()
     }
+    return
+  }
+  if (e.key === 'Tab' && !e.shiftKey) {
+    e.preventDefault()
+    if (blurTimer) {
+      clearTimeout(blurTimer)
+      blurTimer = null
+    }
+    closeSuggestions()
+    syncInferredLineType()
+    emit('tab-next')
   }
 }
 

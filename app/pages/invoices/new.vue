@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
+import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
   buildInvoiceLinePatchBody,
@@ -317,6 +319,8 @@ function onServiceLogPick(logId: string) {
 }
 
 const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
+const lineQtyRefs = ref<Record<string, { focus: () => void } | null>>({})
+const lineRateRefs = ref<Record<string, { focus: () => void } | null>>({})
 
 function addLine() {
   lines.value.push(createEmptyLine())
@@ -396,6 +400,35 @@ function onLineFieldBlur(line: DraftLine) {
 
 function setLineAcRef(localId: string, el: unknown) {
   lineAcRefs.value[localId] = el as { focus: () => void } | null
+}
+
+function setLineQtyRef(localId: string, el: unknown) {
+  lineQtyRefs.value[localId] = el as { focus: () => void } | null
+}
+
+function setLineRateRef(localId: string, el: unknown) {
+  lineRateRefs.value[localId] = el as { focus: () => void } | null
+}
+
+function focusLineQty(localId: string) {
+  lineQtyRefs.value[localId]?.focus()
+}
+
+function focusLineRate(localId: string) {
+  lineRateRefs.value[localId]?.focus()
+}
+
+function addLineAndFocusDescription() {
+  addLine()
+  nextTick(() => {
+    const newest = lines.value[lines.value.length - 1]
+    if (newest) lineAcRefs.value[newest.localId]?.focus()
+  })
+}
+
+function onLineRateTabNext(line: DraftLine) {
+  onLineFieldBlur(line)
+  addLineAndFocusDescription()
 }
 
 function focusCatalogSearch() {
@@ -763,9 +796,9 @@ async function saveDraftAndFinish() {
                   <tr>
                     <th style="width:110px">Type</th>
                     <th>Description</th>
-                    <th style="width:90px">Qty / Hrs</th>
-                    <th style="width:110px">Rate</th>
-                    <th style="width:110px; text-align:right">Amount</th>
+                    <th style="width:110px">Qty / Hrs</th>
+                    <th style="width:150px">Rate</th>
+                    <th style="width:130px; text-align:right">Amount</th>
                     <th style="width:36px" />
                   </tr>
                 </thead>
@@ -783,11 +816,26 @@ async function saveDraftAndFinish() {
                         v-model:line-type="line.lineType"
                         @typed="onLineDescriptionTyped(line)"
                         @blur="onLineFieldBlur(line)"
+                        @tab-next="focusLineQty(line.localId)"
                         @select="applyCatalogToLine(line, $event)"
                       />
                     </td>
-                    <td><input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)"></td>
-                    <td><input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)"></td>
+                    <td>
+                      <LineQuantityInput
+                        :ref="(el) => setLineQtyRef(line.localId, el)"
+                        v-model="line.quantity"
+                        @blur="onLineFieldBlur(line)"
+                        @tab-next="focusLineRate(line.localId)"
+                      />
+                    </td>
+                    <td>
+                      <LineCurrencyInput
+                        :ref="(el) => setLineRateRef(line.localId, el)"
+                        v-model="line.unitPrice"
+                        @blur="onLineFieldBlur(line)"
+                        @tab-next="onLineRateTabNext(line)"
+                      />
+                    </td>
                     <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
                     <td>
                       <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
@@ -815,17 +863,28 @@ async function saveDraftAndFinish() {
                     v-model:line-type="line.lineType"
                     @typed="onLineDescriptionTyped(line)"
                     @blur="onLineFieldBlur(line)"
+                    @tab-next="focusLineQty(line.localId)"
                     @select="applyCatalogToLine(line, $event)"
                   />
                 </label>
                 <div class="inv-line-card-nums">
                   <label class="fld">
                     <span>Qty / Hrs</span>
-                    <input v-model="line.quantity" class="num" type="number" step="0.25" min="0" @blur="onLineFieldBlur(line)">
+                    <LineQuantityInput
+                      :ref="(el) => setLineQtyRef(line.localId, el)"
+                      v-model="line.quantity"
+                      @blur="onLineFieldBlur(line)"
+                      @tab-next="focusLineRate(line.localId)"
+                    />
                   </label>
                   <label class="fld">
                     <span>Rate</span>
-                    <input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" @blur="onLineFieldBlur(line)">
+                    <LineCurrencyInput
+                      :ref="(el) => setLineRateRef(line.localId, el)"
+                      v-model="line.unitPrice"
+                      @blur="onLineFieldBlur(line)"
+                      @tab-next="onLineRateTabNext(line)"
+                    />
                   </label>
                   <div class="inv-line-card-amt">
                     <span class="k">Amount</span>

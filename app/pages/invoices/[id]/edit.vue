@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
+import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
 import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   applyCatalogItemToLineFields,
@@ -168,6 +170,39 @@ const poNumber = ref('')
 const complaint = ref('')
 const internalNotes = ref('')
 const lines = ref<LineItem[]>([])
+
+const lineAcRefs = ref<Record<string, { focus: () => void } | null>>({})
+const lineQtyRefs = ref<Record<string, { focus: () => void } | null>>({})
+const lineRateRefs = ref<Record<string, { focus: () => void } | null>>({})
+
+function setLineAcRef(lineId: string, el: unknown) {
+  lineAcRefs.value[lineId] = el as { focus: () => void } | null
+}
+
+function setLineQtyRef(lineId: string, el: unknown) {
+  lineQtyRefs.value[lineId] = el as { focus: () => void } | null
+}
+
+function setLineRateRef(lineId: string, el: unknown) {
+  lineRateRefs.value[lineId] = el as { focus: () => void } | null
+}
+
+function focusLineQty(lineId: string) {
+  lineQtyRefs.value[lineId]?.focus()
+}
+
+function focusLineRate(lineId: string) {
+  lineRateRefs.value[lineId]?.focus()
+}
+
+async function onLineRateTabNext(line: LineItem) {
+  await patchLine(line, { refreshAfter: false })
+  if (!editable.value) return
+  await addEmptyLine()
+  await nextTick()
+  const newest = lines.value[lines.value.length - 1]
+  if (newest) lineAcRefs.value[newest.id]?.focus()
+}
 
 const busy = ref(false)
 const saveError = ref('')
@@ -951,9 +986,9 @@ const aiPopStyle = computed(() => {
                     <tr>
                       <th style="width:110px">Type</th>
                       <th>Description</th>
-                      <th style="width:90px">Qty / Hrs</th>
-                      <th style="width:110px">Rate</th>
-                      <th style="width:110px; text-align:right">Amount</th>
+                      <th style="width:110px">Qty / Hrs</th>
+                      <th style="width:150px">Rate</th>
+                      <th style="width:130px; text-align:right">Amount</th>
                       <th style="width:36px" />
                     </tr>
                   </thead>
@@ -966,19 +1001,33 @@ const aiPopStyle = computed(() => {
                       </td>
                       <td>
                         <CatalogLineAutocomplete
+                          :ref="(el) => setLineAcRef(line.id, el)"
                           v-model="line.description"
                           v-model:line-type="line.lineType"
                           :disabled="!editable"
                           @focus="selectedLineId = line.id"
                           @blur="patchLine(line)"
+                          @tab-next="focusLineQty(line.id)"
                           @select="applyCatalogToExistingLine(line, $event)"
                         />
                       </td>
                       <td>
-                        <input v-model="line.quantity" class="num" type="number" step="0.25" min="0" :disabled="!editable" @blur="patchLine(line)">
+                        <LineQuantityInput
+                          :ref="(el) => setLineQtyRef(line.id, el)"
+                          v-model="line.quantity"
+                          :disabled="!editable"
+                          @blur="patchLine(line)"
+                          @tab-next="focusLineRate(line.id)"
+                        />
                       </td>
                       <td>
-                        <input v-model="line.unitPrice" class="num" type="number" step="0.01" min="0" :disabled="!editable" @blur="patchLine(line)">
+                        <LineCurrencyInput
+                          :ref="(el) => setLineRateRef(line.id, el)"
+                          v-model="line.unitPrice"
+                          :disabled="!editable"
+                          @blur="patchLine(line)"
+                          @tab-next="onLineRateTabNext(line)"
+                        />
                       </td>
                       <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount) }}</td>
                       <td>
