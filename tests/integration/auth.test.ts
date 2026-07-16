@@ -47,9 +47,9 @@ describe('P1-02 signup + email verification', () => {
 
   it('rejects duplicate emails', async () => {
     const email = emailFor('dup')
-    await signup(db, { name: 'A', email, password: 'a-long-password-123', requestedAccountType: 'viewer' })
+    await signup(db, { name: 'A', email, password: 'a-long-password-123', requestedAccountType: 'accountant' })
     await expect(
-      signup(db, { name: 'B', email, password: 'a-long-password-123', requestedAccountType: 'viewer' }),
+      signup(db, { name: 'B', email, password: 'a-long-password-123', requestedAccountType: 'accountant' }),
     ).rejects.toThrow('EMAIL_TAKEN')
   })
 
@@ -75,7 +75,7 @@ describe('P1-02 signup + email verification', () => {
       name: 'Resend Me',
       email,
       password,
-      requestedAccountType: 'viewer',
+      requestedAccountType: 'accountant',
     })
 
     const { verificationToken: secondToken } = await resendVerificationEmail(db, email, password)
@@ -94,7 +94,7 @@ describe('P1-02 signup + email verification', () => {
       name: 'Expired',
       email: emailFor('expired'),
       password: 'a-long-password-123',
-      requestedAccountType: 'viewer',
+      requestedAccountType: 'accountant',
     })
 
     await db.update(emailVerificationTokens)
@@ -177,7 +177,7 @@ describe('P1-03 login + session lifecycle', () => {
       name: 'Gated',
       email,
       password: 'a-long-password-123',
-      requestedAccountType: 'viewer',
+      requestedAccountType: 'accountant',
     })
 
     await expect(login(db, email, 'a-long-password-123', { portal: 'staff' })).rejects.toThrow('NOT_VERIFIED')

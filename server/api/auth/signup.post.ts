@@ -13,7 +13,7 @@ const signupSchema = z.object({
   lastName: nonEmptyString.max(60),
   email: emailSchema,
   password: z.string().min(12).max(200),
-  accountType: z.enum(['mechanic', 'accountant', 'viewer']),
+  accountType: z.enum(['mechanic', 'accountant']),
 })
 
 export default defineEventHandler(async (event) => {

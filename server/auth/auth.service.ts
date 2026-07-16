@@ -45,7 +45,7 @@ export class AuthError extends Error {
 }
 
 /** Account types a public signup may request (mockup: Mechanic/Accountant/Viewer). */
-export const SIGNUP_ACCOUNT_TYPES: AccountType[] = ['mechanic', 'accountant', 'viewer']
+export const SIGNUP_ACCOUNT_TYPES: AccountType[] = ['mechanic', 'accountant']
 
 export interface SignupInput {
   name: string

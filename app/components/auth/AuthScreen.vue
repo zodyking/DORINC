@@ -324,7 +324,6 @@ async function submitSignup() {
               <select id="signup-type" v-model="signupType">
                 <option>Mechanic</option>
                 <option>Accountant</option>
-                <option>Viewer</option>
               </select>
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>

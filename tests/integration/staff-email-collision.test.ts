@@ -43,7 +43,7 @@ describe('staff / customer email collision', () => {
       name: 'Collision Staff',
       email: staffEmail,
       password: 'a-long-password-123',
-      requestedAccountType: 'viewer',
+      requestedAccountType: 'accountant',
     })
     staffUserId = user.id
     await verifyEmail(db, verificationToken)
