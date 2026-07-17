@@ -5,6 +5,7 @@ import {
   emailBodyForThreadDisplay,
   emailPreviewText,
   linkifyPlainEmailText,
+  looksLikeEmailCssArtifact,
   normalizeInboundEmailText,
   prepareEmailHtmlIframeDocument,
   sanitizeEmailHtml,
@@ -108,6 +109,28 @@ describe('email-display', () => {
     expect(doc).not.toMatch(/overflow\s*:\s*auto/)
     expect(doc).toContain('height: auto !important')
     expect(doc).toContain('Please see the attached check.')
+  })
+
+  it('detects leaked email css in plain bodies', () => {
+    const cssLeak = [
+      'body { margin: 0; padding: 0; width: 100%; background: #f4f7fa; color: #1f2937; font-family: Arial, Helvetica, sans-serif; }',
+      'table { border-spacing: 0; border-collapse: collapse; }',
+      '.email-container { width: 100%; max-width: 620px; margin: 0 auto; background: #ffffff; }',
+      '.mobile-padding { padding: 24px; }',
+    ].join('\n')
+
+    expect(looksLikeEmailCssArtifact(cssLeak)).toBe(true)
+    expect(normalizeInboundEmailText(cssLeak, '<p>We got your email body</p>')).toBe('We got your email body')
+    expect(shouldRenderEmailAsHtml('<p>We got your email body</p>', cssLeak, 'outbound')).toBe(true)
+
+    const rendered = emailBodyForThreadDisplay(
+      cssLeak,
+      '<div class="email-container"><p>We got your email body</p></div>',
+      'outbound',
+    )
+    expect(rendered.mode).toBe('html')
+    expect(rendered.content).toContain('We got your email body')
+    expect(rendered.content).not.toContain('border-collapse')
   })
 
   it('strips quoted reply history from plain and html thread bodies', () => {

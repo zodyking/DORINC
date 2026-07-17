@@ -15,6 +15,7 @@ import {
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { persistInboundAttachments, repairInboundEmailMedia } from './imap-attachments.mjs'
+import { normalizeInboundBody } from '../../../shared/email-css-artifact.mjs'
 import {
   stripQuotedEmailHtml,
   stripQuotedPlainEmailText,
@@ -282,23 +283,6 @@ async function sendAutoResponder(pool, input) {
 
   console.info('[imap-sync] auto-responder sent to', to)
   return { sent: true }
-}
-
-function normalizeInboundBody(text, html) {
-  const plain = String(text ?? '').replace(/\r\n/g, '\n').trim()
-  if (plain) return plain
-  if (html) {
-    return String(html)
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim() || '(empty message)'
-  }
-  return '(empty message)'
 }
 
 async function ingestInboundEmail(pool, input, filters) {
