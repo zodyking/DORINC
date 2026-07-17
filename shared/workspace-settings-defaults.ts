@@ -116,6 +116,16 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   customerEmailReceived: true,
 }
 
+/** Workspace chat settings (Control Panel → Chat). */
+export interface ChatWorkspaceSettings {
+  /** When false, staff see only the shared Team conversation (no DM list or new DM). */
+  directMessagingEnabled: boolean
+}
+
+export const DEFAULT_CHAT_SETTINGS: ChatWorkspaceSettings = {
+  directMessagingEnabled: false,
+}
+
 export const NOTIFICATION_SETTING_META: Array<{
   key: keyof NotificationSettings
   label: string

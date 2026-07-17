@@ -17,6 +17,7 @@ import type { MessageEntityRefInput } from '../../shared/validators/messages'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { formatVehicleUnitLabel, splitEntitySearchTokens } from '../../shared/format/vehicle-unit'
 import { getTeamConversationSummary, syncTeamChatParticipants } from './team-chat.service'
+import { isDirectMessagingEnabled } from './workspace-settings.service'
 import {
   assertValidDmAttachments,
   listAttachmentsByMessageIds,
@@ -29,6 +30,7 @@ export type MessagesServiceErrorCode
     | 'FORBIDDEN'
     | 'INVALID_PARTICIPANT'
     | 'SELF_DM'
+    | 'DM_DISABLED'
     | 'ENTITY_NOT_FOUND'
     | 'ENTITY_FORBIDDEN'
 
@@ -131,6 +133,7 @@ async function findExistingDm(db: Db, userA: string, userB: string) {
 }
 
 export async function createOrGetDmConversation(db: Db, currentUserId: string, participantUserId: string) {
+  if (!(await isDirectMessagingEnabled(db))) throw new MessagesServiceError('DM_DISABLED')
   if (currentUserId === participantUserId) throw new MessagesServiceError('SELF_DM')
   await assertStaffUser(db, participantUserId)
 
@@ -156,6 +159,21 @@ export interface ListConversationsFilter {
 export async function listConversations(db: Db, filter: ListConversationsFilter) {
   await syncTeamChatParticipants(db)
   const teamSummary = await getTeamConversationSummary(db, filter.userId)
+  const directMessagingEnabled = await isDirectMessagingEnabled(db)
+
+  let teamItem = teamSummary
+  if (teamSummary && filter.q) {
+    const term = filter.q.toLowerCase()
+    const hay = `${teamSummary.title} ${teamSummary.lastMessage?.preview ?? ''}`.toLowerCase()
+    if (!hay.includes(term)) teamItem = null
+  }
+
+  if (!directMessagingEnabled) {
+    const merged = teamItem ? [teamItem] : []
+    const start = (filter.page - 1) * filter.pageSize
+    const paged = merged.slice(start, start + filter.pageSize)
+    return { items: paged, total: merged.length, page: filter.page, pageSize: filter.pageSize }
+  }
 
   const participantRows = await db.select({
     conversationId: conversationParticipants.conversationId,
@@ -169,13 +187,6 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
     ))
 
   const dmItems: Array<Record<string, unknown>> = []
-
-  let teamItem = teamSummary
-  if (teamSummary && filter.q) {
-    const term = filter.q.toLowerCase()
-    const hay = `${teamSummary.title} ${teamSummary.lastMessage?.preview ?? ''}`.toLowerCase()
-    if (!hay.includes(term)) teamItem = null
-  }
 
   if (!participantRows.length) {
     const merged = teamItem ? [teamItem] : []

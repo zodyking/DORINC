@@ -5,10 +5,12 @@ import {
   DEFAULT_BUSINESS_PROFILE,
   DEFAULT_INVOICE_SETTINGS,
   DEFAULT_LINE_TYPE_VERBS,
+  DEFAULT_CHAT_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   defaultCatalogKeywordMap,
   type BusinessProfile,
   type CatalogKeywordMap,
+  type ChatWorkspaceSettings,
   type InvoiceWorkspaceSettings,
   type LineTypeVerbSettings,
   type NotificationSettings,
@@ -16,6 +18,7 @@ import {
 import {
   businessProfileSchema,
   catalogKeywordMapSchema,
+  chatWorkspaceSettingsSchema,
   invoiceWorkspaceSettingsSchema,
   lineTypeVerbsSchema,
   notificationSettingsSchema,
@@ -28,6 +31,7 @@ export const WORKSPACE_SETTING_KEYS = {
   lineTypeVerbs: 'workspace.line_type_verbs',
   invoice: 'workspace.invoice_settings',
   notifications: 'workspace.notification_settings',
+  chat: 'workspace.chat_settings',
 } as const
 
 async function readJson<T>(db: Db, key: string): Promise<T | null> {
@@ -173,4 +177,24 @@ export async function isNotificationEnabled(
 ): Promise<boolean> {
   const settings = await getNotificationSettings(db)
   return settings[key] !== false
+}
+
+export async function getChatWorkspaceSettings(db: Db): Promise<ChatWorkspaceSettings> {
+  const raw = await readJson<Partial<ChatWorkspaceSettings>>(db, WORKSPACE_SETTING_KEYS.chat)
+  return chatWorkspaceSettingsSchema.parse({ ...DEFAULT_CHAT_SETTINGS, ...raw })
+}
+
+export async function saveChatWorkspaceSettings(
+  db: Db,
+  input: ChatWorkspaceSettings,
+  updatedBy: string,
+) {
+  const settings = chatWorkspaceSettingsSchema.parse(input)
+  await writeJson(db, WORKSPACE_SETTING_KEYS.chat, settings, updatedBy)
+  return settings
+}
+
+export async function isDirectMessagingEnabled(db: Db): Promise<boolean> {
+  const settings = await getChatWorkspaceSettings(db)
+  return settings.directMessagingEnabled === true
 }

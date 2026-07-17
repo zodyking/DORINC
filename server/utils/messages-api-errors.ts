@@ -14,6 +14,8 @@ export function throwMessagesApiError(event: H3Event, err: MessagesServiceError,
       throw apiError(event, 'VALIDATION_ERROR', 'You cannot message yourself')
     case 'INVALID_PARTICIPANT':
       throw apiError(event, 'VALIDATION_ERROR', 'That user cannot receive messages')
+    case 'DM_DISABLED':
+      throw apiError(event, 'FORBIDDEN', 'Direct messaging is disabled for this workspace')
     default:
       throw apiError(event, 'VALIDATION_ERROR', fallbackMessage)
   }
