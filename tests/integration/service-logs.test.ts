@@ -29,6 +29,7 @@ import { customers } from '../../server/db/schema/customers'
 import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { formatInvoiceNumber, invoiceLineItems, invoices } from '../../server/db/schema/invoices'
+import { auditLogs } from '../../server/db/schema/audit'
 import { users } from '../../server/db/schema/auth'
 
 config()
@@ -424,7 +425,26 @@ describe('P1-28 revert send to invoice', () => {
     expect(updated.complaint).toBe('Edited after undo')
   })
 
-  it('rejects revert when invoice has line items', async () => {
+  it('undoes when invoice only has line items copied from the service log', async () => {
+    const log = await makeLog({
+      draftLineItems: [{
+        lineType: 'labor',
+        description: 'Oil change',
+        qty: '1',
+        rate: '85.00',
+      }],
+    })
+    await transitionServiceLog(db, log.id, 'ready_for_review')
+    const { invoice } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    const lines = await listInvoiceLineItems(db, invoice.id)
+    expect(lines.length).toBeGreaterThan(0)
+
+    const { log: reverted } = await revertServiceLogInvoice(db, log.id)
+    expect(reverted.status).toBe('ready_for_review')
+    expect(reverted.invoiceId).toBeNull()
+  })
+
+  it('rejects revert when invoice was edited after conversion', async () => {
     const log = await makeLog()
     await transitionServiceLog(db, log.id, 'ready_for_review')
     const { invoice } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
@@ -436,6 +456,13 @@ describe('P1-28 revert send to invoice', () => {
       unitPrice: '100.00',
       taxable: true,
       sortOrder: 0,
+    })
+    await db.insert(auditLogs).values({
+      entityType: 'invoice',
+      entityId: invoice.id,
+      action: 'invoices.line_items.create',
+      actorUserId: MECHANIC,
+      afterData: { description: 'Test line' },
     })
     await expect(revertServiceLogInvoice(db, log.id)).rejects.toThrow('NOT_REVERTIBLE')
   })
