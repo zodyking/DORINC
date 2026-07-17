@@ -17,6 +17,7 @@ import {
   promptForSpeechField,
   retryPromptForCommandMode,
   retryPromptForEditPick,
+  retryPromptForEditField,
   retryPromptForField,
   type SpeechLineField,
 } from '~/utils/speech-line-flow'
@@ -244,7 +245,7 @@ export function useSpeechLineFlow(handlers: {
     if (field.value === 'command') return retryPromptForCommandMode()
     if (flowMode.value === 'edit' && editingIndex.value !== null) {
       if (field.value === 'pick') return retryPromptForEditPick()
-      return promptForEditField(field.value, draft.value, editingIndex.value)
+      return retryPromptForEditField(field.value, draft.value.lineType)
     }
     return retryPromptForField(field.value)
   }
@@ -281,7 +282,7 @@ export function useSpeechLineFlow(handlers: {
       goToEditField(target)
       return
     }
-    error.value = 'Say type, description, quantity, rate, save, or cancel.'
+    error.value = 'Say type, description, hours or quantity, or rate — or done when finished.'
     speakThenListen(retryPromptForEditPick())
   }
 
@@ -320,7 +321,7 @@ export function useSpeechLineFlow(handlers: {
         startEditFlow(editIndex)
         return
       }
-      error.value = 'Say add line, edit line item number, or done when finished.'
+      error.value = 'Say add line, edit line, or done when finished.'
       speakThenListen(retryPromptForCommandMode())
       return
     }

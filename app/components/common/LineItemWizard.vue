@@ -86,7 +86,7 @@ const feedback = computed(() => {
     case 'processing':
       return 'Got it…'
     default:
-      return prompt.value || 'Say add line, edit line item number, or done when finished'
+      return prompt.value || 'Say add line, edit line, or done when finished'
   }
 })
 
@@ -170,7 +170,7 @@ defineExpose({ openWizard: openSession })
       />
       <p class="li-list-hint">
         Say <b>add line</b> or <b>add another</b> for more.
-        Say <b>edit line 1</b> or <b>edit line item number {{ editHint }}</b> to change a line.
+        Say <b>edit line 1</b> or <b>edit line {{ editHint }}</b> to change a line.
         Say <b>done</b> when finished.
       </p>
     </section>

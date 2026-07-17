@@ -82,12 +82,12 @@ const steps = [
 ]
 
 const SERVICE_LOG_NARRATIONS: Record<number, string> = {
-  1: 'Pick the customer.',
-  2: 'Choose the vehicle.',
-  3: 'Enter when and where the work happened.',
-  4: 'Describe what you did.',
-  5: 'Upload a photo or use your voice for line items.',
-  6: 'Double-check everything, then submit.',
+  1: 'Pick customer.',
+  2: 'Pick vehicle.',
+  3: 'Enter when and where.',
+  4: 'Describe the work.',
+  5: 'Photo or voice for lines.',
+  6: 'Review and submit.',
 }
 
 useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)

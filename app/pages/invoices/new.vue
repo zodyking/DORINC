@@ -91,11 +91,11 @@ const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | 
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 
 const INVOICE_NARRATIONS: Record<number, string> = {
-  1: 'Pick who you are billing.',
-  2: 'Choose the vehicle for this invoice.',
-  3: 'Set the invoice date, due date, and payment terms.',
-  4: 'Add your line items and charges.',
-  5: 'Preview the invoice PDF, then save your draft.',
+  1: 'Pick customer.',
+  2: 'Pick vehicle.',
+  3: 'Set dates and terms.',
+  4: 'Add line items.',
+  5: 'Preview PDF and save.',
 }
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)

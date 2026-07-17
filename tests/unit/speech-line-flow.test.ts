@@ -8,6 +8,10 @@ import {
   parseSpokenLineType,
   parseSpokenNumber,
   parseKeepCurrent,
+  promptForCommandMode,
+  promptForEditPick,
+  promptForSpeechField,
+  retryPromptForEditPick,
 } from '../../app/utils/speech-line-flow'
 
 describe('speech line flow commands', () => {
@@ -95,5 +99,20 @@ describe('speech line flow commands', () => {
     expect(parseSpokenNumber('labor')).toBe('')
     expect(parseSpokenNumber('hello there')).toBe('')
     expect(parseSpokenNumber('')).toBe('')
+  })
+
+  it('uses direct voice prompts', () => {
+    expect(promptForCommandMode(2)).toBe('Say add line, edit line, or done when finished.')
+    expect(promptForSpeechField('type', '')).toBe('Say labor, part, or fee.')
+    expect(promptForSpeechField('description', 'labor')).toBe('Say what was done.')
+    expect(promptForSpeechField('qty', 'labor')).toBe('Say hours.')
+    expect(promptForSpeechField('confirm', 'part')).toBe('Say save, add another, or cancel.')
+    expect(promptForEditPick({
+      lineType: 'labor',
+      description: 'Brake pads',
+      qty: '2',
+      rate: '95',
+    }, 0)).toBe('Say type, description, hours, or rate — or done when finished.')
+    expect(retryPromptForEditPick()).toBe('Say type, description, hours or quantity, or rate — or done when finished.')
   })
 })
