@@ -1,20 +1,23 @@
-import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
 
 export const MESSAGE_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice'] as const
 export type MessageEntityType = (typeof MESSAGE_ENTITY_TYPES)[number]
 
-export const CONVERSATION_TYPES = ['dm', 'email'] as const
+export const CONVERSATION_TYPES = ['dm', 'email', 'team'] as const
 export type ConversationType = (typeof CONVERSATION_TYPES)[number]
 
-/** Staff direct-message threads. */
+/** Staff direct-message threads and the default team group chat. */
 export const conversations = pgTable('conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
   type: text('type', { enum: CONVERSATION_TYPES }).notNull().default('dm'),
+  title: text('title'),
+  isSystem: boolean('is_system').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   index('conversations_updated_idx').on(table.updatedAt),
+  index('conversations_system_idx').on(table.isSystem),
 ])
 
 export const conversationParticipants = pgTable('conversation_participants', {

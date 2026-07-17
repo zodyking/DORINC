@@ -93,6 +93,9 @@ export async function approveUser(db: Db, input: ApproveInput) {
     .where(eq(users.id, input.userId))
     .returning()
 
+  const { syncTeamChatParticipants } = await import('./team-chat.service')
+  await syncTeamChatParticipants(db)
+
   return { user: updated!, accountTypeKey, previousAccountTypeKey: row.accountTypeKey }
 }
 

@@ -694,6 +694,46 @@ export function buildCustomerEmailReceivedStaffEmail({
   })
 }
 
+export function buildChatMessageReceivedEmail({
+  recipientName,
+  senderName,
+  channelLabel,
+  messagePreview,
+  messagesUrl,
+  appUrl,
+  brand,
+}) {
+  const subject = `${senderName} — ${channelLabel}`
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    `${senderName} sent a message in ${channelLabel}:`,
+    '',
+    messagePreview,
+    '',
+    `Open Messages: ${messagesUrl}`,
+  ].join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Team chat',
+    headline: `${senderName} sent a message`,
+    lead: `You have a new message in ${channelLabel}.`,
+    details: [
+      { label: 'From', value: senderName },
+      { label: 'Channel', value: channelLabel },
+    ],
+    bodyHtml: messagePreview
+      ? `<p style="margin:0;color:#111827;font-size:17px;line-height:28px;font-weight:700;font-style:italic;font-family:Arial,Helvetica,sans-serif;">&ldquo;${escapeHtml(String(messagePreview))}&rdquo;</p>`
+      : undefined,
+    primaryAction: { href: messagesUrl, label: 'Open Messages' },
+    footerNote: 'You received this because chat email notifications are enabled on your account.',
+    appUrl,
+    brand,
+  })
+}
+
 export function buildServiceLogSentToInvoiceStaffEmail({
   recipientName,
   senderName,

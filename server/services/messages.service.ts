@@ -15,6 +15,7 @@ import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import type { MessageEntityRefInput } from '../../shared/validators/messages'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
+import { getTeamConversationSummary, syncTeamChatParticipants } from './team-chat.service'
 
 export type MessagesServiceErrorCode
   = | 'NOT_FOUND'
@@ -62,6 +63,11 @@ async function assertParticipant(db: Db, conversationId: string, userId: string)
       eq(conversationParticipants.userId, userId),
     ))
   if (!row) throw new MessagesServiceError('FORBIDDEN')
+}
+
+async function getConversationRow(db: Db, conversationId: string) {
+  const [row] = await db.select().from(conversations).where(eq(conversations.id, conversationId))
+  return row ?? null
 }
 
 async function getOtherParticipant(db: Db, conversationId: string, userId: string) {
@@ -141,15 +147,34 @@ export interface ListConversationsFilter {
 }
 
 export async function listConversations(db: Db, filter: ListConversationsFilter) {
+  await syncTeamChatParticipants(db)
+  const teamSummary = await getTeamConversationSummary(db, filter.userId)
+
   const participantRows = await db.select({
     conversationId: conversationParticipants.conversationId,
     lastReadAt: conversationParticipants.lastReadAt,
   })
     .from(conversationParticipants)
-    .where(eq(conversationParticipants.userId, filter.userId))
+    .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversationId))
+    .where(and(
+      eq(conversationParticipants.userId, filter.userId),
+      eq(conversations.type, 'dm'),
+    ))
+
+  const dmItems: Array<Record<string, unknown>> = []
+
+  let teamItem = teamSummary
+  if (teamSummary && filter.q) {
+    const term = filter.q.toLowerCase()
+    const hay = `${teamSummary.title} ${teamSummary.lastMessage?.preview ?? ''}`.toLowerCase()
+    if (!hay.includes(term)) teamItem = null
+  }
 
   if (!participantRows.length) {
-    return { items: [], total: 0, page: filter.page, pageSize: filter.pageSize }
+    const merged = teamItem ? [teamItem] : []
+    const start = (filter.page - 1) * filter.pageSize
+    const paged = merged.slice(start, start + filter.pageSize)
+    return { items: paged, total: merged.length, page: filter.page, pageSize: filter.pageSize }
   }
 
   const conversationIds = participantRows.map(r => r.conversationId)
@@ -171,10 +196,12 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
   })
     .from(conversations)
     .leftJoin(latestMessageSubquery, eq(latestMessageSubquery.conversationId, conversations.id))
-    .where(inArray(conversations.id, conversationIds))
+    .where(and(
+      inArray(conversations.id, conversationIds),
+      eq(conversations.type, 'dm'),
+    ))
     .orderBy(desc(sql`coalesce(${latestMessageSubquery.lastMessageAt}, ${conversations.updatedAt})`))
 
-  const items = []
   for (const row of rows) {
     const other = await getOtherParticipant(db, row.conversation.id, filter.userId)
     if (!other) continue
@@ -201,7 +228,7 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
       ? await countUnreadSince(db, row.conversation.id, filter.userId, lastReadAt)
       : 0
 
-    items.push({
+    dmItems.push({
       id: row.conversation.id,
       type: row.conversation.type,
       participant: {
@@ -223,12 +250,15 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
     })
   }
 
+  dmItems.sort((a, b) => new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime())
+  const merged = teamItem ? [teamItem, ...dmItems] : dmItems
+
   const start = (filter.page - 1) * filter.pageSize
-  const paged = items.slice(start, start + filter.pageSize)
+  const paged = merged.slice(start, start + filter.pageSize)
 
   return {
     items: paged,
-    total: items.length,
+    total: merged.length,
     page: filter.page,
     pageSize: filter.pageSize,
   }
@@ -271,6 +301,10 @@ export async function getConversationDeletionLabel(db: Db, conversationId: strin
     return 'Email thread'
   }
 
+  if (conversation.type === 'team') {
+    return conversation.title ?? 'Team'
+  }
+
   const participantRows = await db.select({ name: users.name })
     .from(conversationParticipants)
     .innerJoin(users, eq(conversationParticipants.userId, users.id))
@@ -285,11 +319,8 @@ export async function getConversationDeletionLabel(db: Db, conversationId: strin
 
 export async function getConversationDetail(db: Db, conversationId: string, userId: string) {
   await assertParticipant(db, conversationId, userId)
-  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId))
+  const conversation = await getConversationRow(db, conversationId)
   if (!conversation) throw new MessagesServiceError('NOT_FOUND')
-
-  const other = await getOtherParticipant(db, conversationId, userId)
-  if (!other) throw new MessagesServiceError('NOT_FOUND')
 
   const [participant] = await db.select({ lastReadAt: conversationParticipants.lastReadAt })
     .from(conversationParticipants)
@@ -297,6 +328,20 @@ export async function getConversationDetail(db: Db, conversationId: string, user
       eq(conversationParticipants.conversationId, conversationId),
       eq(conversationParticipants.userId, userId),
     ))
+
+  if (conversation.type === 'team') {
+    return {
+      id: conversation.id,
+      type: conversation.type,
+      title: conversation.title ?? 'Team',
+      isSystem: conversation.isSystem,
+      lastReadAt: participant?.lastReadAt ?? null,
+      updatedAt: conversation.updatedAt,
+    }
+  }
+
+  const other = await getOtherParticipant(db, conversationId, userId)
+  if (!other) throw new MessagesServiceError('NOT_FOUND')
 
   return {
     id: conversation.id,
@@ -415,6 +460,18 @@ export async function sendMessage(
 
   const [sender] = await db.select({ name: users.name }).from(users).where(eq(users.id, senderUserId))
 
+  const conversation = await getConversationRow(db, conversationId)
+  if (conversation?.type !== 'email') {
+    const { notifyChatMessageReceived } = await import('./chat-notifications.service')
+    void notifyChatMessageReceived(db, {
+      conversationId,
+      messageId: message!.id,
+      senderUserId,
+      body: normalizedBody,
+      isTeamChat: conversation?.type === 'team',
+    }).catch(() => {})
+  }
+
   return {
     id: message!.id,
     conversationId: message!.conversationId,
@@ -439,14 +496,21 @@ export async function markConversationRead(db: Db, conversationId: string, userI
 }
 
 export async function getUnreadCount(db: Db, userId: string) {
+  await syncTeamChatParticipants(db)
+  const teamSummary = await getTeamConversationSummary(db, userId)
+  let total = teamSummary?.unreadCount ?? 0
+
   const participantRows = await db.select({
     conversationId: conversationParticipants.conversationId,
     lastReadAt: conversationParticipants.lastReadAt,
   })
     .from(conversationParticipants)
-    .where(eq(conversationParticipants.userId, userId))
+    .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversationId))
+    .where(and(
+      eq(conversationParticipants.userId, userId),
+      eq(conversations.type, 'dm'),
+    ))
 
-  let total = 0
   for (const row of participantRows) {
     total += await countUnreadSince(db, row.conversationId, userId, row.lastReadAt)
   }

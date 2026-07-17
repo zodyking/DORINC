@@ -22,6 +22,7 @@ import {
 } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 import { getConversationDeletionLabel, MessagesServiceError } from './messages.service'
+import { assertTeamConversationDeletable, TeamChatServiceError } from './team-chat.service'
 
 export type DeletionRequestsServiceErrorCode
   = 'NOT_FOUND'
@@ -126,6 +127,15 @@ async function assertEntityDeletable(db: Db, entityType: DeletionEntityType, ent
       return
     }
     case 'conversation':
+      try {
+        await assertTeamConversationDeletable(db, entityId)
+      }
+      catch (err) {
+        if (err instanceof TeamChatServiceError && err.code === 'FORBIDDEN') {
+          throw new DeletionRequestsServiceError('INVALID_TRANSITION')
+        }
+        throw err
+      }
       await getConversationDeletionLabel(db, entityId)
       return
   }

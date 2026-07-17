@@ -45,5 +45,4 @@ export const notificationSettingsSchema = z.object({
   customerServiceRequestSubmitted: z.boolean().default(true),
   customerChangeRequestSubmitted: z.boolean().default(true),
   customerEmailReceived: z.boolean().default(true),
-  serviceLogSentToInvoice: z.boolean().default(true),
 })

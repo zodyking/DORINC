@@ -13,21 +13,26 @@ const emit = defineEmits<{
 }>()
 
 const isEmail = computed(() => props.conversation.type === 'email')
+const isTeam = computed(() => props.conversation.type === 'team')
 
-const displayName = computed(() =>
-  isEmail.value
-    ? (props.conversation.customer?.name || props.conversation.customer?.email || 'Email')
-    : props.conversation.participant.name,
-)
+const displayName = computed(() => {
+  if (props.conversation.type === 'team') return props.conversation.title || 'Team'
+  if (props.conversation.type === 'email') {
+    return props.conversation.customer?.name || props.conversation.customer?.email || 'Email'
+  }
+  return props.conversation.participant.name
+})
 
-const displayEmail = computed(() =>
-  isEmail.value
-    ? props.conversation.customer?.email ?? ''
-    : props.conversation.participant.email,
-)
+const displayEmail = computed(() => {
+  if (props.conversation.type === 'team') return 'Group chat'
+  if (props.conversation.type === 'email') {
+    return props.conversation.customer?.email ?? ''
+  }
+  return props.conversation.participant.email
+})
 
-const avCls = computed(() => avColor(displayName.value))
-const avInitials = computed(() => initials(displayName.value))
+const avCls = computed(() => avColor(isTeam.value ? 'Team' : displayName.value))
+const avInitials = computed(() => isTeam.value ? '👥' : initials(displayName.value))
 
 const preview = computed(() => {
   const last = props.conversation.lastMessage
@@ -70,7 +75,7 @@ const unreadAriaLabel = computed(() =>
   <button
     type="button"
     class="dm-conv-item"
-    :class="{ on: active, unread: conversation.unreadCount > 0, 'is-email': isEmail }"
+    :class="{ on: active, unread: conversation.unreadCount > 0, 'is-email': isEmail, 'is-team': isTeam }"
     :aria-label="itemAriaLabel"
     @click="emit('select', conversation.id)"
   >
@@ -82,7 +87,7 @@ const unreadAriaLabel = computed(() =>
       </span>
       <span v-if="subjectLine" class="dm-conv-subject">{{ subjectLine }}</span>
       <span class="dm-conv-preview">{{ preview }}</span>
-      <small v-if="isEmail && displayEmail" class="dm-conv-email">{{ displayEmail }}</small>
+      <small v-if="displayEmail && (isEmail || isTeam)" class="dm-conv-email">{{ displayEmail }}</small>
     </span>
     <span v-if="conversation.unreadCount" class="dm-conv-badge" :aria-label="unreadAriaLabel">
       {{ conversation.unreadCount }}

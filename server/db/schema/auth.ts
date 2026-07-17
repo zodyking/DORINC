@@ -53,6 +53,11 @@ export const users = pgTable('users', {
   mustChangePassword: boolean('must_change_password').notNull().default(false),
   tempPasswordExpiresAt: timestamp('temp_password_expires_at', { withTimezone: true }),
 
+  /** Default team group chat membership (Messages → Team). */
+  teamChatEnabled: boolean('team_chat_enabled').notNull().default(true),
+  /** Email alert when a chat message is received (DM or team). */
+  messageEmailNotify: boolean('message_email_notify').notNull().default(true),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

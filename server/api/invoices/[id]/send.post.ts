@@ -4,6 +4,9 @@ import {
   InvoiceSendServiceError,
   queueInvoiceSend,
 } from '../../../services/invoice-send.service'
+import { getCustomer } from '../../../services/customers.service'
+import { postInvoiceSentTeamMessage } from '../../../services/workflow-chat.service'
+import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
 import { isInvoiceResendable } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
@@ -35,6 +38,7 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
 export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'invoices.send.all')
   const { id } = validateParams(event, idParamSchema)
+  const db = useDb()
 
   // Body is optional: the one-click flows post nothing, the compose UI posts overrides.
   const rawBody = await readBody(event).catch(() => null)
@@ -42,7 +46,7 @@ export default defineEventHandler(async (event) => {
   const overrides = parsedBody.success ? parsedBody.data : {}
 
   try {
-    const result = await queueInvoiceSend(useDb(), id, actor.id, overrides, actor.accountType)
+    const result = await queueInvoiceSend(db, id, actor.id, overrides, actor.accountType)
 
     await writeAudit(event, {
       entityType: 'invoice',
@@ -59,6 +63,30 @@ export default defineEventHandler(async (event) => {
       permissionKey: 'invoices.send.all',
       riskLevel: 'sensitive',
     })
+
+    if (!result.alreadyQueued) {
+      const inv = result.invoice
+      let customerName = 'Customer'
+      if (inv.customerId) {
+        try {
+          const customer = await getCustomer(db, inv.customerId)
+          customerName = customer.displayName
+        }
+        catch {
+          // fallback
+        }
+      }
+      if (customerName === 'Customer' && inv.customerSnapshot) {
+        customerName = resolveCustomerDisplayName(null, inv.customerSnapshot)
+      }
+      void postInvoiceSentTeamMessage(db, {
+        senderUserId: actor.id,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerId: inv.customerId,
+        customerName,
+      }).catch(() => {})
+    }
 
     return {
       invoice: result.invoice,

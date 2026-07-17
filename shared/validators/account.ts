@@ -12,5 +12,14 @@ export const accountPasswordSchema = z.object({
   newPassword: z.string().min(12).max(200),
 })
 
+export const accountNotificationPrefsSchema = z.object({
+  teamChatEnabled: z.boolean().optional(),
+  messageEmailNotify: z.boolean().optional(),
+}).refine(
+  data => data.teamChatEnabled !== undefined || data.messageEmailNotify !== undefined,
+  { message: 'At least one notification preference is required' },
+)
+
 export type AccountProfileInput = z.infer<typeof accountProfileSchema>
 export type AccountPasswordInput = z.infer<typeof accountPasswordSchema>
+export type AccountNotificationPrefsInput = z.infer<typeof accountNotificationPrefsSchema>

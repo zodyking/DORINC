@@ -229,6 +229,21 @@ async function onDeletionRequested() {
   await dm.fetchConversations()
 }
 
+async function onClearTeamHistory() {
+  const conv = dm.activeConversation
+  if (!conv || conv.type !== 'team') return
+  if (!window.confirm('Clear all messages in the team chat? This cannot be undone.')) return
+  try {
+    await $fetch(`/api/conversations/${conv.id}/clear-history`, { method: 'POST' })
+    dm.messages = []
+    await dm.fetchConversations()
+    if (dm.activeConversationId === conv.id) await dm.openConversation(conv.id)
+  }
+  catch (e: unknown) {
+    dm.fetchError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not clear team chat history'
+  }
+}
+
 async function setChannel(channel: 'dm' | 'email') {
   await dm.setChannel(channel)
 }
@@ -347,6 +362,7 @@ async function setEmailShowAll(showAll: boolean) {
           @back="onBack"
           @send="onSend"
           @deletion-requested="onDeletionRequested"
+          @clear-history="onClearTeamHistory"
         />
       </div>
     </div>

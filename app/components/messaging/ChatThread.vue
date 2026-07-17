@@ -13,6 +13,7 @@ const emit = defineEmits<{
   back: []
   send: [body: string, files: File[]]
   'deletion-requested': []
+  'clear-history': []
 }>()
 
 const auth = useAuthStore()
@@ -20,9 +21,11 @@ const msgsEl = ref<HTMLElement | null>(null)
 
 const userId = computed(() => props.currentUserId ?? auth.user?.id ?? '')
 const isEmail = computed(() => props.conversation?.type === 'email')
+const isTeam = computed(() => props.conversation?.type === 'team')
 
 const peerName = computed(() => {
   if (!props.conversation) return ''
+  if (props.conversation.type === 'team') return props.conversation.title || 'Team'
   if (props.conversation.type === 'email') {
     return props.conversation.customer?.name || props.conversation.customer?.email || 'Customer'
   }
@@ -31,6 +34,7 @@ const peerName = computed(() => {
 
 const peerEmail = computed(() => {
   if (!props.conversation) return ''
+  if (isTeam.value) return 'Everyone on staff'
   if (props.conversation.type === 'email') {
     return props.conversation.customer?.email ?? ''
   }
@@ -43,6 +47,7 @@ const emailSubject = computed(() =>
 
 const conversationLabel = computed(() => {
   if (!props.conversation) return ''
+  if (props.conversation.type === 'team') return props.conversation.title || 'Team'
   if (props.conversation.type === 'email') {
     return emailSubject.value || peerName.value || 'Email thread'
   }
@@ -85,7 +90,16 @@ watch(() => props.conversation?.id, () => {
         </div>
       </div>
       <div class="dm-thread-actions">
+        <button
+          v-if="isTeam"
+          type="button"
+          class="btn sm ghost"
+          @click="emit('clear-history')"
+        >
+          Clear history
+        </button>
         <DeleteEntityButton
+          v-if="!isTeam"
           entity-type="conversation"
           :entity-id="conversation.id"
           :entity-label="conversationLabel"
@@ -119,7 +133,7 @@ watch(() => props.conversation?.id, () => {
         />
       </template>
       <div v-if="!loading && !messages.length" class="dm-thread-loading">
-        {{ isEmail ? 'No emails in this thread yet.' : `Say hello to ${peerName.split(' ')[0]}.` }}
+        {{ isEmail ? 'No emails in this thread yet.' : isTeam ? 'No team messages yet.' : `Say hello to ${peerName.split(' ')[0]}.` }}
       </div>
     </div>
 

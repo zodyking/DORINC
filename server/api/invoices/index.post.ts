@@ -1,6 +1,9 @@
 import { useDb } from '../../db/client'
 import { acquireEditingSession } from '../../services/editing-sessions.service'
 import { createInvoice, InvoicesServiceError } from '../../services/invoices.service'
+import { getCustomer } from '../../services/customers.service'
+import { postInvoiceCreatedTeamMessage } from '../../services/workflow-chat.service'
+import { resolveCustomerDisplayName } from '../../services/entity-snapshots'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -33,6 +36,29 @@ export default defineEventHandler(async (event) => {
       },
       permissionKey: 'invoices.create.all',
     })
+
+    if (invoice.creationSource !== 'service_log') {
+      let customerName = 'Customer'
+      if (invoice.customerId) {
+        try {
+          const customer = await getCustomer(db, invoice.customerId)
+          customerName = customer.displayName
+        }
+        catch {
+          // use fallback below
+        }
+      }
+      if (customerName === 'Customer' && invoice.customerSnapshot) {
+        customerName = resolveCustomerDisplayName(null, invoice.customerSnapshot)
+      }
+      void postInvoiceCreatedTeamMessage(db, {
+        senderUserId: actor.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: invoice.customerId,
+        customerName,
+      }).catch(() => {})
+    }
 
     return { invoice }
   }

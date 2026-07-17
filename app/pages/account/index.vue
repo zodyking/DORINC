@@ -36,6 +36,8 @@ interface AccountDetail {
   lastLoginAt: string | null
   activeSessionCount: number
   sessions: AccountSession[]
+  teamChatEnabled: boolean
+  messageEmailNotify: boolean
 }
 
 const { data, refresh, error } = useClientFetch<{ account: AccountDetail }>('/api/account')
@@ -65,6 +67,18 @@ const passwordError = ref('')
 
 const revokeBusy = ref<string | null>(null)
 const revokeAllBusy = ref(false)
+
+const teamChatEnabled = ref(true)
+const messageEmailNotify = ref(true)
+const notifyBusy = ref(false)
+const notifyMessage = ref('')
+const notifyError = ref('')
+
+watch(account, (a) => {
+  if (!a) return
+  teamChatEnabled.value = a.teamChatEnabled
+  messageEmailNotify.value = a.messageEmailNotify
+}, { immediate: true })
 
 async function saveProfile() {
   profileBusy.value = true
@@ -163,6 +177,29 @@ async function revokeAllOtherSessions() {
   }
 }
 
+async function saveNotificationPrefs() {
+  notifyBusy.value = true
+  notifyMessage.value = ''
+  notifyError.value = ''
+  try {
+    await $fetch('/api/account/notifications', {
+      method: 'PATCH',
+      body: {
+        teamChatEnabled: teamChatEnabled.value,
+        messageEmailNotify: messageEmailNotify.value,
+      },
+    })
+    notifyMessage.value = 'Notification preferences saved'
+    await refresh()
+  }
+  catch (e: unknown) {
+    notifyError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not save preferences'
+  }
+  finally {
+    notifyBusy.value = false
+  }
+}
+
 const displayName = computed(() => account.value?.name ?? auth.user?.name ?? 'Staff')
 const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
@@ -247,6 +284,35 @@ const avInitials = computed(() => initials(displayName.value))
       </div>
 
       <div class="stack">
+        <div class="card">
+          <div class="chead"><h3>Messages</h3></div>
+          <div class="cbody">
+            <label class="fld" style="display:flex; align-items:flex-start; gap:10px;">
+              <input v-model="teamChatEnabled" type="checkbox" style="margin-top:4px;">
+              <span>
+                <b>Team group chat</b>
+                <small style="display:block; color:#64748b; margin-top:4px;">
+                  Stay in the shared Team channel for internal workflow updates. You can clear chat history, but the channel cannot be deleted.
+                </small>
+              </span>
+            </label>
+            <label class="fld" style="display:flex; align-items:flex-start; gap:10px;">
+              <input v-model="messageEmailNotify" type="checkbox" style="margin-top:4px;">
+              <span>
+                <b>Email me for new chat messages</b>
+                <small style="display:block; color:#64748b; margin-top:4px;">
+                  Send an email when you receive a direct message or a team chat message.
+                </small>
+              </span>
+            </label>
+            <p v-if="notifyMessage" style="color:#059669; font-size:13px;">{{ notifyMessage }}</p>
+            <p v-if="notifyError" style="color:#dc2626; font-size:13px;">{{ notifyError }}</p>
+            <button class="btn primary" :disabled="notifyBusy" @click="saveNotificationPrefs">
+              {{ notifyBusy ? 'Saving…' : 'Save message preferences' }}
+            </button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="chead"><h3>Role &amp; access</h3></div>
           <dl class="kv">

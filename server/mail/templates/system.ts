@@ -15,5 +15,5 @@ export {
   buildCustomerServiceRequestStaffEmail,
   buildCustomerChangeRequestStaffEmail,
   buildCustomerEmailReceivedStaffEmail,
-  buildServiceLogSentToInvoiceStaffEmail,
+  buildChatMessageReceivedEmail,
 } from './system.mjs'

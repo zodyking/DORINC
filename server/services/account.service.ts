@@ -34,6 +34,8 @@ export interface AccountDetail {
   lastLoginAt: string | null
   activeSessionCount: number
   sessions: AccountSessionRow[]
+  teamChatEnabled: boolean
+  messageEmailNotify: boolean
 }
 
 export async function getAccountDetail(
@@ -76,6 +78,8 @@ export async function getAccountDetail(
     lastLoginAt: lastLogin?.lastActivityAt ?? null,
     activeSessionCount: mapped.length,
     sessions: mapped,
+    teamChatEnabled: user.teamChatEnabled,
+    messageEmailNotify: user.messageEmailNotify,
   }
 }
 
@@ -97,6 +101,32 @@ export async function updateAccountProfile(
     .set({ name, email, updatedAt: new Date() })
     .where(eq(users.id, userId))
     .returning()
+
+  return user!
+}
+
+export async function updateAccountNotificationPrefs(
+  db: Db,
+  userId: string,
+  input: { teamChatEnabled?: boolean, messageEmailNotify?: boolean },
+) {
+  if (input.teamChatEnabled === undefined && input.messageEmailNotify === undefined) {
+    const [user] = await db.select().from(users).where(eq(users.id, userId))
+    if (!user) throw new AccountServiceError('SESSION_NOT_FOUND')
+    return user
+  }
+
+  const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
+  if (input.teamChatEnabled !== undefined) changes.teamChatEnabled = input.teamChatEnabled
+  if (input.messageEmailNotify !== undefined) changes.messageEmailNotify = input.messageEmailNotify
+
+  const [user] = await db.update(users)
+    .set(changes)
+    .where(eq(users.id, userId))
+    .returning()
+
+  const { syncTeamChatParticipants } = await import('./team-chat.service')
+  await syncTeamChatParticipants(db)
 
   return user!
 }

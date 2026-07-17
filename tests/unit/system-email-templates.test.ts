@@ -3,8 +3,8 @@ import {
   buildBackupNotificationEmail,
   buildCustomerChangeRequestStaffEmail,
   buildCustomerEmailReceivedStaffEmail,
+  buildChatMessageReceivedEmail,
   buildCustomerServiceRequestStaffEmail,
-  buildServiceLogSentToInvoiceStaffEmail,
   buildDeletionRequestResultEmail,
   buildDeletionRequestSubmittedEmail,
   buildInvoiceAttachedEmail,
@@ -231,23 +231,18 @@ describe('system email templates', () => {
     expect(inbound.html).not.toContain('Customer message')
   })
 
-  it('builds service log sent to invoice staff alert', () => {
-    const mail = buildServiceLogSentToInvoiceStaffEmail({
+  it('builds chat message received email', () => {
+    const mail = buildChatMessageReceivedEmail({
       recipientName: 'Pat',
       senderName: 'Brandon K.',
-      serviceLogLabel: 'SL-1007',
-      customerName: 'Fleet Co',
-      vehicleUnit: 'Bus #616',
-      vehicleDetails: '2023 IC BUS PB105',
-      invoiceNumber: 'INV-000711',
-      invoiceUrl: `${appUrl}/invoices/abc`,
-      serviceLogUrl: `${appUrl}/service-logs/abc`,
+      channelLabel: 'Team',
+      messagePreview: 'Invoice INV-000711 has been created for Fleet Co',
+      messagesUrl: `${appUrl}/messages?conversation=abc`,
       appUrl,
       brand,
     })
-    expect(mail.subject).toBe('Invoice needs to be completed — INV-000711 (SL-1007)')
-    expect(mail.html).toContain('Invoice needs to be completed')
-    expect(mail.html).toContain('Complete invoice')
-    expect(mail.text).toContain('Brandon K.')
+    expect(mail.subject).toContain('Brandon K.')
+    expect(mail.html).toContain('Team')
+    expect(mail.html).toContain('Open Messages')
   })
 })

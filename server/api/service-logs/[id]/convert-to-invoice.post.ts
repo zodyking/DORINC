@@ -6,8 +6,8 @@ import {
 } from '../../../services/service-logs.service'
 import { InvoicesServiceError } from '../../../services/invoices.service'
 import { writeAudit } from '../../../services/audit.service'
-import { notifyServiceLogSentToInvoice } from '../../../services/staff-notifications.service'
-import { resolveCustomerDisplayName, resolveVehicleDisplay } from '../../../services/entity-snapshots'
+import { postServiceLogSentToInvoiceTeamMessage } from '../../../services/workflow-chat.service'
+import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
 import { apiError } from '../../../utils/api-error'
 import { canSendServiceLogToInvoice } from '../../../utils/service-log-actions'
 import { validateBody, validateParams } from '../../../utils/validate'
@@ -64,13 +64,15 @@ export default defineEventHandler(async (event) => {
       riskLevel: 'sensitive',
     })
 
-    void notifyServiceLogSentToInvoice(db, {
+    void postServiceLogSentToInvoiceTeamMessage(db, {
+      senderUserId: auth.user.id,
       serviceLogId: log.id,
       logNumber: log.logNumber,
-      senderName: auth.user.name,
-      senderUserId: auth.user.id,
+      customerId: invoice.customerId,
       customerName: resolveCustomerDisplayName(null, log.customerSnapshot),
-      vehicleSnapshot: resolveVehicleDisplay(null, log.vehicleSnapshot),
+      vehicleId: invoice.vehicleId,
+      vehicleBusNumber: log.vehicleSnapshot?.busNumber ?? null,
+      vehicleUnitTag: log.vehicleSnapshot?.unitTag ?? null,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
     }).catch(() => {})

@@ -964,12 +964,12 @@ export async function replyToEmailThread(
   }
 }
 
-export async function getConversationType(db: Db, conversationId: string): Promise<'dm' | 'email' | null> {
+export async function getConversationType(db: Db, conversationId: string): Promise<'dm' | 'email' | 'team' | null> {
   const [row] = await db.select({ type: conversations.type })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1)
-  return (row?.type as 'dm' | 'email' | undefined) ?? null
+  return (row?.type as 'dm' | 'email' | 'team' | undefined) ?? null
 }
 
 export async function ingestInboundEmail(db: Db, input: {

@@ -17,6 +17,22 @@ export interface DmConversationSummary {
   updatedAt: string
 }
 
+export interface TeamConversationSummary {
+  id: string
+  type: 'team'
+  title: string
+  isSystem: boolean
+  lastMessage: {
+    id: string
+    body: string
+    senderUserId: string
+    createdAt: string
+    preview: string
+  } | null
+  unreadCount: number
+  updatedAt: string
+}
+
 export interface EmailConversationSummary {
   id: string
   type: 'email'
@@ -35,7 +51,7 @@ export interface EmailConversationSummary {
   updatedAt: string
 }
 
-export type ConversationSummary = DmConversationSummary | EmailConversationSummary
+export type ConversationSummary = DmConversationSummary | EmailConversationSummary | TeamConversationSummary
 
 export interface EmailAttachment {
   id: string
@@ -104,6 +120,7 @@ export function useDirectMessages() {
     conversations.value.find(c => c.id === activeConversationId.value) ?? null,
   )
   const activeIsEmail = computed(() => activeConversation.value?.type === 'email')
+const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
 
   async function fetchUnreadCount() {
     if (!canUseMessages.value) return
