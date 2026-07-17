@@ -31,4 +31,12 @@ describe('fetchErrorMessage', () => {
     const err = { statusCode: 500, message: '[GET] "/api/invoices/x/preview-pdf": 500' }
     await expect(fetchErrorMessage(err, 'fallback')).resolves.toContain('PDF generation failed')
   })
+
+  it('sanitizes HTML 502 gateway pages instead of showing raw markup', async () => {
+    const html = '<!DOCTYPE html><html><head><title>502 Bad gateway</title></head><body>error</body></html>'
+    const blob = new Blob([html], { type: 'text/html' })
+    const err = { data: blob, statusCode: 502, message: '[GET] "/api/invoices/x/preview-pdf": 502' }
+    await expect(fetchErrorMessage(err, 'fallback')).resolves.toContain('PDF render service is unavailable')
+    await expect(fetchErrorMessage(err, 'fallback')).resolves.not.toContain('<!DOCTYPE html>')
+  })
 })

@@ -6,7 +6,36 @@ type FetchErrorShape = {
   data?: unknown
 }
 
-async function messageFromErrorData(data: unknown): Promise<string | null> {
+function looksLikeHtmlErrorPage(text: string): boolean {
+  const trimmed = text.trimStart().toLowerCase()
+  return trimmed.startsWith('<!doctype html')
+    || trimmed.startsWith('<html')
+    || /<title>[^<]*(bad gateway|502|503|504|gateway time-out)/i.test(text)
+}
+
+function friendlyHttpError(status: number | undefined, fallback: string): string | null {
+  if (status === 502) {
+    return 'PDF render service is unavailable. Ensure the laravel-pdf container is running.'
+  }
+  if (status === 503 || status === 504) {
+    return 'The server timed out while generating the PDF. Try again in a moment.'
+  }
+  if (status === 500) {
+    return 'PDF generation failed on the server. Check admin worker health and try again.'
+  }
+  if (status && status >= 400) return fallback
+  return null
+}
+
+function sanitizeErrorText(text: string, status?: number): string {
+  if (looksLikeHtmlErrorPage(text)) {
+    return friendlyHttpError(status, 'The server returned an error instead of the requested file.')
+      ?? 'The server returned an error instead of the requested file.'
+  }
+  return text.slice(0, 500)
+}
+
+async function messageFromErrorData(data: unknown, status?: number): Promise<string | null> {
   if (!data) return null
 
   if (typeof data === 'object' && data !== null && typeof (data as Blob).text === 'function') {
@@ -15,10 +44,10 @@ async function messageFromErrorData(data: unknown): Promise<string | null> {
       if (!text.trim()) return null
       try {
         const parsed = JSON.parse(text) as { message?: string, data?: { message?: string } }
-        return parsed.data?.message ?? parsed.message ?? text.slice(0, 500)
+        return parsed.data?.message ?? parsed.message ?? sanitizeErrorText(text, status)
       }
       catch {
-        return text.slice(0, 500)
+        return sanitizeErrorText(text, status)
       }
     }
     catch {
@@ -31,7 +60,7 @@ async function messageFromErrorData(data: unknown): Promise<string | null> {
     return obj.data?.message ?? obj.message ?? null
   }
 
-  if (typeof data === 'string' && data.trim()) return data.slice(0, 500)
+  if (typeof data === 'string' && data.trim()) return sanitizeErrorText(data, status)
   return null
 }
 
@@ -55,11 +84,12 @@ export function syncFetchErrorMessage(err: unknown, fallback: string): string {
 /** Parse API error messages from $fetch/ofetch failures (including blob responses). */
 export async function fetchErrorMessage(err: unknown, fallback: string): Promise<string> {
   const e = err as FetchErrorShape
+  const response = (err as { response?: Response })?.response
+  const status = e.statusCode ?? e.status ?? response?.status
 
-  const fromData = await messageFromErrorData(e.data)
+  const fromData = await messageFromErrorData(e.data, status)
   if (fromData) return fromData
 
-  const response = (err as { response?: Response })?.response
   if (response) {
     try {
       const clone = response.clone()
@@ -69,7 +99,7 @@ export async function fetchErrorMessage(err: unknown, fallback: string): Promise
         return body.data?.message ?? body.message ?? fallback
       }
       const text = (await clone.text()).trim()
-      if (text) return text.slice(0, 500)
+      if (text) return sanitizeErrorText(text, status)
     }
     catch {
       // ignore parse failures
@@ -80,13 +110,18 @@ export async function fetchErrorMessage(err: unknown, fallback: string): Promise
     return e.message
   }
 
-  const status = e.statusCode ?? e.status ?? response?.status
-  if (status === 502) {
-    return 'PDF render service is unavailable. Ensure the laravel-pdf container is running.'
-  }
-  if (status === 500) {
-    return 'PDF generation failed on the server. Check admin worker health and try again.'
+  return friendlyHttpError(status, fallback) ?? fallback
+}
+
+/** Reject blob responses that are HTML/text error pages instead of PDF bytes. */
+export async function assertPdfBlob(blob: Blob): Promise<void> {
+  const type = blob.type?.toLowerCase() ?? ''
+  if (type.includes('html') || (type.includes('text/') && !type.includes('pdf'))) {
+    throw new Error('PDF render service returned an error page instead of a PDF.')
   }
 
-  return fallback
+  const head = await blob.slice(0, 5).text()
+  if (!head.startsWith('%PDF')) {
+    throw new Error('PDF render service returned an invalid document.')
+  }
 }

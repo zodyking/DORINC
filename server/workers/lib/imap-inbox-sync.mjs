@@ -22,6 +22,7 @@ import {
 } from '../../../shared/email-quote-stripping.mjs'
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 import { notifyCustomerEmailReceivedStaff } from './customer-email-staff-notify.mjs'
+import { drainMailQueue } from '../handlers/mail-drain.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
 
@@ -603,6 +604,10 @@ export async function runImapInboxSync(pool, opts = {}) {
 
     if (result.ingested > 0) {
       console.log(`[imap-sync] ingested=${result.ingested} attachments=${result.attachments} skipped=${result.skipped} errors=${result.errors}`)
+      const mail = await drainMailQueue(pool, 20, 5)
+      if (mail.processed || mail.failed) {
+        console.log(`[imap-sync] notification mail processed=${mail.processed} failed=${mail.failed}`)
+      }
     }
 
     return result

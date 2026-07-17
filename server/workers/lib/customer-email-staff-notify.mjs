@@ -122,5 +122,9 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
     queued++
   }
 
+  if (queued > 0) {
+    console.log(`[imap-sync] queued ${queued} customer-email staff notification(s) for conversation ${opts.conversationId}`)
+  }
+
   return { queued }
 }
