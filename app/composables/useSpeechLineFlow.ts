@@ -1,5 +1,5 @@
 import { cancelSpeech, speakWizardText } from '~/utils/wizard-speech'
-import { listenOnce, isSpeechAnswerSupported } from '~/composables/useSpeechAnswer'
+import { listenOnce, listenOnceWithAlternatives, isSpeechAnswerSupported } from '~/composables/useSpeechAnswer'
 import {
   buildLineFromDraft,
   fieldLabel,
@@ -9,7 +9,7 @@ import {
   parseSpokenConfirm,
   parseSpokenEditField,
   parseSpokenEditLineNumber,
-  parseSpokenLineType,
+  parseSpokenLineTypeFromAlternatives,
   parseSpokenNumber,
   promptForCommandMode,
   promptForEditField,
@@ -100,9 +100,9 @@ export function useSpeechLineFlow(handlers: {
     const gen = ++listenGen
     status.value = 'listening'
     try {
-      const text = await listenOnce()
+      const alternatives = await listenOnceWithAlternatives()
       if (aborted || gen !== listenGen) return
-      await handleAnswer(text)
+      await handleAnswer(alternatives[0] ?? '', alternatives)
     }
     catch (e) {
       if (aborted || gen !== listenGen) return
@@ -286,7 +286,7 @@ export function useSpeechLineFlow(handlers: {
     speakThenListen(retryPromptForEditPick())
   }
 
-  async function handleAnswer(spoken: string) {
+  async function handleAnswer(spoken: string, alternatives: string[] = [spoken]) {
     if (aborted) return
     status.value = 'processing'
     lastHeard.value = spoken
@@ -361,7 +361,7 @@ export function useSpeechLineFlow(handlers: {
     if (f === 'type') {
       const type = isEdit && parseKeepCurrent(spoken)
         ? draft.value.lineType as typeof draft.value.lineType
-        : parseSpokenLineType(spoken)
+        : parseSpokenLineTypeFromAlternatives(alternatives)
       if (!type) {
         speakThenListen(retryPromptForCurrentField())
         return
