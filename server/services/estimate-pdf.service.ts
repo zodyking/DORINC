@@ -16,6 +16,7 @@ import {
   pdfRenderOptionsFromTemplate,
   resolveInvoicePdfTemplate,
 } from './invoice-template-source.service'
+import { getAppUrl } from './app-config.service'
 import { getBusinessProfile } from './workspace-settings.service'
 
 export type EstimatePdfServiceErrorCode
@@ -107,6 +108,7 @@ export async function generateEstimatePdf(db: Db, estimateId: string, actorId: s
   }, {
     company: businessProfileToDocumentPdfCompany(business),
     design: template.designSettings,
+    portalUrl: `${getAppUrl().replace(/\/$/, '')}/portal`,
   })
   const payload = buildDocumentPdfRenderPayload(data, pdfRenderOptionsFromTemplate(template))
   const filename = `${detail.estimateNumberFormatted}.pdf`

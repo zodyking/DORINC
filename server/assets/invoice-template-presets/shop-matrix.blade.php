@@ -513,6 +513,28 @@
       border-right: 0;
     }
 
+    .customer-support-note {
+      border: 1px solid {{ $darkRule }};
+      padding: 6px 8px;
+      background: #ffffff;
+    }
+    .support-title {
+      font-size: 5.8pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: {{ $muted }};
+      margin: 0 0 4px;
+    }
+    .support-line {
+      margin: 0 0 4px;
+      font-size: 5.8pt;
+      color: {{ $ink }};
+      line-height: 1.25;
+      text-transform: none;
+    }
+    .support-line:last-child { margin-bottom: 0; }
+
     .totals-box {
       border: 1px solid {{ $darkRule }};
       text-transform: uppercase;
@@ -862,45 +884,12 @@
       <tr>
         <td class="bottom-left">
           @if($sectionVisible('footer'))
-            <table class="legal-grid">
-              <tr>
-                <td style="width: 55%;">
-                  I HEREBY AUTHORIZE THE REPAIR WORK DESCRIBED ABOVE TO BE
-                  COMPLETED WITH THE NECESSARY MATERIALS. PERMISSION IS
-                  GRANTED TO OPERATE THE VEHICLE FOR TESTING AND INSPECTION.
-                  ALL CHARGES ARE DUE AND PAYABLE UPON RECEIPT.
-                </td>
-
-                <td style="width: 45%;">
-                  THE ESTIMATED REPAIR AMOUNT WILL NOT BE EXCEEDED WITHOUT
-                  PRIOR AUTHORIZATION EXCEPT AS PERMITTED BY APPLICABLE LAW.
-                  REMOVED PARTS WILL BE DISCARDED UNLESS REQUESTED BEFORE
-                  REPAIR WORK BEGINS.
-                </td>
-              </tr>
-            </table>
-
-            <table class="signature-box">
-              <colgroup>
-                <col style="width: 72%;">
-                <col style="width: 28%;">
-              </colgroup>
-
-              <tr>
-                <th>CUSTOMER SIGNATURE</th>
-                <th>DATE</th>
-              </tr>
-
-              <tr>
-                <td>
-                  X ________________________________________________
-                </td>
-
-                <td>
-                  __________________
-                </td>
-              </tr>
-            </table>
+            <div class="customer-support-note">
+              <div class="support-title">{{ $doc['customerSupport']['title'] ?? 'Questions, changes, or portal access' }}</div>
+              @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
+                <p class="support-line">{{ $line }}</p>
+              @endforeach
+            </div>
           @endif
         </td>
 

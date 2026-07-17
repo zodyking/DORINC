@@ -140,6 +140,28 @@
       text-transform: uppercase;
       letter-spacing: 0.02em;
     }
+    .customer-support-note {
+      border: 1px solid {{ $rule }};
+      padding: 8px 10px;
+      background: {{ $band }};
+    }
+    .support-title {
+      font-size: 6.5pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: {{ $mid }};
+      margin: 0 0 6px;
+    }
+    .support-line {
+      margin: 0 0 6px;
+      font-size: 7.5pt;
+      color: {{ $mid }};
+      line-height: 1.45;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .support-line:last-child { margin-bottom: 0; }
 
     .pay-box td {
       border: 1px solid {{ $rule }};
@@ -269,14 +291,11 @@
     <tr>
       <td width="52%" style="padding-right:12px;">
         @if($sectionVisible('footer'))
-          <table class="sig-box">
-            <tr><td>Customer signature</td></tr>
-            <tr><td class="sig-space">&nbsp;</td></tr>
-            <tr><td>X ______________________________ &nbsp; Date __________</td></tr>
-          </table>
-          <div class="fine">
-            I hereby authorize the repair work described above to be done along with the
-            necessary material. All amounts shown are due and payable upon receipt.
+          <div class="customer-support-note">
+            <div class="support-title">{{ $doc['customerSupport']['title'] ?? 'Questions, changes, or portal access' }}</div>
+            @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
+              <p class="support-line">{{ $line }}</p>
+            @endforeach
           </div>
         @endif
       </td>

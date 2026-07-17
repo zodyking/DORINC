@@ -3,6 +3,7 @@ import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, mergeTemplateSections } from './invoice-template-design'
+import { buildInvoiceCustomerSupportNote } from './invoice-customer-support'
 import { normalizeInvoiceTemplateDesign } from './invoice-template-blade'
 import type { BusinessProfile } from './workspace-settings-defaults'
 
@@ -67,6 +68,10 @@ export interface DocumentPdfData {
   totals: DocumentPdfTotals
   note: string
   company: DocumentPdfCompany
+  customerSupport: {
+    title: string
+    lines: string[]
+  }
   design: Pick<InvoiceTemplateDesignSettings, 'accentColor' | 'accentColor2' | 'fontSans' | 'fontMono' | 'sections'>
 }
 
@@ -291,6 +296,7 @@ export function buildInvoicePdfData(
   options: {
     company?: DocumentPdfCompany
     design?: InvoiceTemplateDesignSettings
+    portalUrl?: string | null
   } = {},
 ): DocumentPdfData {
   const customer = detail.customerSnapshot
@@ -360,6 +366,7 @@ export function buildInvoicePdfData(
     },
     note: detail.complaint ?? detail.customerNotes ?? '—',
     company,
+    customerSupport: buildInvoiceCustomerSupportNote(company, options.portalUrl),
     design: {
       accentColor: design.accentColor,
       accentColor2: design.accentColor2,

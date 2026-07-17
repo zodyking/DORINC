@@ -2,9 +2,7 @@
 import { getAppUrl } from '../services/app-config.service'
 import type { EmailBrandContext } from '../services/email-branding.service'
 import {
-  buildCustomerSupportNote,
   buildStyledEmail,
-  escapeHtml,
 } from './email-layout'
 
 function portalUrl(path = '', appUrl?: string): string {
@@ -59,7 +57,6 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
   const defaults = invoiceSendEditableDefaults(input.invoiceNumber)
   const subject = input.customSubject?.trim() || defaults.subject
   const message = input.customMessage?.trim() || defaults.message
-  const support = buildCustomerSupportNote(input.brand, appUrl)
   const text = [
     `Hello ${input.recipientName},`,
     '',
@@ -69,7 +66,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
     '',
     `View invoice: ${detailUrl}`,
     '',
-    support.text,
+    'If you have questions, reply to this email or submit a request through the portal.',
   ].filter(Boolean).join('\n')
 
   return {
@@ -83,13 +80,20 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
         ? {
             label: 'Invoice total',
             value: totalLine,
+            status: 'Ready',
+            statusTone: 'ok',
           }
         : undefined,
       details: [
+        { label: 'Customer', value: input.recipientName },
         { label: 'Invoice', value: input.invoiceNumber },
         dueLine ? { label: 'Due date', value: dueLine } : null,
+        { label: 'Portal', value: 'Available now' },
       ].filter(Boolean) as Array<{ label: string, value: string }>,
-      note: support,
+      note: {
+        title: 'Need help?',
+        body: 'If you have questions, reply to this email or submit a request through the portal.',
+      },
       primaryAction: { href: detailUrl, label: 'View invoice in the portal' },
       appUrl,
       brand: input.brand,
@@ -115,7 +119,6 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
   const subject = `${kindLabel} ${statusLabel}`
   const reasonLine = input.reviewReason?.trim() || null
   const requestsUrl = portalUrl('/requests', appUrl)
-  const support = buildCustomerSupportNote(input.brand, appUrl)
   const text = [
     `Hello ${input.recipientName},`,
     '',
@@ -123,8 +126,6 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
     reasonLine ? `Staff note: ${reasonLine}` : '',
     '',
     `Track requests: ${requestsUrl}`,
-    '',
-    support.text,
   ].filter(Boolean).join('\n')
 
   return {
@@ -134,17 +135,21 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
       eyebrow: 'Portal request',
       headline: `Request ${statusLabel}`,
       lead: `Your ${kindLabel.toLowerCase()} "${input.requestTitle}" has been ${statusLabel}.`,
+      highlight: {
+        label: 'Decision',
+        value: input.status === 'approved' ? 'Approved' : 'Rejected',
+        status: input.status === 'approved' ? 'Completed' : 'Closed',
+        statusTone: input.status === 'approved' ? 'ok' : 'error',
+      },
       details: [
         { label: 'Request', value: input.requestTitle },
         { label: 'Type', value: kindLabel },
+        { label: 'Customer', value: input.recipientName },
         { label: 'Status', value: statusLabel },
       ],
       note: reasonLine
-        ? {
-            title: 'Update from our team',
-            bodyHtml: `<p style="margin:0 0 14px;color:#6b7280;font-size:13px;line-height:20px;">${escapeHtml(reasonLine)}</p>${support.bodyHtml}`,
-          }
-        : support,
+        ? { title: 'Staff note', body: reasonLine }
+        : undefined,
       primaryAction: { href: requestsUrl, label: 'View your requests' },
       appUrl,
       brand: input.brand,
@@ -165,15 +170,12 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
   const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
   const detailUrl = portalUrl(`/estimates/${input.estimateId}`, appUrl)
   const subject = `Estimate ${input.estimateNumber} Ready For Review`
-  const support = buildCustomerSupportNote(input.brand, appUrl)
   const text = [
     `Hello ${input.recipientName},`,
     '',
     `Estimate ${input.estimateNumber} is ready for your review in the customer portal.`,
     '',
     `View estimate: ${detailUrl}`,
-    '',
-    support.text,
   ].join('\n')
 
   return {
@@ -185,8 +187,9 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
       lead: `Estimate ${input.estimateNumber} is ready for your review in the customer portal.`,
       details: [
         { label: 'Estimate', value: input.estimateNumber },
+        { label: 'Customer', value: input.recipientName },
+        { label: 'Status', value: 'Ready for review' },
       ],
-      note: support,
       primaryAction: { href: detailUrl, label: 'View estimate in the portal' },
       appUrl,
       brand: input.brand,

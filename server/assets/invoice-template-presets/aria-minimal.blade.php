@@ -126,6 +126,27 @@
       text-transform: uppercase;
       color: {{ $faint }};
     }
+    .customer-support-note {
+      border: 1px solid {{ $hairline }};
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: {{ $wash }};
+    }
+    .support-title {
+      font-size: 6pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: {{ $faint }};
+      margin: 0 0 6px;
+    }
+    .support-line {
+      margin: 0 0 6px;
+      font-size: 8pt;
+      color: {{ $muted }};
+      line-height: 1.45;
+    }
+    .support-line:last-child { margin-bottom: 0; }
     .totals-table { font-size: 8.5pt; }
     .totals-table td { padding: 2px 0; }
     .totals-table td:first-child { color: {{ $muted }}; }
@@ -256,9 +277,14 @@
   @if($sectionVisible('totals') || $sectionVisible('footer'))
     <table class="bottom">
       <tr>
-        <td width="55%" style="padding-right:26px;">
+        <td width="55%" style="padding-right:26px; vertical-align:top;">
           @if($sectionVisible('footer'))
-            <div class="sig-line">Customer signature / date</div>
+            <div class="customer-support-note">
+              <div class="support-title">{{ $doc['customerSupport']['title'] ?? 'Questions, changes, or portal access' }}</div>
+              @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
+                <p class="support-line">{{ $line }}</p>
+              @endforeach
+            </div>
           @endif
         </td>
         @if($sectionVisible('totals'))

@@ -18,6 +18,7 @@ import {
   pdfRenderOptionsFromTemplate,
   resolveInvoicePdfTemplate,
 } from './invoice-template-source.service'
+import { getAppUrl } from './app-config.service'
 import { getBusinessProfile } from './workspace-settings.service'
 
 export type InvoicePdfServiceErrorCode
@@ -50,6 +51,7 @@ async function buildInvoicePdfPayload(
   const data = buildInvoicePdfData(detail, {
     company: businessProfileToDocumentPdfCompany(business),
     design: template.designSettings,
+    portalUrl: `${getAppUrl().replace(/\/$/, '')}/portal`,
   })
   const options = pdfOptionsFromTemplate(template)
   return buildDocumentPdfRenderPayload(data, options)

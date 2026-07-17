@@ -182,6 +182,20 @@ export function emailEyebrow(label) {
  * @returns {string}
  */
 export function emailHighlight(highlight) {
+  const statusHtml = highlight.status
+    ? (() => {
+        const tone = highlight.statusTone ?? 'ok'
+        const colors = {
+          ok: { fg: '#15803d', border: '#bbf7d0' },
+          warn: { fg: '#b45309', border: '#fde68a' },
+          error: { fg: '#b91c1c', border: '#fecaca' },
+          neutral: { fg: '#475569', border: '#dbe3ee' },
+        }
+        const c = colors[tone] ?? colors.ok
+        return `<div style="display:inline-block;padding:7px 10px;border:1px solid ${c.border};border-radius:6px;color:${c.fg};font-size:12px;font-weight:700;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.status)}</div>`
+      })()
+    : ''
+
   return [
     `<table role="presentation" width="100%" style="border-top:1px solid ${EMAIL_TOKENS.border};border-bottom:1px solid ${EMAIL_TOKENS.border};">`,
     `<tr>`,
@@ -189,6 +203,7 @@ export function emailHighlight(highlight) {
     `<div style="font-size:12px;color:${EMAIL_TOKENS.muted};padding-bottom:7px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.label)}</div>`,
     `<div style="color:${EMAIL_TOKENS.ink};font-size:34px;line-height:40px;font-weight:750;letter-spacing:-0.6px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.value)}</div>`,
     `</td>`,
+    statusHtml ? `<td align="right" valign="middle" class="highlight-status">${statusHtml}</td>` : '',
     `</tr></table>`,
   ].join('')
 }
@@ -239,55 +254,17 @@ export function emailDetails(rows) {
 }
 
 /**
- * @param {{ title: string, body?: string, bodyHtml?: string }} note
+ * @param {{ title: string, body: string }} note
  * @returns {string}
  */
 export function emailNote(note) {
-  const bodyInner = note.bodyHtml ?? escapeHtml(note.body ?? '')
   return [
     `<table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:${EMAIL_TOKENS.radius};">`,
     `<tr><td style="padding:18px 20px;">`,
     `<div style="color:#374151;font-size:13px;font-weight:700;padding-bottom:5px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.title)}</div>`,
-    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${bodyInner}</div>`,
+    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.body)}</div>`,
     `</td></tr></table>`,
   ].join('')
-}
-
-/**
- * Customer-facing support guidance — uses business profile email from settings.
- * @param {EmailBrandOpts | null | undefined} brand
- * @param {string} [appUrl]
- * @returns {{ title: string, bodyHtml: string, text: string }}
- */
-export function buildCustomerSupportNote(brand, appUrl) {
-  const b = normalizeEmailBrand(brand, appUrl)
-  const portalLoginUrl = b.signInUrl.includes('?')
-    ? `${b.signInUrl}&card=customer`
-    : `${b.signInUrl}?card=customer`
-
-  const emailHtml = b.email
-    ? `<a href="mailto:${escapeHtml(b.email)}" style="color:${EMAIL_TOKENS.accent};font-weight:600;text-decoration:none;">${escapeHtml(b.email)}</a>`
-    : 'our business email'
-
-  const bodyHtml = [
-    `For billing questions or general inquiries, email us at ${emailHtml}.`,
-    `To request service, update vehicle information, or submit invoice correction requests, sign in to your <a href="${escapeHtml(portalLoginUrl)}" style="color:${EMAIL_TOKENS.accent};font-weight:600;text-decoration:none;">customer portal</a>.`,
-    'If you do not have portal access yet, email us to request it.',
-  ].join(' ')
-
-  const text = [
-    b.email
-      ? `For billing questions or general inquiries, email ${b.email}.`
-      : 'For billing questions or general inquiries, contact us using the business email shown below.',
-    'To request service, update vehicle information, or submit invoice correction requests, sign in to your customer portal.',
-    'If you do not have portal access yet, email us to request it.',
-  ].join(' ')
-
-  return {
-    title: 'Questions, changes, or portal access',
-    bodyHtml,
-    text,
-  }
 }
 
 /**

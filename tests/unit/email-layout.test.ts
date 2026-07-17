@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   EMAIL_TOKENS,
-  buildCustomerSupportNote,
   buildStyledEmail,
   emailButton,
   emailPanel,
@@ -93,20 +92,6 @@ describe('email layout', () => {
     expect(html).not.toContain('<!-- Footer -->')
     expect(html).not.toContain('Acme Shop LLC')
     expect(html).not.toContain('Notification settings')
-  })
-
-  it('builds customer support guidance from business settings email', () => {
-    const note = buildCustomerSupportNote({
-      email: 'billing@acme.test',
-      appUrl: 'https://app.example.com',
-      signInUrl: 'https://app.example.com/auth/login',
-    }, 'https://app.example.com')
-
-    expect(note.title).toContain('portal access')
-    expect(note.text).toContain('billing@acme.test')
-    expect(note.text).toContain('customer portal')
-    expect(note.bodyHtml).toContain('mailto:billing@acme.test')
-    expect(note.bodyHtml).toContain('card=customer')
   })
 
   it('still supports legacy body helpers', () => {
