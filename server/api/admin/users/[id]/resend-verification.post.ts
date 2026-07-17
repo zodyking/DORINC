@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { useDb } from '../../../../db/client'
 import { accountTypes, users } from '../../../../db/schema/auth'
 import { issueVerificationToken } from '../../../../auth/auth.service'
-import { sendVerificationEmail } from '../../../../services/verification-email.service'
+import { enqueueVerificationEmail } from '../../../../services/verification-email.service'
 import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
 import { requirePermission } from '../../../../utils/require-permission'
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
   // Issue new verification token and send email
   const verificationToken = await issueVerificationToken(db, row.user.id)
 
-  await sendVerificationEmail(db, {
+  await enqueueVerificationEmail(db, {
     to: row.user.email,
     name: row.user.name,
     verificationToken,

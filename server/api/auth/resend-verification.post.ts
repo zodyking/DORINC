@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { AuthError, resendVerificationEmail } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
-import { sendVerificationEmail } from '../../services/verification-email.service'
+import { enqueueVerificationEmail } from '../../services/verification-email.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
@@ -19,20 +19,23 @@ export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'verify_email', `${rateLimitKeyFromIp(event)}:${emailKey}`)
 
   try {
-    const { user, verificationToken } = await resendVerificationEmail(useDb(), body.email, body.password)
+    const db = useDb()
+    const { user, verificationToken } = await resendVerificationEmail(db, body.email, body.password)
 
-    await sendVerificationEmail(useDb(), {
+    await enqueueVerificationEmail(db, {
       to: user.email,
       name: user.name,
       verificationToken,
     })
 
-    await writeAudit(event, {
+    void writeAudit(event, {
       entityType: 'user',
       entityId: user.id,
       action: 'auth.resend_verification',
       afterData: { email: user.email },
       riskLevel: 'sensitive',
+    }).catch((err) => {
+      console.warn('[audit] resend verification event failed:', (err as Error).message)
     })
 
     return {

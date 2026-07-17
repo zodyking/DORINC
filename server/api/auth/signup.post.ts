@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { AuthError, signup } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
-import { sendVerificationEmail } from '../../services/verification-email.service'
+import { enqueueVerificationEmail } from '../../services/verification-email.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
@@ -28,18 +28,20 @@ export default defineEventHandler(async (event) => {
       requestedAccountType: body.accountType,
     })
 
-    await sendVerificationEmail(db, {
+    await enqueueVerificationEmail(db, {
       to: user.email,
       name: user.name,
       verificationToken,
     })
 
-    await writeAudit(event, {
+    void writeAudit(event, {
       entityType: 'user',
       entityId: user.id,
       action: 'auth.signup',
       afterData: { email: user.email, name: user.name, requestedAccountType: body.accountType },
       riskLevel: 'sensitive',
+    }).catch((err) => {
+      console.warn('[audit] signup event failed:', (err as Error).message)
     })
 
     return {

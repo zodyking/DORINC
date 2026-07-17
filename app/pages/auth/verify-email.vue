@@ -20,8 +20,34 @@ function messageFrom(err: unknown, fallback: string): string {
   return fe.data?.data?.message ?? fe.data?.message ?? fallback
 }
 
-/** Survives the replace navigation that strips the token from the address bar. */
-let pendingVerifyToken: string | null = null
+const VERIFY_TOKEN_STORAGE_KEY = 'dorinc.pendingVerifyToken'
+
+function storedVerifyToken(): string {
+  try {
+    return sessionStorage.getItem(VERIFY_TOKEN_STORAGE_KEY)?.trim() ?? ''
+  }
+  catch {
+    return ''
+  }
+}
+
+function storeVerifyToken(token: string) {
+  try {
+    sessionStorage.setItem(VERIFY_TOKEN_STORAGE_KEY, token)
+  }
+  catch {
+    // Continue with the in-memory token when storage is unavailable.
+  }
+}
+
+function clearVerifyToken() {
+  try {
+    sessionStorage.removeItem(VERIFY_TOKEN_STORAGE_KEY)
+  }
+  catch {
+    // Nothing to clean up.
+  }
+}
 
 async function verifyToken(token: string) {
   state.value = 'loading'
@@ -40,11 +66,18 @@ async function verifyToken(token: string) {
     state.value = 'error'
     message.value = messageFrom(err, 'Could not verify your email — the link may be invalid or expired.')
   }
+  finally {
+    clearVerifyToken()
+  }
 }
 
 onMounted(() => {
   const fromQuery = typeof route.query.token === 'string' ? route.query.token.trim() : ''
-  const token = fromQuery || pendingVerifyToken
+  if (fromQuery) {
+    storeVerifyToken(fromQuery)
+    window.history.replaceState(window.history.state, '', '/auth/verify-email')
+  }
+  const token = fromQuery || storedVerifyToken()
 
   if (!token) {
     state.value = 'error'
@@ -52,13 +85,6 @@ onMounted(() => {
     return
   }
 
-  if (fromQuery) {
-    pendingVerifyToken = fromQuery
-    void navigateTo({ path: '/auth/verify-email', query: {} }, { replace: true })
-    return
-  }
-
-  pendingVerifyToken = null
   void verifyToken(token)
 })
 </script>
