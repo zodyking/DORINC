@@ -34,6 +34,24 @@ class PdfRenderController extends Controller
      */
     private function renderDocument(Request $request, string $defaultType, string $format): Response
     {
+        try {
+            return $this->renderDocumentInner($request, $defaultType, $format);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function renderDocumentInner(Request $request, string $defaultType, string $format): Response
+    {
         $validated = $request->validate([
             'documentType' => 'sometimes|string|in:invoice,estimate',
             'data' => 'required|array',

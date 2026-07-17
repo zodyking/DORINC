@@ -1,6 +1,7 @@
 // invoice_send handler — waits for PDF, emails attachment, then marks invoice sent.
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
+import { notifyInvoiceSentTeamMessage } from '../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 
@@ -300,6 +301,26 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         [job.id],
       )
       processed++
+
+      if (!isResend) {
+        let customerName = payload.recipientName ?? 'Customer'
+        if (invoice.customer_id) {
+          const { rows: customerRows } = await pool.query(
+            `SELECT display_name FROM customers WHERE id = $1 LIMIT 1`,
+            [invoice.customer_id],
+          )
+          if (customerRows[0]?.display_name) customerName = customerRows[0].display_name
+        }
+        void notifyInvoiceSentTeamMessage(pool, {
+          senderUserId: actorId,
+          invoiceId,
+          invoiceNumber: invoice.invoice_number,
+          customerId: invoice.customer_id,
+          customerName,
+        }).catch((err) => {
+          console.warn('[invoice_send] team message failed:', err instanceof Error ? err.message : err)
+        })
+      }
     }
     catch (err) {
       failed++

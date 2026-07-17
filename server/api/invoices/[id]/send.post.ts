@@ -4,9 +4,6 @@ import {
   InvoiceSendServiceError,
   queueInvoiceSend,
 } from '../../../services/invoice-send.service'
-import { getCustomer } from '../../../services/customers.service'
-import { postInvoiceSentTeamMessage } from '../../../services/workflow-chat.service'
-import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
 import { isInvoiceResendable } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
@@ -29,7 +26,7 @@ function mapError(event: Parameters<typeof apiError>[0], err: InvoiceSendService
     case 'NOTIFICATION_DISABLED':
       throw apiError(event, 'VALIDATION_ERROR', 'Invoice emails are disabled in Control Panel → Notifications')
     case 'PDF_FAILED':
-      throw apiError(event, 'INTERNAL_ERROR', 'PDF generation failed — try again or contact support')
+      throw apiError(event, 'INTERNAL_ERROR', err.message || 'PDF generation failed — try again or contact support')
     default:
       throw err
   }
@@ -63,30 +60,6 @@ export default defineEventHandler(async (event) => {
       permissionKey: 'invoices.send.all',
       riskLevel: 'sensitive',
     })
-
-    if (!result.alreadyQueued) {
-      const inv = result.invoice
-      let customerName = 'Customer'
-      if (inv.customerId) {
-        try {
-          const customer = await getCustomer(db, inv.customerId)
-          customerName = customer.displayName
-        }
-        catch {
-          // fallback
-        }
-      }
-      if (customerName === 'Customer' && inv.customerSnapshot) {
-        customerName = resolveCustomerDisplayName(null, inv.customerSnapshot)
-      }
-      void postInvoiceSentTeamMessage(db, {
-        senderUserId: actor.id,
-        invoiceId: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        customerId: inv.customerId,
-        customerName,
-      }).catch(() => {})
-    }
 
     return {
       invoice: result.invoice,
