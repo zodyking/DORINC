@@ -21,17 +21,42 @@ const textareaEl = ref<HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const attachments = ref<File[]>([])
 const attachmentError = ref('')
+const previewUrls = ref<string[]>([])
 
-const ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf'
+const EMAIL_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf'
+const DM_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif'
 const MAX_ATTACHMENTS = 10
 const MAX_ATTACHMENT_MB = 25
-const ATTACH_ALLOWED = new Set(ATTACH_ACCEPT.split(','))
+
+const isEmail = computed(() => props.mode === 'email')
+const attachAccept = computed(() => isEmail.value ? EMAIL_ATTACH_ACCEPT : DM_ATTACH_ACCEPT)
+const attachAllowed = computed(() => new Set(attachAccept.value.split(',')))
+
+const placeholder = computed(() =>
+  isEmail.value
+    ? 'Write your reply…'
+    : 'Message… type invoice, customer, vehicle, or service log to link',
+)
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
+
+function revokePreviewUrls() {
+  for (const url of previewUrls.value) URL.revokeObjectURL(url)
+  previewUrls.value = []
+}
+
+function rebuildPreviewUrls() {
+  revokePreviewUrls()
+  previewUrls.value = attachments.value
+    .filter(f => f.type.startsWith('image/'))
+    .map(f => URL.createObjectURL(f))
+}
+
+onBeforeUnmount(revokePreviewUrls)
 
 function openFilePicker() {
   attachmentError.value = ''
@@ -50,7 +75,7 @@ function onFilesSelected(event: Event) {
       errors.push(`Up to ${MAX_ATTACHMENTS} attachments allowed`)
       break
     }
-    if (file.type && !ATTACH_ALLOWED.has(file.type)) {
+    if (file.type && !attachAllowed.value.has(file.type)) {
       errors.push(`${file.name}: unsupported type`)
       continue
     }
@@ -62,15 +87,27 @@ function onFilesSelected(event: Event) {
     attachments.value.push(file)
   }
   attachmentError.value = errors.join(' · ')
+  rebuildPreviewUrls()
 }
 
 function removeAttachment(index: number) {
   attachments.value.splice(index, 1)
+  rebuildPreviewUrls()
 }
 
 function isImageFile(file: File): boolean {
   return file.type.startsWith('image/')
 }
+
+function previewUrlFor(file: File): string | null {
+  if (!isImageFile(file)) return null
+  const index = attachments.value.indexOf(file)
+  const imageIndex = attachments.value
+    .slice(0, index + 1)
+    .filter(f => f.type.startsWith('image/')).length - 1
+  return previewUrls.value[imageIndex] ?? null
+}
+
 const pickerOpen = ref(false)
 const pickerType = ref<MessageEntityType | null>(null)
 const pickerQuery = ref('')
@@ -79,8 +116,6 @@ const pickerEnd = ref(0)
 const pickerItems = ref<EntitySearchItem[]>([])
 const pickerLoading = ref(false)
 const pickerHighlight = ref(0)
-
-const isEmail = computed(() => props.mode === 'email')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -155,13 +190,17 @@ function insertEntity(item: EntitySearchItem) {
   })
 }
 
+const canSend = computed(() =>
+  !props.disabled && (!!text.value.trim() || attachments.value.length > 0),
+)
+
 function submit() {
-  const body = text.value.trim()
-  if (!body || props.disabled) return
-  emit('send', body, attachments.value.slice())
+  if (!canSend.value) return
+  emit('send', text.value.trim(), attachments.value.slice())
   text.value = ''
   attachments.value = []
   attachmentError.value = ''
+  revokePreviewUrls()
   closePicker()
 }
 
@@ -225,14 +264,21 @@ function onKeydown(e: KeyboardEvent) {
         <div v-else-if="!pickerItems.length" class="dm-entity-picker-empty">No matches</div>
       </div>
     </div>
-    <div v-if="isEmail && attachments.length" class="dm-compose-attachments" aria-label="Pending attachments">
+
+    <div v-if="attachments.length" class="dm-compose-attachments" aria-label="Pending attachments">
       <div
         v-for="(file, i) in attachments"
         :key="`${file.name}-${file.size}-${i}`"
         class="dm-compose-chip"
         :class="{ 'is-image': isImageFile(file) }"
       >
-        <span class="dm-compose-chip-icon" aria-hidden="true">{{ isImageFile(file) ? '🖼️' : '📎' }}</span>
+        <img
+          v-if="previewUrlFor(file)"
+          :src="previewUrlFor(file)!"
+          :alt="file.name"
+          class="dm-compose-chip-thumb"
+        >
+        <span v-else class="dm-compose-chip-icon" aria-hidden="true">📎</span>
         <span class="dm-compose-chip-name" :title="file.name">{{ file.name }}</span>
         <small class="dm-compose-chip-size">{{ formatFileSize(file.size) }}</small>
         <button
@@ -245,33 +291,45 @@ function onKeydown(e: KeyboardEvent) {
         </button>
       </div>
     </div>
-    <p v-if="isEmail && attachmentError" class="dm-compose-attach-error">{{ attachmentError }}</p>
-    <form class="dm-compose-form" :class="{ 'dm-compose-form--email': isEmail }" @submit.prevent="submit">
+    <p v-if="attachmentError" class="dm-compose-attach-error">{{ attachmentError }}</p>
+
+    <form
+      class="dm-compose-form"
+      :class="{ 'dm-compose-form--email': isEmail }"
+      @submit.prevent="submit"
+    >
       <input
-        v-if="isEmail"
         ref="fileInputEl"
         type="file"
         class="dm-compose-file-input"
-        :accept="ATTACH_ACCEPT"
+        :accept="attachAccept"
         multiple
+        capture="environment"
         @change="onFilesSelected"
       >
       <button
-        v-if="isEmail"
         type="button"
         class="dm-attach-btn"
         :disabled="disabled"
-        aria-label="Attach files or images"
-        title="Attach files or images"
+        :aria-label="isEmail ? 'Attach files or images' : 'Attach photos'"
+        :title="isEmail ? 'Attach files or images' : 'Attach photos'"
         @click="openFilePicker"
       >
-        📎
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
       </button>
       <textarea
         ref="textareaEl"
         v-model="text"
-        rows="2"
-        :placeholder="isEmail ? 'Write your reply…' : 'Write a message… Type invoice, customer, vehicle, or service log to link records'"
+        rows="1"
+        :placeholder="placeholder"
         :disabled="disabled"
         aria-label="Message"
         @input="onInput"
@@ -282,11 +340,19 @@ function onKeydown(e: KeyboardEvent) {
         type="submit"
         class="dm-send-btn"
         :class="{ 'dm-send-btn--labeled': isEmail }"
-        :disabled="disabled || !text.trim()"
+        :disabled="!canSend"
         :aria-label="isEmail ? 'Send reply' : 'Send'"
       >
-        <span v-if="isEmail">Send reply</span>
-        <span v-else aria-hidden="true">↑</span>
+        <span v-if="isEmail">Send</span>
+        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
       </button>
     </form>
     <div v-if="!isEmail" class="dm-compose-hint">

@@ -226,7 +226,8 @@ export function useDirectMessages() {
   }
 
   async function sendMessage(body: string, files?: File[]) {
-    if (!activeConversationId.value || !body.trim() || sending.value) return
+    if (!activeConversationId.value || sending.value) return
+    if (!body.trim() && !files?.length) return
     sending.value = true
     try {
       let payload: FormData | { body: string }
