@@ -1,7 +1,7 @@
 import { setHeaders } from 'h3'
 import { z } from 'zod'
 import { useDb } from '../../../../../../../db/client'
-import { getEmailAttachment } from '../../../../../../../services/email-attachment.service'
+import { getMessageAttachment } from '../../../../../../../services/message-attachments.service'
 import { FilesServiceError, resolveImageDisplayPreview } from '../../../../../../../services/files.service'
 import { apiError } from '../../../../../../../utils/api-error'
 import { requirePermission } from '../../../../../../../utils/require-permission'
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   try {
-    const attachment = await getEmailAttachment(db, conversationId, messageId, fileId)
+    const attachment = await getMessageAttachment(db, conversationId, messageId, fileId)
     const file = attachment.mimeType.startsWith('image/')
       ? await resolveImageDisplayPreview(db, fileId)
       : attachment
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   }
   catch (err) {
     if (err instanceof FilesServiceError && err.code === 'NOT_FOUND') {
-      throw apiError(event, 'NOT_FOUND', 'Email attachment not found')
+      throw apiError(event, 'NOT_FOUND', 'Attachment not found')
     }
     throw err
   }

@@ -1880,7 +1880,11 @@ section.page.active.dm-page{
   background:#f1f5f9; border-radius:12px; padding:10px 12px; font-size:13.5px; line-height:1.5;
   color:#0f172a; word-break:break-word;
 }
+.dm-msg-bubble--photo{
+  padding:4px; overflow:hidden;
+}
 .dm-msg.own .dm-msg-bubble{ background:#4f46e5; color:#fff; }
+.dm-msg.own .dm-msg-bubble--photo{ background:#4f46e5; }
 .dm-msg.own .dm-msg-bubble .dm-entity-link{ color:#e0e7ff; }
 .dm-entity-link{
   color:#4f46e5; font-weight:600; text-decoration:underline; text-underline-offset:2px;
@@ -1891,15 +1895,25 @@ section.page.active.dm-page{
   flex-shrink:0;
 }
 .dm-compose-form{ display:flex; gap:8px; align-items:flex-end; }
+.dm-compose-field-wrap{
+  position:relative; flex:1; min-width:0; display:flex;
+}
+.dm-compose-placeholder{
+  position:absolute; left:14px; right:14px; top:11px;
+  color:#94a3b8; pointer-events:none; line-height:1.4;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .dm-compose-input,
 .dm-compose textarea,
 .dm-compose-editor{
   flex:1; resize:none; border:1px solid #e2e8f0; border-radius:12px; padding:10px 14px;
   font:inherit; font-size:13px; min-height:44px; max-height:120px; background:#fff;
-  line-height:1.4; overflow-y:auto; box-sizing:border-box; min-width:0;
+  line-height:1.4; overflow-y:auto; box-sizing:border-box; min-width:0; width:100%;
+  caret-color:#0f172a;
 }
 .dm-compose-editor{
-  white-space:pre-wrap; word-break:break-word; outline:none;
+  white-space:pre-wrap; word-break:break-word; outline:none; -webkit-user-select:text;
+  user-select:text;
 }
 .dm-compose-editor:empty::before{
   content:attr(data-placeholder);
@@ -1926,11 +1940,12 @@ section.page.active.dm-page{
 }
 .dm-msg-images:last-child{ margin-bottom:0; }
 .dm-msg-image-link{
-  display:block; max-width:min(240px, 100%); border-radius:10px; overflow:hidden;
-  border:1px solid rgba(15,23,42,.08);
+  display:block; width:min(280px, 78vw); max-width:100%; border-radius:10px; overflow:hidden;
+  border:1px solid rgba(15,23,42,.08); line-height:0;
 }
 .dm-msg-image-link img{
-  display:block; width:100%; height:auto; max-height:280px; object-fit:cover;
+  display:block; width:100%; height:auto; min-height:80px; max-height:min(320px, 55vh);
+  object-fit:cover; background:#e2e8f0;
 }
 .dm-msg.own .dm-msg-image-link{ border-color:rgba(255,255,255,.25); }
 .dm-compose textarea:focus,
@@ -2329,6 +2344,9 @@ section.page.active.dm-page{
     min-height:44px; max-height:96px; border-radius:12px; padding:11px 14px;
     font-size:16px;
   }
+  .dm-compose-placeholder{
+    left:14px; right:14px; top:11px; font-size:16px;
+  }
   .dm-compose.is-focused .dm-compose-input,
   .dm-compose.is-focused .dm-compose-editor{
     max-height:168px;
@@ -2352,6 +2370,12 @@ section.page.active.dm-page{
     left:12px; right:12px; max-width:calc(100% - 24px);
   }
   .dm-send-btn{ min-width:44px; min-height:44px; }
+  .dm-msg-image-link{
+    width:min(280px, 78vw);
+  }
+  .dm-msg-image-link img{
+    min-height:120px; max-height:min(360px, 48vh);
+  }
   .dm-email-msg{ padding:16px; box-sizing:border-box; max-width:100%; }
   .dm-email-msg-head{ min-width:0; }
   .dm-email-msg-from-row{

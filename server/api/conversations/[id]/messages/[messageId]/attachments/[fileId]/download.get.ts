@@ -1,8 +1,8 @@
 import { setHeaders } from 'h3'
 import { z } from 'zod'
 import { useDb } from '../../../../../../../db/client'
+import { getMessageAttachment } from '../../../../../../../services/message-attachments.service'
 import {
-  getEmailAttachment,
   safeAttachmentDownloadName,
 } from '../../../../../../../services/email-attachment.service'
 import { FilesServiceError } from '../../../../../../../services/files.service'
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const { id: conversationId, messageId, fileId } = validateParams(event, paramsSchema)
 
   try {
-    const file = await getEmailAttachment(useDb(), conversationId, messageId, fileId)
+    const file = await getMessageAttachment(useDb(), conversationId, messageId, fileId)
     const filename = safeAttachmentDownloadName(file.originalFilename)
 
     setHeaders(event, {
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   }
   catch (err) {
     if (err instanceof FilesServiceError && err.code === 'NOT_FOUND') {
-      throw apiError(event, 'NOT_FOUND', 'Email attachment not found')
+      throw apiError(event, 'NOT_FOUND', 'Attachment not found')
     }
     throw err
   }

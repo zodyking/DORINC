@@ -16,6 +16,11 @@ const imageAttachments = computed(() =>
   (props.message.attachments ?? []).filter(a => a.mimeType.startsWith('image/')),
 )
 
+const isPhotoOnly = computed(() => {
+  const body = props.message.body.trim()
+  return imageAttachments.value.length > 0 && (!body || body === '(photo)')
+})
+
 const showBody = computed(() => {
   const body = props.message.body.trim()
   return body && body !== '(photo)'
@@ -34,7 +39,13 @@ function attachmentUrl(fileId: string, action: 'preview' | 'download'): string {
         <b>{{ message.senderName }}</b>
         <time :datetime="message.createdAt">{{ formatMessageTime(message.createdAt) }}</time>
       </div>
-      <div class="dm-msg-bubble" :class="{ 'dm-msg-bubble-email': isEmail }">
+      <div
+        class="dm-msg-bubble"
+        :class="{
+          'dm-msg-bubble-email': isEmail,
+          'dm-msg-bubble--photo': isPhotoOnly && !isEmail,
+        }"
+      >
         <div v-if="imageAttachments.length && !isEmail" class="dm-msg-images">
           <a
             v-for="attachment in imageAttachments"

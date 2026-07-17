@@ -4,6 +4,7 @@ import {
   composeDisplayText,
   parseComposeSegments,
   serializeComposeSegments,
+  stripCaretAnchors,
 } from '../../app/utils/messages-compose-editor'
 
 describe('messages-compose-editor', () => {
@@ -23,5 +24,9 @@ describe('messages-compose-editor', () => {
     ])
     expect(serializeComposeSegments(segments)).toBe(body)
     expect(composeDisplayText(body)).toBe('Use Bus #618 please')
+  })
+
+  it('strips invisible caret anchors from serialized text', () => {
+    expect(stripCaretAnchors('hello\u200Bworld\u200B')).toBe('helloworld')
   })
 })

@@ -41,6 +41,13 @@ export function composeDisplayText(body: string): string {
     .join('')
 }
 
+export const CARET_ANCHOR = '\u200B'
+
+/** Strip invisible caret anchors from serialized compose text. */
+export function stripCaretAnchors(text: string): string {
+  return text.replace(/\u200B/g, '')
+}
+
 /** Serialize a compose editor DOM tree back to stored message text with entity tokens. */
 export function serializeTokenizedRoot(root: HTMLElement): string {
   let out = ''
@@ -60,7 +67,7 @@ export function serializeTokenizedRoot(root: HTMLElement): string {
     }
     out += serializeTokenizedRoot(node)
   }
-  return out
+  return stripCaretAnchors(out)
 }
 
 function appendTextWithBreaks(root: HTMLElement, chunk: string) {
@@ -70,6 +77,41 @@ function appendTextWithBreaks(root: HTMLElement, chunk: string) {
     if (line) root.appendChild(document.createTextNode(line))
     if (i < lines.length - 1) root.appendChild(document.createElement('br'))
   }
+}
+
+/** Ensure a text node exists at the end so mobile browsers can show a caret after chips. */
+export function ensureCaretAnchor(root: HTMLElement) {
+  const last = root.lastChild
+  if (!last || last.nodeType !== Node.TEXT_NODE) {
+    root.appendChild(document.createTextNode(CARET_ANCHOR))
+    return
+  }
+  const content = last.textContent ?? ''
+  if (!content.endsWith(CARET_ANCHOR)) {
+    last.textContent = `${content}${CARET_ANCHOR}`
+  }
+}
+
+/** Place the caret at the end of the compose editor. */
+export function focusEditorAtEnd(root: HTMLElement) {
+  ensureCaretAnchor(root)
+  const sel = window.getSelection()
+  if (!sel) return
+  const last = root.lastChild
+  if (last?.nodeType === Node.TEXT_NODE) {
+    const range = document.createRange()
+    const len = last.textContent?.length ?? 0
+    range.setStart(last, len)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+    return
+  }
+  const range = document.createRange()
+  range.selectNodeContents(root)
+  range.collapse(false)
+  sel.removeAllRanges()
+  sel.addRange(range)
 }
 
 /** Render stored message text into chip labels inside the compose editor. */
@@ -87,6 +129,7 @@ export function renderTokenizedEditor(root: HTMLElement, body: string) {
     }
     appendTextWithBreaks(root, segment.value)
   }
+  ensureCaretAnchor(root)
 }
 
 /** Cursor offset in serialized token text (tokens count as full length). */

@@ -4,10 +4,13 @@ import type { Db } from '../db/client'
 import { appFiles } from '../db/schema/files'
 import {
   ALLOWED_UPLOAD_MIMES,
+  FilesServiceError,
+  getFileWithData,
   maxUploadBytes,
   sniffMime,
   uploadFile,
 } from './files.service'
+import { messages } from '../db/schema/messages'
 
 export interface OutboundMessageAttachmentInput {
   filename: string
@@ -128,4 +131,27 @@ export async function listAttachmentsByMessageIds(
 
 export function attachmentSha256(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex')
+}
+
+/** Load an attachment belonging to any conversation message (team, DM, or email). */
+export async function getMessageAttachment(
+  db: Db,
+  conversationId: string,
+  messageId: string,
+  fileId: string,
+) {
+  const [owned] = await db.select({ id: appFiles.id })
+    .from(appFiles)
+    .innerJoin(messages, eq(messages.id, appFiles.ownerEntityId))
+    .where(and(
+      eq(appFiles.id, fileId),
+      eq(appFiles.ownerEntityType, 'message'),
+      eq(appFiles.ownerEntityId, messageId),
+      eq(messages.conversationId, conversationId),
+      isNull(appFiles.archivedAt),
+    ))
+    .limit(1)
+
+  if (!owned) throw new FilesServiceError('NOT_FOUND')
+  return getFileWithData(db, fileId)
 }

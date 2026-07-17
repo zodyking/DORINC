@@ -6,11 +6,11 @@ import {
   type EntitySearchItem,
 } from '~/utils/messages-ui'
 import {
+  focusEditorAtEnd,
   getTokenizedTextOffset,
   renderTokenizedEditor,
   resizeComposeField,
   serializeTokenizedRoot,
-  setTokenizedTextOffset,
 } from '~/utils/messages-compose-editor'
 import type { MessageEntityType } from '~/server/db/schema/messages'
 
@@ -54,6 +54,11 @@ const placeholder = computed(() => {
 const composeMaxHeight = computed(() =>
   composeFocused.value ? COMPOSE_MAX_HEIGHT_FOCUSED : COMPOSE_MAX_HEIGHT,
 )
+
+const showComposePlaceholder = computed(() => {
+  if (isEmail.value) return false
+  return !text.value.replace(/\u200B/g, '').trim()
+})
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -263,7 +268,7 @@ function insertEntity(item: EntitySearchItem) {
     const el = editorEl.value
     if (!el) return
     renderTokenizedEditor(el, text.value)
-    setTokenizedTextOffset(el, cursor)
+    focusEditorAtEnd(el)
     el.focus()
     resizeActiveComposeField()
   })
@@ -283,6 +288,9 @@ function onEditorPaste(event: ClipboardEvent) {
 
 function onComposeFocus() {
   composeFocused.value = true
+  if (!isEmail.value && editorEl.value) {
+    focusEditorAtEnd(editorEl.value)
+  }
   resizeActiveComposeField()
 }
 
@@ -447,22 +455,28 @@ function onKeydown(e: KeyboardEvent) {
         @focus="onComposeFocus"
         @blur="onComposeBlur"
       />
-      <div
-        v-else
-        ref="editorEl"
-        class="dm-compose-input dm-compose-editor"
-        :data-placeholder="placeholder"
-        contenteditable="true"
-        role="textbox"
-        aria-multiline="true"
-        :aria-label="placeholder"
-        :contenteditable="!disabled"
-        @input="onComposeInput"
-        @keydown="onKeydown"
-        @focus="onComposeFocus"
-        @blur="onComposeBlur"
-        @paste="onEditorPaste"
-      />
+      <div v-else class="dm-compose-field-wrap">
+        <span
+          v-if="showComposePlaceholder"
+          class="dm-compose-placeholder"
+          aria-hidden="true"
+        >{{ placeholder }}</span>
+        <div
+          ref="editorEl"
+          class="dm-compose-input dm-compose-editor"
+          :data-placeholder="placeholder"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          :aria-label="placeholder"
+          :contenteditable="!disabled"
+          @input="onComposeInput"
+          @keydown="onKeydown"
+          @focus="onComposeFocus"
+          @blur="onComposeBlur"
+          @paste="onEditorPaste"
+        />
+      </div>
       <button
         type="submit"
         class="dm-send-btn"
