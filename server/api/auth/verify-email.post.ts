@@ -15,11 +15,13 @@ export default defineEventHandler(async (event) => {
   try {
     const user = await verifyEmail(useDb(), token)
 
-    await writeAudit(event, {
+    void writeAudit(event, {
       entityType: 'user',
       entityId: user.id,
-      action: 'auth.email_verified',
+      action: 'auth.verify_email',
       riskLevel: 'sensitive',
+    }).catch((err) => {
+      console.warn('[audit] email verification event failed:', (err as Error).message)
     })
 
     if (!user.approvedAt) {

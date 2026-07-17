@@ -12,6 +12,9 @@ function buildTransport(config) {
     port: config.port,
     secure: config.port === 465,
     auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
   })
 }
 

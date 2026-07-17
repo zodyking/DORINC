@@ -61,11 +61,14 @@ export async function signup(db: Db, input: SignupInput) {
 
   const email = input.email.trim().toLowerCase()
 
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email))
+  const [existingRows, typeRows] = await Promise.all([
+    db.select({ id: users.id }).from(users).where(eq(users.email, email)),
+    db.select().from(accountTypes).where(eq(accountTypes.key, input.requestedAccountType)),
+  ])
+  const [existing] = existingRows
   if (existing) throw new AuthError('EMAIL_TAKEN')
 
-  const [typeRow] = await db.select().from(accountTypes)
-    .where(eq(accountTypes.key, input.requestedAccountType))
+  const [typeRow] = typeRows
   if (!typeRow) throw new AuthError('INVALID_ACCOUNT_TYPE')
 
   const passwordHash = await hashPassword(input.password)
