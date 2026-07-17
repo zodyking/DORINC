@@ -15,6 +15,7 @@ import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import type { MessageEntityRefInput } from '../../shared/validators/messages'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
+import { formatVehicleUnitLabel, splitEntitySearchTokens } from '../../shared/format/vehicle-unit'
 import { getTeamConversationSummary, syncTeamChatParticipants } from './team-chat.service'
 
 export type MessagesServiceErrorCode
@@ -585,17 +586,21 @@ export async function searchEntitiesForMessage(
     }
     case 'vehicle': {
       const conditions = [isNull(vehicles.archivedAt)]
-      if (term) {
+      const tokens = splitEntitySearchTokens(term)
+      for (const token of tokens) {
         conditions.push(or(
-          ilike(vehicles.busNumber, `%${term}%`),
-          ilike(vehicles.unitTag, `%${term}%`),
-          ilike(vehicles.vin, `%${term}%`),
-          ilike(vehicles.make, `%${term}%`),
-          ilike(vehicles.model, `%${term}%`),
+          ilike(customers.displayName, `%${token}%`),
+          ilike(vehicles.busNumber, `%${token}%`),
+          ilike(vehicles.unitTag, `%${token}%`),
+          ilike(vehicles.vin, `%${token}%`),
+          ilike(vehicles.make, `%${token}%`),
+          ilike(vehicles.model, `%${token}%`),
+          ilike(vehicles.unitType, `%${token}%`),
         )!)
       }
       const rows = await db.select({
         id: vehicles.id,
+        unitType: vehicles.unitType,
         busNumber: vehicles.busNumber,
         unitTag: vehicles.unitTag,
         make: vehicles.make,
@@ -605,13 +610,16 @@ export async function searchEntitiesForMessage(
         .from(vehicles)
         .leftJoin(customers, eq(vehicles.customerId, customers.id))
         .where(and(...conditions))
-        .orderBy(asc(vehicles.busNumber))
+        .orderBy(asc(customers.displayName), asc(vehicles.busNumber), asc(vehicles.unitTag))
         .limit(pageSize)
         .offset((page - 1) * pageSize)
       return {
         items: rows.map((r) => {
-          const tag = r.unitTag || r.busNumber
-          const label = tag ? `Unit ${tag}` : 'Vehicle'
+          const label = formatVehicleUnitLabel({
+            unitType: r.unitType,
+            busNumber: r.busNumber,
+            unitTag: r.unitTag,
+          })
           const sublabel = [r.make, r.model, r.customerName].filter(Boolean).join(' · ')
           return { id: r.id, label, sublabel, entityType: 'vehicle' as const }
         }),

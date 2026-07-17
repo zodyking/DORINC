@@ -88,12 +88,13 @@ async function loadPickerItems() {
   if (!pickerType.value) return
   pickerLoading.value = true
   try {
+    const pageSize = pickerType.value === 'vehicle' ? 500 : 25
     const res = await $fetch<{ items: EntitySearchItem[] }>('/api/messages/entity-search', {
       query: {
         type: pickerType.value,
         q: pickerQuery.value || undefined,
         page: 1,
-        pageSize: 12,
+        pageSize,
       },
     })
     pickerItems.value = res.items

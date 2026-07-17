@@ -1,6 +1,7 @@
 import type { Db } from '../db/client'
 import { formatInvoiceNumber } from '../db/schema/invoices'
 import { formatMoney, parseMoney } from '../../shared/money'
+import { formatVehicleUnitLabel } from '../../shared/format/vehicle-unit'
 import {
   buildEntityRef,
   entityRefToken,
@@ -10,10 +11,12 @@ import {
 function vehicleUnitLabel(
   busNumber: string | null | undefined,
   unitTag: string | null | undefined,
-  fallback = 'Unit',
+  unitType?: string | null,
+  fallback = 'vehicle',
 ): string {
-  const tag = unitTag?.trim() || busNumber?.trim()
-  return tag ? `Unit ${tag}` : fallback
+  const number = unitTag?.trim() || busNumber?.trim()
+  if (!number) return fallback
+  return formatVehicleUnitLabel({ unitType, busNumber, unitTag })
 }
 
 function moneyLabel(value: string): string {
@@ -32,13 +35,14 @@ export async function postServiceLogSentToInvoiceTeamMessage(
     vehicleId: string | null
     vehicleBusNumber: string | null
     vehicleUnitTag: string | null
+    vehicleUnitType?: string | null
     invoiceId: string
     invoiceNumber: number
   },
 ) {
   const invoiceLabel = formatInvoiceNumber(opts.invoiceNumber)
   const slLabel = `SL-${opts.logNumber}`
-  const unitLabel = vehicleUnitLabel(opts.vehicleBusNumber, opts.vehicleUnitTag, 'vehicle')
+  const unitLabel = vehicleUnitLabel(opts.vehicleBusNumber, opts.vehicleUnitTag, opts.vehicleUnitType, 'vehicle')
 
   const refs = []
   const parts: string[] = ['Can you create']
@@ -174,9 +178,10 @@ export async function postVehicleCreatedTeamMessage(
     customerName: string
     busNumber: string | null
     unitTag: string | null
+    unitType?: string | null
   },
 ) {
-  const unitLabel = vehicleUnitLabel(opts.busNumber, opts.unitTag)
+  const unitLabel = vehicleUnitLabel(opts.busNumber, opts.unitTag, opts.unitType)
   const refs = [
     buildEntityRef('vehicle', opts.vehicleId, unitLabel),
     buildEntityRef('customer', opts.customerId, opts.customerName),

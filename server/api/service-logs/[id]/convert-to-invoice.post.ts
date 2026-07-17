@@ -73,6 +73,7 @@ export default defineEventHandler(async (event) => {
       vehicleId: invoice.vehicleId,
       vehicleBusNumber: log.vehicleSnapshot?.busNumber ?? null,
       vehicleUnitTag: log.vehicleSnapshot?.unitTag ?? null,
+      vehicleUnitType: log.vehicleSnapshot?.unitType ?? null,
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
     }).catch(() => {})

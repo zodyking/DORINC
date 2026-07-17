@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
       customerName: customer.displayName,
       busNumber: vehicle.busNumber,
       unitTag: vehicle.unitTag,
+      unitType: vehicle.unitType,
     }).catch(() => {})
 
     return { vehicle }
