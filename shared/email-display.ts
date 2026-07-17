@@ -89,8 +89,45 @@ export function stripQuotedEmailHtml(html: string): string {
   return sanitized || raw
 }
 
-export function normalizeInboundEmailText(text: string, html?: string | null): string {
+const EMAIL_TEMPLATE_CLASS_RE = /\.email-(?:container|shell|outer)|\.mobile-padding|\.secondary-link|\.data-label/i
+
+function countCssProperties(text: string): number {
+  return (text.match(/[a-z-]+\s*:\s*[^;}\n]+;/gi) ?? []).length
+}
+
+/** Plain-text bodies that are really leaked <style> CSS from HTML emails. */
+export function looksLikeEmailCssArtifact(text: string): boolean {
   const plain = cleanPlainEmailText(text)
+  if (!plain || plain.length < 40) return false
+
+  const cssPropertyCount = countCssProperties(plain)
+  const cssRuleMatches = plain.match(/[{][^}]{10,}[}]/g) ?? []
+
+  if (EMAIL_TEMPLATE_CLASS_RE.test(plain) && cssPropertyCount >= 3) return true
+
+  const words = plain.split(/\s+/).filter(word => word.length > 1)
+  if (cssPropertyCount >= 5 && cssPropertyCount / Math.max(words.length, 1) > 0.25) return true
+
+  const trimmed = plain.trim()
+  if (/^(?:body|html|\*|table|img|a)\s*\{/.test(trimmed)) return true
+  if (/^\.\w[\w-]*\s*\{/.test(trimmed) && cssPropertyCount >= 2) return true
+
+  if (cssRuleMatches.length >= 2 && cssPropertyCount >= 4) {
+    const proseWords = plain
+      .replace(/[{][^}]*[}]/g, ' ')
+      .replace(/[.#]?[\w-]+\s*\{/g, ' ')
+      .split(/\s+/)
+      .filter(word => /^[a-zA-Z]{3,}$/.test(word)
+        && !/^(margin|padding|border|width|height|font|color|background|display)$/i.test(word))
+    if (proseWords.length < 5) return true
+  }
+
+  return false
+}
+
+export function normalizeInboundEmailText(text: string, html?: string | null): string {
+  let plain = cleanPlainEmailText(text)
+  if (plain && looksLikeEmailCssArtifact(plain)) plain = ''
   if (plain) return plain
   if (html) return cleanPlainEmailText(stripHtmlToText(html))
   return '(empty message)'
@@ -210,7 +247,7 @@ export function shouldRenderEmailAsHtml(
   }
 
   const plain = cleanPlainEmailText(body ?? '')
-  if (!plain) return true
+  if (!plain || looksLikeEmailCssArtifact(plain)) return true
 
   const htmlAsText = htmlTextLength(html)
   if (!htmlAsText) return false
@@ -223,7 +260,8 @@ export function shouldRenderEmailAsHtml(
 }
 
 export function emailBodyForDisplay(body: string, html?: string | null): { mode: 'html' | 'text', content: string } {
-  const plain = cleanPlainEmailText(body)
+  let plain = cleanPlainEmailText(body)
+  if (plain && looksLikeEmailCssArtifact(plain)) plain = ''
   if (html?.trim() && shouldRenderEmailAsHtml(html, body)) {
     return { mode: 'html', content: html }
   }
