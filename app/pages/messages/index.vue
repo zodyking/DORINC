@@ -13,6 +13,7 @@ const directMessagingEnabled = ref(false)
 const chatSettingsLoaded = ref(false)
 
 const showThread = ref(false)
+const listSearchOpen = ref(false)
 const newDmOpen = ref(false)
 const newEmailOpen = ref(false)
 const staffSearch = ref('')
@@ -254,6 +255,7 @@ async function submitNewEmail() {
 
 async function selectConversation(id: string) {
   dm.activeConversationId = id
+  listSearchOpen.value = false
   revealThread()
   await dm.openConversation(id)
 }
@@ -284,7 +286,7 @@ async function setEmailShowAll(showAll: boolean) {
 
 <template>
   <section class="page active dm-page" :class="{ 'dm-page--in-thread': inThreadLayout }">
-    <StaffPageHead title="Messages" subtitle="Team chat and shared customer email threads">
+    <StaffPageHead class="dm-pagehead-desktop" title="Messages" subtitle="Team chat and shared customer email threads">
       <template #actions>
         <button type="button" class="btn" @click="openNewEmail">
           New email
@@ -302,7 +304,7 @@ async function setEmailShowAll(showAll: boolean) {
 
     <div
       v-if="teamOnlyMode"
-      class="dm-channel-tabs dm-channel-tabs--standalone"
+      class="dm-mobile-channel-bar"
       role="tablist"
       aria-label="Message channels"
     >
@@ -337,66 +339,94 @@ async function setEmailShowAll(showAll: boolean) {
     >
       <aside v-if="!teamOnlyMode" class="dm-sidebar">
         <div class="dm-sidebar-head">
-          <div class="dm-sidebar-actions">
-            <button v-if="directMessagingEnabled" type="button" class="btn primary" aria-label="New message" @click="openNewDm">
-              New message
-            </button>
-            <button type="button" class="btn" aria-label="New email" @click="openNewEmail">
-              New email
-            </button>
+          <div class="dm-list-toolbar">
+            <div class="dm-list-toolbar__top">
+              <h2 class="dm-list-toolbar__title">Messages</h2>
+              <div class="dm-list-toolbar__actions">
+                <button
+                  v-if="directMessagingEnabled"
+                  type="button"
+                  class="dm-toolbar-btn"
+                  aria-label="New message"
+                  @click="openNewDm"
+                >
+                  <span aria-hidden="true">✉</span>
+                </button>
+                <button
+                  type="button"
+                  class="dm-toolbar-btn"
+                  aria-label="New email"
+                  @click="openNewEmail"
+                >
+                  <span aria-hidden="true">📧</span>
+                </button>
+                <button
+                  type="button"
+                  class="dm-toolbar-btn"
+                  :class="{ on: listSearchOpen }"
+                  aria-label="Search conversations"
+                  :aria-expanded="listSearchOpen"
+                  @click="listSearchOpen = !listSearchOpen"
+                >
+                  <span aria-hidden="true">🔍</span>
+                </button>
+              </div>
+            </div>
+            <div class="dm-channel-tabs" role="tablist" aria-label="Message channels">
+              <button
+                type="button"
+                role="tab"
+                class="dm-channel-tab"
+                :class="{ on: dm.messageChannel === 'dm' }"
+                :aria-selected="dm.messageChannel === 'dm'"
+                @click="setChannel('dm')"
+              >
+                Team
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="dm-channel-tab"
+                :class="{ on: dm.messageChannel === 'email' }"
+                :aria-selected="dm.messageChannel === 'email'"
+                @click="setChannel('email')"
+              >
+                Email
+              </button>
+            </div>
+            <div
+              v-if="dm.messageChannel === 'email'"
+              class="dm-email-filter"
+              role="group"
+              aria-label="Email inbox filter"
+            >
+              <button
+                type="button"
+                class="dm-email-filter-opt"
+                :class="{ on: !dm.emailShowAll }"
+                @click="setEmailShowAll(false)"
+              >
+                Customers
+              </button>
+              <button
+                type="button"
+                class="dm-email-filter-opt"
+                :class="{ on: dm.emailShowAll }"
+                @click="setEmailShowAll(true)"
+              >
+                Show all
+              </button>
+            </div>
+            <div class="dm-list-search" :class="{ 'is-open': listSearchOpen }">
+              <input
+                v-model="dm.conversationSearch"
+                type="search"
+                class="dm-search"
+                placeholder="Search conversations…"
+                aria-label="Search conversations"
+              >
+            </div>
           </div>
-          <div class="dm-channel-tabs" role="tablist" aria-label="Message channels">
-            <button
-              type="button"
-              role="tab"
-              class="dm-channel-tab"
-              :class="{ on: dm.messageChannel === 'dm' }"
-              :aria-selected="dm.messageChannel === 'dm'"
-              @click="setChannel('dm')"
-            >
-              Team
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="dm-channel-tab"
-              :class="{ on: dm.messageChannel === 'email' }"
-              :aria-selected="dm.messageChannel === 'email'"
-              @click="setChannel('email')"
-            >
-              Email
-            </button>
-          </div>
-          <div
-            v-if="dm.messageChannel === 'email'"
-            class="dm-email-filter"
-            role="group"
-            aria-label="Email inbox filter"
-          >
-            <button
-              type="button"
-              class="dm-email-filter-opt"
-              :class="{ on: !dm.emailShowAll }"
-              @click="setEmailShowAll(false)"
-            >
-              Customers
-            </button>
-            <button
-              type="button"
-              class="dm-email-filter-opt"
-              :class="{ on: dm.emailShowAll }"
-              @click="setEmailShowAll(true)"
-            >
-              Show all
-            </button>
-          </div>
-          <input
-            v-model="dm.conversationSearch"
-            type="search"
-            class="dm-search"
-            placeholder="Search conversations…"
-            aria-label="Search conversations"
-          >
         </div>
         <div class="dm-conv-list">
           <div v-if="dm.loadingConversations && !dm.conversations.length" class="dm-list-empty">Loading…</div>
