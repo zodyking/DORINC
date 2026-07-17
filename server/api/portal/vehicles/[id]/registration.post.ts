@@ -1,14 +1,14 @@
-import { useDb } from '../../../db/client'
+import { useDb } from '../../../../db/client'
 import {
   assertCanUploadVehicleDocument,
-} from '../../../services/file-access.service'
-import { getVehicle, VehiclesServiceError } from '../../../services/vehicles.service'
-import { writeAudit } from '../../../services/audit.service'
-import { apiError } from '../../../utils/api-error'
-import { assertPortalCustomerScope, requirePortalCustomer } from '../../../utils/require-portal'
-import { validateParams } from '../../../utils/validate'
-import { readEntityDocumentUpload } from '../../../utils/entity-document-upload'
-import { idParamSchema } from '../../../../shared/validators/common'
+} from '../../../../services/file-access.service'
+import { getVehicle, VehiclesServiceError } from '../../../../services/vehicles.service'
+import { writeAudit } from '../../../../services/audit.service'
+import { apiError } from '../../../../utils/api-error'
+import { assertPortalCustomerScope, requirePortalCustomer } from '../../../../utils/require-portal'
+import { validateParams } from '../../../../utils/validate'
+import { readEntityDocumentUpload } from '../../../../utils/entity-document-upload'
+import { idParamSchema } from '../../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
