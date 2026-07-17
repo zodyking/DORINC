@@ -53,12 +53,15 @@ const submitLabel = computed(() => (isResend.value ? 'Resend invoice' : 'Send in
 const successTitle = computed(() => (isResend.value ? 'Invoice resent' : 'Invoice sent'))
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
+let pollStartedAt = 0
+const POLL_TIMEOUT_MS = 120_000
 
 function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = undefined
   }
+  pollStartedAt = 0
 }
 
 async function openModal() {
@@ -130,11 +133,19 @@ async function submit() {
 
 function startPolling() {
   stopPolling()
+  pollStartedAt = Date.now()
   void pollStatus()
   pollTimer = setInterval(() => { void pollStatus() }, 4000)
 }
 
 async function pollStatus() {
+  if (pollStartedAt && Date.now() - pollStartedAt > POLL_TIMEOUT_MS) {
+    stopPolling()
+    phase.value = 'failed'
+    resultMessage.value = 'Delivery is taking too long. Check that SMTP is configured and the PDF render service is running, then try again.'
+    return
+  }
+
   try {
     const data = await $fetch<{
       status: string

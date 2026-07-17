@@ -69,6 +69,8 @@ const results = ref<BulkResultRow[]>([])
 const sentRecipient = ref<string | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
+let pollStartedAt = 0
+const POLL_TIMEOUT_MS = 120_000
 
 const {
   data: customersData,
@@ -145,6 +147,7 @@ function stopPolling() {
     clearInterval(pollTimer)
     pollTimer = undefined
   }
+  pollStartedAt = 0
 }
 
 function toggle(id: string) {
@@ -215,11 +218,25 @@ function updateRow(invoiceId: string, patch: Partial<BulkResultRow>) {
 
 function startPolling() {
   stopPolling()
+  pollStartedAt = Date.now()
   void pollStatuses()
   pollTimer = setInterval(() => { void pollStatuses() }, 2000)
 }
 
 async function pollStatuses() {
+  if (pollStartedAt && Date.now() - pollStartedAt > POLL_TIMEOUT_MS) {
+    stopPolling()
+    for (const row of results.value) {
+      if (['pending', 'queued', 'processing'].includes(row.state)) {
+        updateRow(row.invoiceId, {
+          state: 'failed',
+          stateError: 'Delivery timed out — check SMTP and PDF render service, then try again.',
+        })
+      }
+    }
+    return
+  }
+
   const pending = results.value.filter(r =>
     !r.queueError && (r.state === 'queued' || r.state === 'processing'),
   )
