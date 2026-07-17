@@ -106,12 +106,16 @@ const PAYMENT_TERMS_LABELS: Record<string, string> = {
   net_60: 'Net 60',
 }
 
-const INVOICE_STATUS_LABELS: Record<string, string> = {
-  draft: 'DRAFT',
-  pending_manager_approval: 'PENDING APPROVAL',
-  sent: 'SENT',
-  paid: 'PAID',
-  void: 'VOID',
+/** Payment status shown on invoice PDFs (not workflow status like sent/draft). */
+export function invoicePdfPaymentStatusLabel(balanceDue: string, status: string): string {
+  if (status === 'void')
+    return ''
+
+  const balance = parseMoney(balanceDue ?? '0')
+  if (status === 'paid' || balance === 0n)
+    return 'Paid in Full'
+
+  return 'Payment Due'
 }
 
 const ESTIMATE_STATUS_LABELS: Record<string, string> = {
@@ -331,7 +335,7 @@ export function buildInvoicePdfData(
     date: formatDisplayDate(detail.invoiceDate),
     dueDateLabel: 'Due',
     dueLabel: paymentTermsLabel(detail.paymentTerms),
-    statusLabel: INVOICE_STATUS_LABELS[detail.status] ?? String(detail.status).toUpperCase(),
+    statusLabel: invoicePdfPaymentStatusLabel(detail.balanceDue, detail.status),
     generatedAt: formatGeneratedAt(),
     customer: {
       name: customerName,

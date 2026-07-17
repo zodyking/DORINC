@@ -6,6 +6,7 @@ import {
   businessProfileToDocumentPdfCompany,
   formatPdfVehicleUnitDisplay,
   formatPdfVehicleYearMakeModel,
+  invoicePdfPaymentStatusLabel,
 } from '../../shared/document-pdf-payload'
 
 describe('document-pdf-payload', () => {
@@ -61,7 +62,7 @@ describe('document-pdf-payload', () => {
     })
 
     expect(data.documentTitle).toBe('INVOICE')
-    expect(data.statusLabel).toBe('SENT')
+    expect(data.statusLabel).toBe('Payment Due')
     expect(data.dueLabel).toBe('Net 30')
     expect(data.totals.total).toBe('$430.00')
     expect(data.lineItems).toHaveLength(2)
@@ -124,6 +125,27 @@ describe('document-pdf-payload', () => {
       '739 E New York Ave',
       'Brooklyn, NY 11213',
     ])
+  })
+
+  it('shows payment status on invoice PDFs instead of workflow status', () => {
+    expect(invoicePdfPaymentStatusLabel('430.00', 'sent')).toBe('Payment Due')
+    expect(invoicePdfPaymentStatusLabel('0', 'sent')).toBe('Paid in Full')
+    expect(invoicePdfPaymentStatusLabel('100.00', 'paid')).toBe('Paid in Full')
+    expect(invoicePdfPaymentStatusLabel('50.00', 'void')).toBe('')
+
+    const paid = buildInvoicePdfData({
+      invoiceNumberFormatted: 'INV-000100',
+      invoiceDate: '2026-01-15',
+      paymentTerms: 'net_30',
+      status: 'paid',
+      lineItems: [],
+      feesAmount: '0',
+      discountAmount: '0',
+      taxAmount: '0',
+      total: '500.00',
+      balanceDue: '0',
+    })
+    expect(paid.statusLabel).toBe('Paid in Full')
   })
 
   it('formats fleet unit and year/make/model for PDF vehicle blocks', () => {
