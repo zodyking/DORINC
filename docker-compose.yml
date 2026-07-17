@@ -30,6 +30,8 @@ services:
       APP_URL: ${APP_URL}
       DATABASE_URL: ${DATABASE_URL:-}
       PDF_RENDER_URL: ${PDF_RENDER_URL:-http://laravel-pdf:8080}
+      # Dedicated worker + pdf-worker containers handle background jobs; disable in-process loops.
+      EMBEDDED_WORKERS: 'false'
     networks:
       - dokploy-network
     depends_on:
