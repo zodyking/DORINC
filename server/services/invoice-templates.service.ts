@@ -401,7 +401,18 @@ async function buildTemplatePreviewPayload(
   )
 
   const layoutMarker = input?.bladeSource?.trim() || detail.latestVersion.layoutMarker
-  const bladeSource = resolveEffectiveBladeSource(layoutMarker) ?? undefined
+  let bladeSource: string | undefined
+  if (input?.bladeSource?.trim()) {
+    bladeSource = resolveEffectiveBladeSource(coerceLayoutMarkerForStorage(input.bladeSource)) ?? undefined
+  }
+  else {
+    const { resolveBladeSourceForPdf } = await import('./invoice-template-blade-resolve.service')
+    bladeSource = await resolveBladeSourceForPdf(db, {
+      templateId: detail.id,
+      templateSlug: detail.slug,
+      layoutMarker,
+    }) ?? undefined
+  }
 
   const data = buildInvoicePdfData(invoiceDetail, {
     company: businessProfileToDocumentPdfCompany(business),

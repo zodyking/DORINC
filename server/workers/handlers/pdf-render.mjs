@@ -235,5 +235,19 @@ export async function payloadToPdf(storedContent) {
   if (!shouldUsePdfRenderService()) {
     throw new Error('PDF_RENDER_URL is required for Blade PDF rendering (laravel-pdf service).')
   }
-  return renderDocumentPdfBuffer(payload)
+
+  try {
+    return await renderDocumentPdfBuffer(payload)
+  }
+  catch (err) {
+    if (!payload.options?.bladeSource) throw err
+    const fallback = {
+      ...payload,
+      options: {
+        ...payload.options,
+        bladeSource: undefined,
+      },
+    }
+    return renderDocumentPdfBuffer(fallback)
+  }
 }

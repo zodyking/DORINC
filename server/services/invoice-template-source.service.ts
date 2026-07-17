@@ -6,7 +6,7 @@ import {
   BLADE_INVOICE_TEMPLATE_VIEW,
   DEFAULT_INVOICE_TEMPLATE_DESIGN,
 } from '../../shared/invoice-template-design'
-import { normalizeInvoiceTemplateDesign, resolveEffectiveBladeSource } from '../../shared/invoice-template-blade'
+import { normalizeInvoiceTemplateDesign } from '../../shared/invoice-template-blade'
 
 /** Template source for invoice/estimate PDF rendering (Laravel Blade). */
 export interface InvoicePdfTemplateSource {
@@ -44,6 +44,7 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
   }
 
   const [row] = await db.select({
+    template: invoiceTemplates,
     version: invoiceTemplateVersions,
   })
     .from(invoiceTemplates)
@@ -61,7 +62,12 @@ export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTempl
   if (!row) return getBuiltInInvoicePdfTemplate()
 
   const designSettings = normalizeInvoiceTemplateDesign(row.version.designSettings)
-  const bladeSource = resolveEffectiveBladeSource(row.version.layoutMarker)
+  const { resolveBladeSourceForPdf } = await import('./invoice-template-blade-resolve.service')
+  const bladeSource = await resolveBladeSourceForPdf(db, {
+    templateId: row.template.id,
+    templateSlug: row.template.slug,
+    layoutMarker: row.version.layoutMarker,
+  })
 
   return {
     bladeView: BLADE_INVOICE_TEMPLATE_VIEW,

@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 import type { Db } from './client'
 import { BLADE_INVOICE_TEMPLATE_MARKER } from '../../shared/invoice-template-design'
@@ -8,23 +6,16 @@ import {
   invoiceTemplateVersions,
   invoiceTemplates,
 } from './schema/invoice-templates'
+import { presetBladeMarkerForSlug, INVOICE_TEMPLATE_PRESET_FILES } from '../lib/invoice-preset-blade'
 
 export const DEFAULT_INVOICE_TEMPLATE_SLUG = 'standard-invoice'
 export const DEFAULT_INVOICE_TEMPLATE_NAME = 'Standard Invoice'
 
 /**
  * Built-in template presets shipped with the app (server/assets).
- * Each seeds as its own template with the Blade source stored inline, so
- * users can pick, duplicate, and customize them from the designer.
+ * Preset blades load from disk at PDF render time via preset:slug markers.
  */
-export const INVOICE_TEMPLATE_PRESETS: ReadonlyArray<{ slug: string, name: string, file: string, setAsDefault?: boolean }> = [
-  { slug: 'shop-matrix', name: 'Shop Matrix', file: 'shop-matrix.blade.php', setAsDefault: true },
-  { slug: 'classic-ledger', name: 'Service Matrix', file: 'classic-ledger.blade.php' },
-  { slug: 'onyx-bold', name: 'Onyx Bold', file: 'onyx-bold.blade.php' },
-  { slug: 'aria-minimal', name: 'Aria Minimal', file: 'aria-minimal.blade.php' },
-  { slug: 'executive-slate', name: 'Executive Slate', file: 'executive-slate.blade.php' },
-  { slug: 'blueprint-trade', name: 'Blueprint Trade', file: 'blueprint-trade.blade.php' },
-]
+export const INVOICE_TEMPLATE_PRESETS = INVOICE_TEMPLATE_PRESET_FILES
 
 /** Slugs of built-in system templates that cannot be deleted. */
 export const SYSTEM_INVOICE_TEMPLATE_SLUGS: ReadonlySet<string> = new Set([
@@ -35,26 +26,6 @@ export const SYSTEM_INVOICE_TEMPLATE_SLUGS: ReadonlySet<string> = new Set([
 /** Check if a template slug is a system (built-in) template. */
 export function isSystemTemplateSlug(slug: string): boolean {
   return SYSTEM_INVOICE_TEMPLATE_SLUGS.has(slug)
-}
-
-const PRESET_DIR_CANDIDATES = [
-  // Shipped with nuxt-app production image (see docker/Dockerfile.app).
-  join(process.cwd(), 'server/assets/invoice-template-presets'),
-  // Monorepo dev / test fallback (cwd may be repo root already).
-  join(process.cwd(), '../server/assets/invoice-template-presets'),
-]
-
-async function readPresetBladeSource(file: string): Promise<string> {
-  let lastError: unknown
-  for (const dir of PRESET_DIR_CANDIDATES) {
-    try {
-      return await readFile(join(dir, file), 'utf8')
-    }
-    catch (err) {
-      lastError = err
-    }
-  }
-  throw lastError ?? new Error(`Invoice template preset not found: ${file}`)
 }
 
 /**
@@ -74,7 +45,7 @@ export async function seedInvoiceTemplatePresets(db: Db) {
   let inserted = 0
   let upgraded = 0
   for (const preset of INVOICE_TEMPLATE_PRESETS) {
-    const bladeSource = await readPresetBladeSource(preset.file)
+    const targetMarker = presetBladeMarkerForSlug(preset.slug)
     const template = existingBySlug.get(preset.slug)
 
     if (!template) {
@@ -96,7 +67,7 @@ export async function seedInvoiceTemplatePresets(db: Db) {
           templateId: row.id,
           versionNumber: 1,
           status: 'published',
-          layoutMarker: bladeSource,
+          layoutMarker: targetMarker,
           designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
           publishedAt: new Date(),
         })
@@ -124,14 +95,14 @@ export async function seedInvoiceTemplatePresets(db: Db) {
 
     // Seeded versions carry no actor ids; any actor means a user touched it.
     const userTouched = versions.some(v => v.createdBy !== null || v.publishedBy !== null)
-    if (userTouched || latest.layoutMarker === bladeSource) continue
+    if (userTouched || latest.layoutMarker === targetMarker) continue
 
     const [version] = await db.insert(invoiceTemplateVersions)
       .values({
         templateId: template.id,
         versionNumber: latest.versionNumber + 1,
         status: 'published',
-        layoutMarker: bladeSource,
+        layoutMarker: targetMarker,
         designSettings: DEFAULT_INVOICE_TEMPLATE_DESIGN,
         publishedAt: new Date(),
       })
