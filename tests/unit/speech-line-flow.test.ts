@@ -6,6 +6,7 @@ import {
   parseSpokenEditField,
   parseSpokenEditLineNumber,
   parseSpokenLineType,
+  parseSpokenLineTypeFromAlternatives,
   parseSpokenNumber,
   parseKeepCurrent,
   promptForCommandMode,
@@ -45,6 +46,16 @@ describe('speech line flow commands', () => {
   it('maps spoken service to labor line type', () => {
     expect(parseSpokenLineType('service')).toBe('labor')
     expect(parseSpokenLineType('fee')).toBe('fee')
+  })
+
+  it('maps common iOS mishearings of part on the type step', () => {
+    expect(parseSpokenLineType('art')).toBe('part')
+    expect(parseSpokenLineType('heart')).toBe('part')
+    expect(parseSpokenLineType('apart')).toBe('part')
+    expect(parseSpokenLineType('parts')).toBe('part')
+    expect(parseSpokenLineTypeFromAlternatives(['heart', 'part'])).toBe('part')
+    expect(parseSpokenLineTypeFromAlternatives(['art'])).toBe('part')
+    expect(parseSpokenLineTypeFromAlternatives(['labor', 'labour'])).toBe('labor')
   })
 
   it('detects keep current answers', () => {
@@ -103,7 +114,7 @@ describe('speech line flow commands', () => {
 
   it('uses direct voice prompts', () => {
     expect(promptForCommandMode(2)).toBe('Say add line, edit line, or done when finished.')
-    expect(promptForSpeechField('type', '')).toBe('Say labor, part, or fee.')
+    expect(promptForSpeechField('type', '')).toBe('Say parts, labor, or fee.')
     expect(promptForSpeechField('description', 'labor')).toBe('Say what was done.')
     expect(promptForSpeechField('qty', 'labor')).toBe('Say hours.')
     expect(promptForSpeechField('confirm', 'part')).toBe('Say save, add another, or cancel.')

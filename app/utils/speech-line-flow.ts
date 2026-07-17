@@ -30,7 +30,7 @@ export function promptForSpeechField(field: SpeechLineField, lineType: WizardLin
     case 'pick':
       return retryPromptForEditPick()
     case 'type':
-      return 'Say labor, part, or fee.'
+      return 'Say parts, labor, or fee.'
     case 'description':
       return 'Say what was done.'
     case 'qty':
@@ -49,7 +49,7 @@ export function retryPromptForField(field: SpeechLineField): string {
     case 'pick':
       return retryPromptForEditPick()
     case 'type':
-      return 'Say labor, part, or fee — or cancel.'
+      return 'Say parts, labor, or fee — or cancel.'
     case 'description':
       return 'Say description — or keep — or cancel.'
     case 'qty':
@@ -61,12 +61,28 @@ export function retryPromptForField(field: SpeechLineField): string {
   }
 }
 
+/** Common iOS / Web Speech mishearings when staff say "part" on the type step. */
+const PART_STT_ALIASES = /\b(parts?|art|heart|apart)\b/
+
 export function parseSpokenLineType(spoken: string): WizardLineType | null {
-  const t = spoken.toLowerCase()
-  if (/\blabor\b/.test(t)) return 'labor'
-  if (/\bparts?\b/.test(t)) return 'part'
+  const t = spoken.toLowerCase().trim().replace(/['']/g, '')
+  if (/\b(labor|labour)\b/.test(t)) return 'labor'
+  if (PART_STT_ALIASES.test(t)) return 'part'
   if (/\bfees?\b/.test(t)) return 'fee'
   if (/\bservices?\b/.test(t)) return 'labor'
+  return null
+}
+
+/** Try the best transcript first, then other speech-recognition hypotheses. */
+export function parseSpokenLineTypeFromAlternatives(alternatives: string[]): WizardLineType | null {
+  const seen = new Set<string>()
+  for (const raw of alternatives) {
+    const key = raw.toLowerCase().trim()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const type = parseSpokenLineType(raw)
+    if (type) return type
+  }
   return null
 }
 
@@ -193,7 +209,7 @@ export function parseKeepCurrent(spoken: string): boolean {
 export function retryPromptForEditField(field: SpeechLineField, lineType: WizardLineType | ''): string {
   switch (field) {
     case 'type':
-      return 'Say labor, part, or fee — or cancel.'
+      return 'Say parts, labor, or fee — or cancel.'
     case 'description':
       return 'Say description — or keep — or cancel.'
     case 'qty':
