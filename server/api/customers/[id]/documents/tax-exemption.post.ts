@@ -1,13 +1,13 @@
-import { useDb } from '../../../db/client'
+import { useDb } from '../../../../db/client'
 import {
   assertCanUploadCustomerDocument,
   assertCustomerInScope,
-} from '../../../services/file-access.service'
-import { writeAudit } from '../../../services/audit.service'
-import { requirePermission } from '../../../utils/require-permission'
-import { validateParams } from '../../../utils/validate'
-import { readEntityDocumentUpload } from '../../../utils/entity-document-upload'
-import { idParamSchema } from '../../../../shared/validators/common'
+} from '../../../../services/file-access.service'
+import { writeAudit } from '../../../../services/audit.service'
+import { requirePermission } from '../../../../utils/require-permission'
+import { validateParams } from '../../../../utils/validate'
+import { readEntityDocumentUpload } from '../../../../utils/entity-document-upload'
+import { idParamSchema } from '../../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'customers.update.all')

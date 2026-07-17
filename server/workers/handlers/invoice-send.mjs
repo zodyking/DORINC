@@ -1,7 +1,7 @@
 // invoice_send handler — waits for PDF, emails attachment, then marks invoice sent.
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
-import { notifyInvoiceSentTeamMessage } from '../lib/invoice-sent-team-notify.mjs'
+import { notifyInvoiceSentTeamMessage } from '../../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 
