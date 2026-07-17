@@ -57,6 +57,39 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  if (isMultipartRequest(event)) {
+    const form = await readEmailComposeForm(event)
+    const rawBody = form?.fields.body ?? ''
+    const attachments = form?.attachments ?? []
+    if (!rawBody.trim() && !attachments.length) {
+      throw apiError(event, 'VALIDATION_ERROR', 'Message or attachment is required')
+    }
+    const refs = parseEntityRefsFromBody(rawBody)
+
+    try {
+      return await sendMessage(db, id, user.id, rawBody, refs, attachments)
+    }
+    catch (e) {
+      if (e instanceof MessagesServiceError) {
+        throwMessagesApiError(
+          event,
+          e,
+          e.code === 'ENTITY_NOT_FOUND'
+            ? 'One or more referenced records could not be found'
+            : 'Could not send message',
+        )
+      }
+      const message = (e as Error).message
+      if (message === 'ATTACHMENT_TOO_LARGE') {
+        throw apiError(event, 'VALIDATION_ERROR', 'An attachment exceeds the upload size limit')
+      }
+      if (message === 'INVALID_ATTACHMENT') {
+        throw apiError(event, 'VALIDATION_ERROR', 'Only image attachments are allowed in team chat')
+      }
+      throw e
+    }
+  }
+
   const body = await validateBody(event, sendMessageSchema)
   const refs = body.entityRefs?.length ? body.entityRefs : parseEntityRefsFromBody(body.body)
 

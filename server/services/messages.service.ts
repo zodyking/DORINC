@@ -17,6 +17,12 @@ import type { MessageEntityRefInput } from '../../shared/validators/messages'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { formatVehicleUnitLabel, splitEntitySearchTokens } from '../../shared/format/vehicle-unit'
 import { getTeamConversationSummary, syncTeamChatParticipants } from './team-chat.service'
+import {
+  assertValidDmAttachments,
+  listAttachmentsByMessageIds,
+  persistMessageAttachments,
+  type OutboundMessageAttachmentInput,
+} from './message-attachments.service'
 
 export type MessagesServiceErrorCode
   = | 'NOT_FOUND'
@@ -403,6 +409,8 @@ export async function listMessages(db: Db, filter: ListMessagesFilter) {
     .from(messages)
     .where(eq(messages.conversationId, filter.conversationId))
 
+  const attachmentsByMessage = await listAttachmentsByMessageIds(db, messageIds)
+
   return {
     items: rows.map(r => ({
       id: r.message.id,
@@ -416,6 +424,7 @@ export async function listMessages(db: Db, filter: ListMessagesFilter) {
         entityId: ref.entityId,
         entityLabel: ref.entityLabel,
       })),
+      attachments: attachmentsByMessage.get(r.message.id) ?? [],
     })),
     total: total?.value ?? 0,
     page: filter.page,
@@ -429,18 +438,26 @@ export async function sendMessage(
   senderUserId: string,
   body: string,
   explicitRefs?: MessageEntityRefInput[],
+  attachments: OutboundMessageAttachmentInput[] = [],
 ) {
   await assertParticipant(db, conversationId, senderUserId)
 
+  if (attachments.length) assertValidDmAttachments(attachments)
+
   const normalizedBody = normalizeOutgoingMessage(body)
-  const parsedRefs = parseEntityRefsFromBody(normalizedBody)
+  const finalBody = normalizedBody.trim() || (attachments.length ? '(photo)' : '')
+  if (!finalBody.trim() && !attachments.length) {
+    throw new MessagesServiceError('FORBIDDEN')
+  }
+
+  const parsedRefs = parseEntityRefsFromBody(finalBody)
   const refs = explicitRefs?.length ? explicitRefs : parsedRefs
   await validateEntityRefs(db, senderUserId, refs)
 
   const [message] = await db.insert(messages).values({
     conversationId,
     senderUserId,
-    body: normalizedBody,
+    body: finalBody,
   }).returning()
 
   if (refs.length) {
@@ -454,6 +471,10 @@ export async function sendMessage(
       })),
     )
   }
+
+  const savedAttachments = attachments.length
+    ? await persistMessageAttachments(db, message!.id, senderUserId, attachments)
+    : []
 
   await db.update(conversations)
     .set({ updatedAt: new Date() })
@@ -481,6 +502,7 @@ export async function sendMessage(
     senderName: sender?.name ?? 'Staff',
     createdAt: message!.createdAt,
     entityRefs: refs,
+    attachments: savedAttachments,
   }
 }
 
