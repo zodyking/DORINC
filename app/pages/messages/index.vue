@@ -42,6 +42,10 @@ const EMAIL_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/hei
 const EMAIL_ATTACH_ALLOWED = new Set(EMAIL_ATTACH_ACCEPT.split(','))
 const EMAIL_MAX_ATTACHMENTS = 10
 const EMAIL_MAX_ATTACH_MB = 25
+const NON_CUSTOMER_RECIPIENT_KEY = '__non_customer__'
+
+const canSendNonCustomerEmail = computed(() => auth.user?.nonCustomerEmailEnabled === true)
+const isNonCustomerRecipient = computed(() => emailForm.recipientKey === NON_CUSTOMER_RECIPIENT_KEY)
 
 function formatAttachSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -244,9 +248,45 @@ async function pickStaffUser(userId: string) {
   }
 }
 
+function onEmailRecipientChange(key: string) {
+  if (key === NON_CUSTOMER_RECIPIENT_KEY) {
+    emailForm.customerId = ''
+    emailForm.toEmail = ''
+    return
+  }
+  const item = customerRecipients.value.find(r => `${r.customerId}:${r.email}` === key)
+  emailForm.customerId = item?.customerId ?? ''
+  emailForm.toEmail = item?.email ?? ''
+}
+
+function backToCustomerRecipients() {
+  emailForm.recipientKey = ''
+  emailForm.customerId = ''
+  emailForm.toEmail = ''
+}
+
 async function submitNewEmail() {
   emailStartError.value = ''
   if (dm.sending) return
+  if (isNonCustomerRecipient.value) {
+    if (!emailForm.toEmail.trim() || !emailForm.subject.trim() || !emailForm.body.trim()) {
+      emailStartError.value = 'Email address, subject, and message are required'
+      return
+    }
+    try {
+      await dm.startEmailThread({
+        toEmail: emailForm.toEmail.trim(),
+        subject: emailForm.subject.trim(),
+        body: emailForm.body.trim(),
+      }, emailAttachments.value.slice())
+      newEmailOpen.value = false
+      revealThread()
+    }
+    catch (e: unknown) {
+      emailStartError.value = syncFetchErrorMessage(e, 'Could not send email')
+    }
+    return
+  }
   if (!emailForm.customerId || !emailForm.toEmail || !emailForm.subject.trim() || !emailForm.body.trim()) {
     emailStartError.value = 'Customer, subject, and message are required'
     return
@@ -512,11 +552,12 @@ async function setEmailShowAll(showAll: boolean) {
     <div v-if="newEmailOpen" class="dm-modal-scrim" @click="newEmailOpen = false" />
     <div v-if="newEmailOpen" class="dm-modal dm-modal-wide" role="dialog" aria-label="New email">
       <header class="dm-modal-head">
-        <b>New customer email</b>
+        <b>New email</b>
         <button type="button" class="xbtn" aria-label="Close" @click="newEmailOpen = false">✕</button>
       </header>
       <div class="dm-modal-body dm-email-form">
         <input
+          v-if="!isNonCustomerRecipient"
           v-model="customerSearch"
           type="search"
           class="dm-search"
@@ -525,18 +566,31 @@ async function setEmailShowAll(showAll: boolean) {
         >
         <label class="fld">
           To
+          <template v-if="isNonCustomerRecipient">
+            <input
+              v-model="emailForm.toEmail"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              placeholder="name@example.com"
+              required
+              aria-label="Recipient email address"
+            >
+            <button type="button" class="btn sm ghost" style="margin-top:8px;" @click="backToCustomerRecipients">
+              ← Choose customer
+            </button>
+          </template>
           <select
+            v-else
             v-model="emailForm.recipientKey"
             required
             aria-label="Customer recipient"
-            @change="(e) => {
-              const key = (e.target as HTMLSelectElement).value
-              const item = customerRecipients.find(r => `${r.customerId}:${r.email}` === key)
-              emailForm.customerId = item?.customerId ?? ''
-              emailForm.toEmail = item?.email ?? ''
-            }"
+            @change="(e) => onEmailRecipientChange((e.target as HTMLSelectElement).value)"
           >
-            <option value="" disabled>Select customer…</option>
+            <option value="" disabled>Select recipient…</option>
+            <option v-if="canSendNonCustomerEmail" :value="NON_CUSTOMER_RECIPIENT_KEY">
+              Non-customer email
+            </option>
             <option
               v-for="item in customerRecipients"
               :key="`${item.customerId}-${item.email}`"
@@ -590,8 +644,8 @@ async function setEmailShowAll(showAll: boolean) {
           </div>
           <p v-if="emailAttachError" class="dm-compose-attach-error">{{ emailAttachError }}</p>
         </div>
-        <div v-if="customerLoading" class="dm-list-empty">Loading customers…</div>
-        <div v-else-if="customerError" class="dm-list-empty">{{ customerError }}</div>
+        <div v-if="!isNonCustomerRecipient && customerLoading" class="dm-list-empty">Loading customers…</div>
+        <div v-else-if="!isNonCustomerRecipient && customerError" class="dm-list-empty">{{ customerError }}</div>
       </div>
       <footer class="dm-modal-footer">
         <p v-if="emailStartError" class="dm-fetch-error" style="margin:0;">{{ emailStartError }}</p>

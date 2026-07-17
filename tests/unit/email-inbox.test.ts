@@ -13,6 +13,7 @@ import {
 } from '../../server/mail/email-thread'
 import {
   messageMatchesCustomerInboxFilter,
+  shouldIncludeEmailThreadInDefaultScope,
   shouldIngestCompanyOutboundEmail,
   shouldIngestInboundEmail,
 } from '../../server/services/email-inbox.service'
@@ -248,6 +249,36 @@ describe('shouldIngestInboundEmail', () => {
       ['accounting@company.com'],
       [],
     )).toBe(false)
+  })
+})
+
+describe('shouldIncludeEmailThreadInDefaultScope', () => {
+  const customerEmails = new Set(['customer@client.com'])
+
+  it('includes customer-linked threads in the default scope', () => {
+    expect(shouldIncludeEmailThreadInDefaultScope(
+      { customerId: 'cust-1', staffInitiated: false, counterpartEmail: 'customer@client.com' },
+      customerEmails,
+    )).toBe(true)
+  })
+
+  it('includes staff-initiated non-customer threads without Show all', () => {
+    expect(shouldIncludeEmailThreadInDefaultScope(
+      { customerId: null, staffInitiated: true, counterpartEmail: 'vendor@example.com' },
+      customerEmails,
+    )).toBe(true)
+  })
+
+  it('excludes unrelated inbound threads unless Show all is enabled', () => {
+    expect(shouldIncludeEmailThreadInDefaultScope(
+      { customerId: null, staffInitiated: false, counterpartEmail: 'newsletter@example.com' },
+      customerEmails,
+    )).toBe(false)
+    expect(shouldIncludeEmailThreadInDefaultScope(
+      { customerId: null, staffInitiated: false, counterpartEmail: 'newsletter@example.com' },
+      customerEmails,
+      'all',
+    )).toBe(true)
   })
 })
 

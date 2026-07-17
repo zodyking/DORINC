@@ -8,10 +8,11 @@ describe('ensureEmailInboxSchema', () => {
       .mockResolvedValueOnce({ rows: [{ reg: 'email_ingest_suppressions' }] })
       .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
       .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
     const pool = { query }
 
     await expect(ensureEmailInboxSchema(pool)).resolves.toBe(false)
-    expect(query).toHaveBeenCalledTimes(4)
+    expect(query).toHaveBeenCalledTimes(5)
   })
 
   it('applies inbox and suppression migrations when tables are missing', async () => {
@@ -23,10 +24,11 @@ describe('ensureEmailInboxSchema', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
     const pool = { query }
 
     await expect(ensureEmailInboxSchema(pool)).resolves.toBe(true)
-    expect(query).toHaveBeenCalledTimes(7)
+    expect(query).toHaveBeenCalledTimes(8)
     expect(String(query.mock.calls[1]?.[0])).toContain('CREATE TABLE IF NOT EXISTS "email_threads"')
     expect(String(query.mock.calls[3]?.[0])).toContain('CREATE TABLE IF NOT EXISTS "email_ingest_suppressions"')
     expect(String(query.mock.calls[5]?.[0])).toContain('content_id')
@@ -39,6 +41,7 @@ describe('ensureEmailInboxSchema', () => {
       .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ '1': 1 }] })
     const pool = { query }
 
     await expect(ensureEmailInboxSchema(pool)).resolves.toBe(true)

@@ -335,6 +335,7 @@ export interface ResolvedSession {
     username: string | null
     customerId: string | null
     mustChangePassword: boolean
+    nonCustomerEmailEnabled: boolean
   }
   roleGrants: PermissionKey[]
   overrides: PermissionOverrides
@@ -399,6 +400,7 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
       username: row.user.username,
       customerId: row.user.customerId,
       mustChangePassword: row.user.mustChangePassword,
+      nonCustomerEmailEnabled: row.user.nonCustomerEmailEnabled,
     },
     roleGrants,
     overrides,

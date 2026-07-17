@@ -89,6 +89,11 @@ CREATE INDEX IF NOT EXISTS "conversations_system_idx"
   WHERE "is_system" = true;
 `.trim()
 
+const INLINE_0052_SQL = `
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "non_customer_email_enabled" boolean DEFAULT false NOT NULL;
+ALTER TABLE "email_threads" ADD COLUMN IF NOT EXISTS "staff_initiated" boolean DEFAULT false NOT NULL;
+`.trim()
+
 async function hasColumn(pool, table, column) {
   const { rows } = await pool.query(
     `SELECT 1
@@ -167,6 +172,15 @@ export async function ensureEmailInboxSchema(pool) {
       : INLINE_0051_SQL
     await pool.query(sql)
     console.log('[migrate] ensured team group chat columns (0051_team_group_chat)')
+    applied = true
+  }
+
+  if (!(await hasColumn(pool, 'users', 'non_customer_email_enabled'))) {
+    const sql = folder
+      ? await readFile(join(folder, '0052_non_customer_email.sql'), 'utf8')
+      : INLINE_0052_SQL
+    await pool.query(sql)
+    console.log('[migrate] ensured non-customer email columns (0052_non_customer_email)')
     applied = true
   }
 

@@ -11,6 +11,7 @@ export interface AuthUser {
   accountType: string
   customerId?: string | null
   mustChangePassword?: boolean
+  nonCustomerEmailEnabled?: boolean
 }
 
 export const useAuthStore = defineStore('auth', {

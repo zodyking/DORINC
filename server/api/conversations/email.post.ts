@@ -13,7 +13,7 @@ import { startEmailThreadSchema } from '../../../shared/validators/email-inbox'
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'messages.send.own')
 
-  let body: { customerId: string, toEmail: string, subject: string, body: string }
+  let body: { customerId?: string, toEmail: string, subject: string, body: string }
   let attachments: OutboundAttachmentInput[] = []
   if (isMultipartRequest(event)) {
     const form = await readEmailComposeForm(event)
@@ -37,7 +37,18 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     if (err instanceof EmailInboxError) {
       if (err.code === 'NOT_CONFIGURED') throw apiError(event, 'SERVICE_UNAVAILABLE', 'SMTP is not configured')
-      if (err.code === 'INVALID_RECIPIENT') throw apiError(event, 'VALIDATION_ERROR', 'That customer does not have an email address on file')
+      if (err.code === 'INVALID_RECIPIENT') {
+        throw apiError(
+          event,
+          'VALIDATION_ERROR',
+          body.customerId
+            ? 'That customer does not have an email address on file'
+            : 'Enter a valid email address that is not already a customer on file',
+        )
+      }
+      if (err.code === 'NOT_ALLOWED') {
+        throw apiError(event, 'FORBIDDEN', 'You are not allowed to send email to non-customers')
+      }
       if (err.code === 'SEND_FAILED') throw apiError(event, 'UPSTREAM_ERROR', 'Email could not be sent')
       if (err.code === 'ATTACHMENT_TOO_LARGE') throw apiError(event, 'VALIDATION_ERROR', 'An attachment exceeds the upload size limit')
       if (err.code === 'INVALID_ATTACHMENT') throw apiError(event, 'VALIDATION_ERROR', 'Only images and PDF attachments are allowed')

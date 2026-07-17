@@ -12,6 +12,7 @@ const updateSchema = z.object({
   accountType: z.string().trim().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).optional(),
+  nonCustomerEmailEnabled: z.boolean().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -27,6 +28,7 @@ export default defineEventHandler(async (event) => {
       accountTypeKey: body.accountType,
       isActive: body.isActive,
       disabledReason: body.disabledReason,
+      nonCustomerEmailEnabled: body.nonCustomerEmailEnabled,
     })
 
     if (result.changedFields.length) {
@@ -37,8 +39,13 @@ export default defineEventHandler(async (event) => {
         beforeData: {
           accountType: result.previous.accountTypeKey,
           isActive: result.previous.user.isActive,
+          nonCustomerEmailEnabled: result.previous.user.nonCustomerEmailEnabled,
         },
-        afterData: { accountType: result.accountTypeKey, isActive: result.user.isActive },
+        afterData: {
+          accountType: result.accountTypeKey,
+          isActive: result.user.isActive,
+          nonCustomerEmailEnabled: result.user.nonCustomerEmailEnabled,
+        },
         changedFields: result.changedFields,
         permissionKey: 'users.manage.all',
         riskLevel: 'sensitive',
@@ -58,6 +65,9 @@ export default defineEventHandler(async (event) => {
     if (err instanceof UsersServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'User not found')
       if (err.code === 'INVALID_ACCOUNT_TYPE') throw apiError(event, 'VALIDATION_ERROR', 'Invalid account type')
+      if (err.code === 'NOT_APPROVED') {
+        throw apiError(event, 'VALIDATION_ERROR', 'Only approved active staff can be granted non-customer email access')
+      }
       if (err.code === 'SUPER_ADMIN_PROTECTED') {
         throw apiError(event, 'FORBIDDEN', 'Super Admin accounts cannot be modified this way')
       }

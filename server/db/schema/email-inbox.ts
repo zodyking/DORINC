@@ -1,4 +1,4 @@
-import { bigint, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
 import { customers } from './customers'
 import { conversations, messages } from './messages'
@@ -14,6 +14,8 @@ export const emailThreads = pgTable('email_threads', {
   counterpartName: text('counterpart_name'),
   subject: text('subject').notNull(),
   rootMessageId: text('root_message_id'),
+  /** Staff-composed thread to a non-customer address (visible to all team without Show all). */
+  staffInitiated: boolean('staff_initiated').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

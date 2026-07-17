@@ -222,7 +222,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
   }
 
   async function startEmailThread(
-    input: { customerId: string, toEmail: string, subject: string, body: string },
+    input: { customerId?: string, toEmail: string, subject: string, body: string },
     files?: File[],
   ) {
     if (sending.value) return
@@ -273,11 +273,11 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
   }
 
   function buildEmailFormData(
-    input: { customerId: string, toEmail: string, subject: string, body: string },
+    input: { customerId?: string, toEmail: string, subject: string, body: string },
     files: File[],
   ): FormData {
     const form = new FormData()
-    form.append('customerId', input.customerId)
+    if (input.customerId) form.append('customerId', input.customerId)
     form.append('toEmail', input.toEmail)
     form.append('subject', input.subject)
     form.append('body', input.body)

@@ -57,6 +57,8 @@ export const users = pgTable('users', {
   teamChatEnabled: boolean('team_chat_enabled').notNull().default(true),
   /** Email alert when a chat message is received (DM or team). */
   messageEmailNotify: boolean('message_email_notify').notNull().default(true),
+  /** Approved staff may start email threads to addresses not on a customer record. */
+  nonCustomerEmailEnabled: boolean('non_customer_email_enabled').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

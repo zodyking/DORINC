@@ -38,7 +38,7 @@ export const imapSettingsPatchSchema = imapSettingsSchema.extend({
 })
 
 export const startEmailThreadSchema = z.object({
-  customerId: z.string().uuid(),
+  customerId: z.string().uuid().optional(),
   toEmail: emailSchema,
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(50000),

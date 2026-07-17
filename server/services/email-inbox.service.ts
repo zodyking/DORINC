@@ -49,7 +49,7 @@ import { suppressesInboundEmail } from './email-ingest-suppression.service'
 
 export type EmailInboxErrorCode
   = 'NOT_FOUND' | 'NOT_CONFIGURED' | 'INVALID_RECIPIENT' | 'SEND_FAILED'
-    | 'INVALID_ATTACHMENT' | 'ATTACHMENT_TOO_LARGE'
+    | 'INVALID_ATTACHMENT' | 'ATTACHMENT_TOO_LARGE' | 'NOT_ALLOWED'
 
 export class EmailInboxError extends Error {
   constructor(public readonly code: EmailInboxErrorCode) {
@@ -495,9 +495,7 @@ export async function listEmailConversations(db: Db, filter: {
 
   const filtered: typeof rows = []
   for (const row of rows) {
-    const counterpart = row.thread.counterpartEmail.toLowerCase()
-    const isCustomerThread = !!row.thread.customerId || customerEmails.has(counterpart)
-    if (filter.emailScope !== 'all' && !isCustomerThread) continue
+    if (!shouldIncludeEmailThreadInDefaultScope(row.thread, customerEmails, filter.emailScope)) continue
 
     const label = row.customerName || row.thread.counterpartName || row.thread.counterpartEmail
     if (filter.q) {
@@ -776,10 +774,22 @@ async function getLatestThreadHeaders(db: Db, conversationId: string) {
   return row ?? null
 }
 
+/** Default email inbox scope includes customer threads and staff-initiated non-customer mail. */
+export function shouldIncludeEmailThreadInDefaultScope(
+  thread: { customerId: string | null, staffInitiated: boolean, counterpartEmail: string },
+  customerEmails: Set<string>,
+  emailScope?: 'customers' | 'all',
+): boolean {
+  if (emailScope === 'all') return true
+  const counterpart = thread.counterpartEmail.toLowerCase()
+  const isCustomerThread = !!thread.customerId || customerEmails.has(counterpart)
+  return isCustomerThread || thread.staffInitiated
+}
+
 export async function startEmailThread(
   db: Db,
   actorUserId: string,
-  input: { customerId: string, toEmail: string, subject: string, body: string },
+  input: { customerId?: string, toEmail: string, subject: string, body: string },
   attachments: OutboundAttachmentInput[] = [],
 ) {
   if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
@@ -787,27 +797,41 @@ export async function startEmailThread(
   assertValidOutboundAttachments(attachments)
 
   const toEmail = input.toEmail.trim().toLowerCase()
-  const [customer] = await db.select({
-    id: customers.id,
-    displayName: customers.displayName,
-    email: customers.email,
-  })
-    .from(customers)
-    .where(and(eq(customers.id, input.customerId), isNull(customers.archivedAt)))
-    .limit(1)
-  if (!customer) throw new EmailInboxError('INVALID_RECIPIENT')
-
-  const allowedEmails = new Set<string>()
-  if (customer.email) allowedEmails.add(customer.email.toLowerCase())
-  const contactRows = await db.select({ email: customerContacts.email })
-    .from(customerContacts)
-    .where(and(eq(customerContacts.customerId, customer.id), isNull(customerContacts.archivedAt)))
-  for (const row of contactRows) {
-    if (row.email) allowedEmails.add(row.email.toLowerCase())
-  }
-  if (!allowedEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
-
   const actor = await getActorForOutbound(db, actorUserId)
+
+  let customerId: string | null = null
+  let counterpartName: string
+
+  if (input.customerId) {
+    const [customer] = await db.select({
+      id: customers.id,
+      displayName: customers.displayName,
+      email: customers.email,
+    })
+      .from(customers)
+      .where(and(eq(customers.id, input.customerId), isNull(customers.archivedAt)))
+      .limit(1)
+    if (!customer) throw new EmailInboxError('INVALID_RECIPIENT')
+
+    const allowedEmails = new Set<string>()
+    if (customer.email) allowedEmails.add(customer.email.toLowerCase())
+    const contactRows = await db.select({ email: customerContacts.email })
+      .from(customerContacts)
+      .where(and(eq(customerContacts.customerId, customer.id), isNull(customerContacts.archivedAt)))
+    for (const row of contactRows) {
+      if (row.email) allowedEmails.add(row.email.toLowerCase())
+    }
+    if (!allowedEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
+
+    customerId = customer.id
+    counterpartName = customer.displayName
+  }
+  else {
+    await assertActorCanSendNonCustomerEmail(db, actorUserId)
+    const customerEmails = await buildCustomerEmailAddresses(db)
+    if (customerEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
+    counterpartName = toEmail
+  }
 
   const subject = input.subject.trim()
   const normalizedBody = normalizeOutgoingMessage(input.body.trim())
@@ -822,11 +846,12 @@ export async function startEmailThread(
   const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
   await db.insert(emailThreads).values({
     conversationId: conversation!.id,
-    customerId: customer.id,
+    customerId,
     counterpartEmail: toEmail,
-    counterpartName: customer.displayName,
+    counterpartName,
     subject,
     rootMessageId: internetMessageId,
+    staffInitiated: !input.customerId,
   })
 
   const [message] = await db.insert(messages).values({
@@ -864,6 +889,24 @@ export async function startEmailThread(
   await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversation!.id))
 
   return { conversationId: conversation!.id, messageId: message!.id }
+}
+
+async function assertActorCanSendNonCustomerEmail(db: Db, actorUserId: string): Promise<void> {
+  const [actor] = await db.select({
+    approvedAt: users.approvedAt,
+    isActive: users.isActive,
+    nonCustomerEmailEnabled: users.nonCustomerEmailEnabled,
+    accountTypeKey: accountTypes.key,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(accountTypes.id, users.accountTypeId))
+    .where(eq(users.id, actorUserId))
+    .limit(1)
+  if (!actor) throw new EmailInboxError('NOT_FOUND')
+  if (actor.accountTypeKey === 'customer') throw new EmailInboxError('NOT_ALLOWED')
+  if (!actor.approvedAt || !actor.isActive || !actor.nonCustomerEmailEnabled) {
+    throw new EmailInboxError('NOT_ALLOWED')
+  }
 }
 
 /** Load the sending staff member with their account-type key for the signature. */
