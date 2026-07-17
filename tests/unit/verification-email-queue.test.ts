@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { enqueueVerificationEmail } from '../../server/services/verification-email.service'
 
 const { enqueueJob } = vi.hoisted(() => ({
   enqueueJob: vi.fn(),
@@ -25,8 +26,6 @@ vi.mock('../../server/services/email-branding.service', () => ({
     signInUrl: 'https://app.example.com/auth/login',
   })),
 }))
-
-import { enqueueVerificationEmail } from '../../server/services/verification-email.service'
 
 describe('verification email queue', () => {
   beforeEach(() => {
