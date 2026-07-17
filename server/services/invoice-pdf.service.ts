@@ -1,5 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import type { Db } from '../db/client'
+import { appFiles } from '../db/schema/files'
 import type { InvoiceStatus } from '../db/schema/invoices'
 import { invoiceFiles } from '../db/schema/invoices'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
@@ -27,8 +29,8 @@ export type InvoicePdfServiceErrorCode
     | 'NO_PDF'
 
 export class InvoicePdfServiceError extends Error {
-  constructor(public readonly code: InvoicePdfServiceErrorCode) {
-    super(code)
+  constructor(public readonly code: InvoicePdfServiceErrorCode, message?: string) {
+    super(message ?? code)
   }
 }
 
@@ -117,6 +119,130 @@ async function clearOfficialInvoicePdf(db: Db, invoiceId: string) {
     // File may already be archived or missing — official row is gone either way.
   }
   return existing
+}
+
+async function cancelPendingPdfRenderJobs(db: Db, invoiceId: string) {
+  await db.update(pdfRenderJobs)
+    .set({
+      status: 'failed',
+      finishedAt: new Date(),
+      lastError: 'Superseded by synchronous send render',
+    })
+    .where(and(
+      eq(pdfRenderJobs.entityType, 'invoice'),
+      eq(pdfRenderJobs.entityId, invoiceId),
+      inArray(pdfRenderJobs.status, ['queued', 'processing']),
+    ))
+}
+
+async function storeOfficialInvoicePdf(
+  db: Db,
+  invoiceId: string,
+  pdf: Buffer,
+  filename: string,
+  templateVersionId: string | null,
+  actorId: string,
+  pdfRenderJobId: string | null = null,
+) {
+  const sha256Hash = createHash('sha256').update(pdf).digest('hex')
+  const [file] = await db.insert(appFiles).values({
+    ownerEntityType: 'invoice',
+    ownerEntityId: invoiceId,
+    fileKind: 'pdf',
+    originalFilename: filename,
+    mimeType: 'application/pdf',
+    fileSizeBytes: pdf.length,
+    sha256Hash,
+    binaryData: pdf,
+    createdBy: actorId,
+  }).returning()
+
+  await db.insert(invoiceFiles).values({
+    invoiceId,
+    fileId: file!.id,
+    templateVersionId,
+    sha256Hash,
+    pdfRenderJobId,
+    createdBy: actorId,
+  })
+
+  return file!
+}
+
+/**
+ * Render and store the official invoice PDF immediately for the send pipeline.
+ * Avoids queueing pdf_render_jobs so email delivery can start without worker polling.
+ */
+export async function ensureInvoicePdfForSend(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+): Promise<GenerateInvoicePdfResult> {
+  let detail
+  try {
+    detail = await getInvoiceDetail(db, invoiceId)
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      throw new InvoicePdfServiceError('NOT_FOUND')
+    }
+    throw err
+  }
+
+  const statusEligible = PDF_ELIGIBLE_STATUSES.includes(detail.status)
+    || PDF_SEND_ELIGIBLE_STATUSES.includes(detail.status)
+  if (!statusEligible) {
+    throw new InvoicePdfServiceError('NOT_FINALIZED')
+  }
+
+  const template = await resolveInvoicePdfTemplate(db)
+  const existing = await getInvoicePdfRecord(db, invoiceId)
+
+  if (existing) {
+    const sameTemplate = existing.templateVersionId != null
+      && template.templateVersionId != null
+      && existing.templateVersionId === template.templateVersionId
+    if (sameTemplate || template.templateVersionId == null) {
+      return {
+        job: null,
+        invoiceFile: existing,
+        alreadyExists: true,
+        templateVersionId: existing.templateVersionId,
+      }
+    }
+    await clearOfficialInvoicePdf(db, invoiceId)
+  }
+
+  await cancelPendingPdfRenderJobs(db, invoiceId)
+
+  const payload = await buildInvoicePdfPayload(db, detail, template)
+  const filename = `${detail.invoiceNumberFormatted}.pdf`
+
+  let pdf: Buffer
+  try {
+    pdf = await renderDocumentPdfBuffer(payload)
+  }
+  catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new InvoicePdfServiceError('PDF_FAILED', message)
+  }
+
+  await storeOfficialInvoicePdf(
+    db,
+    invoiceId,
+    pdf,
+    filename,
+    template.templateVersionId,
+    actorId,
+  )
+
+  const record = await getInvoicePdfRecord(db, invoiceId)
+  return {
+    job: null,
+    invoiceFile: record,
+    alreadyExists: false,
+    templateVersionId: template.templateVersionId,
+  }
 }
 
 /** Enqueue PDF render for a finalized invoice — immutable once stored unless force=true. */

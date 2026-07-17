@@ -6,7 +6,7 @@ import { formatInvoiceNumber } from '../db/schema/invoices'
 import { buildInvoiceSentEmail } from '../mail/customer-email-templates'
 import { listContacts } from './customers.service'
 import { enqueueJob } from './jobs.service'
-import { generateInvoicePdf, InvoicePdfServiceError } from './invoice-pdf.service'
+import { ensureInvoicePdfForSend, InvoicePdfServiceError } from './invoice-pdf.service'
 import {
   assertInvoiceSendable,
   getInvoice,
@@ -27,8 +27,8 @@ export type InvoiceSendServiceErrorCode
     | 'NOTIFICATION_DISABLED'
 
 export class InvoiceSendServiceError extends Error {
-  constructor(public readonly code: InvoiceSendServiceErrorCode) {
-    super(code)
+  constructor(public readonly code: InvoiceSendServiceErrorCode, message?: string) {
+    super(message ?? code)
   }
 }
 
@@ -169,12 +169,12 @@ export async function queueInvoiceSend(
 
   let pdfResult
   try {
-    pdfResult = await generateInvoicePdf(db, invoiceId, actorId, { allowDraft: true })
+    pdfResult = await ensureInvoicePdfForSend(db, invoiceId, actorId)
   }
   catch (err) {
     if (err instanceof InvoicePdfServiceError) {
       if (err.code === 'NOT_FOUND') throw new InvoiceSendServiceError('NOT_FOUND')
-      throw new InvoiceSendServiceError('PDF_FAILED')
+      throw new InvoiceSendServiceError('PDF_FAILED', err.message)
     }
     throw err
   }
