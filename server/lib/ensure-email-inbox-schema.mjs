@@ -75,6 +75,20 @@ ALTER TABLE "app_files" ADD COLUMN IF NOT EXISTS "content_id" text;
 CREATE INDEX IF NOT EXISTS "app_files_message_content_id_idx" ON "app_files" USING btree ("owner_entity_id", "content_id") WHERE "content_id" IS NOT NULL;
 `.trim()
 
+const INLINE_0051_SQL = `
+ALTER TABLE "conversations"
+  ADD COLUMN IF NOT EXISTS "title" text,
+  ADD COLUMN IF NOT EXISTS "is_system" boolean DEFAULT false NOT NULL;
+
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "team_chat_enabled" boolean DEFAULT true NOT NULL,
+  ADD COLUMN IF NOT EXISTS "message_email_notify" boolean DEFAULT true NOT NULL;
+
+CREATE INDEX IF NOT EXISTS "conversations_system_idx"
+  ON "conversations" USING btree ("is_system")
+  WHERE "is_system" = true;
+`.trim()
+
 async function hasColumn(pool, table, column) {
   const { rows } = await pool.query(
     `SELECT 1
@@ -144,6 +158,15 @@ export async function ensureEmailInboxSchema(pool) {
       : INLINE_0050_SQL
     await pool.query(sql)
     console.log('[migrate] ensured app_files.content_id for email inline images (0050_email_inline_attachments)')
+    applied = true
+  }
+
+  if (!(await hasColumn(pool, 'users', 'team_chat_enabled'))) {
+    const sql = folder
+      ? await readFile(join(folder, '0051_team_group_chat.sql'), 'utf8')
+      : INLINE_0051_SQL
+    await pool.query(sql)
+    console.log('[migrate] ensured team group chat columns (0051_team_group_chat)')
     applied = true
   }
 
