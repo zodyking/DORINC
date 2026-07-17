@@ -85,6 +85,8 @@ async function hasColumn(pool, table, column) {
   )
   return rows.length > 0
 }
+
+async function resolveMigrationsFolder() {
   const candidates = [
     join(process.cwd(), 'server/db/migrations'),
     join(process.cwd(), '.output/server/db/migrations'),
