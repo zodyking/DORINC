@@ -70,6 +70,22 @@ CREATE INDEX IF NOT EXISTS "email_ingest_suppressions_deleted_at_idx"
   ON "email_ingest_suppressions" USING btree ("deleted_at");
 `.trim()
 
+const INLINE_0050_SQL = `
+ALTER TABLE "app_files" ADD COLUMN IF NOT EXISTS "content_id" text;
+CREATE INDEX IF NOT EXISTS "app_files_message_content_id_idx" ON "app_files" USING btree ("owner_entity_id", "content_id") WHERE "content_id" IS NOT NULL;
+`.trim()
+
+async function hasColumn(pool, table, column) {
+  const { rows } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+     LIMIT 1`,
+    [table, column],
+  )
+  return rows.length > 0
+}
+
 async function resolveMigrationsFolder() {
   const candidates = [
     join(process.cwd(), 'server/db/migrations'),
@@ -119,6 +135,15 @@ export async function ensureEmailInboxSchema(pool) {
       : INLINE_0048_SQL
     await pool.query(sql)
     console.log('[migrate] ensured deleted email suppression table (0048_email_ingest_suppressions)')
+    applied = true
+  }
+
+  if (!(await hasColumn(pool, 'app_files', 'content_id'))) {
+    const sql = folder
+      ? await readFile(join(folder, '0050_email_inline_attachments.sql'), 'utf8')
+      : INLINE_0050_SQL
+    await pool.query(sql)
+    console.log('[migrate] ensured app_files.content_id for email inline images (0050_email_inline_attachments)')
     applied = true
   }
 

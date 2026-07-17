@@ -290,7 +290,10 @@ export function useDirectMessages() {
     if (route.path.startsWith('/messages')) {
       await fetchConversations({ silent: true })
       if (activeConversationId.value) {
-        if (lastMessageId) {
+        if (!messages.value.length) {
+          await fetchMessages(activeConversationId.value, undefined, { silent: true })
+        }
+        else if (lastMessageId) {
           await fetchMessages(activeConversationId.value, lastMessageId, { silent: true })
         }
       }
