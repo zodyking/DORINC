@@ -23,7 +23,7 @@ const data = {
   date: '7/2/2026',
   dueDateLabel: 'Due',
   dueLabel: 'Due on receipt',
-  statusLabel: 'SENT',
+  statusLabel: 'Payment Due',
   generatedAt: '07/11/2026, 11:42 PM',
   customer: {
     name: 'Bnos Menachem Inc',
