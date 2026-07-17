@@ -1066,8 +1066,10 @@ export async function ingestInboundEmail(db: Db, input: {
       customerEmail: counterpartEmail,
       subject: input.subject.trim() || '(No subject)',
       messageBody: message!.body,
-      htmlBody: input.html ?? null,
-    }).catch(() => {})
+      htmlBody: input.html ? stripQuotedEmailHtml(input.html) : null,
+    }).catch((err) => {
+      console.warn('[email-inbox] customer email staff notify failed', err)
+    })
 
     if (
       isNewThread

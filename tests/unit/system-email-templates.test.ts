@@ -222,8 +222,10 @@ describe('system email templates', () => {
     expect(service.html).toContain('View in portal')
     expect(change.html).toContain('Billing correction request')
     expect(change.html).toContain('Review in portal')
-    expect(inbound.html).toContain('Open Messages')
-    expect(inbound.text).toContain('fleet@example.com')
+    expect(inbound.html).toContain('Sign in &amp; reply')
+    expect(inbound.text).toContain('Sign in to DORINC')
+    expect(inbound.text).toContain('Can you confirm the total on the latest invoice?')
+    expect(inbound.html).toContain('Customer message')
   })
 
   it('builds service log sent to invoice staff alert', () => {

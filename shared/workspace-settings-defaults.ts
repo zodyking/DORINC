@@ -176,7 +176,7 @@ export const NOTIFICATION_SETTING_META: Array<{
   {
     key: 'customerEmailReceived',
     label: 'Customer email received',
-    description: 'Email all team members when a new customer email is synced into Messages.',
+    description: 'Email all team members when a customer sends email to your inbox (new thread or reply).',
     group: 'workflow',
   },
   {

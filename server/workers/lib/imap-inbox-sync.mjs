@@ -21,6 +21,7 @@ import {
   stripQuotedPlainEmailText,
 } from '../../../shared/email-quote-stripping.mjs'
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
+import { notifyCustomerEmailReceivedStaff } from './customer-email-staff-notify.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
 
@@ -368,6 +369,20 @@ async function ingestInboundEmail(pool, input, filters) {
 
     await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId])
     await pool.query(`UPDATE email_threads SET updated_at = now() WHERE conversation_id = $1`, [conversationId])
+
+    try {
+      await notifyCustomerEmailReceivedStaff(pool, {
+        conversationId,
+        customerName: customer?.displayName ?? from,
+        customerEmail: from,
+        subject: String(input.subject ?? '').trim() || '(No subject)',
+        messageBody: body,
+        htmlBody: input.html ?? null,
+      })
+    }
+    catch (err) {
+      console.warn('[imap-sync] customer email staff notify failed', err)
+    }
 
     if (
       isNewThread

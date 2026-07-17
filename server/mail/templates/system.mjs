@@ -659,23 +659,26 @@ export function buildCustomerEmailReceivedStaffEmail({
   const mailSubject = subject?.trim()
     ? `Customer Email — ${subject.trim()}`
     : `Customer Email — ${customerName}`
+  const loginUrl = `${String(appUrl ?? '').replace(/\/$/, '')}/login`
   const text = [
     `Hi ${recipientName},`,
     '',
-    `A new email arrived from ${customerName} (${customerEmail}).`,
+    `${customerName} (${customerEmail}) sent a message to your company inbox.`,
     subject?.trim() ? `Subject: ${subject.trim()}` : '',
     '',
+    'Customer message:',
     messagePreview,
     '',
-    `Respond in DORINC: ${messagesUrl}`,
+    `Sign in to DORINC: ${loginUrl}`,
+    `Open Messages to reply: ${messagesUrl}`,
   ].filter(Boolean).join('\n')
 
   return buildStyledEmail({
     subject: mailSubject,
     text,
     eyebrow: 'Customer email',
-    headline: 'New customer email received',
-    lead: `${customerName} sent a new email to your company inbox. Open Messages to review and respond.`,
+    headline: 'Customer sent a message',
+    lead: `${customerName} emailed your company inbox. Sign in to DORINC, open Messages, and reply to the customer.`,
     details: [
       { label: 'Customer', value: customerName },
       { label: 'Email', value: customerEmail },
@@ -683,10 +686,10 @@ export function buildCustomerEmailReceivedStaffEmail({
       { label: 'Notified', value: recipientName },
     ].filter(Boolean),
     note: messagePreview
-      ? { title: 'Message preview', body: truncateEmailNote(messagePreview, 800) }
+      ? { title: 'Customer message', body: truncateEmailNote(messagePreview, 800) }
       : undefined,
-    primaryAction: { href: messagesUrl, label: 'Open Messages' },
-    footerNote: 'You received this because a customer email was synced into Messages.',
+    primaryAction: { href: messagesUrl, label: 'Sign in & reply' },
+    footerNote: 'You received this because a customer email was synced into Messages. Sign in to reply.',
     appUrl,
     brand,
   })

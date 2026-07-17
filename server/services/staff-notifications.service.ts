@@ -26,7 +26,7 @@ import {
   formatPdfVehicleUnitDisplay,
   formatPdfVehicleYearMakeModel,
 } from '../../shared/document-pdf-payload'
-import { emailPreviewText } from '../../shared/email-display'
+import { cleanPlainEmailText, stripHtmlToText } from '../../shared/email-display'
 
 const ENTITY_TYPE_LABELS: Record<DeletionEntityType, string> = {
   customer: 'Customer',
@@ -315,6 +315,11 @@ export async function notifyCustomerChangeRequestSubmitted(
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
 }
 
+function customerEmailStaffMessageBody(body: string, html?: string | null): string {
+  const text = cleanPlainEmailText(body) || (html ? stripHtmlToText(html) : '')
+  return text.trim() || '(empty message)'
+}
+
 export async function notifyCustomerEmailReceived(
   db: Db,
   opts: {
@@ -333,7 +338,7 @@ export async function notifyCustomerEmailReceived(
   const brand = await resolveEmailBrand(db)
   const appUrl = brand.appUrl || getAppUrl()
   const messagesUrl = `${appUrl.replace(/\/$/, '')}/messages?conversation=${opts.conversationId}`
-  const messagePreview = emailPreviewText(opts.messageBody, opts.htmlBody)
+  const messagePreview = customerEmailStaffMessageBody(opts.messageBody, opts.htmlBody)
   const recipients = await listAllTeamMembers(db)
 
   let queued = 0
