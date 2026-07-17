@@ -1,7 +1,10 @@
 // invoice_send handler — waits for PDF, emails attachment, then marks invoice sent.
 import nodemailer from 'nodemailer'
 import { loadSmtpConfig } from '../lib/app-config.mjs'
-import { notifyInvoiceSentTeamMessage } from '../../lib/invoice-sent-team-notify.mjs'
+import {
+  notifyInvoiceSentTeamMessage,
+  tryFinalizeBulkInvoiceSendNotify,
+} from '../../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 
@@ -299,13 +302,23 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         }
       }
 
+      const bulkSendBatchId = payload.bulkSendBatchId ? String(payload.bulkSendBatchId) : null
       await pool.query(
-        `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
-        [job.id],
+        `UPDATE worker_jobs
+         SET status = 'done',
+             finished_at = now(),
+             last_error = NULL,
+             payload = payload || $2::jsonb
+         WHERE id = $1`,
+        [job.id, JSON.stringify({ wasResend: isResend })],
       )
       processed++
 
-      if (!isResend) {
+      const notifyTeam = async () => {
+        if (bulkSendBatchId) {
+          await tryFinalizeBulkInvoiceSendNotify(pool, bulkSendBatchId)
+          return
+        }
         let customerName = payload.recipientName ?? 'Customer'
         if (invoice.customer_id) {
           const { rows: customerRows } = await pool.query(
@@ -314,16 +327,18 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
           )
           if (customerRows[0]?.display_name) customerName = customerRows[0].display_name
         }
-        void notifyInvoiceSentTeamMessage(pool, {
+        await notifyInvoiceSentTeamMessage(pool, {
           senderUserId: actorId,
           invoiceId,
           invoiceNumber: invoice.invoice_number,
           customerId: invoice.customer_id,
           customerName,
-        }).catch((err) => {
-          console.warn('[invoice_send] team message failed:', err instanceof Error ? err.message : err)
+          isResend,
         })
       }
+      void notifyTeam().catch((err) => {
+        console.warn('[invoice_send] team message failed:', err instanceof Error ? err.message : err)
+      })
     }
     catch (err) {
       failed++

@@ -75,6 +75,17 @@ export async function findPendingInvoiceSendJob(db: Db, invoiceId: string) {
   return rows[0] ?? null
 }
 
+export async function attachBulkSendBatchToPendingJob(db: Db, invoiceId: string, batchId: string) {
+  const pending = await findPendingInvoiceSendJob(db, invoiceId)
+  if (!pending) return false
+  const payload = pending.payload as Record<string, unknown>
+  if (payload.bulkSendBatchId === batchId) return true
+  await db.update(workerJobs).set({
+    payload: { ...payload, bulkSendBatchId: batchId },
+  }).where(eq(workerJobs.id, pending.id))
+  return true
+}
+
 export async function findLatestInvoiceSendJob(db: Db, invoiceId: string) {
   const rows = await db.select().from(workerJobs).where(and(
     eq(workerJobs.jobType, 'invoice_send'),
@@ -140,6 +151,11 @@ export interface InvoiceSendOverrides {
   message?: string | null
 }
 
+/** Bulk send groups multiple invoice_send jobs for one consolidated team chat message. */
+export interface InvoiceSendBulkContext {
+  batchId: string
+}
+
 /** Queue PDF generation + email delivery. Invoice becomes sent after email succeeds. */
 export async function queueInvoiceSend(
   db: Db,
@@ -147,6 +163,7 @@ export async function queueInvoiceSend(
   actorId: string,
   overrides?: InvoiceSendOverrides,
   actorAccountType?: string | null,
+  bulkContext?: InvoiceSendBulkContext,
 ): Promise<QueueInvoiceSendResult> {
   const { isNotificationEnabled } = await import('./workspace-settings.service')
   if (!(await isNotificationEnabled(db, 'invoiceEmail'))) {
@@ -190,6 +207,9 @@ export async function queueInvoiceSend(
   if (existing) {
     const reclaimed = await reclaimStaleInvoiceSendJob(db, invoiceId)
     if (!reclaimed) {
+      if (bulkContext?.batchId) {
+        await attachBulkSendBatchToPendingJob(db, invoiceId, bulkContext.batchId)
+      }
       return {
         invoice,
         job: existing,
@@ -221,6 +241,7 @@ export async function queueInvoiceSend(
     recipientEmail: recipient.email,
     recipientName: recipient.name,
     pdfJobId: pdfResult.job?.id ?? null,
+    ...(bulkContext?.batchId ? { bulkSendBatchId: bulkContext.batchId } : {}),
     ...mailPayload,
   }, 5)
 
@@ -298,6 +319,8 @@ export async function bulkQueueInvoiceSend(
 ): Promise<{ results: BulkInvoiceSendResult[], recipient: InvoiceSendRecipient | null }> {
   const recipient = await resolveInvoiceSendRecipient(db, input.customerId)
   const results: BulkInvoiceSendResult[] = []
+  const batchId = crypto.randomUUID()
+  const bulkContext: InvoiceSendBulkContext = { batchId }
 
   for (const invoiceId of input.invoiceIds) {
     let invoiceNumber = ''
@@ -312,7 +335,7 @@ export async function bulkQueueInvoiceSend(
       const result = await queueInvoiceSend(db, invoiceId, actorId, {
         subject: input.subject ?? null,
         message: input.message ?? null,
-      })
+      }, null, bulkContext)
       results.push({
         invoiceId,
         invoiceNumber: formatInvoiceNumber(result.invoice.invoiceNumber),

@@ -122,13 +122,15 @@ export async function postInvoiceSentTeamMessage(
     invoiceNumber: number
     customerId: string | null
     customerName: string
+    isResend?: boolean
   },
 ) {
   const invoiceLabel = formatInvoiceNumber(opts.invoiceNumber)
   const refs = [buildEntityRef('invoice', opts.invoiceId, invoiceLabel)]
+  const verb = opts.isResend ? 'has been resent to' : 'has been sent to'
   const parts = [
     entityRefToken('invoice', opts.invoiceId, invoiceLabel),
-    'has been sent to',
+    verb,
   ]
 
   if (opts.customerId) {
