@@ -2,7 +2,8 @@
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
 import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
-import { serviceLogInvoicePreviewPdfHref } from '~/utils/invoice-pdf'
+import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   serviceLogInvoiceLinkStatusClass,
   type ServiceLogInvoiceLinkStatus,
@@ -122,6 +123,25 @@ function vehicleLabel(vehicle: VehicleBits | null): string {
 function showCustomerRequestGlow(log: ServiceLogRow): boolean {
   return log.customerRequested && log.status !== 'converted_to_invoice'
 }
+
+const pdfOpenBusy = ref<string | null>(null)
+
+async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (pdfOpenBusy.value) return
+  pdfOpenBusy.value = log.id
+  actionError.value = ''
+  try {
+    await openServiceLogInvoicePdf(log.id)
+  }
+  catch (err) {
+    actionError.value = syncFetchErrorMessage(err, 'Could not open invoice PDF')
+  }
+  finally {
+    pdfOpenBusy.value = null
+  }
+}
 </script>
 
 <template>
@@ -222,7 +242,8 @@ function showCustomerRequestGlow(log: ServiceLogRow): boolean {
                     rel="noopener noreferrer"
                     class="sl-inv-pdf-link"
                     :title="`Open ${log.invoiceNumberFormatted} PDF in a new tab`"
-                    @click.stop
+                    :aria-busy="pdfOpenBusy === log.id"
+                    @click="openInvoicePdf(log, $event)"
                   >
                     {{ log.invoiceNumberFormatted }}
                     <span class="sl-inv-pdf-icon" aria-hidden="true">↗</span>

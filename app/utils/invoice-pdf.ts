@@ -11,6 +11,21 @@ export function serviceLogInvoicePreviewPdfHref(serviceLogId: string): string {
   return `/api/service-logs/${serviceLogId}/invoice-preview-pdf`
 }
 
+/** Open a service-log invoice PDF in a new tab with app-level error handling. */
+export async function openServiceLogInvoicePdf(serviceLogId: string): Promise<void> {
+  const blob = await $fetch<Blob>(serviceLogInvoicePreviewPdfHref(serviceLogId), {
+    responseType: 'blob',
+  })
+  await assertPdfBlob(blob)
+  const url = URL.createObjectURL(blob)
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) {
+    URL.revokeObjectURL(url)
+    throw new Error('Pop-up blocked — allow pop-ups for this site to open the PDF')
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 export async function fetchInvoicePreviewPdf(
   invoiceId: string,
   options: { messageLink?: boolean } = {},

@@ -2,6 +2,7 @@
 // Service log detail — photo gallery + status actions.
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
@@ -226,6 +227,23 @@ function previewUrl(fileId: string) {
 function openAiExtraction() {
   if (!canExtract.value || !imageFiles.value.length) return
   aiModalOpen.value = true
+}
+
+const pdfOpenBusy = ref(false)
+
+async function openLinkedInvoicePdf() {
+  if (!log.value?.invoiceId || pdfOpenBusy.value) return
+  pdfOpenBusy.value = true
+  actionError.value = ''
+  try {
+    await openServiceLogInvoicePdf(log.value.id)
+  }
+  catch (err) {
+    actionError.value = syncFetchErrorMessage(err, 'Could not open invoice PDF')
+  }
+  finally {
+    pdfOpenBusy.value = false
+  }
 }
 
 const pill = computed(() => log.value
@@ -531,6 +549,15 @@ const pill = computed(() => log.value
               <dt>Linked invoice</dt>
               <dd>
                 <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
+                ·
+                <button
+                  type="button"
+                  class="link-btn"
+                  :disabled="pdfOpenBusy"
+                  @click="openLinkedInvoicePdf"
+                >
+                  Open PDF
+                </button>
               </dd>
             </template>
           </dl>
@@ -572,3 +599,23 @@ const pill = computed(() => log.value
     />
   </section>
 </template>
+
+<style scoped>
+.link-btn {
+  background: none;
+  border: none;
+  font: inherit;
+  color: #3b82f6;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.link-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+</style>
