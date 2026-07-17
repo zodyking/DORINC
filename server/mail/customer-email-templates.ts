@@ -16,6 +16,7 @@ export type PortalRequestKindLabel
     | 'vehicle_change'
     | 'general'
     | 'new_vehicle'
+    | 'document'
 
 const REQUEST_KIND_LABELS: Record<PortalRequestKindLabel, string> = {
   service: 'Service request',
@@ -23,6 +24,7 @@ const REQUEST_KIND_LABELS: Record<PortalRequestKindLabel, string> = {
   vehicle_change: 'Vehicle correction request',
   general: 'General request',
   new_vehicle: 'New vehicle request',
+  document: 'Document change request',
 }
 
 export type CustomerNotificationKind = 'invoice_sent' | 'request_status' | 'estimate_sent'

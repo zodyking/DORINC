@@ -552,14 +552,9 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
               </div>
             </div>
           </div>
-          <DocumentsEntityDocumentPanel
-            title="Tax exemption form"
-            description="Upload the customer's signed tax exemption certificate (PDF or image)."
+          <DocumentsEntityDocumentViewer
             category="tax_exemption_form"
             :document="taxExemptionDocument"
-            :upload-url="`/api/customers/${customerId}/documents/tax-exemption`"
-            :can-upload="canUpdateCustomer"
-            @uploaded="refresh()"
           />
           <div class="card">
             <div class="chead"><h3>Notes</h3></div>

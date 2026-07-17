@@ -8,6 +8,7 @@ export const PORTAL_REQUEST_REVIEW_KINDS = [
   'vehicle_change',
   'general',
   'new_vehicle',
+  'document',
 ] as const
 
 export type PortalRequestReviewKind = (typeof PORTAL_REQUEST_REVIEW_KINDS)[number]

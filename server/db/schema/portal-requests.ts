@@ -1,5 +1,7 @@
 import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import type { PortalInvoiceCorrectionPayload } from '../../../shared/portal-invoice-correction'
+import type { FileDocumentActiveCategory } from '../../../shared/document-categories'
+import { appFiles } from './files'
 import { customers } from './customers'
 import { users } from './auth'
 import { vehicles } from './vehicles'
@@ -137,4 +139,32 @@ export const portalGeneralRequests = pgTable('portal_general_requests', {
 }, table => [
   index('portal_general_requests_customer_idx').on(table.customerId),
   index('portal_general_requests_status_idx').on(table.status),
+])
+
+export const DOCUMENT_CHANGE_ACTIONS = ['replace', 'remove'] as const
+export type DocumentChangeAction = (typeof DOCUMENT_CHANGE_ACTIONS)[number]
+
+/** Customer requests to update or remove on-file legal documents — staff review applies changes. */
+export const documentChangeRequests = pgTable('document_change_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  customerId: uuid('customer_id').notNull().references(() => customers.id),
+  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
+
+  documentCategory: text('document_category').$type<FileDocumentActiveCategory>().notNull(),
+  action: text('action', { enum: DOCUMENT_CHANGE_ACTIONS }).notNull(),
+  pendingFileId: uuid('pending_file_id').references(() => appFiles.id, { onDelete: 'set null' }),
+  customerNotes: text('customer_notes'),
+
+  status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
+
+  reviewedBy: uuid('reviewed_by').references(() => users.id),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewReason: text('review_reason'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index('document_change_requests_customer_idx').on(table.customerId),
+  index('document_change_requests_status_idx').on(table.status),
 ])

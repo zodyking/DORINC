@@ -16,6 +16,7 @@ import { getInvoice } from './invoices.service'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { isNotificationEnabled } from './workspace-settings.service'
+import { documentChangeRequestTitle } from './document-change-requests.service'
 
 export interface NotificationRecipient {
   email: string
@@ -142,6 +143,11 @@ function requestTitle(kind: PortalRequestReviewKind, request: Record<string, unk
       return String(request.subject ?? 'General request')
     case 'new_vehicle':
       return String(request.fleetTag ?? 'New vehicle')
+    case 'document':
+      return documentChangeRequestTitle(
+        request.documentCategory as 'tax_exemption_form' | 'vehicle_registration',
+        request.action as 'replace' | 'remove',
+      )
     default:
       return 'Portal request'
   }

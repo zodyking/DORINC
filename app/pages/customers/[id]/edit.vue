@@ -24,12 +24,20 @@ const auth = useAuthStore()
 const customerId = computed(() => String(route.params.id || ''))
 const customerFetchKey = computed(() => `customer-detail-${customerId.value}`)
 
-const { data, error, refresh } = useClientFetch<{ customer: Customer }>(
+const { data, error, refresh } = useClientFetch<{ customer: Customer, taxExemptionDocument: {
+  id: string
+  originalFilename: string
+  mimeType: string
+  fileSizeBytes: number
+  createdAt: string
+} | null }>(
   () => `/api/customers/${customerId.value}`,
   { watch: [customerId], key: customerFetchKey },
 )
 
 const customer = computed(() => data.value?.customer)
+const taxExemptionDocument = computed(() => data.value?.taxExemptionDocument ?? null)
+const canUpdateCustomer = computed(() => auth.can('customers.update.all'))
 const canArchive = computed(() => auth.can('customers.archive.all'))
 
 const form = reactive<CustomerFormValue>({
@@ -157,6 +165,16 @@ async function restore() {
         submit-label="Save changes"
         @submit="submit"
         @cancel="navigateTo(`/customers/${route.params.id}`)"
+      />
+      <DocumentsEntityDocumentUploadPanel
+        v-if="canUpdateCustomer"
+        category="tax_exemption_form"
+        :document="taxExemptionDocument"
+        :upload-url="`/api/customers/${customerId}/documents/tax-exemption`"
+        :remove-url="`/api/customers/${customerId}/documents/tax-exemption`"
+        :can-manage="canUpdateCustomer"
+        @uploaded="refresh()"
+        @removed="refresh()"
       />
     </template>
   </section>

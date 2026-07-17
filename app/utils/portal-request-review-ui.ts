@@ -17,6 +17,7 @@ export const STAFF_REQUEST_TABS: { key: StaffRequestTab, label: string }[] = [
   { key: 'invoice_change', label: 'Billing' },
   { key: 'vehicle_change', label: 'Vehicle' },
   { key: 'new_vehicle', label: 'New vehicle' },
+  { key: 'document', label: 'Documents' },
   { key: 'general', label: 'General' },
 ]
 
@@ -38,10 +39,12 @@ export type StaffRequestActionType
     | 'vehicle_note'
     | 'add_vehicle'
     | 'general_resolve'
+    | 'document_change'
 
 export function staffRequestKindLabel(kind: string): string {
   if (kind === 'invoice_change') return 'Billing'
   if (kind === 'new_vehicle') return 'New vehicle'
+  if (kind === 'document') return 'Document'
   return portalRequestKindLabel(kind)
 }
 
@@ -75,6 +78,7 @@ export function staffRequestActionType(row: StaffRequestActionRow): StaffRequest
   if (row.kind === 'vehicle_change') return 'vehicle_note'
   if (row.kind === 'new_vehicle') return 'add_vehicle'
   if (row.kind === 'general') return 'general_resolve'
+  if (row.kind === 'document') return 'document_change'
   if (row.kind === 'invoice_change') {
     if (row.correctionPayload) {
       return portalCorrectionPayloadKind(row.correctionPayload) === 'vehicle'
@@ -119,6 +123,8 @@ export function staffRequestApproveLabel(row: StaffRequestActionRow): string {
       return 'Approve correction'
     case 'add_vehicle':
       return 'Add vehicle'
+    case 'document_change':
+      return 'Apply document change'
     default:
       return 'Approve'
   }
@@ -140,6 +146,8 @@ export function staffRequestApproveHint(row: StaffRequestActionRow): string {
       return 'Adds the correction note to the live vehicle record for staff follow-up.'
     case 'add_vehicle':
       return 'Creates the official fleet vehicle from the customer submission.'
+    case 'document_change':
+      return 'Applies the customer\'s requested document update or removal to the official record.'
     default:
       return 'Marks the message resolved. No other records are changed.'
   }
@@ -158,6 +166,8 @@ export function staffRequestOutcomeSummary(row: StaffRequestActionRow): string {
       return 'Outcome: vehicle notes updated'
     case 'add_vehicle':
       return 'Outcome: new vehicle record'
+    case 'document_change':
+      return 'Outcome: document updated or removed'
     default:
       return 'Outcome: request closed'
   }
