@@ -4,10 +4,25 @@ import { users } from '../db/schema/auth'
 import { conversationParticipants, conversations } from '../db/schema/messages'
 import { buildChatMessageReceivedEmail } from '../mail/templates/system.mjs'
 import { getAppUrl } from './app-config.service'
-import { enqueueHtmlMail } from './jobs.service'
+import { enqueueJob } from './jobs.service'
 import { messagePreview } from './messages.service'
-import { resolveEmailBrand } from './staff-notifications.service'
+import { resolveEmailBrand } from './email-branding.service'
 import { TEAM_CHAT_TITLE } from './team-chat.service'
+
+async function enqueueHtmlMail(
+  db: Db,
+  to: string,
+  mail: { subject: string, text: string, html: string },
+  meta: Record<string, unknown> = {},
+) {
+  return enqueueJob(db, 'email_send', {
+    to,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    ...meta,
+  })
+}
 
 export async function notifyChatMessageReceived(
   db: Db,
