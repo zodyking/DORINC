@@ -11,6 +11,7 @@ import {
   emailMessageMeta,
   emailThreads,
 } from '../db/schema/email-inbox'
+import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/email-inline-images'
 import { sendBrandedMail } from '../mail/branded-mail'
