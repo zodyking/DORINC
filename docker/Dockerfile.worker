@@ -8,6 +8,8 @@ COPY server/lib ./server/lib
 COPY server/mail ./server/mail
 COPY server/db/migrations ./server/db/migrations
 COPY scripts/migrate.mjs ./scripts/migrate.mjs
+# IMAP sync imports shared/*.mjs (email attachments, quote stripping, CSS cleanup).
+COPY shared ./shared
 
 FROM node:24-alpine
 WORKDIR /app
@@ -17,4 +19,5 @@ RUN apk add --no-cache postgresql18-client zstd
 COPY --from=build /src/node_modules ./node_modules
 COPY --from=build /src/server ./server
 COPY --from=build /src/scripts ./scripts
+COPY --from=build /src/shared ./shared
 CMD ["node", "server/workers/worker.mjs"]
