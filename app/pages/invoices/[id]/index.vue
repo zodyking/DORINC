@@ -22,7 +22,7 @@ import {
 import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { phoneDisplay } from '~/utils/phone-ui'
-import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
+import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
 
@@ -88,7 +88,10 @@ const router = useRouter()
 const auth = useAuthStore()
 const id = computed(() => String(route.params.id || ''))
 const idValid = computed(() => UUID_RE.test(id.value))
+const isMessageLink = computed(() => isMessageLinkRoute(route.query))
+const isMessagePdfView = computed(() => isMessageLink.value && route.query.view === 'pdf')
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
+const canLoadInvoice = computed(() => canRead.value || isMessagePdfView.value)
 
 const {
   activeEditor,
@@ -116,16 +119,17 @@ const { data, refresh, error } = useFetch<{
     pendingJobId: string | null
     pendingJobStatus: string | null
   } | null
-}>(() => (idValid.value ? `/api/invoices/${id.value}` : null), {
+}>(() => (idValid.value && canLoadInvoice.value ? `/api/invoices/${id.value}` : null), {
   server: false,
   lazy: true,
   immediate: false,
   watch: false,
+  query: computed(() => messageLinkFetchQuery(route.query)),
 })
 
 function loadInvoiceDetail() {
   if (!import.meta.client) return
-  if (!canRead.value) return
+  if (!canLoadInvoice.value) return
   if (!idValid.value) return
   void refresh()
 }
@@ -134,7 +138,7 @@ onMounted(() => {
   loadInvoiceDetail()
 })
 
-watch([canRead, id], () => {
+watch([canLoadInvoice, id], () => {
   loadInvoiceDetail()
 })
 
@@ -260,6 +264,10 @@ const actionError = ref('')
 const viewTab = ref<'detail' | 'photos' | 'pdf'>('detail')
 const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
 
+watch(isMessagePdfView, (active) => {
+  if (active) viewTab.value = 'pdf'
+}, { immediate: true })
+
 watch(viewTab, async (tab) => {
   if (tab === 'pdf') {
     await nextTick()
@@ -326,11 +334,11 @@ const summaryRows = computed(() => {
 </script>
 
 <template>
-  <section v-if="!auth.loaded || (canRead && idValid && !invoice && !loadErrorMessage)" class="page active">
+  <section v-if="!auth.loaded || (canLoadInvoice && idValid && !invoice && !loadErrorMessage && !isMessagePdfView)" class="page active">
     <div class="cp-state">Loading invoice…</div>
   </section>
 
-  <section v-else-if="!canRead" class="page active">
+  <section v-else-if="!canLoadInvoice" class="page active">
     <div class="pagehead">
       <div>
         <h2>Invoice</h2>
@@ -338,6 +346,28 @@ const summaryRows = computed(() => {
       </div>
     </div>
     <div class="cp-state">You do not have permission to view invoices.</div>
+  </section>
+
+  <section v-else-if="isMessagePdfView && idValid" class="page active page--invoice-pdf">
+    <StaffPageHead>
+      <template #title>
+        {{ invoice?.invoiceNumberFormatted ?? 'Invoice' }}
+      </template>
+      <template #subtitle>
+        <NuxtLink to="/messages">← Back to messages</NuxtLink>
+      </template>
+    </StaffPageHead>
+    <p v-if="loadErrorMessage" class="help" style="margin:0 0 16px; color:#64748b;">
+      {{ loadErrorMessage }}
+    </p>
+    <div class="invoice-pdf-tab">
+      <InvoicePdfPreviewPane
+        ref="pdfPreviewRef"
+        :invoice-id="id"
+        :invoice-label="invoice?.invoiceNumberFormatted ?? 'invoice'"
+        message-link
+      />
+    </div>
   </section>
 
   <section v-else-if="loadErrorMessage" class="page active">

@@ -39,6 +39,7 @@ import {
   unregisterSessionSaveHandler,
 } from '~/composables/useSessionLogoutHandlers'
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
+import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
 
@@ -104,6 +105,11 @@ interface CustomerPick {
 
 const route = useRoute()
 const auth = useAuthStore()
+const isMessageLink = computed(() => isMessageLinkRoute(route.query))
+const canLoadEditor = computed(() =>
+  auth.can('invoices.read.all')
+  || (isMessageLink.value && (auth.can('invoices.update.all') || auth.can('invoices.create.all'))),
+)
 const editorLink = { path: '/templates/designer' }
 const id = route.params.id as string
 
@@ -122,16 +128,17 @@ const {
 // Client-only — do not await (Suspense blank) and do not fetch during SSR
 // (server:false refresh on the server never completes, leaving pending stuck after hydrate).
 const { data, refresh, error, pending } = useClientFetch<{ invoice: InvoicePayload, history: HistoryRow[] }>(
-  () => (idValid.value ? `/api/invoices/${id}` : null),
+  () => (idValid.value && canLoadEditor.value ? `/api/invoices/${id}` : null),
   {
     immediate: false,
     watch: false,
+    query: computed(() => messageLinkFetchQuery(route.query)),
   },
 )
 
 function loadInvoiceEditor() {
   if (!import.meta.client) return
-  if (!auth.loaded || !auth.can('invoices.read.all')) return
+  if (!auth.loaded || !canLoadEditor.value) return
   if (!idValid.value) return
   void refresh()
 }
@@ -140,7 +147,7 @@ onMounted(() => {
   loadInvoiceEditor()
 })
 
-watch([() => auth.loaded, () => auth.can('invoices.read.all'), idValid], () => {
+watch([() => auth.loaded, canLoadEditor, idValid], () => {
   loadInvoiceEditor()
 })
 

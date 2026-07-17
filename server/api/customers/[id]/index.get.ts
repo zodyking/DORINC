@@ -4,12 +4,12 @@ import { auditLogs } from '../../../db/schema/audit'
 import { CustomersServiceError, getCustomer, getCustomerBillingSummary, listContacts } from '../../../services/customers.service'
 import { listInvoices } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
-import { requirePermission } from '../../../utils/require-permission'
+import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
-  requirePermission(event, 'customers.read.all')
+  requirePermissionOrMessageLink(event, 'customers.read.all')
   const { id } = validateParams(event, idParamSchema)
   const db = useDb()
 

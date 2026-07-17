@@ -1,6 +1,9 @@
 // Direct messages UI helpers — entity refs, paths, and compose triggers.
 
 import type { MessageEntityType } from '~/server/db/schema/messages'
+import { MESSAGE_LINK_REF } from './message-link-access'
+
+export { MESSAGE_LINK_REF }
 
 export interface EntityRefToken {
   entityType: MessageEntityType
@@ -52,6 +55,34 @@ export function entityPath(entityType: MessageEntityType, entityId: string): str
       return `/vehicles/${entityId}`
     case 'service_log':
       return `/service-logs/${entityId}`
+    default:
+      return '/'
+  }
+}
+
+export interface MessageLinkAccess {
+  can: (key: string) => boolean
+}
+
+/** Route targets for entity refs embedded in team/DM messages. */
+export function entityPathForMessageLink(
+  entityType: MessageEntityType,
+  entityId: string,
+  access: MessageLinkAccess,
+): string {
+  const refQuery = `ref=${MESSAGE_LINK_REF}`
+  switch (entityType) {
+    case 'invoice':
+      if (access.can('invoices.update.all') || access.can('invoices.create.all')) {
+        return `/invoices/${entityId}/edit?${refQuery}`
+      }
+      return `/invoices/${entityId}?view=pdf&${refQuery}`
+    case 'customer':
+      return `/customers/${entityId}?${refQuery}`
+    case 'vehicle':
+      return `/vehicles/${entityId}?${refQuery}`
+    case 'service_log':
+      return `/service-logs/${entityId}?${refQuery}`
     default:
       return '/'
   }

@@ -5,7 +5,7 @@ import { getInvoiceDetail, InvoicesServiceError } from '../../../services/invoic
 import { getInvoicePdfStatus } from '../../../services/invoice-pdf.service'
 import { getInvoiceSendDeliveryStatus } from '../../../services/invoice-send.service'
 import { apiError } from '../../../utils/api-error'
-import { requirePermission } from '../../../utils/require-permission'
+import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 import { isExternalAuditor, redactInvoiceForAuditor } from '../../../utils/auditor-view'
@@ -13,7 +13,7 @@ import type { AuthContext } from '../../../utils/require-permission'
 
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as AuthContext | undefined
-  requirePermission(event, 'invoices.read.all')
+  requirePermissionOrMessageLink(event, 'invoices.read.all')
   const { id } = validateParams(event, idParamSchema)
   const db = useDb()
 

@@ -4,6 +4,7 @@ import { auditLogs } from '../../../db/schema/audit'
 import { getServiceLog, ServiceLogsServiceError, getInvoiceRevertStatus } from '../../../services/service-logs.service'
 import { listUserUploadsByOwner } from '../../../services/files.service'
 import { apiError } from '../../../utils/api-error'
+import { canAccessViaMessageLink } from '../../../utils/message-link-access'
 import { canRevertServiceLogInvoice, canSendServiceLogToInvoice } from '../../../utils/service-log-actions'
 import { hasPermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
@@ -22,6 +23,7 @@ export default defineEventHandler(async (event) => {
 
     const allowed = hasPermission(event, 'service_logs.read.all')
       || hasPermission(event, 'service_logs.read.own', { ownsRecord: log.submittedBy === auth.user.id })
+      || canAccessViaMessageLink(event)
     if (!allowed) throw apiError(event, 'FORBIDDEN', 'You do not have permission to view this service log')
 
     // User uploads only — excludes thumbnail/preview derivatives (SPEC §8)

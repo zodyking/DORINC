@@ -2,6 +2,7 @@
 // Service log detail — photo gallery + status actions.
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
 
@@ -80,7 +81,7 @@ const { data, refresh, error } = useClientFetch<{
     canRevertInvoice: boolean
     revertBlockReason: string | null
   }
-}>(`/api/service-logs/${id}`)
+}>(`/api/service-logs/${id}`, { query: computed(() => messageLinkFetchQuery(route.query)) })
 
 const log = computed(() => data.value?.log)
 const files = computed(() => data.value?.files ?? [])

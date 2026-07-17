@@ -7,6 +7,7 @@ import {
   moneyDisplay,
   type InvoiceStatus,
 } from '~/utils/invoices-ui'
+import { messageLinkFetchQuery } from '~/utils/message-link-access'
 definePageMeta({ layout: 'staff' })
 
 interface Vehicle {
@@ -64,7 +65,7 @@ const { data, refresh, error } = useClientFetch<{
   history: HistoryRow[]
   recentInvoices: RecentInvoiceRow[]
   invoiceCount: number
-}>(() => `/api/vehicles/${vehicleId.value}`, { watch: [vehicleId] })
+}>(() => `/api/vehicles/${vehicleId.value}`, { watch: [vehicleId], query: computed(() => messageLinkFetchQuery(route.query)) })
 
 const vehicle = computed(() => data.value?.vehicle)
 const customer = computed(() => data.value?.customer)

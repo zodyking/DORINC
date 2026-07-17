@@ -6,13 +6,13 @@ import {
 } from '../../../services/invoice-pdf.service'
 import { apiError } from '../../../utils/api-error'
 import { throwPdfRenderApiError } from '../../../utils/pdf-api-error'
-import { requirePermission } from '../../../utils/require-permission'
+import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
 /** Live DomPDF preview for any invoice status — not stored as the official PDF. */
 export default defineEventHandler(async (event) => {
-  requirePermission(event, 'invoices.generate_pdf.all')
+  requirePermissionOrMessageLink(event, 'invoices.generate_pdf.all')
   const { id } = validateParams(event, idParamSchema)
 
   try {

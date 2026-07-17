@@ -8,6 +8,7 @@ import {
 } from '~/utils/invoices-ui'
 import { avColor, initials } from '~/utils/users-ui'
 import { formatPhoneDisplay, phoneDisplay } from '~/utils/phone-ui'
+import { messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
 
@@ -78,7 +79,7 @@ const { data, refresh, error } = useClientFetch<{
   history: HistoryRow[]
   billing: BillingSummary
   recentInvoices: RecentInvoiceRow[]
-}>(() => `/api/customers/${customerId.value}`, { watch: [customerId], key: customerFetchKey })
+}>(() => `/api/customers/${customerId.value}`, { watch: [customerId], key: customerFetchKey, query: computed(() => messageLinkFetchQuery(route.query)) })
 
 onMounted(() => {
   void refresh()

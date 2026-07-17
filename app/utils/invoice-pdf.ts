@@ -1,8 +1,9 @@
 import { assertPdfBlob } from '~/utils/fetch-blob-error'
 
 /** URL for opening a live invoice PDF preview in a new browser tab. */
-export function invoicePreviewPdfHref(invoiceId: string): string {
-  return `/api/invoices/${invoiceId}/preview-pdf`
+export function invoicePreviewPdfHref(invoiceId: string, options: { messageLink?: boolean } = {}): string {
+  const base = `/api/invoices/${invoiceId}/preview-pdf`
+  return options.messageLink ? `${base}?ref=message` : base
 }
 
 /** Scoped preview for invoices linked to a service log (mechanics + staff list). */
@@ -10,8 +11,12 @@ export function serviceLogInvoicePreviewPdfHref(serviceLogId: string): string {
   return `/api/service-logs/${serviceLogId}/invoice-preview-pdf`
 }
 
-export async function fetchInvoicePreviewPdf(invoiceId: string): Promise<Blob> {
+export async function fetchInvoicePreviewPdf(
+  invoiceId: string,
+  options: { messageLink?: boolean } = {},
+): Promise<Blob> {
   const blob = await $fetch<Blob>(`/api/invoices/${invoiceId}/preview-pdf`, {
+    query: options.messageLink ? { ref: 'message' } : undefined,
     responseType: 'blob',
   })
   await assertPdfBlob(blob)

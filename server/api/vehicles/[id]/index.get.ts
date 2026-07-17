@@ -5,12 +5,12 @@ import { customers } from '../../../db/schema/customers'
 import { listInvoices } from '../../../services/invoices.service'
 import { getVehicle, VehiclesServiceError } from '../../../services/vehicles.service'
 import { apiError } from '../../../utils/api-error'
-import { requirePermission } from '../../../utils/require-permission'
+import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
 export default defineEventHandler(async (event) => {
-  requirePermission(event, 'vehicles.read.all')
+  requirePermissionOrMessageLink(event, 'vehicles.read.all')
   const { id } = validateParams(event, idParamSchema)
   const db = useDb()
 

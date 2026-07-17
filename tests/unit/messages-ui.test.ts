@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   detectEntityTrigger,
   entityPath,
+  entityPathForMessageLink,
   entityRefToken,
   messagePreviewText,
   renderMessageBody,
 } from '../../app/utils/messages-ui'
 
 describe('messages-ui', () => {
+  const can = (key: string) => key === 'invoices.update.all'
+
   it('builds entity ref tokens and paths', () => {
     const token = entityRefToken({
       entityType: 'invoice',
@@ -17,6 +20,15 @@ describe('messages-ui', () => {
     expect(token).toContain('invoice')
     expect(entityPath('invoice', 'abc')).toBe('/invoices/abc')
     expect(entityPath('service_log', 'abc')).toBe('/service-logs/abc')
+  })
+
+  it('routes message links to edit or pdf based on invoice permissions', () => {
+    expect(entityPathForMessageLink('invoice', 'abc', { can }))
+      .toBe('/invoices/abc/edit?ref=message')
+    expect(entityPathForMessageLink('invoice', 'abc', { can: () => false }))
+      .toBe('/invoices/abc?view=pdf&ref=message')
+    expect(entityPathForMessageLink('customer', 'abc', { can: () => false }))
+      .toBe('/customers/abc?ref=message')
   })
 
   it('detects compose trigger keywords at cursor', () => {

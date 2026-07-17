@@ -11,10 +11,14 @@ const props = defineProps<{
   invoiceLabel: string
   canGeneratePdf?: boolean
   showDownload?: boolean
+  messageLink?: boolean
 }>()
 
 const auth = useAuthStore()
-const canUse = computed(() => props.canGeneratePdf !== false && auth.can('invoices.generate_pdf.all'))
+const canUse = computed(() =>
+  props.messageLink
+  || (props.canGeneratePdf !== false && auth.can('invoices.generate_pdf.all')),
+)
 
 const busy = ref(false)
 const error = ref('')
@@ -29,7 +33,7 @@ async function loadPreview() {
   revokePreview()
   previewBlob.value = null
   try {
-    const blob = await fetchInvoicePreviewPdf(props.invoiceId)
+    const blob = await fetchInvoicePreviewPdf(props.invoiceId, { messageLink: props.messageLink })
     previewBlob.value = blob
     setFromBlob(blob)
   }
@@ -45,7 +49,7 @@ async function downloadPdf() {
   if (!canUse.value) return
   error.value = ''
   try {
-    downloadPdfBlob(await fetchInvoicePreviewPdf(props.invoiceId), `${props.invoiceLabel}.pdf`)
+    downloadPdfBlob(await fetchInvoicePreviewPdf(props.invoiceId, { messageLink: props.messageLink }), `${props.invoiceLabel}.pdf`)
   }
   catch (e: unknown) {
     error.value = await fetchErrorMessage(e, 'PDF download failed')

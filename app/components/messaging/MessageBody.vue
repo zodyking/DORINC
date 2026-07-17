@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ENTITY_REF_TOKEN_RE, entityPath } from '~/utils/messages-ui'
+import { ENTITY_REF_TOKEN_RE, entityPathForMessageLink } from '~/utils/messages-ui'
 import type { MessageEntityType } from '~/server/db/schema/messages'
 
 const props = defineProps<{
   body: string
 }>()
+
+const auth = useAuthStore()
+
+function linkPath(entityType: MessageEntityType, entityId: string): string {
+  if (!auth.loaded) return `/`
+  return entityPathForMessageLink(entityType, entityId, { can: key => auth.can(key) })
+}
 
 interface MessagePart {
   kind: 'text' | 'ref'
@@ -46,7 +53,7 @@ const parts = computed<MessagePart[]>(() => {
       <span v-if="part.kind === 'text'">{{ part.value }}</span>
       <NuxtLink
         v-else
-        :to="entityPath(part.entityType!, part.entityId!)"
+        :to="linkPath(part.entityType!, part.entityId!)"
         class="dm-entity-link"
       >
         {{ part.value }}
