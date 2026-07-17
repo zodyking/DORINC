@@ -567,11 +567,17 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
     .offset((filter.page - 1) * filter.pageSize)
 
   const items = await Promise.all(rows.map(async (r) => {
-    const attachments = await listFilesByOwner(db, {
-      ownerEntityType: 'message',
-      ownerEntityId: r.id,
-      fileKind: 'attachment',
-    })
+    let attachments: Awaited<ReturnType<typeof listFilesByOwner>> = []
+    try {
+      attachments = await listFilesByOwner(db, {
+        ownerEntityType: 'message',
+        ownerEntityId: r.id,
+        fileKind: 'attachment',
+      })
+    }
+    catch (err) {
+      console.warn('[email-inbox] attachment list failed for message', r.id, (err as Error).message)
+    }
 
     return {
       id: r.id,

@@ -351,6 +351,13 @@
       "when": 1784241600000,
       "tag": "0049_session_geo",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1784244600000,
+      "tag": "0050_email_inline_attachments",
+      "breakpoints": true
     }
   ]
 }
