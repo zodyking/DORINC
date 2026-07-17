@@ -1,5 +1,6 @@
 import { useDb } from '../../db/client'
 import { createCustomer, CustomersServiceError } from '../../services/customers.service'
+import { postCustomerCreatedTeamMessage } from '../../services/workflow-chat.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -11,7 +12,8 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, customerCreateSchema)
 
   try {
-    const customer = await createCustomer(useDb(), body, actor.id)
+    const db = useDb()
+    const customer = await createCustomer(db, body, actor.id)
 
     await writeAudit(event, {
       entityType: 'customer',
@@ -20,6 +22,12 @@ export default defineEventHandler(async (event) => {
       afterData: { displayName: customer.displayName, accountKind: customer.accountKind },
       permissionKey: 'customers.create.all',
     })
+
+    void postCustomerCreatedTeamMessage(db, {
+      senderUserId: actor.id,
+      customerId: customer.id,
+      customerName: customer.displayName,
+    }).catch(() => {})
 
     return { customer }
   }

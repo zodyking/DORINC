@@ -1,5 +1,9 @@
 import { useDb } from '../../../db/client'
 import { InvoicesServiceError, markInvoicePaid } from '../../../services/invoices.service'
+import { getCustomer } from '../../../services/customers.service'
+import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
+import { postInvoicePaymentReceivedTeamMessage } from '../../../services/workflow-chat.service'
+import { subtractMoney } from '../../../../shared/money'
 import { writeAudit } from '../../../services/audit.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
@@ -21,11 +25,39 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, invoiceMarkPaidSchema)
 
   try {
-    const { invoice, before } = await markInvoicePaid(useDb(), id, actor.id, {
+    const db = useDb()
+    const { invoice, before } = await markInvoicePaid(db, id, actor.id, {
       paymentAmount: body.paymentAmount,
       amountPaid: body.amountPaid,
       paidAt: body.paidAt ? new Date(`${body.paidAt}T12:00:00`) : undefined,
     })
+
+    const paymentAmount = body.paymentAmount
+      ?? (body.amountPaid ? subtractMoney(body.amountPaid, before.amountPaid ?? '0') : before.balanceDue ?? '0')
+
+    let customerName = 'Customer'
+    if (invoice.customerId) {
+      try {
+        const customer = await getCustomer(db, invoice.customerId)
+        customerName = customer.displayName
+      }
+      catch {
+        customerName = resolveCustomerDisplayName(null, invoice.customerSnapshot)
+      }
+    }
+    else if (invoice.customerSnapshot) {
+      customerName = resolveCustomerDisplayName(null, invoice.customerSnapshot)
+    }
+
+    void postInvoicePaymentReceivedTeamMessage(db, {
+      senderUserId: actor.id,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      customerId: invoice.customerId,
+      customerName,
+      paymentAmount,
+      paidInFull: invoice.status === 'paid',
+    }).catch(() => {})
 
     const changedFields = ['amountPaid', 'balanceDue']
     if (invoice.status !== before.status) changedFields.push('status')

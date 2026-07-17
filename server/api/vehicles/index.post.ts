@@ -1,5 +1,7 @@
 import { useDb } from '../../db/client'
 import { createVehicle, VehiclesServiceError } from '../../services/vehicles.service'
+import { getCustomer } from '../../services/customers.service'
+import { postVehicleCreatedTeamMessage } from '../../services/workflow-chat.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -11,7 +13,9 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, vehicleCreateSchema)
 
   try {
-    const vehicle = await createVehicle(useDb(), body, actor.id)
+    const db = useDb()
+    const vehicle = await createVehicle(db, body, actor.id)
+    const customer = await getCustomer(db, vehicle.customerId)
 
     await writeAudit(event, {
       entityType: 'vehicle',
@@ -27,6 +31,15 @@ export default defineEventHandler(async (event) => {
       },
       permissionKey: 'vehicles.create.all',
     })
+
+    void postVehicleCreatedTeamMessage(db, {
+      senderUserId: actor.id,
+      vehicleId: vehicle.id,
+      customerId: customer.id,
+      customerName: customer.displayName,
+      busNumber: vehicle.busNumber,
+      unitTag: vehicle.unitTag,
+    }).catch(() => {})
 
     return { vehicle }
   }
