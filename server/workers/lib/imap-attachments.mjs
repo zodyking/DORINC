@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto'
+import {
+  isInlineEmailPart,
+  resolveAllowedAttachmentMime,
+  resolveInlineImageMime,
+} from '../../../shared/email-attachment-mime.mjs'
 
 const ALLOWED_ATTACHMENT_MIMES = new Set([
   'image/jpeg',
@@ -35,15 +40,6 @@ function attachmentContentId(attachment) {
   const raw = attachment.cid ?? attachment.contentId
   if (!raw?.trim()) return null
   return normalizeContentId(raw)
-}
-
-function isPersistableImageBytes(content, mimeType) {
-  const normalizedMime = String(mimeType || '').toLowerCase()
-  if (!ALLOWED_ATTACHMENT_MIMES.has(normalizedMime) || !normalizedMime.startsWith('image/')) return false
-  const sniffed = sniffAttachmentMime(content)
-  if (!sniffed?.startsWith('image/')) return false
-  if (normalizedMime === 'image/heif') return sniffed === 'image/heic' || sniffed === 'image/heif'
-  return sniffed === normalizedMime
 }
 
 export function safeAttachmentName(filename, index) {
@@ -85,16 +81,21 @@ async function listExistingInlineCids(pool, messageId) {
   return new Set(rows.map(row => normalizeContentId(row.content_id)))
 }
 
-async function countExistingAttachments(pool, messageId) {
+async function listExistingAttachmentHashes(pool, messageId) {
   const { rows } = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM app_files
+    `SELECT sha256_hash, file_kind FROM app_files
      WHERE owner_entity_type = 'message'
        AND owner_entity_id = $1
-       AND file_kind = 'attachment'
        AND archived_at IS NULL`,
     [messageId],
   )
-  return rows[0]?.count ?? 0
+  const attachmentHashes = new Set()
+  const inlineHashes = new Set()
+  for (const row of rows) {
+    if (row.file_kind === 'inline') inlineHashes.add(row.sha256_hash)
+    if (row.file_kind === 'attachment') attachmentHashes.add(row.sha256_hash)
+  }
+  return { attachmentHashes, inlineHashes }
 }
 
 async function insertMessageFile(pool, {
@@ -122,6 +123,7 @@ async function insertMessageFile(pool, {
       contentId,
     ],
   )
+  return sha256
 }
 
 export async function persistInboundAttachments(pool, messageId, attachments = [], opts = {}) {
@@ -131,19 +133,26 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
   let persisted = 0
 
   let existingInlineCids = new Set()
-  let existingAttachmentCount = 0
+  let existingAttachmentHashes = new Set()
+  let existingInlineHashes = new Set()
   if (opts.skipExisting) {
     existingInlineCids = await listExistingInlineCids(pool, messageId)
-    existingAttachmentCount = await countExistingAttachments(pool, messageId)
+    const hashes = await listExistingAttachmentHashes(pool, messageId)
+    existingAttachmentHashes = hashes.attachmentHashes
+    existingInlineHashes = hashes.inlineHashes
   }
 
   for (const [index, attachment] of attachments.slice(0, 20).entries()) {
     if (!attachment.content?.length) continue
 
-    if (attachment.related) {
+    if (isInlineEmailPart(attachment)) {
       const contentId = attachmentContentId(attachment)
-      if (!contentId || !isPersistableImageBytes(attachment.content, attachment.contentType)) continue
-      if (opts.skipExisting && existingInlineCids.has(contentId)) continue
+      const sniffed = sniffAttachmentMime(attachment.content)
+      const mimeType = resolveInlineImageMime(attachment.contentType, sniffed, ALLOWED_ATTACHMENT_MIMES)
+      if (!contentId || !mimeType) continue
+
+      const sha256 = createHash('sha256').update(attachment.content).digest('hex')
+      if (opts.skipExisting && (existingInlineCids.has(contentId) || existingInlineHashes.has(sha256))) continue
 
       totalBytes += attachment.content.length
       if (attachment.content.length > perFileLimit || totalBytes > totalLimit) {
@@ -156,16 +165,33 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
         messageId,
         fileKind: 'inline',
         filename: safeAttachmentName(attachment.filename, index),
-        mimeType: String(attachment.contentType || '').toLowerCase(),
+        mimeType,
         content: attachment.content,
         contentId,
       })
       persisted++
       existingInlineCids.add(contentId)
+      existingInlineHashes.add(sha256)
       continue
     }
 
-    if (opts.skipExisting && existingAttachmentCount > 0) continue
+    const sniffed = sniffAttachmentMime(attachment.content)
+    const mimeType = resolveAllowedAttachmentMime(
+      attachment.contentType,
+      sniffed,
+      ALLOWED_ATTACHMENT_MIMES,
+    )
+    if (!mimeType) {
+      console.warn('[imap-sync] skipped unsafe attachment', {
+        messageId,
+        filename: attachment.filename,
+        mimeType: attachment.contentType,
+      })
+      continue
+    }
+
+    const sha256 = createHash('sha256').update(attachment.content).digest('hex')
+    if (opts.skipExisting && existingAttachmentHashes.has(sha256)) continue
 
     totalBytes += attachment.content.length
     if (attachment.content.length > perFileLimit || totalBytes > totalLimit) {
@@ -177,20 +203,6 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
       continue
     }
 
-    const mimeType = String(attachment.contentType || '').toLowerCase()
-    const sniffed = sniffAttachmentMime(attachment.content)
-    const accepted = mimeType === 'image/heif'
-      ? ['image/heic', 'image/heif']
-      : [mimeType]
-    if (!ALLOWED_ATTACHMENT_MIMES.has(mimeType) || !sniffed || !accepted.includes(sniffed)) {
-      console.warn('[imap-sync] skipped unsafe attachment', {
-        messageId,
-        filename: attachment.filename,
-        mimeType,
-      })
-      continue
-    }
-
     await insertMessageFile(pool, {
       messageId,
       fileKind: 'attachment',
@@ -199,6 +211,7 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
       content: attachment.content,
     })
     persisted++
+    existingAttachmentHashes.add(sha256)
   }
 
   return persisted

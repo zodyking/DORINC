@@ -4,6 +4,7 @@ import type { Db } from '../db/client'
 import type { FileKind, FileOwnerEntityType } from '../db/schema/files'
 import { appFiles } from '../db/schema/files'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
+import { resolveAllowedAttachmentMime } from '../../shared/email-attachment-mime'
 import { getMaxUploadMb } from './app-config.service'
 
 export type FilesServiceErrorCode
@@ -47,11 +48,6 @@ export function sniffMime(data: Buffer): string | null {
   }
   if (data.length >= 5 && data.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf'
   return null
-}
-
-const MIME_EQUIVALENTS: Record<string, string[]> = {
-  'image/heic': ['image/heic', 'image/heif'],
-  'image/heif': ['image/heic', 'image/heif'],
 }
 
 export interface UploadFileInput {
@@ -98,14 +94,15 @@ export async function uploadFile(db: Db, input: UploadFileInput, createdBy: stri
   }
 
   if (!input.trusted) {
-    if (!ALLOWED_UPLOAD_MIMES.has(input.mimeType)) {
-      throw new FilesServiceError('MIME_NOT_ALLOWED', `File type ${input.mimeType} is not allowed`)
-    }
     const sniffed = sniffMime(input.data)
-    const accepted = MIME_EQUIVALENTS[input.mimeType] ?? [input.mimeType]
-    if (!sniffed || !accepted.includes(sniffed)) {
-      throw new FilesServiceError('CONTENT_MISMATCH', 'File contents do not match the declared file type')
+    const resolvedMime = resolveAllowedAttachmentMime(input.mimeType, sniffed, ALLOWED_UPLOAD_MIMES)
+    if (!resolvedMime) {
+      throw new FilesServiceError(
+        'MIME_NOT_ALLOWED',
+        `File type ${input.mimeType} is not allowed`,
+      )
     }
+    input = { ...input, mimeType: resolvedMime }
   }
 
   const sha256Hash = createHash('sha256').update(input.data).digest('hex')

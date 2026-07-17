@@ -161,6 +161,10 @@ export function shouldRenderEmailAsHtml(
 ): boolean {
   if (!html?.trim() || !prepareEmailHtmlIframeDocument(html)) return false
 
+  if (/<img\b/i.test(html) || /\bcid:/i.test(html) || /\/attachments\/[^"'\s]+\/preview/i.test(html)) {
+    return true
+  }
+
   const plain = cleanPlainEmailText(body ?? '')
   if (!plain) return true
 

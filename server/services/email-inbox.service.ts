@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
@@ -14,6 +15,11 @@ import {
 import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/email-inline-images'
+import {
+  isInlineEmailPart,
+  resolveAllowedAttachmentMime,
+  resolveInlineImageMime,
+} from '../../shared/email-attachment-mime'
 import { sendBrandedMail } from '../mail/branded-mail'
 import {
   buildOutboundEmailBodies,
@@ -112,6 +118,7 @@ export interface InboundEmailAttachment {
   contentType: string
   content: Buffer
   related?: boolean
+  contentDisposition?: string | null
   cid?: string | null
   contentId?: string | null
 }
@@ -137,15 +144,6 @@ function attachmentContentId(attachment: InboundEmailAttachment): string | null 
   return normalizeContentId(raw)
 }
 
-function isPersistableImageBytes(content: Buffer, mimeType: string): boolean {
-  const normalizedMime = mimeType.toLowerCase()
-  if (!ALLOWED_UPLOAD_MIMES.has(normalizedMime) || !normalizedMime.startsWith('image/')) return false
-  const sniffed = sniffMime(content)
-  if (!sniffed?.startsWith('image/')) return false
-  if (normalizedMime === 'image/heif') return sniffed === 'image/heic' || sniffed === 'image/heif'
-  return sniffed === normalizedMime
-}
-
 async function persistInboundAttachments(
   db: Db,
   messageId: string,
@@ -157,7 +155,8 @@ async function persistInboundAttachments(
   let persisted = 0
 
   let existingInlineCids = new Set<string>()
-  let existingAttachmentCount = 0
+  let existingAttachmentHashes = new Set<string>()
+  let existingInlineHashes = new Set<string>()
   if (opts.skipExisting) {
     const inlineFiles = await listFilesByOwner(db, {
       ownerEntityType: 'message',
@@ -172,16 +171,24 @@ async function persistInboundAttachments(
       ownerEntityId: messageId,
       fileKind: 'attachment',
     })
-    existingAttachmentCount = regularFiles.length
+    const allFiles = [...inlineFiles, ...regularFiles]
+    for (const file of allFiles) {
+      if (file.fileKind === 'inline') existingInlineHashes.add(file.sha256Hash)
+      if (file.fileKind === 'attachment') existingAttachmentHashes.add(file.sha256Hash)
+    }
   }
 
   for (const [index, attachment] of attachments.slice(0, 20).entries()) {
     if (!attachment.content.length) continue
 
-    if (attachment.related) {
+    if (isInlineEmailPart(attachment)) {
       const contentId = attachmentContentId(attachment)
-      if (!contentId || !isPersistableImageBytes(attachment.content, attachment.contentType)) continue
-      if (opts.skipExisting && existingInlineCids.has(contentId)) continue
+      const sniffed = sniffMime(attachment.content)
+      const mimeType = resolveInlineImageMime(attachment.contentType, sniffed, ALLOWED_UPLOAD_MIMES)
+      if (!contentId || !mimeType) continue
+
+      const sha256 = createHash('sha256').update(attachment.content).digest('hex')
+      if (opts.skipExisting && (existingInlineCids.has(contentId) || existingInlineHashes.has(sha256))) continue
 
       totalBytes += attachment.content.length
       if (totalBytes > maxTotalBytes) {
@@ -195,12 +202,13 @@ async function persistInboundAttachments(
           ownerEntityId: messageId,
           fileKind: 'inline',
           originalFilename: safeInboundAttachmentName(attachment.filename, index),
-          mimeType: attachment.contentType.toLowerCase(),
+          mimeType,
           data: attachment.content,
           contentId,
         }, null)
         persisted++
         existingInlineCids.add(contentId)
+        existingInlineHashes.add(sha256)
       }
       catch (err) {
         if (err instanceof FilesServiceError) {
@@ -216,7 +224,23 @@ async function persistInboundAttachments(
       continue
     }
 
-    if (opts.skipExisting && existingAttachmentCount > 0) continue
+    const sniffed = sniffMime(attachment.content)
+    const mimeType = resolveAllowedAttachmentMime(
+      attachment.contentType,
+      sniffed,
+      ALLOWED_UPLOAD_MIMES,
+    )
+    if (!mimeType) {
+      console.warn('[email-inbox] skipped unsafe attachment', {
+        messageId,
+        filename: attachment.filename,
+        mimeType: attachment.contentType,
+      })
+      continue
+    }
+
+    const sha256 = createHash('sha256').update(attachment.content).digest('hex')
+    if (opts.skipExisting && existingAttachmentHashes.has(sha256)) continue
 
     totalBytes += attachment.content.length
     if (totalBytes > maxTotalBytes) {
@@ -230,10 +254,11 @@ async function persistInboundAttachments(
         ownerEntityId: messageId,
         fileKind: 'attachment',
         originalFilename: safeInboundAttachmentName(attachment.filename, index),
-        mimeType: attachment.contentType.toLowerCase(),
+        mimeType,
         data: attachment.content,
       }, null)
       persisted++
+      existingAttachmentHashes.add(sha256)
     }
     catch (err) {
       if (err instanceof FilesServiceError) {
@@ -569,11 +594,19 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
   const items = await Promise.all(rows.map(async (r) => {
     let attachments: Awaited<ReturnType<typeof listFilesByOwner>> = []
     try {
-      attachments = await listFilesByOwner(db, {
-        ownerEntityType: 'message',
-        ownerEntityId: r.id,
-        fileKind: 'attachment',
-      })
+      const [regular, inline] = await Promise.all([
+        listFilesByOwner(db, {
+          ownerEntityType: 'message',
+          ownerEntityId: r.id,
+          fileKind: 'attachment',
+        }),
+        listFilesByOwner(db, {
+          ownerEntityType: 'message',
+          ownerEntityId: r.id,
+          fileKind: 'inline',
+        }),
+      ])
+      attachments = [...regular, ...inline]
     }
     catch (err) {
       console.warn('[email-inbox] attachment list failed for message', r.id, (err as Error).message)

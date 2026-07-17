@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildReferences,
@@ -57,7 +58,7 @@ describe('worker IMAP attachment helpers', () => {
   it('persists inline related images and regular attachments separately', async () => {
     const query = vi.fn(async (sql: string, _params?: unknown[]) => {
       if (sql.includes('SELECT value FROM app_settings')) return { rows: [{ value: { mb: 25 } }] }
-      if (sql.includes('COUNT(*)')) return { rows: [{ count: 0 }] }
+      if (sql.includes('sha256_hash, file_kind')) return { rows: [] }
       if (sql.includes('content_id FROM app_files')) return { rows: [] }
       return { rows: [] }
     })
@@ -75,5 +76,47 @@ describe('worker IMAP attachment helpers', () => {
     expect(inserts[0]?.[1]?.[1]).toBe('inline')
     expect(inserts[0]?.[1]?.[7]).toBe('logo@mailer')
     expect(inserts[1]?.[1]?.[1]).toBe('attachment')
+  })
+
+  it('persists octet-stream pdf attachments using sniffed mime', async () => {
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT value FROM app_settings')) return { rows: [{ value: { mb: 25 } }] }
+      if (sql.includes('sha256_hash, file_kind')) return { rows: [] }
+      if (sql.includes('content_id FROM app_files')) return { rows: [] }
+      return { rows: [] }
+    })
+    const pdf = Buffer.from('%PDF-1.7 test', 'latin1')
+
+    const count = await persistInboundAttachments({ query }, 'message-1', [
+      { filename: 'invoice.pdf', contentType: 'application/octet-stream', content: pdf, related: false },
+    ])
+
+    expect(count).toBe(1)
+    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO app_files'))
+    expect(insert?.[1]?.[3]).toBe('application/pdf')
+  })
+
+  it('backfills missing attachments on repair without skipping the rest', async () => {
+    const pdfA = Buffer.from('%PDF-1.7 first', 'latin1')
+    const pdfB = Buffer.from('%PDF-1.7 second', 'latin1')
+    const hashA = createHash('sha256').update(pdfA).digest('hex')
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT value FROM app_settings')) return { rows: [{ value: { mb: 25 } }] }
+      if (sql.includes('sha256_hash, file_kind')) {
+        return { rows: [{ sha256_hash: hashA, file_kind: 'attachment' }] }
+      }
+      if (sql.includes('content_id FROM app_files')) return { rows: [] }
+      return { rows: [] }
+    })
+
+    const count = await persistInboundAttachments({ query }, 'message-1', [
+      { filename: 'first.pdf', contentType: 'application/pdf', content: pdfA, related: false },
+      { filename: 'second.pdf', contentType: 'application/pdf', content: pdfB, related: false },
+    ], { skipExisting: true })
+
+    expect(count).toBe(1)
+    const inserts = query.mock.calls.filter(([sql]) => sql.includes('INSERT INTO app_files'))
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0]?.[1]?.[2]).toBe('second.pdf')
   })
 })

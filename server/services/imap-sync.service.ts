@@ -125,6 +125,7 @@ export async function syncImapInbox(db: Db, opts: { full?: boolean } = {}): Prom
               contentType: attachment.contentType,
               content: attachment.content,
               related: attachment.related,
+              contentDisposition: attachment.contentDisposition ?? null,
               cid: attachment.cid ?? null,
               contentId: attachment.contentId ?? null,
             })),
