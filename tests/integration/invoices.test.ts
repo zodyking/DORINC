@@ -14,6 +14,7 @@ import {
   createInvoiceRevision,
   deleteInvoiceLineItem,
   duplicateInvoice,
+  getInvoice,
   getInvoiceDetail,
   listInvoiceLineItems,
   markInvoicePaid,
@@ -30,6 +31,7 @@ import { vehicles } from '../../server/db/schema/vehicles'
 import { serviceLogs } from '../../server/db/schema/service-logs'
 import { users } from '../../server/db/schema/auth'
 import { flushInvoiceSendPipeline, sendAndDeliverInvoice } from '../helpers/invoice-send'
+import { saveBusinessProfile } from '../../server/services/workspace-settings.service'
 
 config()
 
@@ -358,5 +360,74 @@ describe('P1-21 status transitions (SPEC §6.5)', () => {
     await expect(markInvoicePaid(db, invoice.id, ACTOR, {
       paymentAmount: (Number.parseFloat(sent.balanceDue) + 1).toFixed(2),
     })).rejects.toThrow('OVERPAYMENT')
+  })
+})
+
+describe('invoice tax from business settings', () => {
+  it('applies business default tax rate when recalculating draft invoices', async () => {
+    await saveBusinessProfile(db, {
+      businessName: 'Tax Test Shop',
+      phone: '',
+      email: '',
+      website: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'US',
+      taxId: '',
+      defaultTaxRatePercent: '6.6',
+    }, ACTOR)
+
+    const invoice = await createInvoice(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      invoiceDate: '2026-07-10',
+      creationSource: 'blank',
+      taxRate: '0',
+    }, ACTOR)
+
+    await addInvoiceLineItem(db, invoice.id, {
+      lineType: 'labor',
+      description: 'Labor test',
+      quantity: '1',
+      unitPrice: '300.00',
+      sortOrder: 1,
+    }, ACTOR)
+
+    const { invoice: updated, totals } = await recalculateInvoiceTotals(db, invoice.id, ACTOR)
+    expect(updated.taxRate).toBe('0.066000')
+    expect(totals.taxAmount).toBe('19.80')
+    expect(totals.total).toBe('319.80')
+  })
+
+  it('freezes tax rate on sent invoices', async () => {
+    const invoice = await draftWithLine()
+    await db.update(invoices).set({ taxRate: '0.050000' }).where(eq(invoices.id, invoice.id))
+    await recalculateInvoiceTotals(db, invoice.id, ACTOR)
+    const beforeSend = await getInvoice(db, invoice.id)
+    expect(beforeSend.taxRate).toBe('0.066000')
+
+    await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
+    await saveBusinessProfile(db, {
+      businessName: 'Tax Test Shop',
+      phone: '',
+      email: '',
+      website: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'US',
+      taxId: '',
+      defaultTaxRatePercent: '8',
+    }, ACTOR)
+
+    const sent = await getInvoice(db, invoice.id)
+    await recalculateInvoiceTotals(db, invoice.id, ACTOR)
+    const after = await getInvoice(db, invoice.id)
+    expect(after.taxRate).toBe(sent.taxRate)
   })
 })

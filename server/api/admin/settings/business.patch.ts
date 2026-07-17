@@ -1,5 +1,6 @@
 import { useDb } from '../../../db/client'
 import { saveBusinessProfile } from '../../../services/workspace-settings.service'
+import { recalculateOpenInvoiceTaxTotals } from '../../../services/invoices.service'
 import { writeAudit } from '../../../services/audit.service'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody } from '../../../utils/validate'
@@ -10,6 +11,7 @@ export default defineEventHandler(async (event) => {
   requirePermission(event, 'system.admin.all')
   const body = await validateBody(event, businessProfileSchema)
   const profile = await saveBusinessProfile(useDb(), body, auth.user.id)
+  await recalculateOpenInvoiceTaxTotals(useDb(), auth.user.id)
 
   await writeAudit(event, {
     entityType: 'system',

@@ -60,6 +60,24 @@ export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
 /** Statuses from which an invoice may be emailed to the customer. */
 export const INVOICE_SENDABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval', 'sent', 'paid']
 
+/** Draft-like statuses whose tax rate should follow business settings until sent. */
+const TAX_SYNCABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval']
+
+function hasPositiveTaxRate(taxRate: string | null | undefined): boolean {
+  const parsed = Number.parseFloat(taxRate ?? '0')
+  return Number.isFinite(parsed) && parsed > 0
+}
+
+async function resolveInvoiceTaxRateForTotals(
+  db: Db,
+  invoice: { status: InvoiceStatus, taxRate: string | null },
+): Promise<string> {
+  if (!TAX_SYNCABLE_STATUSES.includes(invoice.status)) {
+    return invoice.taxRate ?? '0'
+  }
+  return getDefaultInvoiceTaxRateDecimal(db)
+}
+
 /** Sent/paid invoices are re-emailed without changing status. */
 export const INVOICE_RESENDABLE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
 
@@ -300,7 +318,7 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       complaint: input.complaint ?? src.complaint,
       internalNotes: input.internalNotes ?? src.internalNotes,
       customerNotes: input.customerNotes ?? src.customerNotes,
-      taxRate: input.taxRate ?? src.taxRate ?? '0',
+      taxRate: input.taxRate ?? (hasPositiveTaxRate(src.taxRate) ? src.taxRate! : undefined),
       shopSuppliesPercent: input.shopSuppliesPercent ?? src.shopSuppliesPercent,
       feesAmount: input.feesAmount ?? src.feesAmount ?? '0',
       discountAmount: input.discountAmount ?? src.discountAmount ?? '0',
@@ -1014,6 +1032,7 @@ export async function deleteInvoiceLineItem(db: Db, invoiceId: string, lineId: s
 export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorId: string) {
   const invoice = await getInvoice(db, invoiceId)
   const lines = await listInvoiceLineItems(db, invoiceId)
+  const taxRate = await resolveInvoiceTaxRateForTotals(db, invoice)
 
   const totals = calculateInvoiceTotals({
     lines: lines.map(line => ({
@@ -1022,7 +1041,7 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
       taxable: line.taxable,
     })),
     taxExempt: invoice.taxExempt,
-    taxRate: invoice.taxRate ?? '0',
+    taxRate,
     shopSuppliesPercent: invoice.shopSuppliesPercent ?? undefined,
     // feesAmount column stores computed output — flat header fees land via draft patch before recalc
     feesAmount: '0',
@@ -1030,7 +1049,7 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
     amountPaid: invoice.amountPaid ?? '0',
   })
 
-  const [updated] = await db.update(invoices).set({
+  const updateValues: Record<string, unknown> = {
     subtotal: totals.subtotal,
     taxAmount: totals.taxAmount,
     discountAmount: totals.discountAmount,
@@ -1039,9 +1058,39 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
     balanceDue: totals.balanceDue,
     updatedBy: actorId,
     updatedAt: new Date(),
-  }).where(eq(invoices.id, invoiceId)).returning()
+  }
+  if (TAX_SYNCABLE_STATUSES.includes(invoice.status) && taxRate !== (invoice.taxRate ?? '0')) {
+    updateValues.taxRate = taxRate
+  }
+
+  const totalsUnchanged = totals.subtotal === (invoice.subtotal ?? '0')
+    && totals.taxAmount === (invoice.taxAmount ?? '0')
+    && totals.discountAmount === (invoice.discountAmount ?? '0')
+    && totals.feesAmount === (invoice.feesAmount ?? '0')
+    && totals.total === (invoice.total ?? '0')
+    && totals.balanceDue === (invoice.balanceDue ?? '0')
+    && updateValues.taxRate === undefined
+
+  if (totalsUnchanged) {
+    return { invoice, totals }
+  }
+
+  const [updated] = await db.update(invoices).set(updateValues).where(eq(invoices.id, invoiceId)).returning()
 
   return { invoice: updated!, totals }
+}
+
+/** Recompute totals for all open invoices after business tax settings change. */
+export async function recalculateOpenInvoiceTaxTotals(db: Db, actorId: string) {
+  const rows = await db.select({ id: invoices.id })
+    .from(invoices)
+    .where(inArray(invoices.status, TAX_SYNCABLE_STATUSES))
+
+  for (const row of rows) {
+    await recalculateInvoiceTotals(db, row.id, actorId)
+  }
+
+  return { count: rows.length }
 }
 
 export async function transitionInvoice(

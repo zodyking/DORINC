@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
-import { getInvoiceDetail, InvoicesServiceError } from '../../../services/invoices.service'
+import { getInvoiceDetail, InvoicesServiceError, recalculateInvoiceTotals } from '../../../services/invoices.service'
 import { getInvoicePdfStatus } from '../../../services/invoice-pdf.service'
 import { getInvoiceSendDeliveryStatus } from '../../../services/invoice-send.service'
 import { apiError } from '../../../utils/api-error'
@@ -18,6 +18,8 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   try {
+    const actorId = auth?.user.id ?? 'system'
+    await recalculateInvoiceTotals(db, id, actorId)
     const invoice = await getInvoiceDetail(db, id)
 
     const history = await db.select({
