@@ -22,4 +22,4 @@ ENV APP_ENV=production \
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD php -r "exit(@file_get_contents('http://127.0.0.1:8080/health') ? 0 : 1);"
-CMD ["php", "-d", "memory_limit=512M", "-d", "max_execution_time=120", "-S", "0.0.0.0:8080", "-t", "public"]
+CMD ["php", "-d", "memory_limit=512M", "-d", "max_execution_time=120", "-S", "0.0.0.0:8080", "-t", "public", "public/index.php"]

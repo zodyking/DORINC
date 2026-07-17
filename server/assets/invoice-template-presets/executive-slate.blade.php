@@ -11,6 +11,7 @@
   $line = '#d5dae1';
   $hairline = '#e4e8ed';
   $tint = '#eef1f5';
+  $surface = '#eef1f5';
   $onDark = '#f4f6f9';
   $fontSans = $doc['design']['fontSans'] ?? 'DejaVu Sans, Helvetica, Arial, sans-serif';
   $fontMono = $doc['design']['fontMono'] ?? 'DejaVu Sans Mono, Courier, monospace';

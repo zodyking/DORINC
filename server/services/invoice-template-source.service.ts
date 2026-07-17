@@ -34,6 +34,15 @@ export function getBuiltInInvoicePdfTemplate(): InvoicePdfTemplateSource {
  * Published default from the designer wins; otherwise the built-in template ships with the app.
  */
 export async function resolveInvoicePdfTemplate(db: Db): Promise<InvoicePdfTemplateSource> {
+  // Keep built-in preset blades current on existing installs (idempotent).
+  try {
+    const { ensureDefaultInvoiceTemplate } = await import('./invoice-templates.service')
+    await ensureDefaultInvoiceTemplate(db)
+  }
+  catch {
+    // Non-fatal — fall back to whatever is already published.
+  }
+
   const [row] = await db.select({
     version: invoiceTemplateVersions,
   })

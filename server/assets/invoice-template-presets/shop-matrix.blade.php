@@ -18,6 +18,7 @@
   ];
 
   $ink = '#161616';
+  $muted = '#707070';
   $darkRule = '#303030';
   $rule = '#707070';
   $headerShade = '#dddddd';
