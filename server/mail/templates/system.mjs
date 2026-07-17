@@ -20,6 +20,12 @@ function titleCaseStatus(value) {
     .join(' ')
 }
 
+function senderFirstName(fullName) {
+  const first = String(fullName || '').trim().split(/\s+/).filter(Boolean)[0]
+  if (!first) return 'Staff'
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+}
+
 export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUrl, brand }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const subject = 'Verify Your Email'
@@ -702,8 +708,11 @@ export function buildChatMessageReceivedEmail({
   messagesUrl,
   appUrl,
   brand,
+  isTeamChat = false,
 }) {
-  const subject = `${senderName} — ${channelLabel}`
+  const subject = isTeamChat
+    ? `${senderFirstName(senderName)} Sent A Team Message`
+    : `${senderName} — ${channelLabel}`
   const text = [
     `Hi ${recipientName},`,
     '',

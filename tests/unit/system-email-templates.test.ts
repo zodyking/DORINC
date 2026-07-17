@@ -240,9 +240,23 @@ describe('system email templates', () => {
       messagesUrl: `${appUrl}/messages?conversation=abc`,
       appUrl,
       brand,
+      isTeamChat: true,
     })
-    expect(mail.subject).toContain('Brandon K.')
+    expect(mail.subject).toBe('Brandon Sent A Team Message')
     expect(mail.html).toContain('Team')
     expect(mail.html).toContain('Open Messages')
+  })
+
+  it('builds direct message chat email with channel subject', () => {
+    const mail = buildChatMessageReceivedEmail({
+      recipientName: 'Pat',
+      senderName: 'Brandon K.',
+      channelLabel: 'Direct message',
+      messagePreview: 'Can you review this invoice?',
+      messagesUrl: `${appUrl}/messages?conversation=abc`,
+      appUrl,
+      brand,
+    })
+    expect(mail.subject).toBe('Brandon K. — Direct message')
   })
 })

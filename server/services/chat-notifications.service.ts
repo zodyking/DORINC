@@ -93,6 +93,7 @@ export async function notifyChatMessageReceived(
       messagesUrl,
       appUrl,
       brand,
+      isTeamChat: opts.isTeamChat || conversation.type === 'team',
     })
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'chat_message_received',
