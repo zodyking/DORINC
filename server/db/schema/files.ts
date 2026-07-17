@@ -33,6 +33,7 @@ export const appFiles = pgTable('app_files', {
   fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
   sha256Hash: text('sha256_hash').notNull(),
   /** Content-ID for inline email images (cid: references in HTML). */
+  documentCategory: text('document_category'),
   contentId: text('content_id'),
 
   width: integer('width'),

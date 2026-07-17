@@ -17,11 +17,18 @@ interface PortalVehicleRow {
   unitDescription: string
   vin: string | null
   lastServiceDate: string | null
+  registrationDocument: {
+    id: string
+    originalFilename: string
+    mimeType: string
+    fileSizeBytes: number
+    createdAt: string
+  } | null
 }
 
 const q = ref('')
 
-const { data, error, pending } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
+const { data, error, pending, refresh } = useClientFetch<{ items: PortalVehicleRow[] }>('/api/portal/vehicles')
 
 const items = computed(() => data.value?.items ?? [])
 
@@ -237,6 +244,20 @@ async function submitRequest() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div v-if="filtered.length" class="portal-veh-docs stack">
+        <DocumentsEntityDocumentPanel
+          v-for="veh in filtered"
+          :key="`reg-${veh.id}`"
+          :title="`${veh.tagLabel} registration`"
+          description="Upload the current registration for this unit."
+          category="vehicle_registration"
+          :document="veh.registrationDocument"
+          :upload-url="`/api/portal/vehicles/${veh.id}/registration`"
+          :can-upload="true"
+          @uploaded="refresh()"
+        />
       </div>
     </template>
 

@@ -22,6 +22,7 @@ import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import type { InvoiceTotalsResult } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
+import { getDefaultInvoiceTaxRateDecimal, getInvoiceWorkspaceSettings } from './workspace-settings.service'
 
 export type EstimatesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
@@ -263,6 +264,11 @@ export async function createEstimate(db: Db, input: CreateEstimateInput, actorId
 
   const vehicleSnapshot = await resolveVehicleForCustomer(db, resolved.customerId, resolved.vehicleId)
 
+  const [defaultTaxRate, invoiceSettings] = await Promise.all([
+    resolved.taxRate ? Promise.resolve(resolved.taxRate) : getDefaultInvoiceTaxRateDecimal(db),
+    getInvoiceWorkspaceSettings(db),
+  ])
+
   const [row] = await db.insert(estimates).values({
     customerId: resolved.customerId,
     vehicleId: resolved.vehicleId ?? null,
@@ -279,8 +285,8 @@ export async function createEstimate(db: Db, input: CreateEstimateInput, actorId
     internalNotes: resolved.internalNotes ?? null,
     customerNotes: resolved.customerNotes ?? null,
     taxExempt: customer.taxExempt,
-    taxRate: resolved.taxRate ?? '0',
-    shopSuppliesPercent: resolved.shopSuppliesPercent ?? null,
+    taxRate: defaultTaxRate,
+    shopSuppliesPercent: resolved.shopSuppliesPercent ?? invoiceSettings.shopSuppliesPercent ?? null,
     feesAmount: resolved.feesAmount ?? '0',
     discountAmount: resolved.discountAmount ?? '0',
     createdBy: actorId,

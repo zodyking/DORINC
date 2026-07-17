@@ -2,6 +2,7 @@ import { desc, eq, and } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
 import { CustomersServiceError, getCustomer, getCustomerBillingSummary, listContacts } from '../../../services/customers.service'
+import { getLatestEntityDocument } from '../../../services/entity-documents.service'
 import { listInvoices } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
@@ -43,7 +44,9 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(auditLogs.createdAt))
       .limit(25)
 
-    return { customer, contacts, history, billing, recentInvoices }
+    const taxExemptionDocument = await getLatestEntityDocument(db, 'customer', id, 'tax_exemption_form')
+
+    return { customer, contacts, history, billing, recentInvoices, taxExemptionDocument }
   }
   catch (err) {
     if (err instanceof CustomersServiceError && err.code === 'NOT_FOUND') {

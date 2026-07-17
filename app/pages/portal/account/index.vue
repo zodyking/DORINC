@@ -24,10 +24,18 @@ interface PortalMePayload {
     accountKind: string
     email: string | null
     phone: string | null
+    taxExempt: boolean
   }
+  taxExemptionDocument: {
+    id: string
+    originalFilename: string
+    mimeType: string
+    fileSizeBytes: number
+    createdAt: string
+  } | null
 }
 
-const { data, error } = useClientFetch<PortalMePayload>('/api/portal/me')
+const { data, error, refresh } = useClientFetch<PortalMePayload>('/api/portal/me')
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -141,6 +149,16 @@ async function updatePassword() {
           </button>
         </div>
       </div>
+
+      <DocumentsEntityDocumentPanel
+        title="Tax exemption form"
+        description="Upload your signed tax exemption certificate. Our team will verify it and update your account."
+        category="tax_exemption_form"
+        :document="data.taxExemptionDocument"
+        upload-url="/api/portal/documents/tax-exemption"
+        :can-upload="true"
+        @uploaded="refresh()"
+      />
     </div>
   </section>
 </template>

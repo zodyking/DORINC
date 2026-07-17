@@ -79,6 +79,13 @@ const { data, refresh, error } = useClientFetch<{
   history: HistoryRow[]
   billing: BillingSummary
   recentInvoices: RecentInvoiceRow[]
+  taxExemptionDocument: {
+    id: string
+    originalFilename: string
+    mimeType: string
+    fileSizeBytes: number
+    createdAt: string
+  } | null
 }>(() => `/api/customers/${customerId.value}`, { watch: [customerId], key: customerFetchKey, query: computed(() => messageLinkFetchQuery(route.query)) })
 
 onMounted(() => {
@@ -98,6 +105,8 @@ const recentInvoices = computed(() => data.value?.recentInvoices ?? [])
 const primary = computed(() => contacts.value.find(c => c.isPrimary) ?? contacts.value[0])
 const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
 const canReadInvoices = computed(() => auth.can('invoices.read.all'))
+const canUpdateCustomer = computed(() => auth.can('customers.update.all'))
+const taxExemptionDocument = computed(() => data.value?.taxExemptionDocument ?? null)
 
 // Fleet units for this customer (P1-10)
 interface VehicleRow {
@@ -543,6 +552,15 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
               </div>
             </div>
           </div>
+          <DocumentsEntityDocumentPanel
+            title="Tax exemption form"
+            description="Upload the customer's signed tax exemption certificate (PDF or image)."
+            category="tax_exemption_form"
+            :document="taxExemptionDocument"
+            :upload-url="`/api/customers/${customerId}/documents/tax-exemption`"
+            :can-upload="canUpdateCustomer"
+            @uploaded="refresh()"
+          />
           <div class="card">
             <div class="chead"><h3>Notes</h3></div>
             <div class="cbody" style="font-size:13px; color:#475569; line-height:1.6;">

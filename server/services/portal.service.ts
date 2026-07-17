@@ -11,6 +11,7 @@ import { buildVehicleSnapshot } from './entity-snapshots'
 import { mapPortalCategoryToWorkType } from '../../shared/portal-service-log'
 import { createServiceLog } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
+import { getLatestEntityDocument } from './entity-documents.service'
 import {
   buildPortalLineItemCorrectionDescription,
   buildPortalVehicleCorrectionDescription,
@@ -31,6 +32,14 @@ export class PortalServiceError extends Error {
   }
 }
 
+export interface PortalDocumentMeta {
+  id: string
+  originalFilename: string
+  mimeType: string
+  fileSizeBytes: number
+  createdAt: Date
+}
+
 export interface PortalMePayload {
   user: {
     id: string
@@ -45,7 +54,9 @@ export interface PortalMePayload {
     accountKind: string
     email: string | null
     phone: string | null
+    taxExempt: boolean
   }
+  taxExemptionDocument: PortalDocumentMeta | null
 }
 
 export interface PortalDashboardInvoice {
@@ -718,6 +729,7 @@ export async function getPortalMe(
   },
 ): Promise<PortalMePayload> {
   const company = await getPortalCustomer(db, input.customerId)
+  const taxExemptionDocument = await getLatestEntityDocument(db, 'customer', input.customerId, 'tax_exemption_form')
   return {
     user: {
       id: input.userId,
@@ -732,7 +744,9 @@ export async function getPortalMe(
       accountKind: company.accountKind,
       email: company.email,
       phone: company.phone,
+      taxExempt: company.taxExempt,
     },
+    taxExemptionDocument,
   }
 }
 
@@ -959,6 +973,7 @@ export interface PortalVehicleRow {
   unitDescription: string
   vin: string | null
   lastServiceDate: string | null
+  registrationDocument: PortalDocumentMeta | null
 }
 
 export async function listPortalVehicles(db: Db, customerId: string): Promise<PortalVehicleRow[]> {
@@ -977,13 +992,17 @@ export async function listPortalVehicles(db: Db, customerId: string): Promise<Po
     .groupBy(vehicles.id)
     .orderBy(vehicles.busNumber, vehicles.unitTag, vehicles.createdAt)
 
-  return rows.map(r => ({
-    id: r.vehicle.id,
-    tagLabel: vehicleLabelFromRow(r.vehicle),
-    unitTypeLabel: unitTypeLabel(r.vehicle.unitType),
-    unitDescription: [r.vehicle.year, r.vehicle.make, r.vehicle.model].filter(Boolean).join(' ') || '—',
-    vin: r.vehicle.vin,
-    lastServiceDate: r.lastServiceDate ?? null,
+  return Promise.all(rows.map(async (r) => {
+    const registrationDocument = await getLatestEntityDocument(db, 'vehicle', r.vehicle.id, 'vehicle_registration')
+    return {
+      id: r.vehicle.id,
+      tagLabel: vehicleLabelFromRow(r.vehicle),
+      unitTypeLabel: unitTypeLabel(r.vehicle.unitType),
+      unitDescription: [r.vehicle.year, r.vehicle.make, r.vehicle.model].filter(Boolean).join(' ') || '—',
+      vin: r.vehicle.vin,
+      lastServiceDate: r.lastServiceDate ?? null,
+      registrationDocument,
+    }
   }))
 }
 

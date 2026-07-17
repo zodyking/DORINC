@@ -5,6 +5,7 @@ import type { FileKind, FileOwnerEntityType } from '../db/schema/files'
 import { appFiles } from '../db/schema/files'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import { resolveAllowedAttachmentMime } from '../../shared/email-attachment-mime'
+import type { FileDocumentCategory } from '../../shared/document-categories'
 import { getMaxUploadMb } from './app-config.service'
 
 export type FilesServiceErrorCode
@@ -64,6 +65,8 @@ export interface UploadFileInput {
   trusted?: boolean
   /** Content-ID for inline email images. */
   contentId?: string | null
+  /** Semantic category for customer/vehicle documents. */
+  documentCategory?: FileDocumentCategory | null
 }
 
 /** Columns safe for list views — never the blob (SPEC §8). */
@@ -83,6 +86,7 @@ const META_COLUMNS = {
   createdBy: appFiles.createdBy,
   createdAt: appFiles.createdAt,
   archivedAt: appFiles.archivedAt,
+  documentCategory: appFiles.documentCategory,
 }
 
 export async function uploadFile(db: Db, input: UploadFileInput, createdBy: string | null) {
@@ -117,6 +121,7 @@ export async function uploadFile(db: Db, input: UploadFileInput, createdBy: stri
     fileSizeBytes: input.data.length,
     sha256Hash,
     contentId: input.contentId ?? null,
+    documentCategory: input.documentCategory ?? null,
     width: input.width ?? null,
     height: input.height ?? null,
     binaryData: input.data,
@@ -142,6 +147,7 @@ export interface ListFilesFilter {
   ownerEntityType: FileOwnerEntityType
   ownerEntityId: string
   fileKind?: FileKind
+  documentCategory?: FileDocumentCategory
   includeArchived?: boolean
 }
 
@@ -151,6 +157,7 @@ export async function listFilesByOwner(db: Db, filter: ListFilesFilter) {
     eq(appFiles.ownerEntityId, filter.ownerEntityId),
   ]
   if (filter.fileKind) conditions.push(eq(appFiles.fileKind, filter.fileKind))
+  if (filter.documentCategory) conditions.push(eq(appFiles.documentCategory, filter.documentCategory))
   if (!filter.includeArchived) conditions.push(isNull(appFiles.archivedAt))
 
   return db.select(META_COLUMNS).from(appFiles)

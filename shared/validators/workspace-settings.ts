@@ -11,6 +11,8 @@ export const businessProfileSchema = z.object({
   state: z.string().max(50).default(''),
   postalCode: z.string().max(20).default(''),
   country: z.string().max(60).default('US'),
+  taxId: z.string().max(40).default(''),
+  defaultTaxRatePercent: z.string().regex(/^\d+(\.\d{1,4})?$/).default('0'),
 })
 
 export const catalogKeywordMapSchema = z.record(

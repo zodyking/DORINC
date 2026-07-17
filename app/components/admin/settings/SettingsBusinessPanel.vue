@@ -17,6 +17,8 @@ const form = reactive({
   state: '',
   postalCode: '',
   country: 'US',
+  taxId: '',
+  defaultTaxRatePercent: '0',
 })
 
 watch(() => data.value?.profile, (p) => {
@@ -46,6 +48,8 @@ async function save() {
         state: form.state.trim(),
         postalCode: form.postalCode.trim(),
         country: form.country.trim() || 'US',
+        taxId: form.taxId.trim(),
+        defaultTaxRatePercent: form.defaultTaxRatePercent.trim() || '0',
       },
     })
     message.value = 'Business profile saved'
@@ -65,7 +69,7 @@ async function save() {
   <div class="settings-panel">
     <header class="settings-panel-head">
       <h3>Business</h3>
-      <p>Your shop name, contact details, and address for invoices and customer-facing documents.</p>
+      <p>Your shop name, contact details, address, and default sales tax for invoices.</p>
     </header>
 
     <div v-if="pending" class="card"><div class="cbody">Loading…</div></div>
@@ -122,6 +126,24 @@ async function save() {
           <input v-model="form.country" type="text" maxlength="60">
         </label>
 
+        <div class="row2">
+          <label class="fld">
+            Sales tax ID
+            <input v-model="form.taxId" type="text" maxlength="40" placeholder="EIN or state tax ID">
+          </label>
+          <label class="fld">
+            Default tax rate (%)
+            <input
+              v-model="form.defaultTaxRatePercent"
+              type="text"
+              inputmode="decimal"
+              maxlength="8"
+              placeholder="e.g. 6.6"
+            >
+          </label>
+        </div>
+        <p class="settings-hint">Applied to new invoices and estimates unless the customer is marked tax exempt.</p>
+
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>
 
@@ -139,6 +161,12 @@ async function save() {
   display: grid;
   grid-template-columns: 1fr 1fr 120px;
   gap: 12px;
+}
+.settings-hint {
+  margin: -4px 0 8px;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
 }
 @media (max-width: 640px) {
   .row3 { grid-template-columns: 1fr; }

@@ -65,6 +65,13 @@ const { data, refresh, error } = useClientFetch<{
   history: HistoryRow[]
   recentInvoices: RecentInvoiceRow[]
   invoiceCount: number
+  registrationDocument: {
+    id: string
+    originalFilename: string
+    mimeType: string
+    fileSizeBytes: number
+    createdAt: string
+  } | null
 }>(() => `/api/vehicles/${vehicleId.value}`, { watch: [vehicleId], query: computed(() => messageLinkFetchQuery(route.query)) })
 
 const vehicle = computed(() => data.value?.vehicle)
@@ -84,6 +91,7 @@ const newInvoiceLink = computed(() => {
 })
 
 const canUpdate = computed(() => auth.can('vehicles.update.all'))
+const registrationDocument = computed(() => data.value?.registrationDocument ?? null)
 const canArchive = computed(() => auth.can('vehicles.archive.all'))
 
 const busy = ref(false)
@@ -185,6 +193,15 @@ function histWhen(iso: string): string {
               <dt>Added</dt><dd>{{ new Date(vehicle.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }}</dd>
             </dl>
           </div>
+          <DocumentsEntityDocumentPanel
+            title="Vehicle registration"
+            description="Upload the current registration document for this unit (PDF or image)."
+            category="vehicle_registration"
+            :document="registrationDocument"
+            :upload-url="`/api/vehicles/${vehicle.id}/documents/registration`"
+            :can-upload="canUpdate"
+            @uploaded="refresh()"
+          />
           <div class="card">
             <div class="chead">
               <h3>Invoices · {{ invoiceCount }}</h3>

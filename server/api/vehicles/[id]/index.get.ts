@@ -4,6 +4,7 @@ import { auditLogs } from '../../../db/schema/audit'
 import { customers } from '../../../db/schema/customers'
 import { listInvoices } from '../../../services/invoices.service'
 import { getVehicle, VehiclesServiceError } from '../../../services/vehicles.service'
+import { getLatestEntityDocument } from '../../../services/entity-documents.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermissionOrMessageLink } from '../../../utils/message-link-access'
 import { validateParams } from '../../../utils/validate'
@@ -43,12 +44,15 @@ export default defineEventHandler(async (event) => {
       sort: 'newest',
     })
 
+    const registrationDocument = await getLatestEntityDocument(db, 'vehicle', id, 'vehicle_registration')
+
     return {
       vehicle,
       customer: customer ?? null,
       history,
       recentInvoices: invoiceList.items,
       invoiceCount: invoiceList.total,
+      registrationDocument,
     }
   }
   catch (err) {

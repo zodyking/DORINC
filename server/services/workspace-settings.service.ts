@@ -24,6 +24,7 @@ import {
   notificationSettingsSchema,
 } from '../../shared/validators/workspace-settings'
 import { MANAGER_APPROVAL_THRESHOLD_KEY } from './billing-settings.service'
+import { taxRatePercentToDecimal } from '../../shared/tax'
 
 export const WORKSPACE_SETTING_KEYS = {
   business: 'workspace.business_profile',
@@ -154,6 +155,25 @@ export async function getDetectionSettings(db: Db) {
 
 export async function getPublicBusinessProfile(db: Db): Promise<BusinessProfile> {
   return getBusinessProfile(db)
+}
+
+/** Decimal tax rate for invoice math e.g. "0.066000". */
+export async function getDefaultInvoiceTaxRateDecimal(db: Db): Promise<string> {
+  const profile = await getBusinessProfile(db)
+  return taxRatePercentToDecimal(profile.defaultTaxRatePercent)
+}
+
+export async function getStaffInvoiceDefaults(db: Db) {
+  const [profile, invoiceSettings] = await Promise.all([
+    getBusinessProfile(db),
+    getInvoiceWorkspaceSettings(db),
+  ])
+  return {
+    defaultTaxRatePercent: profile.defaultTaxRatePercent,
+    defaultTaxRateDecimal: taxRatePercentToDecimal(profile.defaultTaxRatePercent),
+    taxId: profile.taxId,
+    shopSuppliesPercent: invoiceSettings.shopSuppliesPercent,
+  }
 }
 
 export async function getNotificationSettings(db: Db): Promise<NotificationSettings> {

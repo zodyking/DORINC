@@ -44,6 +44,12 @@ import {
 
 definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
+const { data: invoiceDefaults } = useClientFetch<{
+  defaultTaxRatePercent: string
+  defaultTaxRateDecimal: string
+  shopSuppliesPercent: string
+}>('/api/settings/invoice-defaults')
+
 interface CustomerPick {
   id: string
   displayName: string
@@ -286,6 +292,8 @@ const summaryRows = computed(() => {
   const breakdown = previewLineTypeBreakdown(lines.value)
   const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
     taxExempt: selectedCustomer.value?.taxExempt,
+    taxRate: invoiceDefaults.value?.defaultTaxRateDecimal ?? '0',
+    shopSuppliesPercent: invoiceDefaults.value?.shopSuppliesPercent ?? null,
   })
   return editorSummaryRows(inv, {
     breakdown,

@@ -1,6 +1,6 @@
 // Invoice creator wizard helpers (mockup: PAGE: INVOICE CREATOR / P1-23).
 
-import { addMoney, multiplyMoney } from '#shared/money'
+import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '#shared/money'
 import type { InvoiceLineType } from './invoices-ui'
 
 export const INVOICE_WIZARD_STEPS = [
@@ -220,17 +220,32 @@ export interface DraftTotalsPreview {
 /** Estimate invoice totals from draft lines before the first save. */
 export function previewDraftTotals(
   lines: DraftLine[],
-  opts: { taxExempt?: boolean } = {},
+  opts: {
+    taxExempt?: boolean
+    taxRate?: string
+    shopSuppliesPercent?: string | null
+    feesAmount?: string
+    discountAmount?: string
+  } = {},
 ): DraftTotalsPreview {
   const subtotal = previewLinesSubtotal(lines)
   const taxExempt = opts.taxExempt ?? false
+  const taxRate = opts.taxRate ?? '0'
+  const validLines = lines.filter(isDraftLineValid)
+  const taxableSubtotal = validLines.length
+    ? addMoney(...validLines.map(l => multiplyMoney(l.quantity, l.unitPrice)))
+    : '0'
+  const taxAmount = taxExempt ? '0' : rateOfMoney(taxableSubtotal, taxRate)
+  const feesAmount = opts.feesAmount ?? '0'
+  const discountAmount = opts.discountAmount ?? '0'
+  const total = subtractMoney(addMoney(subtotal, feesAmount, taxAmount), discountAmount)
   return {
     subtotal,
-    taxAmount: '0.00',
+    taxAmount,
     taxExempt,
-    feesAmount: '0',
-    shopSuppliesPercent: null,
-    discountAmount: '0',
-    total: subtotal,
+    feesAmount,
+    shopSuppliesPercent: opts.shopSuppliesPercent ?? null,
+    discountAmount,
+    total,
   }
 }

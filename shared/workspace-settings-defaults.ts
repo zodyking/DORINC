@@ -17,6 +17,10 @@ export interface BusinessProfile {
   state: string
   postalCode: string
   country: string
+  /** Sales tax ID / EIN shown on invoices when set. */
+  taxId: string
+  /** Default sales tax rate as a percent e.g. "6.6" for 6.6%. */
+  defaultTaxRatePercent: string
 }
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
@@ -30,6 +34,8 @@ export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
   state: '',
   postalCode: '',
   country: 'US',
+  taxId: '',
+  defaultTaxRatePercent: '0',
 }
 
 export interface LineTypeVerbSettings {

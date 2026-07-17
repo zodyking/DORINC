@@ -18,6 +18,7 @@ import { normalizeLineType } from '#shared/line-item-types'
 import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import type { AccountType } from '../../shared/permissions/keys'
 import { getManagerApprovalThreshold } from './billing-settings.service'
+import { getDefaultInvoiceTaxRateDecimal, getInvoiceWorkspaceSettings } from './workspace-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
@@ -431,6 +432,11 @@ export async function createInvoiceDraft(
     ? snapshotOverrides.vehicleSnapshot
     : await resolveVehicleForCustomer(db, input.customerId, input.vehicleId)
 
+  const [defaultTaxRate, invoiceSettings] = await Promise.all([
+    input.taxRate ? Promise.resolve(input.taxRate) : getDefaultInvoiceTaxRateDecimal(db),
+    getInvoiceWorkspaceSettings(db),
+  ])
+
   const draftValues = {
     customerId: input.customerId ?? null,
     vehicleId: input.vehicleId ?? null,
@@ -449,8 +455,8 @@ export async function createInvoiceDraft(
     internalNotes: input.internalNotes ?? null,
     customerNotes: input.customerNotes ?? null,
     taxExempt,
-    taxRate: input.taxRate ?? '0',
-    shopSuppliesPercent: input.shopSuppliesPercent ?? null,
+    taxRate: defaultTaxRate,
+    shopSuppliesPercent: input.shopSuppliesPercent ?? invoiceSettings.shopSuppliesPercent ?? null,
     feesAmount: input.feesAmount ?? '0',
     discountAmount: input.discountAmount ?? '0',
     createdBy: actorId,
