@@ -241,6 +241,12 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       if (!pdfRow) {
         const pendingPdf = await loadPendingPdfJob(pool, invoiceId)
         if (pendingPdf) {
+          const attempt = job.attempts + 1
+          if (attempt >= job.max_attempts) {
+            throw new Error(
+              `PDF render timed out (${pendingPdf.status}): ${pendingPdf.last_error ?? 'still waiting for pdf-worker'}`,
+            )
+          }
           await pool.query(
             `UPDATE worker_jobs
              SET status = 'queued', run_after = now() + interval '3 seconds', last_error = 'Waiting for PDF render'
