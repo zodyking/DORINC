@@ -2066,12 +2066,20 @@ section.page.active.dm-page{
     height:100dvh;
     max-height:100dvh;
     overflow:hidden;
+    overscroll-behavior:none;
+  }
+  html:has(.main-body > section.dm-page),
+  body:has(.main-body > section.dm-page){
+    height:100%;
+    overflow:hidden;
+    overscroll-behavior:none;
   }
   .app:has(.main-body > section.dm-page) .main{
     height:100%;
-    max-height:100%;
+    max-height:100dvh;
     min-height:0;
     overflow:hidden;
+    overscroll-behavior:none;
   }
   .main:has(.main-body > section.dm-page) .topbar{
     flex-shrink:0;
@@ -2080,12 +2088,12 @@ section.page.active.dm-page{
     display:none;
   }
   .main:has(.main-body > section.dm-page) .suite-foot{
-    flex-shrink:0;
+    display:none;
   }
   .main-body:has(section.dm-page){
     display:flex; flex-direction:column; flex:1 1 auto; min-height:0; max-height:100%;
     overflow:hidden;
-    height:auto;
+    overscroll-behavior:none;
   }
   section.page.active.dm-page{
     flex:1 1 auto; min-height:0; min-width:0; max-width:100%;
@@ -2094,7 +2102,9 @@ section.page.active.dm-page{
     padding:8px 0 0;
     padding-left:env(safe-area-inset-left, 0px);
     padding-right:env(safe-area-inset-right, 0px);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
     overflow:hidden;
+    overscroll-behavior:none;
     box-sizing:border-box;
   }
   .dm-page .pagehead{
@@ -2136,7 +2146,7 @@ section.page.active.dm-page{
     flex-shrink:0;
   }
   .dm-layout{
-    flex:1 1 auto; min-height:0; min-width:0; width:100%; max-width:100%;
+    flex:1 1 0; min-height:0; min-width:0; width:100%; max-width:100%;
     grid-template-columns:minmax(0, 1fr);
     height:auto; max-height:100%;
     display:flex;
@@ -2145,6 +2155,7 @@ section.page.active.dm-page{
     border-left:none;
     border-right:none;
     overflow:hidden;
+    overscroll-behavior:none;
   }
   .dm-list-toolbar{
     gap:6px;
@@ -2286,7 +2297,7 @@ section.page.active.dm-page{
     background:#fff;
     border-top:1px solid #e2e8f0;
   }
-  .dm-compose-hint{ display:none; }
+  .dm-compose-hint{ display:none !important; }
   .dm-compose-form{ min-width:0; width:100%; align-items:center; }
   .dm-compose-form textarea{
     min-height:44px; max-height:96px; border-radius:999px; padding:11px 16px;
