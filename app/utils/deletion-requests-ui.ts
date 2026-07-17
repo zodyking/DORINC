@@ -38,7 +38,7 @@ export function deletionPreservationNote(type: DeletionEntityType): string {
     case 'invoice':
       return 'The invoice is permanently removed. This cannot be undone.'
     case 'conversation':
-      return 'The conversation and all messages are permanently removed. Linked customers, invoices, and other records are not affected.'
+      return 'Direct message, email, and team chat threads can be cleared after approval. Team chat stays available; other conversations are permanently removed.'
     default:
       return 'Related records keep their full information after this record is removed.'
   }
@@ -83,7 +83,7 @@ export function deletionRequestOutcomeSummary(entityType: DeletionEntityType): s
     case 'invoice':
       return 'Outcome: invoice permanently removed'
     case 'conversation':
-      return 'Outcome: conversation and messages permanently removed; other records unchanged'
+      return 'Outcome: message history cleared; team chat channel remains, other threads are permanently removed'
     default:
       return 'Outcome: record permanently removed'
   }

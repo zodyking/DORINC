@@ -13,7 +13,6 @@ const emit = defineEmits<{
   back: []
   send: [body: string, files: File[]]
   'deletion-requested': []
-  'clear-history': []
 }>()
 
 const auth = useAuthStore()
@@ -90,16 +89,8 @@ watch(() => props.conversation?.id, () => {
         </div>
       </div>
       <div class="dm-thread-actions">
-        <button
-          v-if="isTeam"
-          type="button"
-          class="btn sm ghost"
-          @click="emit('clear-history')"
-        >
-          Clear history
-        </button>
         <DeleteEntityButton
-          v-if="!isTeam"
+          v-if="!isEmail"
           entity-type="conversation"
           :entity-id="conversation.id"
           :entity-label="conversationLabel"

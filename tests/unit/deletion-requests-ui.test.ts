@@ -18,7 +18,7 @@ describe('deletion-requests-ui helpers', () => {
   it('maps entity types to badges and approve labels', () => {
     expect(deletionRequestTypeBadge('customer').label).toBe('Customer')
     expect(deletionRequestApproveLabel('invoice')).toBe('Confirm delete invoice')
-    expect(deletionRequestOutcomeSummary('conversation')).toContain('conversation')
+    expect(deletionRequestOutcomeSummary('conversation')).toContain('message history')
   })
 
   it('uses staff-aligned status pills', () => {

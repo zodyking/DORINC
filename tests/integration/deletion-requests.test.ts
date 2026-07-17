@@ -37,7 +37,7 @@ import {
   getConversationDeletionLabel,
   sendMessage,
 } from '../../server/services/messages.service'
-import { suppressesInboundEmail } from '../../server/services/email-ingest-suppression.service'
+import { ensureDefaultTeamConversation, postTeamChatMessage } from '../../server/services/team-chat.service'
 
 config()
 
@@ -452,5 +452,42 @@ describe('deletion request workflow', () => {
 
     const convIdx = createdConversationIds.indexOf(conversation!.id)
     if (convIdx >= 0) createdConversationIds.splice(convIdx, 1)
+  })
+
+  it('approves team chat deletion request and clears history without removing the channel', async () => {
+    const teamConversationId = await ensureDefaultTeamConversation(db)
+    createdConversationIds.push(teamConversationId)
+
+    await postTeamChatMessage(db, {
+      senderUserId: ACTOR,
+      body: 'Team message scheduled for clearing',
+    })
+
+    const label = await getConversationDeletionLabel(db, teamConversationId)
+    expect(label).toBe('Team')
+
+    const created = await createDeletionRequest(
+      db,
+      'conversation',
+      teamConversationId,
+      'Reset team chat history for a fresh start',
+      ACTOR,
+    )
+    createdRequestIds.push(created.id)
+    expect(created.entityType).toBe('conversation')
+    expect(created.entityLabel).toBe(label)
+
+    const { request } = await approveDeletionRequest(db, created.id, ACTOR, 'Approved history reset')
+    expect(request.status).toBe('approved')
+
+    const [conversation] = await db.select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.id, teamConversationId))
+    expect(conversation?.id).toBe(teamConversationId)
+
+    const remaining = await db.select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.conversationId, teamConversationId))
+    expect(remaining).toHaveLength(0)
   })
 })

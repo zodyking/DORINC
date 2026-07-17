@@ -103,25 +103,10 @@ export async function isSystemTeamConversation(db: Db, conversationId: string): 
   return row?.type === 'team' && row.isSystem === true
 }
 
-export async function assertTeamConversationDeletable(db: Db, conversationId: string) {
-  if (await isSystemTeamConversation(db, conversationId)) {
-    throw new TeamChatServiceError('FORBIDDEN')
-  }
-}
-
-export async function clearTeamChatHistory(db: Db, conversationId: string, actorUserId: string) {
+export async function clearTeamChatHistory(db: Db, conversationId: string, _actorUserId: string) {
   if (!await isSystemTeamConversation(db, conversationId)) {
     throw new TeamChatServiceError('NOT_TEAM_CHAT')
   }
-
-  const [participant] = await db.select({ id: conversationParticipants.id })
-    .from(conversationParticipants)
-    .where(and(
-      eq(conversationParticipants.conversationId, conversationId),
-      eq(conversationParticipants.userId, actorUserId),
-    ))
-    .limit(1)
-  if (!participant) throw new TeamChatServiceError('FORBIDDEN')
 
   const msgRows = await db.select({ id: messages.id })
     .from(messages)
