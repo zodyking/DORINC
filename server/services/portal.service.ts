@@ -2,7 +2,7 @@ import { and, count, desc, eq, gt, isNull, max, or, sql, sum } from 'drizzle-orm
 import type { Db } from '../db/client'
 import { customers } from '../db/schema/customers'
 import { formatInvoiceNumber, invoices } from '../db/schema/invoices'
-import { newVehicleRequests, invoiceChangeRequests, portalGeneralRequests, serviceRequests, vehicleChangeRequests } from '../db/schema/portal-requests'
+import { documentChangeRequests, newVehicleRequests, invoiceChangeRequests, portalGeneralRequests, serviceRequests, vehicleChangeRequests } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
 import { vehicles } from '../db/schema/vehicles'
 import { getInvoicePdfDownload, InvoicePdfServiceError } from './invoice-pdf.service'
@@ -11,7 +11,7 @@ import { buildVehicleSnapshot } from './entity-snapshots'
 import { mapPortalCategoryToWorkType } from '../../shared/portal-service-log'
 import { createServiceLog } from './service-logs.service'
 import { getVehicle } from './vehicles.service'
-import { getLatestEntityDocument } from './entity-documents.service'
+import { countPendingDocumentChangeRequests, getLatestEntityDocument } from './entity-documents.service'
 import {
   buildPortalLineItemCorrectionDescription,
   buildPortalVehicleCorrectionDescription,
@@ -57,6 +57,7 @@ export interface PortalMePayload {
     taxExempt: boolean
   }
   taxExemptionDocument: PortalDocumentMeta | null
+  pendingTaxExemptionRequest: boolean
 }
 
 export interface PortalDashboardInvoice {
@@ -184,7 +185,7 @@ async function assertPortalInvoiceForChangeRequest(db: Db, customerId: string, i
 }
 
 async function countPendingPortalRequests(db: Db, customerId: string): Promise<number> {
-  const tables = [invoiceChangeRequests, vehicleChangeRequests, newVehicleRequests, portalGeneralRequests] as const
+  const tables = [invoiceChangeRequests, vehicleChangeRequests, newVehicleRequests, portalGeneralRequests, documentChangeRequests] as const
   let total = 0
   for (const table of tables) {
     const [row] = await db.select({ value: count() })
@@ -730,6 +731,7 @@ export async function getPortalMe(
 ): Promise<PortalMePayload> {
   const company = await getPortalCustomer(db, input.customerId)
   const taxExemptionDocument = await getLatestEntityDocument(db, 'customer', input.customerId, 'tax_exemption_form')
+  const pendingTaxExemptionRequest = await countPendingDocumentChangeRequests(db, 'customer', input.customerId, 'tax_exemption_form') > 0
   return {
     user: {
       id: input.userId,
@@ -747,6 +749,7 @@ export async function getPortalMe(
       taxExempt: company.taxExempt,
     },
     taxExemptionDocument,
+    pendingTaxExemptionRequest,
   }
 }
 
@@ -994,6 +997,7 @@ export async function listPortalVehicles(db: Db, customerId: string): Promise<Po
 
   return Promise.all(rows.map(async (r) => {
     const registrationDocument = await getLatestEntityDocument(db, 'vehicle', r.vehicle.id, 'vehicle_registration')
+    const pendingRegistrationRequest = await countPendingDocumentChangeRequests(db, 'vehicle', r.vehicle.id, 'vehicle_registration') > 0
     return {
       id: r.vehicle.id,
       tagLabel: vehicleLabelFromRow(r.vehicle),
@@ -1002,6 +1006,7 @@ export async function listPortalVehicles(db: Db, customerId: string): Promise<Po
       vin: r.vehicle.vin,
       lastServiceDate: r.lastServiceDate ?? null,
       registrationDocument,
+      pendingRegistrationRequest,
     }
   }))
 }

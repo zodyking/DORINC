@@ -24,6 +24,7 @@ interface PortalVehicleRow {
     fileSizeBytes: number
     createdAt: string
   } | null
+  pendingRegistrationRequest: boolean
 }
 
 const q = ref('')
@@ -247,16 +248,15 @@ async function submitRequest() {
       </div>
 
       <div v-if="filtered.length" class="portal-veh-docs stack">
-        <DocumentsEntityDocumentPanel
+        <DocumentsEntityDocumentPortalPanel
           v-for="veh in filtered"
           :key="`reg-${veh.id}`"
-          :title="`${veh.tagLabel} registration`"
-          description="Upload the current registration for this unit."
+          :title="`${veh.tagLabel} — Certificate of Registration`"
           category="vehicle_registration"
           :document="veh.registrationDocument"
-          :upload-url="`/api/portal/vehicles/${veh.id}/registration`"
-          :can-upload="true"
-          @uploaded="refresh()"
+          :pending-request="veh.pendingRegistrationRequest"
+          :change-request-url="`/api/portal/vehicles/${veh.id}/registration/change-request`"
+          @submitted="refresh()"
         />
       </div>
     </template>

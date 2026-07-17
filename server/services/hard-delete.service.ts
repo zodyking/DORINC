@@ -9,6 +9,7 @@ import { invoiceFiles, invoiceLineItems, invoices } from '../db/schema/invoices'
 import { emailIngestSuppressions, emailMessageMeta, emailThreads } from '../db/schema/email-inbox'
 import { conversations, messages } from '../db/schema/messages'
 import {
+  documentChangeRequests,
   invoiceChangeRequests,
   newVehicleRequests,
   portalGeneralRequests,
@@ -359,6 +360,9 @@ async function nullifyUserAttribution(db: Db, userId: string) {
   await db.update(portalGeneralRequests)
     .set({ reviewedBy: null, updatedAt: now })
     .where(eq(portalGeneralRequests.reviewedBy, userId))
+  await db.update(documentChangeRequests)
+    .set({ reviewedBy: null, updatedAt: now })
+    .where(eq(documentChangeRequests.reviewedBy, userId))
 
   await db.update(userPermissionOverrides)
     .set({ createdBy: null })
@@ -425,6 +429,7 @@ export async function hardDeleteUser(
   await db.delete(invoiceChangeRequests).where(eq(invoiceChangeRequests.submittedBy, userId))
   await db.delete(vehicleChangeRequests).where(eq(vehicleChangeRequests.submittedBy, userId))
   await db.delete(portalGeneralRequests).where(eq(portalGeneralRequests.submittedBy, userId))
+  await db.delete(documentChangeRequests).where(eq(documentChangeRequests.submittedBy, userId))
 
   await nullifyUserAttribution(db, userId)
 

@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import type { FileDocumentCategory } from '../../shared/document-categories'
+import type { FileDocumentActiveCategory, FileDocumentCategory } from '../../shared/document-categories'
+import { toPendingDocumentCategory } from '../../shared/document-categories'
 import type { FileOwnerEntityType } from '../db/schema/files'
 import { appFiles } from '../db/schema/files'
 import {
@@ -52,11 +53,52 @@ export async function uploadEntityDocument(
   }, createdBy)
 }
 
+export async function removeEntityDocument(
+  db: Db,
+  ownerEntityType: FileOwnerEntityType,
+  ownerEntityId: string,
+  documentCategory: FileDocumentActiveCategory,
+) {
+  await archiveDocumentsByCategory(db, ownerEntityType, ownerEntityId, documentCategory)
+  await archiveDocumentsByCategory(
+    db,
+    ownerEntityType,
+    ownerEntityId,
+    toPendingDocumentCategory(documentCategory),
+  )
+}
+
+/** Promote a pending review file to the active document category. */
+export async function promotePendingEntityDocument(
+  db: Db,
+  ownerEntityType: FileOwnerEntityType,
+  ownerEntityId: string,
+  activeCategory: FileDocumentActiveCategory,
+  pendingFileId: string,
+) {
+  await archiveDocumentsByCategory(db, ownerEntityType, ownerEntityId, activeCategory)
+  await archiveDocumentsByCategory(
+    db,
+    ownerEntityType,
+    ownerEntityId,
+    toPendingDocumentCategory(activeCategory),
+  )
+
+  await db.update(appFiles)
+    .set({ documentCategory: activeCategory })
+    .where(and(
+      eq(appFiles.id, pendingFileId),
+      eq(appFiles.ownerEntityType, ownerEntityType),
+      eq(appFiles.ownerEntityId, ownerEntityId),
+      isNull(appFiles.archivedAt),
+    ))
+}
+
 export async function getLatestEntityDocument(
   db: Db,
   ownerEntityType: FileOwnerEntityType,
   ownerEntityId: string,
-  documentCategory: FileDocumentCategory,
+  documentCategory: FileDocumentActiveCategory,
 ) {
   const rows = await listFilesByOwner(db, {
     ownerEntityType,
@@ -77,4 +119,30 @@ export async function listEntityDocuments(
     ownerEntityId,
     documentCategory,
   })
+}
+
+export async function countPendingDocumentChangeRequests(
+  db: Db,
+  ownerEntityType: FileOwnerEntityType,
+  ownerEntityId: string,
+  documentCategory: FileDocumentActiveCategory,
+) {
+  const { documentChangeRequests } = await import('../db/schema/portal-requests')
+  const conditions = [
+    eq(documentChangeRequests.documentCategory, documentCategory),
+    eq(documentChangeRequests.status, 'pending'),
+  ]
+  if (ownerEntityType === 'vehicle') {
+    conditions.push(eq(documentChangeRequests.vehicleId, ownerEntityId))
+  }
+  else {
+    conditions.push(eq(documentChangeRequests.customerId, ownerEntityId))
+    conditions.push(isNull(documentChangeRequests.vehicleId))
+  }
+
+  const [row] = await db.select({ id: documentChangeRequests.id })
+    .from(documentChangeRequests)
+    .where(and(...conditions))
+    .limit(1)
+  return row ? 1 : 0
 }

@@ -27,12 +27,20 @@ const route = useRoute()
 const auth = useAuthStore()
 const vehicleId = computed(() => String(route.params.id || ''))
 
-const { data, error, refresh } = useClientFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null }>(
+const { data, error, refresh } = useClientFetch<{ vehicle: Vehicle, customer: { id: string, displayName: string } | null, registrationDocument: {
+  id: string
+  originalFilename: string
+  mimeType: string
+  fileSizeBytes: number
+  createdAt: string
+} | null }>(
   () => `/api/vehicles/${vehicleId.value}`,
   { watch: [vehicleId] },
 )
 
 const v = computed(() => data.value?.vehicle)
+const registrationDocument = computed(() => data.value?.registrationDocument ?? null)
+const canUpdate = computed(() => auth.can('vehicles.update.all'))
 const canArchive = computed(() => auth.can('vehicles.archive.all'))
 
 const form = reactive<VehicleFormValue>({
@@ -184,6 +192,16 @@ async function restore() {
         submit-label="Save unit"
         @submit="submit"
         @cancel="navigateTo(`/vehicles/${route.params.id}`)"
+      />
+      <DocumentsEntityDocumentUploadPanel
+        v-if="canUpdate"
+        category="vehicle_registration"
+        :document="registrationDocument"
+        :upload-url="`/api/vehicles/${v.id}/documents/registration`"
+        :remove-url="`/api/vehicles/${v.id}/documents/registration`"
+        :can-manage="canUpdate"
+        @uploaded="refresh()"
+        @removed="refresh()"
       />
     </template>
   </section>

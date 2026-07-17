@@ -193,14 +193,9 @@ function histWhen(iso: string): string {
               <dt>Added</dt><dd>{{ new Date(vehicle.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }}</dd>
             </dl>
           </div>
-          <DocumentsEntityDocumentPanel
-            title="Vehicle registration"
-            description="Upload the current registration document for this unit (PDF or image)."
+          <DocumentsEntityDocumentViewer
             category="vehicle_registration"
             :document="registrationDocument"
-            :upload-url="`/api/vehicles/${vehicle.id}/documents/registration`"
-            :can-upload="canUpdate"
-            @uploaded="refresh()"
           />
           <div class="card">
             <div class="chead">

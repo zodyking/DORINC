@@ -4,12 +4,18 @@ import { users } from '../db/schema/auth'
 import { customers } from '../db/schema/customers'
 import { formatInvoiceNumber, invoices } from '../db/schema/invoices'
 import {
+  documentChangeRequests,
   invoiceChangeRequests,
   newVehicleRequests,
   portalGeneralRequests,
   serviceRequests,
   vehicleChangeRequests,
 } from '../db/schema/portal-requests'
+import {
+  approveDocumentChangeRequest,
+  documentChangeRequestTitle,
+  rejectDocumentChangeRequest,
+} from './document-change-requests.service'
 import { vehicles } from '../db/schema/vehicles'
 import {
   createInvoice,
@@ -65,6 +71,9 @@ export interface StaffPortalRequestRow {
   reviewedAt: string | null
   reviewReason: string | null
   correctionPayload: PortalInvoiceCorrectionPayload | null
+  pendingFileId?: string | null
+  documentCategory?: string | null
+  documentAction?: string | null
 }
 
 export interface ListStaffPortalRequestsFilter {
@@ -103,6 +112,7 @@ export async function countPendingPortalRequests(db: Db): Promise<number> {
     vehicleChangeRequests,
     portalGeneralRequests,
     newVehicleRequests,
+    documentChangeRequests,
   ] as const
 
   let total = 0
@@ -330,6 +340,58 @@ async function mapNewVehicleRows(db: Db, statusFilter?: string): Promise<StaffPo
   }))
 }
 
+async function mapDocumentChangeRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
+  const conditions = statusFilter && statusFilter !== 'all'
+    ? [eq(documentChangeRequests.status, statusFilter)]
+    : []
+  const rows = await db.select({
+    request: documentChangeRequests,
+    customerName: customers.displayName,
+    submitterName: users.name,
+    submitterEmail: users.email,
+    vehicle: {
+      unitType: vehicles.unitType,
+      busNumber: vehicles.busNumber,
+      unitTag: vehicles.unitTag,
+      make: vehicles.make,
+      model: vehicles.model,
+    },
+  })
+    .from(documentChangeRequests)
+    .innerJoin(customers, eq(documentChangeRequests.customerId, customers.id))
+    .innerJoin(users, eq(documentChangeRequests.submittedBy, users.id))
+    .leftJoin(vehicles, eq(documentChangeRequests.vehicleId, vehicles.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(documentChangeRequests.createdAt))
+
+  return rows.map(r => ({
+    id: r.request.id,
+    kind: 'document' as const,
+    status: r.request.status,
+    customerId: r.request.customerId,
+    customerName: r.customerName,
+    submittedByName: r.submitterName,
+    submittedByEmail: r.submitterEmail,
+    createdAt: r.request.createdAt.toISOString(),
+    title: documentChangeRequestTitle(r.request.documentCategory, r.request.action),
+    summary: r.request.action === 'remove' ? 'Remove on file' : 'Replace on file',
+    detail: r.request.customerNotes,
+    urgency: null,
+    invoiceId: null,
+    invoiceNumberFormatted: null,
+    vehicleId: r.request.vehicleId,
+    vehicleLabel: r.request.vehicleId ? vehicleLabel(r.vehicle?.busNumber ?? null, r.vehicle?.unitTag ?? null, r.vehicle?.make ?? null, r.vehicle?.model ?? null) : null,
+    resultInvoiceId: null,
+    resultVehicleId: null,
+    reviewedAt: r.request.reviewedAt?.toISOString() ?? null,
+    reviewReason: r.request.reviewReason,
+    correctionPayload: null,
+    pendingFileId: r.request.pendingFileId,
+    documentCategory: r.request.documentCategory,
+    documentAction: r.request.action,
+  }))
+}
+
 function matchesSearch(row: StaffPortalRequestRow, q: string): boolean {
   const hay = [
     row.customerName,
@@ -351,7 +413,7 @@ export async function listStaffPortalRequests(db: Db, filter: ListStaffPortalReq
 
   const kinds: PortalRequestReviewKind[] = filter.kind
     ? [filter.kind]
-    : ['service', 'invoice_change', 'vehicle_change', 'general', 'new_vehicle']
+    : ['service', 'invoice_change', 'vehicle_change', 'general', 'new_vehicle', 'document']
 
   let items: StaffPortalRequestRow[] = []
   for (const kind of kinds) {
@@ -360,6 +422,7 @@ export async function listStaffPortalRequests(db: Db, filter: ListStaffPortalReq
     else if (kind === 'vehicle_change') items.push(...await mapVehicleChangeRows(db, status))
     else if (kind === 'general') items.push(...await mapGeneralRows(db, status))
     else if (kind === 'new_vehicle') items.push(...await mapNewVehicleRows(db, status))
+    else if (kind === 'document') items.push(...await mapDocumentChangeRows(db, status))
   }
 
   if (filter.q) items = items.filter(row => matchesSearch(row, filter.q!))
@@ -411,6 +474,11 @@ export async function rejectPortalRequest(
   if (kind === 'new_vehicle') {
     const [row] = await db.update(newVehicleRequests).set(patch).where(and(eq(newVehicleRequests.id, id), eq(newVehicleRequests.status, 'pending'))).returning()
     if (!row) throw new PortalRequestReviewError('NOT_FOUND')
+    await notifyPortalRequestStatus(db, kind, row, 'rejected').catch(() => {})
+    return row
+  }
+  if (kind === 'document') {
+    const row = await rejectDocumentChangeRequest(db, id, actorId, reason)
     await notifyPortalRequestStatus(db, kind, row, 'rejected').catch(() => {})
     return row
   }
@@ -664,6 +732,11 @@ export async function approvePortalRequest(
     case 'vehicle_change': return approveVehicleChangeRequest(db, id, actorId, reason)
     case 'general': return approveGeneralRequest(db, id, actorId, reason)
     case 'new_vehicle': return approveNewVehicleRequest(db, id, actorId, reason)
+    case 'document': {
+      const request = await approveDocumentChangeRequest(db, id, actorId, reason)
+      await notifyPortalRequestStatus(db, kind, request, 'approved').catch(() => {})
+      return { request }
+    }
     default: throw new PortalRequestReviewError('NOT_FOUND')
   }
 }

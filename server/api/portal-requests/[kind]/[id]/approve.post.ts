@@ -35,7 +35,9 @@ export default defineEventHandler(async (event) => {
           ? 'new_vehicle_request'
           : kind === 'general'
             ? 'portal_general_request'
-            : 'service_request'
+            : kind === 'document'
+              ? 'document_change_request'
+              : 'service_request'
 
     await writeAudit(event, {
       entityType,

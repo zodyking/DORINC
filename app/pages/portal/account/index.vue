@@ -33,6 +33,7 @@ interface PortalMePayload {
     fileSizeBytes: number
     createdAt: string
   } | null
+  pendingTaxExemptionRequest: boolean
 }
 
 const { data, error, refresh } = useClientFetch<PortalMePayload>('/api/portal/me')
@@ -150,14 +151,12 @@ async function updatePassword() {
         </div>
       </div>
 
-      <DocumentsEntityDocumentPanel
-        title="Tax exemption form"
-        description="Upload your signed tax exemption certificate. Our team will verify it and update your account."
+      <DocumentsEntityDocumentPortalPanel
         category="tax_exemption_form"
         :document="data.taxExemptionDocument"
-        upload-url="/api/portal/documents/tax-exemption"
-        :can-upload="true"
-        @uploaded="refresh()"
+        :pending-request="data.pendingTaxExemptionRequest"
+        change-request-url="/api/portal/documents/tax-exemption/change-request"
+        @submitted="refresh()"
       />
     </div>
   </section>
