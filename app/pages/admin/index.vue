@@ -150,6 +150,7 @@ const dismissAlertBusy = ref<string | null>(null)
 type ControlPanelSectionId
   = | 'business'
     | 'email'
+    | 'chat'
     | 'notifications'
     | 'invoice'
     | 'catalog'
@@ -162,6 +163,7 @@ type ControlPanelSectionId
 const openSections = reactive<Record<ControlPanelSectionId, boolean>>({
   business: false,
   email: false,
+  chat: false,
   notifications: false,
   invoice: false,
   catalog: false,
@@ -188,7 +190,7 @@ function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
 
 watch(() => route.query.tab, (tab) => {
   const valid: ControlPanelSectionId[] = [
-    'business', 'email', 'notifications', 'invoice', 'catalog', 'line-detection',
+    'business', 'email', 'chat', 'notifications', 'invoice', 'catalog', 'line-detection',
     'import', 'backup', 'ai', 'security',
   ]
   if (typeof tab === 'string' && valid.includes(tab as ControlPanelSectionId)) {
@@ -392,6 +394,17 @@ async function testAiConnection() {
         >
           <SettingsEmailPanel @saved="refresh()" />
           <SettingsImapPanel @saved="refresh()" />
+        </ControlPanelSection>
+
+        <ControlPanelSection
+          id="chat"
+          title="Chat"
+          icon="💬"
+          subtitle="Team chat and direct messaging"
+          :open="openSections.chat"
+          @update:open="setSectionOpen('chat', $event)"
+        >
+          <SettingsChatPanel @saved="refresh()" />
         </ControlPanelSection>
 
         <ControlPanelSection

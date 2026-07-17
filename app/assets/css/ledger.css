@@ -1625,6 +1625,16 @@ section.page.active.dm-page{
   height:min(720px, calc(100vh - 180px));
   min-height:min(480px, calc(100vh - 180px));
 }
+.dm-layout--team-only{
+  grid-template-columns:minmax(0, 1fr);
+}
+.dm-layout--team-only .dm-main{
+  display:flex;
+}
+.dm-channel-tabs--standalone{
+  margin-bottom:12px;
+  max-width:320px;
+}
 .dm-sidebar{
   border-right:1px solid #e2e8f0; display:flex; flex-direction:column; min-height:0;
   min-width:0; max-width:100%; background:#f8fafc;

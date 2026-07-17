@@ -7,6 +7,7 @@ const props = defineProps<{
   loading?: boolean
   sending?: boolean
   currentUserId?: string
+  hideBack?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -78,7 +79,13 @@ watch(() => props.conversation?.id, () => {
 <template>
   <div class="dm-thread">
     <header v-if="conversation" class="dm-thread-head">
-      <button type="button" class="dm-back-btn" aria-label="Back to conversations" @click="emit('back')">
+      <button
+        v-if="!hideBack"
+        type="button"
+        class="dm-back-btn"
+        aria-label="Back to conversations"
+        @click="emit('back')"
+      >
         ←
       </button>
       <div class="dm-thread-peer">

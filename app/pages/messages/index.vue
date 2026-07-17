@@ -9,6 +9,9 @@ definePageMeta({
 const auth = useAuthStore()
 const dm = useDirectMessages()
 
+const directMessagingEnabled = ref(false)
+const chatSettingsLoaded = ref(false)
+
 const showThread = ref(false)
 const newDmOpen = ref(false)
 const newEmailOpen = ref(false)
@@ -74,16 +77,48 @@ function removeEmailAttachment(index: number) {
 }
 
 const hasActiveConversation = computed(() => !!dm.activeConversation)
-const showThreadPanel = computed(() => showThread.value && hasActiveConversation.value)
+const teamOnlyMode = computed(() => chatSettingsLoaded.value && !directMessagingEnabled.value && dm.messageChannel === 'dm')
+const showThreadPanel = computed(() => {
+  if (teamOnlyMode.value && hasActiveConversation.value) return true
+  return showThread.value && hasActiveConversation.value
+})
+const inThreadLayout = computed(() => showThreadPanel.value || teamOnlyMode.value)
+
+async function loadChatSettings() {
+  try {
+    const res = await $fetch<{ settings: { directMessagingEnabled: boolean } }>('/api/messages/chat-settings')
+    directMessagingEnabled.value = res.settings.directMessagingEnabled === true
+  }
+  catch {
+    directMessagingEnabled.value = false
+  }
+  finally {
+    chatSettingsLoaded.value = true
+  }
+}
+
+async function openTeamConversationIfNeeded() {
+  if (!teamOnlyMode.value) return
+  const team = dm.conversations.find(c => c.type === 'team')
+  if (!team) return
+  if (dm.activeConversationId !== team.id) {
+    await dm.openConversation(team.id)
+  }
+  revealThread()
+}
 
 function revealThread() {
   if (dm.activeConversation) showThread.value = true
 }
 
 onMounted(async () => {
+  await loadChatSettings()
   await dm.fetchConversations()
   const convId = useRoute().query.conversation as string | undefined
-  if (convId) {
+  if (teamOnlyMode.value) {
+    await openTeamConversationIfNeeded()
+  }
+  else if (convId) {
     await dm.openConversation(convId)
     revealThread()
   }
@@ -95,8 +130,17 @@ watch(() => dm.conversationSearch, () => {
   conversationSearchTimer = setTimeout(() => { void dm.fetchConversations() }, 300)
 })
 
-watch(() => dm.messageChannel, () => {
-  showThread.value = false
+watch(() => dm.messageChannel, async () => {
+  if (teamOnlyMode.value) {
+    await openTeamConversationIfNeeded()
+  }
+  else {
+    showThread.value = false
+  }
+})
+
+watch(teamOnlyMode, async (enabled) => {
+  if (enabled) await openTeamConversationIfNeeded()
 })
 
 watch(() => dm.activeConversationId, (id) => {
@@ -239,13 +283,13 @@ async function setEmailShowAll(showAll: boolean) {
 </script>
 
 <template>
-  <section class="page active dm-page" :class="{ 'dm-page--in-thread': showThreadPanel }">
+  <section class="page active dm-page" :class="{ 'dm-page--in-thread': inThreadLayout }">
     <StaffPageHead title="Messages" subtitle="Team chat and shared customer email threads">
       <template #actions>
         <button type="button" class="btn" @click="openNewEmail">
           New email
         </button>
-        <button type="button" class="btn primary" @click="openNewDm">
+        <button v-if="directMessagingEnabled" type="button" class="btn primary" @click="openNewDm">
           ✉ New message
         </button>
       </template>
@@ -256,11 +300,45 @@ async function setEmailShowAll(showAll: boolean) {
       <button type="button" class="btn sm" @click="dm.fetchConversations()">Retry</button>
     </div>
 
-    <div class="dm-layout" :class="{ 'show-thread': showThreadPanel }">
-      <aside class="dm-sidebar">
+    <div
+      v-if="teamOnlyMode"
+      class="dm-channel-tabs dm-channel-tabs--standalone"
+      role="tablist"
+      aria-label="Message channels"
+    >
+      <button
+        type="button"
+        role="tab"
+        class="dm-channel-tab"
+        :class="{ on: dm.messageChannel === 'dm' }"
+        :aria-selected="dm.messageChannel === 'dm'"
+        @click="setChannel('dm')"
+      >
+        Team
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="dm-channel-tab"
+        :class="{ on: dm.messageChannel === 'email' }"
+        :aria-selected="dm.messageChannel === 'email'"
+        @click="setChannel('email')"
+      >
+        Email
+      </button>
+    </div>
+
+    <div
+      class="dm-layout"
+      :class="{
+        'show-thread': showThreadPanel,
+        'dm-layout--team-only': teamOnlyMode,
+      }"
+    >
+      <aside v-if="!teamOnlyMode" class="dm-sidebar">
         <div class="dm-sidebar-head">
           <div class="dm-sidebar-actions">
-            <button type="button" class="btn primary" aria-label="New message" @click="openNewDm">
+            <button v-if="directMessagingEnabled" type="button" class="btn primary" aria-label="New message" @click="openNewDm">
               New message
             </button>
             <button type="button" class="btn" aria-label="New email" @click="openNewEmail">
@@ -332,7 +410,8 @@ async function setEmailShowAll(showAll: boolean) {
           <div v-if="!dm.loadingConversations && !dm.conversations.length && !dm.fetchError" class="dm-list-empty">
             <b>No conversations yet</b>
             <span v-if="dm.messageChannel === 'email'">Sync your inbox in Control Panel or start a new customer email.</span>
-            <span v-else>Start a new message to chat with a teammate.</span>
+            <span v-else-if="directMessagingEnabled">Start a new message to chat with a teammate.</span>
+            <span v-else>Team chat is available when direct messaging is disabled.</span>
           </div>
         </div>
       </aside>
@@ -344,6 +423,7 @@ async function setEmailShowAll(showAll: boolean) {
           :loading="dm.loadingMessages"
           :sending="dm.sending"
           :current-user-id="auth.user?.id"
+          :hide-back="teamOnlyMode"
           @back="onBack"
           @send="onSend"
           @deletion-requested="onDeletionRequested"

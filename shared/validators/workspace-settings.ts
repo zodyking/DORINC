@@ -30,6 +30,10 @@ export const invoiceWorkspaceSettingsSchema = z.object({
   managerApprovalThreshold: z.string().regex(/^\d+(\.\d{1,2})?$/).default('5000.00'),
 })
 
+export const chatWorkspaceSettingsSchema = z.object({
+  directMessagingEnabled: z.boolean().default(false),
+})
+
 export const notificationSettingsSchema = z.object({
   staffLoginAlert: z.boolean().default(true),
   customerLoginAlert: z.boolean().default(true),
