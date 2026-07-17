@@ -4,7 +4,6 @@ import {
   InvoiceSendServiceError,
   queueInvoiceSend,
 } from '../../../services/invoice-send.service'
-import { advanceInvoiceSendPipeline } from '../../../services/invoice-send-pipeline.service'
 import { getCustomer } from '../../../services/customers.service'
 import { postInvoiceSentTeamMessage } from '../../../services/workflow-chat.service'
 import { resolveCustomerDisplayName } from '../../../services/entity-snapshots'
@@ -87,9 +86,6 @@ export default defineEventHandler(async (event) => {
         customerId: inv.customerId,
         customerName,
       }).catch(() => {})
-      void advanceInvoiceSendPipeline(id).catch((err) => {
-        console.error('[send] inline pipeline kickoff failed', id, err)
-      })
     }
 
     return {
