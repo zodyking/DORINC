@@ -407,15 +407,6 @@ export async function batchGetInvoiceRevertStatus(
     }
   }
 
-  const lineCounts = await db.select({
-    invoiceId: invoiceLineItems.invoiceId,
-    value: count(),
-  })
-    .from(invoiceLineItems)
-    .where(inArray(invoiceLineItems.invoiceId, draftIds))
-    .groupBy(invoiceLineItems.invoiceId)
-  const lineCountByInvoice = new Map(lineCounts.map(r => [r.invoiceId, Number(r.value)]))
-
   for (const id of draftIds) {
     if (activeSessionIds.has(id)) {
       result.set(id, { revertible: false, reason: 'EDIT_SESSION_ACTIVE' })
@@ -425,10 +416,8 @@ export async function batchGetInvoiceRevertStatus(
       result.set(id, { revertible: false, reason: 'INVOICE_MODIFIED' })
       continue
     }
-    if ((lineCountByInvoice.get(id) ?? 0) > 0) {
-      result.set(id, { revertible: false, reason: 'HAS_LINE_ITEMS' })
-      continue
-    }
+    // Line items copied from the service log on convert are deleted during revert.
+    // Manual invoice edits (including added line items) are blocked via INVOICE_MODIFIED above.
     result.set(id, { revertible: true, reason: null })
   }
 
