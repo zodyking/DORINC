@@ -18,7 +18,7 @@ import {
   buildSmtpTestEmail,
   buildUserSignupPendingEmail,
 } from '../server/mail/templates/system.mjs'
-import { buildStyledEmail } from '../server/mail/email-layout.mjs'
+import { buildStyledEmail, buildCustomerSupportNote } from '../server/mail/email-layout.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const OUT_DIR = join(__dirname, '..', 'Agent-Files', 'email')
@@ -45,20 +45,21 @@ function portalUrl(path = '') {
 
 function buildInvoiceSentEmail(input) {
   const detailUrl = portalUrl(`/invoices/${input.invoiceId}`)
+  const support = buildCustomerSupportNote(brand, APP_URL)
   return buildStyledEmail({
     subject: `Invoice ${input.invoiceNumber} is ready`,
-    text: `Invoice ${input.invoiceNumber} is ready in your portal: ${detailUrl}`,
+    text: `Invoice ${input.invoiceNumber} is ready in your portal: ${detailUrl}\n\n${support.text}`,
     eyebrow: 'Invoice',
     headline: `Invoice ${input.invoiceNumber}`,
     lead: `Invoice ${input.invoiceNumber} has been sent and is available in your customer portal.`,
     highlight: input.total
-      ? { label: 'Invoice total', value: input.total, status: 'Ready', statusTone: 'ok' }
+      ? { label: 'Invoice total', value: input.total }
       : undefined,
     details: [
-      { label: 'Customer', value: input.recipientName },
       { label: 'Invoice', value: input.invoiceNumber },
       input.dueDate ? { label: 'Due date', value: input.dueDate } : null,
     ].filter(Boolean),
+    note: support,
     primaryAction: { href: detailUrl, label: 'View invoice in the portal' },
     appUrl: APP_URL,
     brand,
@@ -67,23 +68,19 @@ function buildInvoiceSentEmail(input) {
 
 function buildRequestStatusEmail(input) {
   const requestsUrl = portalUrl('/requests')
+  const support = buildCustomerSupportNote(brand, APP_URL)
   const statusLabel = input.status === 'approved' ? 'approved' : 'rejected'
   return buildStyledEmail({
     subject: `Service request ${statusLabel}`,
-    text: `Your request was ${statusLabel}`,
+    text: `Your request was ${statusLabel}\n\n${support.text}`,
     eyebrow: 'Portal request',
     headline: `Request ${statusLabel}`,
     lead: `Your service request "${input.requestTitle}" has been ${statusLabel}.`,
-    highlight: {
-      label: 'Decision',
-      value: input.status === 'approved' ? 'Approved' : 'Rejected',
-      status: input.status === 'approved' ? 'Completed' : 'Closed',
-      statusTone: input.status === 'approved' ? 'ok' : 'error',
-    },
     details: [
       { label: 'Request', value: input.requestTitle },
-      { label: 'Customer', value: input.recipientName },
+      { label: 'Status', value: statusLabel },
     ],
+    note: support,
     primaryAction: { href: requestsUrl, label: 'View your requests' },
     appUrl: APP_URL,
     brand,
@@ -92,16 +89,17 @@ function buildRequestStatusEmail(input) {
 
 function buildEstimateSentEmail(input) {
   const detailUrl = portalUrl(`/estimates/${input.estimateId}`)
+  const support = buildCustomerSupportNote(brand, APP_URL)
   return buildStyledEmail({
     subject: `Estimate ${input.estimateNumber} is ready for review`,
-    text: `Estimate ${input.estimateNumber} is ready: ${detailUrl}`,
+    text: `Estimate ${input.estimateNumber} is ready: ${detailUrl}\n\n${support.text}`,
     eyebrow: 'Estimate',
     headline: `Estimate ${input.estimateNumber}`,
     lead: `Estimate ${input.estimateNumber} is ready for your review in the customer portal.`,
     details: [
       { label: 'Estimate', value: input.estimateNumber },
-      { label: 'Customer', value: input.recipientName },
     ],
+    note: support,
     primaryAction: { href: detailUrl, label: 'View estimate in the portal' },
     appUrl: APP_URL,
     brand,

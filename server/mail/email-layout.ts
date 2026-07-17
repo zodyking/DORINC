@@ -21,4 +21,5 @@ export {
   normalizeEmailBrand,
   wrapEmailHtml,
   buildStyledEmail,
+  buildCustomerSupportNote,
 } from './email-layout.mjs'

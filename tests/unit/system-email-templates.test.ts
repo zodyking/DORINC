@@ -25,6 +25,7 @@ describe('system email templates', () => {
     logoUrl: `${appUrl}/images/dorinc-icon-trans.png`,
     logoInitial: 'A',
     addressLines: ['123 Main'],
+    email: 'billing@acme.test',
     appUrl,
     settingsUrl: `${appUrl}/admin?tab=notifications`,
     helpUrl: `${appUrl}/help`,
@@ -66,6 +67,7 @@ describe('system email templates', () => {
     })
     expect(mail.html).toContain('pat.r')
     expect(mail.html).toContain('Sign in to the portal')
+    expect(mail.html).toContain('billing@acme.test')
     expect(mail.text).toContain('Temporary password')
   })
 
@@ -101,6 +103,8 @@ describe('system email templates', () => {
     })
     expect(mail.html).toContain('INV-000001')
     expect(mail.html).toContain('Due date')
+    expect(mail.html).toContain('billing@acme.test')
+    expect(mail.html).toContain('customer portal')
     expect(mail.text).toContain('attached')
   })
 

@@ -3,6 +3,7 @@
  */
 import {
   EMAIL_BRAND_NAME,
+  buildCustomerSupportNote,
   buildStyledEmail,
   escapeHtml,
 } from '../email-layout.mjs'
@@ -123,6 +124,7 @@ export function buildSmtpTestEmail({
 export function buildPortalCredentialEmail({ name, username, tempPassword, appUrl, brand }) {
   const resolvedBrand = brandNameFrom({ brand })
   const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login`
+  const support = buildCustomerSupportNote(brand, appUrl)
   const subject = 'Your Portal Access'
   const text = [
     `Hello ${name},`,
@@ -134,6 +136,8 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
     `Temporary password: ${tempPassword}`,
     '',
     'This temporary password expires in 7 days. You will be required to choose a new password on first login.',
+    '',
+    support.text,
   ].join('\n')
 
   return buildStyledEmail({
@@ -146,11 +150,13 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
       { label: 'Username', value: username },
       { label: 'Temporary password', value: tempPassword },
       { label: 'Expires', value: '7 days' },
-      { label: 'Recipient', value: name },
     ],
     note: {
-      title: 'Security note',
-      body: 'You will choose a new password on first login. If you did not expect this email, contact the shop that issued it.',
+      title: 'Before you sign in',
+      bodyHtml: [
+        'You will choose a new password on first login. If you did not expect this email, contact us right away.',
+        support.bodyHtml,
+      ].join(' '),
     },
     primaryAction: { href: loginUrl, label: 'Sign in to the portal' },
     appUrl,
@@ -192,8 +198,6 @@ export function buildBackupNotificationEmail({
     highlight: {
       label: 'Status',
       value: success ? 'Success' : 'Failed',
-      status: success ? 'Completed' : 'Error',
-      statusTone: success ? 'ok' : 'error',
     },
     details: [
       { label: 'File', value: filename },
@@ -222,6 +226,7 @@ export function buildInvoiceAttachedEmail({
 }) {
   const dueLine = dueDate || null
   const totalLine = total || null
+  const support = buildCustomerSupportNote(brand, appUrl)
   const subject = `Invoice ${invoiceNumber} Is Ready`
   const text = [
     `Hello ${recipientName},`,
@@ -229,6 +234,8 @@ export function buildInvoiceAttachedEmail({
     `Invoice ${invoiceNumber} is attached to this email.`,
     dueLine ? `Due date: ${dueLine}` : '',
     totalLine ? `Total: ${totalLine}` : '',
+    '',
+    support.text,
   ].filter(Boolean).join('\n')
 
   return buildStyledEmail({
@@ -241,20 +248,13 @@ export function buildInvoiceAttachedEmail({
       ? {
           label: 'Invoice total',
           value: totalLine,
-          status: 'Ready',
-          statusTone: 'ok',
         }
       : undefined,
     details: [
       { label: 'Invoice', value: invoiceNumber },
       dueLine ? { label: 'Due date', value: dueLine } : null,
-      { label: 'Recipient', value: recipientName },
-      { label: 'Attachment', value: 'PDF included' },
     ].filter(Boolean),
-    note: {
-      title: 'Need help?',
-      body: 'If you have questions, reply to this email or submit a request through your customer portal.',
-    },
+    note: support,
     appUrl,
     brand,
   })
@@ -340,6 +340,7 @@ export function buildCustomerAutoResponderEmail({
   brand,
 }) {
   const resolvedBrand = brandNameFrom({ brand })
+  const support = buildCustomerSupportNote(brand, appUrl)
   const greeting = recipientName?.trim() ? `Hi ${recipientName.trim()},` : 'Hello,'
   const bodyParagraphs = String(message || '')
     .split(/\n{2,}/)
@@ -348,7 +349,7 @@ export function buildCustomerAutoResponderEmail({
   const bodyHtml = bodyParagraphs
     .map(p => `<p style="margin:0 0 14px;color:#334155;font-size:16px;line-height:27px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
     .join('')
-  const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
+  const text = [greeting, '', ...bodyParagraphs, '', support.text, '', resolvedBrand].join('\n')
 
   return buildStyledEmail({
     subject,
@@ -359,7 +360,7 @@ export function buildCustomerAutoResponderEmail({
     bodyHtml,
     note: {
       title: 'What happens next',
-      body: `A member of the ${resolvedBrand} team will review your message and reply as soon as possible.`,
+      bodyHtml: `A member of the ${escapeHtml(resolvedBrand)} team will review your message and reply as soon as possible. ${support.bodyHtml}`,
     },
     footerNote: null,
     footerLinks: false,
@@ -440,8 +441,6 @@ export function buildDeletionRequestResultEmail({
     highlight: {
       label: 'Decision',
       value: approved ? 'Approved' : 'Denied',
-      status: approved ? 'Completed' : 'Rejected',
-      statusTone: approved ? 'ok' : 'error',
     },
     details: [
       { label: 'Record', value: entityLabel },
@@ -524,8 +523,6 @@ export function buildInvoicePendingApprovalEmail({
       ? {
           label: 'Invoice total',
           value: total,
-          status: 'Pending',
-          statusTone: 'warn',
         }
       : undefined,
     details: [
@@ -734,8 +731,6 @@ export function buildServiceLogSentToInvoiceStaffEmail({
     highlight: {
       label: 'Service log',
       value: serviceLogLabel,
-      status: 'Needs completion',
-      statusTone: 'warn',
     },
     details: [
       senderName ? { label: 'Sent by', value: senderName } : null,
