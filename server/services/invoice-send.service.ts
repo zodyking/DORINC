@@ -6,7 +6,7 @@ import { formatInvoiceNumber } from '../db/schema/invoices'
 import { buildInvoiceSentEmail } from '../mail/customer-email-templates'
 import { listContacts } from './customers.service'
 import { enqueueJob } from './jobs.service'
-import { ensureInvoicePdfForSend, InvoicePdfServiceError } from './invoice-pdf.service'
+import { ensureInvoicePdfForSend, getInvoicePdfRecord, InvoicePdfServiceError } from './invoice-pdf.service'
 import {
   assertInvoiceSendable,
   getInvoice,
@@ -81,6 +81,36 @@ export async function findLatestInvoiceSendJob(db: Db, invoiceId: string) {
     sql`${workerJobs.payload}->>'invoiceId' = ${invoiceId}`,
   )).orderBy(desc(workerJobs.createdAt)).limit(1)
   return rows[0] ?? null
+}
+
+const STALE_SEND_JOB_MS = 90_000
+
+/**
+ * Fail invoice_send jobs that are still waiting on PDF generation so staff can retry.
+ * Common after deploys that moved PDF rendering to the synchronous send path.
+ */
+export async function reclaimStaleInvoiceSendJob(db: Db, invoiceId: string): Promise<boolean> {
+  const pending = await findPendingInvoiceSendJob(db, invoiceId)
+  if (!pending) return false
+
+  const pdfRecord = await getInvoicePdfRecord(db, invoiceId)
+  if (pdfRecord) return false
+
+  const anchor = pending.startedAt ?? pending.createdAt
+  const ageMs = Date.now() - anchor.getTime()
+  const waitingOnPdf = pending.lastError?.includes('Waiting for PDF')
+    || pending.lastError?.includes('PDF render')
+  const stale = ageMs >= STALE_SEND_JOB_MS || waitingOnPdf
+
+  if (!stale) return false
+
+  await db.update(workerJobs).set({
+    status: 'failed',
+    finishedAt: new Date(),
+    lastError: pending.lastError ?? 'Stale send job reclaimed — click Send Invoice again',
+  }).where(eq(workerJobs.id, pending.id))
+
+  return true
 }
 
 export async function getInvoiceSendDeliveryStatus(db: Db, invoiceId: string) {
@@ -158,12 +188,15 @@ export async function queueInvoiceSend(
 
   const existing = await findPendingInvoiceSendJob(db, invoiceId)
   if (existing) {
-    return {
-      invoice,
-      job: existing,
-      recipient,
-      pdfJobId: null,
-      alreadyQueued: true,
+    const reclaimed = await reclaimStaleInvoiceSendJob(db, invoiceId)
+    if (!reclaimed) {
+      return {
+        invoice,
+        job: existing,
+        recipient,
+        pdfJobId: null,
+        alreadyQueued: true,
+      }
     }
   }
 

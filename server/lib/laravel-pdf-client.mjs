@@ -46,7 +46,7 @@ export async function renderDocumentPdfBuffer(payload) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     })
   }
   catch (err) {
@@ -54,17 +54,21 @@ export async function renderDocumentPdfBuffer(payload) {
     throw new Error(`Laravel PDF service failed: ${cause}`, { cause: err })
   }
 
+  const raw = Buffer.from(await res.arrayBuffer())
+
   if (!res.ok) {
     let detail = res.statusText
+    const text = raw.toString('utf8')
     try {
-      const body = await res.json()
+      const body = JSON.parse(text)
       if (body?.message) detail = body.message
     }
     catch {
-      // ignore
+      const title = text.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim()
+      if (title) detail = title
     }
     throw new Error(`Laravel PDF service failed (${res.status}): ${detail}`)
   }
 
-  return Buffer.from(await res.arrayBuffer())
+  return raw
 }

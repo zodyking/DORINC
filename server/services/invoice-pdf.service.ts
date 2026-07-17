@@ -17,6 +17,7 @@ import { enqueuePdfRenderJob } from './pdf-render.service'
 import { getInvoiceDetail, InvoicesServiceError } from './invoices.service'
 import {
   type InvoicePdfTemplateSource,
+  getBuiltInInvoicePdfTemplate,
   pdfRenderOptionsFromTemplate,
   resolveInvoicePdfTemplate,
 } from './invoice-template-source.service'
@@ -27,6 +28,7 @@ export type InvoicePdfServiceErrorCode
   = 'NOT_FOUND'
     | 'NOT_FINALIZED'
     | 'NO_PDF'
+    | 'PDF_FAILED'
 
 export class InvoicePdfServiceError extends Error {
   constructor(public readonly code: InvoicePdfServiceErrorCode, message?: string) {
@@ -135,6 +137,41 @@ async function cancelPendingPdfRenderJobs(db: Db, invoiceId: string) {
     ))
 }
 
+/** Render invoice PDF; fall back to the built-in template when a custom blade fails. */
+async function renderInvoicePdfWithFallback(
+  db: Db,
+  detail: Awaited<ReturnType<typeof getInvoiceDetail>>,
+  template: InvoicePdfTemplateSource,
+): Promise<{ pdf: Buffer, templateVersionId: string | null }> {
+  const primaryPayload = await buildInvoicePdfPayload(db, detail, template)
+
+  try {
+    const pdf = await renderDocumentPdfBuffer(primaryPayload)
+    return { pdf, templateVersionId: template.templateVersionId }
+  }
+  catch (primaryErr) {
+    if (!template.bladeSource) {
+      const message = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
+      throw new InvoicePdfServiceError('PDF_FAILED', message)
+    }
+
+    const fallbackTemplate = getBuiltInInvoicePdfTemplate()
+    const fallbackPayload = await buildInvoicePdfPayload(db, detail, fallbackTemplate)
+    try {
+      const pdf = await renderDocumentPdfBuffer(fallbackPayload)
+      return { pdf, templateVersionId: null }
+    }
+    catch (fallbackErr) {
+      const primaryMessage = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
+      const fallbackMessage = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+      throw new InvoicePdfServiceError(
+        'PDF_FAILED',
+        `Custom template failed (${primaryMessage}); built-in fallback also failed (${fallbackMessage})`,
+      )
+    }
+  }
+}
+
 async function storeOfficialInvoicePdf(
   db: Db,
   invoiceId: string,
@@ -215,14 +252,17 @@ export async function ensureInvoicePdfForSend(
 
   await cancelPendingPdfRenderJobs(db, invoiceId)
 
-  const payload = await buildInvoicePdfPayload(db, detail, template)
   const filename = `${detail.invoiceNumberFormatted}.pdf`
 
   let pdf: Buffer
+  let storedTemplateVersionId: string | null
   try {
-    pdf = await renderDocumentPdfBuffer(payload)
+    const rendered = await renderInvoicePdfWithFallback(db, detail, template)
+    pdf = rendered.pdf
+    storedTemplateVersionId = rendered.templateVersionId
   }
   catch (err) {
+    if (err instanceof InvoicePdfServiceError && err.code === 'PDF_FAILED') throw err
     const message = err instanceof Error ? err.message : String(err)
     throw new InvoicePdfServiceError('PDF_FAILED', message)
   }
@@ -232,7 +272,7 @@ export async function ensureInvoicePdfForSend(
     invoiceId,
     pdf,
     filename,
-    template.templateVersionId,
+    storedTemplateVersionId,
     actorId,
   )
 
@@ -241,7 +281,7 @@ export async function ensureInvoicePdfForSend(
     job: null,
     invoiceFile: record,
     alreadyExists: false,
-    templateVersionId: template.templateVersionId,
+    templateVersionId: storedTemplateVersionId,
   }
 }
 
@@ -348,8 +388,7 @@ export async function previewInvoicePdf(db: Db, invoiceId: string) {
   }
 
   const template = await resolveInvoicePdfTemplate(db)
-  const payload = await buildInvoicePdfPayload(db, detail, template)
-  const pdf = await renderDocumentPdfBuffer(payload)
+  const { pdf } = await renderInvoicePdfWithFallback(db, detail, template)
 
   return {
     pdf,

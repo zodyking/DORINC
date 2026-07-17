@@ -261,11 +261,14 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         }
 
         const failedPdf = await loadFailedPdfJob(pool, invoiceId)
+        if (failedPdf?.last_error?.includes('Superseded by synchronous send render')) {
+          throw new Error('Invoice PDF was not generated — open the invoice and click Send Invoice again.')
+        }
         if (failedPdf) {
           throw new Error(`PDF render failed: ${failedPdf.last_error ?? 'unknown error'}`)
         }
 
-        throw new Error('Invoice PDF is not ready — ensure pdf-worker is running')
+        throw new Error('Invoice PDF is not ready — open the invoice and click Send Invoice again.')
       }
 
       if (!payload.subject) {

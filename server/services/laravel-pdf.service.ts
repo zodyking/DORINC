@@ -39,17 +39,21 @@ async function renderDocumentBuffer(
     throw new Error(`Laravel PDF service failed: ${cause}`, { cause: err })
   }
 
+  const raw = await res.arrayBuffer()
+
   if (!res.ok) {
     let detail = res.statusText
+    const text = Buffer.from(raw).toString('utf8')
     try {
-      const body = await res.json() as { message?: string }
+      const body = JSON.parse(text) as { message?: string }
       if (body?.message) detail = body.message
     }
     catch {
-      // ignore
+      const title = text.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim()
+      if (title) detail = title
     }
     throw new Error(`Laravel PDF service failed (${res.status}): ${detail}`)
   }
 
-  return Buffer.from(await res.arrayBuffer())
+  return Buffer.from(raw)
 }
