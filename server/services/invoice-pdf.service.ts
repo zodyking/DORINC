@@ -234,6 +234,37 @@ export async function previewInvoicePdf(db: Db, invoiceId: string) {
   }
 }
 
+export type InvoicePdfDisplaySource = 'official' | 'preview'
+
+/** Prefer stored official PDFs; otherwise render a live preview. */
+export async function resolveInvoicePdfForDisplay(db: Db, invoiceId: string): Promise<{
+  pdf: Buffer
+  filename: string
+  source: InvoicePdfDisplaySource
+}> {
+  const record = await getInvoicePdfRecord(db, invoiceId)
+  if (record) {
+    try {
+      const { file } = await getInvoicePdfDownload(db, invoiceId)
+      return {
+        pdf: file.binaryData,
+        filename: file.originalFilename,
+        source: 'official',
+      }
+    }
+    catch (err) {
+      if (!(err instanceof InvoicePdfServiceError && err.code === 'NO_PDF')) throw err
+    }
+  }
+
+  const preview = await previewInvoicePdf(db, invoiceId)
+  return {
+    pdf: preview.pdf,
+    filename: preview.filename,
+    source: 'preview',
+  }
+}
+
 export async function getInvoicePdfStatus(db: Db, invoiceId: string) {
   const record = await getInvoicePdfRecord(db, invoiceId)
   const pending = await getPendingPdfRenderJob(db, invoiceId)

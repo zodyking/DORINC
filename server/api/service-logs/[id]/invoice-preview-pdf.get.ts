@@ -2,7 +2,7 @@ import { setResponseHeader } from 'h3'
 import { useDb } from '../../../db/client'
 import {
   InvoicePdfServiceError,
-  previewInvoicePdf,
+  resolveInvoicePdfForDisplay,
 } from '../../../services/invoice-pdf.service'
 import { getServiceLog, ServiceLogsServiceError } from '../../../services/service-logs.service'
 import { apiError } from '../../../utils/api-error'
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
       throw apiError(event, 'NOT_FOUND', 'This service log is not linked to an invoice')
     }
 
-    const { pdf, filename } = await previewInvoicePdf(db, log.invoiceId)
+    const { pdf, filename } = await resolveInvoicePdfForDisplay(db, log.invoiceId)
 
     setResponseHeader(event, 'Content-Type', 'application/pdf')
     setResponseHeader(event, 'Content-Disposition', `inline; filename="${filename}"`)

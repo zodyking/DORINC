@@ -2,7 +2,7 @@ import { setResponseHeader } from 'h3'
 import { useDb } from '../../../db/client'
 import {
   InvoicePdfServiceError,
-  previewInvoicePdf,
+  resolveInvoicePdfForDisplay,
 } from '../../../services/invoice-pdf.service'
 import { apiError } from '../../../utils/api-error'
 import { throwPdfRenderApiError } from '../../../utils/pdf-api-error'
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const { id } = validateParams(event, idParamSchema)
 
   try {
-    const { pdf, filename } = await previewInvoicePdf(useDb(), id)
+    const { pdf, filename } = await resolveInvoicePdfForDisplay(useDb(), id)
 
     setResponseHeader(event, 'Content-Type', 'application/pdf')
     setResponseHeader(event, 'Content-Disposition', `inline; filename="${filename}"`)
