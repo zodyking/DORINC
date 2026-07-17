@@ -1,6 +1,12 @@
 <script setup lang="ts">
 // Vehicle detail (mockup: PAGE: VEHICLE DETAIL).
 import { formatAuditChangeMessage } from '#shared/audit-messages'
+import {
+  invoiceDateDisplay,
+  invoiceStatusPill,
+  moneyDisplay,
+  type InvoiceStatus,
+} from '~/utils/invoices-ui'
 definePageMeta({ layout: 'staff' })
 
 interface Vehicle {
@@ -38,6 +44,16 @@ interface HistoryRow {
   createdAt: string
 }
 
+interface RecentInvoiceRow {
+  id: string
+  invoiceNumberFormatted: string
+  status: string
+  invoiceDate: string
+  dueDate: string | null
+  total: string
+  balanceDue: string
+}
+
 const route = useRoute()
 const auth = useAuthStore()
 const vehicleId = computed(() => String(route.params.id || ''))
@@ -46,12 +62,17 @@ const { data, refresh, error } = useClientFetch<{
   vehicle: Vehicle
   customer: { id: string, displayName: string } | null
   history: HistoryRow[]
+  recentInvoices: RecentInvoiceRow[]
+  invoiceCount: number
 }>(() => `/api/vehicles/${vehicleId.value}`, { watch: [vehicleId] })
 
 const vehicle = computed(() => data.value?.vehicle)
 const customer = computed(() => data.value?.customer)
 const history = computed(() => data.value?.history ?? [])
+const recentInvoices = computed(() => data.value?.recentInvoices ?? [])
+const invoiceCount = computed(() => data.value?.invoiceCount ?? recentInvoices.value.length)
 const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
+const canReadInvoices = computed(() => auth.can('invoices.read.all'))
 
 const newInvoiceLink = computed(() => {
   if (!vehicle.value) return '/invoices/new'
@@ -164,8 +185,49 @@ function histWhen(iso: string): string {
             </dl>
           </div>
           <div class="card">
-            <div class="chead"><h3>Recent invoices</h3></div>
-            <div class="empty" style="display:block;">No invoices yet.</div>
+            <div class="chead">
+              <h3>Invoices · {{ invoiceCount }}</h3>
+              <div v-if="canReadInvoices && customer" class="right">
+                <NuxtLink
+                  :to="`/invoices?q=${encodeURIComponent(customer.displayName)}`"
+                  class="btn sm"
+                >
+                  View all
+                </NuxtLink>
+              </div>
+            </div>
+            <div v-if="recentInvoices.length" class="tscroll">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Issued</th>
+                    <th>Status</th>
+                    <th class="num">Amount</th>
+                    <th class="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="inv in recentInvoices"
+                    :key="inv.id"
+                    :class="{ click: canReadInvoices }"
+                    @click="canReadInvoices ? navigateTo(`/invoices/${inv.id}`) : undefined"
+                  >
+                    <td><span class="lead">{{ inv.invoiceNumberFormatted }}</span></td>
+                    <td>{{ invoiceDateDisplay(inv.invoiceDate) }}</td>
+                    <td>
+                      <span :class="invoiceStatusPill(inv.status as InvoiceStatus, inv.dueDate, inv.balanceDue).cls">
+                        {{ invoiceStatusPill(inv.status as InvoiceStatus, inv.dueDate, inv.balanceDue).label }}
+                      </span>
+                    </td>
+                    <td class="num">{{ moneyDisplay(inv.total) }}</td>
+                    <td class="num">{{ moneyDisplay(inv.balanceDue) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="empty" style="display:block;">No invoices yet.</div>
           </div>
           <div v-if="vehicle.notes" class="card">
             <div class="chead"><h3>Notes</h3></div>

@@ -4,7 +4,7 @@ import { auditLogs } from '../../../db/schema/audit'
 import { CustomersServiceError, getCustomer, getCustomerBillingSummary, listContacts } from '../../../services/customers.service'
 import { listInvoices } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
-import { hasPermission, requirePermission } from '../../../utils/require-permission'
+import { requirePermission } from '../../../utils/require-permission'
 import { validateParams } from '../../../utils/validate'
 import { idParamSchema } from '../../../../shared/validators/common'
 
@@ -18,14 +18,14 @@ export default defineEventHandler(async (event) => {
     const contacts = await listContacts(db, id)
     const billing = await getCustomerBillingSummary(db, id)
 
-    const recentInvoices = hasPermission(event, 'invoices.read.all')
-      ? (await listInvoices(db, {
-          customerId: id,
-          page: 1,
-          pageSize: 8,
-          sort: 'newest',
-        })).items
-      : []
+    // Summary rows for customer context — available to anyone who can view the customer.
+    // Full invoice pages still require invoices.read.all.
+    const recentInvoices = (await listInvoices(db, {
+      customerId: id,
+      page: 1,
+      pageSize: Math.min(Math.max(billing.invoiceCount, 1), 200),
+      sort: 'newest',
+    })).items
 
     // Append-only change history straight from the audit trail (SPEC §6.1)
     const history = await db

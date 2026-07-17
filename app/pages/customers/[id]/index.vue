@@ -410,8 +410,8 @@ const CRED_STATUS_LABELS: Record<string, string> = { queued: 'Queued', sent: 'Se
                   <tr
                     v-for="inv in recentInvoices"
                     :key="inv.id"
-                    class="click"
-                    @click="navigateTo(`/invoices/${inv.id}`)"
+                    :class="{ click: canReadInvoices }"
+                    @click="canReadInvoices ? navigateTo(`/invoices/${inv.id}`) : undefined"
                   >
                     <td><span class="lead">{{ inv.invoiceNumberFormatted }}</span></td>
                     <td>{{ invoiceDateDisplay(inv.invoiceDate) }}</td>

@@ -2,6 +2,7 @@ import { desc, eq, and } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
 import { customers } from '../../../db/schema/customers'
+import { listInvoices } from '../../../services/invoices.service'
 import { getVehicle, VehiclesServiceError } from '../../../services/vehicles.service'
 import { apiError } from '../../../utils/api-error'
 import { requirePermission } from '../../../utils/require-permission'
@@ -35,7 +36,20 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(auditLogs.createdAt))
       .limit(25)
 
-    return { vehicle, customer: customer ?? null, history }
+    const invoiceList = await listInvoices(db, {
+      vehicleId: id,
+      page: 1,
+      pageSize: 200,
+      sort: 'newest',
+    })
+
+    return {
+      vehicle,
+      customer: customer ?? null,
+      history,
+      recentInvoices: invoiceList.items,
+      invoiceCount: invoiceList.total,
+    }
   }
   catch (err) {
     if (err instanceof VehiclesServiceError && err.code === 'NOT_FOUND') {
