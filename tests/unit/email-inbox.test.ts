@@ -13,6 +13,7 @@ import {
 } from '../../server/mail/email-thread'
 import {
   messageMatchesCustomerInboxFilter,
+  shouldIngestCompanyOutboundEmail,
   shouldIngestInboundEmail,
 } from '../../server/services/email-inbox.service'
 import type { EmailBrandContext } from '../../server/services/email-branding.service'
@@ -246,6 +247,31 @@ describe('shouldIngestInboundEmail', () => {
       'stranger@example.com',
       ['accounting@company.com'],
       [],
+    )).toBe(false)
+  })
+})
+
+describe('shouldIngestCompanyOutboundEmail', () => {
+  const companyInboxes = new Set(['accounting@company.com'])
+
+  it('accepts company replies to customers in existing threads', () => {
+    expect(shouldIngestCompanyOutboundEmail(
+      companyInboxes,
+      'accounting@company.com',
+      ['customer@client.com'],
+    )).toBe(true)
+  })
+
+  it('rejects company mail without recipients or from unknown inboxes', () => {
+    expect(shouldIngestCompanyOutboundEmail(
+      companyInboxes,
+      'accounting@company.com',
+      [],
+    )).toBe(false)
+    expect(shouldIngestCompanyOutboundEmail(
+      companyInboxes,
+      'customer@client.com',
+      ['accounting@company.com'],
     )).toBe(false)
   })
 })

@@ -12,7 +12,7 @@ import {
   emailMessageMeta,
   emailThreads,
 } from '../db/schema/email-inbox'
-import { emailPreviewText, normalizeInboundEmailText } from '../../shared/email-display'
+import { emailPreviewText, normalizeInboundEmailText, stripQuotedEmailHtml, stripQuotedPlainEmailText } from '../../shared/email-display'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/email-inline-images'
 import {
@@ -21,6 +21,7 @@ import {
   resolveInlineImageMime,
 } from '../../shared/email-attachment-mime'
 import { sendBrandedMail } from '../mail/branded-mail'
+import { EMAIL_BRAND_NAME } from '../mail/email-layout'
 import {
   buildOutboundEmailBodies,
   buildReplyThreadHeaders,
@@ -390,6 +391,44 @@ export function shouldIngestInboundEmail(
   return filters.autoResponder.enabled && filters.autoResponder.scope === 'all'
 }
 
+/** Import company-sent replies that belong to an existing customer thread (auto-responder, sent copies). */
+export function shouldIngestCompanyOutboundEmail(
+  companyInboxes: Set<string>,
+  from: string,
+  to: string[],
+): boolean {
+  const fromAddr = normalizeEmailAddress(from)
+  return !!fromAddr && companyInboxes.has(fromAddr) && to.length > 0
+}
+
+export async function resolveConversationIdFromThreadHeaders(
+  db: Db,
+  inReplyTo?: string | null,
+  references?: string | null,
+): Promise<string | null> {
+  if (inReplyTo) {
+    const [parent] = await db.select({ conversationId: messages.conversationId })
+      .from(emailMessageMeta)
+      .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
+      .where(eq(emailMessageMeta.internetMessageId, inReplyTo))
+      .limit(1)
+    if (parent) return parent.conversationId
+  }
+
+  if (references) {
+    for (const ref of references.split(/\s+/).filter(Boolean)) {
+      const [parent] = await db.select({ conversationId: messages.conversationId })
+        .from(emailMessageMeta)
+        .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
+        .where(eq(emailMessageMeta.internetMessageId, ref))
+        .limit(1)
+      if (parent) return parent.conversationId
+    }
+  }
+
+  return null
+}
+
 export async function resolveCustomerByEmail(db: Db, email: string) {
   const normalized = email.toLowerCase()
   const [customer] = await db.select({ id: customers.id, displayName: customers.displayName, email: customers.email })
@@ -615,9 +654,10 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
     return {
       id: r.id,
       conversationId: r.conversationId,
-      body: r.body,
+      body: stripQuotedPlainEmailText(r.body),
       senderUserId: r.senderUserId,
-      senderName: r.senderName ?? (r.direction === 'inbound' ? r.fromAddress : null),
+      senderName: r.senderName
+        ?? (r.direction === 'inbound' ? r.fromAddress : EMAIL_BRAND_NAME),
       createdAt: r.createdAt.toISOString(),
       channel: 'email' as const,
       direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
@@ -661,17 +701,18 @@ export async function getEmailMessageHtml(db: Db, conversationId: string, messag
   // Re-render our own outbound emails from the current template so historical
   // messages reflect the latest signature/branding, not the HTML stored at send time.
   let htmlBody: string | null
+  const trimmedBody = stripQuotedPlainEmailText(row.body)
   if (row.direction === 'outbound' && row.senderName) {
     const { html } = await buildOutboundEmailBodies(db, {
       staffName: row.senderName,
       accountTypeKey: row.accountTypeKey,
-      bodyText: row.body,
+      bodyText: trimmedBody,
       subject: thread.subject,
     })
     htmlBody = html
   }
   else {
-    htmlBody = row.htmlBody
+    htmlBody = row.htmlBody ? stripQuotedEmailHtml(row.htmlBody) : row.htmlBody
   }
 
   if (htmlBody?.trim() && /\bcid:/i.test(htmlBody)) {
@@ -969,56 +1010,113 @@ export async function ingestInboundEmail(db: Db, input: {
   const from = normalizeEmailAddress(input.from)
   const companyInboxes = buildCompanyInboxAddresses()
   const customerEmails = await buildCustomerEmailAddresses(db)
-  if (!shouldIngestInboundEmail(companyInboxes, customerEmails, from, input.to, input.cc ?? [])) {
+  const ingestInbound = shouldIngestInboundEmail(companyInboxes, customerEmails, from, input.to, input.cc ?? [])
+
+  let direction: 'inbound' | 'outbound' = 'inbound'
+  let conversationId: string | null = null
+  let isNewThread = false
+
+  if (ingestInbound) {
+    conversationId = await resolveConversationIdFromThreadHeaders(db, input.inReplyTo, input.references)
+    const customer = await resolveCustomerByEmail(db, from)
+    const counterpartEmail = from
+
+    if (!conversationId) {
+      isNewThread = true
+      const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
+      conversationId = conversation!.id
+      await db.insert(emailThreads).values({
+        conversationId,
+        customerId: customer?.id ?? null,
+        counterpartEmail,
+        counterpartName: customer?.displayName ?? null,
+        subject: input.subject.trim() || '(No subject)',
+        rootMessageId: normalizedId,
+      })
+    }
+
+    const messageBody = stripQuotedPlainEmailText(normalizeInboundEmailText(input.text, input.html))
+    const [message] = await db.insert(messages).values({
+      conversationId,
+      senderUserId: null,
+      body: messageBody,
+      createdAt: input.receivedAt ?? new Date(),
+    }).returning()
+
+    await persistInboundAttachments(db, message!.id, input.attachments ?? [])
+
+    await db.insert(emailMessageMeta).values({
+      messageId: message!.id,
+      direction: 'inbound',
+      internetMessageId: normalizedId,
+      inReplyTo: input.inReplyTo ?? null,
+      emailReferences: input.references ?? null,
+      fromAddress: from,
+      toAddresses: input.to,
+      ccAddresses: input.cc ?? [],
+      htmlBody: input.html ? stripQuotedEmailHtml(input.html) : null,
+    })
+
+    await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId))
+    await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversationId))
+
+    void notifyCustomerEmailReceived(db, {
+      conversationId,
+      customerName: customer?.displayName ?? counterpartEmail,
+      customerEmail: counterpartEmail,
+      subject: input.subject.trim() || '(No subject)',
+      messageBody: message!.body,
+      htmlBody: input.html ?? null,
+    }).catch(() => {})
+
+    if (
+      isNewThread
+      && shouldAutoRespondToInbound(customer)
+      && !shouldSkipAutoResponder({
+        subject: input.subject,
+        autoSubmitted: input.autoSubmitted,
+        precedence: input.precedence,
+      })
+    ) {
+      try {
+        await sendCustomerAutoResponderIfEnabled(db, {
+          conversationId: conversationId!,
+          toEmail: from,
+          recipientName: customer?.displayName ?? null,
+          inboundSubject: input.subject,
+          inboundMessageId: normalizedId,
+          inboundReferences: input.references,
+        })
+      }
+      catch (err) {
+        console.warn('[email-inbox] auto-responder failed', err)
+      }
+    }
+
+    return { skipped: false as const, conversationId, messageId: message!.id }
+  }
+
+  if (!shouldIngestCompanyOutboundEmail(companyInboxes, from, input.to)) {
     return { skipped: true as const, reason: 'filtered' as const }
   }
 
-  let conversationId: string | null = null
-  let isNewThread = false
-  if (input.inReplyTo) {
-    const [parent] = await db.select({ conversationId: messages.conversationId })
-      .from(emailMessageMeta)
-      .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
-      .where(eq(emailMessageMeta.internetMessageId, input.inReplyTo))
-      .limit(1)
-    conversationId = parent?.conversationId ?? null
-  }
-
-  if (!conversationId && input.references) {
-    for (const ref of input.references.split(/\s+/).filter(Boolean)) {
-      const [parent] = await db.select({ conversationId: messages.conversationId })
-        .from(emailMessageMeta)
-        .innerJoin(messages, eq(messages.id, emailMessageMeta.messageId))
-        .where(eq(emailMessageMeta.internetMessageId, ref))
-        .limit(1)
-      if (parent) {
-        conversationId = parent.conversationId
-        break
-      }
-    }
-  }
-
-  const customer = await resolveCustomerByEmail(db, from)
-  const counterpartEmail = from
-
+  conversationId = await resolveConversationIdFromThreadHeaders(db, input.inReplyTo, input.references)
   if (!conversationId) {
-    isNewThread = true
-    const [conversation] = await db.insert(conversations).values({ type: 'email' }).returning()
-    conversationId = conversation!.id
-    await db.insert(emailThreads).values({
-      conversationId,
-      customerId: customer?.id ?? null,
-      counterpartEmail,
-      counterpartName: customer?.displayName ?? null,
-      subject: input.subject.trim() || '(No subject)',
-      rootMessageId: normalizedId,
-    })
+    return { skipped: true as const, reason: 'filtered' as const }
   }
 
+  const thread = await getEmailThread(db, conversationId)
+  const recipients = [...input.to, ...(input.cc ?? [])].map(addr => normalizeEmailAddress(addr))
+  if (!recipients.includes(thread.counterpartEmail.toLowerCase())) {
+    return { skipped: true as const, reason: 'filtered' as const }
+  }
+
+  direction = 'outbound'
+  const messageBody = stripQuotedPlainEmailText(normalizeInboundEmailText(input.text, input.html))
   const [message] = await db.insert(messages).values({
     conversationId,
     senderUserId: null,
-    body: normalizeInboundEmailText(input.text, input.html),
+    body: messageBody,
     createdAt: input.receivedAt ?? new Date(),
   }).returning()
 
@@ -1026,51 +1124,19 @@ export async function ingestInboundEmail(db: Db, input: {
 
   await db.insert(emailMessageMeta).values({
     messageId: message!.id,
-    direction: 'inbound',
+    direction,
     internetMessageId: normalizedId,
     inReplyTo: input.inReplyTo ?? null,
     emailReferences: input.references ?? null,
     fromAddress: from,
     toAddresses: input.to,
     ccAddresses: input.cc ?? [],
-    htmlBody: input.html ?? null,
+    htmlBody: input.html ? stripQuotedEmailHtml(input.html) : null,
+    sentByUserId: null,
   })
 
   await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId))
   await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversationId))
-
-  void notifyCustomerEmailReceived(db, {
-    conversationId,
-    customerName: customer?.displayName ?? counterpartEmail,
-    customerEmail: counterpartEmail,
-    subject: input.subject.trim() || '(No subject)',
-    messageBody: message!.body,
-    htmlBody: input.html ?? null,
-  }).catch(() => {})
-
-  if (
-    isNewThread
-    && shouldAutoRespondToInbound(customer)
-    && !shouldSkipAutoResponder({
-      subject: input.subject,
-      autoSubmitted: input.autoSubmitted,
-      precedence: input.precedence,
-    })
-  ) {
-    try {
-      await sendCustomerAutoResponderIfEnabled(db, {
-        conversationId: conversationId!,
-        toEmail: from,
-        recipientName: customer?.displayName ?? null,
-        inboundSubject: input.subject,
-        inboundMessageId: normalizedId,
-        inboundReferences: input.references,
-      })
-    }
-    catch (err) {
-      console.warn('[email-inbox] auto-responder failed', err)
-    }
-  }
 
   return { skipped: false as const, conversationId, messageId: message!.id }
 }

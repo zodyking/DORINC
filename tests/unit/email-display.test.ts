@@ -10,6 +10,8 @@ import {
   sanitizeEmailHtml,
   shouldRenderEmailAsHtml,
   stripHtmlToText,
+  stripQuotedEmailHtml,
+  stripQuotedPlainEmailText,
 } from '../../shared/email-display'
 
 describe('email-display', () => {
@@ -106,5 +108,22 @@ describe('email-display', () => {
     expect(doc).not.toMatch(/overflow\s*:\s*auto/)
     expect(doc).toContain('height: auto !important')
     expect(doc).toContain('Please see the attached check.')
+  })
+
+  it('strips quoted reply history from plain and html thread bodies', () => {
+    const body = [
+      'Thank you but I do not see vehicle 616',
+      '',
+      'On Thu, Jul 16, 2026 at 10:55 PM Devon Onsite Repairs Inc. <accounting@example.com> wrote:',
+      'Per your request, all your estimates have been deleted.',
+    ].join('\n')
+    expect(stripQuotedPlainEmailText(body)).toBe('Thank you but I do not see vehicle 616')
+
+    const html = '<p>New reply</p><blockquote><p>Old company message</p></blockquote>'
+    expect(stripQuotedEmailHtml(html)).toBe('<p>New reply</p>')
+
+    const rendered = emailBodyForThreadDisplay(body, null, 'inbound')
+    expect(rendered.content).toContain('Thank you but I do not see vehicle 616')
+    expect(rendered.content).not.toContain('Per your request')
   })
 })

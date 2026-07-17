@@ -45,6 +45,50 @@ export function cleanPlainEmailText(text: string): string {
     .trim()
 }
 
+const PLAIN_REPLY_SPLIT_PATTERNS = [
+  /\nOn .{0,280}\bwrote:\s*\n/i,
+  /\n-{2,}\s*Original Message\s*-{2,}/i,
+  /\n-{5,}\s*Forwarded message\s*-{5,}/i,
+  /\nFrom:\s.+\n(?:Sent|Date):\s.+\nTo:\s.+\nSubject:/i,
+  /\n_{5,}\n/,
+]
+
+/** Keep only the newest reply text and drop quoted thread history. */
+export function stripQuotedPlainEmailText(text: string): string {
+  let plain = cleanPlainEmailText(text)
+  if (!plain) return plain
+
+  let cutAt = plain.length
+  for (const pattern of PLAIN_REPLY_SPLIT_PATTERNS) {
+    const match = pattern.exec(plain)
+    if (match && match.index > 0 && match.index < cutAt) cutAt = match.index
+  }
+  if (cutAt < plain.length) plain = plain.slice(0, cutAt).trim()
+
+  plain = plain.replace(/\n(?:>[^\n]*\n?)+$/g, '').trim()
+  return plain || cleanPlainEmailText(text)
+}
+
+/** Remove quoted reply containers from stored email HTML. */
+export function stripQuotedEmailHtml(html: string): string {
+  const raw = html.trim()
+  if (!raw) return raw
+
+  let out = raw
+    .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, '')
+    .replace(/<div[^>]*class="[^"]*gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*gmail_extra[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*id="[^"]*divRplyFwdMsg[^"]*"[^>]*>[\s\S]*/gi, '')
+
+  const onWrote = out.match(/On .{10,320} wrote:/i)
+  if (onWrote?.index && onWrote.index > 24) {
+    out = out.slice(0, onWrote.index).replace(/<[^>]*$/g, '').trim()
+  }
+
+  const sanitized = sanitizeEmailHtml(out).trim()
+  return sanitized || raw
+}
+
 export function normalizeInboundEmailText(text: string, html?: string | null): string {
   const plain = cleanPlainEmailText(text)
   if (plain) return plain
@@ -274,5 +318,7 @@ export function emailBodyForThreadDisplay(
   html: string | null | undefined,
   _direction?: 'inbound' | 'outbound',
 ): { mode: 'html' | 'text', content: string } {
-  return emailBodyForDisplay(body, html)
+  const trimmedBody = stripQuotedPlainEmailText(body)
+  const trimmedHtml = html ? stripQuotedEmailHtml(html) : html
+  return emailBodyForDisplay(trimmedBody, trimmedHtml)
 }

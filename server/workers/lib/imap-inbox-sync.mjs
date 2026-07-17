@@ -15,6 +15,10 @@ import {
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { persistInboundAttachments, repairInboundEmailMedia } from './imap-attachments.mjs'
+import {
+  stripQuotedEmailHtml,
+  stripQuotedPlainEmailText,
+} from '../../../shared/email-quote-stripping.mjs'
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
@@ -85,6 +89,41 @@ function shouldAutoRespondToInbound(customer, filters) {
   if (!filters.autoResponder.enabled) return false
   if (filters.autoResponder.scope === 'all') return true
   return !!customer
+}
+
+function shouldIngestCompanyOutboundEmail(companyInboxes, from, to) {
+  const fromAddr = normalizeEmailAddress(from)
+  return !!fromAddr && companyInboxes.has(fromAddr) && to.length > 0
+}
+
+async function resolveConversationIdFromThreadHeaders(pool, inReplyTo, references) {
+  if (inReplyTo) {
+    const { rows } = await pool.query(
+      `SELECT m.conversation_id
+       FROM email_message_meta em
+       INNER JOIN messages m ON m.id = em.message_id
+       WHERE em.internet_message_id = $1
+       LIMIT 1`,
+      [inReplyTo],
+    )
+    if (rows[0]?.conversation_id) return rows[0].conversation_id
+  }
+
+  if (references) {
+    for (const ref of String(references).split(/\s+/).filter(Boolean)) {
+      const { rows } = await pool.query(
+        `SELECT m.conversation_id
+         FROM email_message_meta em
+         INNER JOIN messages m ON m.id = em.message_id
+         WHERE em.internet_message_id = $1
+         LIMIT 1`,
+        [ref],
+      )
+      if (rows[0]?.conversation_id) return rows[0].conversation_id
+    }
+  }
+
+  return null
 }
 
 function shouldSkipAutoResponder(input) {
@@ -287,66 +326,110 @@ async function ingestInboundEmail(pool, input, filters) {
   const smtp = await loadSmtpConfig(pool)
   const companyInboxes = buildCompanyInboxAddresses(filters, smtp)
   const customerEmails = await buildCustomerEmailAddresses(pool, filters.includeCustomerEmails)
-  if (!shouldIngestInboundEmail(companyInboxes, customerEmails, from, input.to, input.cc ?? [], filters)) {
+  const ingestInbound = shouldIngestInboundEmail(companyInboxes, customerEmails, from, input.to, input.cc ?? [], filters)
+
+  if (ingestInbound) {
+    let conversationId = await resolveConversationIdFromThreadHeaders(pool, input.inReplyTo, input.references)
+    let isNewThread = false
+    const customer = await resolveCustomerByEmail(pool, from)
+
+    if (!conversationId) {
+      isNewThread = true
+      const { rows: convRows } = await pool.query(
+        `INSERT INTO conversations (type) VALUES ('email') RETURNING id`,
+      )
+      conversationId = convRows[0].id
+      await pool.query(
+        `INSERT INTO email_threads (
+           conversation_id, customer_id, counterpart_email, counterpart_name, subject, root_message_id
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          conversationId,
+          customer?.id ?? null,
+          from,
+          customer?.displayName ?? null,
+          String(input.subject ?? '').trim() || '(No subject)',
+          normalizedId,
+        ],
+      )
+    }
+
+    const body = stripQuotedPlainEmailText(normalizeInboundBody(input.text, input.html))
+    const { rows: messageRows } = await pool.query(
+      `INSERT INTO messages (conversation_id, sender_user_id, body, created_at)
+       VALUES ($1, NULL, $2, $3)
+       RETURNING id`,
+      [conversationId, body, input.receivedAt ?? new Date()],
+    )
+    const messageId = messageRows[0].id
+
+    const attachmentCount = await persistInboundAttachments(pool, messageId, input.attachments)
+
+    await pool.query(
+      `INSERT INTO email_message_meta (
+         message_id, direction, internet_message_id, in_reply_to, email_references,
+         from_address, to_addresses, cc_addresses, html_body
+       ) VALUES ($1, 'inbound', $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)`,
+      [
+        messageId,
+        normalizedId,
+        input.inReplyTo ?? null,
+        input.references ?? null,
+        from,
+        JSON.stringify(input.to),
+        JSON.stringify(input.cc ?? []),
+        input.html ? stripQuotedEmailHtml(input.html) : null,
+      ],
+    )
+
+    await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId])
+    await pool.query(`UPDATE email_threads SET updated_at = now() WHERE conversation_id = $1`, [conversationId])
+
+    if (
+      isNewThread
+      && shouldAutoRespondToInbound(customer, filters)
+      && !shouldSkipAutoResponder({
+        subject: input.subject,
+        autoSubmitted: input.autoSubmitted,
+        precedence: input.precedence,
+      })
+    ) {
+      try {
+        await sendAutoResponder(pool, {
+          conversationId,
+          toEmail: from,
+          recipientName: customer?.displayName ?? null,
+          inboundMessageId: normalizedId,
+          inboundSubject: input.subject,
+          inboundReferences: input.references,
+        })
+      }
+      catch (err) {
+        console.warn('[imap-sync] auto-responder failed', err)
+      }
+    }
+
+    return { skipped: false, conversationId, isNewThread, attachmentCount }
+  }
+
+  if (!shouldIngestCompanyOutboundEmail(companyInboxes, from, input.to)) {
     return { skipped: true, reason: 'filtered' }
   }
 
-  let conversationId = null
-  let isNewThread = false
+  const conversationId = await resolveConversationIdFromThreadHeaders(pool, input.inReplyTo, input.references)
+  if (!conversationId) return { skipped: true, reason: 'filtered' }
 
-  if (input.inReplyTo) {
-    const { rows } = await pool.query(
-      `SELECT m.conversation_id
-       FROM email_message_meta em
-       INNER JOIN messages m ON m.id = em.message_id
-       WHERE em.internet_message_id = $1
-       LIMIT 1`,
-      [input.inReplyTo],
-    )
-    conversationId = rows[0]?.conversation_id ?? null
+  const { rows: threadRows } = await pool.query(
+    `SELECT counterpart_email FROM email_threads WHERE conversation_id = $1 LIMIT 1`,
+    [conversationId],
+  )
+  const counterpartEmail = String(threadRows[0]?.counterpart_email ?? '').toLowerCase()
+  const recipients = [...input.to, ...(input.cc ?? [])].map(addr => normalizeEmailAddress(addr))
+  if (!counterpartEmail || !recipients.includes(counterpartEmail)) {
+    return { skipped: true, reason: 'filtered' }
   }
 
-  if (!conversationId && input.references) {
-    for (const ref of String(input.references).split(/\s+/).filter(Boolean)) {
-      const { rows } = await pool.query(
-        `SELECT m.conversation_id
-         FROM email_message_meta em
-         INNER JOIN messages m ON m.id = em.message_id
-         WHERE em.internet_message_id = $1
-         LIMIT 1`,
-        [ref],
-      )
-      if (rows[0]?.conversation_id) {
-        conversationId = rows[0].conversation_id
-        break
-      }
-    }
-  }
-
-  const customer = await resolveCustomerByEmail(pool, from)
-
-  if (!conversationId) {
-    isNewThread = true
-    const { rows: convRows } = await pool.query(
-      `INSERT INTO conversations (type) VALUES ('email') RETURNING id`,
-    )
-    conversationId = convRows[0].id
-    await pool.query(
-      `INSERT INTO email_threads (
-         conversation_id, customer_id, counterpart_email, counterpart_name, subject, root_message_id
-       ) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        conversationId,
-        customer?.id ?? null,
-        from,
-        customer?.displayName ?? null,
-        String(input.subject ?? '').trim() || '(No subject)',
-        normalizedId,
-      ],
-    )
-  }
-
-  const body = normalizeInboundBody(input.text, input.html)
+  const body = stripQuotedPlainEmailText(normalizeInboundBody(input.text, input.html))
   const { rows: messageRows } = await pool.query(
     `INSERT INTO messages (conversation_id, sender_user_id, body, created_at)
      VALUES ($1, NULL, $2, $3)
@@ -354,14 +437,13 @@ async function ingestInboundEmail(pool, input, filters) {
     [conversationId, body, input.receivedAt ?? new Date()],
   )
   const messageId = messageRows[0].id
-
   const attachmentCount = await persistInboundAttachments(pool, messageId, input.attachments)
 
   await pool.query(
     `INSERT INTO email_message_meta (
        message_id, direction, internet_message_id, in_reply_to, email_references,
-       from_address, to_addresses, cc_addresses, html_body
-     ) VALUES ($1, 'inbound', $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)`,
+       from_address, to_addresses, cc_addresses, html_body, sent_by_user_id
+     ) VALUES ($1, 'outbound', $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, NULL)`,
     [
       messageId,
       normalizedId,
@@ -369,39 +451,14 @@ async function ingestInboundEmail(pool, input, filters) {
       input.references ?? null,
       from,
       JSON.stringify(input.to),
-      JSON.stringify(input.cc ?? []),
-      input.html ?? null,
+      input.html ? stripQuotedEmailHtml(input.html) : null,
     ],
   )
 
   await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId])
   await pool.query(`UPDATE email_threads SET updated_at = now() WHERE conversation_id = $1`, [conversationId])
 
-  if (
-    isNewThread
-    && shouldAutoRespondToInbound(customer, filters)
-    && !shouldSkipAutoResponder({
-      subject: input.subject,
-      autoSubmitted: input.autoSubmitted,
-      precedence: input.precedence,
-    })
-  ) {
-    try {
-      await sendAutoResponder(pool, {
-        conversationId,
-        toEmail: from,
-        recipientName: customer?.displayName ?? null,
-        inboundMessageId: normalizedId,
-        inboundSubject: input.subject,
-        inboundReferences: input.references,
-      })
-    }
-    catch (err) {
-      console.warn('[imap-sync] auto-responder failed', err)
-    }
-  }
-
-  return { skipped: false, conversationId, isNewThread, attachmentCount }
+  return { skipped: false, conversationId, isNewThread: false, attachmentCount }
 }
 
 /**
@@ -466,7 +523,9 @@ export async function runImapInboxSync(pool, opts = {}) {
             const smtp = await loadSmtpConfig(pool)
             const companyInboxes = buildCompanyInboxAddresses(filters, smtp)
             const customerEmails = await buildCustomerEmailAddresses(pool, filters.includeCustomerEmails)
-            if (!shouldIngestInboundEmail(companyInboxes, customerEmails, from, to, cc, filters)) {
+            const ingestInbound = shouldIngestInboundEmail(companyInboxes, customerEmails, from, to, cc, filters)
+            const ingestCompanyOutbound = shouldIngestCompanyOutboundEmail(companyInboxes, from, to)
+            if (!ingestInbound && !ingestCompanyOutbound) {
               result.skipped++
               continue
             }
