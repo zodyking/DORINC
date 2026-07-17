@@ -5,6 +5,13 @@ import {
   ENTITY_TYPE_LABELS,
   type EntitySearchItem,
 } from '~/utils/messages-ui'
+import {
+  getTokenizedTextOffset,
+  renderTokenizedEditor,
+  resizeComposeField,
+  serializeTokenizedRoot,
+  setTokenizedTextOffset,
+} from '~/utils/messages-compose-editor'
 import type { MessageEntityType } from '~/server/db/schema/messages'
 
 const props = defineProps<{
@@ -18,24 +25,34 @@ const emit = defineEmits<{
 
 const text = ref('')
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const editorEl = ref<HTMLDivElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const attachments = ref<File[]>([])
 const attachmentError = ref('')
 const previewUrls = ref<string[]>([])
+const composeFocused = ref(false)
+const isMobile = ref(false)
 
 const EMAIL_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,application/pdf'
 const DM_ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif'
 const MAX_ATTACHMENTS = 10
 const MAX_ATTACHMENT_MB = 25
+const COMPOSE_MIN_HEIGHT = 44
+const COMPOSE_MAX_HEIGHT = 120
+const COMPOSE_MAX_HEIGHT_FOCUSED = 168
 
 const isEmail = computed(() => props.mode === 'email')
 const attachAccept = computed(() => isEmail.value ? EMAIL_ATTACH_ACCEPT : DM_ATTACH_ACCEPT)
 const attachAllowed = computed(() => new Set(attachAccept.value.split(',')))
 
-const placeholder = computed(() =>
-  isEmail.value
-    ? 'Write your reply…'
-    : 'Message… type invoice, customer, vehicle, or service log to link',
+const placeholder = computed(() => {
+  if (isEmail.value) return 'Write your reply…'
+  if (isMobile.value) return 'Message…'
+  return 'Type invoice, customer, vehicle… to link'
+})
+
+const composeMaxHeight = computed(() =>
+  composeFocused.value ? COMPOSE_MAX_HEIGHT_FOCUSED : COMPOSE_MAX_HEIGHT,
 )
 
 function formatFileSize(bytes: number): string {
@@ -56,7 +73,45 @@ function rebuildPreviewUrls() {
     .map(f => URL.createObjectURL(f))
 }
 
-onBeforeUnmount(revokePreviewUrls)
+function resizeActiveComposeField() {
+  nextTick(() => {
+    const max = composeMaxHeight.value
+    if (isEmail.value) {
+      const el = textareaEl.value
+      if (!el) return
+      resizeComposeField(el, max)
+    }
+    else {
+      const el = editorEl.value
+      if (!el) return
+      resizeComposeField(el, max)
+    }
+  })
+}
+
+function updateMobileFlag() {
+  if (!import.meta.client) return
+  isMobile.value = window.matchMedia('(max-width: 960px)').matches
+}
+
+onMounted(() => {
+  updateMobileFlag()
+  if (import.meta.client) {
+    window.matchMedia('(max-width: 960px)').addEventListener('change', updateMobileFlag)
+  }
+  resizeActiveComposeField()
+})
+
+onBeforeUnmount(() => {
+  revokePreviewUrls()
+  if (import.meta.client) {
+    window.matchMedia('(max-width: 960px)').removeEventListener('change', updateMobileFlag)
+  }
+})
+
+watch(composeMaxHeight, () => {
+  resizeActiveComposeField()
+})
 
 function openFilePicker() {
   attachmentError.value = ''
@@ -147,11 +202,23 @@ function closePicker() {
   pickerQuery.value = ''
 }
 
-function onInput() {
+function currentCursorPos(): number {
+  if (isEmail.value) return textareaEl.value?.selectionStart ?? text.value.length
+  if (!editorEl.value) return text.value.length
+  return getTokenizedTextOffset(editorEl.value)
+}
+
+function onComposeInput() {
+  if (isEmail.value) {
+    resizeActiveComposeField()
+  }
+  else if (editorEl.value) {
+    text.value = serializeTokenizedRoot(editorEl.value)
+    resizeActiveComposeField()
+  }
+
   if (isEmail.value) return
-  const el = textareaEl.value
-  if (!el) return
-  const trigger = detectEntityTrigger(text.value, el.selectionStart)
+  const trigger = detectEntityTrigger(text.value, currentCursorPos())
   if (trigger) {
     pickerOpen.value = true
     pickerType.value = trigger.entityType
@@ -182,23 +249,63 @@ function insertEntity(item: EntitySearchItem) {
   const spacerAfter = after && !/^\s/.test(after) ? ' ' : ''
   text.value = `${before}${spacerBefore}${token}${spacerAfter}${after}`
   closePicker()
+
   nextTick(() => {
-    const el = textareaEl.value
+    const cursor = before.length + spacerBefore.length + token.length + spacerAfter.length
+    if (isEmail.value) {
+      const el = textareaEl.value
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(cursor, cursor)
+      resizeActiveComposeField()
+      return
+    }
+    const el = editorEl.value
     if (!el) return
-    const pos = (before + spacerBefore + token + spacerAfter).length
+    renderTokenizedEditor(el, text.value)
+    setTokenizedTextOffset(el, cursor)
     el.focus()
-    el.setSelectionRange(pos, pos)
+    resizeActiveComposeField()
   })
+}
+
+function onEditorPaste(event: ClipboardEvent) {
+  event.preventDefault()
+  const plain = event.clipboardData?.getData('text/plain') ?? ''
+  if (!plain) return
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+  sel.deleteFromDocument()
+  sel.getRangeAt(0).insertNode(document.createTextNode(plain))
+  sel.collapseToEnd()
+  onComposeInput()
+}
+
+function onComposeFocus() {
+  composeFocused.value = true
+  resizeActiveComposeField()
+}
+
+function onComposeBlur() {
+  composeFocused.value = false
+  resizeActiveComposeField()
 }
 
 const canSend = computed(() =>
   !props.disabled && (!!text.value.trim() || attachments.value.length > 0),
 )
 
+function clearCompose() {
+  text.value = ''
+  if (editorEl.value) editorEl.value.replaceChildren()
+  if (textareaEl.value) textareaEl.value.style.height = `${COMPOSE_MIN_HEIGHT}px`
+  resizeActiveComposeField()
+}
+
 function submit() {
   if (!canSend.value) return
   emit('send', text.value.trim(), attachments.value.slice())
-  text.value = ''
+  clearCompose()
   attachments.value = []
   attachmentError.value = ''
   revokePreviewUrls()
@@ -236,7 +343,7 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="dm-compose">
+  <div class="dm-compose" :class="{ 'is-focused': composeFocused, 'is-mobile': isMobile }">
     <div v-if="pickerOpen && pickerType" class="dm-entity-picker">
       <div class="dm-entity-picker-head">
         <b>{{ ENTITY_TYPE_LABELS[pickerType] }}</b>
@@ -296,7 +403,7 @@ function onKeydown(e: KeyboardEvent) {
 
     <form
       class="dm-compose-form"
-      :class="{ 'dm-compose-form--email': isEmail }"
+      :class="{ 'dm-compose-form--email': isEmail, 'is-focused': composeFocused }"
       @submit.prevent="submit"
     >
       <input
@@ -327,15 +434,34 @@ function onKeydown(e: KeyboardEvent) {
         </svg>
       </button>
       <textarea
+        v-if="isEmail"
         ref="textareaEl"
         v-model="text"
         rows="1"
         :placeholder="placeholder"
         :disabled="disabled"
         aria-label="Message"
-        @input="onInput"
+        class="dm-compose-input"
+        @input="onComposeInput"
         @keydown="onKeydown"
-        @click="onInput"
+        @focus="onComposeFocus"
+        @blur="onComposeBlur"
+      />
+      <div
+        v-else
+        ref="editorEl"
+        class="dm-compose-input dm-compose-editor"
+        :data-placeholder="placeholder"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        :aria-label="placeholder"
+        :contenteditable="!disabled"
+        @input="onComposeInput"
+        @keydown="onKeydown"
+        @focus="onComposeFocus"
+        @blur="onComposeBlur"
+        @paste="onEditorPaste"
       />
       <button
         type="submit"
@@ -356,7 +482,7 @@ function onKeydown(e: KeyboardEvent) {
         </svg>
       </button>
     </form>
-    <div v-if="!isEmail" class="dm-compose-hint">
+    <div v-if="!isEmail && !isMobile" class="dm-compose-hint">
       Tip: type <code>invoice</code>, <code>customer</code>, <code>vehicle</code>, or <code>service log</code> to attach links
     </div>
   </div>
