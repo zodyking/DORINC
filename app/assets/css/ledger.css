@@ -1863,6 +1863,9 @@ section.page.active.dm-page{
 .dm-thread-empty, .dm-thread-loading, .dm-list-empty{
   padding:24px 16px; text-align:center; color:#64748b; font-size:13px;
 }
+.dm-thread-loading--solo{
+  flex:1; align-items:center; justify-content:center; display:flex;
+}
 .dm-thread-empty b, .dm-list-empty b{ display:block; color:#0f172a; margin-bottom:4px; }
 .dm-msg{ display:flex; gap:10px; max-width:85%; }
 .dm-msg.own{ margin-left:auto; flex-direction:row-reverse; }
@@ -2183,12 +2186,20 @@ section.page.active.dm-page{
     display:flex; flex:1; min-height:0; min-width:0; width:100%; max-width:100%;
   }
   .dm-layout .dm-main{ display:none; min-height:0; min-width:0; }
+  .dm-layout--team-only .dm-main{
+    display:flex; flex:1; min-height:0; min-width:0; width:100%; flex-direction:column;
+    height:100%;
+  }
   .dm-layout.show-thread .dm-sidebar{ display:none; }
   .dm-layout.show-thread .dm-main{
     display:flex; flex:1; min-height:0; min-width:0; width:100%; flex-direction:column;
     height:100%;
   }
   .dm-layout .dm-thread-empty{ display:none; }
+  .dm-layout--team-only .dm-thread-empty,
+  .dm-layout--team-only .dm-thread-loading--solo{
+    display:flex;
+  }
   .dm-back-btn{ display:grid; place-items:center; min-width:44px; min-height:44px; }
   .dm-conv-list{ min-height:0; flex:1; -webkit-overflow-scrolling:touch; }
   .dm-conv-item{

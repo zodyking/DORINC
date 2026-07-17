@@ -8,6 +8,7 @@ const props = defineProps<{
   sending?: boolean
   currentUserId?: string
   hideBack?: boolean
+  teamOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -107,9 +108,14 @@ watch(() => props.conversation?.id, () => {
       </div>
     </header>
 
-    <div v-if="!conversation" class="dm-thread-empty">
-      <b>Select a conversation</b>
-      <span>Choose a thread from the list or start a new message.</span>
+    <div v-if="!conversation && loading" class="dm-thread-loading dm-thread-loading--solo">
+      Loading team chat…
+    </div>
+
+    <div v-else-if="!conversation" class="dm-thread-empty">
+      <b>{{ teamOnly ? 'Team chat unavailable' : 'Select a conversation' }}</b>
+      <span v-if="teamOnly">Could not open the shared team thread. Try again in a moment.</span>
+      <span v-else>Choose a thread from the list or start a new message.</span>
     </div>
 
     <div v-else ref="msgsEl" class="dm-thread-msgs" :class="{ 'is-email': isEmail }">

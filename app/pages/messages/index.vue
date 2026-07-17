@@ -80,7 +80,7 @@ function removeEmailAttachment(index: number) {
 const hasActiveConversation = computed(() => !!dm.activeConversation)
 const teamOnlyMode = computed(() => chatSettingsLoaded.value && !directMessagingEnabled.value && dm.messageChannel === 'dm')
 const showThreadPanel = computed(() => {
-  if (teamOnlyMode.value && hasActiveConversation.value) return true
+  if (teamOnlyMode.value) return true
   return showThread.value && hasActiveConversation.value
 })
 const inThreadLayout = computed(() => showThreadPanel.value || teamOnlyMode.value)
@@ -100,6 +100,19 @@ async function loadChatSettings() {
 
 async function openTeamConversationIfNeeded() {
   if (!teamOnlyMode.value) return
+  if (dm.loadingConversations) {
+    await new Promise<void>((resolve) => {
+      const stop = watch(() => dm.loadingConversations, (loading) => {
+        if (!loading) {
+          stop()
+          resolve()
+        }
+      }, { immediate: true })
+    })
+  }
+  if (!dm.conversations.length && !dm.fetchError) {
+    await dm.fetchConversations()
+  }
   const team = dm.conversations.find(c => c.type === 'team')
   if (!team) return
   if (dm.activeConversationId !== team.id) {
@@ -277,6 +290,9 @@ async function onDeletionRequested() {
 
 async function setChannel(channel: 'dm' | 'email') {
   await dm.setChannel(channel)
+  if (teamOnlyMode.value && channel === 'dm') {
+    await openTeamConversationIfNeeded()
+  }
 }
 
 async function setEmailShowAll(showAll: boolean) {
@@ -450,10 +466,11 @@ async function setEmailShowAll(showAll: boolean) {
         <MessagingChatThread
           :conversation="dm.activeConversation"
           :messages="dm.messages"
-          :loading="dm.loadingMessages"
+          :loading="dm.loadingMessages || (teamOnlyMode && !dm.activeConversation && dm.loadingConversations)"
           :sending="dm.sending"
           :current-user-id="auth.user?.id"
           :hide-back="teamOnlyMode"
+          :team-only="teamOnlyMode"
           @back="onBack"
           @send="onSend"
           @deletion-requested="onDeletionRequested"
