@@ -225,7 +225,10 @@ describe('system email templates', () => {
     expect(inbound.html).toContain('Sign in &amp; reply')
     expect(inbound.text).toContain('Sign in to DORINC')
     expect(inbound.text).toContain('Can you confirm the total on the latest invoice?')
-    expect(inbound.html).toContain('Customer message')
+    expect(inbound.html).toContain('Fleet Co Sent A Message')
+    expect(inbound.html).toContain('&ldquo;Can you confirm the total on the latest invoice?&rdquo;')
+    expect(inbound.html).not.toContain('Notified')
+    expect(inbound.html).not.toContain('Customer message')
   })
 
   it('builds service log sent to invoice staff alert', () => {

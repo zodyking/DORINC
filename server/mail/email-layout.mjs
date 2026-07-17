@@ -254,6 +254,17 @@ export function emailDetails(rows) {
 }
 
 /**
+ * Prominent quoted message block (no panel border).
+ * @param {string} text
+ * @returns {string}
+ */
+export function emailQuotedMessage(text) {
+  const body = escapeHtml(String(text ?? '').trim())
+  if (!body) return ''
+  return `<p style="margin:0;color:${EMAIL_TOKENS.ink};font-size:19px;line-height:30px;font-weight:700;font-style:italic;font-family:${EMAIL_TOKENS.font};">&ldquo;${body}&rdquo;</p>`
+}
+
+/**
  * @param {{ title: string, body: string }} note
  * @returns {string}
  */
