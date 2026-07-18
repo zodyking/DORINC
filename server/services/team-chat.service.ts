@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, isNotNull, ne } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, ne } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import {
@@ -23,19 +23,48 @@ export class TeamChatServiceError extends Error {
 }
 
 export async function getDefaultTeamConversationId(db: Db): Promise<string | null> {
-  const [row] = await db.select({ id: conversations.id })
+  const [systemRow] = await db.select({ id: conversations.id })
     .from(conversations)
     .where(and(
       eq(conversations.type, 'team'),
       eq(conversations.isSystem, true),
     ))
+    .orderBy(asc(conversations.createdAt))
     .limit(1)
-  return row?.id ?? null
+  if (systemRow) return systemRow.id
+
+  const [legacyRow] = await db.select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.type, 'team'))
+    .orderBy(asc(conversations.createdAt))
+    .limit(1)
+  return legacyRow?.id ?? null
+}
+
+async function promoteTeamConversation(db: Db, conversationId: string) {
+  const [row] = await db.select({ title: conversations.title })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+
+  await db.update(conversations)
+    .set({
+      isSystem: true,
+      title: row?.title?.trim() ? row.title : TEAM_CHAT_TITLE,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(conversations.id, conversationId),
+      eq(conversations.type, 'team'),
+    ))
 }
 
 export async function ensureDefaultTeamConversation(db: Db): Promise<string> {
   const existingId = await getDefaultTeamConversationId(db)
-  if (existingId) return existingId
+  if (existingId) {
+    await promoteTeamConversation(db, existingId)
+    return existingId
+  }
 
   const [conversation] = await db.insert(conversations).values({
     type: 'team',
@@ -92,6 +121,14 @@ export async function syncTeamChatParticipants(db: Db) {
   return conversationId
 }
 
+export async function isTeamConversation(db: Db, conversationId: string): Promise<boolean> {
+  const [row] = await db.select({ type: conversations.type })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return row?.type === 'team'
+}
+
 export async function isSystemTeamConversation(db: Db, conversationId: string): Promise<boolean> {
   const [row] = await db.select({
     type: conversations.type,
@@ -104,7 +141,7 @@ export async function isSystemTeamConversation(db: Db, conversationId: string): 
 }
 
 export async function clearTeamChatHistory(db: Db, conversationId: string, _actorUserId: string) {
-  if (!await isSystemTeamConversation(db, conversationId)) {
+  if (!await isTeamConversation(db, conversationId)) {
     throw new TeamChatServiceError('NOT_TEAM_CHAT')
   }
 

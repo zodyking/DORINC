@@ -1,4 +1,5 @@
 /** Post invoice sent/resent team chat messages after SMTP delivery succeeds (worker-safe). */
+import { insertTeamChatMessage } from '../workers/lib/team-chat.mjs'
 
 function formatInvoiceNumber(invoiceNumber) {
   return `INV-${String(invoiceNumber).padStart(6, '0')}`
@@ -119,41 +120,23 @@ export function buildBulkInvoiceSentTeamMessageBody(opts) {
   return { body, refs }
 }
 
-async function getTeamConversationId(pool) {
-  const { rows } = await pool.query(
-    `SELECT id FROM conversations
-     WHERE type = 'team' AND is_system = true
-     LIMIT 1`,
-  )
-  return rows[0]?.id ?? null
-}
-
-async function insertTeamChatMessage(pool, senderUserId, body, refs) {
-  const conversationId = await getTeamConversationId(pool)
-  if (!conversationId) return
-
-  const { rows } = await pool.query(
-    `INSERT INTO messages (conversation_id, sender_user_id, body)
-     VALUES ($1, $2, $3)
-     RETURNING id`,
-    [conversationId, senderUserId, body],
-  )
-  const messageId = rows[0]?.id
-  if (!messageId) return
-
-  for (const ref of refs) {
-    await pool.query(
-      `INSERT INTO message_entity_refs
-        (message_id, entity_type, entity_id, entity_label, position)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [messageId, ref.entityType, ref.entityId, ref.entityLabel, ref.position],
-    )
+/**
+ * @param {import('pg').Pool} pool
+ * @param {string} senderUserId
+ * @param {string} body
+ * @param {Array<{ entityType: string, entityId: string, entityLabel: string, position: number }>} refs
+ */
+async function postTeamChatMessage(pool, senderUserId, body, refs) {
+  try {
+    await insertTeamChatMessage(pool, senderUserId, body, refs)
   }
-
-  await pool.query(
-    `UPDATE conversations SET updated_at = now() WHERE id = $1`,
-    [conversationId],
-  )
+  catch (err) {
+    console.warn(
+      '[invoice-sent-team-notify] failed to post team chat message:',
+      err instanceof Error ? err.message : err,
+    )
+    throw err
+  }
 }
 
 /**
@@ -169,7 +152,7 @@ async function insertTeamChatMessage(pool, senderUserId, body, refs) {
  */
 export async function notifyInvoiceSentTeamMessage(pool, opts) {
   const { body, refs } = buildInvoiceSentTeamMessageBody(opts)
-  await insertTeamChatMessage(pool, opts.senderUserId, body, refs)
+  await postTeamChatMessage(pool, opts.senderUserId, body, refs)
 }
 
 /**
@@ -184,7 +167,7 @@ export async function notifyInvoiceSentTeamMessage(pool, opts) {
 export async function notifyBulkInvoiceSentTeamMessage(pool, opts) {
   if (!opts.invoices.length) return
   const { body, refs } = buildBulkInvoiceSentTeamMessageBody(opts)
-  await insertTeamChatMessage(pool, opts.senderUserId, body, refs)
+  await postTeamChatMessage(pool, opts.senderUserId, body, refs)
 }
 
 /**

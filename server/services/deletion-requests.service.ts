@@ -22,7 +22,7 @@ import {
 } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 import { getConversationDeletionLabel, MessagesServiceError } from './messages.service'
-import { isSystemTeamConversation, clearTeamChatHistory } from './team-chat.service'
+import { isTeamConversation, clearTeamChatHistory } from './team-chat.service'
 
 export type DeletionRequestsServiceErrorCode
   = 'NOT_FOUND'
@@ -147,7 +147,7 @@ async function executeDeletion(db: Db, entityType: DeletionEntityType, entityId:
       await hardDeleteInvoice(db, entityId)
       return
     case 'conversation':
-      if (await isSystemTeamConversation(db, entityId)) {
+      if (await isTeamConversation(db, entityId)) {
         await clearTeamChatHistory(db, entityId, actorId)
         return
       }
