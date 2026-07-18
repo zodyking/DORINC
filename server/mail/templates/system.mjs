@@ -12,6 +12,18 @@ function brandNameFrom(opts) {
   return opts?.brand?.brandName || opts?.brandName || EMAIL_BRAND_NAME
 }
 
+function formatMoneyForDisplay(value) {
+  if (value == null || String(value).trim() === '') return null
+  const trimmed = String(value).trim()
+  if (trimmed.startsWith('$')) return trimmed
+  const match = /^(-?\d{1,10})(?:\.(\d{1,2}))?$/.exec(trimmed)
+  if (!match) return trimmed
+  const negative = match[1].startsWith('-')
+  const whole = negative ? match[1].slice(1) : match[1]
+  const frac = (match[2] ?? '0').padEnd(2, '0').slice(0, 2)
+  return `${negative ? '-' : ''}$${whole}.${frac}`
+}
+
 function titleCaseStatus(value) {
   return String(value || '')
     .split(/\s+/)
@@ -228,7 +240,7 @@ export function buildInvoiceAttachedEmail({
   brand,
 }) {
   const dueLine = dueDate || null
-  const totalLine = total || null
+  const totalLine = formatMoneyForDisplay(total)
   const subject = `Invoice ${invoiceNumber} Is Ready`
   const text = [
     `Hello ${recipientName},`,
@@ -512,11 +524,12 @@ export function buildInvoicePendingApprovalEmail({
   brand,
 }) {
   const subject = `Invoice Pending Approval — ${invoiceNumber}`
+  const totalLine = formatMoneyForDisplay(total)
   const text = [
     `Hi ${approverName},`,
     '',
     `Invoice ${invoiceNumber} for ${customerName} is waiting for manager approval.`,
-    total ? `Total: ${total}` : '',
+    totalLine ? `Total: ${totalLine}` : '',
     '',
     `Review: ${invoiceUrl}`,
   ].filter(Boolean).join('\n')
@@ -527,10 +540,10 @@ export function buildInvoicePendingApprovalEmail({
     eyebrow: 'Invoice approval',
     headline: 'Invoice needs approval',
     lead: `Invoice ${invoiceNumber} for ${customerName} is waiting for manager approval.`,
-    highlight: total
+    highlight: totalLine
       ? {
           label: 'Invoice total',
-          value: total,
+          value: totalLine,
           status: 'Pending',
           statusTone: 'warn',
         }

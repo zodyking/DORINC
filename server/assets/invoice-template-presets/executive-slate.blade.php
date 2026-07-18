@@ -68,18 +68,6 @@
     .doc-sub { margin-top: 2px; font-size: 8.5pt; font-weight: 700; color: {{ $muted }}; }
     .company-name { margin: 0 0 2px; font-size: 11.5pt; font-weight: 700; line-height: 1.2; text-align: right; }
     .company-meta { font-size: 7.5pt; color: {{ $muted }}; line-height: 1.45; text-align: right; }
-    .status {
-      display: inline-block;
-      margin-top: 3px;
-      padding: 1px 9px;
-      background: {{ $slate }};
-      color: {{ $onDark }};
-      border-radius: 9px;
-      font-size: 6.5pt;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
 
     .info-card {
       margin-top: 9px;
@@ -214,9 +202,6 @@
         <td width="{{ $sectionVisible('company_info') ? '50%' : '100%' }}">
           <h1 class="doc-title">{{ $doc['documentTitle'] ?? 'INVOICE' }}</h1>
           <div class="doc-sub mono">{{ $doc['number'] ?? '—' }}</div>
-          @if(!empty($doc['statusLabel']))
-            <span class="status">{{ $doc['statusLabel'] }}</span>
-          @endif
         </td>
       @endif
       @if($sectionVisible('company_info'))

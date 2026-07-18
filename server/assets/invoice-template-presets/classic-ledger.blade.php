@@ -74,7 +74,6 @@
       font-weight: 700;
       letter-spacing: 0.12em;
     }
-    .doc-status { margin-top: 2px; text-align: right; font-size: 7.5pt; letter-spacing: 0.24em; color: {{ $mid }}; }
 
     .spec-grid { margin-top: 8px; }
     .spec-grid td {
@@ -209,9 +208,6 @@
         <td width="{{ $sectionVisible('company_info') ? '38%' : '100%' }}">
           <p class="doc-mark">*{{ $doc['documentTitle'] ?? 'INVOICE' }}*</p>
           <div class="doc-no">{{ $doc['number'] ?? '—' }}</div>
-          @if(!empty($doc['statusLabel']))
-            <div class="doc-status">{{ $doc['statusLabel'] }}</div>
-          @endif
         </td>
       @endif
     </tr>
@@ -317,7 +313,7 @@
 
   @if($sectionVisible('footer'))
     <div class="footer">
-      {{ $company['name'] ?? '' }} * {{ $doc['documentTitle'] ?? 'Invoice' }} {{ $doc['number'] ?? '' }} * PAGE 1
+      {{ $company['name'] ?? '' }} * {{ $doc['documentTitle'] ?? 'Invoice' }} {{ $doc['number'] ?? '' }}
     </div>
   @endif
 </body>

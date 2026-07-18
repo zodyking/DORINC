@@ -23,6 +23,19 @@ export function formatMoney(cents: bigint): string {
   return `${negative ? '-' : ''}${whole}.${frac}`
 }
 
+/** Format a decimal money string for display in emails and UI (adds $ when missing). */
+export function formatMoneyForDisplay(value: string | null | undefined): string | null {
+  if (value == null || value.trim() === '') return null
+  const trimmed = value.trim()
+  if (trimmed.startsWith('$')) return trimmed
+  try {
+    return `$${formatMoney(parseMoney(trimmed))}`
+  }
+  catch {
+    return trimmed
+  }
+}
+
 function roundHalfUp(dividend: bigint, divisor: bigint): bigint {
   if (divisor === 0n) throw new Error('Division by zero')
   const adjust = dividend >= 0n ? divisor / 2n : -(divisor / 2n)

@@ -69,18 +69,6 @@
     .masthead .company-meta { font-size: 7.5pt; color: #c5d2df; line-height: 1.45; }
     .masthead .doc-title { margin: 0; font-size: 16pt; font-weight: 700; letter-spacing: 0.14em; text-align: right; color: {{ $onDark }}; line-height: 1; }
     .masthead .doc-sub { margin-top: 3px; text-align: right; font-size: 8.5pt; font-weight: 700; color: #c5d2df; }
-    .masthead .status {
-      display: inline-block;
-      margin-top: 4px;
-      padding: 1px 9px;
-      border: 1px solid {{ $onDark }};
-      border-radius: 9px;
-      font-size: 6.5pt;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: {{ $onDark }};
-    }
 
     .info-card {
       margin-top: 8px;
@@ -235,11 +223,8 @@
       @if($sectionVisible('invoice_meta'))
         <td width="{{ $sectionVisible('company_info') ? '40%' : '100%' }}">
           <h2 class="doc-title">{{ $doc['documentTitle'] ?? 'INVOICE' }}</h2>
-          <div class="doc-sub mono">{{ $doc['number'] ?? '—' }}</div>
-          @if(!empty($doc['statusLabel']))
-            <div style="text-align:right;"><span class="status">{{ $doc['statusLabel'] }}</span></div>
-          @endif
-        </td>
+            <div class="doc-sub mono">{{ $doc['number'] ?? '—' }}</div>
+          </td>
       @endif
     </tr>
   </table>

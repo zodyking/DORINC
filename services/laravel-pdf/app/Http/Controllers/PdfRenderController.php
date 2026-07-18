@@ -99,6 +99,9 @@ class PdfRenderController extends Controller
         }
 
         $html = $this->injectMarginSafetyNet($html, $margins);
+        if ($documentType === 'invoice') {
+            $html = $this->injectPageNumberFooter($html);
+        }
         $pdf = Pdf::loadHTML($html);
 
         $pdf->setPaper($paper, 'portrait');
@@ -158,5 +161,19 @@ class PdfRenderController extends Controller
         }
 
         return $style . $html;
+    }
+
+    /**
+     * Fixed footer on every page — DomPDF replaces {PAGE_NUM} and {PAGE_COUNT} at render time.
+     */
+    private function injectPageNumberFooter(string $html): string
+    {
+        $footer = '<div style="position:fixed;bottom:0.12in;left:0;right:0;text-align:center;font-size:7pt;color:#707070;font-family:DejaVu Sans,Helvetica,Arial,sans-serif;">(pg {PAGE_NUM} of {PAGE_COUNT})</div>';
+
+        if (stripos($html, '</body>') !== false) {
+            return preg_replace('/<\/body>/i', $footer . '</body>', $html, 1);
+        }
+
+        return $html . $footer;
     }
 }

@@ -1,4 +1,5 @@
 /** Customer-facing SMTP templates — unified notification layout. */
+import { formatMoneyForDisplay } from '../../shared/money'
 import { getAppUrl } from '../services/app-config.service'
 import type { EmailBrandContext } from '../services/email-branding.service'
 import {
@@ -55,7 +56,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
   const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
   const detailUrl = portalUrl(`/invoices/${input.invoiceId}`, appUrl)
   const dueLine = input.dueDate || null
-  const totalLine = input.total || null
+  const totalLine = formatMoneyForDisplay(input.total)
   const defaults = invoiceSendEditableDefaults(input.invoiceNumber)
   const subject = input.customSubject?.trim() || defaults.subject
   const message = input.customMessage?.trim() || defaults.message

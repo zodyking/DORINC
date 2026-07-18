@@ -104,6 +104,19 @@ describe('system email templates', () => {
     expect(mail.text).toContain('attached')
   })
 
+  it('formats raw invoice totals with dollar signs', () => {
+    const mail = buildInvoiceAttachedEmail({
+      recipientName: 'Pat',
+      invoiceNumber: 'INV-000711',
+      dueDate: '2026-08-01',
+      total: '326.61',
+      appUrl,
+      brand,
+    })
+    expect(mail.html).toContain('$326.61')
+    expect(mail.text).toContain('Total: $326.61')
+  })
+
   it('builds login notification with sign-in details', () => {
     const mail = buildLoginNotificationEmail({
       name: 'Alex',

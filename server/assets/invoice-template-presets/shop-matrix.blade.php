@@ -37,7 +37,6 @@
   $documentTitle = strtoupper($doc['documentTitle'] ?? 'INVOICE');
   $documentNumber = $doc['number'] ?? '';
   $documentDate = $doc['date'] ?? '';
-  $statusLabel = strtoupper($doc['statusLabel'] ?? '');
 
   $note = trim((string) ($doc['note'] ?? ''));
 
@@ -241,11 +240,6 @@
       font-weight: 700;
       letter-spacing: 0.05em;
       text-decoration: underline;
-    }
-
-    .page-number {
-      font-size: 6.4pt;
-      letter-spacing: 0.1em;
     }
 
     .meta-group {
@@ -644,10 +638,6 @@
           <div class="document-title">
             *{{ $documentTitle }}*
           </div>
-
-          <div class="page-number">
-            PAGE 1
-          </div>
         </td>
 
         <td class="header-meta">
@@ -660,13 +650,6 @@
             <span class="meta-label">Date</span>
             <span class="meta-value">{{ $documentDate }}</span>
           </div>
-
-          @if($statusLabel !== '')
-            <div class="meta-group">
-              <span class="meta-label">Status</span>
-              <span class="meta-value">{{ $statusLabel }}</span>
-            </div>
-          @endif
         </td>
       </tr>
     </table>
@@ -732,10 +715,9 @@
     @if($sectionVisible('customer'))
       <table class="customer-grid">
         <colgroup>
-          <col style="width: 41%;">
-          <col style="width: 36%;">
-          <col style="width: 14%;">
-          <col style="width: 9%;">
+          <col style="width: 45%;">
+          <col style="width: 40%;">
+          <col style="width: 15%;">
         </colgroup>
 
         <tr>
@@ -745,7 +727,6 @@
 
           <th>ADDRESS</th>
           <th>CONTACT</th>
-          <th>STATUS</th>
         </tr>
 
         <tr>
@@ -759,10 +740,6 @@
 
           <td>
             {{ strtoupper($customerContact) }}
-          </td>
-
-          <td class="center">
-            {{ $statusLabel }}
           </td>
         </tr>
       </table>

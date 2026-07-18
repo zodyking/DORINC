@@ -63,17 +63,6 @@
     .company-meta { font-size: 8pt; color: {{ $muted }}; line-height: 1.45; }
     .doc-title { margin: 0; font-size: 19pt; font-weight: 700; letter-spacing: 0.12em; text-align: right; line-height: 1; }
     .doc-number { margin-top: 3px; text-align: right; font-size: 9pt; font-weight: 700; color: {{ $muted }}; }
-    .status {
-      display: inline-block;
-      margin-top: 5px;
-      padding: 1px 9px;
-      border: 1.1px solid {{ $ink }};
-      border-radius: 9px;
-      font-size: 6.5pt;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
 
     .info-card {
       margin-top: 10px;
@@ -228,9 +217,6 @@
         <td width="{{ $sectionVisible('company_info') ? '40%' : '100%' }}">
           <h2 class="doc-title">{{ $doc['documentTitle'] ?? 'INVOICE' }}</h2>
           <div class="doc-number mono">{{ $doc['number'] ?? '—' }}</div>
-          @if(!empty($doc['statusLabel']))
-            <div style="text-align:right;"><span class="status">{{ $doc['statusLabel'] }}</span></div>
-          @endif
         </td>
       @endif
     </tr>

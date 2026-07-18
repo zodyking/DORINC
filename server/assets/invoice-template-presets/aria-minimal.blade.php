@@ -191,7 +191,7 @@
       @if($sectionVisible('invoice_meta'))
         <td width="{{ $sectionVisible('company_info') ? '42%' : '100%' }}">
           <p class="due-figure">{{ $totals['balanceDue'] ?? $totals['total'] ?? '$0.00' }}</p>
-          <div class="due-caption">Amount due · {{ $doc['dueLabel'] ?? 'Due on receipt' }}@if(!empty($doc['statusLabel'])) · {{ $doc['statusLabel'] }}@endif</div>
+          <div class="due-caption">Amount due · {{ $doc['dueLabel'] ?? 'Due on receipt' }}</div>
         </td>
       @endif
     </tr>
