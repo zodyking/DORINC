@@ -7,6 +7,7 @@ import {
 } from '../../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
+import { sendNotificationMail } from '../../mail/outbound-notification-mail.mjs'
 
 function workerAppUrl() {
   return process.env.APP_URL?.trim() || 'http://localhost:3000'
@@ -167,22 +168,21 @@ async function deliverInvoiceEmail(pool, payload, pdfRow) {
   if (!to || !subject) throw new Error('invoice_send payload missing recipient/subject')
 
   const { transport, from } = await getTransport(pool)
-  const prepared = await embedInlineLogoInHtml(html)
 
-  await transport.sendMail({
+  await sendNotificationMail(transport, pool, {
     from,
     to,
     subject,
     text,
-    html: prepared.html,
+    html,
     attachments: [
       {
         filename,
         content: pdfRow.binary_data,
         contentType: pdfRow.mime_type ?? 'application/pdf',
       },
-      ...prepared.attachments,
     ],
+    debugLabel: 'invoice-send',
   })
 }
 

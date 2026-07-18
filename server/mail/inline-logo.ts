@@ -11,6 +11,18 @@ export interface InlineLogoAttachment {
   content: Buffer
   contentType: string
   cid: string
+  contentDisposition?: 'inline' | 'attachment'
+}
+
+function patchHtmlLogoToCid(html: string, logoUrl: string | null | undefined, cid: string): string {
+  if (!logoUrl) return html
+  const escaped = logoUrl
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+  if (!html.includes(escaped) && !html.includes(logoUrl)) return html
+  return html.split(escaped).join(`cid:${cid}`).split(logoUrl).join(`cid:${cid}`)
 }
 
 const DEFAULT_LOGO_PATHS = [
@@ -57,5 +69,26 @@ export async function loadInlineLogoAttachment(
   catch (err) {
     console.warn('[mail] inline logo unavailable, using text fallback', (err as Error).message)
     return null
+  }
+}
+
+/** Embed workspace logo as CID for notification HTML (Nuxt / Drizzle path). */
+export async function embedInlineLogoForBrand(
+  db: Db,
+  html: string | undefined,
+  brand: EmailBrandContext,
+): Promise<{ html: string | undefined, attachments: InlineLogoAttachment[] }> {
+  if (!html || !html.includes('<img')) {
+    return { html, attachments: [] }
+  }
+
+  const logo = await loadInlineLogoAttachment(db, brand)
+  if (!logo) {
+    return { html, attachments: [] }
+  }
+
+  return {
+    html: patchHtmlLogoToCid(html, brand.logoUrl, EMAIL_INLINE_LOGO_CID),
+    attachments: [{ ...logo, contentDisposition: 'inline' }],
   }
 }
