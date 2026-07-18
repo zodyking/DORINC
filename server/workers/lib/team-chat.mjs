@@ -1,5 +1,7 @@
 /** Worker-safe default team chat helpers (mirrors team-chat.service.ts). */
 
+import { notifyChatMessageReceivedWorker } from './chat-notifications.mjs'
+
 export const TEAM_CHAT_TITLE = 'Team'
 
 /**
@@ -151,6 +153,22 @@ export async function insertTeamChatMessage(pool, senderUserId, body, refs) {
     `UPDATE conversations SET updated_at = now() WHERE id = $1`,
     [conversationId],
   )
+
+  try {
+    await notifyChatMessageReceivedWorker(pool, {
+      conversationId,
+      messageId,
+      senderUserId,
+      body,
+      isTeamChat: true,
+    })
+  }
+  catch (err) {
+    console.warn(
+      '[team-chat] chat email notification failed:',
+      err instanceof Error ? err.message : err,
+    )
+  }
 
   return { conversationId, messageId }
 }
