@@ -1,20 +1,20 @@
 import { readMultipartFormData } from 'h3'
-import { useDb } from '../../../../db/client'
+import { useDb } from '../../../../../db/client'
 import {
   createDocumentChangeRequest,
   DocumentChangeServiceError,
-} from '../../../../services/document-change-requests.service'
-import { getPortalCustomer } from '../../../../services/portal.service'
-import { FilesServiceError, maxUploadBytes } from '../../../../services/files.service'
-import { writeAudit } from '../../../../services/audit.service'
-import { apiError } from '../../../../utils/api-error'
-import { requirePortalCustomer } from '../../../../utils/require-portal'
-import { requirePermission } from '../../../../utils/require-permission'
-import { validateParams } from '../../../../utils/validate'
-import { idParamSchema } from '../../../../../shared/validators/common'
-import { portalDocumentChangeRequestSchema } from '../../../../../shared/validators/entity-documents'
+} from '../../../../../services/document-change-requests.service'
+import { getPortalCustomer } from '../../../../../services/portal.service'
+import { FilesServiceError, maxUploadBytes } from '../../../../../services/files.service'
+import { writeAudit } from '../../../../../services/audit.service'
+import { apiError } from '../../../../../utils/api-error'
+import { requirePortalCustomer } from '../../../../../utils/require-portal'
+import { requirePermission } from '../../../../../utils/require-permission'
+import { validateParams } from '../../../../../utils/validate'
+import { idParamSchema } from '../../../../../../shared/validators/common'
+import { portalDocumentChangeRequestSchema } from '../../../../../../shared/validators/entity-documents'
 import { eq } from 'drizzle-orm'
-import { vehicles } from '../../../../db/schema/vehicles'
+import { vehicles } from '../../../../../db/schema/vehicles'
 
 export default defineEventHandler(async (event) => {
   const user = requirePortalCustomer(event)
