@@ -92,3 +92,12 @@ export async function assertCustomerInScope(event: H3Event, db: Db, customerId: 
     throw apiError(event, 'NOT_FOUND', 'Customer not found')
   }
 }
+
+export async function assertVehicleInScope(event: H3Event, db: Db, vehicleId: string) {
+  try {
+    await getVehicle(db, vehicleId)
+  }
+  catch {
+    throw apiError(event, 'NOT_FOUND', 'Vehicle not found')
+  }
+}
