@@ -15,6 +15,18 @@ describe('messages UI contracts', () => {
     expect(page).toContain('dm-channel-switcher-bar')
   })
 
+  it('hides duplicate top channel switcher on desktop when sidebar is visible', () => {
+    const css = source('app/assets/css/ledger.css')
+    expect(css).toContain('.dm-page:has(.dm-sidebar) .dm-channel-switcher-bar')
+    expect(css).toContain('display:none')
+  })
+
+  it('lets team-only desktop layout fill viewport height', () => {
+    const css = source('app/assets/css/ledger.css')
+    expect(css).toContain('.dm-layout--team-only')
+    expect(css).toMatch(/min-width:961px[\s\S]*\.dm-layout--team-only[\s\S]*max-height:none/)
+  })
+
   it('uses a single compose placeholder overlay for team chat', () => {
     const composer = source('app/components/messaging/MessageComposer.vue')
     const css = source('app/assets/css/ledger.css')

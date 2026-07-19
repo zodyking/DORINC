@@ -2078,6 +2078,24 @@ section.page.active.dm-page{
 
 /* ---------- Responsive ---------- */
 .scrim{ display:none; }
+@media (min-width:961px){
+  /* Email desktop: sidebar already has Team/Email tabs — hide duplicate top bar */
+  .dm-page:has(.dm-sidebar) .dm-channel-switcher-bar{
+    display:none;
+  }
+  /* Team-only desktop: fill remaining viewport below page head + switcher */
+  section.page.active.dm-page:has(.dm-layout--team-only){
+    flex:1 1 auto;
+    min-height:0;
+    height:calc(100vh - 120px);
+  }
+  .dm-layout--team-only{
+    flex:1 1 auto;
+    min-height:0;
+    height:auto;
+    max-height:none;
+  }
+}
 @media (max-width:1180px){
   .kpis{ grid-template-columns:repeat(2,1fr); }
   .grid3{ grid-template-columns:repeat(2,1fr); }
