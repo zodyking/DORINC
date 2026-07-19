@@ -82,7 +82,8 @@ function removeEmailAttachment(index: number) {
 }
 
 const hasActiveConversation = computed(() => !!dm.activeConversation)
-const teamOnlyMode = computed(() => chatSettingsLoaded.value && !directMessagingEnabled.value && dm.messageChannel === 'dm')
+const showChannelSwitcherBar = computed(() => chatSettingsLoaded.value && !directMessagingEnabled.value)
+const teamOnlyMode = computed(() => showChannelSwitcherBar.value && dm.messageChannel === 'dm')
 const showThreadPanel = computed(() => {
   if (teamOnlyMode.value) return true
   return showThread.value && hasActiveConversation.value
@@ -359,8 +360,8 @@ async function setEmailShowAll(showAll: boolean) {
     </div>
 
     <div
-      v-if="teamOnlyMode"
-      class="dm-mobile-channel-bar"
+      v-if="showChannelSwitcherBar"
+      class="dm-channel-switcher-bar"
       role="tablist"
       aria-label="Message channels"
     >

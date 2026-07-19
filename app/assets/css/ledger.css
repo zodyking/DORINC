@@ -1656,8 +1656,14 @@ section.page.active.dm-page{
 .dm-list-search{
   display:block;
 }
+.dm-channel-switcher-bar,
 .dm-mobile-channel-bar{
-  display:none;
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:6px;
+  flex-shrink:0;
+  margin-bottom:12px;
+  max-width:320px;
 }
 .dm-sidebar{
   border-right:1px solid #e2e8f0; display:flex; flex-direction:column; min-height:0;
@@ -1914,11 +1920,6 @@ section.page.active.dm-page{
 .dm-compose-editor{
   white-space:pre-wrap; word-break:break-word; outline:none; -webkit-user-select:text;
   user-select:text;
-}
-.dm-compose-editor:empty::before{
-  content:attr(data-placeholder);
-  color:#94a3b8;
-  pointer-events:none;
 }
 .dm-compose.is-focused .dm-compose-input,
 .dm-compose.is-focused .dm-compose-editor{
@@ -2181,8 +2182,22 @@ section.page.active.dm-page{
     flex-shrink:0;
     margin:8px 16px 0;
   }
+  .dm-channel-switcher-bar,
   .dm-mobile-channel-bar{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:6px;
     flex-shrink:0;
+    padding:6px 12px 0;
+    box-sizing:border-box;
+    max-width:none;
+    margin-bottom:0;
+  }
+  .dm-page--in-thread .dm-channel-switcher-bar,
+  .dm-page--in-thread .dm-mobile-channel-bar{
+    padding:6px 12px;
+    border-bottom:1px solid #e2e8f0;
+    background:#fff;
   }
   .dm-layout{
     flex:1 1 0; min-height:0; min-width:0; width:100%; max-width:100%;
@@ -2211,18 +2226,9 @@ section.page.active.dm-page{
   .dm-list-search.is-open{
     display:block;
   }
-  .dm-mobile-channel-bar{
-    display:grid;
-    grid-template-columns:repeat(2, minmax(0, 1fr));
-    gap:6px;
-    flex-shrink:0;
-    padding:6px 12px 0;
-    box-sizing:border-box;
-  }
-  .dm-page--in-thread .dm-mobile-channel-bar{
-    padding:6px 12px;
-    border-bottom:1px solid #e2e8f0;
-    background:#fff;
+  .dm-channel-switcher-bar .dm-channel-tab,
+  .dm-mobile-channel-bar .dm-channel-tab{
+    min-height:34px;
   }
   .dm-channel-tabs{
     margin-bottom:0;
@@ -2232,9 +2238,6 @@ section.page.active.dm-page{
     min-height:36px;
     padding:6px 8px;
     font-size:12.5px;
-  }
-  .dm-mobile-channel-bar .dm-channel-tab{
-    min-height:34px;
   }
   .dm-email-filter{
     margin-bottom:0;

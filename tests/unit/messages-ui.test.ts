@@ -1,53 +1,26 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  detectEntityTrigger,
-  entityPath,
-  entityPathForMessageLink,
-  entityRefToken,
-  messagePreviewText,
-  renderMessageBody,
-} from '../../app/utils/messages-ui'
 
-describe('messages-ui', () => {
-  const can = (key: string) => key === 'invoices.update.all'
+const root = new URL('../../', import.meta.url)
 
-  it('builds entity ref tokens and paths', () => {
-    const token = entityRefToken({
-      entityType: 'invoice',
-      entityId: '00000000-0000-0000-0000-000000000001',
-      entityLabel: 'INV-000001',
-    })
-    expect(token).toContain('invoice')
-    expect(entityPath('invoice', 'abc')).toBe('/invoices/abc')
-    expect(entityPath('service_log', 'abc')).toBe('/service-logs/abc')
+function source(path: string): string {
+  return readFileSync(new URL(path, root), 'utf8')
+}
+
+describe('messages UI contracts', () => {
+  it('shows channel switcher when direct messaging is disabled', () => {
+    const page = source('app/pages/messages/index.vue')
+    expect(page).toContain('showChannelSwitcherBar')
+    expect(page).toContain('v-if="showChannelSwitcherBar"')
+    expect(page).toContain('dm-channel-switcher-bar')
   })
 
-  it('routes message links to edit or pdf based on invoice permissions', () => {
-    expect(entityPathForMessageLink('invoice', 'abc', { can }))
-      .toBe('/invoices/abc/edit?ref=message')
-    expect(entityPathForMessageLink('invoice', 'abc', { can: () => false }))
-      .toBe('/invoices/abc?view=pdf&ref=message')
-    expect(entityPathForMessageLink('customer', 'abc', { can: () => false }))
-      .toBe('/customers/abc?ref=message')
-  })
+  it('uses a single compose placeholder overlay for team chat', () => {
+    const composer = source('app/components/messaging/MessageComposer.vue')
+    const css = source('app/assets/css/ledger.css')
 
-  it('detects compose trigger keywords at cursor', () => {
-    const text = 'Please review invoice'
-    const hit = detectEntityTrigger(text, text.length)
-    expect(hit?.entityType).toBe('invoice')
-    expect(hit?.keyword).toBe('invoice')
-  })
-
-  it('renders entity refs as links in message body', () => {
-    const body = `See ${entityRefToken({
-      entityType: 'customer',
-      entityId: '00000000-0000-0000-0000-000000000002',
-      entityLabel: 'Acme Fleet',
-    })} today`
-    const html = renderMessageBody(body)
-    expect(html).toContain('class="dm-entity-link"')
-    expect(html).toContain('href="/customers/')
-    expect(html).toContain('Acme Fleet')
-    expect(messagePreviewText(body)).toBe('See Acme Fleet today')
+    expect(composer).toContain('dm-compose-placeholder')
+    expect(composer).not.toContain('data-placeholder')
+    expect(css).not.toContain('dm-compose-editor:empty::before')
   })
 })

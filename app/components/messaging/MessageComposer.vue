@@ -464,7 +464,6 @@ function onKeydown(e: KeyboardEvent) {
         <div
           ref="editorEl"
           class="dm-compose-input dm-compose-editor"
-          :data-placeholder="placeholder"
           contenteditable="true"
           role="textbox"
           aria-multiline="true"
