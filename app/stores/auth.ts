@@ -60,10 +60,25 @@ export const useAuthStore = defineStore('auth', {
       const body = portal === 'customer'
         ? { username: identifier, password, portal }
         : { email: identifier, password, portal, geo }
-      const res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
-        method: 'POST',
-        body,
-      })
+      let res: { user: AuthUser }
+      try {
+        res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
+          method: 'POST',
+          body,
+        })
+      }
+      catch (err: unknown) {
+        // Access gate: blocked location/IP → redirect to the admin-set link.
+        const details = (err as { data?: { details?: Record<string, unknown>, data?: { details?: Record<string, unknown> } } })?.data
+        const d = details?.details ?? details?.data?.details
+        if (d?.reason === 'access_blocked') {
+          const redirectUrl = typeof d.redirectUrl === 'string' ? d.redirectUrl : ''
+          if (import.meta.client && redirectUrl) {
+            window.location.href = redirectUrl
+          }
+        }
+        throw err
+      }
       this.user = res.user
       this.loaded = true
       try {

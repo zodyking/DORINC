@@ -612,6 +612,8 @@ async function testAiConnection() {
           @update:open="setSectionOpen('security', $event)"
         >
           <div class="stack">
+            <ControlPanelAccessGate />
+
             <div class="card">
               <div class="chead">
                 <h3>Suspicious Activity</h3>
