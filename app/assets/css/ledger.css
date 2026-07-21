@@ -2211,6 +2211,10 @@ section.page.active.dm-page{
     max-width:none;
     margin-bottom:0;
   }
+  /* Mobile list: sidebar already has Team/Email tabs — hide duplicate top bar */
+  .dm-page:not(.dm-page--in-thread) .dm-channel-switcher-bar{
+    display:none;
+  }
   .dm-page--in-thread .dm-channel-switcher-bar,
   .dm-page--in-thread .dm-mobile-channel-bar{
     padding:6px 12px;

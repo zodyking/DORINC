@@ -21,6 +21,12 @@ describe('messages UI contracts', () => {
     expect(css).toContain('display:none')
   })
 
+  it('hides duplicate top channel switcher on mobile list when sidebar is visible', () => {
+    const css = source('app/assets/css/ledger.css')
+    expect(css).toContain('.dm-page:not(.dm-page--in-thread) .dm-channel-switcher-bar')
+    expect(css).toMatch(/max-width:960px[\s\S]*\.dm-page:not\(\.dm-page--in-thread\) \.dm-channel-switcher-bar[\s\S]*display:none/)
+  })
+
   it('lets team-only desktop layout fill viewport height', () => {
     const css = source('app/assets/css/ledger.css')
     expect(css).toContain('.dm-layout--team-only')
