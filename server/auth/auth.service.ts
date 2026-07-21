@@ -263,6 +263,28 @@ export async function login(
   const ok = await verifyPassword(row.user.passwordHash, password)
   if (!ok) throw new AuthError('INVALID_CREDENTIALS')
 
+  // Super admin accounts can never be locked out: if a super admin signs in with
+  // valid credentials while disabled or rejected, self-heal the account so they
+  // regain access instead of being blocked.
+  const isSuperAdmin = row.accountTypeKey === 'super_admin'
+  const now = new Date()
+  if (isSuperAdmin && (!row.user.isActive || row.user.rejectedAt || !row.user.approvedAt || !row.user.emailVerifiedAt)) {
+    const [restored] = await db.update(users)
+      .set({
+        isActive: true,
+        disabledAt: null,
+        disabledReason: null,
+        rejectedAt: null,
+        rejectedReason: null,
+        approvedAt: row.user.approvedAt ?? now,
+        emailVerifiedAt: row.user.emailVerifiedAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(users.id, row.user.id))
+      .returning()
+    if (restored) row.user = restored
+  }
+
   if (!row.user.isActive) throw new AuthError('DISABLED')
   if (row.user.rejectedAt) throw new AuthError('NOT_APPROVED')
 
