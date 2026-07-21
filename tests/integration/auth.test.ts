@@ -16,7 +16,7 @@ import {
   signup,
   verifyEmail,
 } from '../../server/auth/auth.service'
-import { emailVerificationTokens, passwordResetTokens, sessions, users } from '../../server/db/schema/auth'
+import { accountTypes, emailVerificationTokens, passwordResetTokens, sessions, users } from '../../server/db/schema/auth'
 
 config()
 
@@ -220,6 +220,30 @@ describe('P1-03 login + session lifecycle', () => {
     const { email, userId } = await makeApprovedUser('disabled')
     await db.update(users).set({ isActive: false, disabledAt: new Date() }).where(eq(users.id, userId))
     await expect(login(db, email, 'a-long-password-123', { portal: 'staff' })).rejects.toThrow(AuthError)
+  })
+
+  it('re-enables and signs in a disabled super admin', async () => {
+    const { email, userId } = await makeApprovedUser('superadmin-disabled')
+    const [superType] = await db.select({ id: accountTypes.id })
+      .from(accountTypes)
+      .where(eq(accountTypes.key, 'super_admin'))
+    await db.update(users)
+      .set({
+        accountTypeId: superType!.id,
+        isActive: false,
+        disabledAt: new Date(),
+        disabledReason: 'accidental lockout',
+      })
+      .where(eq(users.id, userId))
+
+    const session = await login(db, email, 'a-long-password-123', { portal: 'staff' })
+    expect(session.user.id).toBe(userId)
+    expect(session.accountTypeKey).toBe('super_admin')
+
+    const [restored] = await db.select().from(users).where(eq(users.id, userId))
+    expect(restored?.isActive).toBe(true)
+    expect(restored?.disabledAt).toBeNull()
+    expect(restored?.disabledReason).toBeNull()
   })
 
   it('rejects staff login via customer portal and customer via staff portal', async () => {
