@@ -1,11 +1,16 @@
 import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
-import { AuthError, login } from '../../auth/auth.service'
+import { AuthError, login, logout } from '../../auth/auth.service'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
-import { resolveIpLocation } from '../../services/ip-geolocation.service'
+import { resolveIpGeo, resolveIpLocation } from '../../services/ip-geolocation.service'
+import {
+  evaluateAccessDecision,
+  getCachedAccessGateSettings,
+  recordAccessEvent,
+} from '../../services/access-gate.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
@@ -19,6 +24,8 @@ export default defineEventHandler(async (event) => {
 
   let locationLabel: string | null = null
   let locationSource: 'device' | 'ip' = 'ip'
+  let loginCoords: { lat: number, lng: number } | null = null
+  let loginCountry: string | null = null
   if (body.portal === 'staff') {
     locationLabel = await resolveBrowserLocation({
       latitude: body.geo.latitude,
@@ -26,9 +33,15 @@ export default defineEventHandler(async (event) => {
       accuracyM: body.geo.accuracyM,
     })
     locationSource = 'device'
+    loginCoords = { lat: body.geo.latitude, lng: body.geo.longitude }
   }
   else {
     locationLabel = await resolveIpLocation(ipAddress)
+    const geo = await resolveIpGeo(ipAddress)
+    if (geo?.latitude != null && geo?.longitude != null) {
+      loginCoords = { lat: geo.latitude, lng: geo.longitude }
+    }
+    loginCountry = geo?.country ?? null
   }
 
   try {
@@ -47,7 +60,48 @@ export default defineEventHandler(async (event) => {
         : null,
     })
 
+    // Access gate: block non-super-admin logins from banned IPs / outside the
+    // allowed geofence. Super admins are always exempt to prevent lockout.
+    const gate = getCachedAccessGateSettings()
+    if (gate.enabled && result.accountTypeKey !== 'super_admin') {
+      const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords })
+      if (decision.blocked) {
+        await logout(useDb(), result.sessionToken).catch(() => {})
+        await recordAccessEvent(useDb(), {
+          eventType: 'login',
+          outcome: 'blocked',
+          ipAddress,
+          userId: result.user.id,
+          userName: result.user.name,
+          userEmail: result.user.email,
+          userAgent: getHeader(event, 'user-agent'),
+          latitude: loginCoords?.lat ?? null,
+          longitude: loginCoords?.lng ?? null,
+          locationLabel,
+          country: loginCountry,
+        }).catch(() => {})
+        throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
+          reason: 'access_blocked',
+          redirectUrl: gate.redirectUrl || null,
+        })
+      }
+    }
+
     setSessionCookie(event, result.sessionToken)
+
+    await recordAccessEvent(useDb(), {
+      eventType: 'login',
+      outcome: 'login_success',
+      ipAddress,
+      userId: result.user.id,
+      userName: result.user.name,
+      userEmail: result.user.email,
+      userAgent: getHeader(event, 'user-agent'),
+      latitude: loginCoords?.lat ?? null,
+      longitude: loginCoords?.lng ?? null,
+      locationLabel,
+      country: loginCountry,
+    }).catch(() => {})
 
     try {
       await writeAudit(event, {
@@ -111,6 +165,16 @@ export default defineEventHandler(async (event) => {
         catch {
           // Alert creation must not block login error response
         }
+        await recordAccessEvent(useDb(), {
+          eventType: 'login',
+          outcome: 'login_failed',
+          ipAddress,
+          userAgent: getHeader(event, 'user-agent'),
+          latitude: loginCoords?.lat ?? null,
+          longitude: loginCoords?.lng ?? null,
+          locationLabel,
+          country: loginCountry,
+        }).catch(() => {})
         throw apiError(
           event,
           'UNAUTHENTICATED',

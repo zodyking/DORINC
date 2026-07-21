@@ -39,4 +39,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureEmailInboxSchema } = await import('../lib/ensure-email-inbox-schema.mjs')
   await ensureEmailInboxSchema(usePool())
+
+  const { ensureAccessGateSchema } = await import('../lib/ensure-access-gate-schema.mjs')
+  await ensureAccessGateSchema(usePool())
 }
