@@ -287,27 +287,29 @@ const avInitials = computed(() => initials(displayName.value))
         <div class="card">
           <div class="chead"><h3>Messages</h3></div>
           <div class="cbody">
-            <label class="fld" style="display:flex; align-items:flex-start; gap:10px;">
-              <input v-model="teamChatEnabled" type="checkbox" style="margin-top:4px;">
-              <span>
-                <b>Team group chat</b>
-                <small style="display:block; color:#64748b; margin-top:4px;">
-                  Stay in the shared Team channel for internal workflow updates. You can clear chat history, but the channel cannot be deleted.
-                </small>
-              </span>
-            </label>
-            <label class="fld" style="display:flex; align-items:flex-start; gap:10px;">
-              <input v-model="messageEmailNotify" type="checkbox" style="margin-top:4px;">
-              <span>
-                <b>Email me for new chat messages</b>
-                <small style="display:block; color:#64748b; margin-top:4px;">
-                  Send an email when you receive a direct message or a team chat message.
-                </small>
-              </span>
-            </label>
-            <p v-if="notifyMessage" style="color:#059669; font-size:13px;">{{ notifyMessage }}</p>
-            <p v-if="notifyError" style="color:#dc2626; font-size:13px;">{{ notifyError }}</p>
-            <button class="btn primary" :disabled="notifyBusy" @click="saveNotificationPrefs">
+            <div class="msg-prefs">
+              <label class="msg-pref-row">
+                <span class="msg-pref-text">
+                  <b>Team group chat</b>
+                  <small>
+                    Stay in the shared Team channel for internal workflow updates. You can clear chat history, but the channel cannot be deleted.
+                  </small>
+                </span>
+                <input v-model="teamChatEnabled" type="checkbox" class="msg-pref-check">
+              </label>
+              <label class="msg-pref-row">
+                <span class="msg-pref-text">
+                  <b>Email me for new chat messages</b>
+                  <small>
+                    Send an email when you receive a direct message or a team chat message.
+                  </small>
+                </span>
+                <input v-model="messageEmailNotify" type="checkbox" class="msg-pref-check">
+              </label>
+            </div>
+            <p v-if="notifyMessage" class="msg-pref-ok">{{ notifyMessage }}</p>
+            <p v-if="notifyError" class="msg-pref-err">{{ notifyError }}</p>
+            <button class="btn primary msg-pref-save" :disabled="notifyBusy" @click="saveNotificationPrefs">
               {{ notifyBusy ? 'Saving…' : 'Save message preferences' }}
             </button>
           </div>
@@ -371,3 +373,66 @@ const avInitials = computed(() => initials(displayName.value))
     </div>
   </section>
 </template>
+
+<style scoped>
+.msg-prefs {
+  display: flex;
+  flex-direction: column;
+}
+.msg-pref-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+.msg-pref-row:first-child {
+  padding-top: 0;
+}
+.msg-pref-row:last-child {
+  border-bottom: none;
+}
+.msg-pref-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.msg-pref-text b {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.msg-pref-text small {
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+/* Explicit sizing beats the global `label.fld input { width:100% }` rule and
+   keeps the checkbox compact + aligned on every viewport. */
+.msg-pref-check {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #4f46e5;
+}
+.msg-pref-ok {
+  margin: 12px 0 0;
+  color: #059669;
+  font-size: 13px;
+}
+.msg-pref-err {
+  margin: 12px 0 0;
+  color: #dc2626;
+  font-size: 13px;
+}
+.msg-pref-save {
+  margin-top: 14px;
+}
+</style>
