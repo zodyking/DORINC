@@ -51,8 +51,11 @@ export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   void: [],
 }
 
-/** Only draft invoices may be edited. */
-export const DRAFT_EDITABLE_STATUSES: InvoiceStatus[] = ['draft']
+/** Statuses that allow line-item and header edits. Paid/void invoices are locked. */
+export const INVOICE_EDITABLE_STATUSES: InvoiceStatus[] = ['draft', 'pending_manager_approval', 'sent']
+
+/** @deprecated Use INVOICE_EDITABLE_STATUSES */
+export const DRAFT_EDITABLE_STATUSES: InvoiceStatus[] = INVOICE_EDITABLE_STATUSES
 
 /** Statuses eligible for correction via revision. */
 export const REVISION_SOURCE_STATUSES: InvoiceStatus[] = ['sent', 'paid']
@@ -213,8 +216,8 @@ export async function buildCatalogSnapshot(db: Db, catalogItemId: string): Promi
   }
 }
 
-function assertDraftEditable(invoice: { status: InvoiceStatus }) {
-  if (!DRAFT_EDITABLE_STATUSES.includes(invoice.status)) {
+function assertInvoiceEditable(invoice: { status: InvoiceStatus }) {
+  if (!INVOICE_EDITABLE_STATUSES.includes(invoice.status)) {
     throw new InvoicesServiceError('NOT_EDITABLE')
   }
 }
@@ -799,7 +802,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
 
 export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch, actorId: string) {
   const before = await getInvoice(db, id)
-  assertDraftEditable(before)
+  assertInvoiceEditable(before)
 
   const changes: Record<string, unknown> = { updatedBy: actorId, updatedAt: new Date() }
   const changedFields: string[] = []
@@ -892,7 +895,7 @@ export async function updateInvoiceDates(
   actorId: string,
 ) {
   const before = await getInvoice(db, id)
-  if (before.status === 'void') throw new InvoicesServiceError('NOT_EDITABLE')
+  if (before.status === 'void' || before.status === 'paid') throw new InvoicesServiceError('NOT_EDITABLE')
 
   const changedFields: string[] = []
   if (before.invoiceDate !== input.invoiceDate) changedFields.push('invoiceDate')
@@ -917,7 +920,7 @@ export async function addInvoiceLineItem(
   actorId: string,
 ) {
   const invoice = await getInvoice(db, invoiceId)
-  assertDraftEditable(invoice)
+  assertInvoiceEditable(invoice)
 
   let catalogSnapshot: CatalogSnapshot | null = null
   if (input.catalogItemId) {
@@ -960,7 +963,7 @@ export async function updateInvoiceLineItem(
   actorId: string,
 ) {
   const invoice = await getInvoice(db, invoiceId)
-  assertDraftEditable(invoice)
+  assertInvoiceEditable(invoice)
 
   const [existing] = await db.select().from(invoiceLineItems)
     .where(and(eq(invoiceLineItems.id, lineId), eq(invoiceLineItems.invoiceId, invoiceId)))
@@ -1018,7 +1021,7 @@ export async function updateInvoiceLineItem(
 
 export async function deleteInvoiceLineItem(db: Db, invoiceId: string, lineId: string, actorId: string) {
   const invoice = await getInvoice(db, invoiceId)
-  assertDraftEditable(invoice)
+  assertInvoiceEditable(invoice)
 
   const [existing] = await db.select().from(invoiceLineItems)
     .where(and(eq(invoiceLineItems.id, lineId), eq(invoiceLineItems.invoiceId, invoiceId)))

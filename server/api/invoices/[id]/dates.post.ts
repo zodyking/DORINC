@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
       if (err.code === 'NOT_EDITABLE') {
-        throw apiError(event, 'CONFLICT', 'This invoice cannot be edited in its current state')
+        throw apiError(event, 'CONFLICT', 'Paid and void invoices cannot be edited')
       }
     }
     throw err

@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
       if (err.code === 'NOT_EDITABLE') {
-        throw apiError(event, 'CONFLICT', 'Only draft invoices can be edited')
+        throw apiError(event, 'CONFLICT', 'Paid and void invoices cannot be edited')
       }
       if (err.code === 'CUSTOMER_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Customer not found')
       if (err.code === 'VEHICLE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Vehicle not found')

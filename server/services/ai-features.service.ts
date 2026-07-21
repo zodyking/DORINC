@@ -27,7 +27,7 @@ import {
 import { enqueueJob } from './jobs.service'
 import { getFileWithData } from './files.service'
 import { getServiceLog, updateServiceLog } from './service-logs.service'
-import { getInvoiceDetail, updateInvoiceLineItem } from './invoices.service'
+import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } from './invoices.service'
 import {
   invoiceDescriptionContentSchema,
   serviceLogExtractionContentSchema,
@@ -120,8 +120,8 @@ export async function enqueueInvoiceDescription(
 ) {
   await assertAiFeatureEnabled(db, 'invoice_description')
   const invoice = await getInvoiceDetail(db, invoiceId)
-  if (invoice.status !== 'draft') {
-    throw new AiFeaturesServiceError('NOT_FOUND', 'Only draft invoices can use AI description assist')
+  if (!INVOICE_EDITABLE_STATUSES.includes(invoice.status)) {
+    throw new AiFeaturesServiceError('NOT_FOUND', 'Paid and void invoices cannot use AI description assist')
   }
 
   const line = invoice.lineItems.find(l => l.id === lineItemId)

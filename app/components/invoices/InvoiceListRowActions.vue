@@ -2,7 +2,7 @@
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import SendInvoiceButton from '~/components/SendInvoiceButton.vue'
 import DeleteEntityButton from '~/components/DeleteEntityButton.vue'
-import { isInvoiceEmailable, isInvoiceResend, type InvoiceStatus } from '~/utils/invoices-ui'
+import { isInvoiceEditable, isInvoiceEmailable, isInvoiceResend, type InvoiceStatus } from '~/utils/invoices-ui'
 
 const props = defineProps<{
   invoiceId: string
@@ -23,7 +23,7 @@ const canDeletePerm = computed(() => auth.can('deletion_requests.submit.all'))
 
 const isResend = computed(() => isInvoiceResend(props.status))
 const sendAllowed = computed(() => canSendPerm.value && isInvoiceEmailable(props.status))
-const editAllowed = computed(() => canUpdatePerm.value && props.status === 'draft')
+const editAllowed = computed(() => canUpdatePerm.value && isInvoiceEditable(props.status))
 const deleteAllowed = computed(() => canDeletePerm.value && props.status !== 'void' && props.status !== 'paid')
 
 const sendLabel = computed(() => (isResend.value ? 'Resend' : 'Send'))
@@ -38,7 +38,9 @@ const sendTitle = computed(() => {
 
 const editTitle = computed(() => {
   if (!canUpdatePerm.value) return 'You do not have permission to edit invoices'
-  return editAllowed.value ? 'Edit draft invoice' : 'Only draft invoices can be edited'
+  if (props.status === 'paid') return 'Paid invoices cannot be edited'
+  if (props.status === 'void') return 'Void invoices cannot be edited'
+  return editAllowed.value ? 'Edit invoice' : 'This invoice cannot be edited'
 })
 
 const deleteTitle = computed(() => {
