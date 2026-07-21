@@ -267,19 +267,28 @@ describe('P1-21 draft editing + line item CRUD', () => {
     expect(remaining).toHaveLength(0)
   })
 
-  it('rejects edits on finalized invoices', async () => {
+  it('rejects edits on paid invoices but allows sent invoices', async () => {
     const invoice = await draftWithLine()
     await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)
+
+    const sentUpdate = await updateInvoiceDraft(db, invoice.id, { poNumber: 'REV-1' }, ACTOR)
+    expect(sentUpdate.invoice.poNumber).toBe('REV-1')
+
+    const lines = await listInvoiceLineItems(db, invoice.id)
+    await updateInvoiceLineItem(db, invoice.id, lines[0].id, { quantity: '5' }, ACTOR)
+    const afterLine = await listInvoiceLineItems(db, invoice.id)
+    expect(afterLine[0]?.quantity).toBe('5.00')
+
+    await markInvoicePaid(db, invoice.id, ACTOR)
     await expect(updateInvoiceDraft(db, invoice.id, { poNumber: 'X' }, ACTOR))
       .rejects.toThrow('NOT_EDITABLE')
-    const lines = await listInvoiceLineItems(db, invoice.id)
     await expect(addInvoiceLineItem(db, invoice.id, {
       lineType: 'fee',
       description: 'Late fee',
       quantity: '1',
       unitPrice: '25.00',
     }, ACTOR)).rejects.toThrow('NOT_EDITABLE')
-    await expect(updateInvoiceLineItem(db, invoice.id, lines[0].id, { quantity: '5' }, ACTOR))
+    await expect(updateInvoiceLineItem(db, invoice.id, lines[0].id, { quantity: '6' }, ACTOR))
       .rejects.toThrow('NOT_EDITABLE')
     await expect(deleteInvoiceLineItem(db, invoice.id, lines[0].id, ACTOR))
       .rejects.toThrow('NOT_EDITABLE')

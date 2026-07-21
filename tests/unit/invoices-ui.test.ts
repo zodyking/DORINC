@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,
+  isInvoiceEditable,
   isInvoiceEmailable,
   isInvoiceOverdue,
   isInvoiceResend,
@@ -21,6 +22,14 @@ describe('invoices-ui helpers (P1-22)', () => {
   it('labels payment terms like the mockup', () => {
     expect(paymentTermsLabel('net_30')).toBe('Net 30')
     expect(paymentTermsLabel('due_on_receipt')).toBe('Due on receipt')
+  })
+
+  it('allows editing sent invoices but locks paid and void', () => {
+    expect(isInvoiceEditable('draft')).toBe(true)
+    expect(isInvoiceEditable('pending_manager_approval')).toBe(true)
+    expect(isInvoiceEditable('sent')).toBe(true)
+    expect(isInvoiceEditable('paid')).toBe(false)
+    expect(isInvoiceEditable('void')).toBe(false)
   })
 
   it('derives overdue pill from sent + past due + balance', () => {

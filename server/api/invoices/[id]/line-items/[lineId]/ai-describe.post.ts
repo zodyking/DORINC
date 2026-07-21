@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
-      if (err.code === 'NOT_EDITABLE') throw apiError(event, 'CONFLICT', 'Only draft invoices can use AI assist')
+      if (err.code === 'NOT_EDITABLE') throw apiError(event, 'CONFLICT', 'Paid and void invoices cannot be edited')
       if (err.code === 'LINE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Line item not found')
     }
     if (err instanceof AiFeaturesServiceError) {

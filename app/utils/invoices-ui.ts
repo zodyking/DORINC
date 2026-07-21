@@ -23,6 +23,12 @@ export function isInvoiceEmailable(status: InvoiceStatus): boolean {
 export function isInvoiceResend(status: InvoiceStatus): boolean {
   return INVOICE_RESEND_STATUSES.includes(status)
 }
+
+export const INVOICE_NON_EDITABLE_STATUSES: InvoiceStatus[] = ['paid', 'void']
+
+export function isInvoiceEditable(status: InvoiceStatus): boolean {
+  return !INVOICE_NON_EDITABLE_STATUSES.includes(status)
+}
 export type InvoiceLineType = LineItemType
 
 export const PAYMENT_TERMS_LABELS: Record<string, string> = {

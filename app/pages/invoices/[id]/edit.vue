@@ -26,8 +26,10 @@ import {
   auditWhenDisplay,
   invoiceDateDisplay,
   invoiceStatusPill,
+  isInvoiceEditable,
   moneyDisplay,
   type InvoiceLineType,
+  type InvoiceStatus,
 } from '~/utils/invoices-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
@@ -155,7 +157,9 @@ const invoice = computed(() => data.value?.invoice)
 const history = computed(() =>
   (data.value?.history ?? []).filter(row => !isEditingSessionNoise(row.action)),
 )
-const isDraft = computed(() => invoice.value?.status === 'draft')
+const isEditable = computed(() =>
+  invoice.value ? isInvoiceEditable(invoice.value.status as InvoiceStatus) : false,
+)
 
 const loadErrorMessage = computed(() => {
   if (!idValid.value) return 'This invoice link is invalid.'
@@ -225,7 +229,7 @@ const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
-const editable = computed(() => canUpdate.value && canEdit.value && isDraft.value)
+const editable = computed(() => canUpdate.value && canEdit.value && isEditable.value)
 
 const pill = computed(() => {
   if (!invoice.value) return { cls: 'pill gray', label: '—' }
@@ -860,7 +864,7 @@ const aiPopStyle = computed(() => {
       <div v-else-if="sessionLoading" class="help" style="margin:-8px 0 16px;">Loading editor…</div>
       <div v-else-if="sessionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ sessionError }}</div>
 
-      <div v-if="!isDraft" class="card" style="margin-bottom:16px;">
+      <div v-if="invoice && !isEditable" class="card" style="margin-bottom:16px;">
         <div class="cbody">
           This invoice is {{ invoice.status }} and cannot be edited.
           <NuxtLink :to="`/invoices/${id}`" class="btn sm" style="margin-left:8px;">View detail</NuxtLink>

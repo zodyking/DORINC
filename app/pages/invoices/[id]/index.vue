@@ -7,6 +7,7 @@ import {
   invoiceDateDisplay,
   invoiceStatusHeadline,
   invoiceStatusPill,
+  isInvoiceEditable,
   isInvoiceEmailable,
   isInvoiceOverdue,
   isInvoiceResend,
@@ -250,7 +251,9 @@ const dueIsOverdue = computed(() =>
   && isInvoiceOverdue(invoice.value.status, invoice.value.dueDate, invoice.value.balanceDue),
 )
 
-const isDraft = computed(() => invoice.value?.status === 'draft')
+const isEditable = computed(() =>
+  invoice.value ? isInvoiceEditable(invoice.value.status as InvoiceStatus) : false,
+)
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
 )
@@ -398,7 +401,7 @@ const summaryRows = computed(() => {
       </template>
       <template #actions>
         <NuxtLink
-          v-if="canUpdate && isDraft"
+          v-if="canUpdate && isEditable"
           :to="`/invoices/${id}/edit`"
           class="btn"
         >
@@ -518,7 +521,7 @@ const summaryRows = computed(() => {
     </p>
 
     <div
-      v-if="isDraft && activeEditor && !sessionLoading"
+      v-if="isEditable && activeEditor && !sessionLoading"
       class="edit-lock-banner"
     >
       <div>
