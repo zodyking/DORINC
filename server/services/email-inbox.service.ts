@@ -16,8 +16,9 @@ import { emailPreviewText, normalizeInboundEmailText, stripQuotedEmailHtml, stri
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { normalizeContentId, rewriteEmailHtmlCidSources } from '../../shared/email-inline-images'
 import {
+  DOCUMENT_ATTACHMENT_MIMES,
   isInlineEmailPart,
-  resolveAllowedAttachmentMime,
+  resolveEmailAttachmentMime,
   resolveInlineImageMime,
 } from '../../shared/email-attachment-mime'
 import { sendBrandedMail } from '../mail/branded-mail'
@@ -226,8 +227,9 @@ async function persistInboundAttachments(
     }
 
     const sniffed = sniffMime(attachment.content)
-    const mimeType = resolveAllowedAttachmentMime(
+    const mimeType = resolveEmailAttachmentMime(
       attachment.contentType,
+      attachment.filename,
       sniffed,
       ALLOWED_UPLOAD_MIMES,
     )
@@ -257,6 +259,10 @@ async function persistInboundAttachments(
         originalFilename: safeInboundAttachmentName(attachment.filename, index),
         mimeType,
         data: attachment.content,
+        // Document types (docx, xlsx, csv, zip…) can't be magic-byte sniffed;
+        // they've already been validated against the document allowlist and are
+        // served download-only, so bypass the image/PDF upload allowlist here.
+        trusted: DOCUMENT_ATTACHMENT_MIMES.has(mimeType),
       }, null)
       persisted++
       existingAttachmentHashes.add(sha256)
@@ -643,7 +649,10 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
           fileKind: 'inline',
         }),
       ])
-      attachments = [...regular, ...inline]
+      // Inline images are embedded in the HTML body (via cid rewriting), so only
+      // surface them in the attachment strip when there is no HTML body to render
+      // them — otherwise they would appear twice.
+      attachments = r.htmlBody?.trim() ? regular : [...regular, ...inline]
     }
     catch (err) {
       console.warn('[email-inbox] attachment list failed for message', r.id, (err as Error).message)

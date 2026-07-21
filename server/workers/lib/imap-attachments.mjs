@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import {
   isInlineEmailPart,
-  resolveAllowedAttachmentMime,
+  resolveEmailAttachmentMime,
   resolveInlineImageMime,
 } from '../../../shared/email-attachment-mime.mjs'
 
@@ -176,8 +176,9 @@ export async function persistInboundAttachments(pool, messageId, attachments = [
     }
 
     const sniffed = sniffAttachmentMime(attachment.content)
-    const mimeType = resolveAllowedAttachmentMime(
+    const mimeType = resolveEmailAttachmentMime(
       attachment.contentType,
+      attachment.filename,
       sniffed,
       ALLOWED_ATTACHMENT_MIMES,
     )
