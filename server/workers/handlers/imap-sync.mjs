@@ -39,6 +39,17 @@ export async function maybeEnqueueImapSync(pool) {
   return true
 }
 
+/** Whether a queued imap_sync job requested a full mailbox re-scan (backfill). */
+function jobWantsFullSync(job) {
+  try {
+    const payload = typeof job.payload === 'string' ? JSON.parse(job.payload || '{}') : (job.payload ?? {})
+    return payload?.full === true
+  }
+  catch {
+    return false
+  }
+}
+
 /**
  * Process queued imap_sync jobs.
  * @param {import('pg').Pool} pool
@@ -79,8 +90,10 @@ export async function processImapSyncJobs(pool, batch = 1) {
 
     if (!job) break
 
+    const full = jobWantsFullSync(job)
+
     try {
-      const result = await runImapInboxSync(pool)
+      const result = await runImapInboxSync(pool, { full })
       if (result.busy) {
         await pool.query(
           `UPDATE worker_jobs SET status = 'queued', started_at = NULL, run_after = now() + interval '5 seconds' WHERE id = $1`,

@@ -1,6 +1,6 @@
 import { readBody } from 'h3'
 import { useDb } from '../../../db/client'
-import { syncImapInbox } from '../../../services/imap-sync.service'
+import { enqueueJob } from '../../../services/jobs.service'
 import { getImapConfig, refreshImapConfigCache } from '../../../services/imap-config.service'
 import { refreshAppConfigCache } from '../../../services/app-config.service'
 import { requirePermission } from '../../../utils/require-permission'
@@ -23,16 +23,19 @@ export default defineEventHandler(async (event) => {
   const body = bodySchema.safeParse(await readBody(event).catch(() => undefined))
   const full = body.success ? body.data?.full === true : false
 
+  // Run the sync in the background worker instead of inline so large mailboxes
+  // (and attachment backfills) never time out the request. Emails + attachments
+  // appear as the worker processes the job.
   try {
-    const result = await syncImapInbox(db, { full })
-    const repairNote = result.repaired ? `, repaired ${result.repaired} attachment(s) on existing message(s)` : ''
+    await enqueueJob(db, 'imap_sync', { trigger: 'manual', full }, 3)
     return {
       ok: true,
-      message: `Synced ${result.ingested} new message(s) (${result.skipped} skipped, ${result.errors} errors${repairNote})`,
-      result,
+      message: full
+        ? 'Full sync started in the background — new emails and attachment backfill will appear in a moment. Refresh to see updates.'
+        : 'Sync started in the background — new emails will appear in a moment. Refresh to see updates.',
     }
   }
   catch (err) {
-    throw apiError(event, 'VALIDATION_ERROR', (err as Error).message || 'IMAP sync failed')
+    throw apiError(event, 'VALIDATION_ERROR', (err as Error).message || 'Could not start IMAP sync')
   }
 })
