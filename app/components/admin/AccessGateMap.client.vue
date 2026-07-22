@@ -20,7 +20,14 @@ let L: typeof import('leaflet') | null = null
 let map: import('leaflet').Map | null = null
 let clusterGroup: import('leaflet').LayerGroup | null = null
 let polygonLayer: import('leaflet').Polygon | null = null
-let vertexLayer: import('leaflet').LayerGroup | null = null
+let traceLayer: import('leaflet').Polyline | null = null
+
+// Freehand drawing state.
+let tracing = false
+let tracePoints: GeoPoint[] = []
+let lastContainerPt: import('leaflet').Point | null = null
+const MIN_TRACE_PX = 6
+const MAX_TRACE_POINTS = 800
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, ch => (
@@ -81,28 +88,14 @@ function renderPolygon() {
     polygonLayer.remove()
     polygonLayer = null
   }
-  if (vertexLayer) {
-    vertexLayer.clearLayers()
-  }
   const pts = props.polygon
-  if (pts.length >= 2) {
+  if (pts.length >= 3) {
     const latlngs = pts.map(p => [p.lat, p.lng]) as [number, number][]
     polygonLayer = L.polygon(latlngs, {
       color: '#4f46e5',
       weight: 2,
       fillOpacity: 0.12,
     }).addTo(map)
-  }
-  if (props.drawing && vertexLayer) {
-    for (const p of pts) {
-      L.circleMarker([p.lat, p.lng], {
-        radius: 5,
-        color: '#4f46e5',
-        fillColor: '#fff',
-        fillOpacity: 1,
-        weight: 2,
-      }).addTo(vertexLayer)
-    }
   }
 }
 
@@ -121,10 +114,87 @@ function fitToData() {
   }
 }
 
-function onMapClick(e: import('leaflet').LeafletMouseEvent) {
-  if (!props.drawing) return
-  const next = [...props.polygon, { lat: e.latlng.lat, lng: e.latlng.lng }]
-  emit('update:polygon', next)
+function clearTraceLayer() {
+  if (traceLayer) {
+    traceLayer.remove()
+    traceLayer = null
+  }
+}
+
+function updateTraceLayer() {
+  if (!L || !map) return
+  const latlngs = tracePoints.map(p => [p.lat, p.lng]) as [number, number][]
+  if (!traceLayer) {
+    traceLayer = L.polyline(latlngs, { color: '#4f46e5', weight: 2, dashArray: '4 4' }).addTo(map)
+  }
+  else {
+    traceLayer.setLatLngs(latlngs)
+  }
+}
+
+function onPointerDown(ev: PointerEvent) {
+  if (!props.drawing || !map || ev.button != null && ev.button !== 0) return
+  ev.preventDefault()
+  tracing = true
+  tracePoints = []
+  clearTraceLayer()
+  const latlng = map.mouseEventToLatLng(ev)
+  tracePoints.push({ lat: latlng.lat, lng: latlng.lng })
+  lastContainerPt = map.mouseEventToContainerPoint(ev)
+  try {
+    (ev.target as Element).setPointerCapture?.(ev.pointerId)
+  }
+  catch {
+    // capture is best-effort
+  }
+}
+
+function onPointerMove(ev: PointerEvent) {
+  if (!tracing || !map) return
+  ev.preventDefault()
+  const pt = map.mouseEventToContainerPoint(ev)
+  if (lastContainerPt && pt.distanceTo(lastContainerPt) < MIN_TRACE_PX) return
+  lastContainerPt = pt
+  const latlng = map.mouseEventToLatLng(ev)
+  tracePoints.push({ lat: latlng.lat, lng: latlng.lng })
+  if (tracePoints.length > MAX_TRACE_POINTS) {
+    // Downsample to keep the polygon light while preserving its shape.
+    tracePoints = tracePoints.filter((_, i) => i % 2 === 0)
+  }
+  updateTraceLayer()
+}
+
+function onPointerUp() {
+  if (!tracing) return
+  tracing = false
+  clearTraceLayer()
+  if (tracePoints.length >= 3) {
+    emit('update:polygon', tracePoints.slice())
+  }
+  tracePoints = []
+  lastContainerPt = null
+}
+
+function setDrawInteractions(enabled: boolean) {
+  if (!map) return
+  const container = map.getContainer()
+  if (enabled) {
+    map.dragging.disable()
+    map.doubleClickZoom.disable()
+    map.boxZoom.disable()
+    container.style.cursor = 'crosshair'
+  }
+  else {
+    map.dragging.enable()
+    map.doubleClickZoom.enable()
+    map.boxZoom.enable()
+    container.style.cursor = ''
+    // Abandon any in-progress stroke when leaving draw mode.
+    tracing = false
+    tracePoints = []
+    lastContainerPt = null
+    clearTraceLayer()
+  }
 }
 
 async function initMap() {
@@ -147,9 +217,12 @@ async function initMap() {
   }).markerClusterGroup
   clusterGroup = makeCluster ? makeCluster() : L.layerGroup()
   map.addLayer(clusterGroup)
-  vertexLayer = L.layerGroup().addTo(map)
 
-  map.on('click', onMapClick)
+  const container = map.getContainer()
+  container.addEventListener('pointerdown', onPointerDown)
+  container.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+
   map.on('popupopen', (e: import('leaflet').PopupEvent) => {
     const node = (e.popup.getElement?.() ?? null) as HTMLElement | null
     const btn = node?.querySelector<HTMLButtonElement>('.ag-ban-btn')
@@ -164,6 +237,7 @@ async function initMap() {
   renderMarkers()
   renderPolygon()
   fitToData()
+  if (props.drawing) setDrawInteractions(true)
 }
 
 onMounted(() => {
@@ -172,6 +246,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (map) {
+    const container = map.getContainer()
+    container.removeEventListener('pointerdown', onPointerDown)
+    container.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
     map.remove()
     map = null
   }
@@ -185,7 +263,8 @@ watch(() => props.polygon, () => {
   renderPolygon()
 }, { deep: true })
 
-watch(() => props.drawing, () => {
+watch(() => props.drawing, (enabled) => {
+  setDrawInteractions(enabled)
   renderPolygon()
 })
 </script>

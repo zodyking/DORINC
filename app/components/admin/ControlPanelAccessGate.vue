@@ -63,10 +63,6 @@ function clearPolygon() {
   form.allowedPolygon = []
 }
 
-function undoPolygonPoint() {
-  form.allowedPolygon = form.allowedPolygon.slice(0, -1)
-}
-
 function addBannedIp() {
   const ip = newIp.value.trim()
   if (!ip) return
@@ -176,12 +172,17 @@ async function save() {
             >
               {{ drawing ? 'Done drawing' : 'Draw area' }}
             </button>
-            <button type="button" class="btn sm" :disabled="!form.allowedPolygon.length" @click="undoPolygonPoint">Undo point</button>
             <button type="button" class="btn sm" :disabled="!form.allowedPolygon.length" @click="clearPolygon">Clear area</button>
           </div>
         </div>
 
-        <p v-if="drawing" class="ag-hint">Click on the map to add points to the allowed area ({{ form.allowedPolygon.length }} point{{ form.allowedPolygon.length === 1 ? '' : 's' }}). Click the markers to ban an IP.</p>
+        <p v-if="drawing" class="ag-hint">
+          Press and drag on the map to trace the allowed area, then release to finish. Each new stroke
+          replaces the previous shape. Turn off “Draw area” to pan/zoom and click markers again.
+        </p>
+        <p v-else-if="form.allowedPolygon.length" class="ag-hint ag-hint--muted">
+          Allowed area set ({{ form.allowedPolygon.length }} points). Click markers to ban an IP.
+        </p>
 
         <ClientOnly>
           <AccessGateMap
@@ -246,7 +247,8 @@ async function save() {
 .ag-sw { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 .ag-maptools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ag-filter { padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12.5px; background: #fff; }
-.ag-hint { margin: 0; font-size: 12.5px; color: #4f46e5; }
+.ag-hint { margin: 0; font-size: 12.5px; color: #4f46e5; line-height: 1.5; }
+.ag-hint--muted { color: #64748b; }
 .ag-stats { font-size: 12px; color: #94a3b8; }
 .ag-bans { display: flex; flex-direction: column; gap: 8px; }
 .ag-ban-add { display: flex; gap: 8px; }
