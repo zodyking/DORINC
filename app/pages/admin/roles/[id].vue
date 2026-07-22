@@ -95,6 +95,8 @@ function moduleLabel(mod: string): string {
     portal_requests: 'Portal Requests',
     deletion_requests: 'Deletion Requests',
     records: 'Records',
+    messages: 'Messages',
+    email: 'Email',
   }
   return labels[mod] ?? mod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }

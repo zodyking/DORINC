@@ -21,7 +21,6 @@ export default defineEventHandler((event) => {
       username: auth.user.username,
       accountType: auth.user.accountType,
       customerId: auth.user.customerId,
-      nonCustomerEmailEnabled: (auth.user as { nonCustomerEmailEnabled?: boolean }).nonCustomerEmailEnabled === true,
     },
     permissions: [...effective].sort(),
   }

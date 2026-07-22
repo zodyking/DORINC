@@ -6,7 +6,6 @@ import type { AccountType } from '../../shared/permissions/keys'
 export type UsersServiceErrorCode
   = | 'NOT_FOUND'
     | 'NOT_PENDING'
-    | 'NOT_APPROVED'
     | 'INVALID_ACCOUNT_TYPE'
     | 'SUPER_ADMIN_PROTECTED'
 
@@ -133,7 +132,6 @@ export interface UpdateUserInput {
   isActive?: boolean
   /** Reason for deactivation (suspension). Only used when isActive=false. */
   disabledReason?: string
-  nonCustomerEmailEnabled?: boolean
 }
 
 /**
@@ -178,20 +176,6 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
     if (!input.isActive && input.disabledReason) {
       changedFields.push('disabledReason')
     }
-  }
-
-  if (
-    input.nonCustomerEmailEnabled !== undefined
-    && input.nonCustomerEmailEnabled !== row.user.nonCustomerEmailEnabled
-  ) {
-    if (row.accountTypeKey === 'customer' || row.accountTypeKey === 'super_admin') {
-      throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
-    }
-    if (!row.user.approvedAt || !row.user.isActive) {
-      throw new UsersServiceError('NOT_APPROVED')
-    }
-    changes.nonCustomerEmailEnabled = input.nonCustomerEmailEnabled
-    changedFields.push('nonCustomerEmailEnabled')
   }
 
   if (!changedFields.length) {
@@ -308,7 +292,6 @@ export async function getUserDetail(db: Db, userId: string) {
     disabledAt: row.user.disabledAt,
     disabledReason: row.user.disabledReason,
     customerId: row.user.customerId,
-    nonCustomerEmailEnabled: row.user.nonCustomerEmailEnabled,
     createdAt: row.user.createdAt,
     updatedAt: row.user.updatedAt,
   }

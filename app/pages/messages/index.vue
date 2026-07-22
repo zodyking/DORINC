@@ -44,7 +44,7 @@ const EMAIL_MAX_ATTACHMENTS = 10
 const EMAIL_MAX_ATTACH_MB = 25
 const NON_CUSTOMER_RECIPIENT_KEY = '__non_customer__'
 
-const canSendNonCustomerEmail = computed(() => auth.user?.nonCustomerEmailEnabled === true)
+const canSendNonCustomerEmail = computed(() => auth.can('email.send_noncustomer.all'))
 const isNonCustomerRecipient = computed(() => emailForm.recipientKey === NON_CUSTOMER_RECIPIENT_KEY)
 
 function formatAttachSize(bytes: number): string {
