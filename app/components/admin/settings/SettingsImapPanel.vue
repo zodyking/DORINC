@@ -137,12 +137,15 @@ async function runTest() {
   }
 }
 
-async function runSync() {
+async function runSync(full = false) {
   syncBusy.value = true
   message.value = ''
   error.value = ''
   try {
-    const res = await $fetch<{ message: string }>('/api/admin/system/imap-sync', { method: 'POST' })
+    const res = await $fetch<{ message: string }>('/api/admin/system/imap-sync', {
+      method: 'POST',
+      body: { full },
+    })
     message.value = res.message
   }
   catch (e: unknown) {
@@ -307,8 +310,17 @@ async function runSync() {
           <button type="button" class="btn" :disabled="testBusy" @click="runTest">
             {{ testBusy ? 'Testing…' : 'Test IMAP connection' }}
           </button>
-          <button type="button" class="btn" :disabled="syncBusy" @click="runSync">
+          <button type="button" class="btn" :disabled="syncBusy" @click="runSync(false)">
             {{ syncBusy ? 'Syncing…' : 'Sync inbox now' }}
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :disabled="syncBusy"
+            title="Re-scan the whole mailbox and backfill attachments/inline images on already-synced emails"
+            @click="runSync(true)"
+          >
+            {{ syncBusy ? 'Syncing…' : 'Backfill attachments (full re-sync)' }}
           </button>
         </div>
       </div>

@@ -10,4 +10,17 @@ describe('email attachments', () => {
   it('recognizes GIF image attachments by their bytes', () => {
     expect(sniffMime(Buffer.from('GIF89aimage-data', 'latin1'))).toBe('image/gif')
   })
+
+  it('recognizes BMP image attachments by their bytes', () => {
+    expect(sniffMime(Buffer.from('BMxxxxxxxxxxxx', 'latin1'))).toBe('image/bmp')
+  })
+
+  it('recognizes AVIF image attachments by their ftyp brand', () => {
+    const avif = Buffer.concat([
+      Buffer.from([0, 0, 0, 0]),
+      Buffer.from('ftypavif', 'latin1'),
+      Buffer.from('extra-data', 'latin1'),
+    ])
+    expect(sniffMime(avif)).toBe('image/avif')
+  })
 })

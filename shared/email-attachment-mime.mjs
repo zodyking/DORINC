@@ -38,6 +38,8 @@ export const DOCUMENT_ATTACHMENT_MIMES = new Set([
   'application/x-7z-compressed',
   'application/x-rar-compressed',
   'message/rfc822',
+  'image/svg+xml',
+  'image/tiff',
 ])
 
 const EXTENSION_MIME = {
@@ -59,6 +61,9 @@ const EXTENSION_MIME = {
   '7z': 'application/x-7z-compressed',
   rar: 'application/x-rar-compressed',
   eml: 'message/rfc822',
+  svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
 }
 
 function extensionMime(filename) {
@@ -105,5 +110,9 @@ export function isInlineEmailPart(attachment) {
 
 export function resolveInlineImageMime(declared, sniffed, allowed) {
   const resolved = resolveAllowedAttachmentMime(declared, sniffed, allowed)
-  return resolved?.startsWith('image/') ? resolved : null
+  if (resolved?.startsWith('image/')) return resolved
+
+  const normalized = String(declared || '').toLowerCase().split(';')[0].trim()
+  if (normalized.startsWith('image/') && allowed.has(normalized)) return normalized
+  return null
 }

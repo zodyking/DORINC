@@ -39,6 +39,14 @@ describe('email-attachment-mime', () => {
     expect(resolveInlineImageMime('application/octet-stream', 'application/pdf', ALLOWED))
       .toBeNull()
   })
+
+  it('accepts a declared inline image type when the sniff fails but it is allowed', () => {
+    expect(resolveInlineImageMime('image/png', null, ALLOWED)).toBe('image/png')
+    expect(resolveInlineImageMime('image/jpeg; name="x.jpg"', null, ALLOWED)).toBe('image/jpeg')
+    // Not an allowed image type → still rejected.
+    expect(resolveInlineImageMime('image/tiff', null, ALLOWED)).toBeNull()
+    expect(resolveInlineImageMime('text/html', null, ALLOWED)).toBeNull()
+  })
 })
 
 describe('resolveEmailAttachmentMime', () => {
@@ -73,9 +81,15 @@ describe('resolveEmailAttachmentMime', () => {
       .toBeNull()
   })
 
+  it('accepts SVG and TIFF as download-only document attachments', () => {
+    expect(resolveEmailAttachmentMime('image/svg+xml', 'logo.svg', null, ALLOWED)).toBe('image/svg+xml')
+    expect(resolveEmailAttachmentMime('application/octet-stream', 'diagram.svg', null, ALLOWED)).toBe('image/svg+xml')
+    expect(resolveEmailAttachmentMime('image/tiff', 'scan.tiff', null, ALLOWED)).toBe('image/tiff')
+    expect(resolveEmailAttachmentMime('application/octet-stream', 'scan.tif', null, ALLOWED)).toBe('image/tiff')
+  })
+
   it('rejects unsupported or unsafe types', () => {
     expect(resolveEmailAttachmentMime('text/html', 'evil.html', null, ALLOWED)).toBeNull()
-    expect(resolveEmailAttachmentMime('image/svg+xml', 'evil.svg', null, ALLOWED)).toBeNull()
     expect(resolveEmailAttachmentMime('application/x-msdownload', 'evil.exe', null, ALLOWED)).toBeNull()
   })
 })

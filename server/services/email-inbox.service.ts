@@ -649,10 +649,11 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
           fileKind: 'inline',
         }),
       ])
-      // Inline images are embedded in the HTML body (via cid rewriting), so only
-      // surface them in the attachment strip when there is no HTML body to render
-      // them — otherwise they would appear twice.
-      attachments = r.htmlBody?.trim() ? regular : [...regular, ...inline]
+      // Always surface every stored file (inline + regular). Inline images also
+      // render inside the HTML body, but listing them here as well guarantees
+      // that photos remain visible even if the sandboxed HTML frame cannot load
+      // them — matching Gmail, which always shows attachments/images.
+      attachments = [...regular, ...inline]
     }
     catch (err) {
       console.warn('[email-inbox] attachment list failed for message', r.id, (err as Error).message)
@@ -676,6 +677,7 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
         filename: file.originalFilename,
         mimeType: file.mimeType,
         fileSizeBytes: file.fileSizeBytes,
+        kind: file.fileKind === 'inline' ? 'inline' as const : 'attachment' as const,
       })),
     }
   }))

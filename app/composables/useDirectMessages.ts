@@ -58,6 +58,7 @@ export interface EmailAttachment {
   filename: string
   mimeType: string
   fileSizeBytes: number
+  kind?: 'inline' | 'attachment'
 }
 
 export interface ChatMessage {

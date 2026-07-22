@@ -30,6 +30,8 @@ export const ALLOWED_UPLOAD_MIMES = new Set([
   'image/gif',
   'image/heic',
   'image/heif',
+  'image/bmp',
+  'image/avif',
   'application/pdf',
 ])
 
@@ -43,8 +45,10 @@ export function sniffMime(data: Buffer): string | null {
   if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'image/png'
   if (data.length >= 12 && data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp'
   if (data.length >= 6 && ['GIF87a', 'GIF89a'].includes(data.subarray(0, 6).toString('latin1'))) return 'image/gif'
+  if (data.length >= 2 && data[0] === 0x42 && data[1] === 0x4D) return 'image/bmp'
   if (data.length >= 12 && data.subarray(4, 8).toString('latin1') === 'ftyp') {
     const brand = data.subarray(8, 12).toString('latin1')
+    if (brand.startsWith('avif') || brand.startsWith('avis')) return 'image/avif'
     if (brand.startsWith('hei') || brand.startsWith('mif') || brand.startsWith('msf')) return 'image/heic'
   }
   if (data.length >= 5 && data.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf'

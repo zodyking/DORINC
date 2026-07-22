@@ -7,6 +7,10 @@ const props = defineProps<{
   attachments: EmailAttachment[]
 }>()
 
+// Track thumbnails that failed to load so we can fall back to a file chip
+// (guarantees the attachment is still openable even if the preview 404s).
+const failedThumbs = ref<Set<string>>(new Set())
+
 function attachmentUrl(fileId: string, action: 'preview' | 'download'): string {
   return `/api/conversations/${props.conversationId}/messages/${props.messageId}/attachments/${fileId}/${action}`
 }
@@ -17,8 +21,15 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+// Only formats browsers render in <img>. Others (SVG/TIFF/etc.) show as files.
+const PREVIEWABLE_IMAGE = /^image\/(jpeg|png|gif|webp|bmp|avif|heic|heif)$/i
+
 function isImage(attachment: EmailAttachment): boolean {
-  return attachment.mimeType.startsWith('image/')
+  return PREVIEWABLE_IMAGE.test(attachment.mimeType) && !failedThumbs.value.has(attachment.id)
+}
+
+function onThumbError(id: string) {
+  failedThumbs.value = new Set(failedThumbs.value).add(id)
 }
 </script>
 
@@ -47,6 +58,7 @@ function isImage(attachment: EmailAttachment): boolean {
             :src="attachmentUrl(attachment.id, 'preview')"
             :alt="attachment.filename"
             loading="lazy"
+            @error="onThumbError(attachment.id)"
           >
         </a>
         <div v-else class="dm-email-attachment-icon" aria-hidden="true">📎</div>

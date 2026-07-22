@@ -38,6 +38,10 @@ export const DOCUMENT_ATTACHMENT_MIMES = new Set([
   'application/x-7z-compressed',
   'application/x-rar-compressed',
   'message/rfc822',
+  // Image formats browsers can't reliably preview inline — kept as safe,
+  // download-only attachments (SVG is download-only to avoid inline script).
+  'image/svg+xml',
+  'image/tiff',
 ])
 
 const EXTENSION_MIME: Record<string, string> = {
@@ -59,6 +63,9 @@ const EXTENSION_MIME: Record<string, string> = {
   '7z': 'application/x-7z-compressed',
   rar: 'application/x-rar-compressed',
   eml: 'message/rfc822',
+  svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
 }
 
 function extensionMime(filename?: string | null): string | null {
@@ -72,7 +79,7 @@ export function resolveAllowedAttachmentMime(
   sniffed: string | null,
   allowed: Set<string>,
 ): string | null {
-  const normalized = String(declared || '').toLowerCase().split(';')[0].trim()
+  const normalized = (String(declared || '').toLowerCase().split(';')[0] ?? '').trim()
   if (!sniffed || !allowed.has(sniffed)) return null
 
   if (!normalized || GENERIC_ATTACHMENT_MIMES.has(normalized)) return sniffed
@@ -97,7 +104,7 @@ export function resolveEmailAttachmentMime(
   const verified = resolveAllowedAttachmentMime(declared, sniffed, imageAndPdfAllowed)
   if (verified) return verified
 
-  const normalized = String(declared || '').toLowerCase().split(';')[0].trim()
+  const normalized = (String(declared || '').toLowerCase().split(';')[0] ?? '').trim()
   if (DOCUMENT_ATTACHMENT_MIMES.has(normalized)) return normalized
 
   // Fall back to the filename extension only for document types — never for
@@ -127,5 +134,12 @@ export function resolveInlineImageMime(
   allowed: Set<string>,
 ): string | null {
   const resolved = resolveAllowedAttachmentMime(declared, sniffed, allowed)
-  return resolved?.startsWith('image/') ? resolved : null
+  if (resolved?.startsWith('image/')) return resolved
+
+  // Fallback: trust a declared image type that is in the allowlist even when the
+  // magic-byte sniff did not recognize the bytes (some mail clients send inline
+  // images with unusual encodings). Rendered only inside <img>, so this is safe.
+  const normalized = (String(declared || '').toLowerCase().split(';')[0] ?? '').trim()
+  if (normalized.startsWith('image/') && allowed.has(normalized)) return normalized
+  return null
 }
