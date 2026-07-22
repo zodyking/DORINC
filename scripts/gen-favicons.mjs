@@ -1,5 +1,7 @@
-// Regenerate transparent favicon + touch/OG icons from the borderless brand mark.
-// Source: public/images/dorinc-icon-trans-2.png (pure "D", transparent background, no border).
+// Regenerate transparent favicon + touch/OG icons from the brand mark.
+// Source: public/images/dorinc-icon-trans.png — a genuinely transparent (RGBA)
+// master with the white background keyed out. `fit: contain` only pads, it does
+// NOT remove a baked-in background, so the source MUST already be transparent.
 // Run: node scripts/gen-favicons.mjs
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -7,7 +9,7 @@ import { dirname, join } from 'node:path'
 import sharp from 'sharp'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SRC = join(root, 'public/images/dorinc-icon-trans-2.png')
+const SRC = join(root, 'public/images/dorinc-icon-trans.png')
 const PUBLIC = join(root, 'public')
 
 /** Render the source mark to a square transparent PNG buffer of the given size. */
