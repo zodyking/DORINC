@@ -17,6 +17,7 @@ import {
   vehicleChangeRequests,
 } from '../db/schema/portal-requests'
 import { serviceLogs } from '../db/schema/service-logs'
+import { backupRecoveryTests, suspiciousActivityAlerts } from '../db/schema/security'
 import { vehicles } from '../db/schema/vehicles'
 import { catalogItems, catalogLaborRates } from '../db/schema/catalog'
 import { appFiles } from '../db/schema/files'
@@ -367,6 +368,19 @@ async function nullifyUserAttribution(db: Db, userId: string) {
   await db.update(userPermissionOverrides)
     .set({ createdBy: null })
     .where(eq(userPermissionOverrides.createdBy, userId))
+
+  // Security tables reference users without an ON DELETE rule — detach the user
+  // so deletion is not blocked while preserving the alert/test history.
+  await db.update(suspiciousActivityAlerts)
+    .set({ actorUserId: null })
+    .where(eq(suspiciousActivityAlerts.actorUserId, userId))
+  await db.update(suspiciousActivityAlerts)
+    .set({ dismissedBy: null })
+    .where(eq(suspiciousActivityAlerts.dismissedBy, userId))
+
+  await db.update(backupRecoveryTests)
+    .set({ testedBy: null })
+    .where(eq(backupRecoveryTests.testedBy, userId))
 }
 
 /**
