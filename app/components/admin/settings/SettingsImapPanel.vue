@@ -310,17 +310,14 @@ async function runSync(full = false) {
           <button type="button" class="btn" :disabled="testBusy" @click="runTest">
             {{ testBusy ? 'Testing…' : 'Test IMAP connection' }}
           </button>
-          <button type="button" class="btn" :disabled="syncBusy" @click="runSync(false)">
-            {{ syncBusy ? 'Syncing…' : 'Sync inbox now' }}
-          </button>
           <button
             type="button"
             class="btn"
             :disabled="syncBusy"
-            title="Re-scan the whole mailbox and backfill attachments/inline images on already-synced emails"
+            title="Fetch new emails and backfill attachments/inline images on existing threads (runs in the background)"
             @click="runSync(true)"
           >
-            {{ syncBusy ? 'Syncing…' : 'Backfill attachments (full re-sync)' }}
+            {{ syncBusy ? 'Starting…' : 'Sync inbox & attachments' }}
           </button>
         </div>
       </div>

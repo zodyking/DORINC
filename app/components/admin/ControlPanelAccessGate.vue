@@ -185,7 +185,7 @@ async function save() {
         </p>
 
         <ClientOnly>
-          <AccessGateMap
+          <AdminAccessGateMap
             :events="events"
             :polygon="form.allowedPolygon"
             :drawing="drawing"

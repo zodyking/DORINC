@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Control Panel — workspace settings, system health, and configuration.
+import ControlPanelAccessGate from '~/components/admin/ControlPanelAccessGate.vue'
 import ControlPanelBackupRestore from '~/components/admin/ControlPanelBackupRestore.vue'
 import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseChart.vue'
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
