@@ -28,13 +28,17 @@ export default defineNuxtConfig({
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-title', content: 'DORINC' },
         { name: 'application-name', content: 'DORINC' },
-        { name: 'description', content: 'Fleet billing, service logs, and customer portal for DORINC.' },
+        // Invariant social tags. The business-aware title/description/image/url
+        // set is emitted once per request by server/plugins/social-meta.ts.
+        { property: 'og:type', content: 'website' },
+        { name: 'twitter:card', content: 'summary' },
       ],
       link: [
         { rel: 'manifest', href: '/manifest.webmanifest' },
-        { rel: 'icon', type: 'image/png', href: '/images/dorinc-icon-trans.png' },
-        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/images/dorinc-icon-trans.png' },
-        { rel: 'apple-touch-icon', href: '/images/dorinc-icon-trans.png' },
+        { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
+        { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
+        { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16.png' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
