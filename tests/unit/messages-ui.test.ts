@@ -27,10 +27,16 @@ describe('messages UI contracts', () => {
     expect(css).toMatch(/max-width:960px[\s\S]*\.dm-page:not\(\.dm-page--in-thread\) \.dm-channel-switcher-bar[\s\S]*display:none/)
   })
 
-  it('lets team-only desktop layout fill viewport height', () => {
+  it('lets the desktop message layout fill viewport height', () => {
     const css = source('app/assets/css/ledger.css')
-    expect(css).toContain('.dm-layout--team-only')
-    expect(css).toMatch(/min-width:961px[\s\S]*\.dm-layout--team-only[\s\S]*max-height:none/)
+    expect(css).toMatch(/min-width:961px[\s\S]*\.dm-layout\{[\s\S]*max-height:none/)
+  })
+
+  it('lets the thread message list scroll internally instead of growing', () => {
+    const css = source('app/assets/css/ledger.css')
+    // The scrollable message list must be able to shrink (min-height:0) so a
+    // tall email scrolls inside the panel rather than expanding the container.
+    expect(css).toMatch(/\.dm-thread-msgs\{[^}]*min-height:0/)
   })
 
   it('uses a single compose placeholder overlay for team chat', () => {

@@ -1756,7 +1756,7 @@ section.page.active.dm-page{
   font:inherit; font-size:13px; background:#fff;
 }
 .dm-search:focus{ outline:none; border-color:#a5b4fc; box-shadow:0 0 0 3px rgba(79,70,229,.12); }
-.dm-conv-list{ flex:1; overflow:auto; min-width:0; }
+.dm-conv-list{ flex:1; overflow:auto; min-width:0; min-height:0; }
 .dm-conv-item{
   display:flex; align-items:flex-start; gap:10px; width:100%; max-width:100%;
   padding:12px 14px; box-sizing:border-box; min-width:0;
@@ -1794,7 +1794,7 @@ section.page.active.dm-page{
 }
 .dm-thread-peer b{ display:block; font-size:14px; }
 .dm-thread-peer small{ color:#64748b; font-size:12px; }
-.dm-thread-msgs{ flex:1; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; background:#fff; }
+.dm-thread-msgs{ flex:1; min-height:0; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; background:#fff; }
 .dm-thread-msgs.is-email{
   padding:0; gap:0; background:#f6f8fc;
 }
@@ -2083,16 +2083,18 @@ section.page.active.dm-page{
   .dm-page:has(.dm-sidebar) .dm-channel-switcher-bar{
     display:none;
   }
-  /* Team-only desktop: fill remaining viewport below page head + switcher */
-  section.page.active.dm-page:has(.dm-layout--team-only){
-    flex:1 1 auto;
-    min-height:0;
+  /* Desktop: the messages workspace fills the viewport height; the conversation
+     list and thread scroll internally instead of growing the page (fixes the
+     capped height + the incremental "growing container" glitch when opening a
+     thread with a tall HTML email). */
+  section.page.active.dm-page{
     height:calc(100vh - 120px);
+    min-height:520px;
   }
-  .dm-layout--team-only{
+  .dm-layout{
     flex:1 1 auto;
-    min-height:0;
     height:auto;
+    min-height:0;
     max-height:none;
   }
 }
