@@ -4,7 +4,7 @@ import { mapStaffLoginGeoError, staffLoginGeoErrorMessage } from '../../app/util
 describe('staff login geolocation helpers', () => {
   it('maps permission denied to actionable copy', () => {
     expect(staffLoginGeoErrorMessage('GEO_PERMISSION_DENIED'))
-      .toContain('location access')
+      .toMatch(/location access/i)
   })
 
   it('maps geolocation errors from thrown codes', () => {

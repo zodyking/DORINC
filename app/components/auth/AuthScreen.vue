@@ -2,7 +2,6 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
 import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
-import { mapStaffLoginGeoError, requestStaffLoginGeo } from '~/utils/staff-login-geo'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -44,6 +43,8 @@ const error = ref('')
 const notice = ref('')
 const loginBlockedReason = ref<string | null>(null)
 const signupSubmittedEmail = ref('')
+const pendingLoginToken = ref<string | null>(null)
+const showLocationPrompt = ref(false)
 
 function messageFrom(err: unknown): string {
   return authErrorMessage(err)
@@ -73,28 +74,49 @@ async function submitLogin(identifier: string, password: string) {
   loginBlockedReason.value = null
   resetResend()
   try {
-    let geo
-    if (card.value === 'staff') {
-      geo = await requestStaffLoginGeo()
+    const result = await auth.login(identifier, password, card.value)
+    if ('needsLocation' in result && result.needsLocation) {
+      pendingLoginToken.value = result.loginToken
+      showLocationPrompt.value = true
+      return
     }
-    const user = await auth.login(identifier, password, card.value, geo)
-    await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
+    await navigateTo(result.accountType === 'customer' ? '/portal' : '/dashboard')
   }
   catch (err) {
-    const geoMessage = mapStaffLoginGeoError(err)
-    if ((err as Error)?.message?.startsWith('GEO_')) {
-      error.value = geoMessage
-    }
-    else {
-      error.value = messageFrom(err)
-      loginBlockedReason.value = authErrorReason(err)
-      const hintedEmail = authErrorEmail(err)
-      if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
-    }
+    error.value = messageFrom(err)
+    loginBlockedReason.value = authErrorReason(err)
+    const hintedEmail = authErrorEmail(err)
+    if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
   }
   finally {
     busy.value = false
   }
+}
+
+async function onLocationComplete(geo: import('#shared/validators/auth').StaffLoginGeo) {
+  if (!pendingLoginToken.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const user = await auth.completeStaffLogin(pendingLoginToken.value, geo)
+    showLocationPrompt.value = false
+    pendingLoginToken.value = null
+    await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
+  }
+  catch (err) {
+    showLocationPrompt.value = false
+    error.value = messageFrom(err)
+    loginBlockedReason.value = authErrorReason(err)
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+function onLocationCancel() {
+  showLocationPrompt.value = false
+  pendingLoginToken.value = null
+  error.value = 'Sign-in was cancelled. Location is required to access the staff workspace.'
 }
 
 async function submitResendFromLogin() {
@@ -227,9 +249,6 @@ async function submitSignup() {
                 </button>
               </div>
             </div>
-            <p class="auth-hint">
-              Staff sign-in requires your device location for security alerts. Your browser will ask for permission.
-            </p>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
 
             <div v-if="loginBlockedReason === 'not_verified'" class="auth-callout">
@@ -265,7 +284,7 @@ async function submitSignup() {
               <NuxtLink :to="staffForgotPasswordLink" class="auth-link">Forgot password?</NuxtLink>
             </div>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              {{ busy ? 'Getting location…' : 'Sign in' }}
+              {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>
           </form>
         </div>
@@ -360,5 +379,11 @@ async function submitSignup() {
       </p>
       <footer class="suite-foot">© 2015 {{ BRAND_NAME }}. All rights reserved.</footer>
     </div>
+
+    <AuthStaffLocationPrompt
+      v-if="showLocationPrompt"
+      @complete="onLocationComplete"
+      @cancel="onLocationCancel"
+    />
   </main>
 </template>

@@ -1,6 +1,7 @@
 import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
 import { AuthError, login, logout } from '../../auth/auth.service'
+import { createPendingLoginToken } from '../../auth/pending-login'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
   let locationSource: 'device' | 'ip' = 'ip'
   let loginCoords: { lat: number, lng: number } | null = null
   let loginCountry: string | null = null
-  if (body.portal === 'staff') {
+  if (body.portal === 'staff' && body.geo) {
     locationLabel = await resolveBrowserLocation({
       latitude: body.geo.latitude,
       longitude: body.geo.longitude,
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
     locationSource = 'device'
     loginCoords = { lat: body.geo.latitude, lng: body.geo.longitude }
   }
-  else {
+  else if (body.portal === 'customer') {
     locationLabel = await resolveIpLocation(ipAddress)
     const geo = await resolveIpGeo(ipAddress)
     if (geo?.latitude != null && geo?.longitude != null) {
@@ -50,7 +51,7 @@ export default defineEventHandler(async (event) => {
       userAgent: getHeader(event, 'user-agent'),
       portal: body.portal,
       locationLabel,
-      geo: body.portal === 'staff'
+      geo: body.portal === 'staff' && body.geo
         ? {
             latitude: body.geo.latitude,
             longitude: body.geo.longitude,
@@ -64,7 +65,7 @@ export default defineEventHandler(async (event) => {
     // allowed geofence. Super admins are always exempt to prevent lockout.
     const gate = getCachedAccessGateSettings()
     if (gate.enabled && result.accountTypeKey !== 'super_admin') {
-      const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords })
+      const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords }, { strictGeo: false })
       if (decision.blocked) {
         await logout(useDb(), result.sessionToken).catch(() => {})
         await recordAccessEvent(useDb(), {
@@ -87,6 +88,14 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Staff (except super admin) complete sign-in after granting device location.
+    if (body.portal === 'staff' && result.accountTypeKey !== 'super_admin' && !body.geo) {
+      return {
+        needsLocation: true,
+        loginToken: createPendingLoginToken(result.sessionToken),
+      }
+    }
+
     setSessionCookie(event, result.sessionToken)
 
     await recordAccessEvent(useDb(), {
@@ -103,41 +112,103 @@ export default defineEventHandler(async (event) => {
       country: loginCountry,
     }).catch(() => {})
 
-    try {
-      await writeAudit(event, {
-        entityType: 'user',
-        entityId: result.user.id,
-        action: result.accountTypeKey === 'customer' ? 'portal.login' : 'auth.login',
-        actor: {
-          id: result.user.id,
-          accountType: result.accountTypeKey,
-          name: result.user.name,
-          email: result.user.email,
-        },
-        riskLevel: 'sensitive',
-        afterData: {
-          locationLabel,
-          locationSource,
-        },
-      })
-    }
-    catch (err) {
-      console.warn('[auth] login audit failed:', (err as Error).message)
-    }
+    if (body.portal === 'staff' && body.geo) {
+      try {
+        await writeAudit(event, {
+          entityType: 'user',
+          entityId: result.user.id,
+          action: 'auth.login',
+          actor: {
+            id: result.user.id,
+            accountType: result.accountTypeKey,
+            name: result.user.name,
+            email: result.user.email,
+          },
+          riskLevel: 'sensitive',
+          afterData: {
+            locationLabel,
+            locationSource,
+          },
+        })
+      }
+      catch (err) {
+        console.warn('[auth] login audit failed:', (err as Error).message)
+      }
 
-    void import('../../services/login-notification.service')
-      .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
-        to: result.user.email,
-        name: result.user.name,
-        portal: body.portal,
-        ipAddress,
-        userAgent: getHeader(event, 'user-agent'),
-        deviceLocation: body.portal === 'staff' ? locationLabel : null,
-        deviceAccuracyM: body.portal === 'staff' ? body.geo.accuracyM ?? null : null,
-      }))
-      .catch((err) => {
-        console.warn('[mail] login notification failed:', (err as Error).message)
-      })
+      void import('../../services/login-notification.service')
+        .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
+          to: result.user.email,
+          name: result.user.name,
+          portal: body.portal,
+          ipAddress,
+          userAgent: getHeader(event, 'user-agent'),
+          deviceLocation: locationLabel,
+          deviceAccuracyM: body.geo.accuracyM ?? null,
+        }))
+        .catch((err) => {
+          console.warn('[mail] login notification failed:', (err as Error).message)
+        })
+    }
+    else if (body.portal === 'customer') {
+      try {
+        await writeAudit(event, {
+          entityType: 'user',
+          entityId: result.user.id,
+          action: 'portal.login',
+          actor: {
+            id: result.user.id,
+            accountType: result.accountTypeKey,
+            name: result.user.name,
+            email: result.user.email,
+          },
+          riskLevel: 'sensitive',
+          afterData: {
+            locationLabel,
+            locationSource,
+          },
+        })
+      }
+      catch (err) {
+        console.warn('[auth] login audit failed:', (err as Error).message)
+      }
+
+      void import('../../services/login-notification.service')
+        .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
+          to: result.user.email,
+          name: result.user.name,
+          portal: body.portal,
+          ipAddress,
+          userAgent: getHeader(event, 'user-agent'),
+          deviceLocation: null,
+          deviceAccuracyM: null,
+        }))
+        .catch((err) => {
+          console.warn('[mail] login notification failed:', (err as Error).message)
+        })
+    }
+    else {
+      try {
+        await writeAudit(event, {
+          entityType: 'user',
+          entityId: result.user.id,
+          action: 'auth.login',
+          actor: {
+            id: result.user.id,
+            accountType: result.accountTypeKey,
+            name: result.user.name,
+            email: result.user.email,
+          },
+          riskLevel: 'sensitive',
+          afterData: {
+            locationLabel: null,
+            locationSource: 'device',
+          },
+        })
+      }
+      catch (err) {
+        console.warn('[auth] login audit failed:', (err as Error).message)
+      }
+    }
 
     return {
       user: {

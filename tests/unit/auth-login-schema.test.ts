@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { loginBodySchema } from '../../shared/validators/auth'
+import { completeStaffLoginBodySchema, loginBodySchema } from '../../shared/validators/auth'
 
 describe('loginBodySchema', () => {
-  it('requires geo for staff login', () => {
+  it('allows staff login with geo', () => {
     const parsed = loginBodySchema.safeParse({
       portal: 'staff',
       email: 'staff@example.com',
@@ -12,13 +12,13 @@ describe('loginBodySchema', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('rejects staff login without geo', () => {
+  it('allows staff login without geo', () => {
     const parsed = loginBodySchema.safeParse({
       portal: 'staff',
       email: 'staff@example.com',
       password: 'secret',
     })
-    expect(parsed.success).toBe(false)
+    expect(parsed.success).toBe(true)
   })
 
   it('allows customer login without geo', () => {

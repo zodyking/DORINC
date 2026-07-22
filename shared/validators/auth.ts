@@ -13,6 +13,11 @@ export const staffLoginBodySchema = z.object({
   portal: z.literal('staff'),
   email: emailSchema,
   password: z.string().min(1).max(200),
+  geo: staffLoginGeoSchema.optional(),
+})
+
+export const completeStaffLoginBodySchema = z.object({
+  loginToken: z.string().min(1).max(500),
   geo: staffLoginGeoSchema,
 })
 

@@ -197,6 +197,15 @@ function setDrawInteractions(enabled: boolean) {
   }
 }
 
+function invalidateMapSize() {
+  if (!map) return
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      map?.invalidateSize({ animate: false })
+    })
+  })
+}
+
 async function initMap() {
   if (!mapEl.value) return
   await import('leaflet/dist/leaflet.css')
@@ -238,13 +247,33 @@ async function initMap() {
   renderPolygon()
   fitToData()
   if (props.drawing) setDrawInteractions(true)
+  invalidateMapSize()
 }
 
+let resizeObserver: ResizeObserver | null = null
+let intersectionObserver: IntersectionObserver | null = null
+
 onMounted(() => {
-  void initMap()
+  void initMap().then(() => {
+    if (!mapEl.value) return
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => invalidateMapSize())
+      resizeObserver.observe(mapEl.value)
+    }
+    if (typeof IntersectionObserver !== 'undefined') {
+      intersectionObserver = new IntersectionObserver((entries) => {
+        if (entries.some(entry => entry.isIntersecting)) invalidateMapSize()
+      })
+      intersectionObserver.observe(mapEl.value)
+    }
+  })
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  intersectionObserver?.disconnect()
+  intersectionObserver = null
   if (map) {
     const container = map.getContainer()
     container.removeEventListener('pointerdown', onPointerDown)
@@ -266,6 +295,7 @@ watch(() => props.polygon, () => {
 watch(() => props.drawing, (enabled) => {
   setDrawInteractions(enabled)
   renderPolygon()
+  invalidateMapSize()
 })
 </script>
 
