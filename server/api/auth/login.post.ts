@@ -65,7 +65,11 @@ export default defineEventHandler(async (event) => {
     // allowed geofence. Super admins are always exempt to prevent lockout.
     const gate = getCachedAccessGateSettings()
     if (gate.enabled && result.accountTypeKey !== 'super_admin') {
-      const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords }, { strictGeo: false })
+      const decision = evaluateAccessDecision(
+        gate,
+        { ip: ipAddress, coords: loginCoords },
+        { strictGeo: loginCoords != null },
+      )
       if (decision.blocked) {
         await logout(useDb(), result.sessionToken).catch(() => {})
         await recordAccessEvent(useDb(), {
