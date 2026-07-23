@@ -2,6 +2,7 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
 import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
+import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -380,7 +381,7 @@ async function submitSignup() {
       <footer class="suite-foot">© 2015 {{ BRAND_NAME }}. All rights reserved.</footer>
     </div>
 
-    <AuthStaffLocationPrompt
+    <StaffLocationPrompt
       v-if="showLocationPrompt"
       @complete="onLocationComplete"
       @cancel="onLocationCancel"

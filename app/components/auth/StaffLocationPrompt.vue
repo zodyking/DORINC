@@ -27,6 +27,7 @@ async function allowLocation() {
 </script>
 
 <template>
+  <Teleport to="body">
   <div class="loc-overlay" role="dialog" aria-modal="true" aria-labelledby="loc-title">
     <div class="loc-card">
       <div class="loc-icon" aria-hidden="true">
@@ -56,13 +57,14 @@ async function allowLocation() {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>
 .loc-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 10001;
   display: grid;
   place-items: center;
   padding: 20px;

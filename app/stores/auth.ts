@@ -81,7 +81,7 @@ export const useAuthStore = defineStore('auth', {
         }
         throw err
       }
-      if (res.needsLocation && res.loginToken) {
+      if (res?.needsLocation === true && typeof res.loginToken === 'string' && res.loginToken) {
         return { needsLocation: true as const, loginToken: res.loginToken }
       }
       if (!res.user) throw new Error('Login response missing user')

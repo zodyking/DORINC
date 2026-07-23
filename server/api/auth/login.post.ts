@@ -92,8 +92,8 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Staff (except super admin) complete sign-in after granting device location.
-    if (body.portal === 'staff' && result.accountTypeKey !== 'super_admin' && !body.geo) {
+    // Staff complete sign-in after granting device location (geofence exempt for super admin).
+    if (body.portal === 'staff' && !body.geo) {
       return {
         needsLocation: true,
         loginToken: createPendingLoginToken(result.sessionToken),
