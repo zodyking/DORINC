@@ -4,6 +4,7 @@ export {
   buildPasswordResetEmail,
   buildSmtpTestEmail,
   buildPortalCredentialEmail,
+  buildStaffInviteEmail,
   buildBackupNotificationEmail,
   buildInvoiceAttachedEmail,
   buildLoginNotificationEmail,

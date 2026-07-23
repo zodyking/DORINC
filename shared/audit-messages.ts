@@ -99,6 +99,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.reset_password': 'Password reset completed',
   'users.approve': 'User approved',
   'users.reject': 'User rejected',
+  'users.invite': 'Staff user invited',
+  'users.invite_resend': 'Staff invite resent',
   'users.update': 'User updated',
   'files.upload': 'File uploaded',
   'files.archive': 'File archived',

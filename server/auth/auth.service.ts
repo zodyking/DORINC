@@ -307,6 +307,12 @@ export async function login(
   else {
     if (!row.user.emailVerifiedAt) throw new AuthError('NOT_VERIFIED')
     if (!row.user.approvedAt) throw new AuthError('NOT_APPROVED')
+    if (
+      row.user.tempPasswordExpiresAt
+      && row.user.tempPasswordExpiresAt.getTime() < Date.now()
+    ) {
+      throw new AuthError('TEMP_PASSWORD_EXPIRED')
+    }
   }
 
   if (meta.portal === 'customer' && !isCustomer) {

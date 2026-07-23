@@ -129,6 +129,9 @@ async function updatePassword() {
     passwordMessage.value = 'Password updated'
     currentPassword.value = ''
     newPassword.value = ''
+    if (auth.user) {
+      auth.user = { ...auth.user, mustChangePassword: false }
+    }
   }
   catch (e: unknown) {
     passwordError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not update password'
@@ -203,6 +206,8 @@ async function saveNotificationPrefs() {
 const displayName = computed(() => account.value?.name ?? auth.user?.name ?? 'Staff')
 const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
+const mustChangePassword = computed(() => auth.user?.mustChangePassword === true)
+const passwordRequired = computed(() => mustChangePassword.value || route.query.password === 'required')
 </script>
 
 <template>
@@ -221,7 +226,14 @@ const avInitials = computed(() => initials(displayName.value))
       </NuxtLink>
     </div>
 
-    <div v-else-if="account" class="cols">
+    <div v-else-if="account">
+      <div v-if="passwordRequired" class="card invite-password-callout">
+        <div class="cbody">
+          <b>Choose your password to finish setup</b>
+          <p>Use the temporary password from your invite email, then create a new password below before continuing.</p>
+        </div>
+      </div>
+      <div class="cols">
       <div class="stack">
         <div class="card">
           <div class="chead"><h3>Profile</h3></div>
@@ -370,11 +382,23 @@ const avInitials = computed(() => initials(displayName.value))
           </div>
         </div>
       </div>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
+.invite-password-callout {
+  margin-bottom: 16px;
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+.invite-password-callout p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
 .msg-prefs {
   display: flex;
   flex-direction: column;

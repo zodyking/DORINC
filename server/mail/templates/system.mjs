@@ -177,6 +177,44 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
   })
 }
 
+export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand }) {
+  const resolvedBrand = brandNameFrom({ brand })
+  const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login?card=staff`
+  const subject = `You're invited to ${resolvedBrand}`
+  const text = [
+    `Hello ${name},`,
+    '',
+    `You've been invited to join the ${resolvedBrand} staff workspace.`,
+    '',
+    `Sign in: ${loginUrl}`,
+    `Email: ${email}`,
+    `Temporary password: ${tempPassword}`,
+    '',
+    'Your email is already verified. Choose a new password when you sign in for the first time.',
+    'This temporary password expires in 7 days.',
+  ].join('\n')
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Staff invite',
+    headline: 'Welcome to the team',
+    lead: `You've been invited to join the ${resolvedBrand} staff workspace. Sign in with the credentials below, then choose your own password.`,
+    details: [
+      { label: 'Email', value: email },
+      { label: 'Temporary password', value: tempPassword },
+      { label: 'Expires', value: '7 days' },
+    ],
+    note: {
+      title: 'First sign-in',
+      body: 'Use the temporary password once, then you will be prompted to create your own password. If you did not expect this invite, contact your administrator.',
+    },
+    primaryAction: { href: loginUrl, label: 'Sign in to staff workspace' },
+    appUrl,
+    brand,
+  })
+}
+
 export function buildBackupNotificationEmail({
   success,
   filename,

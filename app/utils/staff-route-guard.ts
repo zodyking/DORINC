@@ -10,4 +10,11 @@ export async function guardStaffRoute(): Promise<void> {
   if (auth.isCustomer) {
     return navigateTo('/portal')
   }
+
+  if (auth.user?.mustChangePassword) {
+    const route = useRoute()
+    if (route.path !== '/account') {
+      return navigateTo('/account?password=required')
+    }
+  }
 }

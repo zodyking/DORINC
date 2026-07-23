@@ -15,6 +15,7 @@ interface UserDetail {
   rejectedReason: string | null
   isActive: boolean
   disabledReason: string | null
+  mustChangePassword: boolean
   createdAt: string
 }
 
@@ -225,11 +226,27 @@ const resendVerification = () => run(
   'Verification email sent',
 )
 
+const resendInvite = () => run(
+  () => $fetch(`/api/admin/users/${route.params.id}/resend-invite`, {
+    method: 'POST',
+  }),
+  'Invite email sent with a new temporary password',
+)
+
 const canResendVerification = computed(() =>
   canManage.value
   && user.value
   && !user.value.emailVerified
   && user.value.accountType !== 'customer'
+  && user.value.isActive
+  && user.value.status !== 'rejected'
+)
+
+const canResendInvite = computed(() =>
+  canManage.value
+  && user.value
+  && user.value.accountType !== 'customer'
+  && user.value.accountType !== 'super_admin'
   && user.value.isActive
   && user.value.status !== 'rejected'
 )
@@ -389,7 +406,14 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
             <button class="btn primary" :disabled="busy" @click="approve">Approve</button>
           </template>
           <template v-else>
-            <button class="btn" disabled title="Coming soon">Reset password</button>
+            <button
+              v-if="canResendInvite"
+              class="btn"
+              :disabled="busy"
+              @click="resendInvite"
+            >
+              Resend invite
+            </button>
             <button
               v-if="canResendVerification"
               class="btn"
