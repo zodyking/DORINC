@@ -4,7 +4,7 @@ import {
   type OutboundAttachmentInput,
   startEmailThread,
 } from '../../services/email-inbox.service'
-import { requirePermission } from '../../utils/require-permission'
+import { hasPermission, requirePermission } from '../../utils/require-permission'
 import { validateBody } from '../../utils/validate'
 import { apiError, validationError } from '../../utils/api-error'
 import { isMultipartRequest, readEmailComposeForm } from '../../utils/email-compose-form'
@@ -31,8 +31,10 @@ export default defineEventHandler(async (event) => {
     body = await validateBody(event, startEmailThreadSchema)
   }
 
+  const canSendNonCustomer = hasPermission(event, 'email.send_noncustomer.all')
+
   try {
-    return await startEmailThread(useDb(), user.id, body, attachments)
+    return await startEmailThread(useDb(), user.id, body, attachments, { canSendNonCustomer })
   }
   catch (err) {
     if (err instanceof EmailInboxError) {

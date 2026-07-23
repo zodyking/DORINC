@@ -15,7 +15,6 @@ interface UserDetail {
   rejectedReason: string | null
   isActive: boolean
   disabledReason: string | null
-  nonCustomerEmailEnabled: boolean
   createdAt: string
 }
 
@@ -235,25 +234,6 @@ const canResendVerification = computed(() =>
   && user.value.status !== 'rejected'
 )
 
-const canManageNonCustomerEmail = computed(() =>
-  canManage.value
-  && user.value
-  && user.value.approvedAt
-  && user.value.isActive
-  && user.value.accountType !== 'customer'
-  && !isSuperAdminRecord.value,
-)
-
-function toggleNonCustomerEmail(enabled: boolean) {
-  void run(
-    () => $fetch(`/api/admin/users/${route.params.id}`, {
-      method: 'PATCH',
-      body: { nonCustomerEmailEnabled: enabled },
-    }),
-    enabled ? 'Non-customer email enabled' : 'Non-customer email disabled',
-  )
-}
-
 const canDelete = computed(() =>
   canManage.value
   && user.value
@@ -378,6 +358,8 @@ function moduleLabel(mod: string): string {
     portal_requests: 'Portal Requests',
     deletion_requests: 'Deletion Requests',
     records: 'Records',
+    messages: 'Messages',
+    email: 'Email',
   }
   return labels[mod] ?? mod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -527,23 +509,6 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
               <dd v-if="user.disabledReason">{{ user.disabledReason }}</dd>
               <dt>Joined</dt>
               <dd>{{ new Date(user.createdAt).toLocaleDateString() }}</dd>
-              <template v-if="canManageNonCustomerEmail">
-                <dt>Non-customer email</dt>
-                <dd>
-                  <label class="tglrow" style="margin:0;">
-                    Allow sending to addresses not on file as customers
-                    <input
-                      type="checkbox"
-                      :checked="user.nonCustomerEmailEnabled"
-                      :disabled="busy"
-                      @change="toggleNonCustomerEmail(($event.target as HTMLInputElement).checked)"
-                    >
-                  </label>
-                  <p style="font-size:12px; color:#94a3b8; margin:8px 0 0;">
-                    Team members can still view and reply in these threads.
-                  </p>
-                </dd>
-              </template>
             </dl>
           </div>
           <div class="card">

@@ -148,7 +148,6 @@ export default defineEventHandler(async (event) => {
         accountType: result.accountTypeKey,
         customerId: result.user.customerId,
         mustChangePassword: result.user.mustChangePassword,
-        nonCustomerEmailEnabled: result.user.nonCustomerEmailEnabled,
       },
     }
   }

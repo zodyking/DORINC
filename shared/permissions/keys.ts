@@ -98,6 +98,9 @@ export const PERMISSIONS = {
   'messages.read.own': 'View own direct messages',
   'messages.send.own': 'Send direct messages',
 
+  // Email
+  'email.send_noncustomer.all': 'Start email threads to people not on a customer record',
+
   // Record reassignment (fix mis-linked imports / transfers)
   'records.reassign.all': 'Reassign invoices, vehicles, and service logs between customers',
 } as const

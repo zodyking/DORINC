@@ -802,6 +802,7 @@ export async function startEmailThread(
   actorUserId: string,
   input: { customerId?: string, toEmail: string, subject: string, body: string },
   attachments: OutboundAttachmentInput[] = [],
+  options: { canSendNonCustomer?: boolean } = {},
 ) {
   if (!getSmtpConfig()) throw new EmailInboxError('NOT_CONFIGURED')
 
@@ -838,7 +839,9 @@ export async function startEmailThread(
     counterpartName = customer.displayName
   }
   else {
-    await assertActorCanSendNonCustomerEmail(db, actorUserId)
+    // Gated by the `email.send_noncustomer.all` permission (role bundle or
+    // per-user override), evaluated in the request layer and passed in here.
+    if (!options.canSendNonCustomer) throw new EmailInboxError('NOT_ALLOWED')
     const customerEmails = await buildCustomerEmailAddresses(db)
     if (customerEmails.has(toEmail)) throw new EmailInboxError('INVALID_RECIPIENT')
     counterpartName = toEmail
@@ -900,24 +903,6 @@ export async function startEmailThread(
   await db.update(emailThreads).set({ updatedAt: new Date() }).where(eq(emailThreads.conversationId, conversation!.id))
 
   return { conversationId: conversation!.id, messageId: message!.id }
-}
-
-async function assertActorCanSendNonCustomerEmail(db: Db, actorUserId: string): Promise<void> {
-  const [actor] = await db.select({
-    approvedAt: users.approvedAt,
-    isActive: users.isActive,
-    nonCustomerEmailEnabled: users.nonCustomerEmailEnabled,
-    accountTypeKey: accountTypes.key,
-  })
-    .from(users)
-    .innerJoin(accountTypes, eq(accountTypes.id, users.accountTypeId))
-    .where(eq(users.id, actorUserId))
-    .limit(1)
-  if (!actor) throw new EmailInboxError('NOT_FOUND')
-  if (actor.accountTypeKey === 'customer') throw new EmailInboxError('NOT_ALLOWED')
-  if (!actor.approvedAt || !actor.isActive || !actor.nonCustomerEmailEnabled) {
-    throw new EmailInboxError('NOT_ALLOWED')
-  }
 }
 
 /** Load the sending staff member with their account-type key for the signature. */

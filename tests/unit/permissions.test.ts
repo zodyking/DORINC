@@ -46,6 +46,21 @@ describe('evaluatePermission', () => {
       .toEqual({ allowed: false, reason: 'not_granted' })
   })
 
+  it('gates non-customer email on email.send_noncustomer.all', () => {
+    // admin inherits it via the bundle
+    expect(evaluatePermission({ user: user({ accountType: 'admin' }), required: 'email.send_noncustomer.all' }))
+      .toEqual({ allowed: true })
+    // other roles need an explicit override
+    const mechanic = user({ accountType: 'mechanic' })
+    expect(evaluatePermission({ user: mechanic, required: 'email.send_noncustomer.all' }))
+      .toEqual({ allowed: false, reason: 'not_granted' })
+    expect(evaluatePermission({
+      user: mechanic,
+      required: 'email.send_noncustomer.all',
+      overrides: { allow: ['email.send_noncustomer.all'], deny: [] },
+    })).toEqual({ allowed: true })
+  })
+
   it('override allow grants beyond the bundle', () => {
     const mechanic = user({ accountType: 'mechanic' })
     expect(evaluatePermission({
