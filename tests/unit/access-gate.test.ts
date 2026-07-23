@@ -48,9 +48,16 @@ describe('evaluateAccessDecision', () => {
     expect(evaluateAccessDecision(s, { ip: '9.9.9.9', coords: { lat: 41, lng: -74 } }).blocked).toBe(false)
   })
 
-  it('fails open when coordinates are unknown in geo mode', () => {
+  it('fails closed when coordinates are unknown in geo mode', () => {
     const s = settings({ enabled: true, blockMode: 'geo', allowedPolygon: areaSquare })
-    expect(evaluateAccessDecision(s, { ip: '9.9.9.9', coords: null }).blocked).toBe(false)
+    const decision = evaluateAccessDecision(s, { ip: '9.9.9.9', coords: null })
+    expect(decision.blocked).toBe(true)
+    expect(decision.reason).toBe('geo_unknown')
+  })
+
+  it('skips geo when coordinates are unknown if strictGeo is false', () => {
+    const s = settings({ enabled: true, blockMode: 'geo', allowedPolygon: areaSquare })
+    expect(evaluateAccessDecision(s, { ip: '9.9.9.9', coords: null }, { strictGeo: false }).blocked).toBe(false)
   })
 
   it('enforces both ip and geo in both mode', () => {

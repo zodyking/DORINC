@@ -13,6 +13,9 @@ export interface AuthUser {
   mustChangePassword?: boolean
 }
 
+export type StaffLoginPending = { needsLocation: true, loginToken: string }
+export type StaffLoginResult = AuthUser | StaffLoginPending
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as AuthUser | null,
@@ -55,19 +58,57 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async login(identifier: string, password: string, portal: 'customer' | 'staff', geo?: StaffLoginGeo) {
+    async login(identifier: string, password: string, portal: 'customer' | 'staff'): Promise<StaffLoginResult> {
       const body = portal === 'customer'
         ? { username: identifier, password, portal }
-        : { email: identifier, password, portal, geo }
-      let res: { user: AuthUser }
+        : { email: identifier, password, portal }
+      let res: { user?: AuthUser, needsLocation?: boolean, loginToken?: string }
       try {
-        res = await $fetch<{ user: AuthUser }>('/api/auth/login', {
+        res = await $fetch<{ user?: AuthUser, needsLocation?: boolean, loginToken?: string }>('/api/auth/login', {
           method: 'POST',
           body,
         })
       }
       catch (err: unknown) {
         // Access gate: blocked location/IP → redirect to the admin-set link.
+        const details = (err as { data?: { details?: Record<string, unknown>, data?: { details?: Record<string, unknown> } } })?.data
+        const d = details?.details ?? details?.data?.details
+        if (d?.reason === 'access_blocked') {
+          const redirectUrl = typeof d.redirectUrl === 'string' ? d.redirectUrl : ''
+          if (import.meta.client && redirectUrl) {
+            window.location.href = redirectUrl
+          }
+        }
+        throw err
+      }
+      if (res.needsLocation && res.loginToken) {
+        return { needsLocation: true as const, loginToken: res.loginToken }
+      }
+      if (!res.user) throw new Error('Login response missing user')
+      this.user = res.user
+      this.loaded = true
+      try {
+        const fetcher = import.meta.server ? useRequestFetch() : $fetch
+        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
+        this.user = me.user
+        this.permissions = me.permissions
+      }
+      catch {
+        // Cookie is set — keep the login response even if /me hiccups on first request.
+        this.permissions = []
+      }
+      return res.user
+    },
+
+    async completeStaffLogin(loginToken: string, geo: StaffLoginGeo) {
+      let res: { user: AuthUser }
+      try {
+        res = await $fetch<{ user: AuthUser }>('/api/auth/complete-login', {
+          method: 'POST',
+          body: { loginToken, geo },
+        })
+      }
+      catch (err: unknown) {
         const details = (err as { data?: { details?: Record<string, unknown>, data?: { details?: Record<string, unknown> } } })?.data
         const d = details?.details ?? details?.data?.details
         if (d?.reason === 'access_blocked') {
@@ -87,7 +128,6 @@ export const useAuthStore = defineStore('auth', {
         this.permissions = me.permissions
       }
       catch {
-        // Cookie is set — keep the login response even if /me hiccups on first request.
         this.permissions = []
       }
       return res.user

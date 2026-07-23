@@ -12,7 +12,7 @@ export function staffLoginGeoErrorMessage(code: StaffLoginGeoErrorCode): string 
     case 'GEO_UNAVAILABLE':
       return 'This browser does not support location services. Use a device with GPS or enable location in your browser settings.'
     case 'GEO_PERMISSION_DENIED':
-      return 'Staff sign-in requires location access. Allow location when prompted, then try again.'
+      return 'Location access is required to finish signing in. Allow location when prompted, then try again.'
     case 'GEO_POSITION_UNAVAILABLE':
       return 'Could not determine your device location. Check that location services are enabled and try again.'
     case 'GEO_TIMEOUT':

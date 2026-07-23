@@ -78,7 +78,7 @@ export async function saveAccessGateSettings(
   return settings
 }
 
-export type AccessBlockReason = 'ip_banned' | 'geo_outside'
+export type AccessBlockReason = 'ip_banned' | 'geo_outside' | 'geo_unknown'
 
 export interface AccessDecision {
   blocked: boolean
@@ -87,18 +87,27 @@ export interface AccessDecision {
 
 const ALLOWED: AccessDecision = { blocked: false, reason: null }
 
+export interface AccessDecisionOptions {
+  /** When true, missing coordinates block geofence checks. Default: strict (fail closed). */
+  strictGeo?: boolean
+}
+
 /**
- * Pure enforcement decision. Fails open (allowed) whenever the gate is off,
- * the mode does not apply, or the required signal (coordinates) is unknown.
+ * Pure enforcement decision. Geofence checks fail closed when coordinates are
+ * required but unknown unless `strictGeo` is set to false.
  */
 export function evaluateAccessDecision(
   settings: AccessGateSettings,
   input: { ip: string | null, coords: { lat: number, lng: number } | null },
+  options: AccessDecisionOptions = {},
 ): AccessDecision {
+  const strictGeo = options.strictGeo !== false
+
   if (!settings.enabled || settings.blockMode === 'off') return ALLOWED
 
   const checksIp = settings.blockMode === 'ip' || settings.blockMode === 'both'
   const checksGeo = settings.blockMode === 'geo' || settings.blockMode === 'both'
+  const geoActive = checksGeo && settings.allowedPolygon.length >= 3
 
   if (checksIp && input.ip) {
     const normalized = normalizeClientIp(input.ip) ?? input.ip
@@ -107,7 +116,13 @@ export function evaluateAccessDecision(
     }
   }
 
-  if (checksGeo && settings.allowedPolygon.length >= 3 && input.coords) {
+  if (geoActive) {
+    if (!input.coords) {
+      if (strictGeo) {
+        return { blocked: true, reason: 'geo_unknown' }
+      }
+      return ALLOWED
+    }
     if (!isPointInPolygon(input.coords, settings.allowedPolygon)) {
       return { blocked: true, reason: 'geo_outside' }
     }
