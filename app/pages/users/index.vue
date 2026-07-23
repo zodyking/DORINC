@@ -82,6 +82,68 @@ const TYPE_PERMISSION_SUMMARY: Record<string, string> = {
 const busyId = ref('')
 const approveType = reactive<Record<string, string>>({})
 
+const canManage = computed(() => useAuthStore().can('users.manage.all'))
+const inviteOpen = ref(false)
+const inviteBusy = ref(false)
+const inviteError = ref('')
+const inviteNotice = ref('')
+const inviteName = ref('')
+const inviteEmail = ref('')
+const inviteAccountType = ref('mechanic')
+const assignableTypes = ref<string[]>([])
+
+async function loadAssignableTypes() {
+  if (!canManage.value) return
+  try {
+    const res = await $fetch<{ items: string[] }>('/api/admin/users/assignable-types')
+    assignableTypes.value = res.items
+    if (res.items.length && !res.items.includes(inviteAccountType.value)) {
+      inviteAccountType.value = res.items[0]!
+    }
+  }
+  catch {
+    assignableTypes.value = ['mechanic', 'accountant', 'viewer', 'manager', 'admin', 'external_auditor']
+  }
+}
+
+function openInvite() {
+  inviteError.value = ''
+  inviteNotice.value = ''
+  inviteName.value = ''
+  inviteEmail.value = ''
+  inviteOpen.value = true
+  void loadAssignableTypes()
+}
+
+function closeInvite() {
+  inviteOpen.value = false
+}
+
+async function submitInvite() {
+  inviteBusy.value = true
+  inviteError.value = ''
+  inviteNotice.value = ''
+  try {
+    const res = await $fetch<{ user: { name: string, email: string } }>('/api/admin/users/invite', {
+      method: 'POST',
+      body: {
+        name: inviteName.value.trim(),
+        email: inviteEmail.value.trim(),
+        accountType: inviteAccountType.value,
+      },
+    })
+    inviteNotice.value = `Invite sent to ${res.user.email}`
+    await refresh()
+    setTimeout(() => closeInvite(), 1200)
+  }
+  catch (e: unknown) {
+    inviteError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send invite'
+  }
+  finally {
+    inviteBusy.value = false
+  }
+}
+
 async function approve(u: UserRow) {
   busyId.value = u.id
   try {
@@ -117,7 +179,14 @@ async function reject(u: UserRow) {
       <template #title>Users</template>
       <template #actions>
         <button class="btn" type="button" disabled title="Export not available yet">Export</button>
-        <button class="btn primary" type="button" disabled title="Invite users via pending signup approval below">+ Invite user</button>
+        <button
+          v-if="canManage"
+          class="btn primary"
+          type="button"
+          @click="openInvite"
+        >
+          + Invite user
+        </button>
       </template>
     </StaffPageHead>
 
@@ -245,6 +314,48 @@ async function reject(u: UserRow) {
       </div>
     </div>
   </section>
+
+  <div v-if="inviteOpen" class="modal-scrim open" @click.self="closeInvite">
+    <div class="card modal-card invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+      <div class="chead">
+        <h3 id="invite-title">Invite staff user</h3>
+      </div>
+      <div class="cbody invite-modal__body">
+        <p class="invite-modal__intro">
+          Preset their account details. They will receive an email with a temporary password and must choose a new password on first sign-in.
+        </p>
+        <label class="fld">
+          Full name
+          <input v-model="inviteName" type="text" autocomplete="name" placeholder="Jordan Taylor">
+        </label>
+        <label class="fld">
+          Email
+          <input v-model="inviteEmail" type="email" autocomplete="email" placeholder="name@company.com">
+        </label>
+        <label class="fld">
+          Account type
+          <select v-model="inviteAccountType">
+            <option v-for="type in assignableTypes" :key="type" :value="type">
+              {{ accountTypeLabel(type) }}
+            </option>
+          </select>
+        </label>
+        <p v-if="inviteNotice" class="invite-modal__ok">{{ inviteNotice }}</p>
+        <p v-if="inviteError" class="invite-modal__err">{{ inviteError }}</p>
+        <div class="invite-modal__actions">
+          <button type="button" class="btn" :disabled="inviteBusy" @click="closeInvite">Cancel</button>
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="inviteBusy || !inviteName.trim() || !inviteEmail.trim()"
+            @click="submitInvite"
+          >
+            {{ inviteBusy ? 'Sending…' : 'Send invite' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -275,5 +386,35 @@ async function reject(u: UserRow) {
   .approve-type {
     display: none;
   }
+}
+.invite-modal {
+  width: min(100%, 440px);
+}
+.invite-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.invite-modal__intro {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+.invite-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.invite-modal__ok {
+  margin: 0;
+  color: #059669;
+  font-size: 13px;
+}
+.invite-modal__err {
+  margin: 0;
+  color: #dc2626;
+  font-size: 13px;
 }
 </style>

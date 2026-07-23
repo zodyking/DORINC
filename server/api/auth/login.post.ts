@@ -269,7 +269,14 @@ export default defineEventHandler(async (event) => {
         case 'DISABLED':
           throw apiError(event, 'FORBIDDEN', 'This account has been disabled', { reason: 'disabled' })
         case 'TEMP_PASSWORD_EXPIRED':
-          throw apiError(event, 'FORBIDDEN', 'Your temporary password has expired — ask staff to resend portal credentials', { reason: 'temp_password_expired' })
+          throw apiError(
+            event,
+            'FORBIDDEN',
+            body.portal === 'customer'
+              ? 'Your temporary password has expired — ask staff to resend portal credentials'
+              : 'Your temporary password has expired — ask an administrator to resend your invite',
+            { reason: 'temp_password_expired' },
+          )
         case 'PORTAL_DISABLED':
           throw apiError(event, 'FORBIDDEN', 'Portal access is not enabled for this account', { reason: 'portal_disabled' })
         case 'PORTAL_NOT_LINKED':

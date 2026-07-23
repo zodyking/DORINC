@@ -292,6 +292,7 @@ export async function getUserDetail(db: Db, userId: string) {
     disabledAt: row.user.disabledAt,
     disabledReason: row.user.disabledReason,
     customerId: row.user.customerId,
+    mustChangePassword: row.user.mustChangePassword,
     createdAt: row.user.createdAt,
     updatedAt: row.user.updatedAt,
   }

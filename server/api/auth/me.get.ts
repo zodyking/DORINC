@@ -21,6 +21,7 @@ export default defineEventHandler((event) => {
       username: auth.user.username,
       accountType: auth.user.accountType,
       customerId: auth.user.customerId,
+      mustChangePassword: auth.user.mustChangePassword ?? false,
     },
     permissions: [...effective].sort(),
   }
