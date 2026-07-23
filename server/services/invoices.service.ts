@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type {
   CatalogSnapshot,
@@ -141,6 +141,10 @@ export interface AddInvoiceLineInput {
 
 export type UpdateInvoiceLineInput = Partial<AddInvoiceLineInput>
 
+export type InvoiceSort
+  = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'status'
+    | 'customer' | 'unit' | 'amount_high' | 'amount_low'
+
 export interface ListInvoicesFilter {
   q?: string
   status?: InvoiceStatus
@@ -149,7 +153,11 @@ export interface ListInvoicesFilter {
   customerId?: string
   vehicleId?: string
   includeArchived?: boolean
-  sort?: 'newest' | 'oldest' | 'invoice_date' | 'status'
+  amountMin?: string
+  amountMax?: string
+  dateFrom?: string
+  dateTo?: string
+  sort?: InvoiceSort
   page: number
   pageSize: number
 }
@@ -598,17 +606,23 @@ export async function listInvoiceLineItems(db: Db, invoiceId: string) {
     .orderBy(asc(invoiceLineItems.sortOrder), asc(invoiceLineItems.createdAt))
 }
 
-function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArchived' | 'customerId' | 'vehicleId' | 'q'>) {
+function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArchived' | 'customerId' | 'vehicleId' | 'q' | 'amountMin' | 'amountMax' | 'dateFrom' | 'dateTo'>) {
   const conditions = []
   if (!filter.includeArchived) conditions.push(isNull(invoices.archivedAt))
   if (filter.customerId) conditions.push(eq(invoices.customerId, filter.customerId))
   if (filter.vehicleId) conditions.push(eq(invoices.vehicleId, filter.vehicleId))
+
+  if (filter.amountMin) conditions.push(gte(invoices.total, filter.amountMin))
+  if (filter.amountMax) conditions.push(lte(invoices.total, filter.amountMax))
+  if (filter.dateFrom) conditions.push(gte(invoices.invoiceDate, filter.dateFrom))
+  if (filter.dateTo) conditions.push(lte(invoices.invoiceDate, filter.dateTo))
 
   if (filter.q) {
     const term = `%${filter.q}%`
     conditions.push(or(
       ilike(customers.displayName, term),
       ilike(vehicles.busNumber, term),
+      ilike(vehicles.unitTag, term),
       ilike(invoices.poNumber, term),
       ilike(invoices.complaint, term),
       sql`CAST(${invoices.invoiceNumber} AS TEXT) ILIKE ${term}`,
@@ -616,6 +630,22 @@ function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArch
   }
 
   return conditions
+}
+
+/** ORDER BY clause for the invoice list. A stable createdAt tiebreaker keeps pagination deterministic. */
+function invoiceListOrderBy(sort: InvoiceSort | undefined) {
+  const tiebreak = desc(invoices.createdAt)
+  switch (sort) {
+    case 'oldest': return [asc(invoices.createdAt)]
+    case 'invoice_date': return [desc(invoices.invoiceDate), tiebreak]
+    case 'due_date': return [asc(invoices.dueDate), tiebreak]
+    case 'status': return [asc(invoices.status), tiebreak]
+    case 'customer': return [asc(customers.displayName), tiebreak]
+    case 'unit': return [asc(vehicles.busNumber), asc(vehicles.unitTag), tiebreak]
+    case 'amount_high': return [desc(invoices.total), tiebreak]
+    case 'amount_low': return [asc(invoices.total), tiebreak]
+    default: return [tiebreak]
+  }
 }
 
 function todayIsoDate(): string {
@@ -689,13 +719,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
   }
 
   const where = conditions.length ? and(...conditions) : undefined
-  const orderBy = filter.sort === 'oldest'
-    ? asc(invoices.createdAt)
-    : filter.sort === 'invoice_date'
-      ? desc(invoices.invoiceDate)
-      : filter.sort === 'status'
-        ? asc(invoices.status)
-        : desc(invoices.createdAt)
+  const orderBy = invoiceListOrderBy(filter.sort)
 
   const rows = await db.select({
     invoice: invoices,
@@ -714,7 +738,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
     .leftJoin(serviceLogs, eq(invoices.serviceLogId, serviceLogs.id))
     .leftJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
-    .orderBy(orderBy)
+    .orderBy(...orderBy)
     .limit(filter.pageSize)
     .offset((filter.page - 1) * filter.pageSize)
 

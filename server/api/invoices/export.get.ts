@@ -14,6 +14,10 @@ export default defineEventHandler(async (event) => {
     customerId: query.customerId,
     vehicleId: query.vehicleId,
     includeArchived: query.includeArchived,
+    amountMin: query.amountMin,
+    amountMax: query.amountMax,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
     sort: query.sort,
   })
 

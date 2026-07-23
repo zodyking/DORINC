@@ -45,19 +45,25 @@ const canUpload = computed(() => auth.can('service_logs.upload.own'))
 const canReview = computed(() => auth.can('service_logs.review.all'))
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
 
+type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'customer' | 'unit'
+
 const q = ref('')
 const fView = ref<'all' | 'review'>('all')
-const fSort = ref<'newest' | 'oldest' | 'status'>('newest')
+const fSort = ref<ServiceLogSort>('newest')
+const fDateFrom = ref('')
+const fDateTo = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, fView, fSort], () => { page.value = 1 })
+watch([q, fView, fSort, fDateFrom, fDateTo], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
   queue: canReview.value && fView.value === 'review' ? 'review' as const : undefined,
+  dateFrom: fDateFrom.value || undefined,
+  dateTo: fDateTo.value || undefined,
   sort: fSort.value,
 }))
 
@@ -76,13 +82,16 @@ const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.va
 const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Service Logs')
 
 const filtersDirty = computed(() =>
-  fView.value !== 'all' || fSort.value !== 'newest' || !!q.value,
+  fView.value !== 'all' || fSort.value !== 'newest' || !!q.value
+  || !!fDateFrom.value || !!fDateTo.value,
 )
 
 function clearFilters() {
   q.value = ''
   fView.value = 'all'
   fSort.value = 'newest'
+  fDateFrom.value = ''
+  fDateTo.value = ''
 }
 
 const listCountLabel = computed(() => {
@@ -170,10 +179,21 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
           </select>
         </label>
         <label class="fld">
+          Service date from
+          <input v-model="fDateFrom" type="date" aria-label="Service date from">
+        </label>
+        <label class="fld">
+          Service date to
+          <input v-model="fDateTo" type="date" aria-label="Service date to">
+        </label>
+        <label class="fld">
           Sort by
           <select v-model="fSort" aria-label="Sort service logs">
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
+            <option value="service_date">Service date</option>
+            <option value="customer">Customer (A–Z)</option>
+            <option value="unit">Unit number</option>
             <option value="status">Status</option>
           </select>
         </label>
