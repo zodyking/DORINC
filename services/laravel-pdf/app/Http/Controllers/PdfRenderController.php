@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Dompdf\Dompdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Blade;
 use Symfony\Component\HttpFoundation\Response;
@@ -99,12 +100,16 @@ class PdfRenderController extends Controller
         }
 
         $html = $this->injectMarginSafetyNet($html, $margins);
-        if ($documentType === 'invoice') {
-            $html = $this->injectPageNumberFooter($html);
-        }
         $pdf = Pdf::loadHTML($html);
 
         $pdf->setPaper($paper, 'portrait');
+
+        if ($documentType === 'invoice') {
+            // Render first so the total page count is known, then stamp the
+            // footer via the canvas (see drawPageNumberFooter).
+            $pdf->render();
+            $this->drawPageNumberFooter($pdf->getDomPDF());
+        }
 
         return response($pdf->output(), 200, [
             'Content-Type' => 'application/pdf',
@@ -164,16 +169,29 @@ class PdfRenderController extends Controller
     }
 
     /**
-     * Fixed footer on every page — DomPDF replaces {PAGE_NUM} and {PAGE_COUNT} at render time.
+     * Stamp a centered "(pg N of M)" footer on every page.
+     *
+     * DomPDF does NOT substitute {PAGE_NUM}/{PAGE_COUNT} in plain HTML, and CSS
+     * counter(pages) does not resolve a correct total. Drawing via the canvas
+     * (Canvas::page_text) is the supported path: it resolves both the current
+     * page and the total, runs from trusted controller code (no isPhpEnabled),
+     * and repeats the text on every page. Must be called after render() so the
+     * page count is known.
      */
-    private function injectPageNumberFooter(string $html): string
+    private function drawPageNumberFooter(Dompdf $dompdf): void
     {
-        $footer = '<div style="position:fixed;bottom:0.12in;left:0;right:0;text-align:center;font-size:7pt;color:#707070;font-family:DejaVu Sans,Helvetica,Arial,sans-serif;">(pg {PAGE_NUM} of {PAGE_COUNT})</div>';
+        $canvas = $dompdf->getCanvas();
+        $fontMetrics = $dompdf->getFontMetrics();
 
-        if (stripos($html, '</body>') !== false) {
-            return preg_replace('/<\/body>/i', $footer . '</body>', $html, 1);
-        }
+        $font = $fontMetrics->getFont('DejaVu Sans');
+        $size = 7.0;
+        $text = '(pg {PAGE_NUM} of {PAGE_COUNT})';
 
-        return $html . $footer;
+        // Center horizontally using a representative sample width (points; 72/in).
+        $sampleWidth = $fontMetrics->getTextWidth('(pg 00 of 00)', $font, $size);
+        $x = ($canvas->get_width() - $sampleWidth) / 2;
+        $y = $canvas->get_height() - 20; // ~0.28in above the bottom edge
+
+        $canvas->page_text($x, $y, $text, $font, $size, [0.44, 0.44, 0.44]);
     }
 }
