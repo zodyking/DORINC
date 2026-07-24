@@ -56,13 +56,19 @@ const canCreate = computed(() => auth.can('invoices.create.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
 const bulkSendRef = ref<InstanceType<typeof BulkSendInvoicesButton> | null>(null)
 
+type InvoiceSort = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'status' | 'customer' | 'unit' | 'amount_high' | 'amount_low'
+
 const q = ref('')
 const fStatus = ref<StatusChip>((route.query.status as StatusChip) || 'all')
-const fSort = ref<'newest' | 'oldest' | 'invoice_date' | 'status'>('newest')
+const fSort = ref<InvoiceSort>('newest')
+const fAmountMin = ref('')
+const fAmountMax = ref('')
+const fDateFrom = ref('')
+const fDateTo = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, fStatus, fSort], () => { page.value = 1 })
+watch([q, fStatus, fSort, fAmountMin, fAmountMax, fDateFrom, fDateTo], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
@@ -72,6 +78,10 @@ const query = computed(() => ({
     ? undefined
     : fStatus.value,
   overdue: fStatus.value === 'overdue' ? true : undefined,
+  amountMin: fAmountMin.value.trim() || undefined,
+  amountMax: fAmountMax.value.trim() || undefined,
+  dateFrom: fDateFrom.value || undefined,
+  dateTo: fDateTo.value || undefined,
   sort: fSort.value,
 }))
 
@@ -139,13 +149,18 @@ const chips = computed(() => [
 ])
 
 const filtersDirty = computed(() =>
-  fStatus.value !== 'all' || fSort.value !== 'newest' || !!q.value,
+  fStatus.value !== 'all' || fSort.value !== 'newest' || !!q.value
+  || !!fAmountMin.value || !!fAmountMax.value || !!fDateFrom.value || !!fDateTo.value,
 )
 
 function clearFilters() {
   q.value = ''
   fStatus.value = 'all'
   fSort.value = 'newest'
+  fAmountMin.value = ''
+  fAmountMax.value = ''
+  fDateFrom.value = ''
+  fDateTo.value = ''
 }
 
 const listCountLabel = computed(() => {
@@ -306,11 +321,32 @@ async function exportCsv() {
           </select>
         </label>
         <label class="fld">
+          Min amount
+          <input v-model="fAmountMin" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Minimum amount">
+        </label>
+        <label class="fld">
+          Max amount
+          <input v-model="fAmountMax" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Any" aria-label="Maximum amount">
+        </label>
+        <label class="fld">
+          Issued from
+          <input v-model="fDateFrom" type="date" aria-label="Issued from date">
+        </label>
+        <label class="fld">
+          Issued to
+          <input v-model="fDateTo" type="date" aria-label="Issued to date">
+        </label>
+        <label class="fld">
           Sort by
           <select v-model="fSort" aria-label="Sort invoices">
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="invoice_date">Invoice date</option>
+            <option value="due_date">Due date</option>
+            <option value="customer">Customer (A–Z)</option>
+            <option value="unit">Unit number</option>
+            <option value="amount_high">Amount: high to low</option>
+            <option value="amount_low">Amount: low to high</option>
             <option value="status">Status</option>
           </select>
         </label>

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import { isEditingSessionNoise } from '../../shared/audit-messages'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
 import type { Db } from '../db/client'
@@ -460,6 +460,8 @@ export async function revertServiceLogInvoice(db: Db, id: string) {
   return { log: await getServiceLog(db, id), before, invoiceId }
 }
 
+export type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'customer' | 'unit'
+
 export interface ListServiceLogsFilter {
   q?: string
   status?: ServiceLogStatus
@@ -470,7 +472,9 @@ export interface ListServiceLogsFilter {
   /** Restrict to logs submitted by this user (mechanic `.own` scope). */
   submittedBy?: string
   includeArchived?: boolean
-  sort?: 'newest' | 'oldest' | 'status'
+  dateFrom?: string
+  dateTo?: string
+  sort?: ServiceLogSort
   page: number
   pageSize: number
 }
@@ -484,25 +488,36 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
   if (filter.customerId) conditions.push(eq(serviceLogs.customerId, filter.customerId))
   if (filter.vehicleId) conditions.push(eq(serviceLogs.vehicleId, filter.vehicleId))
   if (filter.submittedBy) conditions.push(eq(serviceLogs.submittedBy, filter.submittedBy))
+  if (filter.dateFrom) conditions.push(gte(serviceLogs.serviceDate, filter.dateFrom))
+  if (filter.dateTo) conditions.push(lte(serviceLogs.serviceDate, filter.dateTo))
 
   if (filter.q) {
     const term = `%${filter.q}%`
     conditions.push(or(
       ilike(customers.displayName, term),
       ilike(vehicles.busNumber, term),
+      ilike(vehicles.unitTag, term),
       ilike(vehicles.make, term),
       ilike(vehicles.model, term),
       ilike(serviceLogs.complaint, term),
       ilike(serviceLogs.internalNotes, term),
+      sql`CAST(${serviceLogs.logNumber} AS TEXT) ILIKE ${term}`,
     ))
   }
 
   const where = conditions.length ? and(...conditions) : undefined
+  const tiebreak = desc(serviceLogs.createdAt)
   const orderBy = filter.sort === 'oldest'
-    ? asc(serviceLogs.createdAt)
+    ? [asc(serviceLogs.createdAt)]
     : filter.sort === 'status'
-      ? asc(serviceLogs.status)
-      : desc(serviceLogs.createdAt)
+      ? [asc(serviceLogs.status), tiebreak]
+      : filter.sort === 'service_date'
+        ? [desc(serviceLogs.serviceDate), tiebreak]
+        : filter.sort === 'customer'
+          ? [asc(customers.displayName), tiebreak]
+          : filter.sort === 'unit'
+            ? [asc(vehicles.busNumber), asc(vehicles.unitTag), tiebreak]
+            : [tiebreak]
 
   const rows = await db.select({
     log: serviceLogs,
@@ -524,7 +539,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     .leftJoin(invoices, eq(serviceLogs.invoiceId, invoices.id))
     .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
-    .orderBy(orderBy)
+    .orderBy(...orderBy)
     .limit(filter.pageSize)
     .offset((filter.page - 1) * filter.pageSize)
 
