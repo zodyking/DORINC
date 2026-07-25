@@ -118,6 +118,7 @@ export const invoiceListQuerySchema = paginationSchema.extend({
   overdue: z.coerce.boolean().optional(),
   customerId: uuidSchema.optional(),
   vehicleId: uuidSchema.optional(),
+  unit: z.string().trim().max(100).optional(),
   includeArchived: z.coerce.boolean().optional(),
   amountMin: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Enter a valid amount').optional(),
   amountMax: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Enter a valid amount').optional(),

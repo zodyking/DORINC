@@ -469,6 +469,7 @@ export interface ListServiceLogsFilter {
   queue?: 'review'
   customerId?: string
   vehicleId?: string
+  unit?: string
   /** Restrict to logs submitted by this user (mechanic `.own` scope). */
   submittedBy?: string
   includeArchived?: boolean
@@ -488,6 +489,10 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
   if (filter.customerId) conditions.push(eq(serviceLogs.customerId, filter.customerId))
   if (filter.vehicleId) conditions.push(eq(serviceLogs.vehicleId, filter.vehicleId))
   if (filter.submittedBy) conditions.push(eq(serviceLogs.submittedBy, filter.submittedBy))
+  if (filter.unit) {
+    const unitTerm = `%${filter.unit}%`
+    conditions.push(or(ilike(vehicles.busNumber, unitTerm), ilike(vehicles.unitTag, unitTerm)))
+  }
   if (filter.dateFrom) conditions.push(gte(serviceLogs.serviceDate, filter.dateFrom))
   if (filter.dateTo) conditions.push(lte(serviceLogs.serviceDate, filter.dateTo))
 

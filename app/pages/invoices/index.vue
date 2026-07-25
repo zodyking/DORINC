@@ -61,6 +61,8 @@ type InvoiceSort = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'status' 
 const q = ref('')
 const fStatus = ref<StatusChip>((route.query.status as StatusChip) || 'all')
 const fSort = ref<InvoiceSort>('newest')
+const fCustomer = ref('all')
+const fUnit = ref('')
 const fAmountMin = ref('')
 const fAmountMax = ref('')
 const fDateFrom = ref('')
@@ -68,7 +70,16 @@ const fDateTo = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, fStatus, fSort, fAmountMin, fAmountMax, fDateFrom, fDateTo], () => { page.value = 1 })
+// Debounced customer search that populates the Customer filter dropdown.
+const customerFilterQ = ref('')
+const customerSearchQ = ref('')
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerFilterQ, (val) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => { customerSearchQ.value = val.trim() }, 300)
+})
+
+watch([q, fStatus, fSort, fCustomer, fUnit, fAmountMin, fAmountMax, fDateFrom, fDateTo], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
@@ -78,6 +89,8 @@ const query = computed(() => ({
     ? undefined
     : fStatus.value,
   overdue: fStatus.value === 'overdue' ? true : undefined,
+  customerId: fCustomer.value === 'all' ? undefined : fCustomer.value,
+  unit: fUnit.value.trim() || undefined,
   amountMin: fAmountMin.value.trim() || undefined,
   amountMax: fAmountMax.value.trim() || undefined,
   dateFrom: fDateFrom.value || undefined,
@@ -105,6 +118,12 @@ const {
   query,
   immediate: false,
 })
+
+const { data: customersData, pending: customersPending } = useClientFetch<{ items: { id: string, displayName: string }[] }>(
+  '/api/customers',
+  { query: computed(() => ({ pageSize: 50, sort: 'name-asc' as const, q: customerSearchQ.value || undefined })) },
+)
+const customerOptions = computed(() => customersData.value?.items ?? [])
 
 function loadInvoices() {
   if (!import.meta.client) return
@@ -150,6 +169,7 @@ const chips = computed(() => [
 
 const filtersDirty = computed(() =>
   fStatus.value !== 'all' || fSort.value !== 'newest' || !!q.value
+  || fCustomer.value !== 'all' || !!fUnit.value
   || !!fAmountMin.value || !!fAmountMax.value || !!fDateFrom.value || !!fDateTo.value,
 )
 
@@ -157,6 +177,10 @@ function clearFilters() {
   q.value = ''
   fStatus.value = 'all'
   fSort.value = 'newest'
+  fCustomer.value = 'all'
+  fUnit.value = ''
+  customerFilterQ.value = ''
+  customerSearchQ.value = ''
   fAmountMin.value = ''
   fAmountMax.value = ''
   fDateFrom.value = ''
@@ -319,6 +343,26 @@ async function exportCsv() {
               {{ chip.label }} · {{ chip.count }}
             </option>
           </select>
+        </label>
+        <label class="fld">
+          Customer
+          <input
+            v-model="customerFilterQ"
+            type="search"
+            placeholder="Search customers…"
+            aria-label="Search customers"
+            autocomplete="off"
+          >
+          <select v-model="fCustomer" aria-label="Filter by customer">
+            <option value="all">All customers</option>
+            <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+          </select>
+          <span v-if="customersPending" class="help">Loading customers…</span>
+          <span v-else-if="customerSearchQ && !customerOptions.length" class="help">No customers match.</span>
+        </label>
+        <label class="fld">
+          Unit number
+          <input v-model="fUnit" type="search" placeholder="e.g. HL-114" aria-label="Filter by unit number" autocomplete="off">
         </label>
         <label class="fld">
           Min amount
