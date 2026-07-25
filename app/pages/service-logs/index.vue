@@ -50,18 +50,31 @@ type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'custome
 const q = ref('')
 const fView = ref<'all' | 'review'>('all')
 const fSort = ref<ServiceLogSort>('newest')
+const fCustomer = ref('all')
+const fUnit = ref('')
 const fDateFrom = ref('')
 const fDateTo = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-watch([q, fView, fSort, fDateFrom, fDateTo], () => { page.value = 1 })
+// Debounced customer search that populates the Customer filter dropdown.
+const customerFilterQ = ref('')
+const customerSearchQ = ref('')
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
+watch(customerFilterQ, (val) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer)
+  customerSearchTimer = setTimeout(() => { customerSearchQ.value = val.trim() }, 300)
+})
+
+watch([q, fView, fSort, fCustomer, fUnit, fDateFrom, fDateTo], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
   pageSize: PAGE_SIZE,
   q: q.value || undefined,
   queue: canReview.value && fView.value === 'review' ? 'review' as const : undefined,
+  customerId: fCustomer.value === 'all' ? undefined : fCustomer.value,
+  unit: fUnit.value.trim() || undefined,
   dateFrom: fDateFrom.value || undefined,
   dateTo: fDateTo.value || undefined,
   sort: fSort.value,
@@ -74,6 +87,12 @@ const { data, error, refresh } = useClientFetch<{ items: ServiceLogRow[], total:
   { query },
 )
 
+const { data: customersData, pending: customersPending } = useClientFetch<{ items: { id: string, displayName: string }[] }>(
+  '/api/customers',
+  { query: computed(() => ({ pageSize: 50, sort: 'name-asc' as const, q: customerSearchQ.value || undefined })) },
+)
+const customerOptions = computed(() => customersData.value?.items ?? [])
+
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
@@ -83,6 +102,7 @@ const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Se
 
 const filtersDirty = computed(() =>
   fView.value !== 'all' || fSort.value !== 'newest' || !!q.value
+  || fCustomer.value !== 'all' || !!fUnit.value
   || !!fDateFrom.value || !!fDateTo.value,
 )
 
@@ -90,6 +110,10 @@ function clearFilters() {
   q.value = ''
   fView.value = 'all'
   fSort.value = 'newest'
+  fCustomer.value = 'all'
+  fUnit.value = ''
+  customerFilterQ.value = ''
+  customerSearchQ.value = ''
   fDateFrom.value = ''
   fDateTo.value = ''
 }
@@ -177,6 +201,26 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
             <option value="all">All logs</option>
             <option value="review">Review queue</option>
           </select>
+        </label>
+        <label v-if="!isMechanicScope" class="fld">
+          Customer
+          <input
+            v-model="customerFilterQ"
+            type="search"
+            placeholder="Search customers…"
+            aria-label="Search customers"
+            autocomplete="off"
+          >
+          <select v-model="fCustomer" aria-label="Filter by customer">
+            <option value="all">All customers</option>
+            <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+          </select>
+          <span v-if="customersPending" class="help">Loading customers…</span>
+          <span v-else-if="customerSearchQ && !customerOptions.length" class="help">No customers match.</span>
+        </label>
+        <label class="fld">
+          Unit number
+          <input v-model="fUnit" type="search" placeholder="e.g. HL-114" aria-label="Filter by unit number" autocomplete="off">
         </label>
         <label class="fld">
           Service date from
