@@ -100,7 +100,6 @@ async function draftWithLine() {
     customerId: customer.id,
     vehicleId: vehicle.id,
     invoiceDate: '2026-07-07',
-    shopSuppliesPercent: '3.5',
     creationSource: 'blank',
   }, ACTOR)
 
@@ -180,11 +179,11 @@ describe('P1-20 invoices schema', () => {
 
     const { invoice: updated, totals } = await recalculateInvoiceTotals(db, invoice.id, ACTOR)
     expect(totals.subtotal).toBe('920.18')
-    expect(totals.feesAmount).toBe('32.21')
-    expect(totals.total).toBe('952.39')
+    expect(totals.feesAmount).toBe('0')
+    expect(totals.total).toBe('920.18')
     expect(updated.subtotal).toBe('920.18')
-    expect(updated.total).toBe('952.39')
-    expect(updated.balanceDue).toBe('952.39')
+    expect(updated.total).toBe('920.18')
+    expect(updated.balanceDue).toBe('920.18')
   })
 })
 

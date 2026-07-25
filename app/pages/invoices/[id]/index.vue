@@ -313,8 +313,6 @@ const summaryRows = computed(() => {
     taxAmount: inv.taxAmount,
     taxRate: inv.taxRate,
     taxExempt: inv.taxExempt,
-    feesAmount: inv.feesAmount,
-    shopSuppliesPercent: inv.shopSuppliesPercent,
     discountAmount: inv.discountAmount,
     total: inv.total,
     amountPaid: inv.amountPaid,

@@ -309,12 +309,14 @@
             <table class="totals-table">
               <tr><td>Parts</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
               <tr><td>Labor</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
-              <tr><td>Fees</td><td>{{ $totals['fees'] ?? '$0.00' }}</td></tr>
               <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
               <tr><td>Tax</td><td>
                 @if(!empty($totals['taxExempt']))
                   @if(!empty($totals['waivedTax']))
-                    <span style="text-decoration:line-through;color:#94a3b8;">{{ $totals['waivedTax'] }}</span>
+                    <span style="display:inline-block;position:relative;color:#94a3b8;line-height:1.15;padding:0 1px;">
+                      <span style="position:relative;z-index:1;">{{ $totals['waivedTax'] }}</span>
+                      <span style="position:absolute;left:0;right:0;top:54%;height:0;border-top:1.5px solid #94a3b8;"></span>
+                    </span>
                   @endif
                   <span style="margin-left:8px;font-size:11px;font-weight:600;color:#64748b;text-transform:lowercase;">tax exempt</span>
                 @else

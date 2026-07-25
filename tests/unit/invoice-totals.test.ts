@@ -17,11 +17,12 @@ describe('P1-20 invoice totals (server-side)', () => {
     })
 
     expect(result.subtotal).toBe('920.18')
+    expect(result.feesAmount).toBe('0')
     expect(result.total).toBe('920.18')
     expect(result.balanceDue).toBe('920.18')
   })
 
-  it('applies shop supplies percent and flat fees', () => {
+  it('does not apply shop supply surcharges', () => {
     const result = calculateInvoiceTotals({
       lines: [
         { quantity: '2', unitPrice: '145.00', taxable: true },
@@ -29,12 +30,11 @@ describe('P1-20 invoice totals (server-side)', () => {
         { quantity: '1.5', unitPrice: '145.00', taxable: true },
       ],
       taxExempt: true,
-      shopSuppliesPercent: '3.5',
     })
 
     expect(result.subtotal).toBe('920.18')
-    expect(result.feesAmount).toBe('32.21')
-    expect(result.total).toBe('952.39')
+    expect(result.feesAmount).toBe('0')
+    expect(result.total).toBe('920.18')
   })
 
   it('calculates tax on taxable lines when customer is not exempt', () => {
@@ -61,10 +61,11 @@ describe('P1-20 invoice totals (server-side)', () => {
     })
 
     expect(result.taxAmount).toBe('0')
+    expect(result.waivedTaxAmount).toBe('6.60')
     expect(result.total).toBe('100.00')
   })
 
-  it('applies header fees and payments for balance due', () => {
+  it('applies payments for balance due without header fees', () => {
     const result = calculateInvoiceTotals({
       lines: [
         { quantity: '2', unitPrice: '145.00', taxable: false },
@@ -75,15 +76,14 @@ describe('P1-20 invoice totals (server-side)', () => {
         { quantity: '1', unitPrice: '38.50', taxable: false },
       ],
       taxExempt: true,
-      feesAmount: '24.00',
       amountPaid: '300.00',
     })
 
     expect(result.subtotal).toBe('1117.88')
-    expect(result.feesAmount).toBe('24.00')
-    expect(result.total).toBe('1141.88')
+    expect(result.feesAmount).toBe('0')
+    expect(result.total).toBe('1117.88')
     expect(result.amountPaid).toBe('300.00')
-    expect(result.balanceDue).toBe('841.88')
+    expect(result.balanceDue).toBe('817.88')
   })
 
   it('applies discount before balance due', () => {
@@ -97,21 +97,5 @@ describe('P1-20 invoice totals (server-side)', () => {
     expect(result.discountAmount).toBe('50.00')
     expect(result.total).toBe('450.00')
     expect(result.balanceDue).toBe('350.00')
-  })
-
-  it('matches mockup editor totals with shop supplies fee', () => {
-    const result = calculateInvoiceTotals({
-      lines: [
-        { quantity: '2', unitPrice: '145.00', taxable: true },
-        { quantity: '1', unitPrice: '412.68', taxable: true },
-        { quantity: '1.5', unitPrice: '145.00', taxable: true },
-      ],
-      taxExempt: true,
-      shopSuppliesPercent: '3.5',
-      amountPaid: '0',
-    })
-
-    expect(result.total).toBe('952.39')
-    expect(result.balanceDue).toBe('952.39')
   })
 })

@@ -29,8 +29,6 @@ export interface InvoiceTotalsShape {
   taxAmount: string
   taxExempt: boolean
   waivedTaxAmount?: string | null
-  feesAmount: string
-  shopSuppliesPercent: string | null
   discountAmount: string
   total: string
 }
@@ -94,7 +92,7 @@ export function invoiceDisplayTotal(
   if (!breakdown) return inv.total
   const lineSubtotal = addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
   return subtractMoney(
-    addMoney(lineSubtotal, inv.feesAmount ?? '0', inv.taxAmount ?? '0'),
+    addMoney(lineSubtotal, inv.taxAmount ?? '0'),
     inv.discountAmount ?? '0',
   )
 }
@@ -124,12 +122,6 @@ export function editorSummaryRows(
     lineSubtotal = addMoney(opts.breakdown.parts, opts.breakdown.labor, opts.breakdown.fees)
   }
   rows.push({ label: 'Subtotal', value: moneyDisplay(lineSubtotal) })
-  if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
-    rows.push({ label: 'Shop supplies & fees', value: moneyDisplay(inv.feesAmount) })
-  }
-  else if (inv.shopSuppliesPercent && Number.parseFloat(inv.shopSuppliesPercent) > 0) {
-    rows.push({ label: `Shop supplies (${inv.shopSuppliesPercent}%)`, value: 'Included in fees' })
-  }
   if (inv.taxExempt) {
     const waived = waivedTaxAmount
     if (waived && Number.parseFloat(waived) > 0) {

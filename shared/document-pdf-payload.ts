@@ -45,7 +45,6 @@ export interface DocumentPdfLineItem {
 export interface DocumentPdfTotals {
   parts: string
   labor: string
-  fees: string
   discount: string
   tax: string
   taxExempt?: boolean
@@ -368,7 +367,6 @@ export function buildInvoicePdfData(
     totals: {
       parts: moneyDisplay(formatMoney(partsTotal)),
       labor: moneyDisplay(formatMoney(laborTotal)),
-      fees: moneyDisplay(detail.feesAmount),
       discount: moneyDisplay(detail.discountAmount),
       tax: moneyDisplay(detail.taxAmount),
       taxExempt: detail.taxExempt ?? false,

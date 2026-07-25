@@ -18,7 +18,7 @@ import { normalizeLineType } from '#shared/line-item-types'
 import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import type { AccountType } from '../../shared/permissions/keys'
 import { getManagerApprovalThreshold } from './billing-settings.service'
-import { getDefaultInvoiceTaxRateDecimal, getInvoiceWorkspaceSettings } from './workspace-settings.service'
+import { getDefaultInvoiceTaxRateDecimal } from './workspace-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
@@ -331,8 +331,8 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       internalNotes: input.internalNotes ?? src.internalNotes,
       customerNotes: input.customerNotes ?? src.customerNotes,
       taxRate: input.taxRate ?? (hasPositiveTaxRate(src.taxRate) ? src.taxRate! : undefined),
-      shopSuppliesPercent: input.shopSuppliesPercent ?? src.shopSuppliesPercent,
-      feesAmount: input.feesAmount ?? src.feesAmount ?? '0',
+      shopSuppliesPercent: null,
+      feesAmount: '0',
       discountAmount: input.discountAmount ?? src.discountAmount ?? '0',
       sourceInvoiceId: src.id,
     }
@@ -462,10 +462,9 @@ export async function createInvoiceDraft(
     ? snapshotOverrides.vehicleSnapshot
     : await resolveVehicleForCustomer(db, input.customerId, input.vehicleId)
 
-  const [defaultTaxRate, invoiceSettings] = await Promise.all([
-    input.taxRate ? Promise.resolve(input.taxRate) : getDefaultInvoiceTaxRateDecimal(db),
-    getInvoiceWorkspaceSettings(db),
-  ])
+  const defaultTaxRate = input.taxRate
+    ? input.taxRate
+    : await getDefaultInvoiceTaxRateDecimal(db)
 
   const draftValues = {
     customerId: input.customerId ?? null,
@@ -486,8 +485,8 @@ export async function createInvoiceDraft(
     customerNotes: input.customerNotes ?? null,
     taxExempt,
     taxRate: defaultTaxRate,
-    shopSuppliesPercent: input.shopSuppliesPercent ?? invoiceSettings.shopSuppliesPercent ?? null,
-    feesAmount: input.feesAmount ?? '0',
+    shopSuppliesPercent: null,
+    feesAmount: '0',
     discountAmount: input.discountAmount ?? '0',
     createdBy: actorId,
     updatedBy: actorId,
@@ -896,7 +895,7 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
   for (const key of [
     'invoiceDate', 'dueDate', 'paymentTerms', 'serviceLocation', 'poNumber',
     'complaint', 'internalNotes', 'customerNotes', 'taxRate',
-    'shopSuppliesPercent', 'feesAmount', 'discountAmount',
+    'discountAmount',
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])) {
@@ -908,7 +907,7 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
   if (!changedFields.length) return { invoice: before, before, changedFields }
 
   const [updated] = await db.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
-  const totalsFields = ['taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount', 'customerId', 'taxExempt']
+  const totalsFields = ['taxRate', 'discountAmount', 'customerId', 'taxExempt']
   if (changedFields.some(f => totalsFields.includes(f))) {
     await recalculateInvoiceTotals(db, id, actorId)
     const refreshed = await getInvoice(db, id)
@@ -1075,9 +1074,6 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
     })),
     taxExempt: invoice.taxExempt,
     taxRate,
-    shopSuppliesPercent: invoice.shopSuppliesPercent ?? undefined,
-    // feesAmount column stores computed output — flat header fees land via draft patch before recalc
-    feesAmount: '0',
     discountAmount: invoice.discountAmount ?? '0',
     amountPaid: invoice.amountPaid ?? '0',
   })
@@ -1087,6 +1083,7 @@ export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorI
     taxAmount: totals.taxAmount,
     discountAmount: totals.discountAmount,
     feesAmount: totals.feesAmount,
+    shopSuppliesPercent: null,
     total: totals.total,
     balanceDue: totals.balanceDue,
     updatedBy: actorId,
@@ -1169,8 +1166,6 @@ export async function transitionInvoice(
       })),
       taxExempt: refreshed.taxExempt,
       taxRate: refreshed.taxRate ?? '0',
-      shopSuppliesPercent: refreshed.shopSuppliesPercent ?? undefined,
-      feesAmount: '0',
       discountAmount: refreshed.discountAmount ?? '0',
       amountPaid,
     })
@@ -1302,8 +1297,6 @@ export async function markInvoicePaid(
       })),
       taxExempt: before.taxExempt,
       taxRate: before.taxRate ?? '0',
-      shopSuppliesPercent: before.shopSuppliesPercent ?? undefined,
-      feesAmount: '0',
       discountAmount: before.discountAmount ?? '0',
       amountPaid: newAmountPaid,
     })

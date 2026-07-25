@@ -74,14 +74,12 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       subtotal: '920.18',
       taxAmount: '0',
       taxExempt: true,
-      feesAmount: '32.21',
-      shopSuppliesPercent: '3.5',
       discountAmount: '0',
-      total: '952.39',
+      total: '920.18',
     })
     expect(rows[0]?.value).toBe('$920.18')
-    expect(rows.find(r => r.label === 'Shop supplies & fees')?.value).toBe('$32.21')
-    expect(rows.find(r => r.grand)?.value).toBe('$952.39')
+    expect(rows.find(r => r.label === 'Shop supplies & fees')).toBeUndefined()
+    expect(rows.find(r => r.grand)?.value).toBe('$920.18')
   })
 
   it('shows crossed-out waived tax with tax exempt note', () => {
@@ -90,10 +88,8 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       taxAmount: '0',
       taxExempt: true,
       taxRate: '0.066000',
-      feesAmount: '5.08',
-      shopSuppliesPercent: '3.5',
       discountAmount: '0',
-      total: '150.08',
+      total: '145.00',
     }, {
       lineItems: [{ quantity: '1', unitPrice: '145.00', taxable: true }],
     })
@@ -101,7 +97,7 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(taxRow?.value).toBe('$9.57')
     expect(taxRow?.strikethrough).toBe(true)
     expect(taxRow?.note).toBe('tax exempt')
-    expect(rows.find(r => r.grand)?.value).toBe('$150.08')
+    expect(rows.find(r => r.grand)?.value).toBe('$145.00')
   })
 
   it('uses breakdown sum for subtotal and total when fee lines are not yet in server subtotal', () => {
@@ -109,10 +105,8 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       subtotal: '460.00',
       taxAmount: '0',
       taxExempt: true,
-      feesAmount: '0',
-      shopSuppliesPercent: null,
       discountAmount: '0',
-      total: '460.00',
+      total: '560.00',
     }, {
       breakdown: { parts: '325.00', labor: '135.00', fees: '100.00' },
     })
@@ -125,8 +119,6 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       subtotal: '360.00',
       taxAmount: '0',
       taxExempt: false,
-      feesAmount: '0',
-      shopSuppliesPercent: null,
       discountAmount: '0',
       total: '360.00',
     }, {

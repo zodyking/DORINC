@@ -1,6 +1,6 @@
 // Invoice creator wizard helpers (mockup: PAGE: INVOICE CREATOR / P1-23).
 
-import { addMoney, multiplyMoney, percentOfMoney, rateOfMoney, subtractMoney } from '#shared/money'
+import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '#shared/money'
 import { computeWaivedTaxAmount, taxableSubtotalFromLines } from '#shared/invoice-tax-exempt'
 import type { InvoiceLineType } from './invoices-ui'
 
@@ -214,7 +214,6 @@ export interface DraftTotalsPreview {
   waivedTaxAmount: string | null
   taxExempt: boolean
   feesAmount: string
-  shopSuppliesPercent: string | null
   discountAmount: string
   total: string
 }
@@ -225,8 +224,6 @@ export function previewDraftTotals(
   opts: {
     taxExempt?: boolean
     taxRate?: string
-    shopSuppliesPercent?: string | null
-    feesAmount?: string
     discountAmount?: string
   } = {},
 ): DraftTotalsPreview {
@@ -237,11 +234,7 @@ export function previewDraftTotals(
   const taxableSubtotal = taxableSubtotalFromLines(validLines)
   const waivedTaxAmount = computeWaivedTaxAmount({ taxExempt, taxRate, taxableSubtotal })
   const taxAmount = taxExempt ? '0' : rateOfMoney(taxableSubtotal, taxRate)
-  const percentFees = opts.shopSuppliesPercent
-    ? percentOfMoney(subtotal, opts.shopSuppliesPercent)
-    : '0'
-  const flatFees = opts.feesAmount ?? '0'
-  const feesAmount = addMoney(percentFees, flatFees)
+  const feesAmount = '0'
   const discountAmount = opts.discountAmount ?? '0'
   const total = subtractMoney(addMoney(subtotal, feesAmount, taxAmount), discountAmount)
   return {
@@ -250,7 +243,6 @@ export function previewDraftTotals(
     waivedTaxAmount,
     taxExempt,
     feesAmount,
-    shopSuppliesPercent: opts.shopSuppliesPercent ?? null,
     discountAmount,
     total,
   }

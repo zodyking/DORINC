@@ -22,7 +22,7 @@ import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import type { InvoiceTotalsResult } from './invoice-totals.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
-import { getDefaultInvoiceTaxRateDecimal, getInvoiceWorkspaceSettings } from './workspace-settings.service'
+import { getDefaultInvoiceTaxRateDecimal } from './workspace-settings.service'
 
 export type EstimatesServiceErrorCode
   = 'NOT_FOUND' | 'CUSTOMER_NOT_FOUND' | 'VEHICLE_NOT_FOUND' | 'CATALOG_NOT_FOUND'
@@ -185,8 +185,6 @@ export async function recalculateEstimateTotals(db: Db, estimateId: string, acto
     })),
     taxExempt: estimate.taxExempt,
     taxRate: estimate.taxRate ?? '0',
-    feesAmount: '0',
-    shopSuppliesPercent: estimate.shopSuppliesPercent ?? undefined,
     discountAmount: estimate.discountAmount ?? '0',
     amountPaid: '0',
   })
@@ -195,6 +193,7 @@ export async function recalculateEstimateTotals(db: Db, estimateId: string, acto
     subtotal: totals.subtotal,
     taxAmount: totals.taxAmount,
     feesAmount: totals.feesAmount,
+    shopSuppliesPercent: null,
     discountAmount: totals.discountAmount,
     total: totals.total,
     updatedBy: actorId,
@@ -264,10 +263,9 @@ export async function createEstimate(db: Db, input: CreateEstimateInput, actorId
 
   const vehicleSnapshot = await resolveVehicleForCustomer(db, resolved.customerId, resolved.vehicleId)
 
-  const [defaultTaxRate, invoiceSettings] = await Promise.all([
-    resolved.taxRate ? Promise.resolve(resolved.taxRate) : getDefaultInvoiceTaxRateDecimal(db),
-    getInvoiceWorkspaceSettings(db),
-  ])
+  const defaultTaxRate = resolved.taxRate
+    ? resolved.taxRate
+    : await getDefaultInvoiceTaxRateDecimal(db)
 
   const [row] = await db.insert(estimates).values({
     customerId: resolved.customerId,
@@ -286,8 +284,8 @@ export async function createEstimate(db: Db, input: CreateEstimateInput, actorId
     customerNotes: resolved.customerNotes ?? null,
     taxExempt: customer.taxExempt,
     taxRate: defaultTaxRate,
-    shopSuppliesPercent: resolved.shopSuppliesPercent ?? invoiceSettings.shopSuppliesPercent ?? null,
-    feesAmount: resolved.feesAmount ?? '0',
+    shopSuppliesPercent: null,
+    feesAmount: '0',
     discountAmount: resolved.discountAmount ?? '0',
     createdBy: actorId,
     updatedBy: actorId,
@@ -447,7 +445,7 @@ export async function updateEstimateDraft(db: Db, id: string, patch: EstimatePat
 
   for (const key of [
     'estimateDate', 'validUntil', 'serviceLocation', 'poNumber', 'complaint',
-    'internalNotes', 'customerNotes', 'taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount',
+    'internalNotes', 'customerNotes', 'taxRate', 'discountAmount',
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])) {
@@ -459,7 +457,7 @@ export async function updateEstimateDraft(db: Db, id: string, patch: EstimatePat
   if (!changedFields.length) return { estimate: before, before, changedFields }
 
   const [updated] = await db.update(estimates).set(changes).where(eq(estimates.id, id)).returning()
-  const totalsFields = ['taxRate', 'shopSuppliesPercent', 'feesAmount', 'discountAmount']
+  const totalsFields = ['taxRate', 'discountAmount']
   if (changedFields.some(f => totalsFields.includes(f))) {
     const { estimate } = await recalculateEstimateTotals(db, id, actorId)
     return { estimate, before, changedFields }
@@ -717,8 +715,6 @@ export async function convertEstimateToInvoice(
       internalNotes: before.internalNotes,
       customerNotes: before.customerNotes,
       taxRate: before.taxRate ?? '0',
-      shopSuppliesPercent: before.shopSuppliesPercent,
-      feesAmount: before.feesAmount ?? '0',
       discountAmount: before.discountAmount ?? '0',
     }, actorId)
 

@@ -19,7 +19,6 @@ const { data: templatesData, refresh: refreshTemplates } = useClientFetch<{
 
 const form = reactive({
   defaultPaymentTermsDays: 30,
-  shopSuppliesPercent: '3.5',
   managerApprovalThreshold: '5000.00',
 })
 
@@ -147,10 +146,6 @@ async function onTemplateChange(ev: Event) {
         <label class="fld">
           Payment terms (days)
           <input v-model.number="form.defaultPaymentTermsDays" type="number" min="0" max="365">
-        </label>
-        <label class="fld">
-          Shop supplies default (%)
-          <input v-model="form.shopSuppliesPercent" type="text" inputmode="decimal" placeholder="3.5">
         </label>
         <label class="fld">
           Manager approval threshold ($)

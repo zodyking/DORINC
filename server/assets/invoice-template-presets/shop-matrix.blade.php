@@ -101,7 +101,6 @@
 
   $partsTotal = $totals['parts'] ?? '$0.00';
   $laborTotal = $totals['labor'] ?? '$0.00';
-  $feeTotal = $totals['fees'] ?? '$0.00';
 
   $grandTotal = $totals['balanceDue']
     ?? $totals['total']
@@ -892,11 +891,6 @@
               <tr>
                 <td>LABOR</td>
                 <td>{{ $laborTotal }}</td>
-              </tr>
-
-              <tr>
-                <td>FEES</td>
-                <td>{{ $feeTotal }}</td>
               </tr>
 
               <tr class="grand-total">

@@ -293,7 +293,6 @@ const summaryRows = computed(() => {
   const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
     taxExempt: selectedCustomer.value?.taxExempt,
     taxRate: invoiceDefaults.value?.defaultTaxRateDecimal ?? '0',
-    shopSuppliesPercent: invoiceDefaults.value?.shopSuppliesPercent ?? null,
   })
   return editorSummaryRows(inv, {
     breakdown,

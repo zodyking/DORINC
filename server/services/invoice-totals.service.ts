@@ -1,5 +1,5 @@
 import { computeWaivedTaxAmount } from '../../shared/invoice-tax-exempt'
-import { addMoney, multiplyMoney, percentOfMoney, rateOfMoney, subtractMoney } from '../../shared/money'
+import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '../../shared/money'
 
 export interface InvoiceLineTotalsInput {
   quantity: string
@@ -12,10 +12,6 @@ export interface InvoiceTotalsInput {
   taxExempt: boolean
   /** Decimal rate e.g. "0.066000" for 6.6% */
   taxRate?: string
-  /** Flat header-level fees (fuel surcharge, etc.) */
-  feesAmount?: string
-  /** Percent fee applied to subtotal (shop supplies) e.g. "3.5" */
-  shopSuppliesPercent?: string
   discountAmount?: string
   amountPaid?: string
 }
@@ -37,7 +33,7 @@ export function lineAmount(quantity: string, unitPrice: string): string {
   return multiplyMoney(quantity, unitPrice)
 }
 
-/** Server-side invoice totals — subtotal, tax, discount, fees, balance (SPEC §6.5). */
+/** Server-side invoice totals — subtotal, tax, discount, balance (SPEC §6.5). */
 export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotalsResult {
   const discountAmount = input.discountAmount ?? '0'
   const amountPaid = input.amountPaid ?? '0'
@@ -51,11 +47,7 @@ export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals
     .map(line => lineAmount(line.quantity, line.unitPrice))
   const taxableSubtotal = taxableLines.length ? addMoney(...taxableLines) : '0'
 
-  const percentFees = input.shopSuppliesPercent
-    ? percentOfMoney(subtotal, input.shopSuppliesPercent)
-    : '0'
-  const flatFees = input.feesAmount ?? '0'
-  const feesAmount = addMoney(percentFees, flatFees)
+  const feesAmount = '0'
 
   const waivedTaxAmount = computeWaivedTaxAmount({
     taxExempt: input.taxExempt,

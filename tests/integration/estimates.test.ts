@@ -97,7 +97,6 @@ describe('P3-01 estimates schema + API', () => {
       customerId: customer.id,
       vehicleId: vehicle.id,
       estimateDate: '2026-07-08',
-      shopSuppliesPercent: '3.5',
     }, ACTOR)
 
     await addEstimateLineItem(db, estimate.id, {
@@ -121,9 +120,9 @@ describe('P3-01 estimates schema + API', () => {
 
     const { estimate: updated, totals } = await recalculateEstimateTotals(db, estimate.id, ACTOR)
     expect(totals.subtotal).toBe('274.98')
-    expect(totals.feesAmount).toBe('9.62')
-    expect(totals.total).toBe('284.60')
-    expect(updated.total).toBe('284.60')
+    expect(totals.feesAmount).toBe('0')
+    expect(totals.total).toBe('274.98')
+    expect(updated.total).toBe('274.98')
   })
 
   it('only allows draft edits and enforces status transitions', async () => {

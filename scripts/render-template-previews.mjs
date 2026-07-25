@@ -47,11 +47,10 @@ const data = {
   totals: {
     parts: '$988.50',
     labor: '$210.00',
-    fees: '$25.00',
     discount: '$0.00',
     tax: '$0.00',
-    total: '$1,223.50',
-    balanceDue: '$1,223.50',
+    total: '$1,198.50',
+    balanceDue: '$1,198.50',
   },
   note: 'Unit towed in with a no-start condition. Fuel pressure at rail measured below spec; fuel pump assembly replaced and primary filter serviced. Road-tested 12 miles — starts and idles within spec.',
   company: {
