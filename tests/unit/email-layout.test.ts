@@ -50,6 +50,7 @@ describe('email layout', () => {
     expect(html).toContain('(555) 555 0100')
     expect(html).toContain('Notification settings')
     expect(html).toContain('https://app.example.com')
+    expect(html).not.toContain('<img')
   })
 
   it('builds styled email payloads with subject/text/html', () => {

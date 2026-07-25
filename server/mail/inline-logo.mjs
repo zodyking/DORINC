@@ -74,37 +74,6 @@ async function loadInlineLogoFromPool(pool, fileId) {
  * @param {{ pool?: import('pg').Pool }} [opts]
  * @returns {Promise<{ html: string | undefined, attachments: Array<{ filename: string, content: Buffer, contentType: string, cid: string, contentDisposition?: string }> }>}
  */
-export async function embedInlineLogoInHtml(html, opts = {}) {
-  if (!html || !html.includes('<img')) {
-    return { html, attachments: [] }
-  }
-
-  if (!html.match(BRANDED_LOGO_SRC_RE)) {
-    return { html, attachments: [] }
-  }
-
-  const fileId = html.match(LOGO_FILE_ID_RE)?.[1]
-  let attachment = null
-  if (opts.pool && fileId) {
-    attachment = await loadInlineLogoFromPool(opts.pool, fileId)
-  }
-  if (!attachment) {
-    attachment = await loadDefaultInlineLogoAttachment()
-  }
-  if (!attachment) {
-    return { html, attachments: [] }
-  }
-
-  const patched = html.replace(
-    BRANDED_LOGO_SRC_RE,
-    `src="cid:${EMAIL_INLINE_LOGO_CID}"`,
-  )
-
-  return {
-    html: patched,
-    attachments: [{
-      ...attachment,
-      contentDisposition: 'inline',
-    }],
-  }
+export async function embedInlineLogoInHtml(html, _opts = {}) {
+  return { html, attachments: [] }
 }
