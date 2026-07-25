@@ -7,6 +7,7 @@ import pkg from '../../package.json'
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const buildId = config.public.buildId ?? 'dev'
+  const buildTime = (config.public as { buildTime?: string }).buildTime ?? null
 
   if (!hasDatabaseConfig()) {
     setResponseStatus(event, 200)
@@ -15,6 +16,7 @@ export default defineEventHandler(async (event) => {
       database: 'not_configured',
       version: pkg.version ?? '0.0.0',
       buildId,
+      buildTime,
       requestId: (event.context.requestId as string | undefined) ?? '',
       time: new Date().toISOString(),
     }
@@ -55,6 +57,7 @@ export default defineEventHandler(async (event) => {
     workers,
     version: pkg.version ?? '0.0.0',
     buildId,
+    buildTime,
     requestId: (event.context.requestId as string | undefined) ?? '',
     time: new Date().toISOString(),
   }

@@ -1,4 +1,25 @@
+import { execSync } from 'node:child_process'
 import tailwindcss from '@tailwindcss/vite'
+
+/**
+ * Resolve a build identifier at build time so deploys are verifiable via
+ * /api/health. Prefers an explicit env var, then the git commit SHA, then a
+ * timestamp so it always changes on a fresh build.
+ */
+function resolveBuildId(): string {
+  if (process.env.NUXT_PUBLIC_BUILD_ID) return process.env.NUXT_PUBLIC_BUILD_ID
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+  }
+  catch {
+    return `build-${Date.now()}`
+  }
+}
+
+const BUILD_ID = resolveBuildId()
+const BUILD_TIME = new Date().toISOString()
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -77,7 +98,8 @@ export default defineNuxtConfig({
     maxUploadMb: process.env.MAX_UPLOAD_MB ?? '25',
     public: {
       appUrl: process.env.APP_URL ?? 'http://localhost:3000',
-      buildId: process.env.NUXT_PUBLIC_BUILD_ID ?? 'dev',
+      buildId: BUILD_ID,
+      buildTime: BUILD_TIME,
     },
   },
 
