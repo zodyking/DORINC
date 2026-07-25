@@ -314,7 +314,16 @@
               <tr><td>Labor</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
               <tr><td>Fees</td><td>{{ $totals['fees'] ?? '$0.00' }}</td></tr>
               <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
-              <tr><td>Tax</td><td>{{ $totals['tax'] ?? '$0.00' }}</td></tr>
+              <tr><td>Tax</td><td>
+                @if(!empty($totals['taxExempt']))
+                  @if(!empty($totals['waivedTax']))
+                    <span style="text-decoration:line-through;color:#94a3b8;">{{ $totals['waivedTax'] }}</span>
+                  @endif
+                  <span style="margin-left:8px;font-size:11px;font-weight:600;color:#64748b;text-transform:lowercase;">tax exempt</span>
+                @else
+                  {{ $totals['tax'] ?? '$0.00' }}
+                @endif
+              </td></tr>
               <tr class="total"><td>Total</td><td>{{ $totals['total'] ?? '$0.00' }}</td></tr>
             </table>
             <table class="balance-band">

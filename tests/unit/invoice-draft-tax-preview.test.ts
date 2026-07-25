@@ -25,6 +25,7 @@ describe('previewDraftTotals tax preview', () => {
       taxRate: '0.066000',
     })
     expect(totals.taxAmount).toBe('0')
+    expect(totals.waivedTaxAmount).toBe('6.60')
     expect(totals.total).toBe('100.00')
   })
 })

@@ -1,3 +1,4 @@
+import { computeWaivedTaxAmount } from '../../shared/invoice-tax-exempt'
 import { addMoney, multiplyMoney, percentOfMoney, rateOfMoney, subtractMoney } from '../../shared/money'
 
 export interface InvoiceLineTotalsInput {
@@ -22,6 +23,8 @@ export interface InvoiceTotalsInput {
 export interface InvoiceTotalsResult {
   subtotal: string
   taxAmount: string
+  /** Tax that would apply if not exempt — display only when taxExempt is true. */
+  waivedTaxAmount: string | null
   discountAmount: string
   feesAmount: string
   total: string
@@ -54,6 +57,11 @@ export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals
   const flatFees = input.feesAmount ?? '0'
   const feesAmount = addMoney(percentFees, flatFees)
 
+  const waivedTaxAmount = computeWaivedTaxAmount({
+    taxExempt: input.taxExempt,
+    taxRate,
+    taxableSubtotal,
+  })
   const taxAmount = input.taxExempt
     ? '0'
     : rateOfMoney(taxableSubtotal, taxRate)
@@ -68,6 +76,7 @@ export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals
   return {
     subtotal,
     taxAmount,
+    waivedTaxAmount,
     discountAmount,
     feesAmount,
     total,

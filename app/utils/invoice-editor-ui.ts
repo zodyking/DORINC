@@ -1,6 +1,7 @@
 // Invoice editor helpers (mockup: PAGE: INVOICE EDITOR / P1-24).
 
 import { addMoney, subtractMoney } from '#shared/money'
+import { computeWaivedTaxAmount, taxableSubtotalFromLines, type TaxableLineInput } from '#shared/invoice-tax-exempt'
 import { formatAuditChangeMessage, type AuditMessageInput } from '#shared/audit-messages'
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
@@ -15,10 +16,19 @@ export const EDIT_SESSION_HEARTBEAT_MS = 20_000
 /** Observer poll interval — keep status fresh between heartbeats. */
 export const EDIT_SESSION_STATUS_POLL_MS = 15_000
 
+export interface InvoiceSummaryRow {
+  label: string
+  value: string
+  grand?: boolean
+  strikethrough?: boolean
+  note?: string
+}
+
 export interface InvoiceTotalsShape {
   subtotal: string
   taxAmount: string
   taxExempt: boolean
+  waivedTaxAmount?: string | null
   feesAmount: string
   shopSuppliesPercent: string | null
   discountAmount: string
@@ -91,10 +101,19 @@ export function invoiceDisplayTotal(
 
 /** Server totals rows for editor sidebar — never computed client-side. */
 export function editorSummaryRows(
-  inv: InvoiceTotalsShape,
-  opts: { breakdown?: LineTypeBreakdown, grandLabel?: string } = {},
-): { label: string, value: string, grand?: boolean }[] {
-  const rows: { label: string, value: string, grand?: boolean }[] = []
+  inv: InvoiceTotalsShape & { taxRate?: string | null },
+  opts: { breakdown?: LineTypeBreakdown, grandLabel?: string, lineItems?: TaxableLineInput[] } = {},
+): InvoiceSummaryRow[] {
+  const waivedTaxAmount = inv.waivedTaxAmount ?? (inv.taxExempt
+    ? computeWaivedTaxAmount({
+        taxExempt: true,
+        taxRate: inv.taxRate,
+        taxableSubtotal: opts.lineItems?.length
+          ? taxableSubtotalFromLines(opts.lineItems)
+          : '0',
+      })
+    : null)
+  const rows: InvoiceSummaryRow[] = []
   let lineSubtotal = inv.subtotal
   if (opts.breakdown) {
     rows.push(
@@ -111,14 +130,61 @@ export function editorSummaryRows(
   else if (inv.shopSuppliesPercent && Number.parseFloat(inv.shopSuppliesPercent) > 0) {
     rows.push({ label: `Shop supplies (${inv.shopSuppliesPercent}%)`, value: 'Included in fees' })
   }
-  const taxLabel = inv.taxExempt ? 'Tax (exempt)' : 'Tax'
-  rows.push({ label: taxLabel, value: moneyDisplay(inv.taxAmount) })
+  if (inv.taxExempt) {
+    const waived = waivedTaxAmount
+    if (waived && Number.parseFloat(waived) > 0) {
+      rows.push({
+        label: 'Tax',
+        value: moneyDisplay(waived),
+        strikethrough: true,
+        note: 'tax exempt',
+      })
+    }
+    else {
+      rows.push({ label: 'Tax', value: moneyDisplay('0'), note: 'tax exempt' })
+    }
+  }
+  else {
+    rows.push({ label: 'Tax', value: moneyDisplay(inv.taxAmount) })
+  }
   if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
     rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
   }
   rows.push({
     label: opts.grandLabel ?? 'Total',
     value: moneyDisplay(invoiceDisplayTotal(inv, opts.breakdown)),
+    grand: true,
+  })
+  return rows
+}
+
+export function invoiceDetailSummaryRows(
+  inv: InvoiceTotalsShape & {
+    taxRate?: string | null
+    amountPaid?: string
+    balanceDue?: string
+    lineItems?: TaxableLineInput[]
+    lineTypeBreakdown?: LineTypeBreakdown
+  },
+): InvoiceSummaryRow[] {
+  const waivedTaxAmount = inv.waivedTaxAmount ?? (inv.lineItems?.length
+    ? computeWaivedTaxAmount({
+        taxExempt: inv.taxExempt,
+        taxRate: inv.taxRate,
+        taxableSubtotal: taxableSubtotalFromLines(inv.lineItems),
+      })
+    : null)
+  const base = editorSummaryRows(
+    { ...inv, waivedTaxAmount },
+    { breakdown: inv.lineTypeBreakdown, lineItems: inv.lineItems },
+  )
+  const rows = base.slice(0, -1)
+  if (inv.amountPaid && Number.parseFloat(inv.amountPaid) > 0) {
+    rows.push({ label: 'Amount paid', value: `−${moneyDisplay(inv.amountPaid)}` })
+  }
+  rows.push({
+    label: 'Balance due',
+    value: moneyDisplay(inv.balanceDue ?? inv.total),
     grand: true,
   })
   return rows

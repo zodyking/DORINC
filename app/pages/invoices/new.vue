@@ -298,6 +298,11 @@ const summaryRows = computed(() => {
   return editorSummaryRows(inv, {
     breakdown,
     grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
+    lineItems: lines.value.map(line => ({
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      taxable: line.taxable,
+    })),
   })
 })
 
@@ -950,7 +955,10 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
           :class="{ grand: row.grand }"
         >
           <span>{{ row.label }}</span>
-          <span>{{ row.value }}</span>
+          <span>
+            <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
+            <span v-if="row.note" class="sum-note">{{ row.note }}</span>
+          </span>
         </div>
       </div>
 

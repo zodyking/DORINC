@@ -1,4 +1,5 @@
 import { formatMoney, parseMoney } from './money'
+import { computeWaivedTaxAmount, taxableSubtotalFromLines } from './invoice-tax-exempt'
 import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
@@ -47,6 +48,8 @@ export interface DocumentPdfTotals {
   fees: string
   discount: string
   tax: string
+  taxExempt?: boolean
+  waivedTax?: string | null
   total: string
   balanceDue: string
 }
@@ -285,12 +288,15 @@ export interface BuildInvoicePdfPayloadInput {
     quantity: string
     unitPrice: string
     lineAmount: string
+    taxable?: boolean
   }>
   partsAmount?: string
   laborAmount?: string
   feesAmount: string
   discountAmount: string
   taxAmount: string
+  taxExempt?: boolean
+  taxRate?: string | null
   total: string
   balanceDue: string
 }
@@ -365,6 +371,14 @@ export function buildInvoicePdfData(
       fees: moneyDisplay(detail.feesAmount),
       discount: moneyDisplay(detail.discountAmount),
       tax: moneyDisplay(detail.taxAmount),
+      taxExempt: detail.taxExempt ?? false,
+      waivedTax: detail.taxExempt
+        ? computeWaivedTaxAmount({
+            taxExempt: true,
+            taxRate: detail.taxRate,
+            taxableSubtotal: taxableSubtotalFromLines(detail.lineItems),
+          })
+        : null,
       total: moneyDisplay(detail.total),
       balanceDue: moneyDisplay(detail.balanceDue),
     },

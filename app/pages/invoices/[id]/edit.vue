@@ -52,6 +52,7 @@ interface LineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  taxable?: boolean
   catalogItemId?: string | null
 }
 
@@ -73,6 +74,7 @@ interface InvoicePayload {
   internalNotes: string | null
   subtotal: string
   taxAmount: string
+  taxRate?: string | null
   taxExempt: boolean
   feesAmount: string
   shopSuppliesPercent: string | null
@@ -246,7 +248,14 @@ const summaryRows = computed(() => {
     lineAmount: line.lineAmount,
   }))
   const breakdown = previewLineTypeBreakdown(lineInputs)
-  return editorSummaryRows(invoice.value, { breakdown })
+  return editorSummaryRows(invoice.value, {
+    breakdown,
+    lineItems: lines.value.map(line => ({
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      taxable: line.taxable,
+    })),
+  })
 })
 
 const autosaveText = computed(() => {
@@ -1085,7 +1094,10 @@ const aiPopStyle = computed(() => {
                   :class="{ grand: row.grand }"
                 >
                   <span>{{ row.label }}</span>
-                  <span>{{ row.value }}</span>
+                  <span>
+                    <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
+                    <span v-if="row.note" class="sum-note">{{ row.note }}</span>
+                  </span>
                 </div>
               </div>
             </div>

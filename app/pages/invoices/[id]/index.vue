@@ -24,6 +24,8 @@ import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { phoneDisplay } from '~/utils/phone-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
+import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
+import { invoiceDetailSummaryRows } from '~/utils/invoice-editor-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -45,6 +47,7 @@ interface LineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  taxable?: boolean
   catalogSnapshot: CatalogSnapshotBits | null
 }
 
@@ -64,6 +67,7 @@ interface Invoice {
   vehicleSnapshot: InvoiceVehicleSnapshotDisplay | null
   subtotal: string
   taxAmount: string
+  taxRate?: string | null
   taxExempt: boolean
   discountAmount: string
   feesAmount: string
@@ -304,35 +308,26 @@ async function runAction(path: string) {
 const summaryRows = computed(() => {
   if (!invoice.value) return []
   const inv = invoice.value
-  const breakdown = previewLineTypeBreakdown(inv.lineItems.map(line => ({
-    lineType: line.lineType,
-    description: line.description,
-    quantity: line.quantity,
-    unitPrice: line.unitPrice,
-    lineAmount: line.lineAmount,
-  })))
-  const rows: { label: string, value: string, grand?: boolean }[] = [
-    { label: 'Parts', value: moneyDisplay(breakdown.parts) },
-    { label: 'Labor', value: moneyDisplay(breakdown.labor) },
-    { label: 'Fees', value: moneyDisplay(breakdown.fees) },
-    { label: 'Subtotal', value: moneyDisplay(inv.subtotal) },
-  ]
-  if (inv.feesAmount && Number.parseFloat(inv.feesAmount) > 0) {
-    rows.push({ label: 'Fees & surcharges', value: moneyDisplay(inv.feesAmount) })
-  }
-  if (inv.shopSuppliesPercent && Number.parseFloat(inv.shopSuppliesPercent) > 0) {
-    rows.push({ label: `Shop supplies (${inv.shopSuppliesPercent}%)`, value: 'Included in fees' })
-  }
-  const taxLabel = inv.taxExempt ? 'Tax (exempt)' : 'Tax'
-  rows.push({ label: taxLabel, value: moneyDisplay(inv.taxAmount) })
-  if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
-    rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
-  }
-  if (inv.amountPaid && Number.parseFloat(inv.amountPaid) > 0) {
-    rows.push({ label: 'Amount paid', value: `−${moneyDisplay(inv.amountPaid)}` })
-  }
-  rows.push({ label: 'Balance due', value: moneyDisplay(inv.balanceDue), grand: true })
-  return rows
+  return invoiceDetailSummaryRows({
+    subtotal: inv.subtotal,
+    taxAmount: inv.taxAmount,
+    taxRate: inv.taxRate,
+    taxExempt: inv.taxExempt,
+    feesAmount: inv.feesAmount,
+    shopSuppliesPercent: inv.shopSuppliesPercent,
+    discountAmount: inv.discountAmount,
+    total: inv.total,
+    amountPaid: inv.amountPaid,
+    balanceDue: inv.balanceDue,
+    lineItems: inv.lineItems,
+    lineTypeBreakdown: previewLineTypeBreakdown(inv.lineItems.map(line => ({
+      lineType: line.lineType,
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      lineAmount: line.lineAmount,
+    }))),
+  })
 })
 </script>
 
@@ -627,7 +622,10 @@ const summaryRows = computed(() => {
               :class="{ grand: row.grand }"
             >
               <span>{{ row.label }}</span>
-              <span>{{ row.value }}</span>
+              <span>
+                <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
+                <span v-if="row.note" class="sum-note">{{ row.note }}</span>
+              </span>
             </div>
           </div>
         </div>
