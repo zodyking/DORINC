@@ -76,19 +76,7 @@ export async function loadInlineLogoAttachment(
 export async function embedInlineLogoForBrand(
   db: Db,
   html: string | undefined,
-  brand: EmailBrandContext,
+  _brand: EmailBrandContext,
 ): Promise<{ html: string | undefined, attachments: InlineLogoAttachment[] }> {
-  if (!html || !html.includes('<img')) {
-    return { html, attachments: [] }
-  }
-
-  const logo = await loadInlineLogoAttachment(db, brand)
-  if (!logo) {
-    return { html, attachments: [] }
-  }
-
-  return {
-    html: patchHtmlLogoToCid(html, brand.logoUrl, EMAIL_INLINE_LOGO_CID),
-    attachments: [{ ...logo, contentDisposition: 'inline' }],
-  }
+  return { html, attachments: [] }
 }

@@ -91,7 +91,7 @@ export function normalizeEmailBrand(brand, appUrl = '') {
     brandName,
     brandLegal: brand?.brandLegal?.trim() || EMAIL_BRAND_LEGAL,
     brandTagline: brand?.brandTagline?.trim() || 'Onsite repairs',
-    logoUrl: brand?.logoUrl ?? (base ? `${base}/images/dorinc-icon-trans.png` : null),
+    logoUrl: brand?.logoUrl ?? null,
     logoInitial: brand?.logoInitial?.trim() || brandName.charAt(0).toUpperCase() || 'D',
     addressLines: Array.isArray(brand?.addressLines) ? brand.addressLines.filter(Boolean) : [],
     phone: formatPhoneDisplay(brand?.phone?.trim() || ''),
@@ -330,7 +330,6 @@ export function wrapEmailHtml(opts) {
   const preheader = opts.preheader ? escapeHtml(opts.preheader) : ''
   const headline = opts.headline ? escapeHtml(opts.headline) : (opts.title ? escapeHtml(opts.title) : '')
   const lead = opts.lead ? escapeHtml(opts.lead) : ''
-  const logoUrl = opts.logoUrl !== undefined ? opts.logoUrl : brand.logoUrl
 
   const addressBlock = [
     brand.brandLegal,
@@ -439,21 +438,12 @@ export function wrapEmailHtml(opts) {
               <table role="presentation" width="100%">
                 <tr>
                   <td valign="middle">
-                    <table role="presentation">
-                      <tr>
-                        <td valign="middle" style="width:38px;height:38px;">
-                          ${logoUrl
-                            ? `<img src="${escapeHtml(logoUrl)}" width="38" height="38" alt="${escapeHtml(brandName)}" style="display:block;border:1px solid ${t.border};border-radius:10px;width:38px;height:38px;">`
-                            : `<div style="width:38px;height:38px;border:1px solid ${t.border};border-radius:10px;color:${t.ink};font-size:17px;font-weight:800;line-height:38px;text-align:center;font-family:${t.font};">${escapeHtml(brand.logoInitial)}</div>`}
-                        </td>
-                        <td style="padding-left:12px;">
-                          <div style="font-size:15px; font-weight:700; color:${t.ink}; font-family:${t.font};">${escapeHtml(brandName)}</div>
-                          <div style="font-size:12px; color:${t.faint}; padding-top:2px; font-family:${t.font};">${escapeHtml(brand.brandTagline)}</div>
-                        </td>
-                      </tr>
-                    </table>
+                    <div style="font-size:21px;line-height:28px;font-weight:800;letter-spacing:-0.4px;color:${t.ink};font-family:${t.font};">${escapeHtml(brandName)}</div>
+                    ${brand.brandTagline
+                      ? `<div style="font-size:12px;line-height:18px;color:${t.muted};padding-top:4px;font-family:${t.font};">${escapeHtml(brand.brandTagline)}</div>`
+                      : ''}
                   </td>
-                  <td align="right" valign="middle" style="font-size:12px; color:${t.faint}; font-family:${t.font};">
+                  <td align="right" valign="middle" style="font-size:12px;color:${t.faint};font-family:${t.font};white-space:nowrap;">
                     ${headerBadge}
                   </td>
                 </tr>

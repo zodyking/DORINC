@@ -41,6 +41,7 @@ describe('system email templates', () => {
     expect(mail.subject).toBe('Verify Your Email')
     expect(mail.html).toContain('Verify email address')
     expect(mail.html).toContain('Acme Shop')
+    expect(mail.html).not.toContain('<img')
     expect(mail.text).toContain('Alex')
   })
 

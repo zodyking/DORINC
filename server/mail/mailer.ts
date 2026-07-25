@@ -67,10 +67,10 @@ export type NotificationMailMessage = Omit<MailMessage, 'inReplyTo' | 'reference
 
 /**
  * Send a standalone notification email (no reply threading headers).
- * Generates a unique Message-ID and embeds logos inline when possible.
+ * Generates a unique Message-ID. Email headers use text-only branding (no logo images).
  */
 export async function sendNotificationMail(
-  db: Db | undefined,
+  _db: Db | undefined,
   message: NotificationMailMessage,
 ): Promise<{ delivered: boolean, messageId: string }> {
   const config = getSmtpConfig()
@@ -87,35 +87,14 @@ export async function sendNotificationMail(
 
   try {
     const sanitizedHtml = sanitizeNotificationHtml(message.html)
-    let html = sanitizedHtml
-    let inlineAttachments: NotificationMailMessage['attachments'] = []
-
-    if (db) {
-      const { embedInlineLogoForBrand } = await import('./inline-logo')
-      const { resolveEmailBrand } = await import('../services/email-branding.service')
-      const brand = await resolveEmailBrand(db)
-      const branded = await embedInlineLogoForBrand(db, sanitizedHtml, brand)
-      html = branded.html
-      inlineAttachments = branded.attachments
-    }
-    else {
-      const { embedInlineLogoInHtml } = await import('./inline-logo.mjs')
-      const branded = await embedInlineLogoInHtml(sanitizedHtml, {})
-      html = branded.html
-      inlineAttachments = branded.attachments
-    }
-
     const mailOptions = buildNotificationSendMailOptions({
       from: config.from,
       to: message.to,
       subject: message.subject,
       text: prepareNotificationPlainText(message.text),
-      html,
+      html: sanitizedHtml,
       messageId,
-      attachments: [
-        ...(inlineAttachments ?? []),
-        ...(message.attachments ?? []),
-      ],
+      attachments: message.attachments ?? [],
     })
 
     await logNotificationMimeDebug(mailOptions, message.debugLabel ?? 'notification')

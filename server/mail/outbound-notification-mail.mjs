@@ -4,7 +4,6 @@
  */
 import { randomUUID } from 'node:crypto'
 import MailComposer from 'nodemailer/lib/mail-composer/index.js'
-import { embedInlineLogoInHtml } from './inline-logo.mjs'
 
 /**
  * @param {string} fromAddress
@@ -62,17 +61,10 @@ export function sanitizeNotificationHtml(html) {
  */
 export async function prepareNotificationMailContent(input) {
   const sanitizedHtml = sanitizeNotificationHtml(input.html)
-  const prepared = await embedInlineLogoInHtml(sanitizedHtml, { pool: input.pool })
   return {
     text: prepareNotificationPlainText(input.text),
-    html: prepared.html,
-    inlineAttachments: prepared.attachments.map(att => ({
-      filename: att.filename,
-      content: att.content,
-      contentType: att.contentType,
-      cid: att.cid,
-      contentDisposition: 'inline',
-    })),
+    html: sanitizedHtml,
+    inlineAttachments: [],
   }
 }
 
