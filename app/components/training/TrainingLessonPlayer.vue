@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
-import TrainingDemoPanel from './TrainingDemoPanel.vue'
+import TrainingUiPreview from './TrainingUiPreview.vue'
+import {
+  cancelTrainingSpeech,
+  speakTrainingStep,
+  stripTrainingMarkdown,
+  unlockTrainingSpeech,
+} from '~/utils/training-speech'
 
 const props = defineProps<{
   moduleTitle: string
@@ -23,15 +29,30 @@ const current = computed(() => props.steps[stepIndex.value])
 const isFirst = computed(() => stepIndex.value <= 0)
 const isLast = computed(() => stepIndex.value >= props.steps.length - 1)
 
+function narrateStep() {
+  nextTick(() => speakTrainingStep(current.value, true))
+}
+
 watch(stepIndex, (idx) => {
   quizAnswer.value = null
   quizSubmitted.value = false
   emit('stepChange', idx)
+  narrateStep()
+})
+
+onMounted(() => {
+  narrateStep()
+})
+
+onBeforeUnmount(() => {
+  cancelTrainingSpeech()
 })
 
 function next() {
+  unlockTrainingSpeech({ silent: true })
   if (current.value?.type === 'quiz' && !quizSubmitted.value) return
   if (isLast.value) {
+    cancelTrainingSpeech()
     emit('complete')
     return
   }
@@ -39,12 +60,16 @@ function next() {
 }
 
 function back() {
+  unlockTrainingSpeech({ silent: true })
   if (!isFirst.value) stepIndex.value -= 1
 }
 
 function submitQuiz() {
   if (quizAnswer.value == null) return
   quizSubmitted.value = true
+  if (current.value?.explanation) {
+    speakTrainingStep({ ...current.value, body: current.value.explanation, type: 'content' }, true)
+  }
 }
 
 function quizOptionClass(i: number): string {
@@ -55,6 +80,10 @@ function quizOptionClass(i: number): string {
   if (correct) return 'training-quiz-opt correct'
   if (quizAnswer.value === i) return 'training-quiz-opt wrong'
   return 'training-quiz-opt'
+}
+
+function formatBody(text: string): string {
+  return stripTrainingMarkdown(text)
 }
 </script>
 
@@ -80,12 +109,12 @@ function quizOptionClass(i: number): string {
         </div>
         <h3 class="training-step-title">{{ current.title }}</h3>
         <p v-if="current.subtitle" class="training-step-sub">{{ current.subtitle }}</p>
-        <p class="training-step-body">{{ current.body }}</p>
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
       </template>
 
       <template v-else-if="current.type === 'content'">
         <h3 class="training-step-title">{{ current.title }}</h3>
-        <p class="training-step-body">{{ current.body }}</p>
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
         <ul v-if="current.tips?.length" class="training-tips">
           <li v-for="(tip, i) in current.tips" :key="i">{{ tip }}</li>
         </ul>
@@ -93,8 +122,8 @@ function quizOptionClass(i: number): string {
 
       <template v-else-if="current.type === 'interactive'">
         <h3 class="training-step-title">{{ current.title }}</h3>
-        <p class="training-step-body">{{ current.body }}</p>
-        <TrainingDemoPanel v-if="current.demo" :demo="current.demo" />
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
+        <TrainingUiPreview v-if="current.demo" :preview="current.demo" />
       </template>
 
       <template v-else-if="current.type === 'quiz'">
