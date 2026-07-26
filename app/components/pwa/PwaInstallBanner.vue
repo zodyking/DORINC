@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { canInstall, install, dismiss } = usePwaInstall()
+const { canPromptInstall, install, installed, installHint } = usePwaInstall()
 const { online, queueCount } = useOfflineQueue()
 
 async function onInstall() {
@@ -10,14 +10,13 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
 </script>
 
 <template>
-  <div v-if="canInstall || showOfflineHint" class="pwa-banner" role="region" aria-label="App install and offline status">
-    <div v-if="canInstall" class="pwa-banner__row">
+  <div class="pwa-banner" role="region" aria-label="App install and offline status">
+    <div class="pwa-banner__row">
       <div>
-        <strong>Install DORINC</strong>
-        <p>Add to your home screen for quick mobile access.</p>
+        <strong>{{ installed ? 'DORINC app installed' : 'Install DORINC' }}</strong>
+        <p>{{ installHint }}</p>
       </div>
-      <div class="pwa-banner__actions">
-        <button type="button" class="btn sm" @click="dismiss">Not now</button>
+      <div v-if="canPromptInstall" class="pwa-banner__actions">
         <button type="button" class="btn sm primary" @click="onInstall">Install</button>
       </div>
     </div>

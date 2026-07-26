@@ -31,7 +31,7 @@ describe('PWA offline queue stub (P4-01)', () => {
 
 describe('PWA manifest (P4-01)', () => {
   it('declares required install fields', async () => {
-    const { readFileSync } = await import('node:fs')
+    const { readFileSync, existsSync } = await import('node:fs')
     const { join } = await import('node:path')
     const raw = readFileSync(join(process.cwd(), 'public/manifest.webmanifest'), 'utf8')
     const manifest = JSON.parse(raw) as {
@@ -39,13 +39,17 @@ describe('PWA manifest (P4-01)', () => {
       short_name: string
       start_url: string
       display: string
-      icons: Array<{ sizes: string }>
+      icons: Array<{ sizes: string, type: string, src: string }>
     }
     expect(manifest.name).toBe('DORINC')
     expect(manifest.short_name).toBe('DORINC')
     expect(manifest.start_url).toBe('/')
     expect(manifest.display).toBe('standalone')
-    expect(manifest.icons.some(i => i.sizes === '192x192')).toBe(true)
-    expect(manifest.icons.some(i => i.sizes === '512x512')).toBe(true)
+    const icon192 = manifest.icons.find(i => i.sizes === '192x192')
+    const icon512 = manifest.icons.find(i => i.sizes === '512x512')
+    expect(icon192?.type).toBe('image/png')
+    expect(icon512?.type).toBe('image/png')
+    expect(existsSync(join(process.cwd(), 'public', icon192?.src.replace(/^\//, '') ?? ''))).toBe(true)
+    expect(existsSync(join(process.cwd(), 'public', icon512?.src.replace(/^\//, '') ?? ''))).toBe(true)
   })
 })

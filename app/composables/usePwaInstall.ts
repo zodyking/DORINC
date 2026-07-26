@@ -3,26 +3,25 @@ export interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed', platform: string }>
 }
 
-const DISMISS_KEY = 'dorinc-pwa-install-dismissed'
-
 export function usePwaInstall() {
   const deferredPrompt = ref<BeforeInstallPromptEvent | null>(null)
   const installed = ref(false)
-  const dismissed = ref(false)
+  const isIos = ref(false)
 
-  const canInstall = computed(() =>
-    !!deferredPrompt.value && !installed.value && !dismissed.value,
-  )
+  const canPromptInstall = computed(() => !!deferredPrompt.value)
 
-  function readDismissed() {
-    if (!import.meta.client) return false
-    return localStorage.getItem(DISMISS_KEY) === '1'
-  }
-
-  function dismiss() {
-    dismissed.value = true
-    if (import.meta.client) localStorage.setItem(DISMISS_KEY, '1')
-  }
+  const installHint = computed(() => {
+    if (installed.value) {
+      return 'Launch DORINC from your desktop shortcut or home screen anytime.'
+    }
+    if (canPromptInstall.value) {
+      return 'Add to your home screen or desktop for quick access — works on mobile and Windows.'
+    }
+    if (isIos.value) {
+      return 'On iPhone: tap Share, then Add to Home Screen.'
+    }
+    return 'Use your browser menu to install or add DORINC to your home screen.'
+  })
 
   async function install() {
     const prompt = deferredPrompt.value
@@ -34,13 +33,12 @@ export function usePwaInstall() {
       installed.value = true
       return true
     }
-    dismiss()
     return false
   }
 
   onMounted(() => {
-    dismissed.value = readDismissed()
     installed.value = window.matchMedia('(display-mode: standalone)').matches
+    isIos.value = /iphone|ipad|ipod/i.test(navigator.userAgent)
 
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault()
@@ -53,5 +51,11 @@ export function usePwaInstall() {
     })
   })
 
-  return { canInstall, install, dismiss, installed }
+  return {
+    canPromptInstall,
+    install,
+    installed,
+    installHint,
+    showInstallBanner: computed(() => true),
+  }
 }

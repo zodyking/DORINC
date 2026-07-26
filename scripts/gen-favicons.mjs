@@ -51,9 +51,28 @@ function buildIco(entries) {
 const sizes = [16, 32, 48, 64]
 const pngs = await Promise.all(sizes.map(async size => ({ size, buffer: await pngAt(size) })))
 
+const iconsDir = join(PUBLIC, 'icons')
+
 await writeFile(join(PUBLIC, 'favicon.ico'), buildIco(pngs))
 await writeFile(join(PUBLIC, 'favicon-32.png'), pngs.find(p => p.size === 32).buffer)
 await writeFile(join(PUBLIC, 'favicon-16.png'), pngs.find(p => p.size === 16).buffer)
 await writeFile(join(PUBLIC, 'apple-touch-icon.png'), await pngAt(180))
+// PWA install icons — Windows/desktop requires PNG (SVG wrappers render as a blank tile).
+await writeFile(join(iconsDir, 'icon-192.png'), await pngAt(192))
+await writeFile(join(iconsDir, 'icon-512.png'), await pngAt(512))
+await writeFile(
+  join(iconsDir, 'icon-maskable.png'),
+  await sharp(await readFile(SRC))
+    .resize(410, 410, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .extend({
+      top: 51,
+      bottom: 51,
+      left: 51,
+      right: 51,
+      background: { r: 8, g: 20, b: 48, alpha: 1 },
+    })
+    .png()
+    .toBuffer(),
+)
 
-console.log('Wrote transparent favicon.ico, favicon-16.png, favicon-32.png, apple-touch-icon.png')
+console.log('Wrote favicon.ico, favicon-16.png, favicon-32.png, apple-touch-icon.png, icon-192.png, icon-512.png, icon-maskable.png')
