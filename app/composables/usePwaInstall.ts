@@ -2,7 +2,9 @@ import { pwaInstallCopy } from '#shared/pwa-install-copy'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   detectPwaDeviceKind,
+  dismissPwaBannerForSession,
   isIosDevice,
+  isPwaBannerDismissedForSession,
   isPwaStandaloneMode,
   markPwaInstalledFlag,
   pwaInstallState,
@@ -19,7 +21,7 @@ export function usePwaInstall() {
   const isIos = ref(false)
   const deviceKind = ref(detectPwaDeviceKind())
   const stepsOpen = ref(false)
-  const dismissed = ref(false)
+  const dismissed = ref(isPwaBannerDismissedForSession())
   const bannerReady = ref(false)
 
   const showBanner = computed(() => bannerReady.value && !isStandalone.value && !dismissed.value)
@@ -44,6 +46,7 @@ export function usePwaInstall() {
 
   function closeBanner() {
     dismissed.value = true
+    dismissPwaBannerForSession()
     stepsOpen.value = false
   }
 
@@ -120,7 +123,6 @@ export function usePwaInstall() {
   })
 
   watch(() => route.path, () => {
-    dismissed.value = false
     stepsOpen.value = false
   })
 

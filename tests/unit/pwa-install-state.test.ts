@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  clearBannerDismissed,
+  readBannerDismissed,
+  writeBannerDismissed,
+} from '../../shared/pwa-banner-dismissal'
 import { detectInstalledFromSignals, isInstalledWebAppPlatform } from '../../shared/pwa-install-detect'
 
 describe('pwa install detection', () => {
@@ -30,5 +35,41 @@ describe('pwa install detection', () => {
       relatedApps: null,
       hasRelatedAppsApi: false,
     })).toBe(true)
+  })
+})
+
+describe('pwa banner dismissal', () => {
+  let session: Map<string, string>
+
+  beforeEach(() => {
+    session = new Map<string, string>()
+    const store = {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => session.set(key, value),
+      removeItem: (key: string) => session.delete(key),
+    }
+    clearBannerDismissed(store)
+  })
+
+  it('persists dismissal for the current session', () => {
+    const store = {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => session.set(key, value),
+      removeItem: (key: string) => session.delete(key),
+    }
+    expect(readBannerDismissed(store)).toBe(false)
+    writeBannerDismissed(store)
+    expect(readBannerDismissed(store)).toBe(true)
+  })
+
+  it('clears dismissal on logout', () => {
+    const store = {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => session.set(key, value),
+      removeItem: (key: string) => session.delete(key),
+    }
+    writeBannerDismissed(store)
+    clearBannerDismissed(store)
+    expect(readBannerDismissed(store)).toBe(false)
   })
 })

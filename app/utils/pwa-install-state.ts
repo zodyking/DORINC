@@ -1,4 +1,9 @@
 import { detectInstalledFromSignals } from '#shared/pwa-install-detect'
+import {
+  clearBannerDismissed,
+  readBannerDismissed,
+  writeBannerDismissed,
+} from '#shared/pwa-banner-dismissal'
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -34,6 +39,21 @@ export function clearPwaInstalledFlag(): void {
   if (!import.meta.client) return
   localStorage.removeItem(PWA_INSTALLED_KEY)
   pwaInstallState.installed = false
+}
+
+export function isPwaBannerDismissedForSession(): boolean {
+  if (!import.meta.client) return false
+  return readBannerDismissed(sessionStorage)
+}
+
+export function dismissPwaBannerForSession(): void {
+  if (!import.meta.client) return
+  writeBannerDismissed(sessionStorage)
+}
+
+export function clearPwaBannerDismissal(): void {
+  if (!import.meta.client) return
+  clearBannerDismissed(sessionStorage)
 }
 
 export function subscribePwaInstall(listener: () => void): () => void {
