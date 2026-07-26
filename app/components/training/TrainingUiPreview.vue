@@ -4,10 +4,11 @@ import type { StaffNavIconName } from '~/components/staff/StaffNavIcon.vue'
 import CommonLineItemsTable from '~/components/common/LineItemsTable.vue'
 import { PHOTO_UPLOAD_PICK, VOICE_ENTRY_PICK } from '~/utils/entry-mode-labels'
 import { INVOICE_WIZARD_STEPS } from '~/utils/invoice-creator-ui'
+import { invoiceStatusPill, moneyDisplay } from '~/utils/invoices-ui'
 import { serviceLogStatusPill, type ServiceLogStatus } from '~/utils/service-logs-ui'
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 
-const props = defineProps<{
+defineProps<{
   preview: string
 }>()
 
@@ -257,6 +258,110 @@ const searchQuery = ref('606')
       </label>
       <p class="help" style="margin:0;">
         Found on <strong>Users → select person → Training</strong>. Locked users only see Training until the module is completed.
+      </p>
+    </div>
+
+    <!-- Send the reviewed log to an invoice (the accountant hand-off) -->
+    <div v-else-if="preview === 'send-to-invoice'" class="training-handoff">
+      <div class="training-handoff-row card">
+        <div>
+          <b>SL-1042</b>
+          <span class="help">Acme Fleet Services · Truck #HL-114</span>
+        </div>
+        <span :class="serviceLogStatusPill('in_review' as ServiceLogStatus).cls">
+          {{ serviceLogStatusPill('in_review' as ServiceLogStatus).label }}
+        </span>
+      </div>
+      <p class="training-handoff-arrow" aria-hidden="true">↓</p>
+      <div class="training-handoff-row card">
+        <div>
+          <b>INV-000318</b>
+          <span class="help">6 line items carried over from SL-1042</span>
+        </div>
+        <span :class="invoiceStatusPill('draft').cls">{{ invoiceStatusPill('draft').label }}</span>
+      </div>
+      <p class="help" style="margin:0;">
+        Found on the service log detail page as <strong>Send to invoice</strong>.
+      </p>
+    </div>
+
+    <!-- Server-computed totals, including waived tax for exempt customers -->
+    <div v-else-if="preview === 'invoice-totals'" class="card" style="padding:14px;">
+      <div class="ed-sums" style="width:100%;margin:0;padding:0;">
+        <div class="row"><span>Parts</span><span>{{ moneyDisplay('212.40') }}</span></div>
+        <div class="row"><span>Labor</span><span>{{ moneyDisplay('290.00') }}</span></div>
+        <div class="row"><span>Fees</span><span>{{ moneyDisplay('17.58') }}</span></div>
+        <div class="row"><span>Subtotal</span><span>{{ moneyDisplay('519.98') }}</span></div>
+        <div class="row">
+          <span>Tax<span class="sum-note">(tax exempt)</span></span>
+          <span class="sum-strike">{{ moneyDisplay('41.60') }}</span>
+        </div>
+        <div class="row grand"><span>Balance due</span><span>{{ moneyDisplay('519.98') }}</span></div>
+      </div>
+      <p class="help" style="margin:10px 0 0;">
+        Totals always recalculate from the line items — you never type a total.
+      </p>
+    </div>
+
+    <!-- Sending emails the PDF and moves the invoice to Sent -->
+    <div v-else-if="preview === 'invoice-send'" class="card" style="padding:14px;">
+      <label class="fld">
+        To
+        <input type="text" value="billing@acmefleet.com" disabled>
+      </label>
+      <label class="fld">
+        Attachment
+        <input type="text" value="INV-000318.pdf" disabled>
+      </label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button type="button" class="btn primary sm" disabled>Send invoice</button>
+        <span :class="invoiceStatusPill('sent').cls">{{ invoiceStatusPill('sent').label }}</span>
+      </div>
+    </div>
+
+    <!-- What the customer sees in their portal -->
+    <div v-else-if="preview === 'portal-invoice'" class="card" style="padding:14px;">
+      <p class="help" style="margin:0 0 10px;">Signed in as <strong>Acme Fleet Services</strong></p>
+      <div class="tscroll">
+        <table class="tbl">
+          <thead>
+            <tr><th>Invoice</th><th>Vehicle</th><th class="num">Balance</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>INV-000318</td>
+              <td>Truck #HL-114</td>
+              <td class="num">{{ moneyDisplay('519.98') }}</td>
+            </tr>
+            <tr>
+              <td>INV-000301</td>
+              <td>Truck #HL-108</td>
+              <td class="num">{{ moneyDisplay('0.00') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn sm" style="margin-top:10px;" disabled>Request a correction</button>
+    </div>
+
+    <!-- The staff queue for anything a customer submits -->
+    <div v-else-if="preview === 'portal-requests'" class="training-handoff">
+      <div class="training-handoff-row card">
+        <div>
+          <b>Invoice correction · INV-000318</b>
+          <span class="help">“Labor hours look high” — Acme Fleet Services</span>
+        </div>
+        <span class="pill warn">Pending</span>
+      </div>
+      <div class="training-handoff-row card">
+        <div>
+          <b>New vehicle · Unit HL-120</b>
+          <span class="help">Requested by Acme Fleet Services</span>
+        </div>
+        <span class="pill warn">Pending</span>
+      </div>
+      <p class="help" style="margin:0;">
+        Found under <strong>Portal Requests</strong>. Approving applies the change and notifies the customer.
       </p>
     </div>
 

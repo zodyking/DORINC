@@ -20,20 +20,14 @@ export const TRAINING_STATUS_PILLS: Record<string, string> = {
   completed: 'pill green',
 }
 
-export const TRAINING_MODULE_ICONS: Record<string, string> = {
-  compass: '🧭',
-  mic: '🎙️',
-  camera: '📷',
-  clipboard: '📋',
-  users: '👥',
-  invoice: '🧾',
-  message: '💬',
-  shield: '🛡️',
-  book: '📘',
-}
+/** Icon names rendered by TrainingIcon.vue. */
+export const TRAINING_MODULE_ICONS = [
+  'workflow', 'compass', 'mic', 'camera', 'clipboard',
+  'invoice', 'users', 'portal', 'message', 'shield', 'book',
+] as const
 
 export function trainingModuleIcon(icon: string): string {
-  return TRAINING_MODULE_ICONS[icon] ?? '📘'
+  return (TRAINING_MODULE_ICONS as readonly string[]).includes(icon) ? icon : 'book'
 }
 
 export function trainingCategory(category: string): string {

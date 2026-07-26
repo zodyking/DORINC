@@ -130,7 +130,10 @@ function goHub() {
       </div>
 
       <div v-else-if="currentLesson" class="training-learn-wrap">
+        <!-- Keyed by lesson so the player remounts and restarts at the saved
+             step instead of keeping the previous lesson's step index. -->
         <TrainingLessonPlayer
+          :key="currentLesson.id"
           :module-title="moduleData.title"
           :lesson-title="currentLesson.title"
           :steps="currentLesson.steps"
