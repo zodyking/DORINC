@@ -1,5 +1,7 @@
 export type PwaDeviceKind = 'desktop' | 'mobile'
 
+export type PwaInstallVariant = 'install' | 'installed'
+
 export interface PwaInstallCopyInput {
   deviceKind: PwaDeviceKind
   installed: boolean
@@ -8,9 +10,10 @@ export interface PwaInstallCopyInput {
 }
 
 export interface PwaInstallCopy {
+  variant: PwaInstallVariant
   title: string
   message: string
-  actionLabel: string
+  actionLabel: string | null
   steps: string[] | null
 }
 
@@ -20,17 +23,19 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
 
   if (installed) {
     return {
-      title: isDesktop ? 'Added to your desktop' : 'Added to your home screen',
+      variant: 'installed',
+      title: 'Installed',
       message: isDesktop
-        ? 'Launch DORINC anytime from your desktop shortcut or taskbar.'
-        : 'Open DORINC from your home screen like any other app.',
-      actionLabel: isDesktop ? 'Open app' : 'Got it',
+        ? 'DORINC is on your desktop — open it from your shortcut or taskbar.'
+        : 'DORINC is on your home screen — open it like any other app.',
+      actionLabel: null,
       steps: null,
     }
   }
 
   if (canPromptInstall) {
     return {
+      variant: 'install',
       title: isDesktop ? 'Add DORINC to your desktop' : 'Add DORINC to your home screen',
       message: isDesktop
         ? 'Install once for quick access from your desktop, taskbar, and Start menu — no browser tabs needed.'
@@ -42,6 +47,7 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
 
   if (isIos) {
     return {
+      variant: 'install',
       title: 'Add DORINC to your home screen',
       message: 'Safari does not show an install button here — follow these quick steps instead.',
       actionLabel: 'Show steps',
@@ -55,6 +61,7 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
 
   if (isDesktop) {
     return {
+      variant: 'install',
       title: 'Add DORINC to your desktop',
       message: 'Use your browser install option — look for the install icon near the address bar or in the browser menu.',
       actionLabel: 'Show steps',
@@ -67,6 +74,7 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
   }
 
   return {
+    variant: 'install',
     title: 'Add DORINC to your home screen',
     message: 'Use your browser menu to install the app on this phone.',
     actionLabel: 'Show steps',

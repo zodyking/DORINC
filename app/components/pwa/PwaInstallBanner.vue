@@ -1,27 +1,30 @@
 <script setup lang="ts">
 import { BRAND_ICON } from '~/constants/brand'
 
-const { bannerReady, copy, installed, onAction, showSteps } = usePwaInstall()
+const { copy, onAction, showBanner, showSteps } = usePwaInstall()
 const { online, queueCount } = useOfflineQueue()
 
 const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
+const isInstalledState = computed(() => copy.value.variant === 'installed')
 </script>
 
 <template>
   <Transition name="pwa-banner-reveal">
     <div
-      v-if="bannerReady"
+      v-if="showBanner"
       class="pwa-banner"
+      :class="{ 'pwa-banner--installed': isInstalledState }"
       role="region"
       aria-label="Install DORINC app"
     >
       <div class="pwa-banner__card">
         <div class="pwa-banner__icon-wrap" aria-hidden="true">
           <img class="pwa-banner__icon" :src="BRAND_ICON" alt="">
+          <span v-if="isInstalledState" class="pwa-banner__check" aria-hidden="true">✓</span>
         </div>
 
         <div class="pwa-banner__body">
-          <p class="pwa-banner__eyebrow">Quick access</p>
+          <p class="pwa-banner__eyebrow">{{ isInstalledState ? 'App status' : 'Quick access' }}</p>
           <strong class="pwa-banner__title">{{ copy.title }}</strong>
           <p class="pwa-banner__message">{{ copy.message }}</p>
 
@@ -36,9 +39,9 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
         </div>
 
         <button
+          v-if="copy.actionLabel"
           type="button"
           class="pwa-banner__cta"
-          :class="{ 'is-installed': installed && !copy.steps }"
           @click="onAction"
         >
           {{ copy.actionLabel }}
@@ -65,7 +68,14 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
   box-shadow: 0 10px 28px -18px rgba(79, 70, 229, 0.45);
 }
 
+.pwa-banner--installed .pwa-banner__card {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 55%, #f8fafc 100%);
+  box-shadow: 0 10px 28px -18px rgba(22, 163, 74, 0.25);
+}
+
 .pwa-banner__icon-wrap {
+  position: relative;
   width: 52px;
   height: 52px;
   border-radius: 14px;
@@ -82,6 +92,22 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
   object-fit: contain;
 }
 
+.pwa-banner__check {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+}
+
 .pwa-banner__body {
   min-width: 0;
 }
@@ -93,6 +119,10 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6366f1;
+}
+
+.pwa-banner--installed .pwa-banner__eyebrow {
+  color: #16a34a;
 }
 
 .pwa-banner__title {
@@ -154,25 +184,18 @@ const showOfflineHint = computed(() => !online.value || queueCount.value > 0)
   transform: translateY(0);
 }
 
-.pwa-banner__cta.is-installed {
-  background: #ecfdf5;
-  color: #047857;
-  border: 1px solid #a7f3d0;
-  box-shadow: none;
-}
-
 .pwa-banner-reveal-enter-active {
   transition:
-    opacity 0.5s ease,
-    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    max-height 0.5s ease,
-    margin 0.5s ease;
+    opacity 0.45s ease,
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 0.45s ease,
+    margin 0.45s ease;
   overflow: hidden;
 }
 
 .pwa-banner-reveal-enter-from {
   opacity: 0;
-  transform: translateY(-10px);
+  transform: translateY(-8px);
   max-height: 0;
   margin-bottom: 0;
 }

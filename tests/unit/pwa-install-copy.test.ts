@@ -11,6 +11,7 @@ describe('pwaInstallCopy', () => {
     })
     expect(copy.title).toContain('desktop')
     expect(copy.actionLabel).toBe('Add to desktop')
+    expect(copy.variant).toBe('install')
   })
 
   it('uses home screen copy on mobile', () => {
@@ -36,14 +37,16 @@ describe('pwaInstallCopy', () => {
     expect(copy.steps?.[0]).toContain('Share')
   })
 
-  it('changes message after install on desktop', () => {
+  it('shows a simple installed state without a button', () => {
     const copy = pwaInstallCopy({
       deviceKind: 'desktop',
       installed: true,
       isIos: false,
       canPromptInstall: false,
     })
-    expect(copy.title).toContain('desktop')
-    expect(copy.message).toContain('shortcut')
+    expect(copy.variant).toBe('installed')
+    expect(copy.title).toBe('Installed')
+    expect(copy.actionLabel).toBeNull()
+    expect(copy.message).toContain('desktop')
   })
 })
