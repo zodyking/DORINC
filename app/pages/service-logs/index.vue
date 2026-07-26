@@ -8,8 +8,11 @@ import {
   serviceLogInvoiceLinkStatusClass,
   type ServiceLogInvoiceLinkStatus,
 } from '~/utils/service-log-invoice-status'
+import { vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 
 definePageMeta({ layout: 'staff', permission: ['service_logs.read.all', 'service_logs.read.own'] })
+
+type VehiclePick = VehicleDisplay & { id: string }
 
 interface VehicleBits {
   unitType: string
@@ -51,22 +54,16 @@ const q = ref('')
 const fView = ref<'all' | 'review'>('all')
 const fSort = ref<ServiceLogSort>('newest')
 const fCustomer = ref('all')
-const fUnit = ref('')
+const fVehicle = ref('all')
 const fDateFrom = ref('')
 const fDateTo = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
-// Debounced customer search that populates the Customer filter dropdown.
-const customerFilterQ = ref('')
-const customerSearchQ = ref('')
-let customerSearchTimer: ReturnType<typeof setTimeout> | null = null
-watch(customerFilterQ, (val) => {
-  if (customerSearchTimer) clearTimeout(customerSearchTimer)
-  customerSearchTimer = setTimeout(() => { customerSearchQ.value = val.trim() }, 300)
-})
+// Reset the vehicle filter whenever the customer changes (vehicles are per-customer).
+watch(fCustomer, () => { fVehicle.value = 'all' })
 
-watch([q, fView, fSort, fCustomer, fUnit, fDateFrom, fDateTo], () => { page.value = 1 })
+watch([q, fView, fSort, fCustomer, fVehicle, fDateFrom, fDateTo], () => { page.value = 1 })
 
 const query = computed(() => ({
   page: page.value,
@@ -74,7 +71,7 @@ const query = computed(() => ({
   q: q.value || undefined,
   queue: canReview.value && fView.value === 'review' ? 'review' as const : undefined,
   customerId: fCustomer.value === 'all' ? undefined : fCustomer.value,
-  unit: fUnit.value.trim() || undefined,
+  vehicleId: fVehicle.value === 'all' ? undefined : fVehicle.value,
   dateFrom: fDateFrom.value || undefined,
   dateTo: fDateTo.value || undefined,
   sort: fSort.value,
@@ -89,9 +86,16 @@ const { data, error, refresh } = useClientFetch<{ items: ServiceLogRow[], total:
 
 const { data: customersData, pending: customersPending } = useClientFetch<{ items: { id: string, displayName: string }[] }>(
   '/api/customers',
-  { query: computed(() => ({ pageSize: 50, sort: 'name-asc' as const, q: customerSearchQ.value || undefined })) },
+  { query: { pageSize: 100, sort: 'name-asc' as const } },
 )
 const customerOptions = computed(() => customersData.value?.items ?? [])
+
+// Vehicles load only once a customer is selected (they are per-customer).
+const { data: vehiclesData, pending: vehiclesPending } = useClientFetch<{ items: VehiclePick[] }>(
+  () => (fCustomer.value === 'all' ? null : '/api/vehicles'),
+  { query: computed(() => ({ customerId: fCustomer.value, pageSize: 100, sort: 'tag-asc' as const })) },
+)
+const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
 
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
@@ -102,7 +106,7 @@ const pageTitle = computed(() => isMechanicScope.value ? 'My Service Logs' : 'Se
 
 const filtersDirty = computed(() =>
   fView.value !== 'all' || fSort.value !== 'newest' || !!q.value
-  || fCustomer.value !== 'all' || !!fUnit.value
+  || fCustomer.value !== 'all' || fVehicle.value !== 'all'
   || !!fDateFrom.value || !!fDateTo.value,
 )
 
@@ -111,9 +115,7 @@ function clearFilters() {
   fView.value = 'all'
   fSort.value = 'newest'
   fCustomer.value = 'all'
-  fUnit.value = ''
-  customerFilterQ.value = ''
-  customerSearchQ.value = ''
+  fVehicle.value = 'all'
   fDateFrom.value = ''
   fDateTo.value = ''
 }
@@ -204,23 +206,21 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
         </label>
         <label v-if="!isMechanicScope" class="fld">
           Customer
-          <input
-            v-model="customerFilterQ"
-            type="search"
-            placeholder="Search customers…"
-            aria-label="Search customers"
-            autocomplete="off"
-          >
           <select v-model="fCustomer" aria-label="Filter by customer">
             <option value="all">All customers</option>
             <option v-for="c in customerOptions" :key="c.id" :value="c.id">{{ c.displayName }}</option>
           </select>
           <span v-if="customersPending" class="help">Loading customers…</span>
-          <span v-else-if="customerSearchQ && !customerOptions.length" class="help">No customers match.</span>
         </label>
-        <label class="fld">
-          Unit number
-          <input v-model="fUnit" type="search" placeholder="e.g. HL-114" aria-label="Filter by unit number" autocomplete="off">
+        <label v-if="!isMechanicScope" class="fld">
+          Vehicle / unit
+          <select v-model="fVehicle" :disabled="fCustomer === 'all'" aria-label="Filter by vehicle">
+            <option value="all">All vehicles</option>
+            <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">{{ vehicleTag(v) }}</option>
+          </select>
+          <span v-if="fCustomer === 'all'" class="help">Select a customer first.</span>
+          <span v-else-if="vehiclesPending" class="help">Loading vehicles…</span>
+          <span v-else-if="!vehicleOptions.length" class="help">No vehicles for this customer.</span>
         </label>
         <label class="fld">
           Service date from

@@ -15,7 +15,6 @@ export default defineEventHandler(async (event) => {
     overdue: query.overdue,
     customerId: query.customerId,
     vehicleId: query.vehicleId,
-    unit: query.unit,
     includeArchived: query.includeArchived,
     amountMin: query.amountMin,
     amountMax: query.amountMax,
