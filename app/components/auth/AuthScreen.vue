@@ -2,6 +2,7 @@
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
 import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
+import { staffPostLoginPath } from '~/utils/staff-post-login-path'
 import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
 
 const props = defineProps<{
@@ -81,7 +82,7 @@ async function submitLogin(identifier: string, password: string) {
       showLocationPrompt.value = true
       return
     }
-    await navigateTo(result.accountType === 'customer' ? '/portal' : '/dashboard')
+    await navigateTo(result.accountType === 'customer' ? '/portal' : staffPostLoginPath(auth.trainingGate))
   }
   catch (err) {
     error.value = messageFrom(err)
@@ -102,7 +103,7 @@ async function onLocationComplete(geo: import('#shared/validators/auth').StaffLo
     const user = await auth.completeStaffLogin(pendingLoginToken.value, geo)
     showLocationPrompt.value = false
     pendingLoginToken.value = null
-    await navigateTo(user.accountType === 'customer' ? '/portal' : '/dashboard')
+    await navigateTo(user.accountType === 'customer' ? '/portal' : staffPostLoginPath(auth.trainingGate))
   }
   catch (err) {
     showLocationPrompt.value = false

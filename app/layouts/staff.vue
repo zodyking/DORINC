@@ -59,13 +59,19 @@ const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
 const isSuperAdmin = computed(() => auth.can('system.admin.all'))
 const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
+const trainingNavTarget = computed(() => {
+  if (trainingLocked.value && auth.trainingGate?.moduleSlug) {
+    return `/training/learn/${auth.trainingGate.moduleSlug}`
+  }
+  return '/training'
+})
 
 // Counts become live once list APIs land (Phase 1)
 const nav = computed<NavSection[]>(() => {
   if (trainingLocked.value) {
     return [{
       label: 'Training',
-      items: [{ label: 'Training', to: '/training', icon: 'training' }],
+      items: [{ label: 'Training', to: trainingNavTarget.value, icon: 'training' }],
     }]
   }
 

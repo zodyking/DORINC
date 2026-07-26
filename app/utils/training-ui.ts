@@ -43,3 +43,8 @@ export function trainingProgressLabel(percent: number): string {
 export function isTrainingPath(path: string): boolean {
   return path === '/training' || path.startsWith('/training/learn/')
 }
+
+/** Active lesson player — used by the training lock (hub does not count). */
+export function isTrainingLearnPath(path: string): boolean {
+  return path.startsWith('/training/learn/')
+}

@@ -104,13 +104,19 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
       try {
         const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
+        const me = await fetcher<{
+          user: AuthUser
+          permissions: string[]
+          trainingGate?: TrainingGateState
+        }>('/api/auth/me')
         this.user = me.user
         this.permissions = me.permissions
+        this.trainingGate = me.trainingGate ?? null
       }
       catch {
         // Cookie is set — keep the login response even if /me hiccups on first request.
         this.permissions = []
+        this.trainingGate = null
       }
       return res.user
     },
@@ -138,12 +144,18 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
       try {
         const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
+        const me = await fetcher<{
+          user: AuthUser
+          permissions: string[]
+          trainingGate?: TrainingGateState
+        }>('/api/auth/me')
         this.user = me.user
         this.permissions = me.permissions
+        this.trainingGate = me.trainingGate ?? null
       }
       catch {
         this.permissions = []
+        this.trainingGate = null
       }
       return res.user
     },
@@ -166,6 +178,7 @@ export const useAuthStore = defineStore('auth', {
       }
       this.user = null
       this.permissions = []
+      this.trainingGate = null
       this.loaded = true
       if (redirect) {
         const path = import.meta.client ? window.location.pathname : this.loginPath()

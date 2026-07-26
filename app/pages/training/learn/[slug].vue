@@ -11,6 +11,7 @@ definePageMeta({
 const route = useRoute()
 const auth = useAuthStore()
 const slug = computed(() => String(route.params.slug || ''))
+const gateLocked = computed(() => auth.trainingGate?.locked ?? false)
 const practiceSession = provideTrainingPracticeSession()
 
 watch(slug, () => {
@@ -96,6 +97,10 @@ async function onLessonComplete() {
       done.value = true
       await auth.fetchMe()
       await refresh()
+      const nextSlug = auth.trainingGate?.locked ? auth.trainingGate.moduleSlug : null
+      if (nextSlug && nextSlug !== slug.value) {
+        await navigateTo(`/training/learn/${nextSlug}`)
+      }
     }
   }
   finally {
@@ -104,6 +109,10 @@ async function onLessonComplete() {
 }
 
 function goHub() {
+  if (gateLocked.value && auth.trainingGate?.moduleSlug) {
+    navigateTo(`/training/learn/${auth.trainingGate.moduleSlug}`)
+    return
+  }
   navigateTo('/training')
 }
 </script>
@@ -124,8 +133,11 @@ function goHub() {
       <div v-if="done" class="training-hero">
         <h2>Module complete</h2>
         <p>You finished <strong>{{ moduleData.title }}</strong>. {{ auth.trainingGate?.locked ? 'Refreshing access…' : 'Great work!' }}</p>
-        <button type="button" class="btn primary" style="margin-top:12px;" @click="goHub">
+        <button v-if="!gateLocked" type="button" class="btn primary" style="margin-top:12px;" @click="goHub">
           Back to training
+        </button>
+        <button v-else-if="auth.trainingGate?.moduleSlug" type="button" class="btn primary" style="margin-top:12px;" @click="goHub">
+          Continue training
         </button>
       </div>
 

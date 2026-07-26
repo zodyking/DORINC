@@ -32,6 +32,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/portal')
   }
 
+  const { isTrainingLearnPath } = await import('~/utils/training-ui')
+  if (auth.trainingGate?.locked && !isTrainingLearnPath(to.path)) {
+    const slug = auth.trainingGate.moduleSlug
+    if (slug) return navigateTo(`/training/learn/${slug}`)
+  }
+
   // Check permission requirement from route meta
   const requiredPermission = to.meta.permission as string | string[] | undefined
 
