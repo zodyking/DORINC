@@ -11,7 +11,7 @@ describe('pwaInstallCopy', () => {
     })
     expect(copy.title).toContain('desktop')
     expect(copy.actionLabel).toBe('Add to desktop')
-    expect(copy.variant).toBe('install')
+    expect(copy.action).toBe('prompt')
   })
 
   it('uses home screen copy on mobile', () => {
@@ -25,16 +25,16 @@ describe('pwaInstallCopy', () => {
     expect(copy.actionLabel).toBe('Add to home screen')
   })
 
-  it('returns iOS manual steps when prompt is unavailable', () => {
+  it('uses share action on iOS instead of inline instructions', () => {
     const copy = pwaInstallCopy({
       deviceKind: 'mobile',
       installed: false,
       isIos: true,
       canPromptInstall: false,
     })
-    expect(copy.actionLabel).toBe('Show steps')
-    expect(copy.steps?.length).toBeGreaterThan(0)
-    expect(copy.steps?.[0]).toContain('Share')
+    expect(copy.actionLabel).toBe('Add to home screen')
+    expect(copy.action).toBe('share')
+    expect(copy.steps).toBeNull()
   })
 
   it('shows a simple installed state without a button', () => {

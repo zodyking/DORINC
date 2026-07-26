@@ -1,4 +1,5 @@
 import { pwaInstallCopy, type PwaDeviceKind } from '#shared/pwa-install-copy'
+import { BRAND_NAME } from '~/constants/brand'
 
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -6,6 +7,7 @@ export interface BeforeInstallPromptEvent extends Event {
 }
 
 const PWA_INSTALLED_KEY = 'dorinc-pwa-installed'
+const PWA_BANNER_CLOSED_KEY = 'dorinc-pwa-banner-closed'
 
 function detectDeviceKind(): PwaDeviceKind {
   if (!import.meta.client) return 'desktop'
@@ -33,6 +35,16 @@ function markInstalledFlag(): void {
   localStorage.setItem(PWA_INSTALLED_KEY, '1')
 }
 
+function readBannerClosedFlag(): boolean {
+  if (!import.meta.client) return false
+  return sessionStorage.getItem(PWA_BANNER_CLOSED_KEY) === '1'
+}
+
+function markBannerClosedFlag(): void {
+  if (!import.meta.client) return
+  sessionStorage.setItem(PWA_BANNER_CLOSED_KEY, '1')
+}
+
 async function detectInstalledRelatedApp(): Promise<boolean> {
   if (!import.meta.client || !('getInstalledRelatedApps' in navigator)) return false
   try {
@@ -56,10 +68,12 @@ export function usePwaInstall() {
   const deviceKind = ref<PwaDeviceKind>('desktop')
   const stepsOpen = ref(false)
   const bannerReady = ref(false)
+  const dismissed = ref(false)
+  const fallbackSteps = ref<string[] | null>(null)
 
   const canPromptInstall = computed(() => !!deferredPrompt.value && !installed.value)
 
-  const showBanner = computed(() => bannerReady.value && !isStandalone.value)
+  const showBanner = computed(() => bannerReady.value && !isStandalone.value && !dismissed.value)
 
   const copy = computed(() => pwaInstallCopy({
     deviceKind: deviceKind.value,
@@ -68,14 +82,18 @@ export function usePwaInstall() {
     canPromptInstall: canPromptInstall.value,
   }))
 
-  const showSteps = computed(() => stepsOpen.value && !!copy.value.steps?.length)
+  const showSteps = computed(() => stepsOpen.value && !!(copy.value.steps?.length || fallbackSteps.value?.length))
+
+  const visibleSteps = computed(() => copy.value.steps ?? fallbackSteps.value ?? [])
 
   function revealBanner() {
     bannerReady.value = true
   }
 
-  function toggleSteps() {
-    stepsOpen.value = !stepsOpen.value
+  function closeBanner() {
+    dismissed.value = true
+    stepsOpen.value = false
+    markBannerClosedFlag()
   }
 
   function markInstalled() {
@@ -83,6 +101,29 @@ export function usePwaInstall() {
     markInstalledFlag()
     stepsOpen.value = false
     deferredPrompt.value = null
+  }
+
+  async function shareForHomeScreen() {
+    if (!import.meta.client || typeof navigator.share !== 'function') {
+      fallbackSteps.value = [
+        'Tap the Share button at the bottom of Safari.',
+        'Scroll down and tap Add to Home Screen.',
+        'Tap Add in the top right corner.',
+      ]
+      stepsOpen.value = true
+      return false
+    }
+    try {
+      await navigator.share({
+        title: BRAND_NAME,
+        text: `Add ${BRAND_NAME} to your home screen`,
+        url: window.location.origin,
+      })
+      return true
+    }
+    catch {
+      return false
+    }
   }
 
   async function install() {
@@ -97,22 +138,26 @@ export function usePwaInstall() {
       }
       return false
     }
-
-    if (copy.value.steps?.length) {
-      stepsOpen.value = true
-    }
     return false
   }
 
-  function onAction() {
-    if (canPromptInstall.value) {
-      void install()
+  async function onAction() {
+    const action = copy.value.action
+    if (action === 'prompt') {
+      await install()
       return
     }
-    toggleSteps()
+    if (action === 'share') {
+      await shareForHomeScreen()
+      return
+    }
+    if (action === 'steps') {
+      stepsOpen.value = !stepsOpen.value
+    }
   }
 
   onMounted(() => {
+    dismissed.value = readBannerClosedFlag()
     isStandalone.value = isStandaloneMode()
     installed.value = readInstalledFlag()
     isIos.value = /iphone|ipad|ipod/i.test(navigator.userAgent)
@@ -141,16 +186,11 @@ export function usePwaInstall() {
   })
 
   return {
-    bannerReady,
-    canPromptInstall,
+    closeBanner,
     copy,
-    deviceKind,
-    install,
-    installed,
-    isStandalone,
     onAction,
     showBanner,
     showSteps,
-    stepsOpen,
+    visibleSteps,
   }
 }
