@@ -1,77 +1,25 @@
-import { pwaInstallCopy, type PwaDeviceKind } from '#shared/pwa-install-copy'
+import { pwaInstallCopy } from '#shared/pwa-install-copy'
 import { BRAND_NAME } from '~/constants/brand'
+import {
+  detectPwaDeviceKind,
+  isIosDevice,
+  isPwaStandaloneMode,
+  markPwaInstalledFlag,
+  pwaInstallState,
+  subscribePwaInstall,
+} from '~/utils/pwa-install-state'
 
-export interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed', platform: string }>
-}
-
-const PWA_INSTALLED_KEY = 'dorinc-pwa-installed'
-const PWA_BANNER_CLOSED_KEY = 'dorinc-pwa-banner-closed'
-
-function detectDeviceKind(): PwaDeviceKind {
-  if (!import.meta.client) return 'desktop'
-  const coarse = window.matchMedia('(pointer: coarse)').matches
-  const narrow = window.matchMedia('(max-width: 768px)').matches
-  const mobileUa = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
-  return coarse || narrow || mobileUa ? 'mobile' : 'desktop'
-}
-
-function isStandaloneMode(): boolean {
-  if (!import.meta.client) return false
-  const nav = window.navigator as Navigator & { standalone?: boolean }
-  return window.matchMedia('(display-mode: standalone)').matches
-    || window.matchMedia('(display-mode: minimal-ui)').matches
-    || nav.standalone === true
-}
-
-function readInstalledFlag(): boolean {
-  if (!import.meta.client) return false
-  return localStorage.getItem(PWA_INSTALLED_KEY) === '1'
-}
-
-function markInstalledFlag(): void {
-  if (!import.meta.client) return
-  localStorage.setItem(PWA_INSTALLED_KEY, '1')
-}
-
-function readBannerClosedFlag(): boolean {
-  if (!import.meta.client) return false
-  return sessionStorage.getItem(PWA_BANNER_CLOSED_KEY) === '1'
-}
-
-function markBannerClosedFlag(): void {
-  if (!import.meta.client) return
-  sessionStorage.setItem(PWA_BANNER_CLOSED_KEY, '1')
-}
-
-async function detectInstalledRelatedApp(): Promise<boolean> {
-  if (!import.meta.client || !('getInstalledRelatedApps' in navigator)) return false
-  try {
-    const getApps = (navigator as Navigator & {
-      getInstalledRelatedApps?: () => Promise<Array<{ id?: string }>>
-    }).getInstalledRelatedApps
-    if (!getApps) return false
-    const apps = await getApps()
-    return apps.length > 0
-  }
-  catch {
-    return false
-  }
-}
+export type { BeforeInstallPromptEvent } from '~/utils/pwa-install-state'
 
 export function usePwaInstall() {
-  const deferredPrompt = ref<BeforeInstallPromptEvent | null>(null)
-  const installed = ref(false)
+  const route = useRoute()
+  const installed = ref(pwaInstallState.installed)
   const isStandalone = ref(false)
   const isIos = ref(false)
-  const deviceKind = ref<PwaDeviceKind>('desktop')
+  const deviceKind = ref(detectPwaDeviceKind())
   const stepsOpen = ref(false)
-  const bannerReady = ref(false)
   const dismissed = ref(false)
-  const fallbackSteps = ref<string[] | null>(null)
-
-  const canPromptInstall = computed(() => !!deferredPrompt.value && !installed.value)
+  const bannerReady = ref(false)
 
   const showBanner = computed(() => bannerReady.value && !isStandalone.value && !dismissed.value)
 
@@ -79,12 +27,15 @@ export function usePwaInstall() {
     deviceKind: deviceKind.value,
     installed: installed.value,
     isIos: isIos.value,
-    canPromptInstall: canPromptInstall.value,
   }))
 
-  const showSteps = computed(() => stepsOpen.value && !!(copy.value.steps?.length || fallbackSteps.value?.length))
+  const showSteps = computed(() => stepsOpen.value && !!(copy.value.fallbackSteps?.length))
 
-  const visibleSteps = computed(() => copy.value.steps ?? fallbackSteps.value ?? [])
+  const visibleSteps = computed(() => copy.value.fallbackSteps ?? [])
+
+  function syncFromSharedState() {
+    installed.value = pwaInstallState.installed
+  }
 
   function revealBanner() {
     bannerReady.value = true
@@ -93,23 +44,17 @@ export function usePwaInstall() {
   function closeBanner() {
     dismissed.value = true
     stepsOpen.value = false
-    markBannerClosedFlag()
   }
 
   function markInstalled() {
+    markPwaInstalledFlag()
     installed.value = true
-    markInstalledFlag()
     stepsOpen.value = false
-    deferredPrompt.value = null
+    pwaInstallState.deferredPrompt = null
   }
 
   async function shareForHomeScreen() {
     if (!import.meta.client || typeof navigator.share !== 'function') {
-      fallbackSteps.value = [
-        'Tap the Share button at the bottom of Safari.',
-        'Scroll down and tap Add to Home Screen.',
-        'Tap Add in the top right corner.',
-      ]
       stepsOpen.value = true
       return false
     }
@@ -117,7 +62,7 @@ export function usePwaInstall() {
       await navigator.share({
         title: BRAND_NAME,
         text: `Add ${BRAND_NAME} to your home screen`,
-        url: window.location.origin,
+        url: window.location.href,
       })
       return true
     }
@@ -127,17 +72,19 @@ export function usePwaInstall() {
   }
 
   async function install() {
-    const prompt = deferredPrompt.value
+    const prompt = pwaInstallState.deferredPrompt
     if (prompt) {
       await prompt.prompt()
       const choice = await prompt.userChoice
-      deferredPrompt.value = null
+      pwaInstallState.deferredPrompt = null
       if (choice.outcome === 'accepted') {
         markInstalled()
         return true
       }
       return false
     }
+
+    stepsOpen.value = true
     return false
   }
 
@@ -148,41 +95,31 @@ export function usePwaInstall() {
       return
     }
     if (action === 'share') {
-      await shareForHomeScreen()
-      return
-    }
-    if (action === 'steps') {
-      stepsOpen.value = !stepsOpen.value
+      const shared = await shareForHomeScreen()
+      if (!shared && copy.value.fallbackSteps?.length) stepsOpen.value = true
     }
   }
 
   onMounted(() => {
-    dismissed.value = readBannerClosedFlag()
-    isStandalone.value = isStandaloneMode()
-    installed.value = readInstalledFlag()
-    isIos.value = /iphone|ipad|ipod/i.test(navigator.userAgent)
-    deviceKind.value = detectDeviceKind()
+    isStandalone.value = isPwaStandaloneMode()
+    isIos.value = isIosDevice()
+    deviceKind.value = detectPwaDeviceKind()
+    syncFromSharedState()
 
     if (isStandalone.value) {
       markInstalled()
       return
     }
 
-    void detectInstalledRelatedApp().then((related) => {
-      if (related) markInstalled()
-    })
-
+    const unsubscribe = subscribePwaInstall(syncFromSharedState)
     nextTick(revealBanner)
 
-    window.addEventListener('beforeinstallprompt', (event) => {
-      if (installed.value) return
-      event.preventDefault()
-      deferredPrompt.value = event as BeforeInstallPromptEvent
-    })
+    onBeforeUnmount(unsubscribe)
+  })
 
-    window.addEventListener('appinstalled', () => {
-      markInstalled()
-    })
+  watch(() => route.path, () => {
+    dismissed.value = false
+    stepsOpen.value = false
   })
 
   return {
