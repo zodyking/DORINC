@@ -21,4 +21,17 @@ describe('training catalog', () => {
     expect(slugs).toContain('service-log-photos')
     expect(slugs).toContain('platform-navigation')
   })
+
+  it('hands-on modules use practice steps with practiceId', () => {
+    const handsOn = TRAINING_CATALOG.filter(m =>
+      ['service-log-voice', 'service-log-photos', 'invoice-basics'].includes(m.slug),
+    )
+    for (const mod of handsOn) {
+      const practiceSteps = mod.lessons.flatMap(l => l.steps).filter(s => s.type === 'practice')
+      expect(practiceSteps.length).toBeGreaterThanOrEqual(6)
+      for (const step of practiceSteps) {
+        expect(step.practiceId).toBeTruthy()
+      }
+    }
+  })
 })

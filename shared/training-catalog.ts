@@ -6,6 +6,7 @@ export interface TrainingLessonStep {
   icon?: string
   tips?: string[]
   demo?: string
+  practiceId?: string
   question?: string
   options?: string[]
   correctIndex?: number
@@ -45,10 +46,10 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
   {
     slug: 'platform-navigation',
     title: 'Platform navigation',
-    description: 'Learn the staff workspace layout, sidebar, search patterns, and how to move between customers, vehicles, service logs, and invoices.',
+    description: 'Learn the staff workspace layout and practice opening Service Logs, Invoices, and Customers from the sidebar.',
     category: 'general',
     icon: 'compass',
-    estimatedMinutes: 12,
+    estimatedMinutes: 15,
     sortOrder: 10,
     lessons: [
       {
@@ -60,7 +61,7 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
             type: 'welcome',
             title: 'Welcome aboard',
             subtitle: 'Your command center for fleet service operations',
-            body: 'This tutorial walks through the real staff sidebar, top bar, and the fastest ways to jump between customers, vehicles, service logs, and invoices. Progress saves automatically between steps.',
+            body: 'This module walks through the real staff sidebar and has you practice tapping the right destinations. Each step unlocks Continue only after you complete the task.',
             icon: 'compass',
           },
           {
@@ -69,14 +70,26 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
             body: 'The left sidebar groups tools into **Workspace** (day-to-day work), **System** (users and audit), and **Administration** (control panel). Items only appear when your role has permission.',
             tips: [
               'On mobile, tap the ☰ menu button in the top bar to open the sidebar.',
-              'Your name and role appear in the account menu at the top right — tap it for My account and sign out.',
+              'Your name and role appear in the account menu at the top right.',
             ],
           },
           {
-            type: 'interactive',
-            title: 'Explore the sidebar',
-            body: 'This is the same navigation you see when signed in. Tap each item to hear what it does.',
-            demo: 'staff-sidebar',
+            type: 'practice',
+            title: 'Open Service Logs',
+            body: 'Service logs are where mechanics record work on a unit. Find **Service Logs** in the sidebar and tap it.',
+            practiceId: 'nav-service-logs',
+          },
+          {
+            type: 'practice',
+            title: 'Open Invoices',
+            body: 'Billing lives under **Invoices**. Tap it in the sidebar.',
+            practiceId: 'nav-invoices',
+          },
+          {
+            type: 'practice',
+            title: 'Open Customers',
+            body: 'Fleet accounts and vehicle records start from **Customers**. Tap it in the sidebar.',
+            practiceId: 'nav-customers',
           },
           {
             type: 'quiz',
@@ -89,7 +102,7 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           {
             type: 'complete',
             title: 'Navigation basics complete',
-            body: 'You are ready to explore the app. Use the sidebar to open any section your role can access.',
+            body: 'You practiced the three most common sidebar destinations. Use them to jump between customers, logs, and invoices.',
           },
         ],
       },
@@ -98,55 +111,75 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
   {
     slug: 'service-log-voice',
     title: 'Service logs with voice',
-    description: 'Hands-free line entry on step 5 of the New service log wizard — dictate labor, parts, and fees.',
+    description: 'Build a complete practice service log step by step — customer, vehicle, when/where, work details, voice line items, review, and submit.',
     category: 'service_logs',
     icon: 'mic',
-    estimatedMinutes: 18,
+    estimatedMinutes: 25,
     sortOrder: 20,
     lessons: [
       {
         slug: 'voice-flow',
-        title: 'Voice capture workflow',
+        title: 'Build a voice service log',
         sortOrder: 1,
         steps: [
           {
             type: 'welcome',
             title: 'Voice service logs',
-            subtitle: 'Keep your hands on the wrench',
-            body: 'On step 5 (Log) of New service log, choose **Use your voice**. The line-item wizard listens as you speak each field — type, description, quantity, and rate.',
+            subtitle: 'Hands-on practice — nothing saves to production',
+            body: 'You will walk through the full **New service log** wizard using sample fleet data. On step 5 you will choose **Use your voice** and add a practice line item.',
             icon: 'mic',
           },
           {
             type: 'content',
-            title: 'When to use voice',
-            body: 'After customer, vehicle, when/where, and work details, step 5 asks how you recorded the job. Pick **Use your voice** instead of **Upload photo** when you want hands-free line entry.',
+            title: 'What you will do',
+            body: 'Each screen mirrors the real wizard. Complete every field on each step — **Continue** stays disabled until the step is done.',
             tips: [
-              'Speak clearly: "Labor, replaced DPF sensor, two hours, one forty-five an hour."',
-              'Add multiple lines before continuing to the review step.',
-              'On the Submit step, review the line table — edit any row manually if speech misheard a number.',
+              'Steps 1–4: customer, vehicle, date/location, and complaint.',
+              'Step 5: choose Use your voice and add at least one line.',
+              'Steps 6–7: review everything, then submit the practice log.',
             ],
           },
           {
-            type: 'interactive',
-            title: 'The real log step',
-            body: 'Step 5 shows the same two options as production: photograph the paper sheet or use your voice.',
-            demo: 'service-log-wizard',
+            type: 'practice',
+            title: 'Step 1 — Pick the customer',
+            body: 'Select the fleet account this job was performed for.',
+            practiceId: 'sl-customer',
           },
           {
-            type: 'interactive',
-            title: 'Voice line items',
-            body: 'After choosing voice, tap the microphone on each line. Saved rows appear in the line items table like this.',
-            demo: 'service-log-voice',
+            type: 'practice',
+            title: 'Step 2 — Pick the vehicle',
+            body: 'Choose the unit that was serviced. Only vehicles for your selected customer appear.',
+            practiceId: 'sl-vehicle',
           },
           {
-            type: 'checklist',
-            title: 'Before you submit',
-            items: [
-              { label: 'Customer and vehicle selected', detail: 'Steps 1–2 of the wizard' },
-              { label: 'Service date and odometer entered', detail: 'Step 3 — When & where' },
-              { label: 'Complaint and work type filled in', detail: 'Step 4 — What was done' },
-              { label: 'Voice lines captured on step 5', detail: 'Use your voice → line wizard' },
-            ],
+            type: 'practice',
+            title: 'Step 3 — When & where',
+            body: 'Enter the service date, odometer or hour reading, and where the work happened.',
+            practiceId: 'sl-when',
+          },
+          {
+            type: 'practice',
+            title: 'Step 4 — What was done',
+            body: 'Describe the complaint and work type. Internal notes are optional but good practice.',
+            practiceId: 'sl-work',
+          },
+          {
+            type: 'practice',
+            title: 'Step 5 — Log with voice',
+            body: 'Choose **Use your voice**, then add a practice line item. In production the microphone walks you through each field.',
+            practiceId: 'sl-log-voice',
+          },
+          {
+            type: 'practice',
+            title: 'Step 6 — Review',
+            body: 'Read back customer, vehicle, dates, and your line items before submitting.',
+            practiceId: 'sl-review-voice',
+          },
+          {
+            type: 'practice',
+            title: 'Step 7 — Submit',
+            body: 'Tap **Submit log (practice)** to finish. In production this sends the log to the review queue.',
+            practiceId: 'sl-submit-voice',
           },
           {
             type: 'quiz',
@@ -158,8 +191,8 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           },
           {
             type: 'complete',
-            title: 'Voice logging ready',
-            body: 'Open Service Logs → New service log, complete steps 1–4, then choose Use your voice on step 5.',
+            title: 'Voice logging complete',
+            body: 'You built a full practice log with voice lines. On the job: Service Logs → New service log → complete steps 1–4 → Use your voice on step 5.',
           },
         ],
       },
@@ -168,39 +201,75 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
   {
     slug: 'service-log-photos',
     title: 'Service logs with photos',
-    description: 'Capture paper service log sheets on step 5 of the New service log wizard.',
+    description: 'Build a complete practice service log with a photo upload on step 5 — same wizard, photo capture path.',
     category: 'service_logs',
     icon: 'camera',
-    estimatedMinutes: 14,
+    estimatedMinutes: 22,
     sortOrder: 30,
     lessons: [
       {
         slug: 'photo-capture',
-        title: 'Photo upload workflow',
+        title: 'Build a photo service log',
         sortOrder: 1,
         steps: [
           {
             type: 'welcome',
             title: 'Photo service logs',
             subtitle: 'Snap the paperwork — we handle the rest',
-            body: 'On step 5 (Log), choose **Upload photo** to photograph your paper service log sheet. The office can extract line items later with AI.',
+            body: 'You will complete the same wizard as the voice lesson, but on step 5 you will choose **Upload photo** and attach a practice sheet image.',
             icon: 'camera',
           },
           {
             type: 'content',
-            title: 'Photo tips for clean uploads',
-            body: 'Tap **Upload photo** on step 5. On mobile, the camera opens directly. Photograph the paper sheet where the mechanic wrote the work — not unrelated bay photos.',
+            title: 'Photo tips',
+            body: 'In production, tap **Upload photo** and photograph the paper service log sheet. Training uses a placeholder so you do not need a camera.',
             tips: [
               'Include the full page — do not crop off totals or unit numbers.',
               'Multiple pages are fine; tap the zone again for each sheet.',
-              'Logs stay in draft until you submit on step 6 — you can add photos later from the log detail page.',
+              'Logs stay in draft until you submit on step 6.',
             ],
           },
           {
-            type: 'interactive',
-            title: 'The real photo zone',
-            body: 'This is the same upload area from New service log step 5.',
-            demo: 'service-log-photos',
+            type: 'practice',
+            title: 'Step 1 — Pick the customer',
+            body: 'Select the fleet account for this practice job.',
+            practiceId: 'sl-customer',
+          },
+          {
+            type: 'practice',
+            title: 'Step 2 — Pick the vehicle',
+            body: 'Choose the bus or unit that was serviced.',
+            practiceId: 'sl-vehicle',
+          },
+          {
+            type: 'practice',
+            title: 'Step 3 — When & where',
+            body: 'Enter service date, meter reading, and job location.',
+            practiceId: 'sl-when',
+          },
+          {
+            type: 'practice',
+            title: 'Step 4 — What was done',
+            body: 'Enter the customer complaint and work type.',
+            practiceId: 'sl-work',
+          },
+          {
+            type: 'practice',
+            title: 'Step 5 — Log with photo',
+            body: 'Choose **Upload photo**, then tap **Add practice photo** to simulate attaching your paperwork.',
+            practiceId: 'sl-log-photo',
+          },
+          {
+            type: 'practice',
+            title: 'Step 6 — Review',
+            body: 'Confirm customer, vehicle, and that a photo is attached before submitting.',
+            practiceId: 'sl-review-photo',
+          },
+          {
+            type: 'practice',
+            title: 'Step 7 — Submit',
+            body: 'Submit the practice log. In production it moves to **Ready to invoice** for office review.',
+            practiceId: 'sl-submit-photo',
           },
           {
             type: 'quiz',
@@ -217,8 +286,8 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           },
           {
             type: 'complete',
-            title: 'Photo logging ready',
-            body: 'Choose Upload photo on step 5, capture your paperwork, then review everything on step 6 before Submit log.',
+            title: 'Photo logging complete',
+            body: 'You built a full practice log with a photo. On the job: choose Upload photo on step 5, capture your paperwork, then review on step 6.',
           },
         ],
       },
@@ -241,7 +310,7 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           {
             type: 'welcome',
             title: 'From bay to invoice',
-            body: 'Service logs use the same status pills you see on the Service Logs list and detail pages. This lesson covers submit, review, and send-to-invoice.',
+            body: 'After you submit a log, it moves through review statuses before billing. This lesson covers what each status means.',
             icon: 'clipboard',
           },
           {
@@ -260,6 +329,17 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
             demo: 'service-log-status',
           },
           {
+            type: 'checklist',
+            title: 'Before you submit (real jobs)',
+            items: [
+              { label: 'Customer and vehicle selected', detail: 'Steps 1–2 of the wizard' },
+              { label: 'Service date and odometer entered', detail: 'Step 3 — When & where' },
+              { label: 'Complaint filled in', detail: 'Step 4 — What was done' },
+              { label: 'Photo or voice lines captured', detail: 'Step 5 — Log' },
+              { label: 'Reviewed on step 6', detail: 'Submit log only when accurate' },
+            ],
+          },
+          {
             type: 'complete',
             title: 'Submission flow understood',
             body: 'Always double-check customer, vehicle, and line items on step 6 before tapping Submit log.',
@@ -271,7 +351,7 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
   {
     slug: 'customer-vehicle-lookup',
     title: 'Customers & vehicles',
-    description: 'Find fleet accounts, open vehicle records, and search by bus number or unit tag.',
+    description: 'Find fleet accounts, open vehicle records, and practice navigating to Customers.',
     category: 'general',
     icon: 'users',
     estimatedMinutes: 12,
@@ -285,22 +365,28 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           {
             type: 'welcome',
             title: 'Customers & vehicles',
-            body: 'Every service log and invoice ties to a customer and usually a vehicle. The Customers and Vehicles pages use the same search box pattern.',
+            body: 'Every service log and invoice ties to a customer and usually a vehicle. This lesson covers search patterns and sidebar navigation.',
             icon: 'users',
           },
           {
             type: 'content',
             title: 'Where to search',
-            body: 'Open **Customers** or **Vehicles** from the sidebar. Use the search field to filter by company name, bus number, or unit tag. Vehicle records show bus number and unit tag on the same row.',
+            body: 'Open **Customers** or **Vehicles** from the sidebar. Use the search field to filter by company name, bus number, or unit tag.',
             tips: [
               'Bus numbers and unit tags live on the vehicle record, not the customer name.',
               'From a customer detail page you can jump to their vehicles and open service history.',
             ],
           },
           {
+            type: 'practice',
+            title: 'Navigate to Customers',
+            body: 'Tap **Customers** in the sidebar — this is where fleet account search starts.',
+            practiceId: 'nav-customers',
+          },
+          {
             type: 'interactive',
             title: 'Search the list',
-            body: 'Practice with the same list layout as the Customers page.',
+            body: 'The Customers page uses this list layout. Bus numbers like #606 appear on the linked vehicle record.',
             demo: 'customer-search',
           },
           {
@@ -323,42 +409,73 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
   {
     slug: 'invoice-basics',
     title: 'Invoice basics',
-    description: 'Create draft invoices with the five-step wizard, add line items, and understand tax-exempt totals.',
+    description: 'Build a complete practice invoice step by step — customer, vehicle, dates, line items, review, and save draft.',
     category: 'billing',
     icon: 'invoice',
-    estimatedMinutes: 16,
+    estimatedMinutes: 22,
     sortOrder: 60,
     lessons: [
       {
         slug: 'create-invoice',
-        title: 'Creating an invoice',
+        title: 'Create a practice invoice',
         sortOrder: 1,
         steps: [
           {
             type: 'welcome',
             title: 'Invoice basics',
-            body: 'Invoices use the New invoice wizard: Customer → Vehicle → Dates & terms → Line items → Review. Totals update from server rules.',
+            subtitle: 'Hands-on practice — draft is not saved',
+            body: 'You will walk through the full **New invoice** wizard with sample customers. Each step mirrors production; totals update from the same rules.',
             icon: 'invoice',
           },
           {
             type: 'content',
-            title: 'Wizard steps',
-            body: 'Tap **New invoice** on the Invoices page. Pick customer and optional vehicle, set dates and payment terms, add lines from catalog or manually, then save as draft on Review.',
+            title: 'Wizard overview',
+            body: 'Five steps: Customer → Vehicle → Dates & terms → Line items → Review. Tax-exempt customers show waived tax crossed out.',
             tips: [
-              'Tax-exempt customers show waived tax crossed out — it is not added to the total.',
-              'Catalog quick-add fills description, type, and default price.',
+              'Pick a tax-exempt customer on step 1 to see how tax is waived on the review step.',
+              'Add at least one line with description and quantity before continuing.',
             ],
           },
           {
-            type: 'interactive',
-            title: 'Invoice wizard',
-            body: 'The step bar and totals panel match the real New invoice screen.',
-            demo: 'invoice-wizard',
+            type: 'practice',
+            title: 'Step 1 — Pick the customer',
+            body: 'Select the billing account. Note whether they are tax exempt.',
+            practiceId: 'inv-customer',
+          },
+          {
+            type: 'practice',
+            title: 'Step 2 — Pick the vehicle',
+            body: 'Choose the unit this invoice is for (optional on some jobs, required here for practice).',
+            practiceId: 'inv-vehicle',
+          },
+          {
+            type: 'practice',
+            title: 'Step 3 — Dates & terms',
+            body: 'Set invoice date, due date, and payment terms. PO number is optional.',
+            practiceId: 'inv-dates',
+          },
+          {
+            type: 'practice',
+            title: 'Step 4 — Line items',
+            body: 'Edit the practice line or add more. Every line needs a description and quantity greater than zero.',
+            practiceId: 'inv-lines',
+          },
+          {
+            type: 'practice',
+            title: 'Step 5 — Review',
+            body: 'Check subtotal, tax (or tax exempt), and total before saving.',
+            practiceId: 'inv-review',
+          },
+          {
+            type: 'practice',
+            title: 'Step 6 — Save draft',
+            body: 'Tap **Save draft (practice)** to finish. In production you can preview PDF and send from the invoice detail page.',
+            practiceId: 'inv-save',
           },
           {
             type: 'complete',
             title: 'Invoice basics complete',
-            body: 'Open Invoices → New invoice to practice on a test customer.',
+            body: 'You built a full practice invoice. On the job: Invoices → New invoice and follow the same steps with real customers.',
           },
         ],
       },

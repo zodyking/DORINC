@@ -325,6 +325,98 @@
   color: #64748b;
 }
 
+/* Hands-on practice wizards */
+.training-practice-wizard {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.training-practice-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.training-practice-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  text-align: center;
+}
+
+.training-practice-submit-box {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fafbff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.training-practice-submit-box p {
+  margin: 0;
+  color: #334155;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.training-practice-success {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.training-practice-success p {
+  margin: 0;
+  color: #166534;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.training-practice-photo-placeholder {
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
+  border: 2px dashed #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.training-nav-correct {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+
+.training-nav-wrong {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
 .training-ui-sl {
   padding: 14px;
   background: #fff;

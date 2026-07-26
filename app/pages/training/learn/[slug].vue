@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
 import TrainingLessonPlayer from '~/components/training/TrainingLessonPlayer.vue'
+import { provideTrainingPracticeSession } from '~/composables/useTrainingPracticeSession'
 
 definePageMeta({
   layout: 'staff',
@@ -10,6 +11,12 @@ definePageMeta({
 const route = useRoute()
 const auth = useAuthStore()
 const slug = computed(() => String(route.params.slug || ''))
+const practiceSession = provideTrainingPracticeSession()
+
+watch(slug, () => {
+  practiceSession.resetServiceLog()
+  practiceSession.resetInvoice()
+}, { immediate: true })
 
 interface LessonRow {
   id: string

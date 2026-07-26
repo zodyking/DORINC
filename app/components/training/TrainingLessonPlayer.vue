@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
 import TrainingUiPreview from './TrainingUiPreview.vue'
+import TrainingPracticePanel from './practice/TrainingPracticePanel.vue'
 import {
   cancelTrainingSpeech,
   speakTrainingStep,
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 const stepIndex = ref(props.initialStep ?? 0)
 const quizAnswer = ref<number | null>(null)
 const quizSubmitted = ref(false)
+const practiceReady = ref(false)
 
 const current = computed(() => props.steps[stepIndex.value])
 const isFirst = computed(() => stepIndex.value <= 0)
@@ -36,9 +38,14 @@ function narrateStep() {
 watch(stepIndex, (idx) => {
   quizAnswer.value = null
   quizSubmitted.value = false
+  practiceReady.value = false
   emit('stepChange', idx)
   narrateStep()
 })
+
+function onPracticeReady(ready: boolean) {
+  practiceReady.value = ready
+}
 
 onMounted(() => {
   narrateStep()
@@ -51,6 +58,7 @@ onBeforeUnmount(() => {
 function next() {
   unlockTrainingSpeech({ silent: true })
   if (current.value?.type === 'quiz' && !quizSubmitted.value) return
+  if (current.value?.type === 'practice' && !practiceReady.value) return
   if (isLast.value) {
     cancelTrainingSpeech()
     emit('complete')
@@ -120,6 +128,19 @@ function formatBody(text: string): string {
         </ul>
       </template>
 
+      <template v-else-if="current.type === 'practice'">
+        <h3 class="training-step-title">{{ current.title }}</h3>
+        <p v-if="current.body" class="training-step-body">{{ formatBody(current.body) }}</p>
+        <ul v-if="current.tips?.length" class="training-tips">
+          <li v-for="(tip, i) in current.tips" :key="i">{{ tip }}</li>
+        </ul>
+        <TrainingPracticePanel
+          v-if="current.practiceId"
+          :practice-id="current.practiceId"
+          @ready="onPracticeReady"
+        />
+      </template>
+
       <template v-else-if="current.type === 'interactive'">
         <h3 class="training-step-title">{{ current.title }}</h3>
         <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
@@ -176,7 +197,7 @@ function formatBody(text: string): string {
       <button
         type="button"
         class="btn primary"
-        :disabled="busy || (current?.type === 'quiz' && !quizSubmitted)"
+        :disabled="busy || (current?.type === 'quiz' && !quizSubmitted) || (current?.type === 'practice' && !practiceReady)"
         @click="next"
       >
         {{ isLast ? 'Finish lesson' : 'Continue' }}
