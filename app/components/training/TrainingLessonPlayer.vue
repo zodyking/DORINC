@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
+import TrainingIcon from './TrainingIcon.vue'
 import TrainingUiPreview from './TrainingUiPreview.vue'
 import TrainingPracticePanel from './practice/TrainingPracticePanel.vue'
 import {
@@ -112,8 +113,8 @@ function formatBody(text: string): string {
 
     <div v-if="current" class="training-player-body">
       <template v-if="current.type === 'welcome' || current.type === 'complete'">
-        <div class="training-card-icon" style="width:56px;height:56px;font-size:1.75rem;">
-          {{ current.icon === 'mic' ? '🎙️' : current.icon === 'camera' ? '📷' : current.icon === 'compass' ? '🧭' : '✓' }}
+        <div class="training-card-icon" style="width:56px;height:56px;">
+          <TrainingIcon :name="current.type === 'complete' ? 'check' : (current.icon || 'book')" :size="28" />
         </div>
         <h3 class="training-step-title">{{ current.title }}</h3>
         <p v-if="current.subtitle" class="training-step-sub">{{ current.subtitle }}</p>
@@ -145,6 +146,27 @@ function formatBody(text: string): string {
         <h3 class="training-step-title">{{ current.title }}</h3>
         <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
         <TrainingUiPreview v-if="current.demo" :preview="current.demo" />
+        <div v-if="current.callouts?.length" class="training-callouts">
+          <p v-for="(c, i) in current.callouts" :key="i" class="training-callout">
+            <span><b>{{ c.label }}</b><template v-if="c.detail"> — {{ c.detail }}</template></span>
+          </p>
+        </div>
+      </template>
+
+      <!-- Role-by-role pipeline (the workflow course) -->
+      <template v-else-if="current.type === 'flow'">
+        <h3 class="training-step-title">{{ current.title }}</h3>
+        <p v-if="current.body" class="training-step-body">{{ formatBody(current.body) }}</p>
+        <div class="training-flow">
+          <div v-for="(s, i) in current.stages ?? []" :key="i" class="training-flow-stage">
+            <div class="training-flow-rail"><i /><span /></div>
+            <div class="training-flow-copy">
+              <span class="training-flow-role">{{ s.role }}</span>
+              <p class="training-flow-action">{{ s.action }}</p>
+              <p class="training-flow-result">{{ s.result }}</p>
+            </div>
+          </div>
+        </div>
       </template>
 
       <template v-else-if="current.type === 'quiz'">

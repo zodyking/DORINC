@@ -40,14 +40,21 @@ const { data: catalogData } = useClientFetch<{ items: Array<{
   lessonCount: number
 }> }>('/api/training/modules')
 
-const tab = ref<'my' | 'library' | 'assignments'>('my')
+const tab = ref<'my' | 'library'>('my')
 const gateLocked = computed(() => auth.trainingGate?.locked ?? false)
 
 const myAssignments = computed(() => myData.value?.items ?? [])
 const pendingAssignments = computed(() => myAssignments.value.filter(a => a.status !== 'completed'))
 const catalog = computed(() => catalogData.value?.items ?? [])
 
-const assignedModuleIds = computed(() => new Set(myAssignments.value.map(a => a.module.id)))
+/** Real progress per module so the library reflects what you have actually done. */
+const assignmentByModuleId = computed(() => {
+  const map = new Map<string, { status: string, progressPercent: number }>()
+  for (const a of myAssignments.value) {
+    map.set(a.module.id, { status: a.status, progressPercent: a.progressPercent })
+  }
+  return map
+})
 
 function openModule(slug: string) {
   armTrainingSpeechFromClick()
@@ -64,7 +71,7 @@ onMounted(() => {
 
 <template>
   <section class="page active training-shell">
-    <StaffPageHead subtitle="Interactive tutorials assigned by your admin.">
+    <StaffPageHead subtitle="Short, hands-on courses that walk you through the real interface.">
       <template #title>Training</template>
     </StaffPageHead>
 
@@ -80,12 +87,12 @@ onMounted(() => {
       </p>
     </div>
 
-    <div v-if="canManage" class="wizbar" style="margin-bottom:4px;">
+    <div class="wizbar" style="margin-bottom:4px;">
       <button type="button" class="btn sm" :class="{ primary: tab === 'my' }" @click="tab = 'my'">My training</button>
-      <button type="button" class="btn sm" :class="{ primary: tab === 'library' }" @click="tab = 'library'">Module library</button>
+      <button type="button" class="btn sm" :class="{ primary: tab === 'library' }" @click="tab = 'library'">All courses</button>
     </div>
 
-    <div v-if="tab === 'my' || !canManage">
+    <div v-if="tab === 'my'">
       <div v-if="myAssignments.length" class="training-grid">
         <TrainingModuleCard
           v-for="row in myAssignments"
@@ -104,13 +111,15 @@ onMounted(() => {
         />
       </div>
       <div v-else class="cp-state">
-        No training assigned yet. Your administrator can assign modules from your user profile.
+        Nothing assigned to you yet — open <b>All courses</b> to start any course on your own.
       </div>
     </div>
 
-    <div v-else-if="tab === 'library' && canManage">
+    <div v-else>
       <p class="help" style="margin:0 0 14px;">
-        Modules are shared across account types. Assign them per user from the Users page or below.
+        {{ canManage
+          ? 'Every course, open to all staff. Assign one to a user from their profile to make it required.'
+          : 'Every course is open — work through any of them whenever you want.' }}
       </p>
       <div class="training-grid">
         <TrainingModuleCard
@@ -121,10 +130,12 @@ onMounted(() => {
           :category="mod.category"
           :icon="mod.icon"
           :estimated-minutes="mod.estimatedMinutes"
-          :progress-percent="assignedModuleIds.has(mod.id) ? 50 : 0"
-          :assigned="assignedModuleIds.has(mod.id)"
+          :progress-percent="assignmentByModuleId.get(mod.id)?.progressPercent ?? 0"
+          :status="assignmentByModuleId.get(mod.id)?.status ?? null"
+          :assigned="assignmentByModuleId.has(mod.id)"
           :lesson-count="mod.lessonCount"
           @start="openModule(mod.slug)"
+          @continue="openModule(mod.slug)"
         />
       </div>
     </div>

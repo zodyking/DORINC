@@ -1,3 +1,17 @@
+export interface TrainingCallout {
+  label: string
+  detail?: string
+}
+
+export interface TrainingFlowStage {
+  /** Who performs this stage, e.g. "Mechanic". */
+  role: string
+  /** What they do. */
+  action: string
+  /** What the system produces afterwards. */
+  result: string
+}
+
 export interface TrainingLessonStep {
   type: string
   title?: string
@@ -7,6 +21,10 @@ export interface TrainingLessonStep {
   tips?: string[]
   demo?: string
   practiceId?: string
+  /** Numbered labels pointing at parts of the screen shown above. */
+  callouts?: TrainingCallout[]
+  /** Role-by-role pipeline for `flow` steps. */
+  stages?: TrainingFlowStage[]
   question?: string
   options?: string[]
   correctIndex?: number
@@ -35,14 +53,265 @@ export interface TrainingCatalogModule {
 
 export const TRAINING_CATEGORIES: Record<string, string> = {
   general: 'Getting started',
+  workflow: 'How work flows',
   service_logs: 'Service logs',
   billing: 'Billing & invoices',
+  customers: 'Customers & portal',
   administration: 'Administration',
   communication: 'Communication',
 }
 
+/**
+ * The end-to-end job: field work becomes a paid invoice.
+ * Each stage has exactly one owner and one system result.
+ */
+const WORKFLOW_STAGES: TrainingFlowStage[] = [
+  {
+    role: 'Mechanic',
+    action: 'Uploads a service log from the field — photos of the paper sheet, or dictated line items.',
+    result: 'Service log created as Draft',
+  },
+  {
+    role: 'Mechanic',
+    action: 'Marks the log ready once the work and parts are captured.',
+    result: 'Status → Ready for review',
+  },
+  {
+    role: 'Accountant',
+    action: 'Reviews the log and confirms customer, vehicle, parts and labor.',
+    result: 'Status → In review',
+  },
+  {
+    role: 'Accountant',
+    action: 'Sends the log to an invoice — line items carry over automatically.',
+    result: 'Draft invoice linked to the log',
+  },
+  {
+    role: 'Accountant',
+    action: 'Checks pricing, tax and totals on the draft invoice.',
+    result: 'Invoice ready to approve',
+  },
+  {
+    role: 'Manager',
+    action: 'Approves the invoice when it is over the approval threshold.',
+    result: 'Status → Approved',
+  },
+  {
+    role: 'Accountant',
+    action: 'Sends the invoice. The customer gets an email with the PDF.',
+    result: 'Status → Sent',
+  },
+  {
+    role: 'Customer',
+    action: 'Opens the invoice in the portal and can request a correction.',
+    result: 'Request lands in Portal requests',
+  },
+  {
+    role: 'Accountant',
+    action: 'Records the payment when it arrives.',
+    result: 'Status → Paid, balance clears',
+  },
+]
+
 /** Default interactive training catalog — modules are role-agnostic; admins assign per user. */
 export const TRAINING_CATALOG: TrainingCatalogModule[] = [
+  // ── Flagship: how a job moves through the whole team ──────────
+  {
+    slug: 'workflow',
+    title: 'The DORINC workflow',
+    description: 'Follow one job from a mechanic’s service log to a paid invoice — and see exactly where your part fits.',
+    category: 'workflow',
+    icon: 'workflow',
+    estimatedMinutes: 14,
+    sortOrder: 5,
+    lessons: [
+      {
+        slug: 'end-to-end',
+        title: 'One job, start to finish',
+        description: 'The whole pipeline in one view.',
+        sortOrder: 10,
+        steps: [
+          {
+            type: 'welcome',
+            title: 'How work flows here',
+            subtitle: 'Field work → service log → invoice → payment',
+            body: 'Every job follows the same path. Learn the path once and you always know what to do next.',
+            icon: 'workflow',
+          },
+          {
+            type: 'flow',
+            title: 'The pipeline',
+            body: 'Each stage has one owner and one result. Nothing skips a stage.',
+            stages: WORKFLOW_STAGES,
+          },
+          {
+            type: 'content',
+            title: 'Two records, one chain',
+            body: 'A **service log** records what happened on the vehicle. An **invoice** bills for it. The invoice stays linked to the log it came from, so the evidence travels with the bill.',
+            tips: [
+              'Open an invoice and you can jump straight to its service log.',
+              'Photos on the log stay attached — you never re-upload them.',
+            ],
+          },
+          {
+            type: 'quiz',
+            title: 'Quick check',
+            question: 'What creates the draft invoice?',
+            options: [
+              'The mechanic, when uploading the log',
+              'The accountant, by sending an approved log to an invoice',
+              'The customer, from the portal',
+              'It is created automatically every night',
+            ],
+            correctIndex: 1,
+            explanation: 'The accountant reviews the log first, then sends it to an invoice. Line items carry over.',
+          },
+          {
+            type: 'complete',
+            title: 'You have the map',
+            body: 'Next: walk each stage in the real interface.',
+          },
+        ],
+      },
+      {
+        slug: 'mechanic-stage',
+        title: 'Stage 1 — Mechanic uploads the log',
+        description: 'Capture the work in the field.',
+        sortOrder: 20,
+        steps: [
+          {
+            type: 'content',
+            title: 'Your job: capture the work',
+            body: 'You do not price anything. Record what you did, what parts you used, and which vehicle it was.',
+          },
+          {
+            type: 'interactive',
+            title: 'Start a service log',
+            body: 'Service Logs → New service log. Pick the customer, then the vehicle.',
+            demo: 'service-log-wizard',
+            callouts: [
+              { label: 'Customer then vehicle', detail: 'Vehicles are filtered to the customer you picked.' },
+              { label: 'Service date', detail: 'The day the work happened, not today.' },
+            ],
+          },
+          {
+            type: 'content',
+            title: 'Two ways to capture',
+            body: 'Photograph the paper sheet, or dictate line items with your voice. Use whichever is faster — the voice and photo courses drill each one.',
+            tips: ['Sheet photos win when the paper log is already filled in.', 'Voice wins when you are still at the vehicle.'],
+          },
+          {
+            type: 'interactive',
+            title: 'Hand it off',
+            body: 'When the work is captured, mark the log ready. It moves to the accountant’s review queue.',
+            demo: 'service-log-status',
+            callouts: [
+              { label: 'Ready for review', detail: 'This is your hand-off. You are done unless someone asks for more detail.' },
+            ],
+          },
+          {
+            type: 'checklist',
+            title: 'Your checklist',
+            items: [
+              { label: 'Right customer and vehicle', detail: 'A wrong unit becomes a wrong invoice later.' },
+              { label: 'Every part and labor line captured', detail: 'Photos or voice — do not leave gaps.' },
+              { label: 'Marked ready for review', detail: 'Otherwise it sits as a draft and nobody sees it.' },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'accountant-stage',
+        title: 'Stage 2 — Accountant builds the invoice',
+        description: 'Turn the log into a bill.',
+        sortOrder: 30,
+        steps: [
+          {
+            type: 'content',
+            title: 'Your job: verify, then bill',
+            body: 'Check the log against the vehicle and customer, then send it to an invoice. Pricing happens on the invoice, not the log.',
+          },
+          {
+            type: 'interactive',
+            title: 'Send to invoice',
+            body: 'From the reviewed log, choose Send to invoice. A draft invoice is created and stays linked to the log.',
+            demo: 'send-to-invoice',
+            callouts: [
+              { label: 'Lines carry over', detail: 'Parts and labor from the log become invoice line items.' },
+              { label: 'Link kept', detail: 'The invoice always points back to this log.' },
+            ],
+          },
+          {
+            type: 'interactive',
+            title: 'Check the money',
+            body: 'Confirm quantities, rates and tax. Totals recalculate from the lines every time you save.',
+            demo: 'invoice-totals',
+            callouts: [
+              { label: 'Totals are server-side', detail: 'You cannot type a total — it is always computed from the lines.' },
+              { label: 'Tax exempt', detail: 'Exempt customers show the waived tax crossed out.' },
+            ],
+          },
+          {
+            type: 'checklist',
+            title: 'Your checklist',
+            items: [
+              { label: 'Customer, vehicle and date match the log' },
+              { label: 'Every line has a quantity and a price' },
+              { label: 'Tax looks right for this customer' },
+              { label: 'Sent for approval if it is over the threshold' },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'customer-stage',
+        title: 'Stage 3 — The customer gets it',
+        description: 'Send, then get paid.',
+        sortOrder: 40,
+        steps: [
+          {
+            type: 'interactive',
+            title: 'Send the invoice',
+            body: 'Sending emails the customer a PDF and moves the invoice to Sent.',
+            demo: 'invoice-send',
+            callouts: [
+              { label: 'PDF attached', detail: 'Generated from your invoice template.' },
+              { label: 'Status → Sent', detail: 'The balance is now owed.' },
+            ],
+          },
+          {
+            type: 'interactive',
+            title: 'What the customer sees',
+            body: 'In the portal they see the invoice, its balance, and the vehicle it covers.',
+            demo: 'portal-invoice',
+            callouts: [
+              { label: 'Request a correction', detail: 'Their request appears in Portal requests for staff to review.' },
+            ],
+          },
+          {
+            type: 'content',
+            title: 'Close it out',
+            body: 'When payment arrives, record it on the invoice. The balance drops and the status becomes **Paid** once it reaches zero.',
+            tips: ['Partial payments are fine — the balance tracks what is left.'],
+          },
+          {
+            type: 'quiz',
+            title: 'Quick check',
+            question: 'A customer disputes a line. Where does their request go?',
+            options: ['Direct messages', 'Portal requests', 'The audit log', 'It emails the mechanic'],
+            correctIndex: 1,
+            explanation: 'Portal requests is the staff queue for anything a customer submits from the portal.',
+          },
+          {
+            type: 'complete',
+            title: 'Full circle',
+            body: 'You can now follow any job from the field to a paid invoice.',
+            icon: 'workflow',
+          },
+        ],
+      },
+    ],
+  },
   {
     slug: 'platform-navigation',
     title: 'Platform navigation',
@@ -564,6 +833,75 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
             type: 'complete',
             title: 'Admin training ready',
             body: 'Visit Users or Training to assign your first module.',
+          },
+        ],
+      },
+    ],
+  },
+
+  // ── What the other side of the app looks like ─────────────────
+  {
+    slug: 'customer-portal',
+    title: 'The customer portal',
+    description: 'What customers can see and do — and how their requests reach your queue.',
+    category: 'customers',
+    icon: 'portal',
+    estimatedMinutes: 8,
+    sortOrder: 85,
+    lessons: [
+      {
+        slug: 'portal-and-requests',
+        title: 'Their side of the app',
+        description: 'Read-only for them, a queue for you.',
+        sortOrder: 10,
+        steps: [
+          {
+            type: 'welcome',
+            title: 'The customer’s view',
+            subtitle: 'They read. You decide.',
+            body: 'Customers get a portal for their own records. Knowing what they see stops a lot of phone calls.',
+            icon: 'portal',
+          },
+          {
+            type: 'interactive',
+            title: 'What they see',
+            body: 'Their own invoices, vehicles and service history. Nothing else, and never your drafts.',
+            demo: 'portal-invoice',
+            callouts: [
+              { label: 'Sent and paid only', detail: 'Drafts stay internal until you send them.' },
+            ],
+          },
+          {
+            type: 'content',
+            title: 'Requests, not edits',
+            body: 'Customers cannot change records. They submit a **request** and staff approve or reject it, so every change stays reviewable.',
+          },
+          {
+            type: 'interactive',
+            title: 'Where requests land',
+            body: 'Portal requests is the staff queue for corrections, new vehicles and service requests.',
+            demo: 'portal-requests',
+            callouts: [
+              { label: 'Approve or reject', detail: 'The customer is notified either way.' },
+            ],
+          },
+          {
+            type: 'quiz',
+            title: 'Quick check',
+            question: 'A customer says a vehicle’s unit number is wrong. What happens?',
+            options: [
+              'They edit the vehicle themselves',
+              'They submit a change request for staff to review',
+              'Nothing — only mechanics can report it',
+              'The invoice is deleted',
+            ],
+            correctIndex: 1,
+            explanation: 'Portal users request changes; staff approve or reject them from Portal requests.',
+          },
+          {
+            type: 'complete',
+            title: 'Portal covered',
+            body: 'Customers read and request. Staff decide.',
           },
         ],
       },

@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import TrainingIcon from './TrainingIcon.vue'
 import {
   trainingCategory,
-  trainingModuleIcon,
   trainingProgressLabel,
   TRAINING_STATUS_LABELS,
   TRAINING_STATUS_PILLS,
@@ -28,7 +28,7 @@ defineEmits<{
 <template>
   <article class="training-card">
     <div class="training-card-head">
-      <div class="training-card-icon">{{ trainingModuleIcon(icon) }}</div>
+      <div class="training-card-icon"><TrainingIcon :name="icon" /></div>
       <div>
         <div class="training-card-meta">{{ trainingCategory(category) }} · {{ estimatedMinutes }} min</div>
         <h3>{{ title }}</h3>
@@ -54,7 +54,7 @@ defineEmits<{
           class="btn primary sm"
           @click="$emit(assigned && progressPercent > 0 && progressPercent < 100 ? 'continue' : 'start')"
         >
-          {{ !assigned ? 'Preview' : progressPercent >= 100 ? 'Review' : progressPercent > 0 ? 'Continue' : 'Start' }}
+          {{ progressPercent >= 100 ? 'Review' : progressPercent > 0 ? 'Continue' : 'Start' }}
         </button>
       </slot>
     </div>
