@@ -3,6 +3,7 @@
   "short_name": "DORINC",
   "description": "Fleet billing, service logs, and customer portal for DORINC.",
   "start_url": "/",
+  "id": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

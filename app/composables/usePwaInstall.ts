@@ -6,6 +6,7 @@ import {
   isPwaStandaloneMode,
   markPwaInstalledFlag,
   pwaInstallState,
+  refreshPwaInstallState,
   subscribePwaInstall,
 } from '~/utils/pwa-install-state'
 
@@ -112,6 +113,7 @@ export function usePwaInstall() {
     }
 
     const unsubscribe = subscribePwaInstall(syncFromSharedState)
+    void refreshPwaInstallState().then(() => syncFromSharedState())
     nextTick(revealBanner)
 
     onBeforeUnmount(unsubscribe)

@@ -1,3 +1,5 @@
+import { detectInstalledFromSignals } from '#shared/pwa-install-detect'
+
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed', platform: string }>
@@ -28,6 +30,12 @@ export function markPwaInstalledFlag(): void {
   pwaInstallState.installed = true
 }
 
+export function clearPwaInstalledFlag(): void {
+  if (!import.meta.client) return
+  localStorage.removeItem(PWA_INSTALLED_KEY)
+  pwaInstallState.installed = false
+}
+
 export function subscribePwaInstall(listener: () => void): () => void {
   pwaInstallState.listeners.add(listener)
   return () => pwaInstallState.listeners.delete(listener)
@@ -41,6 +49,55 @@ export function isPwaStandaloneMode(): boolean {
   if (!import.meta.client) return false
   const nav = window.navigator as Navigator & { standalone?: boolean }
   return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
+}
+
+/** True only when the app is actually running as an installed PWA window. */
+export function isPwaRunningInstalled(): boolean {
+  return isPwaStandaloneMode()
+}
+
+export async function detectPwaInstalledOnDevice(): Promise<boolean> {
+  if (!import.meta.client) return false
+
+  const nav = window.navigator as Navigator & { standalone?: boolean }
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
+  const getInstalledRelatedApps = (navigator as Navigator & {
+    getInstalledRelatedApps?: () => Promise<Array<{ platform?: string }>>
+  }).getInstalledRelatedApps
+
+  if (typeof getInstalledRelatedApps !== 'function') {
+    return detectInstalledFromSignals({
+      standalone,
+      relatedApps: null,
+      hasRelatedAppsApi: false,
+    })
+  }
+
+  try {
+    const relatedApps = await getInstalledRelatedApps()
+    return detectInstalledFromSignals({
+      standalone,
+      relatedApps,
+      hasRelatedAppsApi: true,
+    })
+  }
+  catch {
+    return detectInstalledFromSignals({
+      standalone,
+      relatedApps: null,
+      hasRelatedAppsApi: true,
+    })
+  }
+}
+
+/** Sync shared install state from real device signals (not stale localStorage). */
+export async function refreshPwaInstallState(): Promise<boolean> {
+  const installed = await detectPwaInstalledOnDevice()
+  pwaInstallState.installed = installed
+  if (installed) markPwaInstalledFlag()
+  else clearPwaInstalledFlag()
+  notifyPwaInstallListeners()
+  return installed
 }
 
 export function detectPwaDeviceKind(): 'desktop' | 'mobile' {

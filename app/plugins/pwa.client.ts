@@ -1,19 +1,21 @@
 import type { BeforeInstallPromptEvent } from '~/utils/pwa-install-state'
 import {
+  clearPwaInstalledFlag,
   isPwaStandaloneMode,
   markPwaInstalledFlag,
   notifyPwaInstallListeners,
   pwaInstallState,
-  readPwaInstalledFlag,
+  refreshPwaInstallState,
 } from '~/utils/pwa-install-state'
 
 const SW_VERSION = 'v5'
 
 export default defineNuxtPlugin(() => {
-  pwaInstallState.installed = readPwaInstalledFlag() || isPwaStandaloneMode()
+  pwaInstallState.installed = isPwaStandaloneMode()
+  void refreshPwaInstallState()
 
   window.addEventListener('beforeinstallprompt', (event) => {
-    if (pwaInstallState.installed) return
+    clearPwaInstalledFlag()
     event.preventDefault()
     pwaInstallState.deferredPrompt = event as BeforeInstallPromptEvent
     notifyPwaInstallListeners()
