@@ -301,7 +301,7 @@
             <tr><td>Parts amount</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
             <tr><td>Labor amount</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
             <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
-            <tr><td>Sales tax@if(!empty($totals['taxExempt'])) (tax exempt)@endif</td><td>
+            <tr><td>Sales tax{{ !empty($totals['taxExempt']) ? ' (tax exempt)' : '' }}</td><td>
               @if(!empty($totals['taxExempt']) && !empty($totals['waivedTax']))
                 <span style="text-decoration:line-through;">{{ $totals['waivedTax'] }}</span>
               @else

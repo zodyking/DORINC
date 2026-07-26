@@ -323,7 +323,7 @@
               <tr><td>Parts</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
               <tr><td>Labor</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
               <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
-              <tr><td>Tax@if(!empty($totals['taxExempt'])) (tax exempt)@endif</td><td>
+              <tr><td>Tax{{ !empty($totals['taxExempt']) ? ' (tax exempt)' : '' }}</td><td>
                 @if(!empty($totals['taxExempt']) && !empty($totals['waivedTax']))
                   <span style="text-decoration:line-through;">{{ $totals['waivedTax'] }}</span>
                 @else
