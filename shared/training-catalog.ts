@@ -790,17 +790,18 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
           },
           {
             type: 'content',
-            title: 'Always reference the record',
-            body: 'Say **which invoice or service log** you mean. "The Acme one" costs the next person five minutes of searching; "INV-000318" costs them nothing.',
+            title: 'Attach records by typing',
+            body: 'You do not hunt for an attach button. In the message box, **type the word** invoice, customer, vehicle, or service log — a picker opens and the record you choose becomes a link.',
             tips: [
-              'Reference the number in the text and attach the record itself.',
-              'Attached references are clickable — the reader jumps straight to it.',
+              'The composer shows this hint: type invoice, customer, vehicle, or service log to attach links.',
+              'The chosen record becomes a clickable link, so the reader jumps straight to it.',
+              '"The Acme one" costs the next person five minutes; INV-000318 costs them nothing.',
             ],
           },
           {
             type: 'practice',
             title: 'Attach the record',
-            body: 'You are asking a coworker about an invoice. Attach it so they can open it.',
+            body: 'Type invoice in the message box, then pick INV-000318 from the picker that opens.',
             practiceId: 'msg-attach-record',
           },
           {
@@ -808,7 +809,7 @@ export const TRAINING_CATALOG: TrainingCatalogModule[] = [
             title: 'A message worth reading',
             items: [
               { label: 'Right channel', detail: 'Team for internal, Email for the customer.' },
-              { label: 'Record referenced', detail: 'Number in the text, record attached.' },
+              { label: 'Record attached', detail: 'Type invoice, customer, vehicle or service log and pick it.' },
               { label: 'Ask something specific', detail: '"Can you approve INV-000318?" beats "any update?"' },
             ],
           },
