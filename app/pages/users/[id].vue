@@ -535,6 +535,18 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
               <dd>{{ new Date(user.createdAt).toLocaleDateString() }}</dd>
             </dl>
           </div>
+          <div v-if="canManage && user && user.accountType !== 'customer'" class="card">
+            <div class="chead"><h3>Training</h3></div>
+            <div class="cbody">
+              <p class="help" style="margin-top:0;">
+                Assign interactive modules. Locked assignments restrict the user to Training until complete.
+              </p>
+              <TrainingAssignPanel
+                :user-id="user.id"
+                :user-name="user.name"
+              />
+            </div>
+          </div>
           <div class="card">
             <div class="chead"><h3>Recent activity</h3></div>
             <div v-if="activity.length" class="timeline">

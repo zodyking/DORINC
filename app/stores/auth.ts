@@ -13,6 +13,14 @@ export interface AuthUser {
   mustChangePassword?: boolean
 }
 
+export interface TrainingGateState {
+  locked: boolean
+  assignmentId: string | null
+  moduleId: string | null
+  moduleSlug: string | null
+  moduleTitle: string | null
+}
+
 export type StaffLoginPending = { needsLocation: true, loginToken: string }
 export type StaffLoginResult = AuthUser | StaffLoginPending
 
@@ -20,6 +28,7 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as AuthUser | null,
     permissions: [] as string[],
+    trainingGate: null as TrainingGateState | null,
     loaded: false,
     sessionExpiring: false,
   }),
@@ -43,14 +52,20 @@ export const useAuthStore = defineStore('auth', {
       // On SSR, plain $fetch does not forward the incoming request's cookies
       const fetcher = import.meta.server ? useRequestFetch() : $fetch
       try {
-        const res = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
+        const res = await fetcher<{
+          user: AuthUser
+          permissions: string[]
+          trainingGate?: TrainingGateState
+        }>('/api/auth/me')
         this.user = res.user
         this.permissions = res.permissions
+        this.trainingGate = res.trainingGate ?? null
         return true
       }
       catch {
         this.user = null
         this.permissions = []
+        this.trainingGate = null
         return false
       }
       finally {

@@ -379,6 +379,13 @@
       "when": 1784254800000,
       "tag": "0053_app_file_document_category",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1784258400000,
+      "tag": "0056_training",
+      "breakpoints": true
     }
   ]
 }

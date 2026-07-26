@@ -103,6 +103,11 @@ export const PERMISSIONS = {
 
   // Record reassignment (fix mis-linked imports / transfers)
   'records.reassign.all': 'Reassign invoices, vehicles, and service logs between customers',
+
+  // Training
+  'training.read.all': 'View training modules and staff progress',
+  'training.manage.all': 'Assign training modules to staff',
+  'training.complete.own': 'Complete assigned training modules',
 } as const
 
 export type PermissionKey = keyof typeof PERMISSIONS
@@ -145,6 +150,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'deletion_requests.submit.all',
     'records.reassign.all',
     'messages.read.own', 'messages.send.own',
+    'training.read.all', 'training.manage.all', 'training.complete.own',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',
@@ -163,6 +169,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'deletion_requests.submit.all',
     'records.reassign.all',
     'messages.read.own', 'messages.send.own',
+    'training.read.all', 'training.manage.all', 'training.complete.own',
   ],
   mechanic: [
     'customers.read.all',
@@ -173,6 +180,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'ai.help.all',
     'deletion_requests.submit.all',
     'messages.read.own', 'messages.send.own',
+    'training.complete.own',
   ],
   viewer: [
     'customers.read.all',
@@ -184,6 +192,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'reports.read.all',
     'ai.help.all',
     'messages.read.own', 'messages.send.own',
+    'training.complete.own',
   ],
   external_auditor: [
     'customers.read.all',

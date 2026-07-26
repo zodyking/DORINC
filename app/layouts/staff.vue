@@ -58,9 +58,17 @@ const roleLabel = computed(() =>
 const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
 const isSuperAdmin = computed(() => auth.can('system.admin.all'))
+const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
 
 // Counts become live once list APIs land (Phase 1)
 const nav = computed<NavSection[]>(() => {
+  if (trainingLocked.value) {
+    return [{
+      label: 'Training',
+      items: [{ label: 'Training', to: '/training', icon: 'training' }],
+    }]
+  }
+
   const sections: NavSection[] = [
     {
       label: 'Workspace',
@@ -70,6 +78,7 @@ const nav = computed<NavSection[]>(() => {
         { label: 'Customers', to: '/customers', icon: 'customers', permission: 'customers.read.all' },
         { label: 'Vehicles', to: '/vehicles', icon: 'vehicles', permission: 'vehicles.read.all' },
         { label: 'Service Logs', to: '/service-logs', icon: 'service-logs', permission: ['service_logs.read.all', 'service_logs.read.own'] },
+        { label: 'Training', to: '/training', icon: 'training', permission: ['training.complete.own', 'training.read.all'] },
         { label: 'Portal Requests', to: '/portal-requests', icon: 'portal-requests', permission: 'portal_requests.review.all' },
         { label: 'Deletion Requests', to: '/deletion-requests', icon: 'deletion-requests', permission: 'deletion_requests.review.all' },
         { label: 'Catalog', to: '/catalog', icon: 'catalog', permission: 'catalog.read.all' },

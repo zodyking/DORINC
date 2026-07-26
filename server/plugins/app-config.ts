@@ -4,6 +4,7 @@ import { useDb } from '../db/client'
 import { applyPendingMigrations } from '../db/migrate-runtime'
 import { syncNumberSequences } from '../db/sync-sequences'
 import { syncAuthRegistry } from '../db/seed'
+import { syncTrainingCatalog } from '../services/training.service'
 import { refreshAppConfigCache } from '../services/app-config.service'
 import { refreshImapConfigCache } from '../services/imap-config.service'
 import { refreshAccessGateCache } from '../services/access-gate.service'
@@ -30,6 +31,14 @@ export default defineNitroPlugin(async () => {
   }
   catch (err) {
     console.warn(`[seed] auth registry sync skipped: ${(err as Error).message}`)
+  }
+
+  try {
+    await syncTrainingCatalog(db)
+    console.log('[seed] training catalog synced on boot')
+  }
+  catch (err) {
+    console.warn(`[seed] training catalog sync skipped: ${(err as Error).message}`)
   }
 
   try {

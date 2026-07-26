@@ -1,3 +1,5 @@
+import { isTrainingPath } from './training-ui'
+
 /** Shared staff-route guard — used by middleware and staff layout. */
 export async function guardStaffRoute(): Promise<void> {
   const auth = useAuthStore()
@@ -11,10 +13,17 @@ export async function guardStaffRoute(): Promise<void> {
     return navigateTo('/portal')
   }
 
+  const route = useRoute()
+
   if (auth.user?.mustChangePassword) {
-    const route = useRoute()
     if (route.path !== '/account') {
       return navigateTo('/account?password=required')
     }
+    return
+  }
+
+  if (auth.trainingGate?.locked && !isTrainingPath(route.path)) {
+    const slug = auth.trainingGate.moduleSlug
+    return navigateTo(slug ? `/training/learn/${slug}` : '/training')
   }
 }

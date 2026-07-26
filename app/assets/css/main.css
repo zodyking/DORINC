@@ -8,3 +8,5 @@
 
 /* Intentional mobile-optimization overrides (documented per rule) */
 @import './overrides.css';
+
+@import './training.css';
