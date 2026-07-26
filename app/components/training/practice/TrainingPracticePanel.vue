@@ -2,6 +2,7 @@
 import TrainingServiceLogPractice from './TrainingServiceLogPractice.vue'
 import TrainingInvoicePractice from './TrainingInvoicePractice.vue'
 import TrainingNavigationPractice from './TrainingNavigationPractice.vue'
+import TrainingMessagesPractice from './TrainingMessagesPractice.vue'
 
 defineProps<{
   practiceId: string
@@ -25,6 +26,11 @@ const emit = defineEmits<{
   />
   <TrainingNavigationPractice
     v-else-if="practiceId.startsWith('nav-')"
+    :practice-id="practiceId"
+    @ready="emit('ready', $event)"
+  />
+  <TrainingMessagesPractice
+    v-else-if="practiceId.startsWith('msg-')"
     :practice-id="practiceId"
     @ready="emit('ready', $event)"
   />
