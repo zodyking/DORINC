@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
 import TrainingLessonPlayer from '~/components/training/TrainingLessonPlayer.vue'
+import { provideTrainingPracticeSession } from '~/composables/useTrainingPracticeSession'
 
 definePageMeta({
   layout: 'staff',
@@ -10,6 +11,12 @@ definePageMeta({
 const route = useRoute()
 const auth = useAuthStore()
 const slug = computed(() => String(route.params.slug || ''))
+const practiceSession = provideTrainingPracticeSession()
+
+watch(slug, () => {
+  practiceSession.resetServiceLog()
+  practiceSession.resetInvoice()
+}, { immediate: true })
 
 interface LessonRow {
   id: string
@@ -102,7 +109,7 @@ function goHub() {
 </script>
 
 <template>
-  <section class="page active">
+  <section class="page active training-learn-page">
     <div v-if="!moduleData && !error" class="cp-state">Loading training…</div>
     <div v-else-if="error" class="cp-state">Could not load this module.</div>
 
@@ -122,16 +129,17 @@ function goHub() {
         </button>
       </div>
 
-      <TrainingLessonPlayer
-        v-else-if="currentLesson"
-        :module-title="moduleData.title"
-        :lesson-title="currentLesson.title"
-        :steps="currentLesson.steps"
-        :initial-step="initialStep"
-        :busy="busy"
-        @step-change="onStepChange"
-        @complete="onLessonComplete"
-      />
+      <div v-else-if="currentLesson" class="training-learn-wrap">
+        <TrainingLessonPlayer
+          :module-title="moduleData.title"
+          :lesson-title="currentLesson.title"
+          :steps="currentLesson.steps"
+          :initial-step="initialStep"
+          :busy="busy"
+          @step-change="onStepChange"
+          @complete="onLessonComplete"
+        />
+      </div>
 
       <div v-if="lessons.length > 1 && !done" class="help" style="text-align:center;margin-top:12px;">
         Lesson {{ lessonIndex + 1 }} of {{ lessons.length }}

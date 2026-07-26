@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { TrainingLessonStep } from '#shared/training-catalog'
-import TrainingDemoPanel from './TrainingDemoPanel.vue'
+import TrainingUiPreview from './TrainingUiPreview.vue'
+import TrainingPracticePanel from './practice/TrainingPracticePanel.vue'
+import {
+  cancelTrainingSpeech,
+  speakTrainingStep,
+  stripTrainingMarkdown,
+  unlockTrainingSpeech,
+} from '~/utils/training-speech'
 
 const props = defineProps<{
   moduleTitle: string
@@ -18,20 +25,42 @@ const emit = defineEmits<{
 const stepIndex = ref(props.initialStep ?? 0)
 const quizAnswer = ref<number | null>(null)
 const quizSubmitted = ref(false)
+const practiceReady = ref(false)
 
 const current = computed(() => props.steps[stepIndex.value])
 const isFirst = computed(() => stepIndex.value <= 0)
 const isLast = computed(() => stepIndex.value >= props.steps.length - 1)
 
+function narrateStep() {
+  nextTick(() => speakTrainingStep(current.value, true))
+}
+
 watch(stepIndex, (idx) => {
   quizAnswer.value = null
   quizSubmitted.value = false
+  practiceReady.value = false
   emit('stepChange', idx)
+  narrateStep()
+})
+
+function onPracticeReady(ready: boolean) {
+  practiceReady.value = ready
+}
+
+onMounted(() => {
+  narrateStep()
+})
+
+onBeforeUnmount(() => {
+  cancelTrainingSpeech()
 })
 
 function next() {
+  unlockTrainingSpeech({ silent: true })
   if (current.value?.type === 'quiz' && !quizSubmitted.value) return
+  if (current.value?.type === 'practice' && !practiceReady.value) return
   if (isLast.value) {
+    cancelTrainingSpeech()
     emit('complete')
     return
   }
@@ -39,12 +68,16 @@ function next() {
 }
 
 function back() {
+  unlockTrainingSpeech({ silent: true })
   if (!isFirst.value) stepIndex.value -= 1
 }
 
 function submitQuiz() {
   if (quizAnswer.value == null) return
   quizSubmitted.value = true
+  if (current.value?.explanation) {
+    speakTrainingStep({ ...current.value, body: current.value.explanation, type: 'content' }, true)
+  }
 }
 
 function quizOptionClass(i: number): string {
@@ -55,6 +88,10 @@ function quizOptionClass(i: number): string {
   if (correct) return 'training-quiz-opt correct'
   if (quizAnswer.value === i) return 'training-quiz-opt wrong'
   return 'training-quiz-opt'
+}
+
+function formatBody(text: string): string {
+  return stripTrainingMarkdown(text)
 }
 </script>
 
@@ -80,21 +117,34 @@ function quizOptionClass(i: number): string {
         </div>
         <h3 class="training-step-title">{{ current.title }}</h3>
         <p v-if="current.subtitle" class="training-step-sub">{{ current.subtitle }}</p>
-        <p class="training-step-body">{{ current.body }}</p>
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
       </template>
 
       <template v-else-if="current.type === 'content'">
         <h3 class="training-step-title">{{ current.title }}</h3>
-        <p class="training-step-body">{{ current.body }}</p>
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
         <ul v-if="current.tips?.length" class="training-tips">
           <li v-for="(tip, i) in current.tips" :key="i">{{ tip }}</li>
         </ul>
       </template>
 
+      <template v-else-if="current.type === 'practice'">
+        <h3 class="training-step-title">{{ current.title }}</h3>
+        <p v-if="current.body" class="training-step-body">{{ formatBody(current.body) }}</p>
+        <ul v-if="current.tips?.length" class="training-tips">
+          <li v-for="(tip, i) in current.tips" :key="i">{{ tip }}</li>
+        </ul>
+        <TrainingPracticePanel
+          v-if="current.practiceId"
+          :practice-id="current.practiceId"
+          @ready="onPracticeReady"
+        />
+      </template>
+
       <template v-else-if="current.type === 'interactive'">
         <h3 class="training-step-title">{{ current.title }}</h3>
-        <p class="training-step-body">{{ current.body }}</p>
-        <TrainingDemoPanel v-if="current.demo" :demo="current.demo" />
+        <p class="training-step-body">{{ formatBody(current.body ?? '') }}</p>
+        <TrainingUiPreview v-if="current.demo" :preview="current.demo" />
       </template>
 
       <template v-else-if="current.type === 'quiz'">
@@ -147,7 +197,7 @@ function quizOptionClass(i: number): string {
       <button
         type="button"
         class="btn primary"
-        :disabled="busy || (current?.type === 'quiz' && !quizSubmitted)"
+        :disabled="busy || (current?.type === 'quiz' && !quizSubmitted) || (current?.type === 'practice' && !practiceReady)"
         @click="next"
       >
         {{ isLast ? 'Finish lesson' : 'Continue' }}

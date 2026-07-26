@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TrainingModuleCard from '~/components/training/TrainingModuleCard.vue'
+import { armTrainingSpeechFromClick } from '~/utils/training-speech'
 import { isTrainingPath } from '~/utils/training-ui'
 
 definePageMeta({
@@ -49,6 +50,7 @@ const catalog = computed(() => catalogData.value?.items ?? [])
 const assignedModuleIds = computed(() => new Set(myAssignments.value.map(a => a.module.id)))
 
 function openModule(slug: string) {
+  armTrainingSpeechFromClick()
   navigateTo(`/training/learn/${slug}`)
 }
 
