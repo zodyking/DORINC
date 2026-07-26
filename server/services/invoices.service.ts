@@ -152,7 +152,6 @@ export interface ListInvoicesFilter {
   overdue?: boolean
   customerId?: string
   vehicleId?: string
-  unit?: string
   includeArchived?: boolean
   amountMin?: string
   amountMax?: string
@@ -606,16 +605,11 @@ export async function listInvoiceLineItems(db: Db, invoiceId: string) {
     .orderBy(asc(invoiceLineItems.sortOrder), asc(invoiceLineItems.createdAt))
 }
 
-function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArchived' | 'customerId' | 'vehicleId' | 'unit' | 'q' | 'amountMin' | 'amountMax' | 'dateFrom' | 'dateTo'>) {
+function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArchived' | 'customerId' | 'vehicleId' | 'q' | 'amountMin' | 'amountMax' | 'dateFrom' | 'dateTo'>) {
   const conditions = []
   if (!filter.includeArchived) conditions.push(isNull(invoices.archivedAt))
   if (filter.customerId) conditions.push(eq(invoices.customerId, filter.customerId))
   if (filter.vehicleId) conditions.push(eq(invoices.vehicleId, filter.vehicleId))
-
-  if (filter.unit) {
-    const unitTerm = `%${filter.unit}%`
-    conditions.push(or(ilike(vehicles.busNumber, unitTerm), ilike(vehicles.unitTag, unitTerm)))
-  }
 
   if (filter.amountMin) conditions.push(gte(invoices.total, filter.amountMin))
   if (filter.amountMax) conditions.push(lte(invoices.total, filter.amountMax))

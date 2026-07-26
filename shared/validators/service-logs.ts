@@ -68,7 +68,6 @@ export const serviceLogListQuerySchema = z.object({
   queue: z.enum(['review']).optional(),
   customerId: uuidSchema.optional(),
   vehicleId: uuidSchema.optional(),
-  unit: z.string().trim().max(100).optional(),
   includeArchived: z.coerce.boolean().optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
