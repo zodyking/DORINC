@@ -768,3 +768,46 @@
   font-size: 1.05rem;
   line-height: 1;
 }
+
+/* ── Messages / email practice ──────────────────────────────────────── */
+.training-msg-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbff;
+}
+
+.training-msg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 11px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.training-msg-row:hover { border-color: #c7d2fe; background: #fafbff; }
+.training-msg-row.on { border-color: #6366f1; background: #eef2ff; }
+.training-msg-row b { display: block; font-size: 0.9rem; color: #0f172a; }
+.training-msg-row small { font-size: 0.78rem; color: #64748b; }
+
+.training-msg-context {
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+}
+
+.training-msg-context b { display: block; font-size: 0.9rem; color: #0f172a; }
+.training-msg-context small { font-size: 0.78rem; color: #64748b; }
+
+.training-msg-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }

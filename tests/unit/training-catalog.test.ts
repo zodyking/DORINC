@@ -94,6 +94,48 @@ describe('training catalog', () => {
     }
   })
 
+  it('routes every practice step to a panel that exists', () => {
+    // TrainingPracticePanel dispatches on these prefixes.
+    const PREFIXES = ['sl-', 'inv-', 'nav-', 'msg-']
+    for (const mod of TRAINING_CATALOG) {
+      for (const lesson of mod.lessons) {
+        for (const step of lesson.steps.filter(s => s.type === 'practice')) {
+          const id = step.practiceId ?? ''
+          expect(
+            PREFIXES.some(p => id.startsWith(p)),
+            `${mod.slug}/${lesson.slug}: unroutable practiceId "${id}"`,
+          ).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('teaches team messages and customer email hands-on', () => {
+    const dm = TRAINING_CATALOG.find(m => m.slug === 'staff-messages')
+    const email = TRAINING_CATALOG.find(m => m.slug === 'customer-email')
+    expect(dm).toBeTruthy()
+    expect(email).toBeTruthy()
+
+    // Both must be practice-driven, not just prose.
+    const practiceIds = (mod: typeof dm) => (mod?.lessons ?? [])
+      .flatMap(l => l.steps)
+      .filter(s => s.type === 'practice')
+      .map(s => s.practiceId)
+
+    expect(practiceIds(dm).length).toBeGreaterThanOrEqual(2)
+    expect(practiceIds(email).length).toBeGreaterThanOrEqual(4)
+
+    // The email course must cover reading, replying and sending.
+    const ids = practiceIds(email)
+    expect(ids).toContain('msg-open-thread')
+    expect(ids).toContain('msg-reply')
+    expect(ids).toContain('msg-pick-customer')
+    expect(ids).toContain('msg-send')
+
+    // Team course must teach referencing the record.
+    expect(practiceIds(dm)).toContain('msg-attach-record')
+  })
+
   it('ships a workflow course covering the full staff hand-off chain', () => {
     const workflow = TRAINING_CATALOG.find(m => m.slug === 'workflow')
     expect(workflow).toBeTruthy()
