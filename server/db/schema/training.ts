@@ -2,6 +2,9 @@ import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, 
 import type { TrainingLessonStep } from '../../shared/training-catalog'
 import { users } from './auth'
 
+export const TRAINING_ASSIGNMENT_STATUSES = ['assigned', 'in_progress', 'completed'] as const
+export type TrainingAssignmentStatus = (typeof TRAINING_ASSIGNMENT_STATUSES)[number]
+
 /** Reusable training modules — not tied to account type. */
 export const trainingModules = pgTable('training_modules', {
   id: uuid('id').primaryKey().defaultRandom(),

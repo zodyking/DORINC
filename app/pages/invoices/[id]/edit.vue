@@ -1093,11 +1093,8 @@ const aiPopStyle = computed(() => {
                   class="row"
                   :class="{ grand: row.grand }"
                 >
-                  <span>{{ row.label }}</span>
-                  <span>
-                    <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-                    <span v-if="row.note" class="sum-note">{{ row.note }}</span>
-                  </span>
+                  <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
+                  <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
                 </div>
               </div>
             </div>

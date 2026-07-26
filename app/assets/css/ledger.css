@@ -1151,24 +1151,11 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
 .ed-sums .row span:last-child{ font-variant-numeric:tabular-nums; color:#0f172a; font-weight:600; }
 .ed-sums .grand{ border-top:1px solid #e2e8f0; margin-top:8px; padding-top:12px; font-size:15px; font-weight:800; color:#0f172a; }
 .ed-sums .grand span:last-child{ color:#4f46e5; font-size:20px; }
-.ed-sums .sum-strike{
-  position:relative;
-  display:inline-block;
-  color:#94a3b8;
-  font-weight:500;
-  text-decoration:none;
-  line-height:1.2;
-  padding:0 1px;
-}
-.ed-sums .sum-strike::after{
-  content:'';
-  position:absolute;
-  left:0;
-  right:0;
-  top:54%;
-  border-top:1.5px solid #94a3b8;
-}
-.ed-sums .sum-note{ margin-left:8px; font-size:12px; font-weight:600; color:#64748b; text-transform:lowercase; }
+/* Tax-exempt: cross out the amount but keep the same font, size and color as
+   the other summary values so it stays aligned in the amount column. */
+.ed-sums .sum-strike{ text-decoration: line-through; }
+/* "tax exempt" sits before the amount (next to the label) — same font/size. */
+.ed-sums .sum-note{ margin-left:6px; font-weight: inherit; }
 .savebar{
   position:sticky; bottom:0; margin-top:18px;
   background:#fff; border:1px solid #e2e8f0; border-radius:14px;
