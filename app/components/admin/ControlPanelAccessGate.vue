@@ -19,7 +19,7 @@ watch(() => data.value?.settings, (s) => {
   if (!s) return
   form.enabled = s.enabled
   form.blockMode = s.blockMode
-  form.redirectUrl = s.redirectUrl
+  form.redirectUrl = ''
   form.bannedIps = [...s.bannedIps]
   form.allowedPolygon = [...s.allowedPolygon]
 }, { immediate: true })
@@ -89,7 +89,8 @@ async function save() {
       body: {
         enabled: form.enabled,
         blockMode: form.blockMode,
-        redirectUrl: form.redirectUrl,
+        // External redirect links removed — blocked visitors get internal pages.
+        redirectUrl: '',
         bannedIps: [...form.bannedIps],
         allowedPolygon: [...form.allowedPolygon],
       },
@@ -117,8 +118,9 @@ async function save() {
     <div class="cbody ag-panel">
       <p class="ag-intro">
         Capture every site visit and login on a map. When enabled you can ban IP addresses and draw an
-        allowed area — visitors and logins from banned IPs or outside the drawn area are redirected to your
-        chosen link. Super Admins are always exempt so you can never lock yourself out. Off by default.
+        allowed area — unknown visitors outside the area see a service-area notice; known IPs/devices get
+        an email verification code before sign-in. Super Admins are always exempt so you can never lock
+        yourself out. Off by default.
       </p>
 
       <div v-if="pending" class="ag-loading">Loading settings…</div>
@@ -142,10 +144,13 @@ async function save() {
               <option value="both">IP ban + geofence</option>
             </select>
           </label>
-          <label class="fld">
-            Redirect blocked visitors to
-            <input v-model="form.redirectUrl" type="url" placeholder="https://example.com/denied">
-          </label>
+          <div class="fld">
+            <span class="ag-label">Blocked visitor handling</span>
+            <p class="ag-desc">
+              Known IP/device → verify-code page. Unknown → service-area restriction page.
+              External redirect links are disabled.
+            </p>
+          </div>
         </div>
 
         <div class="ag-maphead">

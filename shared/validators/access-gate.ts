@@ -18,7 +18,10 @@ export const accessGateSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   /** Enforcement mode applied only while `enabled` is true. */
   blockMode: z.enum(ACCESS_GATE_BLOCK_MODES).default('off'),
-  /** Where blocked visitors/logins are redirected. Empty → plain 403. */
+  /**
+   * Deprecated: external redirect links are no longer used. Kept for settings
+   * compatibility; runtime always routes to internal gate pages.
+   */
   redirectUrl: z.string().trim().max(2000).default(''),
   /** Exact IP addresses that are always blocked (when blockMode includes IP). */
   bannedIps: z.array(z.string().trim().min(1).max(64)).max(1000).default([]),

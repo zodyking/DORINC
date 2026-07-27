@@ -2,6 +2,7 @@ import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
 import { logout, resolveSession } from '../../auth/auth.service'
 import { verifyPendingLoginToken } from '../../auth/pending-login'
+import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
@@ -11,6 +12,10 @@ import {
   getCachedAccessGateSettings,
   recordAccessEvent,
 } from '../../services/access-gate.service'
+import {
+  findKnownOutsideGeoIdentity,
+  quietlyIssueOutsideGeoChallenge,
+} from '../../services/outside-geo-verify.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
@@ -39,26 +44,56 @@ export default defineEventHandler(async (event) => {
   })
 
   const gate = getCachedAccessGateSettings()
+  let outsideGeofenceLogin = false
   if (gate.enabled && resolved.user.accountType !== 'super_admin') {
     const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords })
     if (decision.blocked) {
-      await logout(useDb(), sessionToken).catch(() => {})
-      await recordAccessEvent(useDb(), {
-        eventType: 'login',
-        outcome: 'blocked',
-        ipAddress,
-        userId: resolved.user.id,
-        userName: resolved.user.name,
-        userEmail: resolved.user.email,
-        userAgent: getHeader(event, 'user-agent'),
-        latitude: loginCoords.lat,
-        longitude: loginCoords.lng,
-        locationLabel,
-      }).catch(() => {})
-      throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
-        reason: 'access_blocked',
-        redirectUrl: gate.redirectUrl || null,
-      })
+      const bypass = decision.reason === 'geo_outside'
+        ? hasValidOutsideGeoBypass(event, {
+            ipAddress,
+            userAgent: getHeader(event, 'user-agent'),
+            userId: resolved.user.id,
+          })
+        : null
+      if (bypass) {
+        outsideGeofenceLogin = true
+      }
+      else {
+        await logout(useDb(), sessionToken).catch(() => {})
+        await recordAccessEvent(useDb(), {
+          eventType: 'login',
+          outcome: 'blocked',
+          ipAddress,
+          userId: resolved.user.id,
+          userName: resolved.user.name,
+          userEmail: resolved.user.email,
+          userAgent: getHeader(event, 'user-agent'),
+          latitude: loginCoords.lat,
+          longitude: loginCoords.lng,
+          locationLabel,
+        }).catch(() => {})
+
+        let redirectTo = '/auth/access-restricted'
+        if (decision.reason === 'geo_outside') {
+          const known = await findKnownOutsideGeoIdentity(useDb(), {
+            ipAddress,
+            userAgent: getHeader(event, 'user-agent'),
+          }).catch(() => null)
+          if (known) {
+            redirectTo = '/auth/verify-location?sent=1'
+            void quietlyIssueOutsideGeoChallenge(useDb(), {
+              ipAddress,
+              userAgent: getHeader(event, 'user-agent'),
+              locationLabel,
+            }).catch(() => {})
+          }
+        }
+
+        throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
+          reason: 'access_blocked',
+          redirectTo,
+        })
+      }
     }
   }
 
@@ -81,7 +116,7 @@ export default defineEventHandler(async (event) => {
     await writeAudit(event, {
       entityType: 'user',
       entityId: resolved.user.id,
-      action: 'auth.login',
+      action: outsideGeofenceLogin ? 'auth.login.outside_geofence' : 'auth.login',
       actor: {
         id: resolved.user.id,
         accountType: resolved.user.accountType,
@@ -92,6 +127,8 @@ export default defineEventHandler(async (event) => {
       afterData: {
         locationLabel,
         locationSource: 'device',
+        outsideGeofence: outsideGeofenceLogin,
+        accessDecisionReason: outsideGeofenceLogin ? 'geo_outside' : null,
       },
     })
   }

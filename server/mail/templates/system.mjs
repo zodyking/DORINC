@@ -102,6 +102,62 @@ export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, bra
   })
 }
 
+export function buildOutsideGeofenceVerificationEmail({
+  name,
+  code,
+  locationLabel,
+  ipAddress,
+  brandName,
+  appUrl,
+  brand,
+}) {
+  const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
+  const subject = 'Verify Suspicious Location Access'
+  const text = [
+    `Hi ${name},`,
+    '',
+    `Someone is trying to access ${resolvedBrand} from a suspicious location outside the allowed area.`,
+    locationLabel ? `Location: ${locationLabel}` : '',
+    ipAddress ? `IP address: ${ipAddress}` : '',
+    '',
+    `Your verification code: ${code}`,
+    '',
+    'This code expires in 15 minutes. If this was not you, contact your administrator immediately and change your password.',
+  ].filter(Boolean).join('\n')
+
+  const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
+  const verifyUrl = base ? `${base}/auth/verify-location` : undefined
+
+  return buildStyledEmail({
+    subject,
+    text,
+    eyebrow: 'Security verification',
+    headline: 'Suspicious location detected',
+    lead: `You're accessing ${resolvedBrand} from a suspicious location. Enter this verification code to confirm your identity.`,
+    highlight: {
+      label: 'Verification code',
+      value: String(code),
+      status: 'Expires in 15 minutes',
+      statusTone: 'warn',
+    },
+    details: [
+      { label: 'Recipient', value: name },
+      locationLabel ? { label: 'Location', value: locationLabel } : null,
+      ipAddress ? { label: 'IP address', value: ipAddress } : null,
+      { label: 'Expires', value: '15 minutes' },
+    ].filter(Boolean),
+    note: {
+      title: 'Was this not you?',
+      body: 'If you did not attempt to sign in, contact your administrator immediately and change your password.',
+    },
+    primaryAction: verifyUrl
+      ? { href: verifyUrl, label: 'Enter verification code' }
+      : undefined,
+    appUrl,
+    brand,
+  })
+}
+
 export function buildSmtpTestEmail({
   brandName,
   source,

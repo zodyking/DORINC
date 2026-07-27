@@ -110,8 +110,10 @@ export function auditLocationDisplay(row: Pick<AuditLogRow, 'action' | 'afterDat
   const label = after?.locationLabel?.trim()
   if (label) return label
 
-  if (row.action === 'auth.login') return '—'
-  if (row.action === 'portal.login') return auditIpDisplay(row.ipAddress)
+  if (row.action === 'auth.login' || row.action === 'auth.login.outside_geofence') return '—'
+  if (row.action === 'portal.login' || row.action === 'portal.login.outside_geofence') {
+    return auditIpDisplay(row.ipAddress)
+  }
 
   return auditIpDisplay(row.ipAddress)
 }

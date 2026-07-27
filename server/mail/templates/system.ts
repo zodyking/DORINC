@@ -2,6 +2,7 @@
 export {
   buildSignupVerificationEmail,
   buildPasswordResetEmail,
+  buildOutsideGeofenceVerificationEmail,
   buildSmtpTestEmail,
   buildPortalCredentialEmail,
   buildStaffInviteEmail,

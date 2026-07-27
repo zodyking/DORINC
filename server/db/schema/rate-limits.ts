@@ -5,6 +5,7 @@ export const RATE_LIMIT_SCOPES = [
   'verify_email',
   'password_reset',
   'credential_send',
+  'outside_geo',
   'ai',
   'upload',
   'pdf_gen',

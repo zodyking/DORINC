@@ -43,6 +43,9 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
   const { ensureAccessGateSchema } = await import('../lib/ensure-access-gate-schema.mjs')
   await ensureAccessGateSchema(usePool())
 
+  const { ensureOutsideGeoSchema } = await import('../lib/ensure-outside-geo-schema.mjs')
+  await ensureOutsideGeoSchema(usePool())
+
   const { ensureDocumentChangeRequestsSchema } = await import('../lib/ensure-document-change-requests-schema.mjs')
   await ensureDocumentChangeRequestsSchema(usePool())
 }

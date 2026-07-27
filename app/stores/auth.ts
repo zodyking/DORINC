@@ -85,13 +85,15 @@ export const useAuthStore = defineStore('auth', {
         })
       }
       catch (err: unknown) {
-        // Access gate: blocked location/IP → redirect to the admin-set link.
+        // Access gate: blocked location/IP → internal verify or restricted page only.
         const details = (err as { data?: { details?: Record<string, unknown>, data?: { details?: Record<string, unknown> } } })?.data
         const d = details?.details ?? details?.data?.details
         if (d?.reason === 'access_blocked') {
-          const redirectUrl = typeof d.redirectUrl === 'string' ? d.redirectUrl : ''
-          if (import.meta.client && redirectUrl) {
-            window.location.href = redirectUrl
+          const redirectTo = typeof d.redirectTo === 'string' && d.redirectTo.startsWith('/')
+            ? d.redirectTo
+            : '/auth/access-restricted'
+          if (import.meta.client) {
+            await navigateTo(redirectTo)
           }
         }
         throw err
@@ -127,9 +129,11 @@ export const useAuthStore = defineStore('auth', {
         const details = (err as { data?: { details?: Record<string, unknown>, data?: { details?: Record<string, unknown> } } })?.data
         const d = details?.details ?? details?.data?.details
         if (d?.reason === 'access_blocked') {
-          const redirectUrl = typeof d.redirectUrl === 'string' ? d.redirectUrl : ''
-          if (import.meta.client && redirectUrl) {
-            window.location.href = redirectUrl
+          const redirectTo = typeof d.redirectTo === 'string' && d.redirectTo.startsWith('/')
+            ? d.redirectTo
+            : '/auth/access-restricted'
+          if (import.meta.client) {
+            await navigateTo(redirectTo)
           }
         }
         throw err
