@@ -6,6 +6,11 @@ import { processAiJobs } from '../workers/handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from '../workers/handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from '../workers/handlers/retention.mjs'
 import { maybeRunImapInboxSync, processImapSyncJobs } from '../workers/handlers/imap-sync.mjs'
+import {
+  maybeEnqueueSecurityMaintenance,
+  processSecurityMaintenanceJobs,
+  runSecurityGeoBackfill,
+} from '../workers/handlers/security.mjs'
 import { touchWorkerHeartbeat } from './worker-heartbeat.mjs'
 import { reclaimStaleWorkerJobs } from './reclaim-stale-jobs.mjs'
 
@@ -72,5 +77,22 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   const imap = await processImapSyncJobs(pool)
   if (imap.processed || imap.failed) {
     console.log(`${logPrefix} imap_sync processed=${imap.processed} failed=${imap.failed}`)
+  }
+
+  // Fills in coordinates for events captured without them, so the security map
+  // is complete without the request path ever waiting on a geolocation lookup.
+  const geoBackfill = await runSecurityGeoBackfill(pool)
+  if (geoBackfill.resolved) {
+    console.log(`${logPrefix} security_geo_backfill resolved=${geoBackfill.resolved} unresolved=${geoBackfill.unresolved}`)
+  }
+
+  const securityScheduled = await maybeEnqueueSecurityMaintenance(pool)
+  if (securityScheduled) {
+    console.log(`${logPrefix} security_maintenance scheduled job enqueued`)
+  }
+
+  const security = await processSecurityMaintenanceJobs(pool)
+  if (security.processed || security.failed) {
+    console.log(`${logPrefix} security_maintenance processed=${security.processed} failed=${security.failed}`)
   }
 }

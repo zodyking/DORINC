@@ -6,20 +6,24 @@ import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
-import {
-  evaluateAccessDecision,
-  getCachedAccessGateSettings,
-  recordAccessEvent,
-} from '../../services/access-gate.service'
+import { captureAccess } from '../../services/security/capture.service'
+import { getSecuritySnapshot } from '../../services/security/policy.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
 import { completeStaffLoginBodySchema } from '../../../shared/validators/auth'
 
+/**
+ * Second staff sign-in step. This is where the geofence is actually enforced:
+ * the browser has now handed us a GPS fix, which is the only location signal
+ * precise enough to judge a drawn area against.
+ */
 export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event))
   const body = await validateBody(event, completeStaffLoginBodySchema)
   const ipAddress = getClientIp(event)
+  const userAgent = getHeader(event, 'user-agent') ?? null
+  const policy = getSecuritySnapshot().policy
 
   const sessionToken = verifyPendingLoginToken(body.loginToken)
   if (!sessionToken) {
@@ -31,51 +35,44 @@ export default defineEventHandler(async (event) => {
     throw apiError(event, 'UNAUTHENTICATED', 'Sign-in session expired — please sign in again')
   }
 
-  const loginCoords = { lat: body.geo.latitude, lng: body.geo.longitude }
-  const locationLabel = await resolveBrowserLocation({
+  const device = {
     latitude: body.geo.latitude,
     longitude: body.geo.longitude,
-    accuracyM: body.geo.accuracyM,
+    accuracyM: body.geo.accuracyM ?? null,
+  }
+  const locationLabel = await resolveBrowserLocation({
+    latitude: device.latitude,
+    longitude: device.longitude,
+    accuracyM: device.accuracyM ?? undefined,
   })
 
-  const gate = getCachedAccessGateSettings()
-  if (gate.enabled && resolved.user.accountType !== 'super_admin') {
-    const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords: loginCoords })
-    if (decision.blocked) {
-      await logout(useDb(), sessionToken).catch(() => {})
-      await recordAccessEvent(useDb(), {
-        eventType: 'login',
-        outcome: 'blocked',
-        ipAddress,
-        userId: resolved.user.id,
-        userName: resolved.user.name,
-        userEmail: resolved.user.email,
-        userAgent: getHeader(event, 'user-agent'),
-        latitude: loginCoords.lat,
-        longitude: loginCoords.lng,
-        locationLabel,
-      }).catch(() => {})
-      throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
-        reason: 'access_blocked',
-        redirectUrl: gate.redirectUrl || null,
-      })
-    }
+  const capture = await captureAccess(useDb(), {
+    eventType: 'login',
+    stage: 'login_complete',
+    ip: ipAddress,
+    device,
+    path: '/api/auth/complete-login',
+    userAgent,
+    requestId: (event.context.requestId as string | undefined) ?? null,
+    locationLabel,
+    viewer: { id: resolved.user.id, name: resolved.user.name, email: resolved.user.email },
+    exempt: resolved.user.accountType === 'super_admin',
+    outcome: 'login_success',
+    attemptedIdentifier: resolved.user.email,
+    attemptedPortal: 'staff',
+    accountExists: true,
+  })
+
+  if (capture.evaluation.blocked) {
+    await logout(useDb(), sessionToken).catch(() => {})
+    throw apiError(event, 'FORBIDDEN', policy.blockMessage || 'Access from your location is restricted', {
+      reason: 'access_blocked',
+      blockReason: capture.evaluation.reason,
+      redirectUrl: policy.redirectUrl || null,
+    })
   }
 
   setSessionCookie(event, sessionToken)
-
-  await recordAccessEvent(useDb(), {
-    eventType: 'login',
-    outcome: 'login_success',
-    ipAddress,
-    userId: resolved.user.id,
-    userName: resolved.user.name,
-    userEmail: resolved.user.email,
-    userAgent: getHeader(event, 'user-agent'),
-    latitude: loginCoords.lat,
-    longitude: loginCoords.lng,
-    locationLabel,
-  }).catch(() => {})
 
   try {
     await writeAudit(event, {
@@ -89,10 +86,7 @@ export default defineEventHandler(async (event) => {
         email: resolved.user.email,
       },
       riskLevel: 'sensitive',
-      afterData: {
-        locationLabel,
-        locationSource: 'device',
-      },
+      afterData: { locationLabel, locationSource: 'device' },
     })
   }
   catch (err) {
@@ -105,9 +99,9 @@ export default defineEventHandler(async (event) => {
       name: resolved.user.name,
       portal: 'staff',
       ipAddress,
-      userAgent: getHeader(event, 'user-agent'),
+      userAgent,
       deviceLocation: locationLabel,
-      deviceAccuracyM: body.geo.accuracyM ?? null,
+      deviceAccuracyM: device.accuracyM,
     }))
     .catch((err) => {
       console.warn('[mail] login notification failed:', (err as Error).message)

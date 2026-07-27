@@ -231,6 +231,38 @@ export interface LoginGeoMeta {
   locationLabel?: string | null
 }
 
+export interface IdentifierLookup {
+  exists: boolean
+  accountTypeKey: AccountType | null
+}
+
+/**
+ * Resolve the account type behind a login identifier without verifying the
+ * password. The security gate uses this to reject a banned network before any
+ * session state is touched, while still exempting super admins from lockout.
+ * Nothing here is returned to the caller of the login endpoint.
+ */
+export async function peekLoginIdentifier(
+  db: Db,
+  identifier: string,
+  portal: LoginPortal,
+): Promise<IdentifierLookup> {
+  const trimmed = identifier.trim().toLowerCase()
+  if (!trimmed) return { exists: false, accountTypeKey: null }
+
+  const [row] = await db
+    .select({ accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(portal === 'customer' ? eq(users.username, trimmed) : eq(users.email, trimmed))
+    .limit(1)
+
+  return {
+    exists: Boolean(row),
+    accountTypeKey: (row?.accountTypeKey as AccountType | undefined) ?? null,
+  }
+}
+
 export async function login(
   db: Db,
   identifier: string,

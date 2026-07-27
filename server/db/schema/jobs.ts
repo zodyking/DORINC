@@ -11,6 +11,7 @@ export const WORKER_JOB_TYPES = [
   'backup_verify',
   'pdf_render',
   'imap_sync',
+  'security_maintenance',
 ] as const
 export type WorkerJobType = (typeof WORKER_JOB_TYPES)[number]
 

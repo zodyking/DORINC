@@ -3,8 +3,9 @@
  * Enforces permissions based on route meta, handles auth redirects.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Skip auth pages
-  if (to.path.startsWith('/auth/') || to.path === '/setup') return
+  // Skip auth pages. /access-denied must stay reachable for signed-out
+  // visitors, otherwise a blocked user bounces into a redirect loop.
+  if (to.path.startsWith('/auth/') || to.path === '/setup' || to.path === '/access-denied') return
 
   const auth = useAuthStore()
 

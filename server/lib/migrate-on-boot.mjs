@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import pg from 'pg'
 import { getDatabaseUrl } from './runtime-config.mjs'
 import { ensureEmailInboxSchema } from './ensure-email-inbox-schema.mjs'
+import { ensureSecuritySchema } from './ensure-security-schema.mjs'
 
 async function resolveMigrationsFolder() {
   const candidates = [
@@ -37,6 +38,7 @@ export async function applyPendingMigrationsOnBoot() {
     const migrationsFolder = await resolveMigrationsFolder()
     await migrate(db, { migrationsFolder })
     await ensureEmailInboxSchema(pool)
+    await ensureSecuritySchema(pool)
     console.log('[migrate] pending migrations applied on boot')
   }
   finally {

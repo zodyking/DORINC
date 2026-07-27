@@ -7,7 +7,7 @@ import { syncAuthRegistry } from '../db/seed'
 import { syncTrainingCatalog } from '../services/training.service'
 import { refreshAppConfigCache } from '../services/app-config.service'
 import { refreshImapConfigCache } from '../services/imap-config.service'
-import { refreshAccessGateCache } from '../services/access-gate.service'
+import { refreshSecuritySnapshot } from '../services/security/policy.service'
 
 export default defineNitroPlugin(async () => {
   if (!hasDatabaseConfig()) return
@@ -44,7 +44,7 @@ export default defineNitroPlugin(async () => {
   try {
     await refreshAppConfigCache(db)
     await refreshImapConfigCache(db)
-    await refreshAccessGateCache(db)
+    await refreshSecuritySnapshot(db)
   }
   catch (err) {
     console.warn(`[app-config] cache warm skipped: ${(err as Error).message}`)
