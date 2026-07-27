@@ -60,15 +60,19 @@ export default defineEventHandler(async (event) => {
     locationLabel,
   })
 
-  await enqueueOutsideGeoVerificationEmail(useDb(), {
-    to: identity.userEmail,
-    name: identity.userName,
-    code: challenge.code,
-    locationLabel,
-    ipAddress,
-  }).catch((err) => {
+  try {
+    await enqueueOutsideGeoVerificationEmail(useDb(), {
+      to: identity.userEmail,
+      name: identity.userName,
+      code: challenge.code,
+      locationLabel,
+      ipAddress,
+    })
+  }
+  catch (err) {
     console.warn('[mail] outside-geo verification email failed:', (err as Error).message)
-  })
+    throw apiError(event, 'INTERNAL_ERROR', 'Could not send the verification email — please try again')
+  }
 
   return {
     alreadyVerified: false,
