@@ -1,4 +1,4 @@
-import { getHeader } from 'h3'
+import { getHeader, readBody, sendRedirect } from 'h3'
 import { getClientIp } from '../../../utils/client-ip'
 import { useDb } from '../../../db/client'
 import {
@@ -6,63 +6,66 @@ import {
   hasValidOutsideGeoBypass,
   setOutsideGeoBypassCookie,
 } from '../../../auth/outside-geo-bypass'
-import {
-  evaluateAccessDecision,
-  getCachedAccessGateSettings,
-} from '../../../services/access-gate.service'
-import { resolveIpGeo } from '../../../services/ip-geolocation.service'
 import { verifyOutsideGeoCode } from '../../../services/outside-geo-verify.service'
-import { apiError } from '../../../utils/api-error'
-import { rateLimitKeyFromIp, requireRateLimit } from '../../../utils/require-rate-limit'
-import { validateBody } from '../../../utils/validate'
-import { outsideGeoVerifyBodySchema } from '../../../../shared/validators/auth'
+import { RateLimitError, consumeRateLimit } from '../../../services/rate-limit.service'
+import { rateLimitKeyFromIp } from '../../../utils/require-rate-limit'
 
+function extractCode(body: unknown): string {
+  if (!body || typeof body !== 'object') return ''
+  const record = body as Record<string, unknown>
+  const raw = record.code
+  return typeof raw === 'string' ? raw.replace(/\s+/g, '').trim() : ''
+}
+
+/**
+ * Verifies the 6-digit code via form POST and redirects.
+ * Never returns JSON (no scope / identity leakage in the browser console).
+ */
 export default defineEventHandler(async (event) => {
-  await requireRateLimit(event, 'outside_geo', rateLimitKeyFromIp(event, 'verify'))
-  const body = await validateBody(event, outsideGeoVerifyBodySchema)
-
-  const ipAddress = getClientIp(event)
-  const userAgent = getHeader(event, 'user-agent') ?? null
-
-  if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
-    return {
-      verified: true,
-      message: 'Your identity is already verified for this location.',
-      redirectTo: '/auth/login',
+  try {
+    await consumeRateLimit(useDb(), 'outside_geo', rateLimitKeyFromIp(event, 'verify'))
+  }
+  catch (err) {
+    if (err instanceof RateLimitError) {
+      return sendRedirect(event, '/auth/verify-location?err=1', 303)
     }
+    return sendRedirect(event, '/auth/verify-location?err=1', 303)
   }
 
-  const gate = getCachedAccessGateSettings()
-  if (gate.enabled) {
-    const geo = ipAddress ? await resolveIpGeo(ipAddress) : null
-    const coords = geo?.latitude != null && geo?.longitude != null
-      ? { lat: geo.latitude, lng: geo.longitude }
-      : null
-    const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords }, { strictGeo: false })
-    if (!decision.blocked || decision.reason !== 'geo_outside') {
-      throw apiError(event, 'BAD_REQUEST', 'Location verification is only required outside the allowed area')
+  try {
+    const ipAddress = getClientIp(event)
+    const userAgent = getHeader(event, 'user-agent') ?? null
+
+    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
+      return sendRedirect(event, '/auth/login', 303)
     }
+
+    const body = await readBody(event).catch(() => null)
+    const code = extractCode(body)
+
+    if (!/^\d{6}$/.test(code)) {
+      return sendRedirect(event, '/auth/verify-location?err=1', 303)
+    }
+
+    const identity = await verifyOutsideGeoCode(useDb(), {
+      code,
+      ipAddress,
+      userAgent,
+    })
+    if (!identity) {
+      return sendRedirect(event, '/auth/verify-location?err=1', 303)
+    }
+
+    const token = createOutsideGeoBypassToken({
+      userId: identity.userId,
+      ipAddress,
+      userAgent,
+    })
+    setOutsideGeoBypassCookie(event, token)
+
+    return sendRedirect(event, '/auth/login', 303)
   }
-
-  const identity = await verifyOutsideGeoCode(useDb(), {
-    code: body.code,
-    ipAddress,
-    userAgent,
-  })
-  if (!identity) {
-    throw apiError(event, 'UNAUTHENTICATED', 'Invalid or expired verification code')
-  }
-
-  const token = createOutsideGeoBypassToken({
-    userId: identity.userId,
-    ipAddress,
-    userAgent,
-  })
-  setOutsideGeoBypassCookie(event, token)
-
-  return {
-    verified: true,
-    message: 'Identity verified. You can now sign in from this location.',
-    redirectTo: '/auth/login',
+  catch {
+    return sendRedirect(event, '/auth/verify-location?err=1', 303)
   }
 })

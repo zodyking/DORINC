@@ -1,4 +1,4 @@
-import { getHeader } from 'h3'
+import { getHeader, sendRedirect } from 'h3'
 import { getClientIp } from '../../../utils/client-ip'
 import { useDb } from '../../../db/client'
 import {
@@ -6,78 +6,64 @@ import {
   getCachedAccessGateSettings,
 } from '../../../services/access-gate.service'
 import { resolveIpGeo, resolveIpLocation } from '../../../services/ip-geolocation.service'
-import {
-  enqueueOutsideGeoVerificationEmail,
-  findKnownOutsideGeoIdentity,
-  issueOutsideGeoChallenge,
-} from '../../../services/outside-geo-verify.service'
+import { quietlyIssueOutsideGeoChallenge } from '../../../services/outside-geo-verify.service'
 import { hasValidOutsideGeoBypass } from '../../../auth/outside-geo-bypass'
-import { apiError } from '../../../utils/api-error'
-import { rateLimitKeyFromIp, requireRateLimit } from '../../../utils/require-rate-limit'
+import { RateLimitError, consumeRateLimit } from '../../../services/rate-limit.service'
+import { rateLimitKeyFromIp } from '../../../utils/require-rate-limit'
 
+/**
+ * Issues (or re-issues) an outside-geofence code and always redirects back to
+ * the verify page. Never returns identity / scope JSON to the browser.
+ */
 export default defineEventHandler(async (event) => {
-  await requireRateLimit(event, 'outside_geo', rateLimitKeyFromIp(event, 'challenge'))
-
-  const ipAddress = getClientIp(event)
-  const userAgent = getHeader(event, 'user-agent') ?? null
-  const gate = getCachedAccessGateSettings()
-
-  if (!gate.enabled) {
-    throw apiError(event, 'BAD_REQUEST', 'Location verification is not required right now')
-  }
-
-  if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
-    return {
-      alreadyVerified: true,
-      message: 'Your identity is already verified for this location. You can sign in.',
-      redirectTo: '/auth/login',
-    }
-  }
-
-  const geo = ipAddress ? await resolveIpGeo(ipAddress) : null
-  const coords = geo?.latitude != null && geo?.longitude != null
-    ? { lat: geo.latitude, lng: geo.longitude }
-    : null
-  const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords }, { strictGeo: false })
-
-  if (!decision.blocked || decision.reason !== 'geo_outside') {
-    throw apiError(event, 'BAD_REQUEST', 'Location verification is only required outside the allowed area')
-  }
-
-  const identity = await findKnownOutsideGeoIdentity(useDb(), { ipAddress, userAgent })
-  if (!identity) {
-    throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
-      reason: 'access_blocked',
-      redirectUrl: gate.redirectUrl || null,
-    })
-  }
-
-  const locationLabel = geo?.label ?? (ipAddress ? await resolveIpLocation(ipAddress) : null)
-  const challenge = await issueOutsideGeoChallenge(useDb(), {
-    identity,
-    ipAddress,
-    userAgent,
-    locationLabel,
-  })
-
   try {
-    await enqueueOutsideGeoVerificationEmail(useDb(), {
-      to: identity.userEmail,
-      name: identity.userName,
-      code: challenge.code,
-      locationLabel,
-      ipAddress,
-    })
+    await consumeRateLimit(useDb(), 'outside_geo', rateLimitKeyFromIp(event, 'challenge'))
   }
   catch (err) {
-    console.warn('[mail] outside-geo verification email failed:', (err as Error).message)
-    throw apiError(event, 'INTERNAL_ERROR', 'Could not send the verification email — please try again')
+    if (err instanceof RateLimitError) {
+      return sendRedirect(event, '/auth/verify-location?err=1', 303)
+    }
+    return sendRedirect(event, '/auth/access-restricted', 303)
   }
 
-  return {
-    alreadyVerified: false,
-    challengeId: challenge.challengeId,
-    maskedEmail: challenge.maskedEmail,
-    message: `A 6-digit verification code was sent to ${challenge.maskedEmail}.`,
+  try {
+    const ipAddress = getClientIp(event)
+    const userAgent = getHeader(event, 'user-agent') ?? null
+    const gate = getCachedAccessGateSettings()
+
+    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
+      return sendRedirect(event, '/auth/login', 303)
+    }
+
+    if (!gate.enabled) {
+      return sendRedirect(event, '/auth/access-restricted', 303)
+    }
+
+    const geo = ipAddress ? await resolveIpGeo(ipAddress) : null
+    const coords = geo?.latitude != null && geo?.longitude != null
+      ? { lat: geo.latitude, lng: geo.longitude }
+      : null
+    const decision = evaluateAccessDecision(gate, { ip: ipAddress, coords }, { strictGeo: false })
+
+    if (!decision.blocked || decision.reason !== 'geo_outside') {
+      return sendRedirect(event, '/auth/access-restricted', 303)
+    }
+
+    const locationLabel = geo?.label ?? (ipAddress ? await resolveIpLocation(ipAddress) : null)
+    const result = await quietlyIssueOutsideGeoChallenge(useDb(), {
+      ipAddress,
+      userAgent,
+      locationLabel,
+      force: true,
+    })
+
+    if (result === 'unknown' || result === 'failed') {
+      return sendRedirect(event, '/auth/access-restricted', 303)
+    }
+
+    return sendRedirect(event, '/auth/verify-location?sent=1', 303)
+  }
+  catch {
+    return sendRedirect(event, '/auth/access-restricted', 303)
   }
 })

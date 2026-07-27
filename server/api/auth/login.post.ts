@@ -13,6 +13,10 @@ import {
   getCachedAccessGateSettings,
   recordAccessEvent,
 } from '../../services/access-gate.service'
+import {
+  findKnownOutsideGeoIdentity,
+  quietlyIssueOutsideGeoChallenge,
+} from '../../services/outside-geo-verify.service'
 import { apiError } from '../../utils/api-error'
 import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-limit'
 import { validateBody } from '../../utils/validate'
@@ -100,9 +104,26 @@ export default defineEventHandler(async (event) => {
             locationLabel,
             country: loginCountry,
           }).catch(() => {})
+
+          let redirectTo = '/auth/access-restricted'
+          if (decision.reason === 'geo_outside') {
+            const known = await findKnownOutsideGeoIdentity(useDb(), {
+              ipAddress,
+              userAgent: getHeader(event, 'user-agent'),
+            }).catch(() => null)
+            if (known) {
+              redirectTo = '/auth/verify-location?sent=1'
+              void quietlyIssueOutsideGeoChallenge(useDb(), {
+                ipAddress,
+                userAgent: getHeader(event, 'user-agent'),
+                locationLabel,
+              }).catch(() => {})
+            }
+          }
+
           throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
             reason: 'access_blocked',
-            redirectUrl: gate.redirectUrl || null,
+            redirectTo,
           })
         }
       }

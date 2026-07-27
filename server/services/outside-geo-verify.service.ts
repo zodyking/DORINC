@@ -98,6 +98,70 @@ export async function findKnownOutsideGeoIdentity(
   return best
 }
 
+/** True when an unused, unexpired challenge already exists for this IP. */
+export async function hasActiveOutsideGeoChallenge(
+  db: Db,
+  input: { ipAddress?: string | null },
+): Promise<boolean> {
+  const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress ?? null
+  if (!ip) return false
+  const now = new Date()
+  const [row] = await db.select({ id: outsideGeoChallenges.id })
+    .from(outsideGeoChallenges)
+    .where(and(
+      eq(outsideGeoChallenges.ipAddress, ip),
+      isNull(outsideGeoChallenges.usedAt),
+      gt(outsideGeoChallenges.expiresAt, now),
+    ))
+    .orderBy(desc(outsideGeoChallenges.createdAt))
+    .limit(1)
+  return !!row
+}
+
+/**
+ * Issue + email a challenge for a known IP/device without returning identity
+ * details to the caller (keeps browser/network responses non-scoping).
+ */
+export async function quietlyIssueOutsideGeoChallenge(
+  db: Db,
+  input: {
+    ipAddress?: string | null
+    userAgent?: string | null
+    locationLabel?: string | null
+    force?: boolean
+  },
+): Promise<'issued' | 'already_active' | 'unknown' | 'failed'> {
+  try {
+    if (!input.force && await hasActiveOutsideGeoChallenge(db, { ipAddress: input.ipAddress })) {
+      return 'already_active'
+    }
+    const identity = await findKnownOutsideGeoIdentity(db, {
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    })
+    if (!identity) return 'unknown'
+
+    const challenge = await issueOutsideGeoChallenge(db, {
+      identity,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+      locationLabel: input.locationLabel ?? null,
+    })
+    await enqueueOutsideGeoVerificationEmail(db, {
+      to: identity.userEmail,
+      name: identity.userName,
+      code: challenge.code,
+      locationLabel: input.locationLabel ?? null,
+      ipAddress: input.ipAddress,
+    })
+    return 'issued'
+  }
+  catch (err) {
+    console.warn('[outside-geo] quiet challenge failed:', (err as Error).message)
+    return 'failed'
+  }
+}
+
 export async function issueOutsideGeoChallenge(
   db: Db,
   input: {

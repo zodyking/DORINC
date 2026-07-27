@@ -1,4 +1,4 @@
-import { getHeader, getRequestURL, sendRedirect, setResponseStatus } from 'h3'
+import { getHeader, getRequestURL, sendRedirect } from 'h3'
 import { getClientIp } from '../utils/client-ip'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { hasDatabaseConfigured, useDb } from '../db/client'
@@ -7,17 +7,21 @@ import {
   getCachedAccessGateSettings,
   recordAccessEvent,
 } from '../services/access-gate.service'
-import { peekIpGeo, resolveIpGeo } from '../services/ip-geolocation.service'
+import { peekIpGeo, resolveIpGeo, resolveIpLocation } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
 import { hasValidOutsideGeoBypass } from '../auth/outside-geo-bypass'
-import { findKnownOutsideGeoIdentity } from '../services/outside-geo-verify.service'
+import {
+  findKnownOutsideGeoIdentity,
+  quietlyIssueOutsideGeoChallenge,
+} from '../services/outside-geo-verify.service'
 
 /** Paths that must always stay reachable so admins can never be locked out. */
 const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
-/** Auth routes that must remain reachable during outside-geofence verification. */
-const AUTH_ALWAYS_ALLOWED = [
+/** Internal gate pages — never bounce these through the gate again. */
+const GATE_PAGES = [
   '/auth/verify-location',
+  '/auth/access-restricted',
 ]
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
@@ -26,12 +30,25 @@ const captureSeen = new Map<string, number>()
 const CAPTURE_WINDOW_MS = 60_000
 const CAPTURE_MAP_MAX = 20_000
 
+/** Avoid re-issuing verification emails on every HTML navigation. */
+const challengeIssued = new Map<string, number>()
+const CHALLENGE_COOLDOWN_MS = 60_000
+
 function shouldCapture(key: string): boolean {
   const now = Date.now()
   const last = captureSeen.get(key)
   if (last && now - last < CAPTURE_WINDOW_MS) return false
   if (captureSeen.size >= CAPTURE_MAP_MAX) captureSeen.clear()
   captureSeen.set(key, now)
+  return true
+}
+
+function shouldIssueChallenge(key: string): boolean {
+  const now = Date.now()
+  const last = challengeIssued.get(key)
+  if (last && now - last < CHALLENGE_COOLDOWN_MS) return false
+  if (challengeIssued.size >= CAPTURE_MAP_MAX) challengeIssued.clear()
+  challengeIssued.set(key, now)
   return true
 }
 
@@ -43,8 +60,8 @@ function isPageNavigation(event: Parameters<typeof getHeader>[0], path: string):
   return accept.includes('text/html')
 }
 
-function isAuthAlwaysAllowed(path: string): boolean {
-  return AUTH_ALWAYS_ALLOWED.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+function isGatePage(path: string): boolean {
+  return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
 }
 
 export default defineEventHandler(async (event) => {
@@ -108,7 +125,7 @@ export default defineEventHandler(async (event) => {
   const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
     ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent })
     : null
-  const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isAuthAlwaysAllowed(path)
+  const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
 
   // Capture the visit (best-effort, off the response path).
   if (shouldCapture(`${ip ?? 'unknown'}|${path}`)) {
@@ -124,24 +141,29 @@ export default defineEventHandler(async (event) => {
 
   if (!effectivelyBlocked) return
 
-  // Outside geofence + known IP/device/user → identity verification instead of hard block.
+  // Outside geofence → internal pages only (no external redirect links).
   if (decision.reason === 'geo_outside') {
     try {
       const known = await findKnownOutsideGeoIdentity(useDb(), { ipAddress: ip, userAgent })
       if (known) {
-        return sendRedirect(event, '/auth/verify-location', 302)
+        if (shouldIssueChallenge(ip ?? userAgent ?? 'unknown')) {
+          const locationLabel = cachedGeo?.label
+            ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
+          await quietlyIssueOutsideGeoChallenge(useDb(), {
+            ipAddress: ip,
+            userAgent,
+            locationLabel,
+          })
+        }
+        return sendRedirect(event, '/auth/verify-location?sent=1', 302)
       }
     }
     catch {
-      // Fall through to the standard hard block if lookup fails.
+      // Fall through to the unknown-device restricted page.
     }
   }
 
-  if (settings.redirectUrl) {
-    return sendRedirect(event, settings.redirectUrl, 302)
-  }
-  setResponseStatus(event, 403)
-  return 'Access to this site is restricted from your location.'
+  return sendRedirect(event, '/auth/access-restricted', 302)
 })
 
 async function captureVisit(input: {
