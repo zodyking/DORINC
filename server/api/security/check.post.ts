@@ -12,7 +12,7 @@ import { validateBody } from '../../utils/validate'
 import {
   securityCheckRequestSchema,
   type SecurityCheckResponse,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 
 /**
  * Per-IP throttle. A page load calls this once, so an in-memory guard is enough

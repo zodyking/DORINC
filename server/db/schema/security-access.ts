@@ -20,7 +20,7 @@ import {
   SECURITY_EVENT_STAGES,
   SECURITY_EVENT_TYPES,
   SECURITY_ZONE_KINDS,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 
 /**
  * IP ban list. Each row is one address or CIDR range, stored canonically in

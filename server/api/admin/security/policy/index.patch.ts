@@ -3,7 +3,7 @@ import { saveSecurityPolicy } from '../../../../services/security/policy.service
 import { writeAudit } from '../../../../services/audit.service'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateBody } from '../../../../utils/validate'
-import { securityPolicySchema } from '../../../../../shared/validators/security'
+import { securityPolicySchema } from '../../../../../shared/validators/security-access'
 
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as { user: { id: string } }

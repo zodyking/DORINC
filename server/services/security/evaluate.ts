@@ -7,7 +7,7 @@ import type {
   SecurityBlockReason,
   SecurityPolicy,
   SecurityZoneKind,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 
 export interface BanEntry {
   id: string

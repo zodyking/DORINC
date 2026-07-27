@@ -2,7 +2,7 @@ import { and, desc, eq, gt, ilike, isNull, lte, or, sql } from 'drizzle-orm'
 import type { Db } from '../../db/client'
 import { ipBans } from '../../db/schema/security-access'
 import { parseIpRule } from '../../../shared/net/ip-match'
-import type { IpBanSource, IpBanStatus } from '../../../shared/validators/security'
+import type { IpBanSource, IpBanStatus } from '../../../shared/validators/security-access'
 import { refreshSecuritySnapshot } from './policy.service'
 
 export interface IpBanView {

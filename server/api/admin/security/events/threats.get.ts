@@ -2,7 +2,7 @@ import { useDb } from '../../../../db/client'
 import { listThreatGroups } from '../../../../services/security/access-events.service'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateQuery } from '../../../../utils/validate'
-import { securityThreatQuerySchema } from '../../../../../shared/validators/security'
+import { securityThreatQuerySchema } from '../../../../../shared/validators/security-access'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'system.admin.all')

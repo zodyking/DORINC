@@ -3,7 +3,7 @@ import type { Db } from '../../db/client'
 import { geofences } from '../../db/schema/security-access'
 import type { GeoPoint } from '../../../shared/geo/point-in-polygon'
 import { polygonBounds, simplifyPolygon } from '../../../shared/geo/point-in-polygon'
-import type { SecurityZoneKind } from '../../../shared/validators/security'
+import type { SecurityZoneKind } from '../../../shared/validators/security-access'
 import { refreshSecuritySnapshot } from './policy.service'
 
 export interface GeofenceView {

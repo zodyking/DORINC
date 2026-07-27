@@ -7,7 +7,7 @@ import type {
   SecurityEventOutcome,
   SecurityEventStage,
   SecurityEventType,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 
 export interface RecordAccessEventInput {
   eventType: SecurityEventType

@@ -7,7 +7,7 @@ import {
   DEFAULT_SECURITY_POLICY,
   type SecurityPolicy,
   securityPolicySchema,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 import type { BanEntry, SecuritySnapshot, ZoneEntry } from './evaluate'
 
 export const SECURITY_POLICY_SETTINGS_KEY = 'security.policy'

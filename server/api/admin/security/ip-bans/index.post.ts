@@ -4,7 +4,7 @@ import { writeAudit } from '../../../../services/audit.service'
 import { apiError } from '../../../../utils/api-error'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateBody } from '../../../../utils/validate'
-import { ipBanCreateSchema } from '../../../../../shared/validators/security'
+import { ipBanCreateSchema } from '../../../../../shared/validators/security-access'
 
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as { user: { id: string, name: string, email: string } }

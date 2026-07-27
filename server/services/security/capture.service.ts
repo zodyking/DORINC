@@ -8,7 +8,7 @@ import type {
   SecurityEventOutcome,
   SecurityEventStage,
   SecurityEventType,
-} from '../../../shared/validators/security'
+} from '../../../shared/validators/security-access'
 import { resolveIpGeo, type IpGeoResult } from '../ip-geolocation.service'
 import { createIpBan, recordBanHit } from './ip-bans.service'
 import { recordGeofenceHit } from './geofences.service'

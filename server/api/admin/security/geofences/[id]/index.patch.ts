@@ -5,7 +5,7 @@ import { writeAudit } from '../../../../../services/audit.service'
 import { apiError } from '../../../../../utils/api-error'
 import { requirePermission } from '../../../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../../../utils/validate'
-import { geofenceUpdateSchema } from '../../../../../../shared/validators/security'
+import { geofenceUpdateSchema } from '../../../../../../shared/validators/security-access'
 
 const paramsSchema = z.object({ id: z.string().uuid() })
 
