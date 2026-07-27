@@ -42,12 +42,14 @@ import {
   wizardLinesSummary,
   type WizardLineDraft,
 } from '~/utils/line-item-wizard-ui'
+import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 
 const photos = ref<{ file: File, preview: string }[]>([])
-type LogRecordMode = 'upload' | 'digital' | null
+type LogRecordMode = 'upload' | 'digital' | 'manual' | null
 const logRecordMode = ref<LogRecordMode>(null)
 const digitalLineItems = ref<WizardLineDraft[]>([])
 const lineWizardRef = ref<{ openWizard: () => void } | null>(null)
+const voiceEntryAvailable = ref(false)
 
 const { data: customersData } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -122,12 +124,31 @@ function selectLogMode(mode: Exclude<LogRecordMode, null>) {
   if (mode === 'digital') void openLineWizardFromGesture()
 }
 
+function ensureManualLogEntry() {
+  if (voiceEntryAvailable.value || logRecordMode.value) return
+  selectLogMode('manual')
+}
+
+watch(step, (current) => {
+  if (current === 5) ensureManualLogEntry()
+})
+
+onMounted(() => {
+  voiceEntryAvailable.value = isVoiceEntryDevice()
+  if (step.value === 5) ensureManualLogEntry()
+})
+
 function clearLogMode() {
+  if (!voiceEntryAvailable.value) return
   logRecordMode.value = null
 }
 
 function prevFromLogStep() {
   if (logRecordMode.value) {
+    if (!voiceEntryAvailable.value) {
+      prevStep()
+      return
+    }
     clearLogMode()
     return
   }
@@ -147,6 +168,9 @@ const logRecordSummary = computed(() => {
   }
   if (logRecordMode.value === 'digital') {
     return wizardLinesSummary(digitalLineItems.value, 'Voice lines')
+  }
+  if (logRecordMode.value === 'manual') {
+    return wizardLinesSummary(digitalLineItems.value, 'Typed lines')
   }
   return '—'
 })
@@ -189,7 +213,7 @@ async function submitLog() {
         workType: workType.value,
         complaint: complaint.value || null,
         internalNotes: internalNotes.value || null,
-        draftLineItems: logRecordMode.value === 'digital' && digitalLineItems.value.length
+        draftLineItems: (logRecordMode.value === 'digital' || logRecordMode.value === 'manual') && digitalLineItems.value.length
           ? digitalLineItems.value.map(toApiDraftLine)
           : undefined,
         finalize: true,
@@ -330,11 +354,14 @@ onBeforeUnmount(() => {
     <!-- Step 5 -->
     <div v-show="step === 5" class="sl-panel active">
       <h3>Service log</h3>
-      <p v-if="!logRecordMode" class="sl-hint">
+      <p v-if="logRecordMode === 'manual' && !voiceEntryAvailable" class="sl-hint">
+        Type each line item below.
+      </p>
+      <p v-if="!logRecordMode && voiceEntryAvailable" class="sl-hint">
         How did you record the work?
       </p>
 
-      <div v-if="!logRecordMode" class="sl-picks sl-log-modes">
+      <div v-if="!logRecordMode && voiceEntryAvailable" class="sl-picks sl-log-modes">
         <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('upload')">
           <span class="av indigo" aria-hidden="true">📷</span>
           <span class="nm">
@@ -371,15 +398,16 @@ onBeforeUnmount(() => {
             <button type="button" class="rm" aria-label="Remove photo" @click="removePhoto(i)">×</button>
           </div>
         </div>
-        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
+        <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>
 
       <div v-else class="sl-log-digital">
         <CommonLineItemWizard
           ref="lineWizardRef"
           v-model:lines="digitalLineItems"
+          :voice-enabled="logRecordMode === 'digital'"
         />
-        <button type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
+        <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
       </div>
 
       <div class="sl-foot">
@@ -410,7 +438,7 @@ onBeforeUnmount(() => {
         <div class="r stack"><span class="k">Customer complaint</span><span class="v">{{ complaint || '—' }}</span></div>
         <div class="r stack"><span class="k">Internal notes</span><span class="v">{{ internalNotes || '—' }}</span></div>
         <div class="r"><span class="k">Service log</span><span class="v">{{ logRecordSummary }}</span></div>
-        <div v-if="logRecordMode === 'digital' && digitalLineItems.length" class="sl-review-lines">
+        <div v-if="(logRecordMode === 'digital' || logRecordMode === 'manual') && digitalLineItems.length" class="sl-review-lines">
           <CommonLineItemsTable :lines="digitalLineItems" title="Line items" />
         </div>
       </div>

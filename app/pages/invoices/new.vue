@@ -41,6 +41,7 @@ import {
   registerSessionSaveHandler,
   unregisterSessionSaveHandler,
 } from '~/composables/useSessionLogoutHandlers'
+import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
@@ -136,6 +137,21 @@ type LineEntryMode = 'guided' | 'manual' | null
 const lineEntryMode = ref<LineEntryMode>(null)
 const wizardLines = ref<WizardLineDraft[]>([])
 const lineWizardRef = ref<{ openWizard: () => void } | null>(null)
+const voiceEntryAvailable = ref(false)
+
+function ensureManualLineEntry() {
+  if (voiceEntryAvailable.value || lineEntryMode.value) return
+  selectLineEntryMode('manual')
+}
+
+watch(step, (current) => {
+  if (current === 4) ensureManualLineEntry()
+})
+
+onMounted(() => {
+  voiceEntryAvailable.value = isVoiceEntryDevice()
+  if (step.value === 4) ensureManualLineEntry()
+})
 
 watch(wizardLines, (wl) => {
   if (lineEntryMode.value === 'guided') {
@@ -389,6 +405,11 @@ function selectLineEntryMode(mode: Exclude<LineEntryMode, null>) {
 function clearLineEntryMode() {
   if (lineEntryMode.value === 'guided') {
     lines.value = wizardLinesToDraftLines(wizardLines.value)
+  }
+  if (!voiceEntryAvailable.value) {
+    if (!lines.value.length) lines.value = [createEmptyLine()]
+    lineEntryMode.value = 'manual'
+    return
   }
   lineEntryMode.value = null
 }
@@ -798,9 +819,9 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <span class="help">Shown on customer-facing PDF under Symptoms / Complaints</span>
       </label>
 
-      <p v-if="!lineEntryMode" class="sl-hint">How do you want to add charges?</p>
+      <p v-if="!lineEntryMode && voiceEntryAvailable" class="sl-hint">How do you want to add charges?</p>
 
-      <div v-if="!lineEntryMode" class="sl-picks sl-log-modes">
+      <div v-if="!lineEntryMode && voiceEntryAvailable" class="sl-picks sl-log-modes">
         <button type="button" class="sl-pick sl-log-mode" @click="selectLineEntryMode('guided')">
           <span class="av teal" aria-hidden="true">🎙️</span>
           <span class="nm">
@@ -825,11 +846,11 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
             ref="lineWizardRef"
             v-model:lines="wizardLines"
           />
-          <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
         </div>
       </div>
 
-      <template v-else>
+      <template v-else-if="lineEntryMode === 'manual'">
         <div class="card inv-line-editor">
           <div class="chead inv-line-editor-head">
             <div class="right inv-line-actions">
@@ -941,7 +962,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
                 </div>
               </article>
             </div>
-            <button type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
           </div>
         </div>
       </template>

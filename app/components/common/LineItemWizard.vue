@@ -13,14 +13,16 @@ import type { SpeechLineField } from '~/utils/speech-line-flow'
 
 const lines = defineModel<WizardLineDraft[]>('lines', { default: () => [] })
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   autoOpen?: boolean
+  voiceEnabled?: boolean
 }>(), {
   autoOpen: false,
+  voiceEnabled: true,
 })
 
 const sessionOpen = ref(false)
-const manualOpen = ref(false)
+const manualOpen = ref(!props.voiceEnabled)
 const manualDraft = ref(emptyWizardLine())
 
 watch(() => manualDraft.value.description, () => {
@@ -96,6 +98,10 @@ const orbState = computed(() => {
 })
 
 function openSession() {
+  if (!props.voiceEnabled) {
+    manualOpen.value = true
+    return
+  }
   sessionOpen.value = true
   manualOpen.value = false
   unlockSpeechFromUserGesture({ silent: true })
@@ -168,14 +174,14 @@ defineExpose({ openWizard: openSession })
         :session-open="sessionOpen"
         @remove="removeLine"
       />
-      <p class="li-list-hint">
+      <p v-if="voiceEnabled" class="li-list-hint">
         Say <b>add line</b> or <b>add another</b> for more.
         Say <b>edit line 1</b> or <b>edit line {{ editHint }}</b> to change a line.
         Say <b>done</b> when finished.
       </p>
     </section>
 
-    <section class="li-voice" :class="{ active: sessionOpen }">
+    <section v-if="voiceEnabled" class="li-voice" :class="{ active: sessionOpen }">
       <button
         type="button"
         class="li-orb"
@@ -225,7 +231,7 @@ defineExpose({ openWizard: openSession })
       </div>
     </section>
 
-    <details class="li-manual" :open="manualOpen || !supported">
+    <details v-if="voiceEnabled" class="li-manual" :open="manualOpen || !supported">
       <summary @click.prevent="manualOpen = !manualOpen">Type a line instead</summary>
       <div class="li-manual-body">
         <label class="fld">
@@ -253,6 +259,35 @@ defineExpose({ openWizard: openSession })
         </div>
       </div>
     </details>
+
+    <section v-else class="li-manual-open">
+      <p class="li-manual-title">Type each line item</p>
+      <div class="li-manual-body">
+        <label class="fld">
+          <span>Type</span>
+          <select v-model="manualDraft.lineType">
+            <option value="">Select…</option>
+            <option v-for="t in WIZARD_LINE_TYPES" :key="t" :value="t">{{ lineTypeLabel(t) }}</option>
+          </select>
+        </label>
+        <label class="fld">
+          <span>Description</span>
+          <input v-model="manualDraft.description" data-prose="prose" type="text" placeholder="What was done?" @blur="onManualFieldBlur">
+        </label>
+        <label class="fld">
+          <span>{{ manualDraft.lineType === 'labor' ? 'Hours' : 'Quantity' }}</span>
+          <input v-model="manualDraft.qty" type="text" inputmode="decimal" @blur="onManualFieldBlur">
+        </label>
+        <label class="fld">
+          <span>Rate</span>
+          <input v-model="manualDraft.rate" type="text" inputmode="decimal" @blur="onManualFieldBlur">
+        </label>
+        <div class="li-manual-actions">
+          <button type="button" class="btn primary" @click="saveManualLine(true)">Save &amp; add another</button>
+          <button type="button" class="btn" @click="saveManualLine(false)">Save line</button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -439,6 +474,19 @@ defineExpose({ openWizard: openSession })
 
 .li-manual-body {
   margin-top: 12px;
+  text-align: left;
+}
+
+.li-manual-open {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.li-manual-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
   text-align: left;
 }
 
