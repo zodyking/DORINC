@@ -6,7 +6,6 @@ import { hasDatabaseConfigured, useDb } from '../db/client'
 import { getSecuritySnapshot, scheduleSnapshotRefresh } from '../services/security/policy.service'
 import { evaluateAccess } from '../services/security/evaluate'
 import { captureAccess } from '../services/security/capture.service'
-import { recordBanHit } from '../services/security/ip-bans.service'
 import { peekIpGeo } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
@@ -119,29 +118,38 @@ export default defineEventHandler(async (event) => {
     deferUnknownGeo: !coords,
   })
 
-  if (isPage && snapshot.policy.captureVisits) {
-    const throttleMs = snapshot.policy.captureThrottleSeconds * 1000
-    if (shouldCapture(`${ip ?? 'unknown'}|${path}`, throttleMs)) {
-      // Off the response path: this resolves the IP over the network, which
-      // both warms the cache for the next request and plots the visit.
-      void captureAccess(useDb(), {
-        eventType: 'visit',
-        stage: 'page_load',
-        ip,
-        path,
-        userAgent,
-        requestId: event.context.requestId as string | undefined ?? null,
-        viewer: session?.viewer ?? null,
-        exempt: isSuperAdmin,
-      }).catch(() => {})
-    }
+  // A rule match earns a row on API calls too — otherwise a banned client
+  // hammering /api/auth/login leaves no trace in the event feed. Both kinds of
+  // traffic are throttled per client so nothing can flood the table; a
+  // throttled hit still runs the capture, which keeps the ban and zone
+  // counters exact, it just writes no row.
+  const flagged = decision.blocked || decision.wouldBlock
+  const throttleMs = snapshot.policy.captureThrottleSeconds * 1000
+  const considered = flagged || (isPage && snapshot.policy.captureVisits)
+
+  if (considered) {
+    const key = flagged
+      // Keyed on the decision rather than the path, so a bot probing a hundred
+      // URLs produces one row per window instead of a hundred.
+      ? `${ip ?? 'unknown'}|blocked|${decision.reason ?? ''}`
+      : `${ip ?? 'unknown'}|${path}`
+
+    // Off the response path: this resolves the IP over the network, which both
+    // warms the cache for the next request and plots the event on the map.
+    void captureAccess(useDb(), {
+      eventType: 'visit',
+      stage: isPage ? 'page_load' : 'api',
+      ip,
+      path,
+      userAgent,
+      requestId: event.context.requestId as string | undefined ?? null,
+      viewer: session?.viewer ?? null,
+      exempt: isSuperAdmin,
+      recordEvent: shouldCapture(key, throttleMs),
+    }).catch(() => {})
   }
 
   if (!decision.blocked) return
-
-  if (decision.matchedBan && !isPage) {
-    void recordBanHit(useDb(), decision.matchedBan.id, { userAgent }).catch(() => {})
-  }
 
   if (isApi) {
     setResponseStatus(event, 403)

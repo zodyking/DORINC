@@ -52,6 +52,17 @@ export interface CaptureAccessInput {
 
   /** Skip the IP geolocation network call (used by the fast middleware path). */
   skipIpLookup?: boolean
+  /**
+   * Only write a row when a rule matched. Pre-authentication gate checks set
+   * this so a sign-in produces one row for its real outcome instead of two.
+   */
+  recordOnlyIfFlagged?: boolean
+  /**
+   * Evaluate and update the ban/zone counters, but write no event row. Used
+   * when a chatty client has already been recorded inside the throttle window,
+   * so the counters stay exact without the table filling up.
+   */
+  recordEvent?: boolean
 }
 
 export interface CaptureAccessResult {
@@ -101,8 +112,10 @@ export async function captureAccess(db: Db, input: CaptureAccessInput): Promise<
   })
 
   const outcome = outcomeFor(input, evaluation)
+  const flagged = evaluation.blocked || evaluation.wouldBlock
+  const write = input.recordEvent !== false && !(input.recordOnlyIfFlagged && !flagged)
 
-  const eventId = await recordAccessEvent(db, {
+  const eventId = !write ? null : await recordAccessEvent(db, {
     eventType: input.eventType,
     stage: input.stage,
     outcome,

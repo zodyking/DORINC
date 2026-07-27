@@ -90,8 +90,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Evaluate the gate before touching any session state, so a blocked attempt
-  // never revokes the account's existing sessions.
-  const gate = await captureAccess(useDb(), baseCapture)
+  // never revokes the account's existing sessions. Nothing is written unless a
+  // rule matched — the attempt's real outcome is recorded once, below.
+  const gate = await captureAccess(useDb(), { ...baseCapture, recordOnlyIfFlagged: true })
   if (gate.evaluation.blocked) {
     throw apiError(event, 'FORBIDDEN', policy.blockMessage || 'Access from your location is restricted', {
       reason: 'access_blocked',
