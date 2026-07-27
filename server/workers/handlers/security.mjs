@@ -63,7 +63,7 @@ export async function runSecurityGeoBackfill(pool, batch = BACKFILL_BATCH) {
     const ip = row.ip
     if (!ip) continue
 
-    let geo = null
+    let geo
     try {
       geo = await lookupIpGeo(ip)
     }

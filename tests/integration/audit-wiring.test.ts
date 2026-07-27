@@ -80,6 +80,9 @@ function walkMutationEndpoints(dir: string, acc: string[] = []): string[] {
 const API_ROOT = path.resolve('server/api')
 const AUDIT_EXEMPT = new Set([
   path.join(API_ROOT, 'editing-sessions', '[id]', 'heartbeat.post.ts'),
+  // Public visitor check. It writes an access event, which is the record for
+  // this path; an audit row per page load would bury the actual audit trail.
+  path.join(API_ROOT, 'security', 'check.post.ts'),
 ])
 
 describe('P1-32 Phase 1 audit wiring', () => {

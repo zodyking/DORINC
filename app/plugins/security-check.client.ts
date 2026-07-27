@@ -66,8 +66,14 @@ export default defineNuxtPlugin(() => {
       return
     }
     // No Worker support (or it failed to start): fall back to the main thread.
-    void $fetch<CheckResponse>('/api/security/check', { method: 'POST', body: payload })
-      .then(applyDecision)
+    void fetch('/api/security/check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+    })
+      .then(res => (res.ok ? res.json() as Promise<CheckResponse> : null))
+      .then(result => { if (result) applyDecision(result) })
       .catch(() => {})
   }
 
