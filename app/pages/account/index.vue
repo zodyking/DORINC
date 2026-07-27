@@ -27,6 +27,18 @@ interface AccountSession {
   isCurrent: boolean
 }
 
+interface AccountKnownDevice {
+  key: string
+  userAgent: string | null
+  ipAddress: string | null
+  locationLabel: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  sessionCount: number
+  isActive: boolean
+  isCurrent: boolean
+}
+
 interface AccountDetail {
   id: string
   name: string
@@ -36,6 +48,7 @@ interface AccountDetail {
   lastLoginAt: string | null
   activeSessionCount: number
   sessions: AccountSession[]
+  knownDevices: AccountKnownDevice[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
 }
@@ -188,7 +201,7 @@ async function saveNotificationPrefs() {
     await $fetch('/api/account/notifications', {
       method: 'PATCH',
       body: {
-        teamChatEnabled: teamChatEnabled.value,
+        ...(canManageTeamChat.value ? { teamChatEnabled: teamChatEnabled.value } : {}),
         messageEmailNotify: messageEmailNotify.value,
       },
     })
@@ -208,6 +221,15 @@ const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
 const mustChangePassword = computed(() => auth.user?.mustChangePassword === true)
 const passwordRequired = computed(() => mustChangePassword.value || route.query.password === 'required')
+const canManageTeamChat = computed(() => {
+  const type = account.value?.accountType || auth.user?.accountType
+  return type === 'admin' || type === 'super_admin'
+})
+
+function isMobileUserAgent(userAgent: string | null | undefined): boolean {
+  const ua = userAgent?.toLowerCase() ?? ''
+  return ua.includes('iphone') || ua.includes('ipad') || ua.includes('android')
+}
 </script>
 
 <template>
@@ -300,14 +322,20 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
           <div class="chead"><h3>Messages</h3></div>
           <div class="cbody">
             <div class="msg-prefs">
-              <label class="msg-pref-row">
+              <label class="msg-pref-row" :class="{ 'msg-pref-row--disabled': !canManageTeamChat }">
                 <span class="msg-pref-text">
                   <b>Team group chat</b>
                   <small>
                     Stay in the shared Team channel for internal workflow updates. You can clear chat history, but the channel cannot be deleted.
+                    <template v-if="!canManageTeamChat"> Only an admin can change this setting.</template>
                   </small>
                 </span>
-                <input v-model="teamChatEnabled" type="checkbox" class="msg-pref-check">
+                <input
+                  v-model="teamChatEnabled"
+                  type="checkbox"
+                  class="msg-pref-check"
+                  :disabled="!canManageTeamChat || notifyBusy"
+                >
               </label>
               <label class="msg-pref-row">
                 <span class="msg-pref-text">
@@ -348,8 +376,8 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
             :key="session.id"
             class="userrow"
           >
-            <div class="thumb" style="width:38px; height:38px; font-size:15px;">
-              {{ session.userAgent?.toLowerCase().includes('iphone') || session.userAgent?.toLowerCase().includes('android') ? '📱' : '💻' }}
+            <div class="thumb sess-thumb">
+              {{ isMobileUserAgent(session.userAgent) ? '📱' : '💻' }}
             </div>
             <div class="nm">
               <b>{{ sessionDeviceLabel(session.userAgent) }}</b>
@@ -379,6 +407,37 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
             >
               {{ revokeAllBusy ? 'Signing out others…' : 'Sign out of all other sessions' }}
             </button>
+          </div>
+
+          <div class="known-devices">
+            <div class="known-devices__head">
+              <h4>Known devices</h4>
+              <span>{{ account.knownDevices?.length ?? 0 }}</span>
+            </div>
+            <div
+              v-for="device in account.knownDevices"
+              :key="device.key"
+              class="userrow known-devices__row"
+            >
+              <div class="thumb sess-thumb">
+                {{ isMobileUserAgent(device.userAgent) ? '📱' : '💻' }}
+              </div>
+              <div class="nm">
+                <b>{{ sessionDeviceLabel(device.userAgent) }}</b>
+                <small>
+                  {{ sessionLocation(device.locationLabel, device.isCurrent) }}
+                  · last seen {{ formatSessionAge(device.lastSeenAt) }}
+                </small>
+              </div>
+              <div class="end">
+                <span v-if="device.isCurrent" class="pill ok">This device</span>
+                <span v-else-if="device.isActive" class="pill info">Active</span>
+                <span v-else class="pill gray">Known</span>
+              </div>
+            </div>
+            <div v-if="!account.knownDevices?.length" class="cbody known-devices__empty">
+              No known devices yet.
+            </div>
           </div>
         </div>
       </div>
@@ -413,6 +472,10 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
   border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
 }
+.msg-pref-row--disabled {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
 .msg-pref-row:first-child {
   padding-top: 0;
 }
@@ -446,6 +509,10 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
   cursor: pointer;
   accent-color: #4f46e5;
 }
+.msg-pref-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
 .msg-pref-ok {
   margin: 12px 0 0;
   color: #059669;
@@ -458,5 +525,40 @@ const passwordRequired = computed(() => mustChangePassword.value || route.query.
 }
 .msg-pref-save {
   margin-top: 14px;
+}
+.sess-thumb {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+.known-devices {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 4px;
+}
+.known-devices__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 6px;
+}
+.known-devices__head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.known-devices__head span {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.known-devices__row {
+  opacity: 0.98;
+}
+.known-devices__empty {
+  color: #94a3b8;
+  font-size: 13px;
+  padding-top: 4px;
 }
 </style>

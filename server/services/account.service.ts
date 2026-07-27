@@ -25,6 +25,19 @@ export interface AccountSessionRow {
   isCurrent: boolean
 }
 
+export interface AccountKnownDeviceRow {
+  /** Stable key for the device (normalized user-agent). */
+  key: string
+  userAgent: string | null
+  ipAddress: string | null
+  locationLabel: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  sessionCount: number
+  isActive: boolean
+  isCurrent: boolean
+}
+
 export interface AccountDetail {
   id: string
   name: string
@@ -34,8 +47,14 @@ export interface AccountDetail {
   lastLoginAt: string | null
   activeSessionCount: number
   sessions: AccountSessionRow[]
+  knownDevices: AccountKnownDeviceRow[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
+}
+
+function deviceKey(userAgent: string | null | undefined): string {
+  const ua = userAgent?.trim()
+  return ua ? ua : 'unknown'
 }
 
 export async function getAccountDetail(
@@ -67,6 +86,60 @@ export async function getAccountDetail(
     isCurrent: s.id === currentSessionId,
   }))
 
+  // Historical sessions (including revoked/expired) define the user's known devices.
+  const historyRows = await db
+    .select({
+      id: sessions.id,
+      userAgent: sessions.userAgent,
+      ipAddress: sessions.ipAddress,
+      locationLabel: sessions.locationLabel,
+      lastActivityAt: sessions.lastActivityAt,
+      createdAt: sessions.createdAt,
+      revokedAt: sessions.revokedAt,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+    .orderBy(desc(sessions.lastActivityAt))
+    .limit(500)
+
+  const deviceMap = new Map<string, AccountKnownDeviceRow>()
+  for (const row of historyRows) {
+    const key = deviceKey(row.userAgent)
+    const lastSeenAt = row.lastActivityAt.toISOString()
+    const createdAt = row.createdAt.toISOString()
+    const isLive = row.revokedAt == null && row.expiresAt > now
+    const isCurrent = row.id === currentSessionId
+    const existing = deviceMap.get(key)
+    if (!existing) {
+      deviceMap.set(key, {
+        key,
+        userAgent: row.userAgent,
+        ipAddress: row.ipAddress,
+        locationLabel: row.locationLabel,
+        firstSeenAt: createdAt,
+        lastSeenAt,
+        sessionCount: 1,
+        isActive: isLive,
+        isCurrent,
+      })
+      continue
+    }
+    existing.sessionCount += 1
+    if (isLive) existing.isActive = true
+    if (isCurrent) existing.isCurrent = true
+    if (row.createdAt.getTime() < new Date(existing.firstSeenAt).getTime()) {
+      existing.firstSeenAt = createdAt
+    }
+    // historyRows are newest-first; first write already holds the latest lastSeen/location.
+  }
+
+  const knownDevices = [...deviceMap.values()].sort((a, b) => {
+    if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+    return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
+  })
+
   const lastLogin = mapped.find(s => s.isCurrent) ?? mapped[0]
 
   return {
@@ -78,6 +151,7 @@ export async function getAccountDetail(
     lastLoginAt: lastLogin?.lastActivityAt ?? null,
     activeSessionCount: mapped.length,
     sessions: mapped,
+    knownDevices,
     teamChatEnabled: user.teamChatEnabled,
     messageEmailNotify: user.messageEmailNotify,
   }

@@ -8,11 +8,25 @@ import { validateBody } from '../../utils/validate'
 import { useDb } from '../../db/client'
 import { accountNotificationPrefsSchema } from '../../../shared/validators/account'
 
+function canManageTeamChat(accountType: string | undefined): boolean {
+  return accountType === 'admin' || accountType === 'super_admin'
+}
+
 export default defineEventHandler(async (event) => {
-  const auth = event.context.auth as { user?: { id: string } } | undefined
+  const auth = event.context.auth as {
+    user?: { id: string, accountType?: string }
+  } | undefined
   if (!auth?.user) throw apiError(event, 'UNAUTHENTICATED', 'Not signed in')
 
   const body = await validateBody(event, accountNotificationPrefsSchema)
+
+  if (body.teamChatEnabled !== undefined && !canManageTeamChat(auth.user.accountType)) {
+    throw apiError(
+      event,
+      'FORBIDDEN',
+      'Only admins can change team group chat membership',
+    )
+  }
 
   try {
     const user = await updateAccountNotificationPrefs(useDb(), auth.user.id, body)
