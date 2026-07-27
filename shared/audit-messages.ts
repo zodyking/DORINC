@@ -91,6 +91,8 @@ const ACTION_LABELS: Record<string, string> = {
   'service_logs.update': 'Service log updated',
   'service_logs.convert_to_invoice': 'Converted to invoice',
   'auth.login': 'Staff signed in',
+  'auth.login.outside_geofence': 'Logged in outside geofence',
+  'portal.login.outside_geofence': 'Logged in outside geofence',
   'auth.logout': 'Staff signed out',
   'auth.signup': 'New user registered',
   'auth.verify_email': 'Email verified',
@@ -201,6 +203,16 @@ export function formatAuditChangeMessage(input: AuditMessageInput): string {
   const before = asRecord(input.beforeData)
   const after = asRecord(input.afterData)
   const fields = Array.isArray(input.changedFields) ? input.changedFields : []
+
+  if (
+    input.action === 'auth.login.outside_geofence'
+    || input.action === 'portal.login.outside_geofence'
+  ) {
+    const name = input.actorName?.trim()
+      || stringVal(after.name)
+      || stringVal(after.displayName)
+    return name ? `${name} logged in outside geofence` : 'Logged in outside geofence'
+  }
 
   if (input.action === 'invoices.line_items.create') {
     const desc = stringVal(after.description) ?? 'line item'

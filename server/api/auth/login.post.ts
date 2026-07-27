@@ -2,6 +2,7 @@ import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
 import { AuthError, login, logout } from '../../auth/auth.service'
 import { createPendingLoginToken } from '../../auth/pending-login'
+import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
@@ -63,7 +64,10 @@ export default defineEventHandler(async (event) => {
 
     // Access gate: block non-super-admin logins from banned IPs / outside the
     // allowed geofence. Super admins are always exempt to prevent lockout.
+    // Known users who completed suspicious-location verification may sign in
+    // outside the geofence with a short-lived bypass cookie.
     const gate = getCachedAccessGateSettings()
+    let outsideGeofenceLogin = false
     if (gate.enabled && result.accountTypeKey !== 'super_admin') {
       const decision = evaluateAccessDecision(
         gate,
@@ -71,24 +75,36 @@ export default defineEventHandler(async (event) => {
         { strictGeo: loginCoords != null },
       )
       if (decision.blocked) {
-        await logout(useDb(), result.sessionToken).catch(() => {})
-        await recordAccessEvent(useDb(), {
-          eventType: 'login',
-          outcome: 'blocked',
-          ipAddress,
-          userId: result.user.id,
-          userName: result.user.name,
-          userEmail: result.user.email,
-          userAgent: getHeader(event, 'user-agent'),
-          latitude: loginCoords?.lat ?? null,
-          longitude: loginCoords?.lng ?? null,
-          locationLabel,
-          country: loginCountry,
-        }).catch(() => {})
-        throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
-          reason: 'access_blocked',
-          redirectUrl: gate.redirectUrl || null,
-        })
+        const bypass = decision.reason === 'geo_outside'
+          ? hasValidOutsideGeoBypass(event, {
+              ipAddress,
+              userAgent: getHeader(event, 'user-agent'),
+              userId: result.user.id,
+            })
+          : null
+        if (bypass) {
+          outsideGeofenceLogin = true
+        }
+        else {
+          await logout(useDb(), result.sessionToken).catch(() => {})
+          await recordAccessEvent(useDb(), {
+            eventType: 'login',
+            outcome: 'blocked',
+            ipAddress,
+            userId: result.user.id,
+            userName: result.user.name,
+            userEmail: result.user.email,
+            userAgent: getHeader(event, 'user-agent'),
+            latitude: loginCoords?.lat ?? null,
+            longitude: loginCoords?.lng ?? null,
+            locationLabel,
+            country: loginCountry,
+          }).catch(() => {})
+          throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
+            reason: 'access_blocked',
+            redirectUrl: gate.redirectUrl || null,
+          })
+        }
       }
     }
 
@@ -121,7 +137,7 @@ export default defineEventHandler(async (event) => {
         await writeAudit(event, {
           entityType: 'user',
           entityId: result.user.id,
-          action: 'auth.login',
+          action: outsideGeofenceLogin ? 'auth.login.outside_geofence' : 'auth.login',
           actor: {
             id: result.user.id,
             accountType: result.accountTypeKey,
@@ -132,6 +148,8 @@ export default defineEventHandler(async (event) => {
           afterData: {
             locationLabel,
             locationSource,
+            outsideGeofence: outsideGeofenceLogin,
+            accessDecisionReason: outsideGeofenceLogin ? 'geo_outside' : null,
           },
         })
       }
@@ -158,7 +176,7 @@ export default defineEventHandler(async (event) => {
         await writeAudit(event, {
           entityType: 'user',
           entityId: result.user.id,
-          action: 'portal.login',
+          action: outsideGeofenceLogin ? 'portal.login.outside_geofence' : 'portal.login',
           actor: {
             id: result.user.id,
             accountType: result.accountTypeKey,
@@ -169,6 +187,8 @@ export default defineEventHandler(async (event) => {
           afterData: {
             locationLabel,
             locationSource,
+            outsideGeofence: outsideGeofenceLogin,
+            accessDecisionReason: outsideGeofenceLogin ? 'geo_outside' : null,
           },
         })
       }
@@ -195,7 +215,7 @@ export default defineEventHandler(async (event) => {
         await writeAudit(event, {
           entityType: 'user',
           entityId: result.user.id,
-          action: 'auth.login',
+          action: outsideGeofenceLogin ? 'auth.login.outside_geofence' : 'auth.login',
           actor: {
             id: result.user.id,
             accountType: result.accountTypeKey,
@@ -206,6 +226,8 @@ export default defineEventHandler(async (event) => {
           afterData: {
             locationLabel: null,
             locationSource: 'device',
+            outsideGeofence: outsideGeofenceLogin,
+            accessDecisionReason: outsideGeofenceLogin ? 'geo_outside' : null,
           },
         })
       }

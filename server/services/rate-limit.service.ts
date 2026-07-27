@@ -12,6 +12,7 @@ export const DEFAULT_RATE_LIMITS: Record<RateLimitScope, RateLimitPolicy> = {
   verify_email: { maxAttempts: 5, windowMs: 15 * 60 * 1000 },
   password_reset: { maxAttempts: 5, windowMs: 15 * 60 * 1000 },
   credential_send: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
+  outside_geo: { maxAttempts: 8, windowMs: 15 * 60 * 1000 },
   ai: { maxAttempts: 30, windowMs: 60 * 60 * 1000 },
   upload: { maxAttempts: 20, windowMs: 60 * 60 * 1000 },
   pdf_gen: { maxAttempts: 10, windowMs: 60 * 60 * 1000 },

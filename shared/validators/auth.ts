@@ -31,3 +31,7 @@ export const loginBodySchema = z.discriminatedUnion('portal', [
   customerLoginBodySchema,
   staffLoginBodySchema,
 ])
+
+export const outsideGeoVerifyBodySchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit verification code'),
+})
