@@ -23,6 +23,15 @@ const GATE_PAGES = [
   '/auth/verify-location',
   '/auth/access-restricted',
 ]
+/** Auth entry pages still enforce geo even for signed-in super admins. */
+const AUTH_ENTRY_PREFIXES = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/forgot-password',
+  '/auth/resend-verification',
+  '/auth/reset-password',
+  '/auth/verify-email',
+]
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
 /** Throttle visit capture so a single client can't flood the table. */
@@ -64,6 +73,11 @@ function isGatePage(path: string): boolean {
   return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
 }
 
+function isAuthEntry(path: string): boolean {
+  if (path === '/auth') return true
+  return AUTH_ENTRY_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+}
+
 export default defineEventHandler(async (event) => {
   const settings = getCachedAccessGateSettings()
   if (!settings.enabled) return
@@ -76,7 +90,8 @@ export default defineEventHandler(async (event) => {
   const ip = getClientIp(event)
   const userAgent = getHeader(event, 'user-agent') ?? null
 
-  // Resolve the viewer so super admins are never geo/IP blocked (anti-lockout).
+  // Resolve the viewer so super admins are never geo/IP blocked on app pages
+  // (anti-lockout). Auth entry pages still enforce the geofence.
   let isSuperAdmin = false
   let viewer: { id: string, name: string, email: string } | null = null
   try {
@@ -93,36 +108,32 @@ export default defineEventHandler(async (event) => {
     // Ignore — treat as anonymous visitor.
   }
 
+  const checksGeo = settings.blockMode === 'geo' || settings.blockMode === 'both'
+  const geoActive = checksGeo && settings.allowedPolygon.length >= 3
+
   let cachedGeo = peekIpGeo(ip)
-  let coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
-    ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
-    : null
-
-  let decision = isSuperAdmin
-    ? { blocked: false as const, reason: null }
-    : evaluateAccessDecision(settings, { ip, coords })
-
-  // On the blocked path only: if geo is unknown because the IP cache is cold,
-  // resolve once so known travelers can reach identity verification on first hit.
-  // Does not change evaluateAccessDecision itself.
-  if (!isSuperAdmin && decision.blocked && decision.reason === 'geo_unknown' && ip) {
+  // When geofence is active, always resolve IP geo (peek alone is too easy to
+  // miss on first hit / cold cache and lets entry pages render incorrectly).
+  if (geoActive && ip && (!cachedGeo || cachedGeo.latitude == null || cachedGeo.longitude == null)) {
     try {
-      const resolved = await resolveIpGeo(ip)
-      if (resolved) {
-        cachedGeo = resolved
-        if (resolved.latitude != null && resolved.longitude != null) {
-          coords = { lat: resolved.latitude, lng: resolved.longitude }
-          decision = evaluateAccessDecision(settings, { ip, coords })
-        }
-      }
+      cachedGeo = await resolveIpGeo(ip) ?? cachedGeo
     }
     catch {
-      // Keep the original geo_unknown decision.
+      // Keep peek/null.
     }
   }
 
+  const coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
+    ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
+    : null
+
+  const superAdminExempt = isSuperAdmin && !isAuthEntry(path) && !isGatePage(path)
+  const decision = superAdminExempt
+    ? { blocked: false as const, reason: null }
+    : evaluateAccessDecision(settings, { ip, coords })
+
   // Known users who already verified a suspicious-location challenge may proceed.
-  const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
+  const outsideGeoBypass = (!superAdminExempt && decision.blocked && decision.reason === 'geo_outside')
     ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent })
     : null
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)

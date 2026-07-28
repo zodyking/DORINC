@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { clearGeoGateCleared } from '~/utils/geo-gate'
+
 definePageMeta({
   layout: false,
   // Challenge is issued server-side on redirect. This page must not probe APIs.
@@ -8,6 +10,11 @@ definePageMeta({
 const route = useRoute()
 const err = computed(() => route.query.err === '1' || route.query.err === 'invalid')
 const sent = computed(() => route.query.sent === '1')
+
+onMounted(() => {
+  // Force a fresh GPS gate check after verification completes.
+  clearGeoGateCleared()
+})
 </script>
 
 <template>

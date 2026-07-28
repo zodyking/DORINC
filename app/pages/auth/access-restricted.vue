@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { clearGeoGateCleared } from '~/utils/geo-gate'
+
 definePageMeta({
   layout: false,
   // Static notice page — no client data fetches / no scoping requests.
   ssr: true,
+})
+
+onMounted(() => {
+  clearGeoGateCleared()
 })
 </script>
 
