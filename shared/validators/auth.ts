@@ -35,13 +35,3 @@ export const loginBodySchema = z.discriminatedUnion('portal', [
 export const outsideGeoVerifyBodySchema = z.object({
   code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit verification code'),
 })
-
-/** Browser GPS check for the access gate. Coords optional → IP fallback. */
-export const outsideGeoDeviceCheckBodySchema = z.object({
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
-  accuracyM: z.number().min(0).max(100_000).optional(),
-}).refine(
-  data => (data.latitude == null) === (data.longitude == null),
-  { message: 'latitude and longitude must be provided together' },
-)

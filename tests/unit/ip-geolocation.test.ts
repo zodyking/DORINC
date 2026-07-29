@@ -32,6 +32,9 @@ describe('resolveIpLocation formatting', () => {
           zip: '11201',
         }))
       }
+      if (url.includes('ipapi.co') || url.includes('ipinfo.io')) {
+        return new Response(JSON.stringify({ error: true }))
+      }
       return new Response(JSON.stringify({ success: false }))
     }
 
@@ -58,6 +61,9 @@ describe('resolveIpLocation formatting', () => {
           country_code: 'US',
           postal: '11215',
         }))
+      }
+      if (url.includes('ipapi.co') || url.includes('ipinfo.io')) {
+        return new Response(JSON.stringify({ error: true }))
       }
       return new Response(JSON.stringify({ status: 'fail' }))
     }
