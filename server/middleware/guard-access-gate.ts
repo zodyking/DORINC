@@ -7,7 +7,7 @@ import {
   getCachedAccessGateSettings,
   recordAccessEvent,
 } from '../services/access-gate.service'
-import { peekIpGeo, resolveIpGeo, resolveIpLocation } from '../services/ip-geolocation.service'
+import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent, resolveIpLocation } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
 import { hasValidOutsideGeoBypass } from '../auth/outside-geo-bypass'
@@ -93,33 +93,29 @@ export default defineEventHandler(async (event) => {
     // Ignore — treat as anonymous visitor.
   }
 
+  const checksGeo = settings.blockMode === 'geo' || settings.blockMode === 'both'
+  const geoActive = checksGeo && settings.allowedPolygon.length >= 3
+
   let cachedGeo = peekIpGeo(ip)
-  let coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
+  // Visit gate stays IP-based (browser GPS remains login-only). Always resolve
+  // IP geo when the fence is active so cold cache / weak peek can't skip the check.
+  if (!isSuperAdmin && geoActive && ip) {
+    try {
+      const resolved = await resolveIpGeoForEvent(event, ip)
+      if (resolved) cachedGeo = resolved
+    }
+    catch {
+      // Keep peek/null.
+    }
+  }
+
+  const coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
     ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
     : null
 
-  let decision = isSuperAdmin
+  const decision = isSuperAdmin
     ? { blocked: false as const, reason: null }
     : evaluateAccessDecision(settings, { ip, coords })
-
-  // On the blocked path only: if geo is unknown because the IP cache is cold,
-  // resolve once so known travelers can reach identity verification on first hit.
-  // Does not change evaluateAccessDecision itself.
-  if (!isSuperAdmin && decision.blocked && decision.reason === 'geo_unknown' && ip) {
-    try {
-      const resolved = await resolveIpGeo(ip)
-      if (resolved) {
-        cachedGeo = resolved
-        if (resolved.latitude != null && resolved.longitude != null) {
-          coords = { lat: resolved.latitude, lng: resolved.longitude }
-          decision = evaluateAccessDecision(settings, { ip, coords })
-        }
-      }
-    }
-    catch {
-      // Keep the original geo_unknown decision.
-    }
-  }
 
   // Known users who already verified a suspicious-location challenge may proceed.
   const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')

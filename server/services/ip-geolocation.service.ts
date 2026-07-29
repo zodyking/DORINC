@@ -1,3 +1,5 @@
+import type { H3Event } from 'h3'
+import { getHeader } from 'h3'
 import { isPrivateIp, normalizeClientIp } from '../utils/client-ip'
 
 export { normalizeClientIp } from '../utils/client-ip'
@@ -91,6 +93,31 @@ interface IpApiResponse {
   zip?: string
   lat?: number
   lon?: number
+  mobile?: boolean
+  proxy?: boolean
+  hosting?: boolean
+}
+
+interface IpApiCoResponse {
+  error?: boolean
+  reason?: string
+  city?: string
+  region?: string
+  region_code?: string
+  country_name?: string
+  country_code?: string
+  postal?: string
+  latitude?: number
+  longitude?: number
+}
+
+interface IpInfoResponse {
+  city?: string
+  region?: string
+  country?: string
+  postal?: string
+  loc?: string
+  bogon?: boolean
 }
 
 export interface IpLocationResult {
@@ -102,6 +129,23 @@ export interface IpGeoResult {
   latitude: number | null
   longitude: number | null
   country: string | null
+  /** True when the source marked this IP as mobile / CGNAT-prone. */
+  mobile?: boolean
+  /** Provider sources that contributed to this result. */
+  sources?: string[]
+}
+
+interface ProviderGeo {
+  source: string
+  label: string | null
+  latitude: number
+  longitude: number
+  country: string | null
+  mobile?: boolean
+  proxy?: boolean
+  hosting?: boolean
+  /** Higher is better. */
+  weight: number
 }
 
 function abbreviateRegion(region: string, regionCode?: string, countryCode?: string): string {
@@ -159,12 +203,12 @@ export function formatLocationParts(parts: {
   return segments.join(', ')
 }
 
-async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
+async function fetchJson<T>(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<T | null> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, { signal: controller.signal, headers })
     clearTimeout(timeoutId)
     if (!res.ok) return null
     return await res.json() as T
@@ -175,9 +219,89 @@ async function fetchJson<T>(url: string, timeoutMs: number): Promise<T | null> {
   }
 }
 
+function haversineKm(a: { lat: number, lng: number }, b: { lat: number, lng: number }): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const r = 6371
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat)
+  const lat2 = toRad(b.lat)
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** Providers that agree within this distance are averaged (city-scale). */
+const CONSENSUS_KM = 15
+
+function toResult(cluster: ProviderGeo[]): IpGeoResult {
+  const weightSum = cluster.reduce((sum, p) => sum + p.weight, 0)
+  const latitude = cluster.reduce((sum, p) => sum + p.latitude * p.weight, 0) / weightSum
+  const longitude = cluster.reduce((sum, p) => sum + p.longitude * p.weight, 0) / weightSum
+  const bestLabel = [...cluster].sort((a, b) => {
+    const aLen = a.label?.length ?? 0
+    const bLen = b.label?.length ?? 0
+    return bLen - aLen || b.weight - a.weight
+  })[0]
+  return {
+    label: bestLabel?.label ?? null,
+    latitude,
+    longitude,
+    country: bestLabel?.country ?? null,
+    mobile: cluster.some(p => p.mobile),
+    sources: cluster.map(p => p.source),
+  }
+}
+
+/**
+ * Combine provider coordinates. Prefer tight consensus; edge/high-trust
+ * sources win when low-trust mobile/proxy points disagree across a city border.
+ */
+export function pickConsensusGeo(providers: ProviderGeo[]): IpGeoResult | null {
+  const usable = providers.filter(p =>
+    Number.isFinite(p.latitude)
+    && Number.isFinite(p.longitude)
+    && Math.abs(p.latitude) <= 90
+    && Math.abs(p.longitude) <= 180,
+  )
+  if (!usable.length) return null
+
+  const ranked = [...usable].sort((a, b) => b.weight - a.weight)
+
+  // Edge / paid sources: if they disagree with weaker mobile/proxy hits, trust them alone.
+  const authoritative = ranked.find(p => p.weight >= 5)
+  if (authoritative) {
+    const dissenters = usable.filter(p => p.source !== authoritative.source && haversineKm(
+      { lat: authoritative.latitude, lng: authoritative.longitude },
+      { lat: p.latitude, lng: p.longitude },
+    ) > CONSENSUS_KM)
+    const onlyWeakDisagree = dissenters.length > 0
+      && dissenters.every(p => p.mobile || p.proxy || p.hosting || p.weight <= 3)
+    if (onlyWeakDisagree) {
+      return toResult([authoritative])
+    }
+  }
+
+  // Prefer a high-weight cluster of agreeing providers.
+  for (const seed of ranked) {
+    const cluster = usable.filter(p => haversineKm(
+      { lat: seed.latitude, lng: seed.longitude },
+      { lat: p.latitude, lng: p.longitude },
+    ) <= CONSENSUS_KM)
+    if (cluster.length >= 2 || seed.weight >= 5) {
+      return toResult(cluster)
+    }
+  }
+
+  // Single remaining source: prefer non-mobile/non-proxy when available.
+  const trusted = ranked.find(p => !p.mobile && !p.proxy && !p.hosting) ?? ranked[0]
+  if (!trusted) return null
+  return toResult([trusted])
+}
+
 async function lookupWithIpApi(ip: string): Promise<IpLocationResult | null> {
   const data = await fetchJson<IpApiResponse>(
-    `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,zip,lat,lon`,
+    `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,zip,lat,lon,mobile,proxy,hosting`,
     3000,
   )
   if (data?.status !== 'success' || !data.city) return null
@@ -212,6 +336,25 @@ async function lookupWithIpWho(ip: string): Promise<IpLocationResult | null> {
   return { label }
 }
 
+async function lookupWithIpApiCo(ip: string): Promise<IpLocationResult | null> {
+  const data = await fetchJson<IpApiCoResponse>(
+    `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+    3000,
+    { Accept: 'application/json' },
+  )
+  if (!data || data.error || !data.city) return null
+  const label = formatLocationParts({
+    city: data.city,
+    region: data.region,
+    regionCode: data.region_code,
+    country: data.country_name,
+    countryCode: data.country_code,
+    zip: data.postal,
+  })
+  if (!label) return null
+  return { label }
+}
+
 function pickMoreSpecificLocation(a: IpLocationResult | null, b: IpLocationResult | null): IpLocationResult | null {
   if (!a) return b
   if (!b) return a
@@ -232,12 +375,16 @@ export async function resolveIpLocation(ip: string | null | undefined): Promise<
   const normalized = normalizeClientIp(ip)
   if (!normalized || isPrivateIp(normalized)) return null
 
-  const [fromIpApi, fromIpWho] = await Promise.all([
+  const [fromIpApi, fromIpWho, fromIpApiCo] = await Promise.all([
     lookupWithIpApi(normalized),
     lookupWithIpWho(normalized),
+    lookupWithIpApiCo(normalized),
   ])
 
-  const best = pickMoreSpecificLocation(fromIpApi, fromIpWho)
+  const best = pickMoreSpecificLocation(
+    pickMoreSpecificLocation(fromIpApi, fromIpWho),
+    fromIpApiCo,
+  )
   return best?.label ?? null
 }
 
@@ -247,7 +394,8 @@ interface CachedGeo {
 }
 
 const IP_GEO_CACHE = new Map<string, CachedGeo>()
-const IP_GEO_TTL_MS = 24 * 60 * 60 * 1000
+/** Shorter TTL so travelers are not stuck on a stale "inside" city for a full day. */
+const IP_GEO_TTL_MS = 2 * 60 * 60 * 1000
 const IP_GEO_CACHE_MAX = 5000
 
 function readGeoCache(ip: string): IpGeoResult | null | undefined {
@@ -268,14 +416,18 @@ function writeGeoCache(ip: string, value: IpGeoResult | null): void {
   IP_GEO_CACHE.set(ip, { value, expiresAt: Date.now() + IP_GEO_TTL_MS })
 }
 
-async function lookupGeoWithIpApi(ip: string): Promise<IpGeoResult | null> {
+async function lookupGeoWithIpApi(ip: string): Promise<ProviderGeo | null> {
   const data = await fetchJson<IpApiResponse>(
-    `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,zip,lat,lon`,
+    `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,region,regionName,country,countryCode,zip,lat,lon,mobile,proxy,hosting`,
     3000,
   )
   if (data?.status !== 'success') return null
   if (typeof data.lat !== 'number' || typeof data.lon !== 'number') return null
+  let weight = 3
+  if (data.mobile) weight -= 1
+  if (data.proxy || data.hosting) weight -= 1
   return {
+    source: 'ip-api',
     label: formatLocationParts({
       city: data.city,
       region: data.regionName || data.region,
@@ -287,14 +439,19 @@ async function lookupGeoWithIpApi(ip: string): Promise<IpGeoResult | null> {
     latitude: data.lat,
     longitude: data.lon,
     country: data.country ?? null,
+    mobile: data.mobile === true,
+    proxy: data.proxy === true,
+    hosting: data.hosting === true,
+    weight: Math.max(1, weight),
   }
 }
 
-async function lookupGeoWithIpWho(ip: string): Promise<IpGeoResult | null> {
+async function lookupGeoWithIpWho(ip: string): Promise<ProviderGeo | null> {
   const data = await fetchJson<IpWhoResponse>(`https://ipwho.is/${encodeURIComponent(ip)}`, 3000)
   if (!data?.success) return null
   if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') return null
   return {
+    source: 'ipwho',
     label: formatLocationParts({
       city: data.city,
       region: data.region,
@@ -306,6 +463,93 @@ async function lookupGeoWithIpWho(ip: string): Promise<IpGeoResult | null> {
     latitude: data.latitude,
     longitude: data.longitude,
     country: data.country ?? null,
+    weight: 3,
+  }
+}
+
+async function lookupGeoWithIpApiCo(ip: string): Promise<ProviderGeo | null> {
+  const data = await fetchJson<IpApiCoResponse>(
+    `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+    3000,
+    { Accept: 'application/json' },
+  )
+  if (!data || data.error) return null
+  if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') return null
+  return {
+    source: 'ipapi.co',
+    label: formatLocationParts({
+      city: data.city,
+      region: data.region,
+      regionCode: data.region_code,
+      country: data.country_name,
+      countryCode: data.country_code,
+      zip: data.postal,
+    }),
+    latitude: data.latitude,
+    longitude: data.longitude,
+    country: data.country_name ?? null,
+    weight: 4,
+  }
+}
+
+async function lookupGeoWithIpInfo(ip: string): Promise<ProviderGeo | null> {
+  const token = process.env.IPINFO_TOKEN?.trim()
+  if (!token) return null
+  const data = await fetchJson<IpInfoResponse>(
+    `https://ipinfo.io/${encodeURIComponent(ip)}/json?token=${encodeURIComponent(token)}`,
+    3000,
+  )
+  if (!data || data.bogon || !data.loc) return null
+  const [latRaw, lngRaw] = data.loc.split(',')
+  const latitude = Number(latRaw)
+  const longitude = Number(lngRaw)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+  return {
+    source: 'ipinfo',
+    label: formatLocationParts({
+      city: data.city,
+      region: data.region,
+      regionCode: data.region,
+      country: data.country,
+      countryCode: data.country,
+      zip: data.postal,
+    }),
+    latitude,
+    longitude,
+    country: data.country ?? null,
+    weight: 5,
+  }
+}
+
+/** Read Cloudflare visitor-location headers when the edge provides them. */
+export function readCloudflareIpGeo(event: H3Event): ProviderGeo | null {
+  const latRaw = getHeader(event, 'cf-iplatitude')
+  const lngRaw = getHeader(event, 'cf-iplongitude')
+  if (!latRaw || !lngRaw) return null
+  const latitude = Number(latRaw)
+  const longitude = Number(lngRaw)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+  const city = getHeader(event, 'cf-ipcity')
+  const region = getHeader(event, 'cf-region') || getHeader(event, 'cf-region-code')
+  const regionCode = getHeader(event, 'cf-region-code')
+  const country = getHeader(event, 'cf-ipcountry')
+  const zip = getHeader(event, 'cf-postal-code')
+
+  return {
+    source: 'cloudflare',
+    label: formatLocationParts({
+      city,
+      region,
+      regionCode,
+      country,
+      countryCode: country,
+      zip,
+    }),
+    latitude,
+    longitude,
+    country: country ?? null,
+    weight: 6,
   }
 }
 
@@ -320,23 +564,36 @@ export function peekIpGeo(ip: string | null | undefined): IpGeoResult | null | u
 }
 
 /**
- * Resolve approximate coordinates + label for a public IP, cached in memory
- * for 24h. Returns null for private/unknown IPs so callers can fail open.
+ * Resolve approximate coordinates + label for a public IP using multiple
+ * providers (and optional Cloudflare edge headers). Cached for 2h.
  */
-export async function resolveIpGeo(ip: string | null | undefined): Promise<IpGeoResult | null> {
+export async function resolveIpGeo(
+  ip: string | null | undefined,
+  options: { cloudflare?: ProviderGeo | null } = {},
+): Promise<IpGeoResult | null> {
   const normalized = normalizeClientIp(ip)
   if (!normalized || isPrivateIp(normalized)) return null
 
   const cached = readGeoCache(normalized)
   if (cached !== undefined) return cached
 
-  const [fromIpApi, fromIpWho] = await Promise.all([
+  const providers = await Promise.all([
+    Promise.resolve(options.cloudflare ?? null),
     lookupGeoWithIpApi(normalized),
     lookupGeoWithIpWho(normalized),
+    lookupGeoWithIpApiCo(normalized),
+    lookupGeoWithIpInfo(normalized),
   ])
 
-  const result = fromIpApi ?? fromIpWho
+  const result = pickConsensusGeo(providers.filter((p): p is ProviderGeo => !!p))
   writeGeoCache(normalized, result)
   return result
 }
 
+/** Convenience wrapper: include Cloudflare edge geo when present on the request. */
+export async function resolveIpGeoForEvent(
+  event: H3Event,
+  ip: string | null | undefined,
+): Promise<IpGeoResult | null> {
+  return resolveIpGeo(ip, { cloudflare: readCloudflareIpGeo(event) })
+}
