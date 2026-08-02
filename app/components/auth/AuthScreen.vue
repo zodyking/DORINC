@@ -336,6 +336,7 @@ async function submitSignup() {
                   {{ reveal.signupPass ? 'Hide' : 'Show' }}
                 </button>
               </div>
+              <span class="help">At least 12 characters</span>
             </div>
             <div class="fld">
               <label for="signup-confirm">Confirm Password</label>
@@ -362,7 +363,7 @@ async function submitSignup() {
             </div>
             <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <p v-if="notice" class="auth-hint auth-success" role="status">{{ notice }}</p>
-            <p class="auth-hint">Requires admin approval.</p>
+            <p v-if="!error && !notice" class="auth-hint auth-info">After you verify your email, an admin must approve your account before you can sign in.</p>
             <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:12px;padding:11px;">
               {{ busy ? 'Submitting…' : 'Submit request' }}
             </button>
