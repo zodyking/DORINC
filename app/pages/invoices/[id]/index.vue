@@ -270,6 +270,12 @@ const busy = ref(false)
 const actionError = ref('')
 const viewTab = ref<'detail' | 'photos' | 'pdf'>('detail')
 const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
+const sendRef = ref<{ openModal: () => void } | null>(null)
+
+function onSendClick() {
+  if (!canSendNow.value || sendInProgress.value) return
+  sendRef.value?.openModal()
+}
 
 watch(isMessagePdfView, (active) => {
   if (active) viewTab.value = 'pdf'
@@ -418,13 +424,15 @@ const summaryRows = computed(() => {
         >
           Submit for manager approval
         </button>
-        <SendInvoiceButton
+        <button
           v-if="canSend && canSendNow && !sendInProgress"
-          :invoice-id="id"
-          :label="sendButtonLabel"
+          type="button"
+          class="btn"
           :disabled="busy"
-          @sent="refresh()"
-        />
+          @click="onSendClick"
+        >
+          {{ sendButtonLabel }}
+        </button>
         <NuxtLink
           v-if="canRecordPayment && showRecordPayment"
           :to="`/invoices/${id}/payment`"
@@ -441,35 +449,6 @@ const summaryRows = computed(() => {
         >
           {{ pdfDownloadBusy ? 'Preparing…' : 'Download' }}
         </button>
-        <ChangeDatesButton
-          v-if="invoice.status !== 'void'"
-          :invoice-id="id"
-          :invoice-date="invoice.invoiceDate"
-          :due-date="invoice.dueDate"
-          :payment-terms="invoice.paymentTerms"
-          :disabled="busy"
-          @changed="refresh()"
-        />
-        <ChangeVehicleButton
-          v-if="invoice.status !== 'void' && invoice.customerId"
-          entity-type="invoice"
-          :entity-id="id"
-          :customer-id="invoice.customerId"
-          :current-vehicle-id="invoice.vehicleId"
-          :disabled="busy"
-          @changed="refresh()"
-        />
-        <ReassignEntityButton
-          v-if="invoice.status !== 'void'"
-          entity-type="invoice"
-          :entity-id="id"
-          :entity-label="invoice.invoiceNumberFormatted"
-          :current-customer-id="invoice.customerId"
-          :current-customer-name="invoice.customerName"
-          :current-vehicle-id="invoice.vehicleId"
-          :disabled="busy"
-          @reassigned="refresh()"
-        />
         <DeleteEntityButton
           v-if="removableInvoice"
           entity-type="invoice"
@@ -479,6 +458,15 @@ const summaryRows = computed(() => {
         />
       </template>
     </StaffPageHead>
+
+    <SendInvoiceButton
+      v-if="canSend && canSendNow"
+      ref="sendRef"
+      :invoice-id="id"
+      :label="sendButtonLabel"
+      hide-trigger
+      @sent="refresh()"
+    />
 
     <div class="inv-meta">
       <div class="inv-meta__item">
