@@ -923,225 +923,221 @@ const aiPopStyle = computed(() => {
       </div>
 
       <div v-show="activeTab === 'invoice'" class="ed-pane" :class="{ active: activeTab === 'invoice' }">
-        <div class="cols">
-          <div class="stack">
-            <div class="card">
-              <div class="chead"><h3>Details</h3></div>
-              <div class="cbody ed-details-grid">
-                <label class="fld">
-                  Customer
-                  <select v-model="customerId" :disabled="!editable" @change="onCustomerChange">
-                    <option v-if="!customerOptions.length" value="" disabled>
-                      {{ customersPending ? 'Loading customers…' : 'No customers found' }}
-                    </option>
-                    <option v-for="c in customerOptions" :key="c.id" :value="c.id">
-                      {{ c.displayName }}
-                    </option>
-                  </select>
-                  <span class="help">{{ customerTermsHelp(selectedCustomer?.paymentTerms ?? invoice.paymentTerms, selectedCustomer?.accountKind) }}</span>
-                </label>
-                <label class="fld">
-                  Vehicle
-                  <select v-model="vehicleId" :disabled="!editable || !customerId" @change="patchHeader">
-                    <option value="">— Select vehicle —</option>
-                    <option v-if="vehiclesPending && !vehicleOptions.length" value="" disabled>Loading vehicles…</option>
-                    <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">
-                      {{ vehicleTag(v) }} — {{ vehicleSub(v) }}
-                    </option>
-                  </select>
-                  <span class="help">{{ vehicleHelp }}</span>
-                </label>
-                <label class="fld">
-                  Invoice Date
-                  <input v-model="invoiceDate" type="date" :disabled="!editable" @change="patchHeader">
-                </label>
-                <label class="fld">
-                  Due date
-                  <input v-model="dueDate" type="date" :disabled="!editable" @change="patchHeader">
-                </label>
-                <label class="fld ed-po-span">
-                  Reference / PO
-                  <input v-model="poNumber" type="text" placeholder="Optional — customer PO number" :disabled="!editable" @blur="patchHeader">
-                </label>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="chead"><h3>Service narrative</h3></div>
-              <div class="cbody">
-                <label class="fld">
-                  Customer complaint / symptoms
-                  <textarea
-                    :value="complaint"
-                    rows="4"
-                    placeholder="What the customer reported — printed on invoice PDF"
-                    :disabled="!editable"
-                    v-bind="complaintInputAttrs"
-                    @input="onComplaintInput"
-                    @blur="onComplaintFieldBlur"
-                  />
-                  <span class="help">Shown on customer-facing PDF under Symptoms / Complaints</span>
-                </label>
-                <label class="fld">
-                  Internal notes <span class="fld-badge">Staff only</span>
-                  <textarea
-                    v-model="internalNotes"
-                    rows="4"
-                    placeholder="Parts used, fault codes, follow-up — staff only"
-                    :disabled="!editable"
-                    @blur="patchHeader"
-                  />
-                  <span class="help">Never shown on customer PDF or portal</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="chead">
-                <h3>Line items</h3>
-                <div class="right">
-                  <button
-                    type="button"
-                    class="btn sm ai-btn"
-                    :disabled="!editable || !canDescribe || aiBusy || !lines.length"
-                    title="AI description assist (Ctrl+Shift+D)"
-                    @click="openAiPopover(lines.find(l => l.id === selectedLineId) ?? lines[0]!, $event)"
-                  >
-                    <span class="dot">✦</span> AI
-                  </button>
-                  <NuxtLink to="/catalog" class="btn sm">From catalog</NuxtLink>
-                  <button
-                    type="button"
-                    class="btn sm primary"
-                    :disabled="!editable || busy"
-                    :title="!editable && lockedByOther ? 'Another user is editing this invoice' : !editable && sessionLoading ? 'Opening editor…' : !editable ? 'This invoice cannot be edited' : busy ? 'Saving…' : undefined"
-                    @click="addEmptyLine"
-                  >
-                    + Add line
-                  </button>
-                </div>
-              </div>
-              <div class="tscroll">
-                <table class="ed-lines">
-                  <thead>
-                    <tr>
-                      <th style="width:110px">Type</th>
-                      <th>Description</th>
-                      <th style="width:110px">Qty / Hrs</th>
-                      <th style="width:150px">Rate</th>
-                      <th style="width:130px; text-align:right">Amount</th>
-                      <th style="width:36px" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="line in lines" :key="line.id">
-                      <td>
-                        <select v-model="line.lineType" :disabled="!editable" @change="patchLine(line)">
-                          <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                        </select>
-                      </td>
-                      <td>
-                        <CatalogLineAutocomplete
-                          v-model="line.description"
-                          v-model:line-type="line.lineType"
-                          :line-id="line.id"
-                          :disabled="!editable"
-                          @focus="selectedLineId = line.id"
-                          @blur="patchLine(line)"
-                          @tab-next="focusLineQty(line.id)"
-                          @select="applyCatalogToExistingLine(line, $event)"
-                        />
-                      </td>
-                      <td>
-                        <LineQuantityInput
-                          v-model="line.quantity"
-                          :line-id="line.id"
-                          :disabled="!editable"
-                          @blur="patchLine(line)"
-                          @tab-next="focusLineRate(line.id)"
-                        />
-                      </td>
-                      <td>
-                        <LineCurrencyInput
-                          v-model="line.unitPrice"
-                          :line-id="line.id"
-                          :disabled="!editable"
-                          @blur="patchLine(line)"
-                          @tab-next="onLineRateTabNext(line)"
-                        />
-                      </td>
-                      <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount) }}</td>
-                      <td>
-                        <button
-                          type="button"
-                          class="rm"
-                          aria-label="Remove line"
-                          :disabled="!editable || lines.length <= 1 || busy"
-                          @click="removeLine(line.id)"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="ed-sums">
-                <div
-                  v-for="(row, i) in summaryRows"
-                  :key="i"
-                  class="row"
-                  :class="{ grand: row.grand }"
-                >
-                  <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
-                  <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="editable" class="savebar">
-              <button type="button" class="btn" :disabled="busy" @click="saveDraft">
-                {{ busy ? 'Saving…' : 'Save draft' }}
-              </button>
-              <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
-              <button
-                type="button"
-                class="btn primary"
-                :disabled="busy"
-                :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
-                @click="finalizeAndSend"
-              >
-                Finalize &amp; send
-              </button>
-            </div>
-            <div v-else class="savebar">
-              <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
+        <div class="stack ed-invoice-stack">
+          <div class="card">
+            <div class="chead"><h3>Details</h3></div>
+            <div class="cbody ed-details-grid">
+              <label class="fld">
+                Customer
+                <select v-model="customerId" :disabled="!editable" @change="onCustomerChange">
+                  <option v-if="!customerOptions.length" value="" disabled>
+                    {{ customersPending ? 'Loading customers…' : 'No customers found' }}
+                  </option>
+                  <option v-for="c in customerOptions" :key="c.id" :value="c.id">
+                    {{ c.displayName }}
+                  </option>
+                </select>
+                <span class="help">{{ customerTermsHelp(selectedCustomer?.paymentTerms ?? invoice.paymentTerms, selectedCustomer?.accountKind) }}</span>
+              </label>
+              <label class="fld">
+                Vehicle
+                <select v-model="vehicleId" :disabled="!editable || !customerId" @change="patchHeader">
+                  <option value="">— Select vehicle —</option>
+                  <option v-if="vehiclesPending && !vehicleOptions.length" value="" disabled>Loading vehicles…</option>
+                  <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">
+                    {{ vehicleTag(v) }} — {{ vehicleSub(v) }}
+                  </option>
+                </select>
+                <span class="help">{{ vehicleHelp }}</span>
+              </label>
+              <label class="fld">
+                Invoice Date
+                <input v-model="invoiceDate" type="date" :disabled="!editable" @change="patchHeader">
+              </label>
+              <label class="fld">
+                Due date
+                <input v-model="dueDate" type="date" :disabled="!editable" @change="patchHeader">
+              </label>
+              <label class="fld ed-po-span">
+                Reference / PO
+                <input v-model="poNumber" type="text" placeholder="Optional — customer PO number" :disabled="!editable" @blur="patchHeader">
+              </label>
             </div>
           </div>
 
-          <div class="stack">
-            <div class="card">
-              <div class="chead">
-                <h3>Change history</h3>
-              </div>
-              <div class="tscroll">
-                <table class="tbl hist-log">
-                  <thead>
-                    <tr><th>When</th><th>User</th><th>Change</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in history" :key="row.id">
-                      <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
-                      <td class="who">{{ row.actorName ?? '—' }}</td>
-                      <td class="chg">{{ formatHistoryChange(row.action, row.afterData ?? null, { changedFields: row.changedFields, beforeData: row.beforeData }) }}</td>
-                    </tr>
-                    <tr v-if="!history.length">
-                      <td colspan="3" class="empty" style="display:table-cell;">No history yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
+          <div class="card">
+            <div class="chead"><h3>Service narrative</h3></div>
+            <div class="cbody">
+              <label class="fld">
+                Customer complaint / symptoms
+                <textarea
+                  :value="complaint"
+                  rows="4"
+                  placeholder="What the customer reported — printed on invoice PDF"
+                  :disabled="!editable"
+                  v-bind="complaintInputAttrs"
+                  @input="onComplaintInput"
+                  @blur="onComplaintFieldBlur"
+                />
+                <span class="help">Shown on customer-facing PDF under Symptoms / Complaints</span>
+              </label>
+              <label class="fld">
+                Internal notes <span class="fld-badge">Staff only</span>
+                <textarea
+                  v-model="internalNotes"
+                  rows="4"
+                  placeholder="Parts used, fault codes, follow-up — staff only"
+                  :disabled="!editable"
+                  @blur="patchHeader"
+                />
+                <span class="help">Never shown on customer PDF or portal</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chead">
+              <h3>Line items</h3>
+              <div class="right">
+                <button
+                  type="button"
+                  class="btn sm ai-btn"
+                  :disabled="!editable || !canDescribe || aiBusy || !lines.length"
+                  title="AI description assist (Ctrl+Shift+D)"
+                  @click="openAiPopover(lines.find(l => l.id === selectedLineId) ?? lines[0]!, $event)"
+                >
+                  <span class="dot">✦</span> AI
+                </button>
+                <NuxtLink to="/catalog" class="btn sm">From catalog</NuxtLink>
+                <button
+                  type="button"
+                  class="btn sm primary"
+                  :disabled="!editable || busy"
+                  :title="!editable && lockedByOther ? 'Another user is editing this invoice' : !editable && sessionLoading ? 'Opening editor…' : !editable ? 'This invoice cannot be edited' : busy ? 'Saving…' : undefined"
+                  @click="addEmptyLine"
+                >
+                  + Add line
+                </button>
               </div>
             </div>
+            <div class="tscroll">
+              <table class="ed-lines">
+                <thead>
+                  <tr>
+                    <th style="width:110px">Type</th>
+                    <th>Description</th>
+                    <th style="width:110px">Qty / Hrs</th>
+                    <th style="width:150px">Rate</th>
+                    <th style="width:130px; text-align:right">Amount</th>
+                    <th style="width:36px" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="line in lines" :key="line.id">
+                    <td>
+                      <select v-model="line.lineType" :disabled="!editable" @change="patchLine(line)">
+                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <CatalogLineAutocomplete
+                        v-model="line.description"
+                        v-model:line-type="line.lineType"
+                        :line-id="line.id"
+                        :disabled="!editable"
+                        @focus="selectedLineId = line.id"
+                        @blur="patchLine(line)"
+                        @tab-next="focusLineQty(line.id)"
+                        @select="applyCatalogToExistingLine(line, $event)"
+                      />
+                    </td>
+                    <td>
+                      <LineQuantityInput
+                        v-model="line.quantity"
+                        :line-id="line.id"
+                        :disabled="!editable"
+                        @blur="patchLine(line)"
+                        @tab-next="focusLineRate(line.id)"
+                      />
+                    </td>
+                    <td>
+                      <LineCurrencyInput
+                        v-model="line.unitPrice"
+                        :line-id="line.id"
+                        :disabled="!editable"
+                        @blur="patchLine(line)"
+                        @tab-next="onLineRateTabNext(line)"
+                      />
+                    </td>
+                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount) }}</td>
+                    <td>
+                      <button
+                        type="button"
+                        class="rm"
+                        aria-label="Remove line"
+                        :disabled="!editable || lines.length <= 1 || busy"
+                        @click="removeLine(line.id)"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="ed-sums">
+              <div
+                v-for="(row, i) in summaryRows"
+                :key="i"
+                class="row"
+                :class="{ grand: row.grand }"
+              >
+                <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
+                <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chead">
+              <h3>Change history</h3>
+            </div>
+            <div class="tscroll">
+              <table class="tbl hist-log">
+                <thead>
+                  <tr><th>When</th><th>User</th><th>Change</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in history" :key="row.id">
+                    <td class="when">{{ auditWhenDisplay(row.createdAt) }}</td>
+                    <td class="who">{{ row.actorName ?? '—' }}</td>
+                    <td class="chg">{{ formatHistoryChange(row.action, row.afterData ?? null, { changedFields: row.changedFields, beforeData: row.beforeData }) }}</td>
+                  </tr>
+                  <tr v-if="!history.length">
+                    <td colspan="3" class="empty" style="display:table-cell;">No history yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-if="editable" class="savebar">
+            <button type="button" class="btn" :disabled="busy" @click="saveDraft">
+              {{ busy ? 'Saving…' : 'Save draft' }}
+            </button>
+            <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
+            <button
+              type="button"
+              class="btn primary"
+              :disabled="busy"
+              :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
+              @click="finalizeAndSend"
+            >
+              Finalize &amp; send
+            </button>
+          </div>
+          <div v-else class="savebar">
+            <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
           </div>
         </div>
       </div>
