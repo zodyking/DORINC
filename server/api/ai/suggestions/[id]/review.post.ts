@@ -5,8 +5,8 @@ import {
   reviewAiSuggestion,
 } from '../../../../services/ai-features.service'
 import { getAiSuggestion } from '../../../../services/ai-jobs.service'
+import { InvoicesServiceError } from '../../../../services/invoices.service'
 import { apiError } from '../../../../utils/api-error'
-import { requireEditSession } from '../../../../utils/require-edit-session'
 import { hasPermission, requirePermission } from '../../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
@@ -35,8 +35,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (before.featureType === 'invoice_description') {
-    const actor = requirePermission(event, 'invoices.update.all')
-    await requireEditSession(event, db, 'invoice', before.entityId, actor.id)
+    requirePermission(event, 'invoices.update.all')
   }
   if (before.featureType === 'service_log_extraction') {
     requirePermission(event, 'service_logs.review.all')
@@ -74,6 +73,11 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_PENDING') throw apiError(event, 'CONFLICT', 'Suggestion was already reviewed')
       if (err.code === 'INVALID_CONTENT') throw apiError(event, 'VALIDATION_ERROR', err.message)
       if (err.code === 'LINE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Line item not found')
+    }
+    if (err instanceof InvoicesServiceError) {
+      if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
+      if (err.code === 'LINE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Line item not found')
+      if (err.code === 'NOT_EDITABLE') throw apiError(event, 'CONFLICT', 'Paid and void invoices cannot be edited')
     }
     throw err
   }

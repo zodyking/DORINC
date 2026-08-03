@@ -534,6 +534,19 @@ async function patchLine(
   }
 }
 
+async function saveLineDescription(line: LineItem, description: string) {
+  await $fetch(`/api/invoices/${id}/line-items/${line.id}`, {
+    method: 'PATCH',
+    body: { description: description.trim() },
+  })
+}
+
+/** Refresh or re-acquire the edit lock (server purges stale sessions after ~90s). */
+async function ensureInvoiceEditLock(): Promise<boolean> {
+  await acquireEditSession()
+  return canEdit.value
+}
+
 async function applyCatalogToExistingLine(line: LineItem, item: CatalogQuickItem) {
   if (!editable.value) return
   const fields = applyCatalogItemToLineFields(item)
@@ -716,6 +729,11 @@ function positionAiPop(event: MouseEvent) {
 
 async function openAiPopover(line: LineItem, event: MouseEvent) {
   if (!editable.value || !canDescribe.value) return
+  await acquireEditSession()
+  if (!canEdit.value) {
+    aiError.value = sessionError.value || 'This invoice is locked — refresh the page and try again'
+    return
+  }
   selectedLineId.value = line.id
   aiPopOriginal.value = line.description
   aiPopText.value = ''
@@ -746,7 +764,7 @@ async function openAiPopover(line: LineItem, event: MouseEvent) {
   }
 }
 
-async function insertAiDescription() {
+async function insertAiDescription(retry = false) {
   if (!selectedLineId.value || !aiPopText.value.trim()) return
   const line = selectedLine.value
   if (!line) return
@@ -754,34 +772,49 @@ async function insertAiDescription() {
   aiBusy.value = true
   aiError.value = ''
   try {
+    if (!(await ensureInvoiceEditLock())) {
+      aiError.value = sessionError.value || 'This invoice is locked — refresh the page and try again'
+      return
+    }
+
+    const description = aiPopText.value.trim()
+    await saveLineDescription(line, description)
+    line.description = description
+
     if (aiPopSuggestionId.value) {
-      await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
-        method: 'POST',
-        body: {
-          action: 'edit',
-          lineItemId: selectedLineId.value,
-          content: {
-            description: aiPopText.value.trim(),
-            lineItemId: selectedLineId.value,
-            originalDescription: aiPopOriginal.value,
+      try {
+        await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
+          method: 'POST',
+          body: {
+            action: 'edit',
+            lineItemId: line.id,
+            content: {
+              description,
+              lineItemId: line.id,
+              originalDescription: aiPopOriginal.value,
+            },
           },
-        },
-      })
+        })
+      }
+      catch {
+        // Line is saved; marking the suggestion reviewed is best-effort.
+      }
     }
-    else {
-      line.description = aiPopText.value.trim()
-      await patchLine(line, { description: aiPopText.value.trim() })
-    }
+
+    stopAiPoll()
     aiPopOpen.value = false
     await Promise.all([refreshInvoice(), refreshInvoiceAi()])
   }
   catch (e: unknown) {
-    const err = e as { data?: { code?: string, message?: string } }
-    if (err.data?.code === 'EDIT_SESSION_ACTIVE') {
-      aiError.value = err.data.message ?? 'This invoice is locked — refresh and try again'
-      return
+    const err = e as { data?: { code?: string } }
+    if (!retry && err.data?.code === 'EDIT_SESSION_ACTIVE') {
+      await acquireEditSession()
+      if (canEdit.value) {
+        aiBusy.value = false
+        return insertAiDescription(true)
+      }
     }
-    aiError.value = err.data?.message ?? 'Could not apply description'
+    aiError.value = syncFetchErrorMessage(e, 'Could not apply description')
   }
   finally {
     aiBusy.value = false
