@@ -36,13 +36,8 @@ const { data, refresh, pending, error: listError } = useClientFetch<{ items: Pac
   { query },
 )
 
-const { data: categoriesData, refresh: refreshCategories } = useClientFetch<{ items: { id: string, name: string }[] }>(
-  '/api/catalog/categories',
-)
-
 const packages = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
-const categories = computed(() => categoriesData.value?.items ?? [])
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
 const filtersDirty = computed(() => !!q.value.trim() || fSort.value !== 'name-asc')
@@ -68,8 +63,6 @@ const formError = ref('')
 const emptyForm = (): PackageFormValue => ({
   sku: '',
   name: '',
-  description: '',
-  categoryId: '',
 })
 
 const form = reactive<PackageFormValue>(emptyForm())
@@ -98,8 +91,6 @@ async function openEditPackage(row: PackageRow) {
     Object.assign(form, {
       sku: pkg.sku ?? '',
       name: pkg.name,
-      description: pkg.description ?? '',
-      categoryId: pkg.categoryId ?? '',
     })
     formLines.value = pkg.items.map(item => ({
       localId: newLocalId(),
@@ -135,8 +126,8 @@ function headerPayload() {
   return {
     sku: form.sku || null,
     name: form.name,
-    description: form.description || null,
-    categoryId: form.categoryId || null,
+    description: null,
+    categoryId: null,
   }
 }
 
@@ -156,6 +147,10 @@ function apiErrorMessage(err: unknown, fallback: string): string {
 async function submitPackage() {
   if (!form.name.trim()) {
     formError.value = 'Name is required'
+    return
+  }
+  if (!formLines.value.length) {
+    formError.value = 'Add at least one catalog item to the package'
     return
   }
   formBusy.value = true
@@ -210,14 +205,14 @@ function onRowClick(row: PackageRow) {
   if (canManage.value) void openEditPackage(row)
 }
 
-defineExpose({ refresh, refreshCategories, openNewPackage })
+defineExpose({ refresh, openNewPackage })
 </script>
 
 <template>
   <div class="pkg-panel">
     <ListFilterBar
       v-model:search="q"
-      search-placeholder="Search packages, SKUs, categories…"
+      search-placeholder="Search packages or SKUs…"
       search-aria-label="Search catalog packages"
       :count-label="listCountLabel"
       :filters-active="filtersDirty"
@@ -243,7 +238,6 @@ defineExpose({ refresh, refreshCategories, openNewPackage })
             <tr>
               <th class="cell-item">Package</th>
               <th class="col-sku">SKU</th>
-              <th class="col-cat">Category</th>
               <th class="col-type">Items</th>
             </tr>
           </thead>
@@ -257,10 +251,8 @@ defineExpose({ refresh, refreshCategories, openNewPackage })
             >
               <td class="cell-item">
                 <span class="lead">{{ row.name }}</span>
-                <span v-if="row.description" class="sub">{{ row.description }}</span>
               </td>
               <td class="mono col-sku" style="font-size:12px">{{ row.sku ?? '—' }}</td>
-              <td class="col-cat">{{ row.categoryName ?? '—' }}</td>
               <td class="col-type">{{ row.itemCount }}</td>
             </tr>
           </tbody>
@@ -316,7 +308,6 @@ defineExpose({ refresh, refreshCategories, openNewPackage })
           v-model:lines="formLines"
           :busy="formBusy"
           :error="formError"
-          :categories="categories"
           :editing="!!editingId"
           :submit-label="formBusy ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save changes' : 'Create package')"
           @submit="submitPackage"

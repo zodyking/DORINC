@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { catalogTypeLabel, catalogTypePill } from '~/utils/catalog-ui'
-import type { CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import { catalogItemSub, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
+import { catalogTypeLabel, catalogTypePill, type CatalogItemType } from '~/utils/catalog-ui'
 
 export interface PackageFormValue {
   sku: string
   name: string
-  description: string
-  categoryId: string
 }
 
 export interface PackageLineDraft {
@@ -20,46 +18,72 @@ export interface PackageLineDraft {
   quantity: string
 }
 
+type ItemTypeFilter = 'all' | CatalogItemType
+
 const model = defineModel<PackageFormValue>({ required: true })
 const lines = defineModel<PackageLineDraft[]>('lines', { required: true })
 
-const props = defineProps<{
+defineProps<{
   busy?: boolean
   submitLabel: string
   error?: string
-  categories: { id: string, name: string }[]
   editing?: boolean
 }>()
 
 const emit = defineEmits<{ submit: [], cancel: [], archive: [] }>()
 
 const searchQ = ref('')
+const itemTypeFilter = ref<ItemTypeFilter>('all')
 const searchOpen = ref(false)
 const searchBusy = ref(false)
 const searchResults = ref<CatalogQuickItem[]>([])
+const activeIndex = ref(0)
+const searchInput = ref<HTMLInputElement | null>(null)
+const listId = useId()
+
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+let blurTimer: ReturnType<typeof setTimeout> | null = null
+let searchSeq = 0
+
+const typeFilters: { key: ItemTypeFilter, label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'part', label: 'Parts' },
+  { key: 'labor', label: 'Labor' },
+  { key: 'fee', label: 'Fees' },
+]
+
+const emptyMessage = computed(() => {
+  if (searchBusy.value) return ''
+  if (!searchQ.value.trim()) return 'Type to search parts, labor, and fees — or pick a type filter.'
+  return `No catalog items match “${searchQ.value.trim()}”.`
+})
+
+const showResults = computed(() =>
+  searchOpen.value && (searchBusy.value || searchResults.value.length > 0 || !!emptyMessage.value),
+)
 
 function newLocalId() {
   return `pkg-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-watch(searchQ, (q) => {
+watch([searchQ, itemTypeFilter], () => {
   if (searchTimer) clearTimeout(searchTimer)
-  if (!q.trim()) {
-    searchResults.value = []
-    searchOpen.value = false
-    return
-  }
-  searchTimer = setTimeout(() => { void runSearch(q.trim()) }, 220)
+  searchTimer = setTimeout(() => { void runSearch(searchQ.value) }, 180)
 })
 
 async function runSearch(q: string) {
+  const seq = ++searchSeq
   searchBusy.value = true
-  searchOpen.value = true
   try {
     const data = await $fetch<{ items: CatalogQuickItem[] }>('/api/catalog/items', {
-      query: { q, pageSize: 12 },
+      query: {
+        q: q.trim() || undefined,
+        itemType: itemTypeFilter.value === 'all' ? undefined : itemTypeFilter.value,
+        pageSize: 16,
+        sort: 'name-asc',
+      },
     })
+    if (seq !== searchSeq) return
     searchResults.value = data.items.map(item => ({
       id: item.id,
       itemType: item.itemType,
@@ -68,13 +92,35 @@ async function runSearch(q: string) {
       defaultPrice: item.defaultPrice,
       uom: item.uom,
     }))
+    activeIndex.value = searchResults.value.length ? 0 : -1
   }
   catch {
+    if (seq !== searchSeq) return
     searchResults.value = []
+    activeIndex.value = -1
   }
   finally {
-    searchBusy.value = false
+    if (seq === searchSeq) searchBusy.value = false
   }
+}
+
+function openSearch() {
+  searchOpen.value = true
+  void runSearch(searchQ.value)
+}
+
+function closeSearch() {
+  searchOpen.value = false
+  activeIndex.value = -1
+}
+
+function onSearchBlur() {
+  blurTimer = setTimeout(closeSearch, 150)
+}
+
+function onSearchFocus() {
+  if (blurTimer) clearTimeout(blurTimer)
+  openSearch()
 }
 
 function addCatalogItem(item: CatalogQuickItem) {
@@ -91,7 +137,37 @@ function addCatalogItem(item: CatalogQuickItem) {
   }]
   searchQ.value = ''
   searchResults.value = []
-  searchOpen.value = false
+  activeIndex.value = -1
+  nextTick(() => searchInput.value?.focus())
+}
+
+function selectActiveItem() {
+  const item = searchResults.value[activeIndex.value]
+  if (item) addCatalogItem(item)
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (!showResults.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    openSearch()
+    return
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (!searchResults.value.length) return
+    activeIndex.value = (activeIndex.value + 1) % searchResults.value.length
+  }
+  else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (!searchResults.value.length) return
+    activeIndex.value = (activeIndex.value - 1 + searchResults.value.length) % searchResults.value.length
+  }
+  else if (e.key === 'Enter') {
+    e.preventDefault()
+    selectActiveItem()
+  }
+  else if (e.key === 'Escape') {
+    closeSearch()
+  }
 }
 
 function removeLine(localId: string) {
@@ -107,6 +183,10 @@ function moveLine(localId: string, direction: -1 | 1) {
   const [row] = next.splice(index, 1)
   next.splice(target, 0, row!)
   lines.value = next
+}
+
+function setTypeFilter(filter: ItemTypeFilter) {
+  itemTypeFilter.value = filter
 }
 </script>
 
@@ -126,47 +206,70 @@ function moveLine(localId: string, direction: -1 | 1) {
         </label>
       </div>
 
-      <label class="fld">
-        <span>Description</span>
-        <textarea v-model="model.description" rows="2" maxlength="2000" placeholder="What this package includes" />
-      </label>
-
-      <label class="fld">
-        <span>Category</span>
-        <select v-model="model.categoryId">
-          <option value="">Uncategorized</option>
-          <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-        </select>
-      </label>
-
-      <div class="pkg-lines">
-        <div class="pkg-lines-head">
-          <h4>Included items</h4>
-          <div class="pkg-search-wrap">
-            <input
-              v-model="searchQ"
-              type="search"
-              placeholder="Search catalog to add items…"
-              aria-label="Search catalog items to add to package"
-              @focus="searchOpen = !!searchQ.trim()"
+      <div class="pkg-picker">
+        <div class="pkg-picker-head">
+          <h4>Add parts, labor & fees</h4>
+          <div class="pkg-type-chips" role="tablist" aria-label="Catalog item type">
+            <button
+              v-for="chip in typeFilters"
+              :key="chip.key"
+              type="button"
+              class="pkg-type-chip"
+              :class="{ on: itemTypeFilter === chip.key }"
+              role="tab"
+              :aria-selected="itemTypeFilter === chip.key"
+              @click="setTypeFilter(chip.key)"
             >
-            <div v-if="searchOpen" class="pkg-search-panel">
-              <p v-if="searchBusy" class="help" style="margin:8px 12px;">Searching…</p>
-              <p v-else-if="!searchResults.length" class="help" style="margin:8px 12px;">No catalog items found.</p>
-              <button
-                v-for="item in searchResults"
-                :key="item.id"
-                type="button"
-                class="pkg-search-hit"
-                @mousedown.prevent="addCatalogItem(item)"
-              >
-                <span :class="catalogTypePill(item.itemType)">{{ catalogTypeLabel(item.itemType) }}</span>
-                <span>{{ item.name }}</span>
-                <span v-if="item.sku" class="sub">{{ item.sku }}</span>
-              </button>
-            </div>
+              {{ chip.label }}
+            </button>
           </div>
         </div>
+
+        <div class="pkg-search-wrap">
+          <input
+            ref="searchInput"
+            v-model="searchQ"
+            type="search"
+            placeholder="Search catalog — name, SKU, description…"
+            aria-label="Search catalog items to add to package"
+            :aria-controls="listId"
+            :aria-expanded="showResults"
+            autocomplete="off"
+            @focus="onSearchFocus"
+            @blur="onSearchBlur"
+            @keydown="onSearchKeydown"
+          >
+          <div
+            v-if="showResults"
+            :id="listId"
+            class="pkg-search-panel"
+            role="listbox"
+            aria-label="Catalog search results"
+          >
+            <p v-if="searchBusy" class="help pkg-search-empty">Searching…</p>
+            <p v-else-if="!searchResults.length" class="help pkg-search-empty">{{ emptyMessage }}</p>
+            <button
+              v-for="(item, index) in searchResults"
+              :key="item.id"
+              type="button"
+              class="pkg-search-hit"
+              :class="{ active: index === activeIndex }"
+              role="option"
+              :aria-selected="index === activeIndex"
+              @mousedown.prevent="addCatalogItem(item)"
+            >
+              <span :class="catalogTypePill(item.itemType)">{{ catalogTypeLabel(item.itemType) }}</span>
+              <span class="pkg-search-hit-main">
+                <span class="lead">{{ item.name }}</span>
+                <span class="sub">{{ catalogItemSub(item) }}</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pkg-lines">
+        <h4>Included items <span v-if="lines.length" class="pkg-lines-count">{{ lines.length }}</span></h4>
 
         <div v-if="lines.length" class="tscroll">
           <table class="tbl pkg-lines-tbl">
@@ -196,7 +299,7 @@ function moveLine(localId: string, direction: -1 | 1) {
             </tbody>
           </table>
         </div>
-        <p v-else class="help" style="margin:12px 0 0;">Add catalog items above — each becomes a line when the package is applied to an invoice.</p>
+        <p v-else class="help pkg-lines-empty">Search above to add items — each becomes an invoice line when the package is applied.</p>
       </div>
     </div>
 
@@ -206,7 +309,7 @@ function moveLine(localId: string, direction: -1 | 1) {
       </button>
       <div class="right">
         <button type="button" class="btn" :disabled="busy" @click="emit('cancel')">Cancel</button>
-        <button type="submit" class="btn primary" :disabled="busy || !model.name.trim()">
+        <button type="submit" class="btn primary" :disabled="busy || !model.name.trim() || !lines.length">
           {{ submitLabel }}
         </button>
       </div>
@@ -222,50 +325,81 @@ function moveLine(localId: string, direction: -1 | 1) {
   gap: 12px;
 }
 
-.pkg-lines {
+.pkg-picker {
   margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border, #e2e8f0);
+  padding: 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--surface-2, #f8fafc);
 }
 
-.pkg-lines-head {
+.pkg-picker-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.pkg-lines-head h4 {
+.pkg-picker-head h4 {
   margin: 0;
   font-size: 14px;
 }
 
+.pkg-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pkg-type-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+  cursor: pointer;
+}
+
+.pkg-type-chip.on {
+  border-color: #6366f1;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
 .pkg-search-wrap {
   position: relative;
-  flex: 1 1 240px;
-  max-width: 360px;
+}
+
+.pkg-search-wrap input {
+  width: 100%;
 }
 
 .pkg-search-panel {
   position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
+  z-index: 30;
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  max-height: 240px;
+  max-height: 280px;
   overflow: auto;
   background: #fff;
   border: 1px solid var(--border, #e2e8f0);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+}
+
+.pkg-search-empty {
+  margin: 10px 12px;
 }
 
 .pkg-search-hit {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   width: 100%;
   padding: 10px 12px;
   border: 0;
@@ -274,8 +408,49 @@ function moveLine(localId: string, direction: -1 | 1) {
   cursor: pointer;
 }
 
-.pkg-search-hit:hover {
-  background: #f8fafc;
+.pkg-search-hit:hover,
+.pkg-search-hit.active {
+  background: #f1f5f9;
+}
+
+.pkg-search-hit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pkg-search-hit-main .lead {
+  font-weight: 600;
+}
+
+.pkg-lines {
+  margin-top: 18px;
+}
+
+.pkg-lines h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.pkg-lines-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.pkg-lines-empty {
+  margin: 0;
 }
 
 .pkg-line-actions {
