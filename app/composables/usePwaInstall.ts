@@ -29,12 +29,9 @@ export function usePwaInstall() {
     browser: browser.value,
   }))
 
-  const showSteps = computed(() => {
-    if (!copy.value.steps?.length) return false
-    return copy.value.stepsExpandedByDefault || stepsOpen.value
-  })
+  const showSteps = computed(() => stepsOpen.value && !!(copy.value.fallbackSteps?.length))
 
-  const visibleSteps = computed(() => copy.value.steps ?? [])
+  const visibleSteps = computed(() => copy.value.fallbackSteps ?? [])
 
   function syncFromSharedState() {
     installed.value = pwaInstallState.installed

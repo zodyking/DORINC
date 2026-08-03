@@ -13,7 +13,7 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
     <div
       v-if="showBanner"
       class="pwa-banner"
-      :class="{ 'pwa-banner--installed': isInstalledState, 'pwa-banner--expanded': showSteps }"
+      :class="{ 'pwa-banner--installed': isInstalledState }"
       role="region"
       aria-label="Install DORINC app"
     >
@@ -38,21 +38,7 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
           <p class="pwa-banner__message">{{ copy.message }}</p>
 
           <ol v-if="showSteps && visibleSteps.length" class="pwa-banner__steps">
-            <li v-for="(step, index) in visibleSteps" :key="index" class="pwa-banner__step">
-              <div class="pwa-banner__step-copy">
-                <span class="pwa-banner__step-number">{{ index + 1 }}</span>
-                <p class="pwa-banner__step-text">{{ step.text }}</p>
-              </div>
-              <figure v-if="step.image" class="pwa-banner__step-figure">
-                <img
-                  class="pwa-banner__step-image"
-                  :src="step.image"
-                  :alt="step.imageAlt ?? `Step ${index + 1} illustration`"
-                  loading="lazy"
-                  decoding="async"
-                >
-              </figure>
-            </li>
+            <li v-for="(step, index) in visibleSteps" :key="index">{{ step }}</li>
           </ol>
 
           <p v-if="showOfflineHint" class="pwa-banner__offline">
@@ -62,15 +48,7 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
         </div>
 
         <button
-          v-if="copy.actionLabel && !copy.stepsExpandedByDefault"
-          type="button"
-          class="pwa-banner__cta"
-          @click="onAction"
-        >
-          {{ copy.actionLabel }}
-        </button>
-        <button
-          v-else-if="copy.actionLabel && copy.stepsExpandedByDefault && !showSteps"
+          v-if="copy.actionLabel"
           type="button"
           class="pwa-banner__cta"
           @click="onAction"
@@ -92,7 +70,7 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 14px;
-  align-items: start;
+  align-items: center;
   padding: 14px 40px 14px 16px;
   border-radius: 16px;
   border: 1px solid #c7d2fe;
@@ -197,60 +175,15 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
 }
 
 .pwa-banner__steps {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 12px;
-}
-
-.pwa-banner__step {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid #e2e8f0;
-}
-
-.pwa-banner__step-copy {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.pwa-banner__step-number {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
-}
-
-.pwa-banner__step-text {
-  margin: 0;
+  margin: 10px 0 0;
+  padding-left: 18px;
   color: #334155;
   font-size: 0.8rem;
   line-height: 1.45;
 }
 
-.pwa-banner__step-figure {
-  margin: 0;
-}
-
-.pwa-banner__step-image {
-  display: block;
-  width: 100%;
-  max-width: 320px;
-  height: auto;
-  border-radius: 10px;
-  border: 1px solid #dbeafe;
-  background: #fff;
+.pwa-banner__steps li + li {
+  margin-top: 4px;
 }
 
 .pwa-banner__offline {
@@ -306,7 +239,7 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
 .pwa-banner-reveal-leave-from {
   opacity: 1;
   transform: translateY(0);
-  max-height: 1200px;
+  max-height: 240px;
   margin-bottom: 14px;
 }
 
@@ -326,10 +259,6 @@ const isInstalledState = computed(() => copy.value.variant === 'installed')
   .pwa-banner__cta {
     grid-column: 1 / -1;
     width: 100%;
-  }
-
-  .pwa-banner__step-image {
-    max-width: 100%;
   }
 }
 </style>

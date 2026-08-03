@@ -30,8 +30,7 @@ describe('pwaInstallCopy', () => {
     expect(copy.title).toContain('desktop')
     expect(copy.actionLabel).toBe('Add to desktop')
     expect(copy.action).toBe('prompt')
-    expect(copy.steps?.length).toBeGreaterThan(0)
-    expect(copy.steps?.[0]?.image).toBeTruthy()
+    expect(copy.fallbackSteps?.length).toBeGreaterThan(0)
   })
 
   it('uses home screen copy on mobile Android', () => {
@@ -45,18 +44,27 @@ describe('pwaInstallCopy', () => {
     expect(copy.action).toBe('prompt')
   })
 
-  it('shows expanded Safari steps on iOS without share action', () => {
+  it('uses Chrome-specific steps on iOS Chrome', () => {
+    const copy = pwaInstallCopy({
+      deviceKind: 'mobile',
+      installed: false,
+      browser: 'ios-chrome',
+    })
+    expect(copy.actionLabel).toBe('Add to home screen')
+    expect(copy.action).toBe('show-steps')
+    expect(copy.message).not.toContain('Safari is the most reliable')
+    expect(copy.fallbackSteps?.[0]).toContain('Chrome')
+    expect(copy.fallbackSteps?.[0]).toContain('Share')
+  })
+
+  it('uses Safari-specific steps on iOS Safari', () => {
     const copy = pwaInstallCopy({
       deviceKind: 'mobile',
       installed: false,
       browser: 'ios-safari',
     })
-    expect(copy.actionLabel).toBe('Show steps')
-    expect(copy.action).toBe('show-steps')
-    expect(copy.stepsExpandedByDefault).toBe(true)
-    expect(copy.steps?.some(step => step.text.includes('View More'))).toBe(true)
-    expect(copy.steps?.some(step => step.text.includes('Open as Web App'))).toBe(true)
-    expect(copy.steps?.every(step => step.image)).toBe(true)
+    expect(copy.fallbackSteps?.[0]).toContain('Safari')
+    expect(copy.fallbackSteps?.some(step => step.includes('View More'))).toBe(true)
   })
 
   it('shows a simple installed state without a button', () => {
