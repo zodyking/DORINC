@@ -7,12 +7,6 @@ export type PwaInstallVariant = 'install' | 'installed'
 
 export type PwaInstallAction = 'prompt' | 'show-steps' | null
 
-export interface PwaInstallStep {
-  text: string
-  image?: string
-  imageAlt?: string
-}
-
 export interface PwaInstallCopyInput {
   deviceKind: PwaDeviceKind
   installed: boolean
@@ -25,228 +19,84 @@ export interface PwaInstallCopy {
   message: string
   actionLabel: string | null
   action: PwaInstallAction
-  steps: PwaInstallStep[] | null
-  stepsExpandedByDefault: boolean
+  fallbackSteps: string[] | null
 }
 
-const IOS_SAFARI_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Open DORINC in Safari. In-app browsers (Messages, Mail, etc.) cannot install PWAs — copy the link into Safari if needed.',
-    image: '/pwa-guide/ios-safari-open.svg',
-    imageAlt: 'Safari browser with the DORINC address in the URL bar',
-  },
-  {
-    text: 'In Compact Mode (Safari default), tap the ••• More button at the bottom-right. If you already see a Share icon in the toolbar, skip to the next step.',
-    image: '/pwa-guide/ios-safari-more-menu.svg',
-    imageAlt: 'Safari bottom toolbar with the More menu button highlighted',
-  },
-  {
-    text: 'Tap the Share button — a square with an arrow pointing up. In landscape it appears at the top-right; in Bottom/Top toolbar modes it sits in the center of the bar.',
-    image: '/pwa-guide/ios-safari-share.svg',
-    imageAlt: 'Safari Share button highlighted in the toolbar',
-  },
-  {
-    text: 'If you do not see Add to Home Screen, tap View More (▼) at the bottom of the share sheet to expand the full action list.',
-    image: '/pwa-guide/ios-safari-view-more.svg',
-    imageAlt: 'Share sheet with View More expanded to reveal additional actions',
-  },
-  {
-    text: 'Scroll and tap Add to Home Screen (+ icon).',
-    image: '/pwa-guide/ios-add-home-screen.svg',
-    imageAlt: 'Share sheet showing the Add to Home Screen option',
-  },
-  {
-    text: 'Leave Open as Web App turned ON so DORINC launches full-screen without Safari bars, then tap Add.',
-    image: '/pwa-guide/ios-open-as-web-app.svg',
-    imageAlt: 'Add to Home Screen dialog with Open as Web App enabled',
-  },
-]
-
-const IOS_OTHER_BROWSER_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Open DORINC in this browser (iOS 16.4+). For the most reliable install, use Safari — tap Share in Safari and choose Add to Home Screen.',
-    image: '/pwa-guide/ios-safari-open.svg',
-    imageAlt: 'Browser with the DORINC site open',
-  },
-  {
-    text: 'Tap the Share or ••• menu button in the browser toolbar.',
-    image: '/pwa-guide/ios-safari-share.svg',
-    imageAlt: 'Browser toolbar Share button highlighted',
-  },
-  {
-    text: 'Tap View More (▼) if Add to Home Screen is hidden, then select Add to Home Screen.',
-    image: '/pwa-guide/ios-add-home-screen.svg',
-    imageAlt: 'Share menu showing Add to Home Screen',
-  },
-  {
-    text: 'Keep Open as Web App enabled and tap Add. The DORINC icon will appear on your Home Screen.',
-    image: '/pwa-guide/ios-open-as-web-app.svg',
-    imageAlt: 'Confirmation dialog with Open as Web App enabled',
-  },
-]
-
-const ANDROID_CHROME_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Open DORINC in Chrome. If an Install app banner appears at the bottom, tap it and skip to the last step.',
-    image: '/pwa-guide/android-chrome-banner.svg',
-    imageAlt: 'Chrome showing an Install app banner at the bottom of the screen',
-  },
-  {
-    text: 'Otherwise tap the ⋮ three-dot menu in the top-right corner.',
-    image: '/pwa-guide/android-chrome-menu.svg',
-    imageAlt: 'Chrome menu button highlighted in the top-right corner',
-  },
-  {
-    text: 'Tap Install app or Add to Home screen.',
-    image: '/pwa-guide/android-install-app.svg',
-    imageAlt: 'Chrome menu with Install app option highlighted',
-  },
-  {
-    text: 'Confirm Add — DORINC will appear on your home screen and app drawer like a native app.',
-    image: '/pwa-guide/android-confirm.svg',
-    imageAlt: 'Install confirmation dialog with Add button',
-  },
-]
-
-const ANDROID_SAMSUNG_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Open DORINC in Samsung Internet.',
-    image: '/pwa-guide/android-chrome-banner.svg',
-    imageAlt: 'Samsung Internet with the DORINC site open',
-  },
-  {
-    text: 'Tap the ☰ menu icon at the bottom-right.',
-    image: '/pwa-guide/android-samsung-menu.svg',
-    imageAlt: 'Samsung Internet menu button highlighted',
-  },
-  {
-    text: 'Tap Add page to, then Home screen.',
-    image: '/pwa-guide/android-install-app.svg',
-    imageAlt: 'Samsung Internet menu showing Add page to Home screen',
-  },
-  {
-    text: 'Confirm Add — the DORINC icon will appear on your home screen.',
-    image: '/pwa-guide/android-confirm.svg',
-    imageAlt: 'Add to Home screen confirmation dialog',
-  },
-]
-
-const ANDROID_FIREFOX_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Open DORINC in Firefox.',
-    image: '/pwa-guide/android-chrome-banner.svg',
-    imageAlt: 'Firefox with the DORINC site open',
-  },
-  {
-    text: 'Tap the ⋮ menu at the bottom-right.',
-    image: '/pwa-guide/android-chrome-menu.svg',
-    imageAlt: 'Firefox menu button highlighted',
-  },
-  {
-    text: 'Tap Install or Add to Home screen. Note: Firefox creates a shortcut that may open inside the browser rather than standalone.',
-    image: '/pwa-guide/android-install-app.svg',
-    imageAlt: 'Firefox menu with Add to Home screen option',
-  },
-  {
-    text: 'Tap Add to place the shortcut on your home screen.',
-    image: '/pwa-guide/android-confirm.svg',
-    imageAlt: 'Add to Home screen confirmation dialog',
-  },
-]
-
-const DESKTOP_CHROME_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Look for the install icon in Chrome\'s address bar — a monitor with a down arrow (⊕ or ⬇). Click it and choose Install.',
-    image: '/pwa-guide/desktop-chrome-install.svg',
-    imageAlt: 'Chrome address bar with the install icon highlighted',
-  },
-  {
-    text: 'If the icon is missing, open the ⋮ menu → Cast, save, and share → Install page as app… (or Install DORINC).',
-    image: '/pwa-guide/desktop-chrome-menu.svg',
-    imageAlt: 'Chrome menu showing Install page as app option',
-  },
-  {
-    text: 'Confirm Install. DORINC opens in its own window — pin it from the taskbar or Start menu for quick access.',
-    image: '/pwa-guide/desktop-confirm.svg',
-    imageAlt: 'Desktop install confirmation dialog',
-  },
-]
-
-const DESKTOP_EDGE_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Look for the App available icon in Edge\'s address bar and click Install.',
-    image: '/pwa-guide/desktop-edge-install.svg',
-    imageAlt: 'Edge address bar with the app install icon highlighted',
-  },
-  {
-    text: 'If the icon is missing, open the ⋯ menu → Apps → Install this site as an app.',
-    image: '/pwa-guide/desktop-edge-menu.svg',
-    imageAlt: 'Edge menu showing Install this site as an app',
-  },
-  {
-    text: 'Confirm Install, then pin DORINC to your taskbar or Start menu from the app window.',
-    image: '/pwa-guide/desktop-confirm.svg',
-    imageAlt: 'Desktop install confirmation dialog',
-  },
-]
-
-const DESKTOP_SAFARI_STEPS: PwaInstallStep[] = [
-  {
-    text: 'In Safari on macOS Sonoma (14) or later, open the File menu → Add to Dock…',
-    image: '/pwa-guide/desktop-safari-menu.svg',
-    imageAlt: 'Safari File menu with Add to Dock option',
-  },
-  {
-    text: 'Or click the Share button in the toolbar and choose Add to Dock.',
-    image: '/pwa-guide/desktop-safari-share.svg',
-    imageAlt: 'Safari Share menu with Add to Dock option',
-  },
-  {
-    text: 'Confirm — DORINC will appear in your Dock and Launchpad like a native app.',
-    image: '/pwa-guide/desktop-confirm.svg',
-    imageAlt: 'Add to Dock confirmation dialog',
-  },
-]
-
-const DESKTOP_FIREFOX_STEPS: PwaInstallStep[] = [
-  {
-    text: 'Firefox on desktop does not support installing PWAs natively.',
-    image: '/pwa-guide/desktop-firefox-note.svg',
-    imageAlt: 'Firefox browser note about PWA support',
-  },
-  {
-    text: 'Use Chrome or Edge for the best experience, or bookmark DORINC for quick access in Firefox.',
-    image: '/pwa-guide/desktop-chrome-install.svg',
-    imageAlt: 'Chrome install icon as an alternative browser option',
-  },
-]
-
-function stepsForBrowser(browser: PwaBrowser): PwaInstallStep[] {
+function stepsForBrowser(browser: PwaBrowser): string[] {
   switch (browser) {
     case 'ios-safari':
-      return IOS_SAFARI_STEPS
+      return [
+        'If Share is not visible, tap the ••• More button at the bottom-right of Safari, then tap Share (square with arrow up).',
+        'If Add to Home Screen is not listed, tap View More (▼) at the bottom of the share sheet.',
+        'Tap Add to Home Screen, leave Open as Web App turned on, then tap Add.',
+      ]
     case 'ios-chrome':
+      return [
+        'In Chrome, tap Share to the right of the address bar (square with arrow up).',
+        'Scroll the share sheet and tap Add to Home Screen.',
+        'Confirm the name, leave Open as Web App on if shown, then tap Add.',
+      ]
     case 'ios-edge':
+      return [
+        'In Edge, tap Share in the address bar (square with arrow up).',
+        'Scroll the share sheet and tap Add to Home Screen.',
+        'Confirm the name, leave Open as Web App on if shown, then tap Add.',
+      ]
     case 'ios-firefox':
+      return [
+        'In Firefox, tap the Share button in the toolbar (square with arrow up).',
+        'Scroll the share sheet and tap Add to Home Screen.',
+        'Confirm the name, leave Open as Web App on if shown, then tap Add.',
+      ]
     case 'ios-other':
-      return IOS_OTHER_BROWSER_STEPS
+      return [
+        'Open your browser\'s Share menu (usually a square with an arrow up).',
+        'Scroll the share sheet and tap Add to Home Screen.',
+        'Confirm the name, leave Open as Web App on if shown, then tap Add.',
+      ]
     case 'android-chrome':
     case 'android-edge':
     case 'android-other':
-      return ANDROID_CHROME_STEPS
+      return [
+        'If an Install app banner appears at the bottom, tap it. Otherwise tap the ⋮ menu (top-right).',
+        'Tap Install app or Add to Home screen.',
+        'Confirm Add — DORINC will appear on your home screen.',
+      ]
     case 'android-samsung':
-      return ANDROID_SAMSUNG_STEPS
+      return [
+        'Tap the ☰ menu at the bottom-right of Samsung Internet.',
+        'Tap Add page to, then Home screen.',
+        'Confirm Add — DORINC will appear on your home screen.',
+      ]
     case 'android-firefox':
-      return ANDROID_FIREFOX_STEPS
+      return [
+        'Tap the ⋮ menu at the bottom-right of Firefox.',
+        'Tap Install or Add to Home screen.',
+        'Confirm Add — a shortcut will appear on your home screen.',
+      ]
     case 'desktop-chrome':
     case 'desktop-other':
-      return DESKTOP_CHROME_STEPS
+      return [
+        'Click the install icon in Chrome\'s address bar (monitor with down arrow), or open ⋮ → Cast, save, and share → Install page as app….',
+        'Confirm Install — DORINC opens in its own window.',
+        'Pin it to your taskbar or Start menu for quick access.',
+      ]
     case 'desktop-edge':
-      return DESKTOP_EDGE_STEPS
+      return [
+        'Click the App available icon in Edge\'s address bar, or open ⋯ → Apps → Install this site as an app.',
+        'Confirm Install — DORINC opens in its own window.',
+        'Pin it to your taskbar or Start menu for quick access.',
+      ]
     case 'desktop-safari':
-      return DESKTOP_SAFARI_STEPS
+      return [
+        'In Safari on macOS Sonoma (14) or later, open File → Add to Dock…, or click Share → Add to Dock.',
+        'Confirm — DORINC will appear in your Dock and Launchpad.',
+      ]
     case 'desktop-firefox':
-      return DESKTOP_FIREFOX_STEPS
+      return [
+        'Firefox on desktop does not support installing PWAs natively.',
+        'Use Chrome or Edge for the best experience, or bookmark DORINC for quick access.',
+      ]
   }
 }
 
@@ -254,6 +104,7 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
   const { deviceKind, installed, browser } = input
   const isDesktop = deviceKind === 'desktop'
   const ios = isIosBrowser(browser)
+  const steps = stepsForBrowser(browser)
 
   if (installed) {
     return {
@@ -264,48 +115,31 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
         : 'DORINC is on your home screen — open it like any other app.',
       actionLabel: null,
       action: null,
-      steps: null,
-      stepsExpandedByDefault: false,
+      fallbackSteps: null,
     }
   }
-
-  const steps = stepsForBrowser(browser)
 
   if (ios) {
     return {
       variant: 'install',
       title: 'Add DORINC to your home screen',
-      message: browser === 'ios-safari'
-        ? 'iPhone does not show an automatic install prompt. Follow the steps below in Safari — it only takes a few taps.'
-        : 'Follow the steps below to add DORINC to your home screen. Safari is the most reliable option on iPhone.',
-      actionLabel: 'Show steps',
+      message: 'Tap the button below for step-by-step instructions in your current browser.',
+      actionLabel: 'Add to home screen',
       action: 'show-steps',
-      steps,
-      stepsExpandedByDefault: true,
+      fallbackSteps: steps,
     }
   }
 
-  if (isDesktop && browser !== 'desktop-firefox') {
+  if (isDesktop) {
     return {
       variant: 'install',
       title: 'Add DORINC to your desktop',
-      message: 'Install once for quick access from your desktop, taskbar, and Start menu.',
+      message: browser === 'desktop-firefox'
+        ? 'Tap the button below for instructions — Firefox cannot install PWAs directly.'
+        : 'Install once for quick access from your desktop, taskbar, and Start menu.',
       actionLabel: 'Add to desktop',
-      action: 'prompt',
-      steps,
-      stepsExpandedByDefault: false,
-    }
-  }
-
-  if (isDesktop && browser === 'desktop-firefox') {
-    return {
-      variant: 'install',
-      title: 'Add DORINC to your desktop',
-      message: 'Firefox cannot install PWAs directly. Switch to Chrome or Edge, or follow the steps below.',
-      actionLabel: 'Show steps',
-      action: 'show-steps',
-      steps,
-      stepsExpandedByDefault: true,
+      action: browser === 'desktop-firefox' ? 'show-steps' : 'prompt',
+      fallbackSteps: steps,
     }
   }
 
@@ -313,9 +147,8 @@ export function pwaInstallCopy(input: PwaInstallCopyInput): PwaInstallCopy {
     variant: 'install',
     title: 'Add DORINC to your home screen',
     message: 'Install for one-tap access in the shop.',
-    actionLabel: browser === 'android-firefox' ? 'Show steps' : 'Add to home screen',
-    action: browser === 'android-firefox' ? 'show-steps' : 'prompt',
-    steps,
-    stepsExpandedByDefault: browser === 'android-firefox',
+    actionLabel: 'Add to home screen',
+    action: 'prompt',
+    fallbackSteps: steps,
   }
 }
