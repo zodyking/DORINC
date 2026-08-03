@@ -263,6 +263,14 @@ function deletionEntityToMessageType(entityType: string): import('../db/schema/m
   }
 }
 
+/** Human-readable reason clause for team chat (first person when empty). */
+export function formatDeletionRequestReasonClause(reason: string): string {
+  const trimmed = reason.trim()
+  if (!trimmed) return 'I did not enter a reason.'
+  const normalized = trimmed.endsWith('.') ? trimmed.slice(0, -1) : trimmed
+  return `${normalized}.`
+}
+
 /** Submitter posts a first-person team message when requesting record deletion. */
 export async function postDeletionRequestSubmittedTeamMessage(
   db: Db,
@@ -291,8 +299,15 @@ export async function postDeletionRequestSubmittedTeamMessage(
     parts.push(`${assetLabel} ${opts.entityLabel}`)
   }
 
-  parts.push('needs to be deleted because')
-  parts.push(`${opts.reason.trim()}.`)
+  const reasonClause = formatDeletionRequestReasonClause(opts.reason)
+  if (opts.reason.trim()) {
+    parts.push('needs to be deleted because')
+    parts.push(reasonClause)
+  }
+  else {
+    parts.push('needs to be deleted.')
+    parts.push(reasonClause)
+  }
   parts.push('Can an administrator please review the')
   parts.push(entityRefToken('deletion_request', opts.requestId, 'deletion request'))
   refs.push(buildEntityRef('deletion_request', opts.requestId, 'deletion request'))

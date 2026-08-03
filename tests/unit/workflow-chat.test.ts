@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { entityRefToken } from '../../server/services/messages.service'
+import { formatDeletionRequestReasonClause } from '../../server/services/workflow-chat.service'
 
 describe('workflow chat message tokens', () => {
   it('builds service log handoff message with entity refs', () => {
@@ -95,7 +96,7 @@ describe('workflow chat message tokens', () => {
     const body = [
       entityRefToken('service_log', '44444444-4444-4444-8444-444444444444', 'Service log SL-1007'),
       'needs to be deleted because',
-      'Duplicate upload.',
+      formatDeletionRequestReasonClause('Duplicate upload.'),
       'Can an administrator please review the',
       entityRefToken('deletion_request', '55555555-5555-4555-8555-555555555555', 'deletion request'),
       '?',
@@ -103,7 +104,29 @@ describe('workflow chat message tokens', () => {
 
     expect(body).toContain('Service log SL-1007')
     expect(body).toContain('needs to be deleted because')
+    expect(body).toContain('Duplicate upload.')
     expect(body).toContain('[[ref:deletion_request:')
     expect(body).toContain('deletion request')
+  })
+
+  it('formats empty deletion reasons for team chat', () => {
+    expect(formatDeletionRequestReasonClause('')).toBe('I did not enter a reason.')
+    expect(formatDeletionRequestReasonClause('  ')).toBe('I did not enter a reason.')
+    expect(formatDeletionRequestReasonClause('Duplicate entry.')).toBe('Duplicate entry.')
+  })
+
+  it('builds deletion request message without reason using first-person fallback', () => {
+    const body = [
+      entityRefToken('service_log', '44444444-4444-4444-8444-444444444444', 'Service log SL-1007'),
+      'needs to be deleted.',
+      formatDeletionRequestReasonClause(''),
+      'Can an administrator please review the',
+      entityRefToken('deletion_request', '55555555-5555-4555-8555-555555555555', 'deletion request'),
+      '?',
+    ].join(' ')
+
+    expect(body).toContain('needs to be deleted.')
+    expect(body).toContain('I did not enter a reason.')
+    expect(body).not.toContain('needs to be deleted because')
   })
 })

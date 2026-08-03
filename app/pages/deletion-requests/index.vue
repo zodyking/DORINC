@@ -91,16 +91,19 @@ const listCountLabel = computed(() => {
 
 const busyId = ref('')
 const modalOpen = ref(false)
-const modalMode = ref<'approve' | 'reject'>('approve')
+const modalMode = ref<'approve' | 'reject' | 'review'>('approve')
 const modalRow = ref<DeletionRequestRow | null>(null)
 const modalReason = ref('')
 const actionError = ref('')
+const deepLinkHandled = ref(false)
+
+const router = useRouter()
 
 const modalApproveLabel = computed(() =>
   modalRow.value ? deletionRequestApproveLabel(modalRow.value.entityType) : 'Confirm deletion',
 )
 
-function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject') {
+function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject' | 'review') {
   modalRow.value = row
   modalMode.value = mode
   modalReason.value = ''
@@ -111,6 +114,21 @@ function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject') {
 function closeModal() {
   modalOpen.value = false
   modalRow.value = null
+  if (highlightRequestId.value) {
+    const { request: _request, ...rest } = route.query
+    void router.replace({ query: rest })
+  }
+}
+
+function beginRejectFromReview() {
+  modalMode.value = 'reject'
+  modalReason.value = ''
+  actionError.value = ''
+}
+
+async function confirmApproveFromReview() {
+  modalMode.value = 'approve'
+  await submitModal()
 }
 
 async function submitModal() {
@@ -142,13 +160,12 @@ async function submitModal() {
   }
 }
 
-watch([items, highlightRequestId], async () => {
-  if (!highlightRequestId.value || !items.value.length) return
-  await nextTick()
-  document.getElementById(`deletion-req-${highlightRequestId.value}`)?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center',
-  })
+watch([items, highlightRequestId], () => {
+  if (!highlightRequestId.value || !items.value.length || deepLinkHandled.value) return
+  const row = items.value.find(r => r.id === highlightRequestId.value)
+  if (!row) return
+  deepLinkHandled.value = true
+  openModal(row, 'review')
 }, { immediate: true })
 </script>
 
@@ -216,7 +233,6 @@ watch([items, highlightRequestId], async () => {
             :key="row.id"
             :id="`deletion-req-${row.id}`"
             class="modrow"
-            :class="{ 'modrow-highlight': row.id === highlightRequestId }"
           >
             <span class="av" :class="avColor(row.entityLabel)">{{ initials(row.entityLabel) }}</span>
             <div class="nm">
@@ -293,8 +309,22 @@ watch([items, highlightRequestId], async () => {
       <div class="modal staff-req-modal" role="dialog" aria-modal="true" @click.stop>
         <div class="mhead">
           <div>
-            <h3>{{ modalMode === 'approve' ? modalApproveLabel : 'Reject request' }}</h3>
-            <p v-if="modalMode === 'approve'">{{ deletionRequestApproveHint(modalRow.entityType) }}</p>
+            <h3>
+              {{
+                modalMode === 'review'
+                  ? 'Review deletion request'
+                  : modalMode === 'approve'
+                    ? modalApproveLabel
+                    : 'Reject request'
+              }}
+            </h3>
+            <p v-if="modalMode === 'review' && modalRow.status === 'pending'">
+              Approve or reject this deletion request.
+            </p>
+            <p v-else-if="modalMode === 'review'">
+              This request has already been {{ modalRow.status === 'approved' ? 'approved' : 'declined' }}.
+            </p>
+            <p v-else-if="modalMode === 'approve'">{{ deletionRequestApproveHint(modalRow.entityType) }}</p>
             <p v-else>The record stays active. Tell the requester why deletion was declined.</p>
           </div>
           <button type="button" class="close" aria-label="Close" @click="closeModal">×</button>
@@ -323,7 +353,7 @@ watch([items, highlightRequestId], async () => {
             <NuxtLink :to="modalRow.entityHref" class="link">View record</NuxtLink>
           </div>
 
-          <label class="fld" style="margin-top:16px;">
+          <label v-if="modalMode !== 'review'" class="fld" style="margin-top:16px;">
             <span>{{ modalMode === 'reject' ? 'Rejection reason' : 'Staff note (optional)' }}</span>
             <textarea
               v-model="modalReason"
@@ -336,8 +366,22 @@ watch([items, highlightRequestId], async () => {
         </div>
 
         <div class="mfoot">
-          <button type="button" class="btn" @click="closeModal">Cancel</button>
+          <button type="button" class="btn" @click="closeModal">
+            {{ modalMode === 'review' && modalRow.status !== 'pending' ? 'Close' : 'Cancel' }}
+          </button>
+          <template v-if="modalMode === 'review' && modalRow.status === 'pending'">
+            <button type="button" class="btn" @click="beginRejectFromReview">Reject</button>
+            <button
+              type="button"
+              class="btn primary"
+              :disabled="busyId === modalRow.id"
+              @click="confirmApproveFromReview"
+            >
+              {{ modalApproveLabel }}
+            </button>
+          </template>
           <button
+            v-else-if="modalMode !== 'review'"
             type="button"
             class="btn primary"
             :disabled="busyId === modalRow.id"
@@ -447,9 +491,5 @@ watch([items, highlightRequestId], async () => {
   color: #dc2626;
   font-size: 13px;
   margin: 8px 0 0;
-}
-.modrow-highlight {
-  background: #eff6ff;
-  box-shadow: inset 0 0 0 1px #bfdbfe;
 }
 </style>

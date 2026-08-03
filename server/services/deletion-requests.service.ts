@@ -23,6 +23,7 @@ import {
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 import { getConversationDeletionLabel, MessagesServiceError } from './messages.service'
 import { isTeamConversation, clearTeamChatHistory } from './team-chat.service'
+import { listUsersWithPermission } from './notification-recipients.service'
 
 export type DeletionRequestsServiceErrorCode
   = 'NOT_FOUND'
@@ -258,15 +259,19 @@ export async function createDeletionRequest(
   }).returning()
 
   try {
-    const { postDeletionRequestSubmittedTeamMessage } = await import('./workflow-chat.service')
-    await postDeletionRequestSubmittedTeamMessage(db, {
-      senderUserId: submittedBy,
-      requestId: row!.id,
-      entityType,
-      entityId,
-      entityLabel,
-      reason: reason.trim(),
-    })
+    const reviewers = await listUsersWithPermission(db, 'deletion_requests.review.all')
+    const submitterCanReview = reviewers.some(r => r.id === submittedBy)
+    if (!submitterCanReview) {
+      const { postDeletionRequestSubmittedTeamMessage } = await import('./workflow-chat.service')
+      await postDeletionRequestSubmittedTeamMessage(db, {
+        senderUserId: submittedBy,
+        requestId: row!.id,
+        entityType,
+        entityId,
+        entityLabel,
+        reason: reason.trim(),
+      })
+    }
   }
   catch (err) {
     console.warn('[team-chat] deletion request team message failed:', (err as Error).message)
