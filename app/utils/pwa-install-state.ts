@@ -4,6 +4,7 @@ export interface BeforeInstallPromptEvent extends Event {
 }
 
 const PWA_INSTALLED_KEY = 'dorinc-pwa-installed'
+const PWA_BANNER_DISMISSED_KEY = 'dorinc-pwa-banner-dismissed'
 
 export interface PwaInstallSharedState {
   deferredPrompt: BeforeInstallPromptEvent | null
@@ -26,6 +27,21 @@ export function markPwaInstalledFlag(): void {
   if (!import.meta.client) return
   localStorage.setItem(PWA_INSTALLED_KEY, '1')
   pwaInstallState.installed = true
+}
+
+export function readPwaBannerDismissed(): boolean {
+  if (typeof sessionStorage === 'undefined') return false
+  return sessionStorage.getItem(PWA_BANNER_DISMISSED_KEY) === '1'
+}
+
+export function markPwaBannerDismissed(): void {
+  if (typeof sessionStorage === 'undefined') return
+  sessionStorage.setItem(PWA_BANNER_DISMISSED_KEY, '1')
+}
+
+export function clearPwaBannerDismissed(): void {
+  if (typeof sessionStorage === 'undefined') return
+  sessionStorage.removeItem(PWA_BANNER_DISMISSED_KEY)
 }
 
 export function subscribePwaInstall(listener: () => void): () => void {
