@@ -36,6 +36,13 @@ export function vehicleSub(v: VehicleDisplay): string {
   return [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Year / make / model not set'
 }
 
+/** Invoice unit row — year/make/model line only (fleet # shown separately). */
+export function vehicleUnitLine(v: VehicleDisplay): string {
+  const sub = vehicleSub(v)
+  if (sub !== 'Year / make / model not set') return sub
+  return vehicleTag(v)
+}
+
 /** Odometer format — "412,806 mi" or "2,148.6 hrs" (mockup keeps hour tenths). */
 export function odoDisplay(odometer: string | number | null, unit: string): string {
   if (odometer == null || odometer === '') return '—'

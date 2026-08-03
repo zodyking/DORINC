@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { vehicleSub, vehicleTag } from '~/utils/vehicles-ui'
+import { vehicleSub, vehicleUnitLine } from '~/utils/vehicles-ui'
 
 const props = withDefaults(defineProps<{
   entityType?: 'invoice' | 'service_log'
@@ -177,7 +177,7 @@ async function submit() {
                 :value="v.id"
                 :disabled="v.id === currentVehicleId"
               >
-                {{ vehicleTag(v) }} — {{ vehicleSub(v) }}
+                {{ vehicleUnitLine(v) }}
               </option>
             </select>
             <span v-if="selectedHelp" class="help">{{ selectedHelp }}</span>

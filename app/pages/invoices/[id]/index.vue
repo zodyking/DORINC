@@ -20,7 +20,7 @@ import {
   type InvoiceStatus,
   type InvoiceVehicleSnapshotDisplay,
 } from '~/utils/invoices-ui'
-import { odoDisplay, vehicleSub } from '~/utils/vehicles-ui'
+import { odoDisplay, vehicleUnitLine } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { phoneDisplay } from '~/utils/phone-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
@@ -659,7 +659,7 @@ const summaryRows = computed(() => {
             </div>
           </div>
           <dl v-if="invoice.vehicleSnapshot" class="kv">
-            <dt>Unit</dt><dd>{{ vehicleSub(invoice.vehicleSnapshot) }}</dd>
+            <dt>Unit</dt><dd>{{ vehicleUnitLine(invoice.vehicleSnapshot) }}</dd>
             <dt>VIN</dt><dd class="mono" style="font-size:12px">{{ invoice.vehicleSnapshot.vin ?? '—' }}</dd>
             <dt>Odometer</dt><dd>{{ odoDisplay(invoice.vehicleSnapshot.odometer, invoice.vehicleSnapshot.odometerUnit || 'mi') }}</dd>
             <dt>Fleet #</dt><dd>{{ invoice.vehicleSnapshot.busNumber ?? invoice.vehicleSnapshot.unitTag ?? '—' }}</dd>

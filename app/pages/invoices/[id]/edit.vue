@@ -33,7 +33,7 @@ import {
   type InvoiceStatus,
 } from '~/utils/invoices-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
-import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
+import { odoDisplay, vehicleSub, vehicleUnitLine, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
 import { useProseField } from '~/composables/useProseField'
@@ -973,12 +973,12 @@ const aiPopStyle = computed(() => {
                 <span class="help">{{ customerTermsHelp(selectedCustomer?.paymentTerms ?? invoice.paymentTerms, selectedCustomer?.accountKind) }}</span>
               </label>
               <label class="fld">
-                Vehicle
+                Unit
                 <select v-model="vehicleId" :disabled="!editable || !customerId" @change="patchHeader">
-                  <option value="">— Select vehicle —</option>
-                  <option v-if="vehiclesPending && !vehicleOptions.length" value="" disabled>Loading vehicles…</option>
+                  <option value="">— Select unit —</option>
+                  <option v-if="vehiclesPending && !vehicleOptions.length" value="" disabled>Loading units…</option>
                   <option v-for="v in vehicleOptions" :key="v.id" :value="v.id">
-                    {{ vehicleTag(v) }} — {{ vehicleSub(v) }}
+                    {{ vehicleUnitLine(v) }}
                   </option>
                 </select>
                 <span class="help">{{ vehicleHelp }}</span>
@@ -1217,7 +1217,7 @@ const aiPopStyle = computed(() => {
                 <dt>Submitted by</dt><dd>{{ serviceLogData?.log?.submitterName ?? '—' }}</dd>
                 <dt>Uploaded</dt><dd>{{ serviceLogData?.log?.createdAt ? invoiceDateDisplay(serviceLogData.log.createdAt.slice(0, 10)) : '—' }}</dd>
                 <dt>Service date</dt><dd>{{ serviceLogData?.log?.serviceDate ? invoiceDateDisplay(serviceLogData.log.serviceDate) : '—' }}</dd>
-                <dt>Vehicle</dt><dd>{{ serviceLogData?.log?.vehicle ? `${vehicleTag(serviceLogData.log.vehicle)} · ${vehicleSub(serviceLogData.log.vehicle)}` : '—' }}</dd>
+                <dt>Unit</dt><dd>{{ serviceLogData?.log?.vehicle ? vehicleUnitLine(serviceLogData.log.vehicle) : '—' }}</dd>
                 <dt>Work type</dt><dd>{{ serviceLogData?.log?.workType ?? '—' }}</dd>
               </dl>
             </div>
