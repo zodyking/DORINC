@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420" role="img" aria-hidden="true">
+  <title>Safari with DORINC open</title>
+  <rect x="20" y="10" width="280" height="400" rx="28" fill="#111827" />
+  <rect x="28" y="24" width="264" height="372" rx="20" fill="#f8fafc" />
+  <rect x="118" y="16" width="84" height="8" rx="4" fill="#374151" />
+  
+  <rect x="40" y="44" width="240" height="28" rx="8" fill="#fff" stroke="#cbd5e1" />
+  <text x="52" y="62" font-family="system-ui,sans-serif" font-size="11" fill="#64748b">safari</text>
+  <text x="52" y="92" font-family="system-ui,sans-serif" font-size="12" fill="#0f172a">dorinc.app</text>
+  <rect x="40" y="108" width="240" height="220" rx="10" fill="#eef2ff" />
+  <text x="130" y="220" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="#4f46e5">DORINC</text>
+  <rect x="40" y="44" width="240" height="28" rx="8" fill="none" stroke="#6366f1" stroke-width="3" stroke-dasharray="6 4" />
+  <rect x="36" y="40" width="248" height="36" rx="12" fill="#6366f1" opacity="0.12" />
+  
+</svg>

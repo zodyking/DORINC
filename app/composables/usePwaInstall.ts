@@ -1,21 +1,21 @@
 import { pwaInstallCopy } from '#shared/pwa-install-copy'
-import { BRAND_NAME } from '~/constants/brand'
+import { detectPwaBrowser } from '#shared/pwa-browser-detect'
 import {
   detectPwaDeviceKind,
-  isIosDevice,
   isPwaStandaloneMode,
+  markPwaBannerDismissed,
   markPwaInstalledFlag,
   pwaInstallState,
+  readPwaBannerDismissed,
   subscribePwaInstall,
 } from '~/utils/pwa-install-state'
 
 export type { BeforeInstallPromptEvent } from '~/utils/pwa-install-state'
 
 export function usePwaInstall() {
-  const route = useRoute()
   const installed = ref(pwaInstallState.installed)
   const isStandalone = ref(false)
-  const isIos = ref(false)
+  const browser = ref(detectPwaBrowser())
   const deviceKind = ref(detectPwaDeviceKind())
   const stepsOpen = ref(false)
   const dismissed = ref(false)
@@ -26,12 +26,15 @@ export function usePwaInstall() {
   const copy = computed(() => pwaInstallCopy({
     deviceKind: deviceKind.value,
     installed: installed.value,
-    isIos: isIos.value,
+    browser: browser.value,
   }))
 
-  const showSteps = computed(() => stepsOpen.value && !!(copy.value.fallbackSteps?.length))
+  const showSteps = computed(() => {
+    if (!copy.value.steps?.length) return false
+    return copy.value.stepsExpandedByDefault || stepsOpen.value
+  })
 
-  const visibleSteps = computed(() => copy.value.fallbackSteps ?? [])
+  const visibleSteps = computed(() => copy.value.steps ?? [])
 
   function syncFromSharedState() {
     installed.value = pwaInstallState.installed
@@ -43,6 +46,7 @@ export function usePwaInstall() {
 
   function closeBanner() {
     dismissed.value = true
+    markPwaBannerDismissed()
     stepsOpen.value = false
   }
 
@@ -51,24 +55,6 @@ export function usePwaInstall() {
     installed.value = true
     stepsOpen.value = false
     pwaInstallState.deferredPrompt = null
-  }
-
-  async function shareForHomeScreen() {
-    if (!import.meta.client || typeof navigator.share !== 'function') {
-      stepsOpen.value = true
-      return false
-    }
-    try {
-      await navigator.share({
-        title: BRAND_NAME,
-        text: `Add ${BRAND_NAME} to your home screen`,
-        url: window.location.href,
-      })
-      return true
-    }
-    catch {
-      return false
-    }
   }
 
   async function install() {
@@ -94,16 +80,16 @@ export function usePwaInstall() {
       await install()
       return
     }
-    if (action === 'share') {
-      const shared = await shareForHomeScreen()
-      if (!shared && copy.value.fallbackSteps?.length) stepsOpen.value = true
+    if (action === 'show-steps') {
+      stepsOpen.value = true
     }
   }
 
   onMounted(() => {
     isStandalone.value = isPwaStandaloneMode()
-    isIos.value = isIosDevice()
+    browser.value = detectPwaBrowser()
     deviceKind.value = detectPwaDeviceKind()
+    dismissed.value = readPwaBannerDismissed()
     syncFromSharedState()
 
     if (isStandalone.value) {
@@ -115,11 +101,6 @@ export function usePwaInstall() {
     nextTick(revealBanner)
 
     onBeforeUnmount(unsubscribe)
-  })
-
-  watch(() => route.path, () => {
-    dismissed.value = false
-    stepsOpen.value = false
   })
 
   return {

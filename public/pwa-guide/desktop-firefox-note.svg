@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" role="img" aria-hidden="true">
+  <title>Firefox PWA limitation note</title>
+  <rect x="20" y="12" width="320" height="180" rx="10" fill="#e2e8f0" />
+  <rect x="28" y="20" width="304" height="24" rx="6" fill="#fff" stroke="#cbd5e1" />
+  <rect x="28" y="48" width="304" height="136" rx="6" fill="#fff" />
+  
+  <rect x="40" y="60" width="280" height="100" rx="8" fill="#fff7ed" stroke="#fdba74" />
+  <text x="56" y="96" font-family="system-ui,sans-serif" font-size="11" fill="#9a3412">Firefox does not support PWA install</text>
+  <text x="56" y="118" font-family="system-ui,sans-serif" font-size="10" fill="#c2410c">Use Chrome or Edge instead</text>
+  
+</svg>

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
 import { loginPathForRoute, redirectToLogin } from '~/utils/auth-session'
+import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
 
 export interface AuthUser {
@@ -171,6 +172,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.permissions = []
       this.loaded = true
+      if (import.meta.client) clearPwaBannerDismissed()
       if (redirect) {
         const path = import.meta.client ? window.location.pathname : this.loginPath()
         await redirectToLogin(path)

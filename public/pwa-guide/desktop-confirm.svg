@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" role="img" aria-hidden="true">
+  <title>Desktop install confirmation</title>
+  <rect x="20" y="12" width="320" height="180" rx="10" fill="#e2e8f0" />
+  <rect x="28" y="20" width="304" height="24" rx="6" fill="#fff" stroke="#cbd5e1" />
+  <rect x="28" y="48" width="304" height="136" rx="6" fill="#fff" />
+  
+  <rect x="90" y="70" width="180" height="90" rx="10" fill="#fff" stroke="#cbd5e1" />
+  <text x="130" y="110" font-family="system-ui,sans-serif" font-size="11" fill="#0f172a">Install DORINC?</text>
+  <rect x="210" y="124" width="48" height="22" rx="6" fill="#6366f1" />
+  <text x="224" y="139" font-family="system-ui,sans-serif" font-size="9" fill="#fff">Install</text>
+  <rect x="206" y="120" width="56" height="30" rx="6" fill="none" stroke="#6366f1" stroke-width="3" stroke-dasharray="6 4" />
+  <rect x="202" y="116" width="64" height="38" rx="10" fill="#6366f1" opacity="0.12" />
+  
+</svg>
