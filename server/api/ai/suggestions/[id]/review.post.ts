@@ -6,7 +6,8 @@ import {
 } from '../../../../services/ai-features.service'
 import { getAiSuggestion } from '../../../../services/ai-jobs.service'
 import { apiError } from '../../../../utils/api-error'
-import { hasPermission } from '../../../../utils/require-permission'
+import { requireEditSession } from '../../../../utils/require-edit-session'
+import { hasPermission, requirePermission } from '../../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
 import { aiSuggestionReviewSchema } from '../../../../../shared/validators/ai'
@@ -34,7 +35,8 @@ export default defineEventHandler(async (event) => {
   }
 
   if (before.featureType === 'invoice_description') {
-    requirePermission(event, 'invoices.update.all')
+    const actor = requirePermission(event, 'invoices.update.all')
+    await requireEditSession(event, db, 'invoice', before.entityId, actor.id)
   }
   if (before.featureType === 'service_log_extraction') {
     requirePermission(event, 'service_logs.review.all')

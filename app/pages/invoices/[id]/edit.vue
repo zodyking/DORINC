@@ -747,27 +747,41 @@ async function openAiPopover(line: LineItem, event: MouseEvent) {
 }
 
 async function insertAiDescription() {
-  if (!aiPopSuggestionId.value || !selectedLineId.value) return
+  if (!selectedLineId.value || !aiPopText.value.trim()) return
+  const line = selectedLine.value
+  if (!line) return
+
   aiBusy.value = true
   aiError.value = ''
   try {
-    await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
-      method: 'POST',
-      body: {
-        action: 'edit',
-        lineItemId: selectedLineId.value,
-        content: {
-          description: aiPopText.value.trim(),
+    if (aiPopSuggestionId.value) {
+      await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
+        method: 'POST',
+        body: {
+          action: 'edit',
           lineItemId: selectedLineId.value,
-          originalDescription: aiPopOriginal.value,
+          content: {
+            description: aiPopText.value.trim(),
+            lineItemId: selectedLineId.value,
+            originalDescription: aiPopOriginal.value,
+          },
         },
-      },
-    })
+      })
+    }
+    else {
+      line.description = aiPopText.value.trim()
+      await patchLine(line, { description: aiPopText.value.trim() })
+    }
     aiPopOpen.value = false
     await Promise.all([refreshInvoice(), refreshInvoiceAi()])
   }
   catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not apply description'
+    const err = e as { data?: { code?: string, message?: string } }
+    if (err.data?.code === 'EDIT_SESSION_ACTIVE') {
+      aiError.value = err.data.message ?? 'This invoice is locked — refresh and try again'
+      return
+    }
+    aiError.value = err.data?.message ?? 'Could not apply description'
   }
   finally {
     aiBusy.value = false
