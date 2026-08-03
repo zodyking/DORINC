@@ -90,4 +90,20 @@ describe('workflow chat message tokens', () => {
 
     expect(body).toContain('Partial payment of $500.00 received for')
   })
+
+  it('builds deletion request team message with asset and review links', () => {
+    const body = [
+      entityRefToken('service_log', '44444444-4444-4444-8444-444444444444', 'Service log SL-1007'),
+      'needs to be deleted because',
+      'Duplicate upload.',
+      'Can an administrator please review the',
+      entityRefToken('deletion_request', '55555555-5555-4555-8555-555555555555', 'deletion request'),
+      '?',
+    ].join(' ')
+
+    expect(body).toContain('Service log SL-1007')
+    expect(body).toContain('needs to be deleted because')
+    expect(body).toContain('[[ref:deletion_request:')
+    expect(body).toContain('deletion request')
+  })
 })

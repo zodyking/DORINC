@@ -1,7 +1,7 @@
 import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
 
-export const MESSAGE_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice'] as const
+export const MESSAGE_ENTITY_TYPES = ['customer', 'vehicle', 'service_log', 'invoice', 'deletion_request'] as const
 export type MessageEntityType = (typeof MESSAGE_ENTITY_TYPES)[number]
 
 export const CONVERSATION_TYPES = ['dm', 'email', 'team'] as const

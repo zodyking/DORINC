@@ -244,3 +244,64 @@ export async function postInvoicePaymentReceivedTeamMessage(
     skipNormalize: true,
   })
 }
+
+const DELETION_ENTITY_LABELS: Record<string, string> = {
+  customer: 'Customer',
+  vehicle: 'Vehicle',
+  service_log: 'Service log',
+  invoice: 'Invoice',
+  conversation: 'Conversation',
+}
+
+function deletionEntityToMessageType(entityType: string): import('../db/schema/messages').MessageEntityType | null {
+  switch (entityType) {
+    case 'customer': return 'customer'
+    case 'vehicle': return 'vehicle'
+    case 'service_log': return 'service_log'
+    case 'invoice': return 'invoice'
+    default: return null
+  }
+}
+
+/** Submitter posts a first-person team message when requesting record deletion. */
+export async function postDeletionRequestSubmittedTeamMessage(
+  db: Db,
+  opts: {
+    senderUserId: string
+    requestId: string
+    entityType: string
+    entityId: string
+    entityLabel: string
+    reason: string
+  },
+) {
+  const refs: ReturnType<typeof buildEntityRef>[] = []
+  const parts: string[] = []
+  const assetLabel = DELETION_ENTITY_LABELS[opts.entityType] ?? 'Record'
+  const messageEntityType = deletionEntityToMessageType(opts.entityType)
+
+  if (messageEntityType) {
+    const linkLabel = opts.entityType === 'customer'
+      ? opts.entityLabel
+      : `${assetLabel} ${opts.entityLabel}`
+    parts.push(entityRefToken(messageEntityType, opts.entityId, linkLabel))
+    refs.push(buildEntityRef(messageEntityType, opts.entityId, linkLabel))
+  }
+  else {
+    parts.push(`${assetLabel} ${opts.entityLabel}`)
+  }
+
+  parts.push('needs to be deleted because')
+  parts.push(`${opts.reason.trim()}.`)
+  parts.push('Can an administrator please review the')
+  parts.push(entityRefToken('deletion_request', opts.requestId, 'deletion request'))
+  refs.push(buildEntityRef('deletion_request', opts.requestId, 'deletion request'))
+  parts.push('?')
+
+  return postTeamChatMessage(db, {
+    senderUserId: opts.senderUserId,
+    body: parts.join(' '),
+    entityRefs: refs,
+    skipNormalize: true,
+  })
+}

@@ -59,6 +59,7 @@ export interface DeletionRequestRow {
 export interface ListDeletionRequestsFilter {
   entityType?: DeletionEntityType
   entityId?: string
+  requestId?: string
   status?: 'pending' | 'approved' | 'rejected' | 'all'
   q?: string
   page?: number
@@ -257,21 +258,18 @@ export async function createDeletionRequest(
   }).returning()
 
   try {
-    const submitter = await db.select({
-      name: users.name,
-    }).from(users).where(eq(users.id, submittedBy)).limit(1)
-    const { notifyDeletionRequestSubmitted } = await import('./staff-notifications.service')
-    await notifyDeletionRequestSubmitted(db, {
-      submitterName: submitter[0]?.name || 'A staff member',
-      submitterId: submittedBy,
+    const { postDeletionRequestSubmittedTeamMessage } = await import('./workflow-chat.service')
+    await postDeletionRequestSubmittedTeamMessage(db, {
+      senderUserId: submittedBy,
+      requestId: row!.id,
       entityType,
+      entityId,
       entityLabel,
       reason: reason.trim(),
-      requestId: row!.id,
     })
   }
   catch (err) {
-    console.warn('[mail] deletion request submitted notification failed:', (err as Error).message)
+    console.warn('[team-chat] deletion request team message failed:', (err as Error).message)
   }
 
   return row!
@@ -284,6 +282,7 @@ export async function listDeletionRequests(db: Db, filter: ListDeletionRequestsF
 
   if (filter.entityType) conditions.push(eq(entityDeletionRequests.entityType, filter.entityType))
   if (filter.entityId) conditions.push(eq(entityDeletionRequests.entityId, filter.entityId))
+  if (filter.requestId) conditions.push(eq(entityDeletionRequests.id, filter.requestId))
   if (filter.status && filter.status !== 'all') {
     conditions.push(eq(entityDeletionRequests.status, filter.status))
   }

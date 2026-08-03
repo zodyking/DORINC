@@ -34,7 +34,12 @@ interface DeletionRequestRow {
 }
 
 const auth = useAuthStore()
+const route = useRoute()
 const canReview = computed(() => auth.can('deletion_requests.review.all'))
+
+const highlightRequestId = computed(() =>
+  typeof route.query.request === 'string' ? route.query.request : '',
+)
 
 const tab = ref<'all' | DeletionEntityType>('all')
 const status = ref<'pending' | 'approved' | 'rejected' | 'all'>('pending')
@@ -42,11 +47,16 @@ const q = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
+if (highlightRequestId.value) {
+  status.value = 'all'
+}
+
 watch([tab, status, q], () => { page.value = 1 })
 
 const query = computed(() => ({
   entityType: tab.value === 'all' ? undefined : tab.value,
-  status: status.value,
+  status: highlightRequestId.value ? 'all' : status.value,
+  requestId: highlightRequestId.value || undefined,
   q: q.value || undefined,
   page: page.value,
   pageSize: PAGE_SIZE,
@@ -131,6 +141,15 @@ async function submitModal() {
     busyId.value = ''
   }
 }
+
+watch([items, highlightRequestId], async () => {
+  if (!highlightRequestId.value || !items.value.length) return
+  await nextTick()
+  document.getElementById(`deletion-req-${highlightRequestId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+}, { immediate: true })
 </script>
 
 <template>
@@ -192,7 +211,13 @@ async function submitModal() {
           No deletion requests match this filter.
         </div>
         <div v-else id="deletion-req-queue">
-          <div v-for="row in items" :key="row.id" class="modrow">
+          <div
+            v-for="row in items"
+            :key="row.id"
+            :id="`deletion-req-${row.id}`"
+            class="modrow"
+            :class="{ 'modrow-highlight': row.id === highlightRequestId }"
+          >
             <span class="av" :class="avColor(row.entityLabel)">{{ initials(row.entityLabel) }}</span>
             <div class="nm">
               <div class="row-title">
@@ -422,5 +447,9 @@ async function submitModal() {
   color: #dc2626;
   font-size: 13px;
   margin: 8px 0 0;
+}
+.modrow-highlight {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
 }
 </style>

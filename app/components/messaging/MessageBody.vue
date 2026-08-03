@@ -7,10 +7,27 @@ const props = defineProps<{
 }>()
 
 const auth = useAuthStore()
+const { showAppAlert } = useAppAlert()
 
 function linkPath(entityType: MessageEntityType, entityId: string): string {
   if (!auth.loaded) return `/`
   return entityPathForMessageLink(entityType, entityId, { can: key => auth.can(key) })
+}
+
+function isDeletionRequestRef(entityType: MessageEntityType): boolean {
+  return entityType === 'deletion_request'
+}
+
+function openDeletionRequestLink(entityId: string) {
+  if (auth.can('deletion_requests.review.all')) {
+    void navigateTo(linkPath('deletion_request', entityId))
+    return
+  }
+
+  showAppAlert(
+    'You do not have permission to moderate deletion requests.',
+    'Permission required',
+  )
 }
 
 interface MessagePart {
@@ -51,6 +68,14 @@ const parts = computed<MessagePart[]>(() => {
   <span class="dm-msg-text">
     <template v-for="(part, i) in parts" :key="i">
       <span v-if="part.kind === 'text'">{{ part.value }}</span>
+      <a
+        v-else-if="isDeletionRequestRef(part.entityType!)"
+        href="#"
+        class="dm-entity-link"
+        @click.prevent="openDeletionRequestLink(part.entityId!)"
+      >
+        {{ part.value }}
+      </a>
       <NuxtLink
         v-else
         :to="linkPath(part.entityType!, part.entityId!)"

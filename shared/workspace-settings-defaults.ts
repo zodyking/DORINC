@@ -157,12 +157,6 @@ export const NOTIFICATION_SETTING_META: Array<{
     group: 'security',
   },
   {
-    key: 'deletionRequestSubmitted',
-    label: 'Deletion request submitted',
-    description: 'Notify reviewers when someone requests a record deletion.',
-    group: 'workflow',
-  },
-  {
     key: 'deletionRequestResult',
     label: 'Deletion request result',
     description: 'Email the requestor when a deletion request is approved or denied.',

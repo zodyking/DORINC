@@ -39,6 +39,7 @@ export const ENTITY_TYPE_LABELS: Record<MessageEntityType, string> = {
   customer: 'Customer',
   vehicle: 'Vehicle',
   service_log: 'Service log',
+  deletion_request: 'Deletion request',
 }
 
 export function entityRefToken(ref: EntityRefToken): string {
@@ -55,6 +56,8 @@ export function entityPath(entityType: MessageEntityType, entityId: string): str
       return `/vehicles/${entityId}`
     case 'service_log':
       return `/service-logs/${entityId}`
+    case 'deletion_request':
+      return `/deletion-requests?request=${entityId}`
     default:
       return '/'
   }
@@ -83,6 +86,8 @@ export function entityPathForMessageLink(
       return `/vehicles/${entityId}?${refQuery}`
     case 'service_log':
       return `/service-logs/${entityId}?${refQuery}`
+    case 'deletion_request':
+      return `/deletion-requests?request=${entityId}&${refQuery}`
     default:
       return '/'
   }
