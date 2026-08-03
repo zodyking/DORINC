@@ -64,7 +64,7 @@ export function catalogTypeToLineType(itemType: string): InvoiceLineType {
 }
 
 /** Fill type / description / qty / rate from a catalog pick (creator + editor autocomplete). */
-export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
+export function applyCatalogItemToLineFields(item: CatalogQuickItem, quantity = '1'): {
   lineType: InvoiceLineType
   description: string
   quantity: string
@@ -78,10 +78,30 @@ export function applyCatalogItemToLineFields(item: CatalogQuickItem): {
       return inferLineTypeFromDescription(item.name, verbs) ?? fromCatalog
     })(),
     description: item.name,
-    quantity: '1',
+    quantity,
     unitPrice: item.defaultPrice ?? '0',
     catalogItemId: item.id,
   }
+}
+
+export interface PackageLineItem {
+  catalogItemId: string
+  itemType: string
+  name: string
+  defaultPrice: string | null
+  uom: string
+  quantity: string
+}
+
+export function expandPackageItemToLineFields(item: PackageLineItem) {
+  return applyCatalogItemToLineFields({
+    id: item.catalogItemId,
+    itemType: item.itemType,
+    sku: null,
+    name: item.name,
+    defaultPrice: item.defaultPrice,
+    uom: item.uom,
+  }, item.quantity || '1')
 }
 
 /** Grand total for display — when a line breakdown is present, derive from live lines. */

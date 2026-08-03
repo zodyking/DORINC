@@ -47,6 +47,37 @@ export const catalogItems = pgTable('catalog_items', {
   index('catalog_items_sku_idx').on(table.sku),
 ])
 
+/** Pre-built bundles of catalog items for quick invoice line entry. */
+export const catalogPackages = pgTable('catalog_packages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sku: text('sku'),
+  name: text('name').notNull(),
+  description: text('description'),
+  categoryId: uuid('category_id').references(() => catalogCategories.id),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+}, table => [
+  index('catalog_packages_name_idx').on(table.name),
+  index('catalog_packages_category_idx').on(table.categoryId),
+  index('catalog_packages_sku_idx').on(table.sku),
+])
+
+/** Catalog items included in a package (parts, labor, fees). */
+export const catalogPackageItems = pgTable('catalog_package_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  packageId: uuid('package_id').notNull().references(() => catalogPackages.id, { onDelete: 'cascade' }),
+  catalogItemId: uuid('catalog_item_id').notNull().references(() => catalogItems.id),
+  quantity: text('quantity').notNull().default('1'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index('catalog_package_items_package_idx').on(table.packageId),
+  index('catalog_package_items_item_idx').on(table.catalogItemId),
+])
+
 /** Standard shop labor rates — linked to labor catalog items when applicable (SPEC §6.3). */
 export const catalogLaborRates = pgTable('catalog_labor_rates', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -58,3 +58,32 @@ export const catalogLaborRateListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })
+
+export const catalogPackageItemSchema = z.object({
+  catalogItemId: uuidSchema,
+  quantity: z.string().trim().min(1).max(30),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+})
+
+export const catalogPackageCreateSchema = z.object({
+  sku: z.string().trim().max(40).nullish(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).nullish(),
+  categoryId: uuidSchema.nullish(),
+  items: z.array(catalogPackageItemSchema).max(100).optional(),
+})
+
+export const catalogPackageUpdateSchema = catalogPackageCreateSchema.partial().omit({ items: true })
+
+export const catalogPackageItemsSetSchema = z.object({
+  items: z.array(catalogPackageItemSchema).max(100),
+})
+
+export const catalogPackageListQuerySchema = z.object({
+  q: z.string().max(200).optional(),
+  categoryId: uuidSchema.optional(),
+  includeArchived: z.coerce.boolean().optional(),
+  sort: z.enum(['name-asc', 'name-desc', 'sku-asc', 'newest']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+})

@@ -7,13 +7,18 @@ import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   archiveCatalogItem,
+  archivePackage,
   createCatalogItem,
   createCategory,
   createLaborRate,
+  createPackage,
   deleteCategory,
+  getPackage,
   listCatalogItems,
+  listPackages,
+  setPackageItems,
 } from '../../server/services/catalog.service'
-import { catalogCategories, catalogItems, catalogLaborRates } from '../../server/db/schema/catalog'
+import { catalogCategories, catalogItems, catalogLaborRates, catalogPackages } from '../../server/db/schema/catalog'
 import { users } from '../../server/db/schema/auth'
 
 config()
@@ -28,6 +33,7 @@ const ACTOR = anyUser!.id
 const category = await createCategory(db, { name: `CatTest-${stamp}`, sortOrder: 1 })
 
 afterAll(async () => {
+  await db.delete(catalogPackages).where(like(catalogPackages.name, `CatTest-${stamp}%`))
   await db.delete(catalogLaborRates).where(like(catalogLaborRates.name, `CatTest-${stamp}%`))
   await db.delete(catalogItems).where(like(catalogItems.name, `CatTest-${stamp}%`))
   await db.delete(catalogCategories).where(like(catalogCategories.name, `CatTest-${stamp}%`))
@@ -125,5 +131,51 @@ describe('P1-18 labor rates', () => {
     }, ACTOR)
     expect(rate.rate).toBe('95.00')
     expect(rate.uom).toBe('flat')
+  })
+})
+
+describe('catalog packages', () => {
+  it('creates, lists, updates items, and archives packages', async () => {
+    const part = await createCatalogItem(db, {
+      itemType: 'part',
+      name: `CatTest-${stamp} Package part`,
+      defaultPrice: '12.00',
+    }, ACTOR)
+    const labor = await createCatalogItem(db, {
+      itemType: 'labor',
+      name: `CatTest-${stamp} Package labor`,
+      defaultPrice: '145.00',
+      uom: 'hr',
+    }, ACTOR)
+
+    const pkg = await createPackage(db, {
+      sku: `PKG-${stamp}`,
+      name: `CatTest-${stamp} PM kit`,
+      description: 'Oil + labor',
+      categoryId: category.id,
+    }, ACTOR, [
+      { catalogItemId: part.id, quantity: '2' },
+      { catalogItemId: labor.id, quantity: '1.5' },
+    ])
+
+    expect(pkg.items).toHaveLength(2)
+    expect(pkg.items[0]?.quantity).toBe('2')
+
+    const listed = await listPackages(db, { q: 'PM kit', page: 1, pageSize: 10 })
+    expect(listed.items.some(row => row.id === pkg.id)).toBe(true)
+    expect(listed.items.find(row => row.id === pkg.id)?.itemCount).toBe(2)
+
+    const loaded = await getPackage(db, pkg.id)
+    expect(loaded.items.map(i => i.catalogItemId).sort()).toEqual([labor.id, part.id].sort())
+
+    const updated = await setPackageItems(db, pkg.id, [
+      { catalogItemId: labor.id, quantity: '2', sortOrder: 0 },
+    ])
+    expect(updated.items).toHaveLength(1)
+    expect(updated.items[0]?.quantity).toBe('2')
+
+    await archivePackage(db, pkg.id)
+    const hidden = await listPackages(db, { q: 'PM kit', page: 1, pageSize: 10 })
+    expect(hidden.items.some(row => row.id === pkg.id)).toBe(false)
   })
 })

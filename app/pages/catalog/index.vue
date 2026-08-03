@@ -2,6 +2,7 @@
 // Catalog list with search, type chips, add/edit modal (mockup: PAGE: CATALOG).
 import CatalogItemForm, { type CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
 import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
+import CatalogPackagesPanel from '~/components/catalog/CatalogPackagesPanel.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 import { normalizeCatalogItemType } from '~/utils/catalog-ui'
 import { windowedPagerPages } from '~/utils/pager-ui'
@@ -27,9 +28,12 @@ interface CatalogItemRow {
 }
 
 type TypeChip = 'all' | 'part' | 'labor' | 'fee'
+type CatalogTab = 'items' | 'packages'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.can('catalog.manage.all'))
+const activeTab = ref<CatalogTab>('items')
+const packagesPanelRef = ref<InstanceType<typeof CatalogPackagesPanel> | null>(null)
 
 const q = ref('')
 const fType = ref<TypeChip>('all')
@@ -245,10 +249,11 @@ function onRowClick(row: CatalogItemRow) {
 
 <template>
   <section class="page active">
-    <StaffPageHead subtitle="Parts, labor, and fees for invoice lines">
+    <StaffPageHead subtitle="Parts, labor, fees, and packages for invoice lines">
       <template #title>Catalog</template>
       <template v-if="canManage" #actions>
         <button
+          v-if="activeTab === 'items'"
           type="button"
           class="btn"
           @click="categoriesOpen = true"
@@ -256,14 +261,50 @@ function onRowClick(row: CatalogItemRow) {
           Manage categories
         </button>
         <button
+          v-if="activeTab === 'items'"
           type="button"
           class="btn primary"
           @click="openNewItem"
         >
           + New Item
         </button>
+        <button
+          v-if="activeTab === 'packages'"
+          type="button"
+          class="btn primary"
+          @click="packagesPanelRef?.openNewPackage()"
+        >
+          + New Package
+        </button>
       </template>
     </StaffPageHead>
+
+    <div class="ed-tabs-wrap">
+      <div class="ed-tabs" role="tablist" aria-label="Catalog views">
+        <button
+          type="button"
+          class="ed-tab"
+          :class="{ on: activeTab === 'items' }"
+          role="tab"
+          :aria-selected="activeTab === 'items'"
+          @click="activeTab = 'items'"
+        >
+          Items
+        </button>
+        <button
+          type="button"
+          class="ed-tab"
+          :class="{ on: activeTab === 'packages' }"
+          role="tab"
+          :aria-selected="activeTab === 'packages'"
+          @click="activeTab = 'packages'"
+        >
+          Packages
+        </button>
+      </div>
+    </div>
+
+    <template v-if="activeTab === 'items'">
 
     <ListFilterBar
       v-model:search="q"
@@ -358,6 +399,10 @@ function onRowClick(row: CatalogItemRow) {
         </div>
       </div>
     </div>
+
+    </template>
+
+    <CatalogPackagesPanel v-else ref="packagesPanelRef" />
 
     <CatalogCategoriesModal v-model:open="categoriesOpen" @changed="onCategoriesChanged" />
 

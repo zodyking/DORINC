@@ -386,6 +386,13 @@
       "when": 1784258400000,
       "tag": "0056_training",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1784259000000,
+      "tag": "0057_catalog_packages",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import {
   catalogItemSub,
   catalogTypeToLineType,
   editorSummaryRows,
+  expandPackageItemToLineFields,
   formatHistoryChange,
 } from '../../app/utils/invoice-editor-ui'
 
@@ -48,6 +49,23 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       defaultPrice: null,
       uom: 'each',
     }).unitPrice).toBe('0')
+  })
+
+  it('expands package items with package quantity', () => {
+    expect(expandPackageItemToLineFields({
+      catalogItemId: 'cat-1',
+      itemType: 'part',
+      name: 'Oil filter',
+      defaultPrice: '24.99',
+      uom: 'each',
+      quantity: '2',
+    })).toEqual({
+      lineType: 'part',
+      description: 'Oil filter',
+      quantity: '2',
+      unitPrice: '24.99',
+      catalogItemId: 'cat-1',
+    })
   })
 
   it('renders catalog quick-add subtitles', () => {

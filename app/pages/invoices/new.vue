@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
 import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
 import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
@@ -451,6 +452,19 @@ function applyCatalogToLine(line: DraftLine, item: CatalogQuickItem) {
   line.catalogItemId = fields.catalogItemId
 }
 
+function applyPackageLines(packageLines: ReturnType<typeof applyCatalogItemToLineFields>[]) {
+  if (!packageLines.length) return
+  const next = packageLines.map(fields => ({
+    ...createEmptyLine(),
+    lineType: fields.lineType,
+    description: fields.description,
+    quantity: fields.quantity,
+    unitPrice: fields.unitPrice,
+    catalogItemId: fields.catalogItemId,
+  }))
+  lines.value = [...lines.value, ...next]
+}
+
 function onLineDescriptionTyped(line: DraftLine) {
   line.catalogItemId = null
 }
@@ -855,6 +869,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
           <div class="chead inv-line-editor-head">
             <div class="right inv-line-actions">
               <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+              <AddPackageModal @applied="applyPackageLines" />
               <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
             </div>
           </div>

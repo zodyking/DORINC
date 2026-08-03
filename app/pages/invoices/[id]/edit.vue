@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
+import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
 import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
 import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
 import { isEditingSessionNoise } from '#shared/audit-messages'
@@ -574,6 +575,38 @@ async function addEmptyLine() {
   }
 }
 
+async function applyPackageLines(packageLines: ReturnType<typeof applyCatalogItemToLineFields>[]) {
+  if (!editable.value || !packageLines.length) return
+  busy.value = true
+  saveError.value = ''
+  try {
+    const created: LineItem[] = []
+    let sortOrder = lines.value.length
+    for (const fields of packageLines) {
+      const { line } = await $fetch<{ line: LineItem }>(`/api/invoices/${id}/line-items`, {
+        method: 'POST',
+        body: {
+          lineType: fields.lineType,
+          description: fields.description,
+          quantity: fields.quantity,
+          unitPrice: fields.unitPrice,
+          catalogItemId: fields.catalogItemId,
+          sortOrder: sortOrder++,
+        },
+      })
+      created.push(line)
+    }
+    lines.value = [...lines.value, ...created]
+    void refreshInvoice()
+  }
+  catch (e: unknown) {
+    saveError.value = syncFetchErrorMessage(e, 'Could not add package lines')
+  }
+  finally {
+    busy.value = false
+  }
+}
+
 async function removeLine(lineId: string) {
   if (!editable.value || lines.value.length <= 1) return
   busy.value = true
@@ -1009,6 +1042,7 @@ const aiPopStyle = computed(() => {
                   <span class="dot">✦</span> AI
                 </button>
                 <NuxtLink to="/catalog" class="btn sm">From catalog</NuxtLink>
+                <AddPackageModal :disabled="!editable || busy" @applied="applyPackageLines" />
                 <button
                   type="button"
                   class="btn sm primary"
