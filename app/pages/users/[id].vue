@@ -661,6 +661,7 @@ const showPermissionsModal = ref(false)
   overflow-y: auto;
   padding: 16px 20px;
   flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -695,5 +696,20 @@ const showPermissionsModal = ref(false)
   color: #991b1b;
   font-size: 13px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .perm-modal {
+    max-width: none;
+    width: 100%;
+    max-height: none;
+    height: 100dvh;
+    border-radius: 0;
+  }
 }
 </style>

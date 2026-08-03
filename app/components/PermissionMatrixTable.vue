@@ -10,7 +10,7 @@ import {
   type PermissionArea,
   type PermissionColumn,
   type PermissionStatus,
-} from '~/shared/permissions/display'
+} from '#shared/permissions/display'
 
 const props = withDefaults(defineProps<{
   roleGrants?: string[]
