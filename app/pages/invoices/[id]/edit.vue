@@ -1258,6 +1258,10 @@ const aiPopStyle = computed(() => {
 </template>
 
 <style scoped>
+.ed-invoice-stack {
+  max-width: 100%;
+}
+
 .ed-details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
