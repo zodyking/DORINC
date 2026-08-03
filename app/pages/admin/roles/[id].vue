@@ -15,10 +15,6 @@ interface RoleDetail {
   updatedAt: string
 }
 
-interface PermissionGroup {
-  [module: string]: Array<{ key: string, description: string | null }>
-}
-
 const route = useRoute()
 const auth = useAuthStore()
 
@@ -26,13 +22,8 @@ const { data, refresh, error } = useClientFetch<{ role: RoleDetail }>(
   `/api/admin/roles/${route.params.id}`,
 )
 
-const { data: permData } = useClientFetch<{ permissions: PermissionGroup }>(
-  '/api/admin/roles/permissions',
-)
-
 const role = computed(() => data.value?.role)
-const allPermissions = computed(() => permData.value?.permissions ?? {})
-const permissionModules = computed(() => Object.keys(allPermissions.value).sort())
+const roleGrants = computed(() => role.value?.permissions ?? [])
 
 const editName = ref('')
 const editDescription = ref('')
@@ -74,59 +65,13 @@ const busy = ref(false)
 const notice = ref('')
 const errorMsg = ref('')
 
-function moduleLabel(mod: string): string {
-  const labels: Record<string, string> = {
-    customers: 'Customers',
-    vehicles: 'Vehicles',
-    catalog: 'Catalog',
-    service_logs: 'Service Logs',
-    invoices: 'Invoices',
-    estimates: 'Estimates',
-    templates: 'Templates',
-    reports: 'Reports',
-    files: 'Files',
-    users: 'Users',
-    roles: 'Roles',
-    audit: 'Audit',
-    ai: 'AI',
-    backups: 'Backups',
-    system: 'System',
-    portal: 'Portal',
-    portal_requests: 'Portal Requests',
-    deletion_requests: 'Deletion Requests',
-    records: 'Records',
-    messages: 'Messages',
-    email: 'Email',
-  }
-  return labels[mod] ?? mod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
-
 function togglePermission(key: string) {
   if (!canEdit.value) return
+  if (key === 'system.admin.all' && role.value?.key !== 'super_admin') return
   if (selectedPermissions.value.has(key)) {
     selectedPermissions.value.delete(key)
   } else {
     selectedPermissions.value.add(key)
-  }
-  selectedPermissions.value = new Set(selectedPermissions.value)
-}
-
-function selectAllInModule(mod: string) {
-  if (!canEdit.value) return
-  const perms = allPermissions.value[mod] ?? []
-  for (const p of perms) {
-    if (p.key !== 'system.admin.all' || role.value?.key === 'super_admin') {
-      selectedPermissions.value.add(p.key)
-    }
-  }
-  selectedPermissions.value = new Set(selectedPermissions.value)
-}
-
-function deselectAllInModule(mod: string) {
-  if (!canEdit.value) return
-  const perms = allPermissions.value[mod] ?? []
-  for (const p of perms) {
-    selectedPermissions.value.delete(p.key)
   }
   selectedPermissions.value = new Set(selectedPermissions.value)
 }
@@ -266,35 +211,14 @@ async function deleteRole() {
                 <span class="pill">{{ selectedPermissions.size }} selected</span>
               </div>
             </div>
-            <div class="cbody perm-matrix">
-              <div v-for="mod in permissionModules" :key="mod" class="perm-module">
-                <div class="perm-module-header">
-                  <span class="perm-module-name">{{ moduleLabel(mod) }}</span>
-                  <span v-if="canEdit" class="perm-module-actions">
-                    <button class="link-btn" @click="selectAllInModule(mod)">Select all</button>
-                    <button class="link-btn" @click="deselectAllInModule(mod)">Clear</button>
-                  </span>
-                </div>
-                <div class="perm-list">
-                  <label
-                    v-for="perm in allPermissions[mod]"
-                    :key="perm.key"
-                    class="perm-item"
-                    :class="{ disabled: !canEdit || (perm.key === 'system.admin.all' && role.key !== 'super_admin') }"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="selectedPermissions.has(perm.key)"
-                      :disabled="!canEdit || (perm.key === 'system.admin.all' && role.key !== 'super_admin')"
-                      @change="togglePermission(perm.key)"
-                    >
-                    <span class="perm-label">
-                      <code>{{ perm.key }}</code>
-                      <span v-if="perm.description" class="perm-desc">{{ perm.description }}</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
+            <div class="cbody perm-matrix-body">
+              <PermissionMatrixTable
+                :role-grants="roleGrants"
+                :selected-keys="selectedPermissions"
+                mode="checkbox"
+                :show-nav-hint="canEdit"
+                @toggle="togglePermission"
+              />
             </div>
           </div>
         </div>
@@ -351,83 +275,8 @@ code {
 .flash.err { color: #dc2626; }
 .flash.ok { color: #059669; }
 
-.perm-matrix {
-  padding: 0 !important;
-}
-
-.perm-module {
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.perm-module:last-child {
-  border-bottom: none;
-}
-
-.perm-module-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.perm-module-name {
-  font-weight: 600;
-  font-size: 13px;
-  color: #334155;
-}
-
-.perm-module-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.link-btn {
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: 12px;
-  color: #3b82f6;
-  cursor: pointer;
-  padding: 0;
-}
-
-.link-btn:hover {
-  text-decoration: underline;
-}
-
-.perm-list {
-  padding: 8px 16px;
-}
-
-.perm-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 6px 0;
-  cursor: pointer;
-}
-
-.perm-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.perm-item input[type="checkbox"] {
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.perm-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.perm-desc {
-  font-size: 11px;
-  color: #64748b;
+.perm-matrix-body {
+  padding: 12px 16px !important;
 }
 
 .modal-backdrop {

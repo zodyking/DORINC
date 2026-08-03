@@ -38,10 +38,6 @@ interface UserPermissions {
   effective: string[]
 }
 
-interface PermissionGroup {
-  [module: string]: Array<{ key: string, description: string | null }>
-}
-
 const route = useRoute()
 const auth = useAuthStore()
 
@@ -53,14 +49,10 @@ const { data: permData, refresh: refreshPerms } = useClientFetch<UserPermissions
   `/api/admin/users/${route.params.id}/permissions`,
 )
 
-const { data: allPermsData } = useClientFetch<{ permissions: PermissionGroup }>(
-  '/api/admin/roles/permissions',
-)
-
 const user = computed(() => data.value?.user)
 const activity = computed(() => data.value?.activity ?? [])
 const userPerms = computed(() => permData.value)
-const allPermissions = computed(() => allPermsData.value?.permissions ?? {})
+const roleGrants = computed(() => userPerms.value?.roleGrants ?? [])
 
 const selectedType = ref('')
 watchEffect(() => {
@@ -132,17 +124,6 @@ function cycleOverrideState(key: string) {
   const current = getOverrideState(key)
   const next: OverrideState = current === 'inherit' ? 'allow' : current === 'allow' ? 'deny' : 'inherit'
   setOverrideState(key, next)
-}
-
-function isGrantedByRole(key: string): boolean {
-  return userPerms.value?.roleGrants.includes(key) ?? false
-}
-
-function getEffectiveState(key: string): boolean {
-  const override = getOverrideState(key)
-  if (override === 'deny') return false
-  if (override === 'allow') return true
-  return isGrantedByRole(key)
 }
 
 function messageFrom(err: unknown): string {
@@ -320,15 +301,6 @@ async function savePermissionsAndClose() {
   if (!errorMsg.value) showPermissionsModal.value = false
 }
 
-// Key permissions to show at the top
-const KEY_PERMISSION_ROWS = [
-  { label: 'Upload service logs', key: 'service_logs.upload.own' },
-  { label: 'Review service logs', key: 'service_logs.review.all' },
-  { label: 'View all vehicles', key: 'vehicles.read.all' },
-  { label: 'Create invoices', key: 'invoices.create.all' },
-  { label: 'Manage users', key: 'users.manage.all' },
-] as const
-
 function joinedLabel(iso: string | undefined): string {
   if (!iso) return ''
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
@@ -354,35 +326,7 @@ function activityTitle(a: ActivityRow): string {
   return map[a.action] ?? a.action
 }
 
-function moduleLabel(mod: string): string {
-  const labels: Record<string, string> = {
-    customers: 'Customers',
-    vehicles: 'Vehicles',
-    catalog: 'Catalog',
-    service_logs: 'Service Logs',
-    invoices: 'Invoices',
-    estimates: 'Estimates',
-    templates: 'Templates',
-    reports: 'Reports',
-    files: 'Files',
-    users: 'Users',
-    roles: 'Roles',
-    audit: 'Audit',
-    ai: 'AI',
-    backups: 'Backups',
-    system: 'System',
-    portal: 'Portal',
-    portal_requests: 'Portal Requests',
-    deletion_requests: 'Deletion Requests',
-    records: 'Records',
-    messages: 'Messages',
-    email: 'Email',
-  }
-  return labels[mod] ?? mod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
-
 const showPermissionsModal = ref(false)
-const permissionModules = computed(() => Object.keys(allPermissions.value).sort())
 </script>
 
 <template>
@@ -481,24 +425,20 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
                 </button>
               </div>
             </div>
-            <div class="cbody" style="padding-top:6px; padding-bottom:6px;">
-              <div v-for="row in KEY_PERMISSION_ROWS" :key="row.key" class="tglrow">
-                {{ row.label }}
-                <span class="perm-badge" :class="getEffectiveState(row.key) ? 'granted' : 'denied'">
-                  {{ getEffectiveState(row.key) ? '✓' : '✗' }}
-                </span>
-                <span
-                  v-if="getOverrideState(row.key) !== 'inherit'"
-                  class="override-indicator"
-                  :class="getOverrideState(row.key)"
-                >
-                  {{ getOverrideState(row.key) === 'allow' ? '+' : '−' }}
-                </span>
-              </div>
-              <p style="font-size:12px; color:#94a3b8; margin:8px 0;">
+            <div class="cbody perm-summary-body">
+              <PermissionMatrixTable
+                v-if="userPerms"
+                :role-grants="roleGrants"
+                :override-states="overrideStates"
+                mode="readonly"
+                compact
+                :show-nav-hint="false"
+              />
+              <p class="perm-summary-foot">
                 Base permissions from {{ accountTypeLabel(user.accountType) }} role.
                 <template v-if="userPerms?.overrides.allow.length || userPerms?.overrides.deny.length">
-                  <br>User has {{ userPerms?.overrides.allow.length || 0 }} allow override(s) and {{ userPerms?.overrides.deny.length || 0 }} deny override(s).
+                  {{ userPerms?.overrides.allow.length || 0 }} allow override(s),
+                  {{ userPerms?.overrides.deny.length || 0 }} deny override(s).
                 </template>
               </p>
             </div>
@@ -617,33 +557,12 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
             <button class="close-btn" aria-label="Close" @click="showPermissionsModal = false">&times;</button>
           </div>
           <div class="modal-body perm-modal-body">
-            <p class="perm-hint">
-              Click a permission to cycle through states: Inherit → Allow → Deny → Inherit
-            </p>
-            <div v-for="mod in permissionModules" :key="mod" class="perm-module">
-              <div class="perm-module-header">{{ moduleLabel(mod) }}</div>
-              <div class="perm-list">
-                <div
-                  v-for="perm in allPermissions[mod]"
-                  :key="perm.key"
-                  class="perm-row"
-                  :class="{ disabled: perm.key === 'system.admin.all' }"
-                  @click="perm.key !== 'system.admin.all' && cycleOverrideState(perm.key)"
-                >
-                  <span class="perm-state" :class="getOverrideState(perm.key)">
-                    {{ getOverrideState(perm.key) === 'inherit' ? '○' : getOverrideState(perm.key) === 'allow' ? '+' : '−' }}
-                  </span>
-                  <span class="perm-info">
-                    <code>{{ perm.key }}</code>
-                    <span v-if="perm.description" class="perm-desc">{{ perm.description }}</span>
-                    <span v-if="isGrantedByRole(perm.key)" class="perm-role-tag">From role</span>
-                  </span>
-                  <span class="perm-effective" :class="getEffectiveState(perm.key) ? 'yes' : 'no'">
-                    {{ getEffectiveState(perm.key) ? 'Granted' : 'Denied' }}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <PermissionMatrixTable
+              :role-grants="roleGrants"
+              :override-states="overrideStates"
+              mode="editable"
+              @cycle="cycleOverrideState"
+            />
           </div>
           <div class="modal-footer">
             <button class="btn" @click="showPermissionsModal = false">Cancel</button>
@@ -674,43 +593,15 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
   color: #059669;
 }
 
-.perm-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 600;
-}
-.perm-badge.granted {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.perm-badge.denied {
-  background: #fee2e2;
-  color: #dc2626;
+.perm-summary-body {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
 }
 
-.override-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  font-size: 10px;
-  font-weight: 700;
-  margin-left: 4px;
-}
-.override-indicator.allow {
-  background: #3b82f6;
-  color: #fff;
-}
-.override-indicator.deny {
-  background: #ef4444;
-  color: #fff;
+.perm-summary-foot {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 10px 0 0;
 }
 
 .modal-backdrop {
@@ -731,7 +622,7 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
 
 .perm-modal {
   width: 100%;
-  max-width: 640px;
+  max-width: 860px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -768,126 +659,8 @@ const permissionModules = computed(() => Object.keys(allPermissions.value).sort(
 
 .perm-modal-body {
   overflow-y: auto;
-  padding: 0;
+  padding: 16px 20px;
   flex: 1;
-}
-
-.perm-hint {
-  padding: 12px 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 13px;
-  color: #64748b;
-  margin: 0;
-}
-
-.perm-module {
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.perm-module:last-child {
-  border-bottom: none;
-}
-
-.perm-module-header {
-  padding: 10px 20px;
-  background: #f8fafc;
-  font-weight: 600;
-  font-size: 13px;
-  color: #334155;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.perm-list {
-  padding: 4px 0;
-}
-
-.perm-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 20px;
-  cursor: pointer;
-}
-
-.perm-row:hover {
-  background: #f8fafc;
-}
-
-.perm-row.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.perm-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.perm-state.inherit {
-  background: #f1f5f9;
-  color: #94a3b8;
-}
-
-.perm-state.allow {
-  background: #dbeafe;
-  color: #2563eb;
-}
-
-.perm-state.deny {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.perm-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.perm-info code {
-  font-size: 11px;
-  background: #f1f5f9;
-  padding: 2px 5px;
-  border-radius: 4px;
-  color: #475569;
-}
-
-.perm-desc {
-  display: block;
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.perm-role-tag {
-  display: inline-block;
-  font-size: 10px;
-  background: #e0e7ff;
-  color: #4f46e5;
-  padding: 1px 5px;
-  border-radius: 4px;
-  margin-left: 6px;
-}
-
-.perm-effective {
-  font-size: 11px;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.perm-effective.yes {
-  color: #16a34a;
-}
-
-.perm-effective.no {
-  color: #dc2626;
 }
 
 .modal-footer {
