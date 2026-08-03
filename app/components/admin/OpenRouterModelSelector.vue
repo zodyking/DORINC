@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 const props = defineProps<{
   modelValue: string
   apiKey?: string
@@ -35,8 +37,13 @@ async function loadModels() {
   loadStatus.value = 'loading'
   loadError.value = ''
   try {
-    const q = props.apiKey?.trim() ? { apiKey: props.apiKey.trim() } : undefined
-    const res = await $fetch<{ models: ModelOption[] }>('/api/admin/ai/models', { query: q })
+    const trimmedKey = props.apiKey?.trim()
+    const res = trimmedKey
+      ? await $fetch<{ models: ModelOption[] }>('/api/admin/ai/models', {
+          method: 'POST',
+          body: { apiKey: trimmedKey },
+        })
+      : await $fetch<{ models: ModelOption[] }>('/api/admin/ai/models')
     models.value = res.models
     loadStatus.value = 'success'
     if (!props.modelValue && res.models[0]) {
@@ -45,7 +52,10 @@ async function loadModels() {
   }
   catch (e: unknown) {
     loadStatus.value = 'error'
-    loadError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Failed to load models'
+    loadError.value = syncFetchErrorMessage(
+      e,
+      'Failed to load models from OpenRouter — check server internet access and try Refresh models',
+    )
   }
 }
 
@@ -217,16 +227,16 @@ watch([filteredModels, sortBy], () => {
   }
 })
 
-watch(() => props.apiKey, () => {
-  if (models.value.length) return
-  void loadModels()
-}, { immediate: true })
+watch(() => props.apiKey?.trim() ?? '', (key, prev) => {
+  if (key && key !== prev) void loadModels()
+})
 
 function onWindowReposition() {
   if (showList.value) updatePanelPosition()
 }
 
 onMounted(() => {
+  void loadModels()
   window.addEventListener('resize', onWindowReposition)
   window.addEventListener('scroll', onWindowReposition, true)
 })

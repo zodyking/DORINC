@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import {
   AiProviderServiceError,
   listOpenRouterModels,
@@ -6,12 +7,19 @@ import {
 import { useDb } from '../../../db/client'
 import { requirePermission } from '../../../utils/require-permission'
 import { apiError } from '../../../utils/api-error'
+import { validateBody } from '../../../utils/validate'
+
+const modelsRequestSchema = z.object({
+  /** Optional — verifies account access; public catalog works without a key. */
+  apiKey: z.string().trim().min(8).max(512).optional(),
+})
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'ai.admin.all')
+  const body = await validateBody(event, modelsRequestSchema)
 
   try {
-    const apiKey = await resolveOpenRouterApiKey(useDb())
+    const apiKey = await resolveOpenRouterApiKey(useDb(), body.apiKey)
     const models = await listOpenRouterModels(apiKey)
     return { ok: true, count: models.length, models }
   }

@@ -28,6 +28,7 @@ import {
   formatSuspiciousAlertIps,
   workerQueueStatusLabel,
 } from '~/utils/admin-panel-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
@@ -312,10 +313,16 @@ async function saveAiSettings() {
     await $fetch('/api/admin/ai/settings', { method: 'PATCH', body })
     aiForm.apiKey = ''
     aiMessage.value = 'AI settings saved'
-    await Promise.all([refresh(), refreshAi(), refreshUsageLogs()])
+    try {
+      await Promise.all([refresh(), refreshAi(), refreshUsageLogs()])
+    }
+    catch (refreshErr: unknown) {
+      aiMessage.value = 'AI settings saved (status refresh failed — reload the page if totals look stale)'
+      console.warn('[ai-settings] refresh after save failed', refreshErr)
+    }
   }
   catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    aiError.value = syncFetchErrorMessage(e, 'Save failed — check encryption setup and try again')
   }
   finally {
     aiSaveBusy.value = false
@@ -335,7 +342,7 @@ async function testAiConnection() {
     aiMessage.value = res.message
   }
   catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Connection test failed'
+    aiError.value = syncFetchErrorMessage(e, 'Connection test failed')
   }
   finally {
     aiTestBusy.value = false

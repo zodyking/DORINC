@@ -10,6 +10,7 @@ import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { getAppUrl } from './app-config.service'
 import { BRAND_NAME } from '../../shared/brand'
 import type { AiProviderSettingsPatch } from '../../shared/validators/ai'
+import { ensureEncryptionReadyForSettings } from './app-config.service'
 
 export type AiProviderServiceErrorCode = 'NOT_CONFIGURED' | 'KEY_MISSING' | 'CONNECTION_FAILED' | 'SPEND_CAP_EXCEEDED'
 
@@ -75,6 +76,16 @@ function toView(row: typeof aiProviderSettings.$inferSelect): AiProviderSettings
   }
 }
 
+/** JSON-safe snapshot for audit rows (Dates → ISO strings). */
+export function aiProviderSettingsAuditSnapshot(view: AiProviderSettingsView) {
+  return {
+    ...view,
+    updatedAt: view.updatedAt instanceof Date
+      ? view.updatedAt.toISOString()
+      : view.updatedAt,
+  }
+}
+
 export async function ensureAiProviderSettings(db: Db): Promise<AiProviderSettingsView> {
   const [existing] = await db.select().from(aiProviderSettings).limit(1)
   if (existing) return toView(existing)
@@ -102,6 +113,7 @@ export async function updateAiProviderSettings(
   }
 
   if (apiKey !== undefined) {
+    await ensureEncryptionReadyForSettings(db)
     update.encryptedApiKey = encryptBuffer(Buffer.from(apiKey, 'utf8'))
   }
 
@@ -253,6 +265,19 @@ function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
     label: `${name} — ${cost}`,
     promptPerMillion: prompt.perMillion,
     completionPerMillion: completion.perMillion,
+  }
+}
+
+/** Resolve OpenRouter key for admin model picker — never throws; falls back to public catalog. */
+export async function resolveOpenRouterApiKey(db: Db, overrideKey?: string): Promise<string | undefined> {
+  const trimmed = overrideKey?.trim()
+  if (trimmed) return trimmed
+
+  try {
+    return await getDecryptedApiKey(db) ?? undefined
+  }
+  catch {
+    return undefined
   }
 }
 
