@@ -319,7 +319,6 @@ async function saveAiSettings() {
       await aiModelSelectorRef.value?.reload()
       await Promise.all([refresh(), refreshAi(), refreshUsageLogs()])
     }
-    }
     catch (refreshErr: unknown) {
       aiMessage.value = 'AI settings saved (status refresh failed — reload the page if totals look stale)'
       console.warn('[ai-settings] refresh after save failed', refreshErr)
