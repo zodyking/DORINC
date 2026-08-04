@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
       console.error('[ai-settings] audit write failed:', (auditErr as Error).message)
     }
 
-    return updated
+    return { settings: updated }
   }
   catch (err) {
     const msg = (err as Error).message ?? 'Failed to save AI settings'

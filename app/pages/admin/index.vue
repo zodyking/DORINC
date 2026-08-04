@@ -254,18 +254,19 @@ const { data: aiData, refresh: refreshAi } = useClientFetch<{
   usage: AiUsageSummary
   spendCaps: AiSpendCaps
 }>(
-  '/api/admin/ai/settings',
-  { immediate: canManageAi.value },
+  () => (canManageAi.value ? '/api/admin/ai/settings' : null),
 )
 
 const { data: usageLogs, refresh: refreshUsageLogs } = useClientFetch<{
   items: AiUsageLogItem[]
   total: number
-}>('/api/admin/ai/usage', { immediate: canManageAi.value })
+}>(() => (canManageAi.value ? '/api/admin/ai/usage' : null))
+
+const aiModelSelectorRef = ref<{ reload: () => Promise<void> } | null>(null)
 
 const aiForm = reactive({
   enabled: false,
-  defaultModel: 'anthropic/claude-3.5-sonnet',
+  defaultModel: '',
   apiKey: '',
   serviceLogExtractionEnabled: true,
   invoiceDescriptionEnabled: true,
@@ -274,8 +275,7 @@ const aiForm = reactive({
   monthlySpendCapUsd: '' as string | number,
 })
 
-watch(() => aiData.value?.settings, (s) => {
-  if (!s) return
+function applyAiSettings(s: AiSettingsView) {
   aiForm.enabled = s.enabled
   aiForm.defaultModel = s.defaultModel
   aiForm.serviceLogExtractionEnabled = s.serviceLogExtractionEnabled
@@ -284,6 +284,11 @@ watch(() => aiData.value?.settings, (s) => {
   aiForm.dailySpendCapUsd = s.dailySpendCapUsd ?? ''
   aiForm.monthlySpendCapUsd = s.monthlySpendCapUsd ?? ''
   aiForm.apiKey = ''
+}
+
+watch(() => aiData.value?.settings, (s) => {
+  if (!s) return
+  applyAiSettings(s)
 }, { immediate: true })
 
 const aiSaveBusy = ref(false)
@@ -307,11 +312,13 @@ async function saveAiSettings() {
     }
     if (aiForm.apiKey.trim()) body.apiKey = aiForm.apiKey.trim()
 
-    await $fetch('/api/admin/ai/settings', { method: 'PATCH', body })
-    aiForm.apiKey = ''
+    const { settings } = await $fetch<{ settings: AiSettingsView }>('/api/admin/ai/settings', { method: 'PATCH', body })
+    applyAiSettings(settings)
     aiMessage.value = 'AI settings saved'
     try {
+      await aiModelSelectorRef.value?.reload()
       await Promise.all([refresh(), refreshAi(), refreshUsageLogs()])
+    }
     }
     catch (refreshErr: unknown) {
       aiMessage.value = 'AI settings saved (status refresh failed — reload the page if totals look stale)'
@@ -331,12 +338,12 @@ async function testAiConnection() {
   aiMessage.value = ''
   aiError.value = ''
   try {
-    const body = aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : undefined
     const res = await $fetch<{ message: string }>('/api/admin/ai/test-connection', {
       method: 'POST',
-      body,
+      body: aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {},
     })
     aiMessage.value = res.message
+    await aiModelSelectorRef.value?.reload()
   }
   catch (e: unknown) {
     aiError.value = syncFetchErrorMessage(e, 'Connection test failed')
@@ -504,6 +511,7 @@ async function testAiConnection() {
                   OpenRouter is the sole AI provider. Models and pricing are loaded live from OpenRouter.
                 </p>
                 <OpenRouterModelSelector
+                  ref="aiModelSelectorRef"
                   v-model="aiForm.defaultModel"
                   :api-key="aiForm.apiKey"
                 />
@@ -520,18 +528,21 @@ async function testAiConnection() {
                   AI enabled
                   <span class="tgl"><input v-model="aiForm.enabled" type="checkbox"><span class="tr" /></span>
                 </div>
-                <div class="tglrow">
+                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
                   Service log extraction
-                  <span class="tgl"><input v-model="aiForm.serviceLogExtractionEnabled" type="checkbox"><span class="tr" /></span>
+                  <span class="tgl"><input v-model="aiForm.serviceLogExtractionEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
                 </div>
-                <div class="tglrow">
+                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
                   Invoice description writer
-                  <span class="tgl"><input v-model="aiForm.invoiceDescriptionEnabled" type="checkbox"><span class="tr" /></span>
+                  <span class="tgl"><input v-model="aiForm.invoiceDescriptionEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
                 </div>
-                <div class="tglrow">
+                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
                   Platform help assistant
-                  <span class="tgl"><input v-model="aiForm.platformHelpEnabled" type="checkbox"><span class="tr" /></span>
+                  <span class="tgl"><input v-model="aiForm.platformHelpEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
                 </div>
+                <p class="help" style="margin:8px 0 0;">
+                  Turn off a feature toggle to block that AI workflow for all staff. Changes apply after you save.
+                </p>
                 <label class="fld">
                   Daily spend cap (USD)
                   <input v-model="aiForm.dailySpendCapUsd" type="number" min="0" step="0.01" placeholder="No cap">
@@ -714,3 +725,9 @@ async function testAiConnection() {
 
   </section>
 </template>
+
+<style scoped>
+.ai-toggle-off {
+  opacity: 0.55;
+}
+</style>

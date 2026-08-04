@@ -46,9 +46,6 @@ async function loadModels() {
       : await $fetch<{ models: ModelOption[] }>('/api/admin/ai/models')
     models.value = res.models
     loadStatus.value = 'success'
-    if (!props.modelValue && res.models[0]) {
-      emit('update:modelValue', res.models[0].id)
-    }
   }
   catch (e: unknown) {
     loadStatus.value = 'error'
@@ -91,7 +88,32 @@ const filteredModels = computed(() =>
   filterAndSortModels(models.value, query.value, sortBy.value),
 )
 
-const selectedModel = computed(() => models.value.find(m => m.id === props.modelValue) ?? null)
+function modelMakerFromId(id: string): string {
+  const slash = id.indexOf('/')
+  if (slash <= 0) return 'Other'
+  const maker = id.slice(0, slash).trim()
+  if (!maker) return 'Other'
+  return maker.charAt(0).toUpperCase() + maker.slice(1)
+}
+
+function placeholderModel(id: string): ModelOption {
+  const name = id.includes('/') ? id.slice(id.indexOf('/') + 1) : id
+  return {
+    id,
+    name,
+    maker: modelMakerFromId(id),
+    label: `${name} (saved model)`,
+    promptPerMillion: null,
+    completionPerMillion: null,
+  }
+}
+
+const selectedModel = computed(() => {
+  if (!props.modelValue) return null
+  return models.value.find(m => m.id === props.modelValue) ?? placeholderModel(props.modelValue)
+})
+
+const displayLabel = computed(() => selectedModel.value?.label ?? props.modelValue)
 
 const inputPlaceholder = computed(() => {
   if (loadStatus.value === 'loading') return 'Loading models…'
@@ -227,6 +249,10 @@ watch([filteredModels, sortBy], () => {
   }
 })
 
+watch(() => props.modelValue, () => {
+  if (open.value) updatePanelPosition()
+})
+
 watch(() => props.apiKey?.trim() ?? '', (key, prev) => {
   if (key && key !== prev) void loadModels()
 })
@@ -234,6 +260,8 @@ watch(() => props.apiKey?.trim() ?? '', (key, prev) => {
 function onWindowReposition() {
   if (showList.value) updatePanelPosition()
 }
+
+defineExpose({ reload: loadModels })
 
 onMounted(() => {
   void loadModels()
@@ -269,7 +297,7 @@ onBeforeUnmount(() => {
       <div class="or-combo" :class="{ open, disabled: disabled || !models.length }">
         <input
           ref="inputEl"
-          :value="open ? query : (selectedModel?.label ?? modelValue)"
+          :value="open ? query : displayLabel"
           type="text"
           role="combobox"
           autocomplete="off"

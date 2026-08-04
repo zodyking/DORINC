@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 const testSchema = z.object({
   apiKey: z.string().trim().min(8).max(512).optional(),
-})
+}).default({})
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'ai.admin.all')
@@ -28,7 +28,9 @@ export default defineEventHandler(async (event) => {
     return {
       ok: result.ok,
       modelCount: result.modelCount,
-      message: `OpenRouter connection verified (${result.modelCount} models available)`,
+      message: body.apiKey
+        ? `OpenRouter connection verified with the entered key (${result.modelCount} models available)`
+        : `OpenRouter connection verified with the saved key (${result.modelCount} models available)`,
     }
   }
   catch (e) {
