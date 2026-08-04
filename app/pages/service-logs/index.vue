@@ -292,8 +292,8 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
               </td>
               <td class="col-status" data-label="Status">
                 <div class="sl-list-badges">
-                  <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).cls">
-                    {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId }).label }}
+                  <span :class="serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId, invoiceLinkStatus: log.invoiceLinkStatus }).cls">
+                    {{ serviceLogStatusPill(log.status as ServiceLogStatus, { invoiceId: log.invoiceId, invoiceLinkStatus: log.invoiceLinkStatus }).label }}
                   </span>
                   <span v-if="log.customerRequested" class="pill info sl-list-cust-req">Customer request</span>
                 </div>
@@ -427,7 +427,7 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
 }
 
 .sl-inv-status--in_progress {
-  color: #d97706;
+  color: #16a34a;
 }
 
 .sl-inv-status--sent {

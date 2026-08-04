@@ -3,6 +3,8 @@
 import { formatAuditChangeMessage } from '#shared/audit-messages'
 import { vehicleSub, vehicleTag, type VehicleDisplay } from './vehicles-ui'
 
+import type { ServiceLogInvoiceLinkStatus } from './service-log-invoice-status'
+
 export type ServiceLogStatus
   = 'draft' | 'uploaded' | 'ocr_processing' | 'ai_processing' | 'ready_for_review' | 'in_review'
     | 'needs_info' | 'converted_to_invoice' | 'rejected' | 'archived'
@@ -39,9 +41,23 @@ export function isServiceLogSendable(status: ServiceLogStatus): boolean {
 
 export const CUSTOMER_REQUESTED_TRIAGE_STATUSES: ServiceLogStatus[] = ['draft', 'uploaded']
 
-export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceId?: string | null }): { cls: string, label: string } {
+export function serviceLogStatusPill(
+  status: ServiceLogStatus,
+  opts?: {
+    invoiceId?: string | null
+    invoiceLinkStatus?: ServiceLogInvoiceLinkStatus | null
+  },
+): { cls: string, label: string } {
   if (status === 'converted_to_invoice' && !opts?.invoiceId) {
     return { cls: 'pill warn', label: 'Awaiting review' }
+  }
+  if (status === 'converted_to_invoice' && opts?.invoiceLinkStatus) {
+    const { key, label } = opts.invoiceLinkStatus
+    if (key === 'queued') return { cls: 'pill warn', label }
+    return { cls: 'pill ok', label }
+  }
+  if (status === 'converted_to_invoice') {
+    return { cls: 'pill warn', label: 'In queue' }
   }
   switch (status) {
     case 'draft':
@@ -58,8 +74,6 @@ export function serviceLogStatusPill(status: ServiceLogStatus, opts?: { invoiceI
       return { cls: 'pill warn', label: 'Ready to invoice' }
     case 'needs_info':
       return { cls: 'pill warn', label: 'Needs info' }
-    case 'converted_to_invoice':
-      return { cls: 'pill ok', label: 'Invoiced' }
     case 'rejected':
       return { cls: 'pill over', label: 'Rejected' }
     case 'archived':

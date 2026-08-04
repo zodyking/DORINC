@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { useDb } from '../../../db/client'
 import { auditLogs } from '../../../db/schema/audit'
+import { resolveServiceLogInvoiceLinkStatuses } from '../../../services/invoice-link-status.service'
 import { getServiceLog, ServiceLogsServiceError, getInvoiceRevertStatus } from '../../../services/service-logs.service'
 import { listUserUploadsByOwner } from '../../../services/files.service'
 import { apiError } from '../../../utils/api-error'
@@ -51,10 +52,18 @@ export default defineEventHandler(async (event) => {
       ? (await getInvoiceRevertStatus(db, log.invoiceId)).reason
       : null
 
+    const invoiceLinkStatuses = log.invoiceId
+      ? await resolveServiceLogInvoiceLinkStatuses(db, [log.invoiceId])
+      : new Map()
+    const invoiceLinkStatus = log.invoiceId
+      ? invoiceLinkStatuses.get(log.invoiceId) ?? null
+      : null
+
     return {
       log,
       files,
       history,
+      invoiceLinkStatus,
       actions: {
         canSendToInvoice,
         canRevertInvoice,
