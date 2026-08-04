@@ -182,16 +182,15 @@ watch(() => route.path, () => {
       <header class="topbar">
         <button class="burger" aria-label="Open navigation" @click="sidebarOpen = !sidebarOpen">☰</button>
         <button
-          v-if="shellWidgetVisible"
+          v-if="shellWidgetVisible && !shellPanelOpen"
           type="button"
           class="iconbtn help-topbar-btn"
-          :class="{ on: shellPanelOpen, open: shellPanelOpen }"
-          aria-label="Platform help"
-          :aria-expanded="shellPanelOpen"
+          aria-label="Open platform help"
+          :aria-expanded="false"
           @click="toggleFromTopbar"
         >
-          <span v-if="!shellPanelOpen" class="help-topbar-pulse" aria-hidden="true" />
-          <span class="help-topbar-icon">{{ shellPanelOpen ? '✕' : '✦' }}</span>
+          <span class="help-topbar-pulse" aria-hidden="true" />
+          <span class="help-topbar-icon">✦</span>
         </button>
         <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
         <span class="spacer" />

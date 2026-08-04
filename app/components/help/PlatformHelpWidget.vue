@@ -545,14 +545,14 @@ onUnmounted(() => {
         </footer>
       </div>
       <button
+        v-if="!panelOpen"
         class="help-fab"
-        :class="{ open: panelOpen }"
         aria-label="Open platform help"
-        :aria-expanded="panelOpen"
+        :aria-expanded="false"
         @click="togglePanel"
       >
-        <span v-if="!panelOpen" class="pulse" />
-        {{ panelOpen ? '✕' : '✦' }}
+        <span class="pulse" />
+        ✦
       </button>
     </div>
   </template>
