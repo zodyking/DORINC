@@ -1,11 +1,9 @@
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { InvoiceStatus } from '../db/schema/invoices'
 import { invoices } from '../db/schema/invoices'
 import { auditLogs } from '../db/schema/audit'
-import { editingSessions } from '../db/schema/editing-sessions'
 import { workerJobs } from '../db/schema/jobs'
-import { isEditingSessionNoise } from '../../shared/audit-messages'
 
 export type ServiceLogInvoiceLinkStatusKey = 'queued' | 'in_progress' | 'sent'
 
@@ -16,16 +14,25 @@ export interface ServiceLogInvoiceLinkStatus {
 
 export interface ServiceLogInvoiceLinkStatusInput {
   invoiceStatus: InvoiceStatus
-  hasActiveEditSession: boolean
-  wasOpenedOrModified: boolean
+  wasSavedAtLeastOnce: boolean
   hasPendingSend: boolean
 }
 
 const STATUS_LABELS: Record<ServiceLogInvoiceLinkStatusKey, string> = {
-  queued: 'Queued',
-  in_progress: 'In progress',
+  queued: 'In queue',
+  in_progress: 'Invoiced',
   sent: 'Sent',
 }
+
+const INVOICE_SAVE_AUDIT_ACTIONS = new Set([
+  'invoices.update',
+  'invoices.update_dates',
+  'invoices.line_items.create',
+  'invoices.line_items.update',
+  'invoices.line_items.delete',
+  'ai.line_audit.completed',
+  'ai.line_audit.reviewed',
+])
 
 /** Derive the service-log list sub-label for a linked invoice. */
 export function deriveServiceLogInvoiceLinkStatus(
@@ -43,17 +50,15 @@ export function deriveServiceLogInvoiceLinkStatus(
     return null
   }
 
-  if (input.hasActiveEditSession || input.wasOpenedOrModified || input.hasPendingSend) {
+  if (input.wasSavedAtLeastOnce || input.hasPendingSend) {
     return { key: 'in_progress', label: STATUS_LABELS.in_progress }
   }
 
   return { key: 'queued', label: STATUS_LABELS.queued }
 }
 
-function auditCountsAsOpenedOrModified(action: string): boolean {
-  if (action === 'editing_sessions.acquire') return true
-  if (action === 'invoices.create') return false
-  return !isEditingSessionNoise(action)
+function auditCountsAsSavedAtLeastOnce(action: string): boolean {
+  return INVOICE_SAVE_AUDIT_ACTIONS.has(action)
 }
 
 /** Batch-resolve linked invoice sub-statuses for the service log list. */
@@ -89,15 +94,6 @@ export async function resolveServiceLogInvoiceLinkStatuses(
 
   if (!draftIds.length) return result
 
-  const activeSessions = await db.select({ entityId: editingSessions.entityId })
-    .from(editingSessions)
-    .where(and(
-      eq(editingSessions.entityType, 'invoice'),
-      inArray(editingSessions.entityId, draftIds),
-      isNull(editingSessions.releasedAt),
-    ))
-  const activeSessionIds = new Set(activeSessions.map(s => s.entityId))
-
   const audits = await db.select({
     entityId: auditLogs.entityId,
     action: auditLogs.action,
@@ -109,10 +105,10 @@ export async function resolveServiceLogInvoiceLinkStatuses(
       ne(auditLogs.action, 'invoices.create'),
     ))
 
-  const openedOrModifiedIds = new Set<string>()
+  const savedAtLeastOnceIds = new Set<string>()
   for (const row of audits) {
-    if (auditCountsAsOpenedOrModified(row.action)) {
-      openedOrModifiedIds.add(row.entityId)
+    if (auditCountsAsSavedAtLeastOnce(row.action)) {
+      savedAtLeastOnceIds.add(row.entityId)
     }
   }
 
@@ -132,8 +128,7 @@ export async function resolveServiceLogInvoiceLinkStatuses(
   for (const id of draftIds) {
     const status = deriveServiceLogInvoiceLinkStatus({
       invoiceStatus: 'draft',
-      hasActiveEditSession: activeSessionIds.has(id),
-      wasOpenedOrModified: openedOrModifiedIds.has(id),
+      wasSavedAtLeastOnce: savedAtLeastOnceIds.has(id),
       hasPendingSend: pendingSendIds.has(id),
     })
     if (status) result.set(id, status)

@@ -4,6 +4,7 @@ import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoMan
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { messageLinkFetchQuery } from '~/utils/message-link-access'
+import type { ServiceLogInvoiceLinkStatus } from '~/utils/service-log-invoice-status'
 
 definePageMeta({ layout: 'staff' })
 
@@ -77,6 +78,7 @@ const { data, refresh, error } = useClientFetch<{
   log: ServiceLog
   files: FileMeta[]
   history: HistoryRow[]
+  invoiceLinkStatus: ServiceLogInvoiceLinkStatus | null
   actions: {
     canSendToInvoice: boolean
     canRevertInvoice: boolean
@@ -85,6 +87,7 @@ const { data, refresh, error } = useClientFetch<{
 }>(`/api/service-logs/${id}`, { query: computed(() => messageLinkFetchQuery(route.query)) })
 
 const log = computed(() => data.value?.log)
+const invoiceLinkStatus = computed(() => data.value?.invoiceLinkStatus ?? null)
 const files = computed(() => data.value?.files ?? [])
 const history = computed(() => data.value?.history ?? [])
 const actions = computed(() => data.value?.actions ?? {
@@ -247,7 +250,7 @@ async function openLinkedInvoicePdf() {
 }
 
 const pill = computed(() => log.value
-  ? serviceLogStatusPill(log.value.status, { invoiceId: log.value.invoiceId })
+  ? serviceLogStatusPill(log.value.status, { invoiceId: log.value.invoiceId, invoiceLinkStatus: invoiceLinkStatus.value })
   : { cls: 'pill gray', label: '—' })
 </script>
 
