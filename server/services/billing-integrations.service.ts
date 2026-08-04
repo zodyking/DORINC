@@ -4,6 +4,7 @@ import { billingIntegrations } from '../db/schema/billing-integrations'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { ensureEncryptionReadyForSettings } from './app-config.service'
 import type { BillingIntegrationsPatch, BillingIntegrationsView } from '../../shared/validators/billing-integrations'
+import { getAiProviderSettings } from './ai-provider.service'
 
 export class BillingIntegrationsServiceError extends Error {
   constructor(public readonly code: 'NOT_CONFIGURED' | 'KEY_MISSING', message?: string) {
@@ -28,16 +29,27 @@ function toView(row: typeof billingIntegrations.$inferSelect): BillingIntegratio
     namecheapMonitoredDomains: row.namecheapMonitoredDomains ?? [],
     namecheapManualDomains: row.namecheapManualDomains ?? [],
     openrouterBillingEnabled: row.openrouterBillingEnabled,
-    hasOpenrouterManagementKey: row.encryptedOpenrouterManagementKey != null && row.encryptedOpenrouterManagementKey.length > 0,
+    hasAiOpenRouterKey: false,
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+async function composeBillingIntegrationsView(
+  db: Db,
+  row: typeof billingIntegrations.$inferSelect,
+): Promise<BillingIntegrationsView> {
+  const ai = await getAiProviderSettings(db)
+  return {
+    ...toView(row),
+    hasAiOpenRouterKey: ai.hasApiKey,
   }
 }
 
 export async function ensureBillingIntegrations(db: Db): Promise<BillingIntegrationsView> {
   const [existing] = await db.select().from(billingIntegrations).limit(1)
-  if (existing) return toView(existing)
+  if (existing) return composeBillingIntegrationsView(db, existing)
   const [created] = await db.insert(billingIntegrations).values({}).returning()
-  return toView(created!)
+  return composeBillingIntegrationsView(db, created!)
 }
 
 export async function getBillingIntegrations(db: Db): Promise<BillingIntegrationsView> {
@@ -53,7 +65,6 @@ export async function updateBillingIntegrations(
   const {
     vultrApiKey,
     namecheapApiKey,
-    openrouterManagementKey,
     ...rest
   } = patch
 
@@ -71,17 +82,13 @@ export async function updateBillingIntegrations(
     await ensureEncryptionReadyForSettings(db)
     update.encryptedNamecheapApiKey = encryptBuffer(Buffer.from(namecheapApiKey, 'utf8'))
   }
-  if (openrouterManagementKey !== undefined) {
-    await ensureEncryptionReadyForSettings(db)
-    update.encryptedOpenrouterManagementKey = encryptBuffer(Buffer.from(openrouterManagementKey, 'utf8'))
-  }
 
   const [updated] = await db.update(billingIntegrations)
     .set(update)
     .where(eq(billingIntegrations.id, current.id))
     .returning()
 
-  return toView(updated!)
+  return composeBillingIntegrationsView(db, updated!)
 }
 
 async function readSecret(buffer: Buffer | null | undefined): Promise<string | null> {
@@ -118,10 +125,4 @@ export async function getNamecheapCredentials(db: Db): Promise<{
     clientIp: row.namecheapClientIp,
     useSandbox: row.namecheapUseSandbox,
   }
-}
-
-export async function getOpenrouterManagementKey(db: Db): Promise<string | null> {
-  const [row] = await db.select({ key: billingIntegrations.encryptedOpenrouterManagementKey })
-    .from(billingIntegrations).limit(1)
-  return readSecret(row?.key)
 }

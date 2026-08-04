@@ -3,9 +3,9 @@ import type { BillingDashboardPayload } from '../../shared/validators/billing-in
 import {
   getBillingIntegrations,
   getNamecheapCredentials,
-  getOpenrouterManagementKey,
   getVultrApiKey,
 } from './billing-integrations.service'
+import { getAiProviderSettings } from './ai-provider.service'
 import {
   domainTld,
   fetchNamecheapDomains,
@@ -31,6 +31,7 @@ function roundMoney(value: number): number {
 
 export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPayload> {
   const settings = await getBillingIntegrations(db)
+  const aiSettings = await getAiProviderSettings(db)
   const nowIso = new Date().toISOString()
 
   const vultrBlock: BillingDashboardPayload['vultr'] = {
@@ -55,7 +56,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   }
 
   const openrouterBlock: BillingDashboardPayload['openrouter'] = {
-    configured: settings.openrouterBillingEnabled,
+    configured: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
     totalCredits: null,
     totalUsage: null,
     remainingCredits: null,
@@ -154,10 +155,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
 
   if (settings.openrouterBillingEnabled) {
     try {
-      const managementKey = settings.hasOpenrouterManagementKey
-        ? await getOpenrouterManagementKey(db)
-        : null
-      const resolved = await resolveOpenRouterBilling(db, managementKey)
+      const resolved = await resolveOpenRouterBilling(db)
       openrouterBlock.totalCredits = resolved.credits?.totalCredits ?? null
       openrouterBlock.totalUsage = resolved.credits?.totalUsage ?? null
       openrouterBlock.remainingCredits = resolved.credits?.remainingCredits ?? null
@@ -190,7 +188,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
       namecheap: settings.namecheapEnabled
         && (settings.hasNamecheapApiKey || settings.namecheapManualDomains.length > 0),
-      openrouter: settings.openrouterBillingEnabled,
+      openrouter: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
     },
     vultr: vultrBlock,
     namecheap: namecheapBlock,

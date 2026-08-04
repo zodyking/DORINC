@@ -31,7 +31,6 @@ export default defineEventHandler(async (event) => {
         namecheapMonitoredDomains: before.namecheapMonitoredDomains,
         namecheapManualDomains: before.namecheapManualDomains,
         openrouterBillingEnabled: before.openrouterBillingEnabled,
-        hasOpenrouterManagementKey: before.hasOpenrouterManagementKey,
       },
       afterData: {
         vultrEnabled: settings.vultrEnabled,
@@ -40,8 +39,8 @@ export default defineEventHandler(async (event) => {
         namecheapEnabled: settings.namecheapEnabled,
         hasNamecheapApiKey: settings.hasNamecheapApiKey,
         namecheapMonitoredDomains: settings.namecheapMonitoredDomains,
+        namecheapManualDomains: settings.namecheapManualDomains,
         openrouterBillingEnabled: settings.openrouterBillingEnabled,
-        hasOpenrouterManagementKey: settings.hasOpenrouterManagementKey,
       },
       permissionKey: 'system.admin.all',
       riskLevel: 'sensitive',

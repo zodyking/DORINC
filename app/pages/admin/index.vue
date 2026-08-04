@@ -469,7 +469,7 @@ async function testAiConnection() {
           id="billing"
           title="Billing integrations"
           icon="💳"
-          subtitle="Vultr, Namecheap, and OpenRouter credentials"
+          subtitle="Vultr and Namecheap credentials"
           :open="openSections.billing"
           @update:open="setSectionOpen('billing', $event)"
         >

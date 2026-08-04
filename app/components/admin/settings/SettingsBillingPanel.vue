@@ -46,7 +46,6 @@ const form = reactive({
   namecheapMonitoredDomains: [] as string[],
   namecheapManualDomains: [] as ManualDomainFormRow[],
   openrouterBillingEnabled: true,
-  openrouterManagementKey: '',
 })
 
 function manualDomainToForm(row: NamecheapManualDomain): ManualDomainFormRow {
@@ -85,7 +84,6 @@ function hydrate(s: BillingIntegrationsView) {
   form.namecheapMonitoredDomains = [...s.namecheapMonitoredDomains]
   form.namecheapManualDomains = s.namecheapManualDomains.map(manualDomainToForm)
   form.openrouterBillingEnabled = s.openrouterBillingEnabled
-  form.openrouterManagementKey = s.hasOpenrouterManagementKey ? SAVED_PASSWORD_MASK : ''
 }
 
 watch(() => data.value?.settings, (s) => {
@@ -170,7 +168,7 @@ function removeManualDomain(index: number) {
 }
 
 const saveBusy = ref(false)
-const testBusy = ref<'vultr' | 'namecheap' | 'openrouter' | null>(null)
+const testBusy = ref<'vultr' | 'namecheap' | null>(null)
 const message = ref('')
 const error = ref('')
 
@@ -198,9 +196,6 @@ async function save() {
     const namecheapKey = passwordForSave(form.namecheapApiKey, !!data.value?.settings.hasNamecheapApiKey)
     if (namecheapKey !== undefined) body.namecheapApiKey = namecheapKey
 
-    const openrouterKey = passwordForSave(form.openrouterManagementKey, !!data.value?.settings.hasOpenrouterManagementKey)
-    if (openrouterKey !== undefined) body.openrouterManagementKey = openrouterKey
-
     await $fetch('/api/admin/billing/integrations', { method: 'PATCH', body })
     message.value = 'Billing integrations saved'
     await refresh()
@@ -217,7 +212,7 @@ async function save() {
   }
 }
 
-async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
+async function testConnection(provider: 'vultr' | 'namecheap') {
   testBusy.value = provider
   message.value = ''
   error.value = ''
@@ -234,10 +229,6 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
       body.namecheapUseSandbox = form.namecheapUseSandbox
       const key = passwordForSave(form.namecheapApiKey, !!data.value?.settings.hasNamecheapApiKey)
       if (key) body.namecheapApiKey = key
-    }
-    if (provider === 'openrouter') {
-      const key = passwordForSave(form.openrouterManagementKey, !!data.value?.settings.hasOpenrouterManagementKey)
-      if (key) body.openrouterManagementKey = key
     }
     const res = await $fetch<{ message: string }>('/api/admin/billing/test-connection', { method: 'POST', body })
     message.value = res.message
@@ -258,8 +249,8 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
     <header class="settings-panel-head">
       <h3>Infrastructure billing</h3>
       <p>
-        Connect Vultr, Namecheap, and OpenRouter credentials for the billing monitor.
-        API keys are encrypted in PostgreSQL and never returned to the browser.
+        Connect Vultr and Namecheap for the billing monitor. OpenRouter billing uses the API key from Control Panel → AI.
+        Provider keys are encrypted in PostgreSQL and never returned to the browser.
         Admins and managers with billing access see usage on the Billing page.
       </p>
     </header>
@@ -419,22 +410,18 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
           <div class="tglrow">
             <div>
               <div class="notif-label">Enable OpenRouter billing</div>
-              <div class="notif-desc">Account credits and monthly usage. Inference usage also uses the AI provider key from Control Panel → AI.</div>
+              <div class="notif-desc">
+                Show account credits and usage on the Billing page using the OpenRouter API key saved in
+                <NuxtLink to="/admin?tab=ai">Control Panel → AI</NuxtLink>.
+              </div>
             </div>
             <span class="tgl">
               <input v-model="form.openrouterBillingEnabled" type="checkbox">
               <span class="tr" />
             </span>
           </div>
-          <label class="fld">
-            Management key
-            <input v-model="form.openrouterManagementKey" type="password" maxlength="512" autocomplete="off" placeholder="OpenRouter management API key">
-          </label>
-          <div class="settings-actions">
-            <button type="button" class="btn" :disabled="testBusy === 'openrouter'" @click="testConnection('openrouter')">
-              {{ testBusy === 'openrouter' ? 'Testing…' : 'Test OpenRouter key' }}
-            </button>
-          </div>
+          <p v-if="data?.settings.hasAiOpenRouterKey" class="settings-help">OpenRouter API key is configured in AI settings.</p>
+          <p v-else class="settings-err">No OpenRouter API key yet — add one in Control Panel → AI to enable billing data.</p>
         </div>
       </div>
 

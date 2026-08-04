@@ -232,7 +232,7 @@ async function reload() {
                 </div>
               </dl>
             </template>
-            <p v-else class="muted">Enable OpenRouter billing in Control Panel → Billing.</p>
+            <p v-else class="muted">Enable OpenRouter billing and configure the API key in Control Panel → AI.</p>
           </div>
         </article>
       </div>

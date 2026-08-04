@@ -1,7 +1,6 @@
 import type { Db } from '../db/client'
 import { getAiProviderSettings, getDecryptedApiKey } from './ai-provider.service'
 import { getAiUsageSummary } from './ai-jobs.service'
-import { getOpenrouterManagementKey } from './billing-integrations.service'
 
 export interface OpenRouterCreditsSummary {
   totalCredits: number
@@ -31,9 +30,9 @@ async function openRouterFetch<T>(apiKey: string, path: string): Promise<T> {
   return payload
 }
 
-export async function fetchOpenRouterCredits(managementKey: string): Promise<OpenRouterCreditsSummary> {
+export async function fetchOpenRouterCredits(apiKey: string): Promise<OpenRouterCreditsSummary> {
   const payload = await openRouterFetch<{ data?: { total_credits?: number, total_usage?: number } }>(
-    managementKey,
+    apiKey,
     '/credits',
   )
   const totalCredits = Number(payload.data?.total_credits ?? 0)
@@ -57,47 +56,71 @@ export async function fetchOpenRouterKeyUsage(apiKey: string): Promise<OpenRoute
   }
 }
 
-export async function resolveOpenRouterBilling(db: Db, managementKey: string | null): Promise<{
+export async function resolveOpenRouterBilling(db: Db): Promise<{
   credits: OpenRouterCreditsSummary | null
   keyUsage: OpenRouterKeySummary | null
   internalMonthlyUsd: number
   error: string | null
 }> {
-  let credits: OpenRouterCreditsSummary | null = null
-  let keyUsage: OpenRouterKeySummary | null = null
+  const aiSettings = await getAiProviderSettings(db)
+  const summary = await getAiUsageSummary(db)
+  const internalMonthlyUsd = Number(summary.estimatedCostUsd ?? 0)
   const errors: string[] = []
 
-  if (managementKey) {
-    try {
-      credits = await fetchOpenRouterCredits(managementKey)
-    }
-    catch (e) {
-      errors.push((e as Error).message)
+  if (!aiSettings.hasApiKey) {
+    return {
+      credits: null,
+      keyUsage: null,
+      internalMonthlyUsd,
+      error: 'OpenRouter API key not configured in Control Panel → AI',
     }
   }
 
+  let apiKey: string | null = null
   try {
-    const settings = await getAiProviderSettings(db)
-    if (settings.enabled && settings.hasApiKey) {
-      const inferenceKey = await getDecryptedApiKey(db)
-      if (inferenceKey) {
-        keyUsage = await fetchOpenRouterKeyUsage(inferenceKey)
-      }
+    apiKey = await getDecryptedApiKey(db)
+  }
+  catch (e) {
+    return {
+      credits: null,
+      keyUsage: null,
+      internalMonthlyUsd,
+      error: (e as Error).message,
     }
+  }
+
+  if (!apiKey) {
+    return {
+      credits: null,
+      keyUsage: null,
+      internalMonthlyUsd,
+      error: 'OpenRouter API key not configured in Control Panel → AI',
+    }
+  }
+
+  let credits: OpenRouterCreditsSummary | null = null
+  let keyUsage: OpenRouterKeySummary | null = null
+
+  try {
+    credits = await fetchOpenRouterCredits(apiKey)
   }
   catch (e) {
     errors.push((e as Error).message)
   }
 
-  const summary = await getAiUsageSummary(db)
-  const internalMonthlyUsd = Number(summary.estimatedCostUsd ?? 0)
+  try {
+    keyUsage = await fetchOpenRouterKeyUsage(apiKey)
+  }
+  catch (e) {
+    errors.push((e as Error).message)
+  }
 
-  if (!managementKey && !keyUsage) {
+  if (!credits && !keyUsage) {
     return {
       credits: null,
       keyUsage: null,
       internalMonthlyUsd,
-      error: managementKey ? errors.join('; ') : 'OpenRouter management key not configured',
+      error: errors.join('; ') || 'OpenRouter billing data unavailable',
     }
   }
 
@@ -107,9 +130,4 @@ export async function resolveOpenRouterBilling(db: Db, managementKey: string | n
     internalMonthlyUsd,
     error: errors.length ? errors.join('; ') : null,
   }
-}
-
-export async function testOpenRouterManagementKey(key: string): Promise<{ ok: true }> {
-  await fetchOpenRouterCredits(key)
-  return { ok: true }
 }

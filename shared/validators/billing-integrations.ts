@@ -21,7 +21,6 @@ export const billingIntegrationsPatchSchema = z.object({
   namecheapMonitoredDomains: z.array(z.string().trim().min(3).max(253)).max(500).optional(),
   namecheapManualDomains: z.array(namecheapManualDomainSchema).max(500).optional(),
   openrouterBillingEnabled: z.boolean().optional(),
-  openrouterManagementKey: z.string().trim().min(8).max(512).optional(),
 })
 
 export type BillingIntegrationsPatch = z.infer<typeof billingIntegrationsPatchSchema>
@@ -40,7 +39,7 @@ export interface BillingIntegrationsView {
   namecheapMonitoredDomains: string[]
   namecheapManualDomains: NamecheapManualDomain[]
   openrouterBillingEnabled: boolean
-  hasOpenrouterManagementKey: boolean
+  hasAiOpenRouterKey: boolean
   updatedAt: string | Date
 }
 
