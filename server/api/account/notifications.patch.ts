@@ -12,6 +12,10 @@ function canManageTeamChat(accountType: string | undefined): boolean {
   return accountType === 'admin' || accountType === 'super_admin'
 }
 
+function canManageSilentDeveloperMode(accountType: string | undefined): boolean {
+  return accountType === 'admin' || accountType === 'super_admin'
+}
+
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as {
     user?: { id: string, accountType?: string }
@@ -28,6 +32,14 @@ export default defineEventHandler(async (event) => {
     )
   }
 
+  if (body.silentDeveloperMode !== undefined && !canManageSilentDeveloperMode(auth.user.accountType)) {
+    throw apiError(
+      event,
+      'FORBIDDEN',
+      'Only admins can change silent developer mode',
+    )
+  }
+
   try {
     const user = await updateAccountNotificationPrefs(useDb(), auth.user.id, body)
 
@@ -38,16 +50,19 @@ export default defineEventHandler(async (event) => {
       afterData: {
         teamChatEnabled: user.teamChatEnabled,
         messageEmailNotify: user.messageEmailNotify,
+        silentDeveloperMode: user.silentDeveloperMode,
       },
       changedFields: [
         ...(body.teamChatEnabled !== undefined ? ['teamChatEnabled'] : []),
         ...(body.messageEmailNotify !== undefined ? ['messageEmailNotify'] : []),
+        ...(body.silentDeveloperMode !== undefined ? ['silentDeveloperMode'] : []),
       ],
     })
 
     return {
       teamChatEnabled: user.teamChatEnabled,
       messageEmailNotify: user.messageEmailNotify,
+      silentDeveloperMode: user.silentDeveloperMode,
     }
   }
   catch (err) {

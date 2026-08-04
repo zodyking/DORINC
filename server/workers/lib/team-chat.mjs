@@ -122,11 +122,28 @@ export async function ensureDefaultTeamConversation(pool) {
 
 /**
  * @param {import('pg').Pool} pool
+ * @param {string} userId
+ */
+export async function isSilentDeveloperMode(pool, userId) {
+  const { rows } = await pool.query(
+    `SELECT silent_developer_mode FROM users WHERE id = $1 LIMIT 1`,
+    [userId],
+  )
+  return rows[0]?.silent_developer_mode === true
+}
+
+/**
+ * @param {import('pg').Pool} pool
  * @param {string} senderUserId
  * @param {string} body
  * @param {Array<{ entityType: string, entityId: string, entityLabel: string, position: number }>} refs
+ * @param {{ workflowNotification?: boolean }} [opts]
  */
-export async function insertTeamChatMessage(pool, senderUserId, body, refs) {
+export async function insertTeamChatMessage(pool, senderUserId, body, refs, opts = {}) {
+  if (opts.workflowNotification && await isSilentDeveloperMode(pool, senderUserId)) {
+    return { conversationId: null, messageId: null, suppressed: true }
+  }
+
   const conversationId = await ensureDefaultTeamConversation(pool)
 
   const { rows } = await pool.query(

@@ -15,8 +15,11 @@ export const accountPasswordSchema = z.object({
 export const accountNotificationPrefsSchema = z.object({
   teamChatEnabled: z.boolean().optional(),
   messageEmailNotify: z.boolean().optional(),
+  silentDeveloperMode: z.boolean().optional(),
 }).refine(
-  data => data.teamChatEnabled !== undefined || data.messageEmailNotify !== undefined,
+  data => data.teamChatEnabled !== undefined
+    || data.messageEmailNotify !== undefined
+    || data.silentDeveloperMode !== undefined,
   { message: 'At least one notification preference is required' },
 )
 

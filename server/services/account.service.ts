@@ -50,6 +50,7 @@ export interface AccountDetail {
   knownDevices: AccountKnownDeviceRow[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
+  silentDeveloperMode: boolean
 }
 
 function deviceKey(userAgent: string | null | undefined): string {
@@ -154,6 +155,7 @@ export async function getAccountDetail(
     knownDevices,
     teamChatEnabled: user.teamChatEnabled,
     messageEmailNotify: user.messageEmailNotify,
+    silentDeveloperMode: user.silentDeveloperMode,
   }
 }
 
@@ -182,9 +184,17 @@ export async function updateAccountProfile(
 export async function updateAccountNotificationPrefs(
   db: Db,
   userId: string,
-  input: { teamChatEnabled?: boolean, messageEmailNotify?: boolean },
+  input: {
+    teamChatEnabled?: boolean
+    messageEmailNotify?: boolean
+    silentDeveloperMode?: boolean
+  },
 ) {
-  if (input.teamChatEnabled === undefined && input.messageEmailNotify === undefined) {
+  if (
+    input.teamChatEnabled === undefined
+    && input.messageEmailNotify === undefined
+    && input.silentDeveloperMode === undefined
+  ) {
     const [user] = await db.select().from(users).where(eq(users.id, userId))
     if (!user) throw new AccountServiceError('SESSION_NOT_FOUND')
     return user
@@ -193,6 +203,7 @@ export async function updateAccountNotificationPrefs(
   const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
   if (input.teamChatEnabled !== undefined) changes.teamChatEnabled = input.teamChatEnabled
   if (input.messageEmailNotify !== undefined) changes.messageEmailNotify = input.messageEmailNotify
+  if (input.silentDeveloperMode !== undefined) changes.silentDeveloperMode = input.silentDeveloperMode
 
   const [user] = await db.update(users)
     .set(changes)

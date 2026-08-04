@@ -57,6 +57,8 @@ export const users = pgTable('users', {
   teamChatEnabled: boolean('team_chat_enabled').notNull().default(true),
   /** Email alert when a chat message is received (DM or team). */
   messageEmailNotify: boolean('message_email_notify').notNull().default(true),
+  /** Suppress workflow team chat + staff emails for actions by this user (admin testing). */
+  silentDeveloperMode: boolean('silent_developer_mode').notNull().default(false),
   /**
    * @deprecated Replaced by the `email.send_noncustomer.all` permission
    * (role bundle or per-user override). No longer read or written by the app;

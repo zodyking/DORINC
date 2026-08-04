@@ -78,6 +78,7 @@ export async function postServiceLogSentToInvoiceTeamMessage(
     body: parts.join(' '),
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -111,6 +112,7 @@ export async function postInvoiceCreatedTeamMessage(
     body: parts.join(' '),
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -146,6 +148,7 @@ export async function postInvoiceSentTeamMessage(
     body: parts.join(' '),
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -168,6 +171,7 @@ export async function postCustomerCreatedTeamMessage(
     body,
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -199,6 +203,7 @@ export async function postVehicleCreatedTeamMessage(
     body,
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -242,6 +247,7 @@ export async function postInvoicePaymentReceivedTeamMessage(
     body: parts.join(' '),
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }
 
@@ -318,5 +324,6 @@ export async function postDeletionRequestSubmittedTeamMessage(
     body: parts.join(' '),
     entityRefs: refs,
     skipNormalize: true,
+    workflowNotification: true,
   })
 }

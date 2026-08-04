@@ -169,8 +169,23 @@ export async function postTeamChatMessage(
     body: string
     entityRefs?: MessageEntityRefInput[]
     skipNormalize?: boolean
+    /** When true, skip posting if the sender has silent developer mode enabled. */
+    workflowNotification?: boolean
   },
 ) {
+  if (opts.workflowNotification) {
+    const { shouldSuppressActorNotifications } = await import('./notification-suppression.service')
+    if (await shouldSuppressActorNotifications(db, opts.senderUserId)) {
+      return {
+        conversationId: null,
+        messageId: null,
+        body: opts.body,
+        entityRefs: opts.entityRefs ?? [],
+        suppressed: true as const,
+      }
+    }
+  }
+
   const conversationId = await syncTeamChatParticipants(db)
   const normalizedBody = opts.skipNormalize ? opts.body.trim() : normalizeOutgoingMessage(opts.body)
   const parsedRefs = parseEntityRefsFromBody(normalizedBody)

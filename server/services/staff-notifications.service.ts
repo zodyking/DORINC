@@ -19,6 +19,7 @@ import {
 } from './notification-recipients.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
+import { shouldSuppressActorNotifications } from './notification-suppression.service'
 import { getInvoice } from './invoices.service'
 import { getCustomer } from './customers.service'
 import {
@@ -61,6 +62,10 @@ export async function notifyDeletionRequestSubmitted(
     requestId: string
   },
 ) {
+  if (await shouldSuppressActorNotifications(db, opts.submitterId)) {
+    return { queued: 0 as const, reason: 'suppressed' as const }
+  }
+
   if (!(await isNotificationEnabled(db, 'deletionRequestSubmitted'))) {
     return { queued: 0 as const, reason: 'disabled' as const }
   }
@@ -175,6 +180,10 @@ export async function notifyUserSignupPendingApproval(
 }
 
 export async function notifyInvoicePendingApproval(db: Db, invoiceId: string, actorId?: string | null) {
+  if (await shouldSuppressActorNotifications(db, actorId)) {
+    return { queued: 0 as const, reason: 'suppressed' as const }
+  }
+
   if (!(await isNotificationEnabled(db, 'invoicePendingApproval'))) {
     return { queued: 0 as const, reason: 'disabled' as const }
   }

@@ -128,7 +128,7 @@ export function buildBulkInvoiceSentTeamMessageBody(opts) {
  */
 async function postTeamChatMessage(pool, senderUserId, body, refs) {
   try {
-    await insertTeamChatMessage(pool, senderUserId, body, refs)
+    await insertTeamChatMessage(pool, senderUserId, body, refs, { workflowNotification: true })
   }
   catch (err) {
     console.warn(

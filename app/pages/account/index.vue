@@ -51,6 +51,7 @@ interface AccountDetail {
   knownDevices: AccountKnownDevice[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
+  silentDeveloperMode: boolean
 }
 
 const { data, refresh, error } = useClientFetch<{ account: AccountDetail }>('/api/account')
@@ -83,6 +84,7 @@ const revokeAllBusy = ref(false)
 
 const teamChatEnabled = ref(true)
 const messageEmailNotify = ref(true)
+const silentDeveloperMode = ref(false)
 const notifyBusy = ref(false)
 const notifyMessage = ref('')
 const notifyError = ref('')
@@ -91,6 +93,7 @@ watch(account, (a) => {
   if (!a) return
   teamChatEnabled.value = a.teamChatEnabled
   messageEmailNotify.value = a.messageEmailNotify
+  silentDeveloperMode.value = a.silentDeveloperMode
 }, { immediate: true })
 
 async function saveProfile() {
@@ -203,6 +206,7 @@ async function saveNotificationPrefs() {
       body: {
         ...(canManageTeamChat.value ? { teamChatEnabled: teamChatEnabled.value } : {}),
         messageEmailNotify: messageEmailNotify.value,
+        ...(canManageTeamChat.value ? { silentDeveloperMode: silentDeveloperMode.value } : {}),
       },
     })
     notifyMessage.value = 'Notification preferences saved'
@@ -345,6 +349,23 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   </small>
                 </span>
                 <input v-model="messageEmailNotify" type="checkbox" class="msg-pref-check">
+              </label>
+              <label
+                v-if="canManageTeamChat"
+                class="msg-pref-row msg-pref-row--dev"
+              >
+                <span class="msg-pref-text">
+                  <b>Silent developer mode</b>
+                  <small>
+                    When enabled, workflow notifications you trigger — team chat updates and staff emails for invoices, service logs, deletion requests, and similar actions — are not sent to other users. Your manual chat messages still work. Other users&apos; notifications are unaffected.
+                  </small>
+                </span>
+                <input
+                  v-model="silentDeveloperMode"
+                  type="checkbox"
+                  class="msg-pref-check"
+                  :disabled="notifyBusy"
+                >
               </label>
             </div>
             <p v-if="notifyMessage" class="msg-pref-ok">{{ notifyMessage }}</p>
@@ -500,6 +521,15 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
 }
 /* Explicit sizing beats the global `label.fld input { width:100% }` rule and
    keeps the checkbox compact + aligned on every viewport. */
+.msg-pref-row--dev {
+  background: #fafafa;
+  margin: 0 -16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.msg-pref-row--dev:last-child {
+  border-bottom: none;
+}
 .msg-pref-check {
   width: 20px;
   height: 20px;

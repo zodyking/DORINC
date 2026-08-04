@@ -72,6 +72,10 @@ function createPool(state) {
         return { rows: [{ name: 'Staff User' }] }
       }
 
+      if (text.includes('SELECT silent_developer_mode FROM users')) {
+        return { rows: [{ silent_developer_mode: state.silentDeveloperMode ?? false }] }
+      }
+
       if (text.includes('message_email_notify = true')) {
         return { rows: [] }
       }
@@ -120,6 +124,28 @@ describe('worker team chat', () => {
 
     const result = await insertTeamChatMessage(pool, 'staff-1', 'Invoice sent', [])
     expect(result).toEqual({ conversationId: 'team-1', messageId: 'msg-1' })
+  })
+
+  it('suppresses workflow notifications when silent developer mode is on', async () => {
+    const state = {
+      systemTeamId: 'team-1',
+      staffIds: ['staff-1'],
+      participants: ['staff-1'],
+      silentDeveloperMode: true,
+    }
+    const pool = createPool(state)
+
+    const insertCallsBefore = pool.query.mock.calls.filter(
+      call => String(call[0]).startsWith('INSERT INTO messages'),
+    ).length
+
+    const result = await insertTeamChatMessage(pool, 'staff-1', 'Invoice sent', [], { workflowNotification: true })
+    expect(result).toEqual({ conversationId: null, messageId: null, suppressed: true })
+
+    const insertCallsAfter = pool.query.mock.calls.filter(
+      call => String(call[0]).startsWith('INSERT INTO messages'),
+    ).length
+    expect(insertCallsAfter).toBe(insertCallsBefore)
   })
 
   it('queues chat email notifications for other team participants', async () => {
