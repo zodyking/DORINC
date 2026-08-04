@@ -137,26 +137,28 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     vehicleSnapshot: buildVehicleSnapshot(vehicle),
   }
 
-  let row: typeof serviceLogs.$inferSelect | undefined
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt === 0) await ensureServiceLogNumberSequence(db)
-    else await syncServiceLogNumberSequence(db)
+  return db.transaction(async (tx) => {
+    let row: typeof serviceLogs.$inferSelect | undefined
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt === 0) await ensureServiceLogNumberSequence(tx)
+      else await syncServiceLogNumberSequence(tx)
 
-    const savepoint = `service_log_insert_${attempt}`
-    await db.execute(sql.raw(`SAVEPOINT ${savepoint}`))
-    try {
-      ;[row] = await db.insert(serviceLogs).values(draftValues).returning()
-      await db.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
-      break
+      const savepoint = `service_log_insert_${attempt}`
+      await tx.execute(sql.raw(`SAVEPOINT ${savepoint}`))
+      try {
+        ;[row] = await tx.insert(serviceLogs).values(draftValues).returning()
+        await tx.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
+        break
+      }
+      catch (err) {
+        await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
+        if (isPgUniqueViolation(err, 'service_logs_log_number_unique') && attempt < 2) continue
+        throw err
+      }
     }
-    catch (err) {
-      await db.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
-      if (isPgUniqueViolation(err, 'service_logs_log_number_unique') && attempt < 2) continue
-      throw err
-    }
-  }
 
-  return row!
+    return row!
+  })
 }
 
 /** Restores review status when a converted log no longer has a live invoice link. */

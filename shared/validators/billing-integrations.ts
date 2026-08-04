@@ -101,6 +101,7 @@ export interface BillingDashboardPayload {
     limit: number | null
     limitRemaining: number | null
     internalMonthlyUsd: number | null
+    creditsNote: string | null
     currency: string
     error: string | null
     lastUpdated: string

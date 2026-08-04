@@ -65,6 +65,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     limit: null,
     limitRemaining: null,
     internalMonthlyUsd: null,
+    creditsNote: null,
     currency: 'USD',
     error: null,
     lastUpdated: nowIso,
@@ -164,6 +165,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
       openrouterBlock.limit = resolved.keyUsage?.limit ?? null
       openrouterBlock.limitRemaining = resolved.keyUsage?.limitRemaining ?? null
       openrouterBlock.internalMonthlyUsd = resolved.internalMonthlyUsd
+      openrouterBlock.creditsNote = resolved.creditsNote
       openrouterBlock.error = resolved.error
     }
     catch (e) {

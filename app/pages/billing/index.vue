@@ -204,7 +204,8 @@ async function reload() {
           </div>
           <div class="cbody">
             <p v-if="dashboard.openrouter.error" class="err">{{ dashboard.openrouter.error }}</p>
-            <template v-else-if="dashboard.openrouter.configured">
+            <p v-else-if="dashboard.openrouter.creditsNote" class="note">{{ dashboard.openrouter.creditsNote }}</p>
+            <template v-if="dashboard.openrouter.configured && !dashboard.openrouter.error">
               <dl class="metric-grid">
                 <div>
                   <dt>Remaining credits</dt>
@@ -407,6 +408,13 @@ async function reload() {
 .err {
   color: #dc2626;
   font-size: 13px;
+}
+
+.note {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 0 12px;
+  line-height: 1.45;
 }
 
 .alert-card {

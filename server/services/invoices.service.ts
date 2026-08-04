@@ -483,30 +483,36 @@ export async function createInvoiceDraft(
   }
 
   let row: typeof invoices.$inferSelect | undefined
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt === 0) {
-      await ensureInvoiceNumberSequence(db)
-    }
-    else {
-      await syncInvoiceNumberSequence(db)
-    }
-    const savepoint = `invoice_insert_${attempt}`
-    await db.execute(sql.raw(`SAVEPOINT ${savepoint}`))
-    try {
-      ;[row] = await db.insert(invoices).values(draftValues).returning()
-      await db.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
-      break
-    }
-    catch (err) {
-      await db.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
-      if (isPgUniqueViolation(err, 'invoices_invoice_number_unique') && attempt < 2) {
-        continue
+  row = await db.transaction(async (tx) => {
+    let inserted: typeof invoices.$inferSelect | undefined
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt === 0) {
+        await ensureInvoiceNumberSequence(tx)
       }
-      throw err
+      else {
+        await syncInvoiceNumberSequence(tx)
+      }
+      const savepoint = `invoice_insert_${attempt}`
+      await tx.execute(sql.raw(`SAVEPOINT ${savepoint}`))
+      try {
+        ;[inserted] = await tx.insert(invoices).values(draftValues).returning()
+        await tx.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
+        break
+      }
+      catch (err) {
+        await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
+        if (isPgUniqueViolation(err, 'invoices_invoice_number_unique') && attempt < 2) {
+          continue
+        }
+        throw err
+      }
     }
-  }
+    return inserted
+  })
 
-  return row!
+  if (!row) throw new InvoicesServiceError('INVALID_CREATE')
+
+  return row
 }
 
 export async function duplicateInvoice(db: Db, sourceInvoiceId: string, actorId: string, invoiceDate?: string) {
