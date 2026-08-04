@@ -46,6 +46,7 @@ import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.v
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import {
   latestLineAuditSuggestion,
+  shouldRunLineAuditBeforeSave,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
@@ -66,6 +67,7 @@ interface InvoicePayload {
   id: string
   invoiceNumberFormatted: string
   status: string
+  creationSource?: string | null
   customerId: string
   vehicleId: string | null
   serviceLogId: string | null
@@ -423,6 +425,18 @@ const isDirty = computed(() => {
   return buildFormSnapshot() !== savedFormSnapshot.value
 })
 
+const historyActions = computed(() => history.value.map(row => row.action))
+
+const runLineAuditOnSave = computed(() => {
+  if (!invoice.value) return false
+  return shouldRunLineAuditBeforeSave({
+    isDirty: isDirty.value,
+    creationSource: invoice.value.creationSource,
+    status: invoice.value.status,
+    historyActions: historyActions.value,
+  })
+})
+
 function syncFormFromInvoice(inv: InvoicePayload) {
   customerId.value = inv.customerId
   vehicleId.value = inv.vehicleId ?? ''
@@ -728,6 +742,7 @@ async function runLineAuditBeforeSave(): Promise<boolean> {
   auditError.value = ''
 
   if (!canDescribe.value || !lines.value.length) return true
+  if (!runLineAuditOnSave.value) return true
 
   auditBusy.value = true
   try {

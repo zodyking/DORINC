@@ -45,6 +45,18 @@ export function invoiceNeedsInitialServiceLogReview(opts: {
   return !opts.historyActions.some(action => LINE_AUDIT_REVIEW_ACTIONS.has(action))
 }
 
+/** Run line audit on save only when the editor changed or a converted service log still needs first review. */
+export function shouldRunLineAuditBeforeSave(opts: {
+  isDirty: boolean
+  creationSource?: string | null
+  status: string
+  historyActions: string[]
+  locallyCleared?: boolean
+}): boolean {
+  if (opts.isDirty) return true
+  return invoiceNeedsInitialServiceLogReview(opts)
+}
+
 export async function pollAiJobUntilDone(
   jobId: string,
   opts: { intervalMs?: number, timeoutMs?: number } = {},

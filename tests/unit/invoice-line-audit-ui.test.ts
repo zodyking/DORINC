@@ -7,6 +7,7 @@ import {
   lineAuditHasIssues,
   lineAuditIssueLines,
   parseLineAuditContent,
+  shouldRunLineAuditBeforeSave,
 } from '../../app/utils/invoice-line-audit-ui'
 
 const auditSuggestion: AiSuggestionRow = {
@@ -75,6 +76,36 @@ describe('invoice line audit ui', () => {
       creationSource: 'blank',
       status: 'draft',
       historyActions: [],
+    })).toBe(false)
+  })
+
+  it('runs line audit only when dirty or service log still needs first review', () => {
+    expect(shouldRunLineAuditBeforeSave({
+      isDirty: true,
+      creationSource: 'blank',
+      status: 'draft',
+      historyActions: [],
+    })).toBe(true)
+
+    expect(shouldRunLineAuditBeforeSave({
+      isDirty: false,
+      creationSource: 'blank',
+      status: 'draft',
+      historyActions: [],
+    })).toBe(false)
+
+    expect(shouldRunLineAuditBeforeSave({
+      isDirty: false,
+      creationSource: 'service_log',
+      status: 'draft',
+      historyActions: ['invoices.create'],
+    })).toBe(true)
+
+    expect(shouldRunLineAuditBeforeSave({
+      isDirty: false,
+      creationSource: 'service_log',
+      status: 'draft',
+      historyActions: ['invoices.create', 'ai.line_audit.completed'],
     })).toBe(false)
   })
 })
