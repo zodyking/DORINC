@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { BillingIntegrationsView, NamecheapManualDomain } from '#shared/validators/billing-integrations'
+import { BILLING_PROVIDER_LABELS } from '~/utils/billing-ui'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
+
+const labels = BILLING_PROVIDER_LABELS
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -219,16 +222,17 @@ async function save() {
   }
 
   try {
+    const manualDomains = formManualDomainsForSave()
     const body: Record<string, unknown> = {
       vultrEnabled: form.vultrEnabled,
       vultrMonitoredInstanceIds: form.vultrMonitoredInstanceIds,
-      namecheapEnabled: form.namecheapEnabled,
+      namecheapEnabled: form.namecheapEnabled || manualDomains.length > 0,
       namecheapApiUser: form.namecheapApiUser.trim() || undefined,
       namecheapUsername: form.namecheapUsername.trim() || undefined,
       namecheapClientIp: form.namecheapClientIp.trim() || undefined,
       namecheapUseSandbox: form.namecheapUseSandbox,
       namecheapMonitoredDomains: form.namecheapMonitoredDomains,
-      namecheapManualDomains: formManualDomainsForSave(),
+      namecheapManualDomains: manualDomains,
       openrouterBillingEnabled: form.openrouterBillingEnabled,
     }
 
@@ -301,7 +305,12 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
 
     <form v-else class="stack" @submit.prevent="save">
       <div class="card">
-        <div class="chead"><h3>Vultr</h3></div>
+        <div class="chead provider-card-head">
+          <div>
+            <h3>{{ labels.vultr.name }}</h3>
+            <span class="provider-category">{{ labels.vultr.category }}</span>
+          </div>
+        </div>
         <div class="cbody settings-form">
           <div class="tglrow">
             <div>
@@ -350,7 +359,12 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
       </div>
 
       <div class="card">
-        <div class="chead"><h3>Namecheap</h3></div>
+        <div class="chead provider-card-head">
+          <div>
+            <h3>{{ labels.namecheap.name }}</h3>
+            <span class="provider-category">{{ labels.namecheap.category }}</span>
+          </div>
+        </div>
         <div class="cbody settings-form">
           <div class="tglrow">
             <div>
@@ -452,7 +466,12 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
       </div>
 
       <div class="card">
-        <div class="chead"><h3>OpenRouter</h3></div>
+        <div class="chead provider-card-head">
+          <div>
+            <h3>{{ labels.openrouter.name }}</h3>
+            <span class="provider-category">{{ labels.openrouter.category }}</span>
+          </div>
+        </div>
         <div class="cbody settings-form">
           <div class="tglrow">
             <div>
@@ -596,5 +615,24 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
   margin: 0;
   font-size: 12.5px;
   color: #b45309;
+}
+
+.provider-card-head {
+  display: flex;
+  align-items: flex-start;
+}
+
+.provider-card-head h3 {
+  margin: 0;
+}
+
+.provider-category {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #6366f1;
 }
 </style>

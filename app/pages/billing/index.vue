@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { BillingDashboardPayload } from '#shared/validators/billing-integrations'
+import { BILLING_PROVIDER_LABELS } from '~/utils/billing-ui'
 
 definePageMeta({ layout: 'staff', permission: 'billing.read.all' })
 
 interface DashboardResponse {
   dashboard: BillingDashboardPayload
 }
+
+const labels = BILLING_PROVIDER_LABELS
 
 const { data, pending, error, refresh } = useClientFetch<DashboardResponse>('/api/billing/dashboard')
 
@@ -35,6 +38,12 @@ function daysBadgeClass(days: number): string {
   return 'ok'
 }
 
+function providerStatus(configured: boolean, hasError: boolean): { label: string, class: string } {
+  if (hasError) return { label: 'Error', class: 'danger' }
+  if (configured) return { label: 'Connected', class: 'ok' }
+  return { label: 'Not configured', class: 'muted' }
+}
+
 const refreshBusy = ref(false)
 
 async function reload() {
@@ -50,7 +59,7 @@ async function reload() {
 
 <template>
   <section class="page active billing-page">
-    <StaffPageHead subtitle="Vultr usage, Namecheap renewals, and OpenRouter credits">
+    <StaffPageHead subtitle="Infrastructure spend across web hosting, domain renewals, and AI usage">
       <template #title>Billing</template>
       <template #actions>
         <button type="button" class="btn" :disabled="refreshBusy || pending" @click="reload">
@@ -70,41 +79,71 @@ async function reload() {
     </div>
 
     <template v-else-if="dashboard">
-      <div class="kpi-grid">
-        <div class="kpi-card primary">
-          <span class="kpi-label">Estimated monthly cost</span>
-          <strong class="kpi-value">{{ money(dashboard.totals.estimatedMonthlyUsd, dashboard.totals.currency) }}</strong>
-          <span class="kpi-sub">Vultr MTD + OpenRouter monthly + domains renewing in 30 days</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Estimated yearly cost</span>
-          <strong class="kpi-value">{{ money(dashboard.totals.estimatedYearlyUsd, dashboard.totals.currency) }}</strong>
-          <span class="kpi-sub">Projected from current usage and renewals within 12 months</span>
-        </div>
-      </div>
-
-      <div class="breakdown card">
-        <div class="chead"><h3>Cost breakdown (monthly estimate)</h3></div>
-        <dl class="kv">
-          <dt>Vultr (month to date)</dt>
-          <dd>{{ money(dashboard.totals.breakdown.vultrUsd) }}</dd>
-          <dt>OpenRouter (monthly usage)</dt>
-          <dd>{{ money(dashboard.totals.breakdown.openrouterUsd) }}</dd>
-          <dt>Namecheap (renewals ≤30 days)</dt>
-          <dd>{{ money(dashboard.totals.breakdown.namecheapUsd) }}</dd>
-        </dl>
-        <p class="foot-note">Last refreshed {{ new Date(dashboard.lastRefreshed).toLocaleString() }}</p>
-      </div>
-
-      <div class="provider-grid">
-        <article class="card provider-card">
-          <div class="chead">
-            <h3>Vultr</h3>
-            <span class="pill" :class="dashboard.vultr.error ? 'danger' : dashboard.vultr.configured ? 'ok' : 'muted'">
-              {{ dashboard.vultr.error ? 'Error' : dashboard.vultr.configured ? 'Connected' : 'Not configured' }}
-            </span>
+      <section class="billing-hero card">
+        <div class="cbody hero-body">
+          <div class="hero-summary">
+            <div class="hero-stat primary">
+              <span class="hero-label">Estimated monthly cost</span>
+              <strong class="hero-value">{{ money(dashboard.totals.estimatedMonthlyUsd, dashboard.totals.currency) }}</strong>
+              <span class="hero-sub">Web hosting MTD + AI monthly usage + domain renewals in 30 days</span>
+            </div>
+            <div class="hero-divider" aria-hidden="true" />
+            <div class="hero-stat">
+              <span class="hero-label">Estimated yearly cost</span>
+              <strong class="hero-value">{{ money(dashboard.totals.estimatedYearlyUsd, dashboard.totals.currency) }}</strong>
+              <span class="hero-sub">Projected from current usage and renewals within 12 months</span>
+            </div>
           </div>
-          <div class="cbody">
+          <p class="hero-meta">Last refreshed {{ new Date(dashboard.lastRefreshed).toLocaleString() }}</p>
+        </div>
+      </section>
+
+      <section class="billing-breakdown card">
+        <div class="chead">
+          <h3>Monthly cost breakdown</h3>
+        </div>
+        <div class="cbody">
+          <ul class="breakdown-list">
+            <li>
+              <div class="breakdown-copy">
+                <span class="breakdown-name">{{ labels.vultr.name }}</span>
+                <span class="breakdown-category">{{ labels.vultr.category }}</span>
+              </div>
+              <span class="breakdown-amount">{{ money(dashboard.totals.breakdown.vultrUsd) }}</span>
+            </li>
+            <li>
+              <div class="breakdown-copy">
+                <span class="breakdown-name">{{ labels.openrouter.name }}</span>
+                <span class="breakdown-category">{{ labels.openrouter.category }}</span>
+              </div>
+              <span class="breakdown-amount">{{ money(dashboard.totals.breakdown.openrouterUsd) }}</span>
+            </li>
+            <li>
+              <div class="breakdown-copy">
+                <span class="breakdown-name">{{ labels.namecheap.name }}</span>
+                <span class="breakdown-category">{{ labels.namecheap.category }}</span>
+              </div>
+              <span class="breakdown-amount">{{ money(dashboard.totals.breakdown.namecheapUsd) }}</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="billing-providers">
+        <article class="card provider-section">
+          <header class="provider-head">
+            <div class="provider-title">
+              <h3>{{ labels.vultr.name }}</h3>
+              <span class="provider-category">{{ labels.vultr.category }}</span>
+            </div>
+            <span
+              class="pill"
+              :class="providerStatus(dashboard.vultr.configured, !!dashboard.vultr.error).class"
+            >
+              {{ providerStatus(dashboard.vultr.configured, !!dashboard.vultr.error).label }}
+            </span>
+          </header>
+          <div class="cbody provider-body">
             <p v-if="dashboard.vultr.error" class="err">{{ dashboard.vultr.error }}</p>
             <template v-else-if="dashboard.vultr.configured">
               <dl class="metric-grid">
@@ -122,47 +161,57 @@ async function reload() {
                 </div>
               </dl>
 
-              <h4 v-if="dashboard.vultr.monitoredInstances.length">Monitored servers</h4>
-              <ul v-if="dashboard.vultr.monitoredInstances.length" class="mini-list">
-                <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id">
-                  <b>{{ inst.label }}</b>
-                  <span>{{ inst.region }} · {{ inst.plan }} · {{ inst.status }}</span>
-                </li>
-              </ul>
+              <div v-if="dashboard.vultr.monitoredInstances.length" class="provider-subsection">
+                <h4>Monitored servers</h4>
+                <ul class="mini-list">
+                  <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id">
+                    <b>{{ inst.label }}</b>
+                    <span>{{ inst.region }} · {{ inst.plan }} · {{ inst.status }}</span>
+                  </li>
+                </ul>
+              </div>
               <p v-else class="muted">No servers selected — choose instances in Control Panel → Billing.</p>
 
-              <h4 v-if="dashboard.vultr.invoices.length">Recent invoices</h4>
-              <div v-if="dashboard.vultr.invoices.length" class="tscroll">
-                <table class="tbl compact">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th class="num">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in dashboard.vultr.invoices" :key="row.id">
-                      <td>{{ formatDate(row.date) }}</td>
-                      <td>{{ row.description }}</td>
-                      <td class="num">{{ money(row.amount) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div v-if="dashboard.vultr.invoices.length" class="provider-subsection">
+                <h4>Recent invoices</h4>
+                <div class="tscroll">
+                  <table class="tbl compact">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th class="num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in dashboard.vultr.invoices" :key="row.id">
+                        <td>{{ formatDate(row.date) }}</td>
+                        <td>{{ row.description }}</td>
+                        <td class="num">{{ money(row.amount) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </template>
-            <p v-else class="muted">Configure Vultr in Control Panel → Billing.</p>
+            <p v-else class="muted">Configure {{ labels.vultr.name }} ({{ labels.vultr.category }}) in Control Panel → Billing.</p>
           </div>
         </article>
 
-        <article class="card provider-card">
-          <div class="chead">
-            <h3>Namecheap</h3>
-            <span class="pill" :class="dashboard.namecheap.error ? 'danger' : dashboard.namecheap.configured ? 'ok' : 'muted'">
-              {{ dashboard.namecheap.error ? 'Error' : dashboard.namecheap.configured ? 'Connected' : 'Not configured' }}
+        <article class="card provider-section">
+          <header class="provider-head">
+            <div class="provider-title">
+              <h3>{{ labels.namecheap.name }}</h3>
+              <span class="provider-category">{{ labels.namecheap.category }}</span>
+            </div>
+            <span
+              class="pill"
+              :class="providerStatus(dashboard.namecheap.configured, !!dashboard.namecheap.error).class"
+            >
+              {{ providerStatus(dashboard.namecheap.configured, !!dashboard.namecheap.error).label }}
             </span>
-          </div>
-          <div class="cbody">
+          </header>
+          <div class="cbody provider-body">
             <p v-if="dashboard.namecheap.error" class="err">{{ dashboard.namecheap.error }}</p>
             <template v-if="dashboard.namecheap.configured">
               <div v-if="dashboard.namecheap.domains.length" class="tscroll">
@@ -189,20 +238,26 @@ async function reload() {
                   </tbody>
                 </table>
               </div>
-              <p v-else class="muted">No domains configured — add manual domains or API watch list in Control Panel → Billing.</p>
+              <p v-else class="muted">No domains configured — add manual domains or an API watch list in Control Panel → Billing.</p>
             </template>
-            <p v-else class="muted">Configure Namecheap in Control Panel → Billing.</p>
+            <p v-else class="muted">Configure {{ labels.namecheap.name }} ({{ labels.namecheap.category }}) in Control Panel → Billing.</p>
           </div>
         </article>
 
-        <article class="card provider-card">
-          <div class="chead">
-            <h3>OpenRouter</h3>
-            <span class="pill" :class="dashboard.openrouter.error ? 'danger' : dashboard.openrouter.configured ? 'ok' : 'muted'">
-              {{ dashboard.openrouter.error ? 'Error' : dashboard.openrouter.configured ? 'Connected' : 'Not configured' }}
+        <article class="card provider-section">
+          <header class="provider-head">
+            <div class="provider-title">
+              <h3>{{ labels.openrouter.name }}</h3>
+              <span class="provider-category">{{ labels.openrouter.category }}</span>
+            </div>
+            <span
+              class="pill"
+              :class="providerStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).class"
+            >
+              {{ providerStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).label }}
             </span>
-          </div>
-          <div class="cbody">
+          </header>
+          <div class="cbody provider-body">
             <p v-if="dashboard.openrouter.error" class="err">{{ dashboard.openrouter.error }}</p>
             <p v-else-if="dashboard.openrouter.creditsNote" class="note">{{ dashboard.openrouter.creditsNote }}</p>
             <template v-if="dashboard.openrouter.configured && !dashboard.openrouter.error">
@@ -236,7 +291,7 @@ async function reload() {
             <p v-else class="muted">Enable OpenRouter billing and configure the API key in Control Panel → AI.</p>
           </div>
         </article>
-      </div>
+      </section>
     </template>
   </section>
 </template>
@@ -245,85 +300,209 @@ async function reload() {
 .billing-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
-.kpi-grid {
+.billing-hero {
+  border-color: #c7d2fe;
+  background: linear-gradient(135deg, #eef2ff 0%, #fff 55%);
+}
+
+.hero-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.hero-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 24px;
+  align-items: stretch;
 }
 
 @media (max-width: 720px) {
-  .kpi-grid { grid-template-columns: 1fr; }
+  .hero-summary {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .hero-divider {
+    display: none;
+  }
 }
 
-.kpi-card {
-  padding: 18px 20px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
+.hero-stat {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.kpi-card.primary {
-  border-color: #c7d2fe;
-  background: linear-gradient(135deg, #eef2ff 0%, #fff 100%);
-}
-
-.kpi-label {
+.hero-label {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: #64748b;
 }
 
-.kpi-value {
-  font-size: clamp(1.5rem, 4vw, 2rem);
+.hero-value {
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  line-height: 1.1;
   color: #0f172a;
 }
 
-.kpi-sub {
-  font-size: 12.5px;
+.hero-sub {
+  font-size: 13px;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.45;
+  max-width: 36ch;
 }
 
-.breakdown .foot-note {
-  margin: 12px 16px 16px;
+.hero-divider {
+  width: 1px;
+  background: #cbd5e1;
+  margin: 4px 0;
+}
+
+.hero-meta {
+  margin: 0;
   font-size: 12px;
   color: #94a3b8;
 }
 
-.provider-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+.breakdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (max-width: 1100px) {
-  .provider-grid { grid-template-columns: 1fr; }
+.breakdown-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.provider-card h4 {
-  margin: 16px 0 8px;
+.breakdown-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.breakdown-list li:first-child {
+  padding-top: 0;
+}
+
+.breakdown-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breakdown-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.breakdown-category {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.breakdown-amount {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.billing-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.provider-section {
+  overflow: hidden;
+}
+
+.provider-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.provider-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.provider-head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.provider-category {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #6366f1;
+  text-transform: uppercase;
+}
+
+.provider-body {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.provider-subsection {
+  margin-top: 24px;
+}
+
+.provider-subsection:first-of-type {
+  margin-top: 4px;
+}
+
+.provider-subsection h4 {
+  margin: 0 0 12px;
   font-size: 13px;
+  font-weight: 600;
   color: #334155;
 }
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
 }
 
+@media (max-width: 900px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .metric-grid div {
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
 }
@@ -343,10 +522,6 @@ async function reload() {
   color: #0f172a;
 }
 
-@media (max-width: 520px) {
-  .metric-grid { grid-template-columns: 1fr; }
-}
-
 .mini-list {
   list-style: none;
   margin: 0;
@@ -357,8 +532,8 @@ async function reload() {
 }
 
 .mini-list li {
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
 }
@@ -373,7 +548,7 @@ async function reload() {
 .tbl.compact th,
 .tbl.compact td {
   font-size: 12.5px;
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 
 .tag {
