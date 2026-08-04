@@ -43,7 +43,6 @@ import {
   invoiceLineAuditContentSchema,
   serviceLogExtractionContentSchema,
   type AiSuggestionReview,
-  type InvoiceLineAuditContent,
   type InvoiceLineAuditReview,
 } from '../../shared/validators/ai'
 
