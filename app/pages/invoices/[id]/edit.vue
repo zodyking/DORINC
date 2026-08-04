@@ -45,7 +45,6 @@ import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoMan
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import {
-  invoiceNeedsInitialServiceLogReview,
   latestLineAuditSuggestion,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
@@ -234,8 +233,6 @@ const autosaveTick = ref(0)
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canDescribe = computed(() => auth.can('ai.describe.all'))
-const canApprove = computed(() => auth.can('invoices.approve.all'))
-const canSend = computed(() => auth.can('invoices.send.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
@@ -422,24 +419,6 @@ const isDirty = computed(() => {
   return buildFormSnapshot() !== savedFormSnapshot.value
 })
 
-const initialReviewClearedLocally = ref(false)
-
-const needsInitialReview = computed(() => {
-  if (!invoice.value) return false
-  return invoiceNeedsInitialServiceLogReview({
-    creationSource: invoice.value.creationSource,
-    status: invoice.value.status,
-    historyActions: history.value.map(row => row.action),
-    locallyCleared: initialReviewClearedLocally.value,
-  })
-})
-
-const canShowSave = computed(() => isDirty.value || needsInitialReview.value)
-
-const canShowSend = computed(() =>
-  editable.value && !canShowSave.value && (canApprove.value || canSend.value),
-)
-
 function syncFormFromInvoice(inv: InvoicePayload) {
   customerId.value = inv.customerId
   vehicleId.value = inv.vehicleId ?? ''
@@ -525,53 +504,27 @@ async function syncInvoiceDraftToServer() {
 }
 
 async function completeSave() {
-  if (invoice.value?.creationSource === 'service_log') {
-    initialReviewClearedLocally.value = true
-  }
   await refreshInvoice()
   markFormClean()
 }
 
-async function completeSend() {
-  if (canApprove.value) await $fetch(`/api/invoices/${id}/approve`, { method: 'POST' })
-  if (canSend.value) {
-    const sendResult = await $fetch<{ message?: string }>(`/api/invoices/${id}/send`, { method: 'POST' })
-    saveError.value = sendResult.message ?? 'Invoice queued for email delivery.'
-  }
-  await releaseEditSession()
-  await navigateTo(`/invoices/${id}`)
-}
-
 async function saveInvoice() {
   if (!editable.value || !invoice.value) return
-  if (!isDirty.value && !needsInitialReview.value) return
   busy.value = true
   saveError.value = ''
+  savePendingAfterAudit.value = true
   try {
     await syncInvoiceDraftToServer()
-    const auditOk = await runLineAuditBeforeSave('save')
+    const auditOk = await runLineAuditBeforeSave()
     if (!auditOk) return
+    savePendingAfterAudit.value = false
     await completeSave()
   }
   catch (e: unknown) {
+    savePendingAfterAudit.value = false
     if (!saveError.value) {
       saveError.value = syncFetchErrorMessage(e, 'Save failed')
     }
-  }
-  finally {
-    busy.value = false
-  }
-}
-
-async function sendInvoice() {
-  if (!editable.value || isDirty.value) return
-  busy.value = true
-  saveError.value = ''
-  try {
-    await completeSend()
-  }
-  catch (e: unknown) {
-    saveError.value = syncFetchErrorMessage(e, 'Send failed')
   }
   finally {
     busy.value = false
@@ -737,7 +690,7 @@ const auditModalOpen = ref(false)
 const auditRequireReview = ref(false)
 const auditBusy = ref(false)
 const auditError = ref('')
-const pendingSaveAction = ref<'save' | 'send' | null>(null)
+const savePendingAfterAudit = ref(false)
 const activeAuditSuggestion = ref<AiSuggestionRow | null>(null)
 
 const { data: invoiceAiData, refresh: refreshInvoiceAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
@@ -764,8 +717,7 @@ function shouldSkipLineAuditError(e: unknown): boolean {
     || message.includes('spend cap')
 }
 
-async function runLineAuditBeforeSave(action: 'save' | 'send'): Promise<boolean> {
-  pendingSaveAction.value = action
+async function runLineAuditBeforeSave(): Promise<boolean> {
   auditError.value = ''
 
   if (!canDescribe.value || !lines.value.length) return true
@@ -786,16 +738,13 @@ async function runLineAuditBeforeSave(action: 'save' | 'send'): Promise<boolean>
       return false
     }
 
-    pendingSaveAction.value = null
     return true
   }
   catch (e: unknown) {
     if (shouldSkipLineAuditError(e)) {
-      pendingSaveAction.value = null
       return true
     }
     saveError.value = syncFetchErrorMessage(e, 'Line audit failed')
-    pendingSaveAction.value = null
     return false
   }
   finally {
@@ -829,10 +778,10 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
     auditRequireReview.value = false
     await Promise.all([refreshInvoice(), refreshAuditReport()])
 
-    const action = pendingSaveAction.value
-    pendingSaveAction.value = null
-    if (action === 'save') await completeSave()
-    else if (action === 'send') await completeSend()
+    if (savePendingAfterAudit.value) {
+      savePendingAfterAudit.value = false
+      await completeSave()
+    }
   }
   catch (e: unknown) {
     auditError.value = syncFetchErrorMessage(e, 'Could not apply audit changes')
@@ -845,7 +794,7 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
 function closeAuditModal() {
   auditModalOpen.value = false
   auditRequireReview.value = false
-  pendingSaveAction.value = null
+  savePendingAfterAudit.value = false
 }
 
 function onAiKeydown(e: KeyboardEvent) {
@@ -1177,22 +1126,12 @@ if (import.meta.client) {
 
           <div v-if="editable" class="savebar">
             <button
-              v-if="canShowSave"
               type="button"
               class="btn primary"
               :disabled="busy || auditBusy"
               @click="saveInvoice"
             >
               {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save' }}
-            </button>
-            <button
-              v-else-if="canShowSend"
-              type="button"
-              class="btn primary"
-              :disabled="busy"
-              @click="sendInvoice"
-            >
-              {{ busy ? 'Sending…' : 'Send' }}
             </button>
             <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
           </div>
