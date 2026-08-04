@@ -82,6 +82,7 @@ export const PERMISSIONS = {
   // Backups + system
   'backups.manage.all': 'Run and manage backups',
   'system.admin.all': 'Control Panel',
+  'billing.read.all': 'View infrastructure billing monitor',
 
   // Customer portal (customer accounts)
   'portal.read.own': 'View own portal data',
@@ -151,6 +152,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'records.reassign.all',
     'messages.read.own', 'messages.send.own',
     'training.read.all', 'training.manage.all', 'training.complete.own',
+    'billing.read.all',
   ],
   accountant: [
     'customers.read.all', 'customers.create.all', 'customers.update.all',

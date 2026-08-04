@@ -59,6 +59,7 @@ const roleLabel = computed(() =>
 const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
 const isSuperAdmin = computed(() => auth.can('system.admin.all'))
+const canViewBilling = computed(() => auth.can('billing.read.all'))
 const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
 
 // Counts become live once list APIs land (Phase 1)
@@ -114,6 +115,7 @@ async function signOut() {
 
 const crumb = computed(() => {
   if (route.path === '/messages' || route.path.startsWith('/messages/')) return 'Messages'
+  if (route.path === '/billing' || route.path.startsWith('/billing/')) return 'Billing'
   if (route.path === '/invoices/new') return 'New invoice'
   if (/^\/invoices\/[^/]+/.test(route.path) && route.path !== '/invoices/new') {
     return 'Invoice'
@@ -243,6 +245,9 @@ watch(() => route.path, () => {
             </NuxtLink>
             <NuxtLink v-if="isSuperAdmin" to="/admin" class="menu-link" role="menuitem" @click="closeOverlays">
               🛡 &nbsp;Control panel
+            </NuxtLink>
+            <NuxtLink v-if="canViewBilling" to="/billing" class="menu-link" role="menuitem" @click="closeOverlays">
+              💳 &nbsp;Billing
             </NuxtLink>
             <hr>
             <button class="danger" @click="signOut">⏻ &nbsp;Sign out</button>

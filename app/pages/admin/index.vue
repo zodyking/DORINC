@@ -14,6 +14,7 @@ import SettingsNotificationsPanel from '~/components/admin/settings/SettingsNoti
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
 import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
+import SettingsBillingPanel from '~/components/admin/settings/SettingsBillingPanel.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
@@ -158,6 +159,7 @@ type ControlPanelSectionId
     | 'invoice'
     | 'catalog'
     | 'line-detection'
+    | 'billing'
     | 'import'
     | 'backup'
     | 'ai'
@@ -171,6 +173,7 @@ const openSections = reactive<Record<ControlPanelSectionId, boolean>>({
   invoice: false,
   catalog: false,
   'line-detection': false,
+  billing: false,
   import: false,
   backup: false,
   ai: false,
@@ -193,7 +196,7 @@ function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
 
 watch(() => route.query.tab, (tab) => {
   const valid: ControlPanelSectionId[] = [
-    'business', 'email', 'chat', 'notifications', 'invoice', 'catalog', 'line-detection',
+    'business', 'email', 'chat', 'notifications', 'invoice', 'catalog', 'line-detection', 'billing',
     'import', 'backup', 'ai', 'security',
   ]
   if (typeof tab === 'string' && valid.includes(tab as ControlPanelSectionId)) {
@@ -460,6 +463,17 @@ async function testAiConnection() {
           @update:open="setSectionOpen('line-detection', $event)"
         >
           <SettingsLineDetectionPanel />
+        </ControlPanelSection>
+
+        <ControlPanelSection
+          id="billing"
+          title="Billing integrations"
+          icon="💳"
+          subtitle="Vultr, Namecheap, and OpenRouter credentials"
+          :open="openSections.billing"
+          @update:open="setSectionOpen('billing', $event)"
+        >
+          <SettingsBillingPanel @saved="refresh()" />
         </ControlPanelSection>
 
         <p class="cp-sections-sublabel">System</p>
