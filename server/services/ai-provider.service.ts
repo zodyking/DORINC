@@ -142,7 +142,7 @@ export async function getDecryptedApiKey(db: Db): Promise<string | null> {
   if (!row?.encryptedApiKey?.length) return null
 
   try {
-    return decryptBuffer(row.encryptedApiKey).toString('utf8')
+    return decryptBuffer(row.encryptedApiKey).toString('utf8').trim() || null
   }
   catch {
     throw new AiProviderServiceError('KEY_MISSING', 'Stored API key could not be decrypted')

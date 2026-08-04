@@ -4,6 +4,8 @@ import {
   AiFeaturesServiceError,
   executeInvoiceLineAudit,
 } from '../../../services/ai-features.service'
+import { AiProviderServiceError } from '../../../services/ai-provider.service'
+import { OpenRouterServiceError } from '../../../services/ai-openrouter.service'
 import { InvoicesServiceError } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
 import { rateLimitKeyFromUser, requireRateLimit } from '../../../utils/require-rate-limit'
@@ -53,6 +55,16 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'FEATURE_DISABLED') throw apiError(event, 'CONFLICT', err.message)
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', err.message)
       if (err.code === 'AI_FAILED') throw apiError(event, 'CONFLICT', err.message)
+    }
+    if (err instanceof AiProviderServiceError && (err.code === 'NOT_CONFIGURED' || err.code === 'KEY_MISSING')) {
+      throw apiError(event, 'CONFLICT', 'AI is not configured')
+    }
+    if (err instanceof OpenRouterServiceError) {
+      const msg = err.message.toLowerCase()
+      if (msg.includes('authentication') || msg.includes('api key') || msg.includes('unauthorized')) {
+        throw apiError(event, 'CONFLICT', 'AI is not configured')
+      }
+      throw apiError(event, 'CONFLICT', err.message)
     }
     throw err
   }

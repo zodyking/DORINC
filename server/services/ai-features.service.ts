@@ -22,6 +22,7 @@ import {
 } from './ai-provider.service'
 import {
   openRouterChat,
+  OpenRouterServiceError,
   parseOpenRouterJson,
 } from './ai-openrouter.service'
 import { enqueueJob } from './jobs.service'
@@ -49,11 +50,57 @@ export class AiFeaturesServiceError extends Error {
   }
 }
 
+async function resolveConfiguredApiKey(db: Db): Promise<string> {
+  try {
+    const key = (await getDecryptedApiKey(db))?.trim()
+    if (!key) throw new AiFeaturesServiceError('NOT_CONFIGURED', 'AI is not configured')
+    return key
+  }
+  catch (e) {
+    if (e instanceof AiFeaturesServiceError) throw e
+    if (e instanceof AiProviderServiceError && (e.code === 'KEY_MISSING' || e.code === 'NOT_CONFIGURED')) {
+      throw new AiFeaturesServiceError('NOT_CONFIGURED', 'AI is not configured')
+    }
+    throw e
+  }
+}
+
+function normalizeAiExecutionError(err: unknown): AiFeaturesServiceError {
+  if (err instanceof AiFeaturesServiceError) return err
+  if (err instanceof AiProviderServiceError) {
+    if (err.code === 'NOT_CONFIGURED' || err.code === 'KEY_MISSING') {
+      return new AiFeaturesServiceError('NOT_CONFIGURED', 'AI is not configured')
+    }
+    if (err.code === 'SPEND_CAP_EXCEEDED') {
+      return new AiFeaturesServiceError('FEATURE_DISABLED', err.message)
+    }
+    return new AiFeaturesServiceError('AI_FAILED', err.message)
+  }
+  if (err instanceof OpenRouterServiceError) {
+    const msg = err.message.toLowerCase()
+    if (err.code === 'API_ERROR' && (
+      msg.includes('authentication')
+      || msg.includes('api key')
+      || msg.includes('unauthorized')
+      || msg.includes('invalid api')
+    )) {
+      return new AiFeaturesServiceError('NOT_CONFIGURED', 'AI is not configured')
+    }
+    return new AiFeaturesServiceError('AI_FAILED', err.message)
+  }
+  if (err instanceof Error) return new AiFeaturesServiceError('AI_FAILED', err.message)
+  return new AiFeaturesServiceError('AI_FAILED', 'Line audit failed')
+}
+
+export { normalizeAiExecutionError as normalizeAiExecutionErrorForTest }
+
 async function assertAiFeatureEnabled(db: Db, feature: AiFeatureType): Promise<{ model: string }> {
   const settings = await getAiProviderSettings(db)
-  if (!settings.enabled || !settings.hasApiKey) {
+  if (!settings.enabled) {
     throw new AiFeaturesServiceError('NOT_CONFIGURED', 'AI is not configured')
   }
+
+  await resolveConfiguredApiKey(db)
 
   const featureEnabled = feature === 'service_log_extraction'
     ? settings.serviceLogExtractionEnabled
@@ -200,9 +247,9 @@ export async function executeInvoiceLineAudit(
     return { aiJob, ...result }
   }
   catch (e) {
-    const message = e instanceof Error ? e.message : 'Line audit failed'
-    await markAiJobFailed(db, aiJob.id, message)
-    throw e
+    const normalized = normalizeAiExecutionError(e)
+    await markAiJobFailed(db, aiJob.id, normalized.message)
+    throw normalized
   }
 }
 
@@ -387,8 +434,7 @@ export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
   }
 
   const { model } = await assertAiFeatureEnabled(db, 'invoice_description')
-  const apiKey = await getDecryptedApiKey(db)
-  if (!apiKey) throw new AiProviderServiceError('NOT_CONFIGURED')
+  const apiKey = await resolveConfiguredApiKey(db)
 
   await updateAiJobStatus(db, aiJobId, 'processing')
 
@@ -410,10 +456,16 @@ export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
     JSON.stringify({ lines: inputLines }, null, 2),
   ].filter(Boolean).join('\n\n')
 
-  const result = await openRouterChat(apiKey, model, [
-    { role: 'system', content: buildLineAuditSystemPrompt(rules) },
-    { role: 'user', content: userPrompt },
-  ], 'invoice_description')
+  let result
+  try {
+    result = await openRouterChat(apiKey, model, [
+      { role: 'system', content: buildLineAuditSystemPrompt(rules) },
+      { role: 'user', content: userPrompt },
+    ], 'invoice_description')
+  }
+  catch (e) {
+    throw normalizeAiExecutionError(e)
+  }
 
   const parsedRaw = parseOpenRouterJson(result.content) as { lines?: Array<Record<string, unknown>> }
   const auditContent = normalizeAuditLines(inputLines, parsedRaw.lines ?? [])

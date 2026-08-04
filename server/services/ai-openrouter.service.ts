@@ -74,6 +74,10 @@ export async function openRouterChat(
   messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }>,
   feature: AiFeatureType,
 ): Promise<OpenRouterChatResult> {
+  if (!apiKey.trim()) {
+    throw new OpenRouterServiceError('API_ERROR', 'Missing Authentication header')
+  }
+
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {

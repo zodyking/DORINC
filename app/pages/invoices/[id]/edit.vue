@@ -87,7 +87,6 @@ interface InvoicePayload {
   discountAmount: string
   total: string
   lineItems: LineItem[]
-  creationSource?: string
 }
 
 interface HistoryRow {
@@ -710,11 +709,14 @@ async function refreshAuditReport() {
 }
 
 function shouldSkipLineAuditError(e: unknown): boolean {
-  const err = e as { data?: { message?: string } }
+  const err = e as { data?: { message?: string }, statusCode?: number }
   const message = err.data?.message?.toLowerCase() ?? ''
   return message.includes('not configured')
     || message.includes('disabled')
     || message.includes('spend cap')
+    || message.includes('authentication')
+    || message.includes('api key')
+    || err.statusCode === 409
 }
 
 async function runLineAuditBeforeSave(): Promise<boolean> {
