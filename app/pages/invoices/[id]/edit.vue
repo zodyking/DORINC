@@ -45,6 +45,7 @@ import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoMan
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import {
+  invoiceNeedsInitialServiceLogReview,
   latestLineAuditSuggestion,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
@@ -87,6 +88,7 @@ interface InvoicePayload {
   discountAmount: string
   total: string
   lineItems: LineItem[]
+  creationSource?: string
 }
 
 interface HistoryRow {
@@ -420,8 +422,22 @@ const isDirty = computed(() => {
   return buildFormSnapshot() !== savedFormSnapshot.value
 })
 
+const initialReviewClearedLocally = ref(false)
+
+const needsInitialReview = computed(() => {
+  if (!invoice.value) return false
+  return invoiceNeedsInitialServiceLogReview({
+    creationSource: invoice.value.creationSource,
+    status: invoice.value.status,
+    historyActions: history.value.map(row => row.action),
+    locallyCleared: initialReviewClearedLocally.value,
+  })
+})
+
+const canShowSave = computed(() => isDirty.value || needsInitialReview.value)
+
 const canShowSend = computed(() =>
-  editable.value && !isDirty.value && (canApprove.value || canSend.value),
+  editable.value && !canShowSave.value && (canApprove.value || canSend.value),
 )
 
 function syncFormFromInvoice(inv: InvoicePayload) {
@@ -509,6 +525,9 @@ async function syncInvoiceDraftToServer() {
 }
 
 async function completeSave() {
+  if (invoice.value?.creationSource === 'service_log') {
+    initialReviewClearedLocally.value = true
+  }
   await refreshInvoice()
   markFormClean()
 }
@@ -524,7 +543,8 @@ async function completeSend() {
 }
 
 async function saveInvoice() {
-  if (!editable.value || !invoice.value || !isDirty.value) return
+  if (!editable.value || !invoice.value) return
+  if (!isDirty.value && !needsInitialReview.value) return
   busy.value = true
   saveError.value = ''
   try {
@@ -1157,7 +1177,7 @@ if (import.meta.client) {
 
           <div v-if="editable" class="savebar">
             <button
-              v-if="isDirty"
+              v-if="canShowSave"
               type="button"
               class="btn primary"
               :disabled="busy || auditBusy"

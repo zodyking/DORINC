@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AiSuggestionRow } from '../../app/utils/ai-ui'
 import {
+  invoiceNeedsInitialServiceLogReview,
   isLineAuditSuggestion,
   latestLineAuditSuggestion,
   lineAuditHasIssues,
@@ -55,5 +56,25 @@ describe('invoice line audit ui', () => {
     expect(lineAuditHasIssues(content!)).toBe(true)
     expect(lineAuditIssueLines(content!)).toHaveLength(1)
     expect(lineAuditIssueLines(content!)[0]?.suggested?.quantity).toBe('2')
+  })
+
+  it('requires initial review for unreviewed service-log drafts', () => {
+    expect(invoiceNeedsInitialServiceLogReview({
+      creationSource: 'service_log',
+      status: 'draft',
+      historyActions: ['invoices.create'],
+    })).toBe(true)
+
+    expect(invoiceNeedsInitialServiceLogReview({
+      creationSource: 'service_log',
+      status: 'draft',
+      historyActions: ['invoices.create', 'ai.line_audit.completed'],
+    })).toBe(false)
+
+    expect(invoiceNeedsInitialServiceLogReview({
+      creationSource: 'blank',
+      status: 'draft',
+      historyActions: [],
+    })).toBe(false)
   })
 })

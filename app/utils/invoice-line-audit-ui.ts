@@ -27,6 +27,24 @@ export function lineAuditIssueLines(content: InvoiceLineAuditContent) {
   return content.lines.filter(l => l.status === 'needs_fix')
 }
 
+const LINE_AUDIT_REVIEW_ACTIONS = new Set([
+  'ai.line_audit.completed',
+  'ai.line_audit.reviewed',
+])
+
+/** Service-log invoices stay on Save until the first line audit completes. */
+export function invoiceNeedsInitialServiceLogReview(opts: {
+  creationSource?: string | null
+  status: string
+  historyActions: string[]
+  locallyCleared?: boolean
+}): boolean {
+  if (opts.locallyCleared) return false
+  if (opts.creationSource !== 'service_log') return false
+  if (opts.status !== 'draft') return false
+  return !opts.historyActions.some(action => LINE_AUDIT_REVIEW_ACTIONS.has(action))
+}
+
 export async function pollAiJobUntilDone(
   jobId: string,
   opts: { intervalMs?: number, timeoutMs?: number } = {},
