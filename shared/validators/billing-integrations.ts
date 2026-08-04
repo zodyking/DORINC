@@ -1,5 +1,20 @@
 import { z } from 'zod'
 
+function emptyToUndefined(value: unknown): unknown {
+  if (value === '' || value === null) return undefined
+  return value
+}
+
+const optionalApiKey = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().min(8).max(512).optional(),
+)
+
+const optionalShortText = (max: number) => z.preprocess(
+  emptyToUndefined,
+  z.string().trim().min(1).max(max).optional(),
+)
+
 export const namecheapManualDomainSchema = z.object({
   name: z.string().trim().min(3).max(253),
   renewalDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -10,13 +25,13 @@ export type NamecheapManualDomain = z.infer<typeof namecheapManualDomainSchema>
 
 export const billingIntegrationsPatchSchema = z.object({
   vultrEnabled: z.boolean().optional(),
-  vultrApiKey: z.string().trim().min(8).max(512).optional(),
+  vultrApiKey: optionalApiKey,
   vultrMonitoredInstanceIds: z.array(z.string().trim().min(1).max(64)).max(100).optional(),
   namecheapEnabled: z.boolean().optional(),
-  namecheapApiUser: z.string().trim().min(1).max(120).optional(),
-  namecheapUsername: z.string().trim().min(1).max(120).optional(),
-  namecheapClientIp: z.string().trim().min(7).max(45).optional(),
-  namecheapApiKey: z.string().trim().min(8).max(512).optional(),
+  namecheapApiUser: optionalShortText(120),
+  namecheapUsername: optionalShortText(120),
+  namecheapClientIp: optionalShortText(45),
+  namecheapApiKey: optionalApiKey,
   namecheapUseSandbox: z.boolean().optional(),
   namecheapMonitoredDomains: z.array(z.string().trim().min(3).max(253)).max(500).optional(),
   namecheapManualDomains: z.array(namecheapManualDomainSchema).max(500).optional(),

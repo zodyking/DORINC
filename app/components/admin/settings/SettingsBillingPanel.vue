@@ -167,6 +167,37 @@ function removeManualDomain(index: number) {
   form.namecheapManualDomains.splice(index, 1)
 }
 
+function fetchErrorMessage(e: unknown, fallback: string): string {
+  const data = (e as { data?: { message?: string, issues?: Array<{ path?: string, message?: string }> } })?.data
+  const issue = data?.issues?.find(row => row.message)
+  if (issue) {
+    const path = issue.path ? `${issue.path}: ` : ''
+    return `${path}${issue.message}`
+  }
+  return data?.message ?? fallback
+}
+
+function validateManualDomainsBeforeSave(): string | null {
+  for (const row of form.namecheapManualDomains) {
+    const name = row.name.trim()
+    const renewalDate = row.renewalDate.trim()
+    const renewalCost = row.renewalCost.trim()
+    const hasAny = name || renewalDate || renewalCost
+    if (!hasAny) continue
+    if (name.length < 3) return 'Each manual domain needs a domain name (example.com).'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(renewalDate)) return `Expiry date is required for ${name}.`
+    const cost = Number(renewalCost)
+    if (!Number.isFinite(cost) || cost < 0) return `Renewal cost is required for ${name}.`
+  }
+  return null
+}
+
+watch(() => form.namecheapEnabled, (enabled) => {
+  if (enabled && form.namecheapManualDomains.length === 0) {
+    addManualDomain()
+  }
+})
+
 const saveBusy = ref(false)
 const testBusy = ref<'vultr' | 'namecheap' | null>(null)
 const message = ref('')
@@ -176,6 +207,14 @@ async function save() {
   saveBusy.value = true
   message.value = ''
   error.value = ''
+
+  const manualValidationError = validateManualDomainsBeforeSave()
+  if (manualValidationError) {
+    error.value = manualValidationError
+    saveBusy.value = false
+    return
+  }
+
   try {
     const body: Record<string, unknown> = {
       vultrEnabled: form.vultrEnabled,
@@ -191,10 +230,10 @@ async function save() {
     }
 
     const vultrKey = passwordForSave(form.vultrApiKey, !!data.value?.settings.hasVultrApiKey)
-    if (vultrKey !== undefined) body.vultrApiKey = vultrKey
+    if (vultrKey) body.vultrApiKey = vultrKey
 
     const namecheapKey = passwordForSave(form.namecheapApiKey, !!data.value?.settings.hasNamecheapApiKey)
-    if (namecheapKey !== undefined) body.namecheapApiKey = namecheapKey
+    if (namecheapKey) body.namecheapApiKey = namecheapKey
 
     await $fetch('/api/admin/billing/integrations', { method: 'PATCH', body })
     message.value = 'Billing integrations saved'
@@ -205,7 +244,7 @@ async function save() {
     emit('saved')
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    error.value = fetchErrorMessage(e, 'Save failed')
   }
   finally {
     saveBusy.value = false
@@ -236,7 +275,7 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
     if (provider === 'namecheap') await loadNamecheapDomains()
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Connection test failed'
+    error.value = fetchErrorMessage(e, 'Connection test failed')
   }
   finally {
     testBusy.value = null
@@ -313,60 +352,33 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
           <div class="tglrow">
             <div>
               <div class="notif-label">Enable Namecheap monitoring</div>
-              <div class="notif-desc">Track domain renewals via manual entries or the Namecheap API (API access requires 20+ domains in your account).</div>
+              <div class="notif-desc">Turn this on to show your domains on the Billing dashboard. Use manual entries below, or connect the Namecheap API when approved (20+ domains required).</div>
             </div>
             <span class="tgl">
               <input v-model="form.namecheapEnabled" type="checkbox">
               <span class="tr" />
             </span>
           </div>
-          <div class="row2">
-            <label class="fld">
-              API user
-              <input v-model="form.namecheapApiUser" type="text" maxlength="120" autocomplete="off">
-            </label>
-            <label class="fld">
-              Username
-              <input v-model="form.namecheapUsername" type="text" maxlength="120" autocomplete="off">
-            </label>
-          </div>
-          <label class="fld">
-            Whitelisted client IP
-            <input v-model="form.namecheapClientIp" type="text" maxlength="45" placeholder="Your server public IP">
-          </label>
-          <label class="fld">
-            API key
-            <input v-model="form.namecheapApiKey" type="password" maxlength="512" autocomplete="off">
-          </label>
-          <label class="settings-check">
-            <input v-model="form.namecheapUseSandbox" type="checkbox">
-            <span>Use Namecheap sandbox API (testing only)</span>
-          </label>
-          <div class="settings-actions">
-            <button type="button" class="btn" :disabled="testBusy === 'namecheap'" @click="testConnection('namecheap')">
-              {{ testBusy === 'namecheap' ? 'Testing…' : 'Test Namecheap connection' }}
-            </button>
-          </div>
 
-          <template v-if="form.namecheapEnabled">
-            <hr class="section-divider">
-            <div class="notif-label">Manual domains</div>
+          <fieldset class="namecheap-section">
+            <legend>Manual domains</legend>
             <p class="settings-help">
-              Enter domains manually until Namecheap approves API access. These appear on the Billing dashboard immediately after save.
+              Enter domain, expiry date, and renewal cost manually. No Namecheap API required.
             </p>
+            <p v-if="!form.namecheapEnabled" class="settings-warn">Enable Namecheap monitoring above for these to appear on the Billing page.</p>
             <div v-if="form.namecheapManualDomains.length" class="manual-domain-list">
               <div v-for="(row, index) in form.namecheapManualDomains" :key="index" class="manual-domain-row">
                 <label class="fld">
                   Domain
-                  <input v-model="row.name" type="text" maxlength="253" placeholder="example.com">
+                  <input v-model="row.name" type="text" maxlength="253" placeholder="example.com" required>
                 </label>
                 <label class="fld">
                   Expiry date
-                  <input v-model="row.renewalDate" type="date">
+                  <input v-model="row.renewalDate" type="date" required>
                 </label>
                 <label class="fld">
                   Renewal cost (USD)
-                  <input v-model="row.renewalCost" type="number" min="0" step="0.01" placeholder="15.88">
+                  <input v-model="row.renewalCost" type="number" min="0" step="0.01" placeholder="15.88" required>
                 </label>
                 <button type="button" class="btn sm danger" @click="removeManualDomain(index)">
                   Remove
@@ -376,31 +388,63 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
             <button type="button" class="btn sm" @click="addManualDomain">
               + Add domain
             </button>
-          </template>
+          </fieldset>
 
-          <template v-if="hasNamecheapKey && form.namecheapEnabled">
-            <hr class="section-divider">
-            <div class="notif-label">Watched domains (API)</div>
-            <p class="settings-help">When API access is approved, select domains to sync renewal dates and pricing automatically.</p>
-            <button type="button" class="btn sm" :disabled="namecheapDomainsLoading" @click="loadNamecheapDomains">
-              {{ namecheapDomainsLoading ? 'Loading…' : 'Refresh domain list' }}
-            </button>
-            <p v-if="namecheapDomainsError" class="settings-err">{{ namecheapDomainsError }}</p>
-            <div v-if="namecheapDomains.length" class="picker-list">
-              <label v-for="domain in namecheapDomains" :key="domain.name" class="settings-check">
-                <input
-                  type="checkbox"
-                  :checked="form.namecheapMonitoredDomains.includes(domain.name)"
-                  @change="toggleDomain(domain.name, ($event.target as HTMLInputElement).checked)"
-                >
-                <span>
-                  <b>{{ domain.name }}</b>
-                  <small>Expires {{ domain.expires }}<template v-if="domain.isPremium"> · premium</template><template v-if="domain.autoRenew"> · auto-renew</template></small>
-                </span>
+          <fieldset class="namecheap-section optional-api">
+            <legend>Optional: Namecheap API</legend>
+            <p class="settings-help">When Namecheap approves API access, fill these in to sync domains automatically.</p>
+            <div class="row2">
+              <label class="fld">
+                API user
+                <input v-model="form.namecheapApiUser" type="text" maxlength="120" autocomplete="off">
+              </label>
+              <label class="fld">
+                Username
+                <input v-model="form.namecheapUsername" type="text" maxlength="120" autocomplete="off">
               </label>
             </div>
-            <p v-else-if="!namecheapDomainsLoading && !namecheapDomainsError" class="settings-help">No domains returned from Namecheap.</p>
-          </template>
+            <label class="fld">
+              Whitelisted client IP
+              <input v-model="form.namecheapClientIp" type="text" maxlength="45" placeholder="Your server public IP">
+            </label>
+            <label class="fld">
+              API key
+              <input v-model="form.namecheapApiKey" type="password" maxlength="512" autocomplete="off">
+            </label>
+            <label class="settings-check">
+              <input v-model="form.namecheapUseSandbox" type="checkbox">
+              <span>Use Namecheap sandbox API (testing only)</span>
+            </label>
+            <div class="settings-actions">
+              <button type="button" class="btn" :disabled="testBusy === 'namecheap'" @click="testConnection('namecheap')">
+                {{ testBusy === 'namecheap' ? 'Testing…' : 'Test Namecheap connection' }}
+              </button>
+            </div>
+
+            <template v-if="hasNamecheapKey && form.namecheapEnabled">
+              <hr class="section-divider">
+              <div class="notif-label">Watched domains (API)</div>
+              <p class="settings-help">Select domains to sync renewal dates and pricing automatically.</p>
+              <button type="button" class="btn sm" :disabled="namecheapDomainsLoading" @click="loadNamecheapDomains">
+                {{ namecheapDomainsLoading ? 'Loading…' : 'Refresh domain list' }}
+              </button>
+              <p v-if="namecheapDomainsError" class="settings-err">{{ namecheapDomainsError }}</p>
+              <div v-if="namecheapDomains.length" class="picker-list">
+                <label v-for="domain in namecheapDomains" :key="domain.name" class="settings-check">
+                  <input
+                    type="checkbox"
+                    :checked="form.namecheapMonitoredDomains.includes(domain.name)"
+                    @change="toggleDomain(domain.name, ($event.target as HTMLInputElement).checked)"
+                  >
+                  <span>
+                    <b>{{ domain.name }}</b>
+                    <small>Expires {{ domain.expires }}<template v-if="domain.isPremium"> · premium</template><template v-if="domain.autoRenew"> · auto-renew</template></small>
+                  </span>
+                </label>
+              </div>
+              <p v-else-if="!namecheapDomainsLoading && !namecheapDomainsError" class="settings-help">No domains returned from Namecheap.</p>
+            </template>
+          </fieldset>
         </div>
       </div>
 
@@ -522,5 +566,32 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
 .btn.sm.danger {
   color: #b91c1c;
   border-color: #fecaca;
+}
+
+.namecheap-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.namecheap-section legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  padding: 0 6px;
+}
+
+.namecheap-section.optional-api {
+  background: #fafafa;
+}
+
+.settings-warn {
+  margin: 0;
+  font-size: 12.5px;
+  color: #b45309;
 }
 </style>
