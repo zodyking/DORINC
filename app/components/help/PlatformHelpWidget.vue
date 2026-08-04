@@ -197,7 +197,18 @@ watch(panelOpen, (open) => {
   document.body.classList.toggle('help-chat-open', open)
 })
 
+const { registerWidget, unregisterWidget } = usePlatformHelpShell()
+
+onMounted(() => {
+  registerWidget({
+    visible: widgetVisible,
+    panelOpen,
+    togglePanel,
+  })
+})
+
 onUnmounted(() => {
+  unregisterWidget()
   document.body.classList.remove('help-on', 'help-chat-open')
 })
 </script>
@@ -210,7 +221,7 @@ onUnmounted(() => {
       aria-hidden="true"
       @click="closePanel"
     />
-    <div class="help-widget" aria-live="polite">
+    <div class="help-widget help-widget--shell" aria-live="polite">
       <div
         class="help-panel"
         :class="{ open: panelOpen }"

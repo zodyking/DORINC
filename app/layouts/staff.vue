@@ -8,6 +8,7 @@ import type { PermissionKey } from '~/shared/permissions/keys'
 
 const route = useRoute()
 const auth = useAuthStore()
+const { shellWidgetVisible, shellPanelOpen, toggleFromTopbar } = usePlatformHelpShell()
 const { load: loadDetectionSettings } = useDetectionSettings()
 
 onMounted(() => {
@@ -180,6 +181,17 @@ watch(() => route.path, () => {
       <!-- TOPBAR -->
       <header class="topbar">
         <button class="burger" aria-label="Open navigation" @click="sidebarOpen = !sidebarOpen">☰</button>
+        <button
+          v-if="shellWidgetVisible"
+          type="button"
+          class="iconbtn help-topbar-btn"
+          :class="{ on: shellPanelOpen, open: shellPanelOpen }"
+          aria-label="Platform help"
+          :aria-expanded="shellPanelOpen"
+          @click="toggleFromTopbar"
+        >
+          {{ shellPanelOpen ? '✕' : '✦' }}
+        </button>
         <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
         <span class="spacer" />
         <div v-if="canUseMessages" class="notif-wrap">
@@ -274,5 +286,13 @@ watch(() => route.path, () => {
 }
 .dm-header-btn svg {
   display: block;
+}
+.help-topbar-btn {
+  font-size: 17px;
+  font-weight: 700;
+  color: #4f46e5;
+}
+.help-topbar-btn.open {
+  color: #0f172a;
 }
 </style>
