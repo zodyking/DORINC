@@ -46,8 +46,6 @@ import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.v
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import {
   latestLineAuditSuggestion,
-  pendingLineAuditSuggestion,
-  pollAiJobUntilDone,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
@@ -389,6 +387,42 @@ const serviceLogImages = computed(() =>
 const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
 
 const hydratingFromServer = ref(false)
+const savedFormSnapshot = ref<string | null>(null)
+
+function buildFormSnapshot(): string {
+  return JSON.stringify({
+    customerId: customerId.value,
+    vehicleId: vehicleId.value,
+    invoiceDate: invoiceDate.value,
+    dueDate: dueDate.value,
+    paymentTerms: paymentTerms.value,
+    poNumber: poNumber.value,
+    complaint: complaint.value,
+    internalNotes: internalNotes.value,
+    lines: lines.value.map(line => ({
+      id: line.id,
+      lineType: line.lineType,
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      taxable: line.taxable,
+      catalogItemId: line.catalogItemId ?? null,
+    })),
+  })
+}
+
+function markFormClean() {
+  savedFormSnapshot.value = buildFormSnapshot()
+}
+
+const isDirty = computed(() => {
+  if (savedFormSnapshot.value === null) return false
+  return buildFormSnapshot() !== savedFormSnapshot.value
+})
+
+const canShowSend = computed(() =>
+  editable.value && !isDirty.value && (canApprove.value || canSend.value),
+)
 
 function syncFormFromInvoice(inv: InvoicePayload) {
   customerId.value = inv.customerId
@@ -405,6 +439,9 @@ function syncFormFromInvoice(inv: InvoicePayload) {
 watch(invoice, (inv) => {
   if (!inv || hydratingFromServer.value) return
   syncFormFromInvoice(inv)
+  if (savedFormSnapshot.value === null) {
+    nextTick(() => markFormClean())
+  }
 }, { immediate: true })
 
 watch(paymentTerms, (terms) => {
@@ -471,34 +508,50 @@ async function syncInvoiceDraftToServer() {
   await patchHeader({ refreshAfter: false, manageBusy: false })
 }
 
-async function completeSaveDraft() {
-  await releaseEditSession()
-  await navigateTo({ path: `/invoices/${id}`, query: { saved: 'draft' } })
+async function completeSave() {
+  await refreshInvoice()
+  markFormClean()
 }
 
-async function completeFinalizeAndSend() {
+async function completeSend() {
   if (canApprove.value) await $fetch(`/api/invoices/${id}/approve`, { method: 'POST' })
   if (canSend.value) {
     const sendResult = await $fetch<{ message?: string }>(`/api/invoices/${id}/send`, { method: 'POST' })
     saveError.value = sendResult.message ?? 'Invoice queued for email delivery.'
   }
+  await releaseEditSession()
   await navigateTo(`/invoices/${id}`)
 }
 
-async function saveDraft() {
-  if (!editable.value || !invoice.value) return
+async function saveInvoice() {
+  if (!editable.value || !invoice.value || !isDirty.value) return
   busy.value = true
   saveError.value = ''
   try {
     await syncInvoiceDraftToServer()
-    const auditOk = await runLineAuditBeforeSave('draft')
+    const auditOk = await runLineAuditBeforeSave('save')
     if (!auditOk) return
-    await completeSaveDraft()
+    await completeSave()
   }
   catch (e: unknown) {
     if (!saveError.value) {
       saveError.value = syncFetchErrorMessage(e, 'Save failed')
     }
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function sendInvoice() {
+  if (!editable.value || isDirty.value) return
+  busy.value = true
+  saveError.value = ''
+  try {
+    await completeSend()
+  }
+  catch (e: unknown) {
+    saveError.value = syncFetchErrorMessage(e, 'Send failed')
   }
   finally {
     busy.value = false
@@ -651,24 +704,6 @@ async function removeLine(lineId: string) {
   }
 }
 
-async function finalizeAndSend() {
-  if (!editable.value) return
-  busy.value = true
-  saveError.value = ''
-  try {
-    await syncInvoiceDraftToServer()
-    const auditOk = await runLineAuditBeforeSave('finalize')
-    if (!auditOk) return
-    await completeFinalizeAndSend()
-  }
-  catch (e: unknown) {
-    saveError.value = syncFetchErrorMessage(e, 'Finalize failed')
-  }
-  finally {
-    busy.value = false
-  }
-}
-
 function copyComplaintFromLog() {
   const log = serviceLogData.value?.log
   if (!log || !editable.value) return
@@ -682,7 +717,7 @@ const auditModalOpen = ref(false)
 const auditRequireReview = ref(false)
 const auditBusy = ref(false)
 const auditError = ref('')
-const pendingSaveAction = ref<'draft' | 'finalize' | null>(null)
+const pendingSaveAction = ref<'save' | 'send' | null>(null)
 const activeAuditSuggestion = ref<AiSuggestionRow | null>(null)
 
 const { data: invoiceAiData, refresh: refreshInvoiceAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
@@ -709,7 +744,7 @@ function shouldSkipLineAuditError(e: unknown): boolean {
     || message.includes('spend cap')
 }
 
-async function runLineAuditBeforeSave(action: 'draft' | 'finalize'): Promise<boolean> {
+async function runLineAuditBeforeSave(action: 'save' | 'send'): Promise<boolean> {
   pendingSaveAction.value = action
   auditError.value = ''
 
@@ -717,15 +752,15 @@ async function runLineAuditBeforeSave(action: 'draft' | 'finalize'): Promise<boo
 
   auditBusy.value = true
   try {
-    const { aiJob } = await $fetch<{ aiJob: { id: string } }>(`/api/invoices/${id}/line-audit`, {
+    const res = await $fetch<{
+      issuesFound: number
+      suggestion: AiSuggestionRow | null
+    }>(`/api/invoices/${id}/line-audit`, {
       method: 'POST',
     })
-    await pollAiJobUntilDone(aiJob.id)
-    await refreshAuditReport()
 
-    const pending = pendingLineAuditSuggestion(invoiceAiSuggestions.value)
-    if (pending) {
-      activeAuditSuggestion.value = pending
+    if (res.suggestion && res.issuesFound > 0) {
+      activeAuditSuggestion.value = res.suggestion
       auditRequireReview.value = true
       auditModalOpen.value = true
       return false
@@ -776,8 +811,8 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
 
     const action = pendingSaveAction.value
     pendingSaveAction.value = null
-    if (action === 'draft') await completeSaveDraft()
-    else if (action === 'finalize') await completeFinalizeAndSend()
+    if (action === 'save') await completeSave()
+    else if (action === 'send') await completeSend()
   }
   catch (e: unknown) {
     auditError.value = syncFetchErrorMessage(e, 'Could not apply audit changes')
@@ -1121,19 +1156,25 @@ if (import.meta.client) {
           </div>
 
           <div v-if="editable" class="savebar">
-            <button type="button" class="btn" :disabled="busy" @click="saveDraft">
-              {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save draft' }}
-            </button>
-            <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
             <button
+              v-if="isDirty"
+              type="button"
+              class="btn primary"
+              :disabled="busy || auditBusy"
+              @click="saveInvoice"
+            >
+              {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              v-else-if="canShowSend"
               type="button"
               class="btn primary"
               :disabled="busy"
-              :title="!canApprove || !canSend ? 'Requires approve and send permissions' : undefined"
-              @click="finalizeAndSend"
+              @click="sendInvoice"
             >
-              Finalize &amp; send
+              {{ busy ? 'Sending…' : 'Send' }}
             </button>
+            <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
           </div>
           <div v-else class="savebar">
             <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>

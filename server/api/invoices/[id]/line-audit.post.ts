@@ -2,7 +2,7 @@ import { useDb } from '../../../db/client'
 import { writeAudit } from '../../../services/audit.service'
 import {
   AiFeaturesServiceError,
-  enqueueInvoiceLineAudit,
+  executeInvoiceLineAudit,
 } from '../../../services/ai-features.service'
 import { InvoicesServiceError } from '../../../services/invoices.service'
 import { apiError } from '../../../utils/api-error'
@@ -22,17 +22,26 @@ export default defineEventHandler(async (event) => {
   await requireEditSession(event, db, 'invoice', id, actor.id)
 
   try {
-    const { aiJob, workerJob } = await enqueueInvoiceLineAudit(db, id, actor.id)
+    const { aiJob, auditContent, suggestion } = await executeInvoiceLineAudit(db, id, actor.id)
 
     await writeAudit(event, {
       entityType: 'invoice',
       entityId: id,
-      action: 'ai.line_audit.queued',
-      afterData: { aiJobId: aiJob.id, workerJobId: workerJob.id },
+      action: 'ai.line_audit.completed',
+      afterData: {
+        aiJobId: aiJob.id,
+        issuesFound: auditContent.summary.issuesFound,
+        suggestionId: suggestion?.id ?? null,
+      },
       permissionKey: 'ai.describe.all',
     })
 
-    return { aiJob, workerJob }
+    return {
+      aiJob,
+      issuesFound: auditContent.summary.issuesFound,
+      auditContent,
+      suggestion,
+    }
   }
   catch (err) {
     if (err instanceof InvoicesServiceError) {
@@ -43,6 +52,7 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_CONFIGURED') throw apiError(event, 'CONFLICT', 'AI is not configured')
       if (err.code === 'FEATURE_DISABLED') throw apiError(event, 'CONFLICT', err.message)
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', err.message)
+      if (err.code === 'AI_FAILED') throw apiError(event, 'CONFLICT', err.message)
     }
     throw err
   }

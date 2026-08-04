@@ -175,6 +175,42 @@ export async function enqueueInvoiceLineAudit(
   invoiceId: string,
   actorId: string,
 ) {
+  const { aiJob } = await prepareInvoiceLineAuditJob(db, invoiceId, actorId)
+
+  const workerJob = await enqueueJob(db, 'invoice_description_ai', {
+    aiJobId: aiJob.id,
+    invoiceId,
+    mode: 'line_audit',
+  })
+
+  await linkAiJobWorker(db, aiJob.id, workerJob.id)
+
+  return { aiJob, workerJob }
+}
+
+/** Run line audit inline (save gate) — does not depend on background worker polling. */
+export async function executeInvoiceLineAudit(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+) {
+  const { aiJob } = await prepareInvoiceLineAuditJob(db, invoiceId, actorId)
+  try {
+    const result = await runInvoiceLineAuditJob(db, aiJob.id)
+    return { aiJob, ...result }
+  }
+  catch (e) {
+    const message = e instanceof Error ? e.message : 'Line audit failed'
+    await markAiJobFailed(db, aiJob.id, message)
+    throw e
+  }
+}
+
+async function prepareInvoiceLineAuditJob(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+) {
   await assertAiFeatureEnabled(db, 'invoice_description')
   const invoice = await getInvoiceDetail(db, invoiceId)
   if (!INVOICE_EDITABLE_STATUSES.includes(invoice.status)) {
@@ -208,15 +244,7 @@ export async function enqueueInvoiceLineAudit(
     createdBy: actorId,
   })
 
-  const workerJob = await enqueueJob(db, 'invoice_description_ai', {
-    aiJobId: aiJob.id,
-    invoiceId,
-    mode: 'line_audit',
-  })
-
-  await linkAiJobWorker(db, aiJob.id, workerJob.id)
-
-  return { aiJob, workerJob }
+  return { aiJob, invoice }
 }
 
 const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.

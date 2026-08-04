@@ -16,6 +16,7 @@ import { workerJobs } from '../../server/db/schema/jobs'
 import {
   enqueueInvoiceDescription,
   enqueueInvoiceLineAudit,
+  executeInvoiceLineAudit,
   enqueueServiceLogExtraction,
   reviewAiSuggestion,
   reviewInvoiceLineAudit,
@@ -310,27 +311,17 @@ describe('P2-14 invoice description AI writer', () => {
 })
 
 describe('invoice line audit before save', () => {
-  it('queues audit and returns pending suggestion when issues are found', async () => {
+  it('runs audit inline and returns pending suggestion when issues are found', async () => {
     await ensureAiReady()
     mockLineAuditJson.lines[0]!.lineItemId = lineItemId
     const fetchMock = trackFetchMock(mockLineAuditJson)
 
-    const { aiJob, workerJob } = await enqueueInvoiceLineAudit(db, invoiceId, actorId)
+    const { aiJob, auditContent, suggestion } = await executeInvoiceLineAudit(db, invoiceId, actorId)
     createdJobIds.push(aiJob.id)
-    createdWorkerJobIds.push(workerJob.id)
-
-    await pool.query(`UPDATE worker_jobs SET run_after = now() WHERE id = $1`, [workerJob.id])
-    const result = await processAiJobs(pool)
-    expect(result.processed).toBe(1)
-
-    const { rows: suggestions } = await pool.query(
-      `SELECT * FROM ai_suggestions WHERE ai_job_id = $1`,
-      [aiJob.id],
-    )
-    expect(suggestions[0].status).toBe('pending')
-    expect(suggestions[0].suggested_content.kind).toBe('invoice_line_audit')
-    expect(suggestions[0].suggested_content.summary.issuesFound).toBe(1)
-    createdSuggestionIds.push(suggestions[0].id)
+    expect(auditContent.summary.issuesFound).toBe(1)
+    expect(suggestion?.status).toBe('pending')
+    expect(suggestion?.suggestedContent.kind).toBe('invoice_line_audit')
+    if (suggestion) createdSuggestionIds.push(suggestion.id)
 
     fetchMock.mockRestore()
   })
@@ -340,21 +331,13 @@ describe('invoice line audit before save', () => {
     mockLineAuditJson.lines[0]!.lineItemId = lineItemId
     const fetchMock = trackFetchMock(mockLineAuditJson)
 
-    const { aiJob, workerJob } = await enqueueInvoiceLineAudit(db, invoiceId, actorId)
-    createdJobIds.push(aiJob.id)
-    createdWorkerJobIds.push(workerJob.id)
-    await pool.query(`UPDATE worker_jobs SET run_after = now() WHERE id = $1`, [workerJob.id])
-    await processAiJobs(pool)
-
-    const { rows: suggestions } = await pool.query(
-      `SELECT id FROM ai_suggestions WHERE ai_job_id = $1`,
-      [aiJob.id],
-    )
-    const suggestionId = suggestions[0].id as string
-    createdSuggestionIds.push(suggestionId)
+    const { suggestion } = await executeInvoiceLineAudit(db, invoiceId, actorId)
+    if (!suggestion) throw new Error('expected suggestion')
+    createdSuggestionIds.push(suggestion.id)
+    createdJobIds.push(suggestion.aiJobId)
 
     await reviewInvoiceLineAudit(db, {
-      suggestionId,
+      suggestionId: suggestion.id,
       decisions: [{ lineItemId, action: 'accept' }],
     }, actorId)
 
