@@ -1,7 +1,7 @@
 // Integration tests for service logs schema/API (P1-15): create, status
 // transitions per SPEC §6.4, mechanic own-scope filtering, updates.
 import { config } from 'dotenv'
-import { like, inArray, eq } from 'drizzle-orm'
+import { like, inArray, eq, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -301,6 +301,20 @@ describe('P1-26 convert service log to invoice (SPEC §6.4, §6.5)', () => {
     expect(converted.status).toBe('converted_to_invoice')
     expect(converted.invoiceId).toBe(invoice.id)
     expect(invoice.status).toBe('draft')
+  })
+
+  it('converts on the first attempt when the invoice sequence is stale', async () => {
+    const log = await approvedLog()
+    const [{ max }] = await db.select({
+      max: sql<number>`COALESCE(MAX(${invoices.invoiceNumber}), 0)`,
+    }).from(invoices)
+    const currentMax = Number(max)
+
+    await db.execute(sql`SELECT setval('invoice_number_seq', ${currentMax + 50}, true)`)
+
+    const { invoice, log: converted } = await convertServiceLogToInvoice(db, log.id, MECHANIC)
+    expect(converted.status).toBe('converted_to_invoice')
+    expect(invoice.invoiceNumber).toBe(currentMax + 1)
   })
 
   it('rejects conversion from draft', async () => {

@@ -40,18 +40,17 @@ function nextNumberAfterMax(maxNum: number, floor: number): number {
   return Math.max(maxNum, floor - 1) + 1
 }
 
-/** setval rejects 0 and values below the sequence minimum — use floor with is_called=false when empty. */
+/** Align sequence so the next nextval() returns MAX(column) + 1 (respecting schema floor). */
 function syncSequenceSql(sequenceName: NumberSequenceName, maxColumn: string, tableName: string) {
   const floor = SEQUENCE_FLOORS[sequenceName]
   return sql`
     SELECT setval(
       ${sequenceName},
-      CASE
-        WHEN COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0) < ${floor}
-        THEN ${floor}
-        ELSE (SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)})
-      END,
-      COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0) < ${floor}
+      GREATEST(
+        COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0),
+        ${floor - 1}
+      ),
+      true
     ) AS setval
   `
 }

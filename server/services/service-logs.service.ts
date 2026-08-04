@@ -142,11 +142,15 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     if (attempt === 0) await ensureServiceLogNumberSequence(db)
     else await syncServiceLogNumberSequence(db)
 
+    const savepoint = `service_log_insert_${attempt}`
+    await db.execute(sql.raw(`SAVEPOINT ${savepoint}`))
     try {
       ;[row] = await db.insert(serviceLogs).values(draftValues).returning()
+      await db.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
       break
     }
     catch (err) {
+      await db.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
       if (isPgUniqueViolation(err, 'service_logs_log_number_unique') && attempt < 2) continue
       throw err
     }
