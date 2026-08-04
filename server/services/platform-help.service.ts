@@ -79,16 +79,19 @@ interface OpenRouterChatResponse {
 function buildUserTurn(
   question: string,
   pageContext?: string,
-  imageDataUrl?: string,
+  imageDataUrls?: string[],
 ): string | OpenRouterMessageContent[] {
   const prefix = pageContext ? `Current page: ${pageContext}\n\n` : ''
   const userText = `${prefix}${question}`
 
-  if (!imageDataUrl) return userText
+  if (!imageDataUrls?.length) return userText
 
   return [
     { type: 'text', text: userText },
-    { type: 'image_url', image_url: { url: imageDataUrl } },
+    ...imageDataUrls.map(url => ({
+      type: 'image_url' as const,
+      image_url: { url },
+    })),
   ]
 }
 
@@ -98,7 +101,7 @@ async function callOpenRouterHelp(
   input: {
     question: string
     pageContext?: string
-    imageDataUrl?: string
+    imageDataUrls?: string[]
     history?: PlatformHelpHistoryMessage[]
   },
 ): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
@@ -110,7 +113,7 @@ async function callOpenRouterHelp(
   const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }> = [
     { role: 'system', content: HELP_SYSTEM_PROMPT },
     ...historyMessages,
-    { role: 'user', content: buildUserTurn(input.question, input.pageContext, input.imageDataUrl) },
+    { role: 'user', content: buildUserTurn(input.question, input.pageContext, input.imageDataUrls) },
   ]
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -123,7 +126,7 @@ async function callOpenRouterHelp(
     },
     body: JSON.stringify({
       model,
-      max_tokens: input.imageDataUrl ? 2048 : 1024,
+      max_tokens: input.imageDataUrls?.length ? 2048 : 1024,
       temperature: 0.3,
       messages,
     }),
@@ -167,7 +170,7 @@ export async function askPlatformHelp(
     question: string
     pageContext?: string
     userId: string
-    imageDataUrl?: string
+    imageDataUrls?: string[]
     history?: PlatformHelpHistoryMessage[]
   },
 ): Promise<PlatformHelpResult> {
@@ -190,7 +193,7 @@ export async function askPlatformHelp(
       const apiKey = await getDecryptedApiKey(db)
       if (apiKey) {
         const model = modelForFeature(settings, 'platform_help')
-        if (input.imageDataUrl && !(await modelSupportsVision(db, model))) {
+        if (input.imageDataUrls?.length && !(await modelSupportsVision(db, model))) {
           return {
             answer: formatPlatformHelpHtml(
               '<p>This help model does not support image analysis.</p>'
@@ -226,7 +229,7 @@ export async function askPlatformHelp(
       if (e instanceof AiSpendCapExceededError) {
         capped = true
       }
-      if (input.imageDataUrl) {
+      if (input.imageDataUrls?.length) {
         return {
           answer: visionFailureMessage(capped),
           source: 'fallback',
@@ -236,7 +239,7 @@ export async function askPlatformHelp(
     }
   }
 
-  if (input.imageDataUrl) {
+  if (input.imageDataUrls?.length) {
     return {
       answer: visionFailureMessage(capped),
       source: 'fallback',

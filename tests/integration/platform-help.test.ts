@@ -78,7 +78,7 @@ describe.sequential('P2-15 platform help assistant', () => {
     const result = await askPlatformHelp(db, {
       question: 'what is this?',
       userId: actorId,
-      imageDataUrl: tinyPng,
+      imageDataUrls: [tinyPng],
     })
 
     expect(result.answer.toLowerCase()).not.toContain('suggested question')

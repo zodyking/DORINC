@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
       question: body.question,
       pageContext: body.pageContext,
       userId: user.id,
-      imageDataUrl: body.imageDataUrl,
+      imageDataUrls: body.imageDataUrls,
       history: body.history,
     })
 
