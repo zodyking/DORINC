@@ -19,4 +19,26 @@ describe('platformHelpAskSchema', () => {
     })
     expect(parsed.imageDataUrls).toHaveLength(2)
   })
+
+  it('sanitizes history content and drops empty rows', () => {
+    const parsed = platformHelpAskSchema.parse({
+      question: 'Follow up',
+      history: [
+        { role: 'user', content: '  hi  ' },
+        { role: 'assistant', content: `${'x'.repeat(5000)}` },
+        { role: 'user', content: '   ' },
+      ],
+    })
+    expect(parsed.history).toHaveLength(2)
+    expect(parsed.history?.[0]?.content).toBe('hi')
+    expect(parsed.history?.[1]?.content.length).toBe(4000)
+  })
+
+  it('drops blank pageContext strings', () => {
+    const parsed = platformHelpAskSchema.parse({
+      question: 'Help',
+      pageContext: '   ',
+    })
+    expect(parsed.pageContext).toBeUndefined()
+  })
 })

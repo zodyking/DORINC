@@ -214,14 +214,19 @@ export async function askPlatformHelp(
           input,
         )
         const estimatedCostUsd = estimateTokenCostUsd(promptTokens, completionTokens)
-        await logAiUsage(db, {
-          featureType: 'platform_help',
-          model,
-          promptTokens,
-          completionTokens,
-          estimatedCostUsd,
-          createdBy: input.userId,
-        })
+        try {
+          await logAiUsage(db, {
+            featureType: 'platform_help',
+            model,
+            promptTokens,
+            completionTokens,
+            estimatedCostUsd,
+            createdBy: input.userId,
+          })
+        }
+        catch (usageErr) {
+          console.error('[platform-help] usage log failed:', (usageErr as Error).message)
+        }
         return { answer, source: 'ai', capped: false }
       }
     }

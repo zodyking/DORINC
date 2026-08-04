@@ -5,6 +5,7 @@ import {
   helpPageKeyFromRoute,
   isPlatformHelpWidgetVisible,
 } from '~/utils/platform-help-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 interface PendingAttachment {
   id: string
@@ -113,10 +114,37 @@ function loadStoredMessages() {
   }
 }
 
+const MAX_HISTORY_CONTENT = 3500
+
 function persistMessages() {
   if (!import.meta.client) return
-  const toStore = messages.value.filter(m => m.role !== 'typing')
-  sessionStorage.setItem(storageKey.value, JSON.stringify(toStore))
+  const toStore = messages.value
+    .filter(m => m.role !== 'typing')
+    .map((m) => {
+      if (!m.imageDataUrls?.length) return m
+      return {
+        ...m,
+        imageDataUrls: undefined,
+        html: buildUserMessageHtml(m.text, []),
+      }
+    })
+  try {
+    sessionStorage.setItem(storageKey.value, JSON.stringify(toStore))
+  }
+  catch {
+    try {
+      const slim = toStore.map(m => ({
+        id: m.id,
+        role: m.role,
+        html: m.html.replace(/data:image\/[^"']+/gi, ''),
+        text: m.text.slice(0, MAX_HISTORY_CONTENT),
+      }))
+      sessionStorage.setItem(storageKey.value, JSON.stringify(slim))
+    }
+    catch {
+      sessionStorage.removeItem(storageKey.value)
+    }
+  }
 }
 
 function openPanel() {
@@ -244,8 +272,9 @@ function buildApiHistory() {
     .slice(-40)
     .map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.text,
+      content: m.text.trim().slice(0, MAX_HISTORY_CONTENT),
     }))
+    .filter(m => m.content.length > 0)
 }
 
 async function sendMessage() {
@@ -274,13 +303,14 @@ async function sendMessage() {
   scrollMessages()
 
   try {
+    const history = buildApiHistory()
     const res = await $fetch<{ answer: string, source: 'ai' | 'fallback', capped: boolean }>('/api/ai/help', {
       method: 'POST',
       body: {
         question,
-        pageContext: contextLabel.value.replace('Viewing · ', ''),
+        pageContext: contextLabel.value.replace('Viewing · ', '') || undefined,
         imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
-        history: buildApiHistory().slice(0, -1),
+        history: history.length > 1 ? history.slice(0, -1) : undefined,
       },
     })
     messages.value = messages.value.filter(m => m.role !== 'typing')
@@ -290,9 +320,10 @@ async function sendMessage() {
     }
     pushAssistant(answer)
   }
-  catch {
+  catch (err) {
     messages.value = messages.value.filter(m => m.role !== 'typing')
-    pushAssistant('<p>Sorry, I could not reach the help service. Check your connection and try again.</p>')
+    const detail = syncFetchErrorMessage(err, 'Could not reach the help service')
+    pushAssistant(`<p>Sorry, ${detail}. Check your connection and try again.</p>`)
   }
   finally {
     busy.value = false

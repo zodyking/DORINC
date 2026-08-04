@@ -114,5 +114,7 @@ describe('admin-panel-ui helpers (P1-34)', () => {
     expect(parseOptionalSpendCap(1)).toBe(1)
     expect(parseOptionalSpendCap(60)).toBe(60)
     expect(parseOptionalSpendCap('  ')).toBeNull()
+    expect(parseOptionalSpendCap(0)).toBeNull()
+    expect(parseOptionalSpendCap('0')).toBeNull()
   })
 })

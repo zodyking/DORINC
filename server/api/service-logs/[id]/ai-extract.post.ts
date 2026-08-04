@@ -25,14 +25,19 @@ export default defineEventHandler(async (event) => {
     await getServiceLog(db, id)
     const { aiJob, workerJob } = await enqueueServiceLogExtraction(db, id, actor.id, body.fileId)
 
-    await writeAudit(event, {
-      entityType: 'service_log',
-      entityId: id,
-      action: 'ai.extraction.queued',
-      afterData: { aiJobId: aiJob.id, workerJobId: workerJob.id, fileId: body.fileId ?? null },
-      permissionKey: 'ai.extract.all',
-      riskLevel: 'sensitive',
-    })
+    try {
+      await writeAudit(event, {
+        entityType: 'service_log',
+        entityId: id,
+        action: 'ai.extraction.queued',
+        afterData: { aiJobId: aiJob.id, workerJobId: workerJob.id, fileId: body.fileId ?? null },
+        permissionKey: 'ai.extract.all',
+        riskLevel: 'sensitive',
+      })
+    }
+    catch (auditErr) {
+      console.error('[ai-extract] audit write failed:', (auditErr as Error).message)
+    }
 
     return { aiJob, workerJob }
   }
@@ -44,6 +49,7 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_CONFIGURED') throw apiError(event, 'CONFLICT', 'AI is not configured')
       if (err.code === 'FEATURE_DISABLED') throw apiError(event, 'CONFLICT', err.message)
       if (err.code === 'NO_IMAGES') throw apiError(event, 'CONFLICT', 'No images available for extraction')
+      if (err.code === 'SPEND_CAP_EXCEEDED') throw apiError(event, 'CONFLICT', err.message)
     }
     throw err
   }

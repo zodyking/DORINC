@@ -16,6 +16,8 @@ import {
 } from './ai-jobs.service'
 import {
   AiProviderServiceError,
+  AiSpendCapExceededError,
+  assertSpendCapAllowsRequest,
   getAiProviderSettings,
   getDecryptedApiKey,
   modelForFeature,
@@ -42,7 +44,7 @@ import {
 
 export type AiFeaturesServiceErrorCode
   = 'NOT_CONFIGURED' | 'FEATURE_DISABLED' | 'NOT_FOUND' | 'NOT_PENDING'
-    | 'INVALID_CONTENT' | 'NO_IMAGES' | 'LINE_NOT_FOUND' | 'AI_FAILED'
+    | 'INVALID_CONTENT' | 'NO_IMAGES' | 'LINE_NOT_FOUND' | 'AI_FAILED' | 'SPEND_CAP_EXCEEDED'
 
 export class AiFeaturesServiceError extends Error {
   constructor(public readonly code: AiFeaturesServiceErrorCode, message?: string) {
@@ -110,6 +112,19 @@ async function assertAiFeatureEnabled(db: Db, feature: AiFeatureType): Promise<{
 
   if (!featureEnabled) {
     throw new AiFeaturesServiceError('FEATURE_DISABLED', 'This AI feature is disabled')
+  }
+
+  try {
+    await assertSpendCapAllowsRequest(db)
+  }
+  catch (e) {
+    if (e instanceof AiSpendCapExceededError) {
+      throw new AiFeaturesServiceError(
+        'SPEND_CAP_EXCEEDED',
+        `${e.period === 'daily' ? 'Daily' : 'Monthly'} AI spend cap ($${e.capUsd}) reached`,
+      )
+    }
+    throw e
   }
 
   return { model: modelForFeature(settings, feature) }

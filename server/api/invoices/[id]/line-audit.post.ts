@@ -26,17 +26,22 @@ export default defineEventHandler(async (event) => {
   try {
     const { aiJob, auditContent, suggestion } = await executeInvoiceLineAudit(db, id, actor.id)
 
-    await writeAudit(event, {
-      entityType: 'invoice',
-      entityId: id,
-      action: 'ai.line_audit.completed',
-      afterData: {
-        aiJobId: aiJob.id,
-        issuesFound: auditContent.summary.issuesFound,
-        suggestionId: suggestion?.id ?? null,
-      },
-      permissionKey: 'ai.describe.all',
-    })
+    try {
+      await writeAudit(event, {
+        entityType: 'invoice',
+        entityId: id,
+        action: 'ai.line_audit.completed',
+        afterData: {
+          aiJobId: aiJob.id,
+          issuesFound: auditContent.summary.issuesFound,
+          suggestionId: suggestion?.id ?? null,
+        },
+        permissionKey: 'ai.describe.all',
+      })
+    }
+    catch (auditErr) {
+      console.error('[ai-line-audit] audit write failed:', (auditErr as Error).message)
+    }
 
     return {
       aiJob,
@@ -55,6 +60,7 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'FEATURE_DISABLED') throw apiError(event, 'CONFLICT', err.message)
       if (err.code === 'NOT_FOUND') throw apiError(event, 'NOT_FOUND', err.message)
       if (err.code === 'AI_FAILED') throw apiError(event, 'CONFLICT', err.message)
+      if (err.code === 'SPEND_CAP_EXCEEDED') throw apiError(event, 'CONFLICT', err.message)
     }
     if (err instanceof AiProviderServiceError && (err.code === 'NOT_CONFIGURED' || err.code === 'KEY_MISSING')) {
       throw apiError(event, 'CONFLICT', 'AI is not configured')
