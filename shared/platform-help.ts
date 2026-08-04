@@ -61,6 +61,83 @@ const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, t
 
 const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small', 'h4', 'h3', 'em'])
 
+const HELP_SECTION_TITLE = /^(Steps|Tips|What I see|Quick answer|Notes)$/i
+
+function groupParagraphsUnderSection(
+  html: string,
+  section: string,
+  listClass: string,
+  tag: 'ol' | 'ul',
+): string {
+  const re = new RegExp(
+    `(<h4 class="help-section">${section}<\\/h4>)([\\s\\S]*?)(?=<h4 class="help-section">|$)`,
+    'i',
+  )
+  return html.replace(re, (_, header: string, body: string) => {
+    if (new RegExp(`<${tag}[\\s>]`, 'i').test(body)) {
+      return header + body.replace(
+        new RegExp(`<${tag}`, 'i'),
+        `<${tag} class="${listClass}"`,
+      )
+    }
+    const paragraphs = [...body.matchAll(/<p(?: class="help-lead")?>([\s\S]*?)<\/p>/gi)]
+    if (!paragraphs.length) return header + body
+    const items = paragraphs.map(m => `<li>${m[1]!.trim()}</li>`).join('')
+    const rest = body.replace(/<p(?: class="help-lead")?>([\s\S]*?)<\/p>/gi, '').trim()
+    return `${header}<${tag} class="${listClass}">${items}</${tag}>${rest}`
+  })
+}
+
+function addListClasses(html: string): string {
+  return html
+    .replace(/<ol(?![^>]*class=)/gi, '<ol class="help-steps"')
+    .replace(/<ul(?![^>]*class=)/gi, '<ul class="help-tips"')
+}
+
+/** Convert numbered paragraph lines (e.g. <p>1. Go to…</p>) into list items under Steps. */
+function convertNumberedParagraphs(html: string): string {
+  return html.replace(
+    /(<h4 class="help-section">Steps<\/h4>)([\s\S]*?)(?=<h4 class="help-section">|$)/i,
+    (_, header: string, body: string) => {
+      if (/<ol[\s>]/i.test(body)) return header + body
+      const converted = body.replace(
+        /<p(?: class="help-lead")?>\s*\d+[.)]\s*([\s\S]*?)<\/p>/gi,
+        (_m, item: string) => `<li>${item.trim()}</li>`,
+      )
+      if (!/<li>/i.test(converted)) return header + body
+      const items = [...converted.matchAll(/<li>[\s\S]*?<\/li>/gi)].map(m => m[0]).join('')
+      const rest = converted.replace(/<li>[\s\S]*?<\/li>/gi, '').trim()
+      return `${header}<ol class="help-steps">${items}</ol>${rest}`
+    },
+  )
+}
+
+/** Turn loose paragraphs under Steps/Tips headers into styled lists. */
+export function structureHelpSections(html: string): string {
+  let out = html.replace(
+    /<p>\s*(Steps|Tips|What I see|Quick answer|Notes)\s*:?\s*<\/p>/gi,
+    '<h4 class="help-section">$1</h4>',
+  )
+  out = out.replace(
+    /<h4(?: class="help-section")?>(Steps|Tips|What I see|Quick answer|Notes)\s*:?\s*<\/h4>/gi,
+    '<h4 class="help-section">$1</h4>',
+  )
+  out = out.replace(
+    /<p>\s*<b>(Steps|Tips|What I see|Quick answer|Notes)<\/b>\s*:?\s*<\/p>/gi,
+    '<h4 class="help-section">$1</h4>',
+  )
+  out = groupParagraphsUnderSection(out, 'Steps', 'help-steps', 'ol')
+  out = groupParagraphsUnderSection(out, 'Tips', 'help-tips', 'ul')
+  out = groupParagraphsUnderSection(out, 'What I see', 'help-tips', 'ul')
+  out = convertNumberedParagraphs(out)
+  out = addListClasses(out)
+  if (!out.includes('help-lead') && !out.includes('help-section')) {
+    return out
+  }
+  out = out.replace(/^\s*<p>(?![^<]*class="help-lead")([\s\S]*?)<\/p>/, '<p class="help-lead">$1</p>')
+  return out
+}
+
 /** Normalize AI/fallback help answers into clean, safe HTML with numbered steps. */
 export function formatPlatformHelpHtml(raw: string): string {
   let text = raw.trim()
@@ -69,9 +146,79 @@ export function formatPlatformHelpHtml(raw: string): string {
   // Drop truncated HTML tags (common when max_tokens cuts off mid-response).
   text = text.replace(/<[^>]*$/, '')
 
+  // Plain-text responses → HTML blocks.
+  if (!/<[a-z][\s>]/i.test(text)) {
+    const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean)
+    const parts: string[] = []
+    let stepLines: string[] = []
+    let tipLines: string[] = []
+    let mode: 'intro' | 'steps' | 'tips' | 'body' = 'intro'
+
+    const flushSteps = () => {
+      if (!stepLines.length) return
+      parts.push(`<ol class="help-steps">${stepLines.map(l => `<li>${l}</li>`).join('')}</ol>`)
+      stepLines = []
+    }
+    const flushTips = () => {
+      if (!tipLines.length) return
+      parts.push(`<ul class="help-tips">${tipLines.map(l => `<li>${l}</li>`).join('')}</ul>`)
+      tipLines = []
+    }
+
+    for (const line of lines) {
+      const mdHeading = line.match(/^#{1,4}\s+(.+)$/)
+      if (mdHeading) {
+        flushSteps()
+        flushTips()
+        const title = mdHeading[1]!.trim().replace(/:$/, '')
+        parts.push(`<h4 class="help-section">${title}</h4>`)
+        mode = /^tips$/i.test(title) ? 'tips' : /^steps$/i.test(title) ? 'steps' : 'body'
+        continue
+      }
+      if (HELP_SECTION_TITLE.test(line.replace(/:$/, ''))) {
+        flushSteps()
+        flushTips()
+        const title = line.replace(/:$/, '')
+        parts.push(`<h4 class="help-section">${title}</h4>`)
+        mode = /^tips$/i.test(title) ? 'tips' : /^steps$/i.test(title) ? 'steps' : 'body'
+        continue
+      }
+      const numbered = line.match(/^\d+[.)]\s+(.*)$/)
+      if (numbered) {
+        flushTips()
+        mode = 'steps'
+        stepLines.push(numbered[1]!.trim())
+        continue
+      }
+      const bullet = line.match(/^[-*•]\s+(.*)$/)
+      if (bullet) {
+        flushSteps()
+        mode = 'tips'
+        tipLines.push(bullet[1]!.trim())
+        continue
+      }
+      if (mode === 'steps') {
+        stepLines.push(line)
+        continue
+      }
+      if (mode === 'tips') {
+        tipLines.push(line)
+        continue
+      }
+      flushSteps()
+      flushTips()
+      const cls = parts.length === 0 ? 'help-lead' : ''
+      parts.push(cls ? `<p class="${cls}">${line}</p>` : `<p>${line}</p>`)
+      mode = 'body'
+    }
+    flushSteps()
+    flushTips()
+    text = parts.join('')
+  }
+
   // Markdown headings → section headers.
-  text = text.replace(/^#{1,4}\s+(.+)$/gm, (_, title: string) => `<h4>${title.trim()}</h4>`)
-  text = text.replace(/^\*\*(.+?)\*\*\s*$/gm, (_, title: string) => `<h4>${title.trim()}</h4>`)
+  text = text.replace(/^#{1,4}\s+(.+)$/gm, (_, title: string) => `<h4 class="help-section">${title.trim()}</h4>`)
+  text = text.replace(/^\*\*(.+?)\*\*\s*$/gm, (_, title: string) => `<h4 class="help-section">${title.trim()}</h4>`)
 
   // Convert markdown-style numbered steps to an ordered list.
   if (!/<ol[\s>]/i.test(text) && /^\s*\d+\.\s+/m.test(text)) {
@@ -82,7 +229,7 @@ export function formatPlatformHelpHtml(raw: string): string {
       const step = line.match(/^\s*\d+\.\s+(.*)$/)
       if (step) {
         if (!inList) {
-          parts.push('<ol>')
+          parts.push('<ol class="help-steps">')
           inList = true
         }
         parts.push(`<li>${step[1]!.trim()}</li>`)
@@ -109,7 +256,7 @@ export function formatPlatformHelpHtml(raw: string): string {
       const bullet = line.match(/^\s*[-*•]\s+(.*)$/)
       if (bullet) {
         if (!inList) {
-          parts.push('<ul>')
+          parts.push('<ul class="help-tips">')
           inList = true
         }
         parts.push(`<li>${bullet[1]!.trim()}</li>`)
@@ -133,6 +280,7 @@ export function formatPlatformHelpHtml(raw: string): string {
   )
 
   text = text.replace(/<script[\s\S]*?<\/script>/gi, '')
+  text = structureHelpSections(text)
   return text.trim()
 }
 

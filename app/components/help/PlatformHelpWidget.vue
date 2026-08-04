@@ -303,8 +303,8 @@ onUnmounted(() => {
 <template>
   <template v-if="widgetVisible">
     <div
-      class="help-backdrop"
-      :class="{ open: panelOpen, 'help-backdrop--fullscreen': fullscreen }"
+      v-if="panelOpen && !fullscreen"
+      class="help-backdrop open"
       aria-hidden="true"
       @click="closePanel"
     />
