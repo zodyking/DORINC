@@ -84,6 +84,9 @@ function hydrate(s: BillingIntegrationsView) {
   form.namecheapMonitoredDomains = [...s.namecheapMonitoredDomains]
   form.namecheapManualDomains = s.namecheapManualDomains.map(manualDomainToForm)
   form.openrouterBillingEnabled = s.openrouterBillingEnabled
+  if (s.namecheapEnabled && form.namecheapManualDomains.length === 0) {
+    addManualDomain()
+  }
 }
 
 watch(() => data.value?.settings, (s) => {
