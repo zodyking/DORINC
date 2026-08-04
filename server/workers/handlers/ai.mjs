@@ -1,9 +1,9 @@
 // AI worker — service log extraction + invoice description (SPEC §10, P2-13/P2-14).
 import { decryptBuffer } from '../lib/encryption.mjs'
 import {
-  applyConservativeAuditFilter,
   buildLineAuditSystemPrompt,
   buildLineAuditUserPrompt,
+  normalizeLineAuditResults,
 } from '../../../shared/invoice-line-audit.mjs'
 
 const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.
@@ -14,46 +14,6 @@ If a field is not visible, use null or omit draftLineItems. Do not invent prices
 const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, professional customer-facing invoice descriptions.
 Return JSON only: { "description": "..." }.
 Keep factual accuracy. Do not add parts, prices, quantities, or hours. Wording only — shorter is fine.`
-
-function normalizeAuditLines(inputLines, aiLines) {
-  const normalized = inputLines.map((input) => {
-    const ai = aiLines.find(row => String(row.lineItemId) === input.lineItemId)
-    const original = {
-      description: input.description,
-      quantity: String(input.quantity),
-      unitPrice: String(input.unitPrice),
-    }
-    const status = ai?.status === 'needs_fix' ? 'needs_fix' : 'ok'
-    const issues = Array.isArray(ai?.issues)
-      ? ai.issues.map(i => String(i)).filter(Boolean).slice(0, 20)
-      : []
-    let suggested = null
-    if (status === 'needs_fix' && ai?.suggested && typeof ai.suggested === 'object') {
-      suggested = {
-        description: String(ai.suggested.description ?? original.description).slice(0, 500),
-        quantity: String(ai.suggested.quantity ?? original.quantity).slice(0, 30),
-        unitPrice: String(ai.suggested.unitPrice ?? original.unitPrice).slice(0, 30),
-      }
-    }
-    return {
-      lineItemId: input.lineItemId,
-      sortOrder: input.sortOrder,
-      lineType: input.lineType === 'part' || input.lineType === 'fee' ? input.lineType : 'labor',
-      status,
-      issues,
-      original,
-      suggested,
-    }
-  })
-  const filtered = applyConservativeAuditFilter(inputLines, normalized)
-  const issuesFound = filtered.filter(l => l.status === 'needs_fix').length
-  return {
-    kind: 'invoice_line_audit',
-    checkedAt: new Date().toISOString(),
-    lines: filtered,
-    summary: { totalLines: filtered.length, issuesFound },
-  }
-}
 
 function estimateCost(model, promptTokens, completionTokens) {
   const isHaiku = model.includes('haiku')
@@ -316,7 +276,7 @@ async function processLineAudit(pool, aiJobId, job, input, settings) {
   ], 0.3)
 
   const parsedRaw = parseJsonBlock(result.content)
-  const auditContent = normalizeAuditLines(inputLines, parsedRaw.lines ?? [])
+  const auditContent = normalizeLineAuditResults(inputLines, parsedRaw.lines ?? [])
 
   await logUsage(pool, {
     aiJobId,

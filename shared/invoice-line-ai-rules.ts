@@ -6,4 +6,6 @@ export {
   buildLineAuditSystemPrompt,
   buildLineAuditUserPrompt,
   applyConservativeAuditFilter,
+  detectDeterministicLineIssue,
+  normalizeLineAuditResults,
 } from './invoice-line-audit.mjs'

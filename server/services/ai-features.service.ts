@@ -34,9 +34,9 @@ import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } fr
 import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
-  applyConservativeAuditFilter,
   buildLineAuditSystemPrompt,
   buildLineAuditUserPrompt,
+  normalizeLineAuditResults,
 } from '../../shared/invoice-line-audit.mjs'
 import {
   invoiceDescriptionContentSchema,
@@ -381,59 +381,6 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
   return { suggestion, parsed }
 }
 
-function normalizeAuditLines(
-  inputLines: Array<{
-    lineItemId: string
-    sortOrder?: number
-    lineType: string
-    description: string
-    quantity: string
-    unitPrice: string
-    lineAmount?: string
-  }>,
-  aiLines: Array<Record<string, unknown>>,
-): InvoiceLineAuditContent {
-  const normalized = inputLines.map((input) => {
-    const ai = aiLines.find(row => String(row.lineItemId) === input.lineItemId)
-    const original = {
-      description: input.description,
-      quantity: String(input.quantity),
-      unitPrice: String(input.unitPrice),
-    }
-    const status = ai?.status === 'needs_fix' ? 'needs_fix' as const : 'ok' as const
-    const issues = Array.isArray(ai?.issues)
-      ? ai.issues.map(i => String(i)).filter(Boolean).slice(0, 20)
-      : []
-    let suggested = null
-    if (status === 'needs_fix' && ai?.suggested && typeof ai.suggested === 'object') {
-      const s = ai.suggested as Record<string, unknown>
-      suggested = {
-        description: String(s.description ?? original.description).slice(0, 500),
-        quantity: String(s.quantity ?? original.quantity).slice(0, 30),
-        unitPrice: String(s.unitPrice ?? original.unitPrice).slice(0, 30),
-      }
-    }
-    return {
-      lineItemId: input.lineItemId,
-      sortOrder: input.sortOrder,
-      lineType: (input.lineType === 'part' || input.lineType === 'fee' ? input.lineType : 'labor') as 'part' | 'labor' | 'fee',
-      status,
-      issues,
-      original,
-      suggested,
-    }
-  })
-
-  const filtered = applyConservativeAuditFilter(inputLines, normalized)
-  const issuesFound = filtered.filter(l => l.status === 'needs_fix').length
-  return invoiceLineAuditContentSchema.parse({
-    kind: 'invoice_line_audit',
-    checkedAt: new Date().toISOString(),
-    lines: filtered,
-    summary: { totalLines: filtered.length, issuesFound },
-  })
-}
-
 export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
   const job = await getAiJob(db, aiJobId)
   if (!job) throw new AiFeaturesServiceError('NOT_FOUND', 'AI job not found')
@@ -472,7 +419,16 @@ export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
   }
 
   const parsedRaw = parseOpenRouterJson(result.content) as { lines?: Array<Record<string, unknown>> }
-  const auditContent = normalizeAuditLines(inputLines, parsedRaw.lines ?? [])
+  const filtered = normalizeLineAuditResults(inputLines, parsedRaw.lines ?? [])
+  const auditContent = invoiceLineAuditContentSchema.parse({
+    kind: 'invoice_line_audit',
+    checkedAt: new Date().toISOString(),
+    lines: filtered,
+    summary: {
+      totalLines: filtered.length,
+      issuesFound: filtered.filter(l => l.status === 'needs_fix').length,
+    },
+  })
 
   await logAiUsage(db, {
     aiJobId,
