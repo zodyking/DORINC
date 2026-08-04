@@ -14,6 +14,7 @@ import {
   formatBackupSize,
   formatDbLatency,
   formatScheduleDisplay,
+  parseOptionalSpendCap,
   pdfWorkerHealthTone,
   pdfWorkerStatusLabel,
   securitySectionTone,
@@ -103,5 +104,15 @@ describe('admin-panel-ui helpers (P1-34)', () => {
     expect(securitySectionTone('idle', 0)).toBe('ok')
     expect(securitySectionTone('backlog', 0)).toBe('warn')
     expect(securitySectionTone('idle', 2)).toBe('bad')
+  })
+
+  it('parses optional AI spend caps from number or string inputs', () => {
+    expect(parseOptionalSpendCap('')).toBeNull()
+    expect(parseOptionalSpendCap(null)).toBeNull()
+    expect(parseOptionalSpendCap(undefined)).toBeNull()
+    expect(parseOptionalSpendCap('2.50')).toBe(2.5)
+    expect(parseOptionalSpendCap(1)).toBe(1)
+    expect(parseOptionalSpendCap(60)).toBe(60)
+    expect(parseOptionalSpendCap('  ')).toBeNull()
   })
 })

@@ -27,6 +27,7 @@ import {
   formatSuspiciousAlertUser,
   formatSuspiciousAlertIps,
   workerQueueStatusLabel,
+  parseOptionalSpendCap,
 } from '~/utils/admin-panel-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
@@ -269,8 +270,8 @@ const aiForm = reactive({
   serviceLogExtractionEnabled: true,
   invoiceDescriptionEnabled: true,
   platformHelpEnabled: true,
-  dailySpendCapUsd: '' as string,
-  monthlySpendCapUsd: '' as string,
+  dailySpendCapUsd: '' as string | number,
+  monthlySpendCapUsd: '' as string | number,
 })
 
 watch(() => aiData.value?.settings, (s) => {
@@ -301,12 +302,8 @@ async function saveAiSettings() {
       serviceLogExtractionEnabled: aiForm.serviceLogExtractionEnabled,
       invoiceDescriptionEnabled: aiForm.invoiceDescriptionEnabled,
       platformHelpEnabled: aiForm.platformHelpEnabled,
-      dailySpendCapUsd: aiForm.dailySpendCapUsd.trim()
-        ? Number(aiForm.dailySpendCapUsd)
-        : null,
-      monthlySpendCapUsd: aiForm.monthlySpendCapUsd.trim()
-        ? Number(aiForm.monthlySpendCapUsd)
-        : null,
+      dailySpendCapUsd: parseOptionalSpendCap(aiForm.dailySpendCapUsd),
+      monthlySpendCapUsd: parseOptionalSpendCap(aiForm.monthlySpendCapUsd),
     }
     if (aiForm.apiKey.trim()) body.apiKey = aiForm.apiKey.trim()
 
