@@ -48,4 +48,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureDocumentChangeRequestsSchema } = await import('../lib/ensure-document-change-requests-schema.mjs')
   await ensureDocumentChangeRequestsSchema(usePool())
+
+  const { ensureBillingIntegrationsSchema } = await import('../lib/ensure-billing-integrations-schema.mjs')
+  await ensureBillingIntegrationsSchema(usePool())
 }
