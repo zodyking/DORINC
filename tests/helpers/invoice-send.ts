@@ -12,10 +12,9 @@ export async function sendAndDeliverInvoice(
   pool: Pool,
   invoiceId: string,
   actorId: string,
-  actorAccountType?: string | null,
 ) {
   const { sendInvoice } = await import('../../server/services/invoices.service')
-  await sendInvoice(db, invoiceId, actorId, actorAccountType)
+  await sendInvoice(db, invoiceId, actorId)
   return flushInvoiceSendPipeline(pool, db, invoiceId)
 }
 

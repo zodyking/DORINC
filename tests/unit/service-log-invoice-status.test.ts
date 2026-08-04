@@ -17,13 +17,7 @@ describe('deriveServiceLogInvoiceLinkStatus', () => {
     })).toEqual({ key: 'sent', label: 'Sent' })
   })
 
-  it('returns Invoiced for saved drafts and manager approval', () => {
-    expect(deriveServiceLogInvoiceLinkStatus({
-      invoiceStatus: 'pending_manager_approval',
-      wasSavedAtLeastOnce: false,
-      hasPendingSend: false,
-    })).toEqual({ key: 'in_progress', label: 'Invoiced' })
-
+  it('returns Invoiced for saved drafts', () => {
     expect(deriveServiceLogInvoiceLinkStatus({
       invoiceStatus: 'draft',
       wasSavedAtLeastOnce: true,

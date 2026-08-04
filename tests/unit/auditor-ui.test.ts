@@ -10,6 +10,6 @@ describe('P3-12 auditor UI helpers', () => {
   it('maps invoice statuses for auditor table', () => {
     expect(auditorInvoiceSub('sent')).toBe('Outstanding')
     expect(auditorInvoiceSub('paid')).toBe('Settled')
-    expect(auditorInvoiceSub('pending_manager_approval')).toContain('pending')
+    expect(auditorInvoiceSub('pending_manager_approval')).toBe('Draft — send when ready')
   })
 })

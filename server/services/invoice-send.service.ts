@@ -19,7 +19,6 @@ import {
 export type InvoiceSendServiceErrorCode
   = 'NOT_FOUND'
     | 'INVALID_TRANSITION'
-    | 'MANAGER_APPROVAL_REQUIRED'
     | 'NO_RECIPIENT'
     | 'ALREADY_QUEUED'
     | 'PDF_FAILED'
@@ -162,7 +161,6 @@ export async function queueInvoiceSend(
   invoiceId: string,
   actorId: string,
   overrides?: InvoiceSendOverrides,
-  actorAccountType?: string | null,
   bulkContext?: InvoiceSendBulkContext,
 ): Promise<QueueInvoiceSendResult> {
   const { isNotificationEnabled } = await import('./workspace-settings.service')
@@ -182,12 +180,11 @@ export async function queueInvoiceSend(
   }
 
   try {
-    await assertInvoiceSendable(db, invoice, actorAccountType)
+    await assertInvoiceSendable(db, invoice)
   }
   catch (err) {
     if (err instanceof InvoicesServiceError) {
       if (err.code === 'NOT_FOUND') throw new InvoiceSendServiceError('NOT_FOUND')
-      if (err.code === 'MANAGER_APPROVAL_REQUIRED') throw new InvoiceSendServiceError('MANAGER_APPROVAL_REQUIRED')
       if (err.code === 'INVALID_TRANSITION') throw new InvoiceSendServiceError('INVALID_TRANSITION')
     }
     throw err
@@ -303,7 +300,6 @@ export interface BulkInvoiceSendResult {
 const SEND_ERROR_MESSAGES: Record<InvoiceSendServiceErrorCode, string> = {
   NOT_FOUND: 'Invoice not found',
   INVALID_TRANSITION: 'This invoice cannot be emailed from its current status',
-  MANAGER_APPROVAL_REQUIRED: 'Manager approval is required before sending this invoice',
   NO_RECIPIENT: 'No billing email on file',
   ALREADY_QUEUED: 'Already queued for delivery',
   PDF_FAILED: 'PDF generation failed',
@@ -335,7 +331,7 @@ export async function bulkQueueInvoiceSend(
       const result = await queueInvoiceSend(db, invoiceId, actorId, {
         subject: input.subject ?? null,
         message: input.message ?? null,
-      }, null, bulkContext)
+      }, bulkContext)
       results.push({
         invoiceId,
         invoiceNumber: formatInvoiceNumber(result.invoice.invoiceNumber),

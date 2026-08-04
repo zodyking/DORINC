@@ -53,7 +53,6 @@ interface DashboardPayload {
       portalRequests: number
       deletionRequests: number
       aiExtractions: number
-      managerApprovals: number
       total: number
     }
   }

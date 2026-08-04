@@ -42,11 +42,7 @@ export function deriveServiceLogInvoiceLinkStatus(
     return { key: 'sent', label: STATUS_LABELS.sent }
   }
 
-  if (input.invoiceStatus === 'pending_manager_approval') {
-    return { key: 'in_progress', label: STATUS_LABELS.in_progress }
-  }
-
-  if (input.invoiceStatus !== 'draft') {
+  if (input.invoiceStatus !== 'draft' && input.invoiceStatus !== 'pending_manager_approval') {
     return null
   }
 
@@ -83,11 +79,7 @@ export async function resolveServiceLogInvoiceLinkStatuses(
       result.set(row.id, { key: 'sent', label: STATUS_LABELS.sent })
       continue
     }
-    if (row.status === 'pending_manager_approval') {
-      result.set(row.id, { key: 'in_progress', label: STATUS_LABELS.in_progress })
-      continue
-    }
-    if (row.status === 'draft') {
+    if (row.status === 'draft' || row.status === 'pending_manager_approval') {
       draftIds.push(row.id)
     }
   }

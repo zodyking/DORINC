@@ -85,9 +85,8 @@ export function invoiceStatusPill(
   }
   switch (status) {
     case 'draft':
-      return { cls: 'pill draft', label: 'Draft' }
     case 'pending_manager_approval':
-      return { cls: 'pill warn', label: 'Pending approval', hint: 'Awaiting manager sign-off before send' }
+      return { cls: 'pill draft', label: 'Draft' }
     case 'sent':
       return { cls: 'pill sent', label: 'Sent', hint: 'Awaiting payment' }
     case 'paid':

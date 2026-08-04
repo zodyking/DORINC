@@ -224,10 +224,6 @@ const serviceLogImages = computed(() =>
 const hasServiceLogPhotos = computed(() => !!invoice.value?.serviceLogId && serviceLogImages.value.length > 0)
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
-const canApprove = computed(() => auth.can('invoices.approve.all'))
-const canManagerApprove = computed(() =>
-  ['manager', 'admin', 'super_admin'].includes(auth.user?.accountType ?? ''),
-)
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
@@ -266,8 +262,6 @@ const showRecordPayment = computed(() =>
   && Number.parseFloat(invoice.value.balanceDue) > 0,
 )
 
-const busy = ref(false)
-const actionError = ref('')
 const viewTab = ref<'detail' | 'photos' | 'pdf'>('detail')
 const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
 const sendRef = ref<{ openModal: () => void } | null>(null)
@@ -292,23 +286,6 @@ async function runAdminForceRelease() {
   const reason = window.prompt('Reason for unlocking this invoice for editing (required):')
   if (!reason?.trim()) return
   await forceRelease(reason.trim())
-}
-
-async function runAction(path: string) {
-  if (!invoice.value) return
-  busy.value = true
-  actionError.value = ''
-  try {
-    const result = await $fetch<{ message?: string }>(path, { method: 'POST' })
-    await refresh()
-    if (result.message) actionError.value = result.message
-  }
-  catch (e: unknown) {
-    actionError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Action failed'
-  }
-  finally {
-    busy.value = false
-  }
 }
 
 const summaryRows = computed(() => {
@@ -416,19 +393,9 @@ const summaryRows = computed(() => {
           Send reminder
         </button>
         <button
-          v-if="canApprove && !canManagerApprove && invoice.status === 'draft'"
-          type="button"
-          class="btn"
-          :disabled="busy"
-          @click="runAction(`/api/invoices/${id}/approve`)"
-        >
-          Submit for manager approval
-        </button>
-        <button
           v-if="canSend && canSendNow && !sendInProgress"
           type="button"
           class="btn"
-          :disabled="busy"
           @click="onSendClick"
         >
           {{ sendButtonLabel }}
@@ -454,7 +421,6 @@ const summaryRows = computed(() => {
           entity-type="invoice"
           :entity-id="id"
           :entity-label="invoice.invoiceNumberFormatted"
-          :disabled="busy"
         />
       </template>
     </StaffPageHead>
@@ -490,7 +456,6 @@ const summaryRows = computed(() => {
     </div>
 
     <p v-if="savedNotice" class="flash ok" style="margin:-8px 0 16px;">{{ savedNotice }}</p>
-    <p v-if="actionError" class="help" :style="{ color: actionError.includes('queued') ? '#059669' : '#dc2626', margin: '-8px 0 16px' }">{{ actionError }}</p>
     <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
       Email delivery in progress to {{ sendDelivery?.recipientEmail ?? 'customer' }}.

@@ -50,7 +50,6 @@ export interface DashboardReviewQueue {
   portalRequests: number
   deletionRequests: number
   aiExtractions: number
-  managerApprovals: number
   total: number
 }
 
@@ -202,13 +201,10 @@ async function listNeedsAttention(db: Db, limit = 8): Promise<DashboardNeedsAtte
       const days = Math.floor((Date.now() - due.getTime()) / 86400000)
       sublabel = `Due ${row.dueDate.slice(5).replace('-', ' ')} · ${days} days late`
     }
-    else if (row.status === 'draft') {
+    else if (row.status === 'draft' || row.status === 'pending_manager_approval') {
       sublabel = row.creationSource === 'service_log' && row.serviceLogId
         ? 'From service log'
         : `Draft since ${row.invoiceDate}`
-    }
-    else if (row.status === 'pending_manager_approval') {
-      sublabel = 'Awaiting manager approval'
     }
 
     return {
@@ -298,20 +294,12 @@ async function reviewQueueCounts(db: Db): Promise<DashboardReviewQueue> {
   const portalRequestsN = await safeReviewCount('portal requests', () => countPendingPortalRequests(db))
   const deletionRequestsN = await safeReviewCount('deletion requests', () => countPendingDeletionRequests(db))
 
-  const managerApprovalsN = await safeReviewCount('manager approvals', async () => {
-    const [row] = await db.select({ value: count() })
-      .from(invoices)
-      .where(and(isNull(invoices.archivedAt), eq(invoices.status, 'pending_manager_approval')))
-    return Number(row?.value ?? 0)
-  })
-
   return {
     serviceLogs: serviceLogsN,
     portalRequests: portalRequestsN,
     deletionRequests: deletionRequestsN,
     aiExtractions: 0,
-    managerApprovals: managerApprovalsN,
-    total: serviceLogsN + portalRequestsN + deletionRequestsN + managerApprovalsN,
+    total: serviceLogsN + portalRequestsN + deletionRequestsN,
   }
 }
 
@@ -494,9 +482,9 @@ export async function getDashboard(
     primaryCta: { label: '+ New Invoice', href: '/invoices/new' },
     secondaryCta: {
       label: reviewQueue.total ? `Review queue · ${reviewQueue.total}` : 'Review queue',
-      href: reviewQueue.managerApprovals
-        ? '/invoices?status=pending_manager_approval'
-        : '/service-logs?queue=review',
+      href: reviewQueue.serviceLogs
+        ? '/service-logs?queue=review'
+        : '/portal-requests',
     },
     billing: {
       kpis: {

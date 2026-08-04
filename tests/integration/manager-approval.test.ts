@@ -1,4 +1,4 @@
-// Integration tests for manager invoice approval workflow (P3-13).
+// High-value invoices send directly — manager approval workflow removed.
 import { config } from 'dotenv'
 import { eq, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
@@ -7,8 +7,6 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { createCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
-  approveInvoice,
-  canManagerApproveInvoices,
   createInvoice,
   sendInvoice,
 } from '../../server/services/invoices.service'
@@ -27,7 +25,7 @@ const [anyUser] = await db.select({ id: users.id }).from(users).limit(1)
 const ACTOR = anyUser!.id
 
 const customer = await createCustomer(db, {
-  displayName: `MgrAppr-${stamp} Fleet`,
+  displayName: `DirectSend-${stamp} Fleet`,
   accountKind: 'fleet',
 }, ACTOR)
 
@@ -61,31 +59,16 @@ async function highValueDraft() {
   return invoice
 }
 
-describe('P3-13 manager approval workflow', () => {
-  it('routes high-value accountant approvals to pending_manager_approval', async () => {
+describe('invoice send without manager approval gate', () => {
+  it('lets staff send high-value drafts directly', async () => {
     const draft = await highValueDraft()
-    const { invoice } = await approveInvoice(db, draft.id, ACTOR, 'accountant')
-    expect(invoice.status).toBe('pending_manager_approval')
-    expect(invoice.submittedForApprovalAt).toBeTruthy()
-  })
-
-  it('lets managers send pending_manager_approval invoices', async () => {
-    const draft = await highValueDraft()
-    await approveInvoice(db, draft.id, ACTOR, 'accountant')
-    const sent = await sendAndDeliverInvoice(db, pool, draft.id, ACTOR, 'manager')
-    expect(sent.status).toBe('sent')
-    expect(sent.approvedAt).toBeTruthy()
-  })
-
-  it('lets managers send high-value drafts directly', async () => {
-    const draft = await highValueDraft()
-    const sent = await sendAndDeliverInvoice(db, pool, draft.id, ACTOR, 'manager')
+    const sent = await sendAndDeliverInvoice(db, pool, draft.id, ACTOR)
     expect(sent.status).toBe('sent')
   })
 
-  it('identifies manager approval account types', () => {
-    expect(canManagerApproveInvoices('manager')).toBe(true)
-    expect(canManagerApproveInvoices('admin')).toBe(true)
-    expect(canManagerApproveInvoices('accountant')).toBe(false)
+  it('queues send for high-value draft via sendInvoice', async () => {
+    const draft = await highValueDraft()
+    const { invoice } = await sendInvoice(db, draft.id, ACTOR)
+    expect(invoice.status).toBe('draft')
   })
 })

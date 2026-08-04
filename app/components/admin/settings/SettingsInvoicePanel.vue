@@ -20,7 +20,6 @@ const { data: templatesData, refresh: refreshTemplates } = useClientFetch<{
 
 const form = reactive({
   defaultPaymentTermsDays: 30,
-  managerApprovalThreshold: '5000.00',
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
 })
 
@@ -63,7 +62,13 @@ async function save() {
   try {
     await $fetch('/api/admin/settings/invoice', {
       method: 'PATCH',
-      body: { settings: { ...form } },
+      body: {
+        settings: {
+          defaultPaymentTermsDays: form.defaultPaymentTermsDays,
+          shopSuppliesPercent: settingsData.value?.settings.shopSuppliesPercent ?? '3.5',
+          lineItemAiRules: form.lineItemAiRules,
+        },
+      },
     })
     message.value = 'Invoice settings saved'
     await refresh()
@@ -148,11 +153,6 @@ async function onTemplateChange(ev: Event) {
         <label class="fld">
           Payment terms (days)
           <input v-model.number="form.defaultPaymentTermsDays" type="number" min="0" max="365">
-        </label>
-        <label class="fld">
-          Manager approval threshold ($)
-          <input v-model="form.managerApprovalThreshold" type="text" inputmode="decimal" placeholder="5000.00">
-          <span class="help">Invoices at or above this total require manager approval.</span>
         </label>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>

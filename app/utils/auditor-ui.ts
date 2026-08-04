@@ -7,6 +7,6 @@ export function auditorAccessBanner(): string {
 export function auditorInvoiceSub(status: string): string {
   if (status === 'sent') return 'Outstanding'
   if (status === 'paid') return 'Settled'
-  if (status === 'draft') return 'Draft — send when ready'
+  if (status === 'draft' || status === 'pending_manager_approval') return 'Draft — send when ready'
   return status.replace(/_/g, ' ')
 }

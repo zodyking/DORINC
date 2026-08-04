@@ -141,9 +141,6 @@ export async function saveInvoiceWorkspaceSettings(
     shopSuppliesPercent: settings.shopSuppliesPercent,
     lineItemAiRules: settings.lineItemAiRules.trim(),
   }, updatedBy)
-  await writeJson(db, MANAGER_APPROVAL_THRESHOLD_KEY, {
-    amount: settings.managerApprovalThreshold,
-  }, updatedBy)
   return settings
 }
 
