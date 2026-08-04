@@ -176,8 +176,8 @@ async function onTemplateChange(ev: Event) {
             placeholder="One rule per line…"
           />
           <span class="help">
-            The invoice description writer runs these checks once when you save or finalize.
-            Edit the rules for your shop, or restore the built-in defaults.
+            The line audit runs once when you save or finalize. It only flags lines with a clear rule violation —
+            acceptable shop wording should stay untouched. Edit rules for your shop, or restore the built-in defaults.
           </span>
         </label>
         <div class="settings-actions" style="margin-top:8px;">

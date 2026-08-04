@@ -34,6 +34,11 @@ import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } fr
 import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
+  applyConservativeAuditFilter,
+  buildLineAuditSystemPrompt,
+  buildLineAuditUserPrompt,
+} from '../../shared/invoice-line-audit.mjs'
+import {
   invoiceDescriptionContentSchema,
   invoiceLineAuditContentSchema,
   serviceLogExtractionContentSchema,
@@ -218,20 +223,6 @@ export async function enqueueInvoiceDescription(
   return { aiJob, workerJob }
 }
 
-function buildLineAuditSystemPrompt(rules: string): string {
-  return [
-    'You audit invoice line items before they are saved to a customer-facing invoice.',
-    'Return JSON only with this shape:',
-    '{ "lines": [ { "lineItemId": "uuid", "status": "ok"|"needs_fix", "issues": ["..."],',
-    '"suggested": { "description": "...", "quantity": "...", "unitPrice": "..." } | null } ] }',
-    'For each line provided, return exactly one entry with the same lineItemId.',
-    'Use status "ok" when the line already meets all rules — set suggested to null.',
-    'Use status "needs_fix" when any rule is violated — suggested must contain corrected description, quantity, and unitPrice as decimal strings.',
-    'Rules to enforce:',
-    rules,
-  ].join(' ')
-}
-
 export async function enqueueInvoiceLineAudit(
   db: Db,
   invoiceId: string,
@@ -398,6 +389,7 @@ function normalizeAuditLines(
     description: string
     quantity: string
     unitPrice: string
+    lineAmount?: string
   }>,
   aiLines: Array<Record<string, unknown>>,
 ): InvoiceLineAuditContent {
@@ -432,12 +424,13 @@ function normalizeAuditLines(
     }
   })
 
-  const issuesFound = normalized.filter(l => l.status === 'needs_fix').length
+  const filtered = applyConservativeAuditFilter(inputLines, normalized)
+  const issuesFound = filtered.filter(l => l.status === 'needs_fix').length
   return invoiceLineAuditContentSchema.parse({
     kind: 'invoice_line_audit',
     checkedAt: new Date().toISOString(),
-    lines: normalized,
-    summary: { totalLines: normalized.length, issuesFound },
+    lines: filtered,
+    summary: { totalLines: filtered.length, issuesFound },
   })
 }
 
@@ -465,11 +458,7 @@ export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
   const rules = String(job.inputPayload.rules ?? '')
   const complaint = job.inputPayload.complaint ? String(job.inputPayload.complaint) : null
 
-  const userPrompt = [
-    complaint ? `Invoice complaint context: ${complaint}` : '',
-    'Audit each line item below. Apply the rules strictly.',
-    JSON.stringify({ lines: inputLines }, null, 2),
-  ].filter(Boolean).join('\n\n')
+  const userPrompt = buildLineAuditUserPrompt(complaint, inputLines)
 
   let result
   try {

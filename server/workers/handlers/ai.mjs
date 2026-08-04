@@ -1,5 +1,10 @@
 // AI worker — service log extraction + invoice description (SPEC §10, P2-13/P2-14).
 import { decryptBuffer } from '../lib/encryption.mjs'
+import {
+  applyConservativeAuditFilter,
+  buildLineAuditSystemPrompt,
+  buildLineAuditUserPrompt,
+} from '../../../shared/invoice-line-audit.mjs'
 
 const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.
 Return JSON only with keys: complaint (customer symptoms, string or null), internalNotes (mechanic notes, string or null),
@@ -9,20 +14,6 @@ If a field is not visible, use null or omit draftLineItems. Do not invent prices
 const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, professional customer-facing invoice descriptions.
 Return JSON only: { "description": "..." }.
 Keep factual accuracy. Do not add parts, prices, quantities, or hours. Wording only — shorter is fine.`
-
-function buildLineAuditSystemPrompt(rules) {
-  return [
-    'You audit invoice line items before they are saved to a customer-facing invoice.',
-    'Return JSON only with this shape:',
-    '{ "lines": [ { "lineItemId": "uuid", "status": "ok"|"needs_fix", "issues": ["..."],',
-    '"suggested": { "description": "...", "quantity": "...", "unitPrice": "..." } | null } ] }',
-    'For each line provided, return exactly one entry with the same lineItemId.',
-    'Use status "ok" when the line already meets all rules — set suggested to null.',
-    'Use status "needs_fix" when any rule is violated — suggested must contain corrected description, quantity, and unitPrice as decimal strings.',
-    'Rules to enforce:',
-    rules,
-  ].join(' ')
-}
 
 function normalizeAuditLines(inputLines, aiLines) {
   const normalized = inputLines.map((input) => {
@@ -54,12 +45,13 @@ function normalizeAuditLines(inputLines, aiLines) {
       suggested,
     }
   })
-  const issuesFound = normalized.filter(l => l.status === 'needs_fix').length
+  const filtered = applyConservativeAuditFilter(inputLines, normalized)
+  const issuesFound = filtered.filter(l => l.status === 'needs_fix').length
   return {
     kind: 'invoice_line_audit',
     checkedAt: new Date().toISOString(),
-    lines: normalized,
-    summary: { totalLines: normalized.length, issuesFound },
+    lines: filtered,
+    summary: { totalLines: filtered.length, issuesFound },
   }
 }
 
@@ -315,11 +307,7 @@ async function processLineAudit(pool, aiJobId, job, input, settings) {
   const rules = String(input.rules ?? '')
   const complaint = input.complaint ? String(input.complaint) : null
 
-  const userPrompt = [
-    complaint ? `Invoice complaint context: ${complaint}` : '',
-    'Audit each line item below. Apply the rules strictly.',
-    JSON.stringify({ lines: inputLines }, null, 2),
-  ].filter(Boolean).join('\n\n')
+  const userPrompt = buildLineAuditUserPrompt(complaint, inputLines)
 
   const model = modelFor(settings, 'invoice_description')
   const result = await openRouterChat(settings.apiKey, model, [
