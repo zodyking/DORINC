@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       pageContext: body.pageContext,
       userId: user.id,
       imageDataUrl: body.imageDataUrl,
+      history: body.history,
     })
 
     await writeAudit(event, {

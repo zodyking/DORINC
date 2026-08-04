@@ -98,9 +98,15 @@ export const invoiceDescriptionContentSchema = z.object({
 
 export type InvoiceDescriptionContent = z.infer<typeof invoiceDescriptionContentSchema>
 
+export const platformHelpHistoryMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(4000),
+})
+
 export const platformHelpAskSchema = z.object({
   question: z.string().trim().min(1).max(2000),
   pageContext: z.string().trim().min(1).max(120).optional(),
+  history: z.array(platformHelpHistoryMessageSchema).max(40).optional(),
   /** Base64 data URL screenshot for vision-capable platform help models. */
   imageDataUrl: z.string().regex(
     /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=]+$/i,

@@ -57,7 +57,7 @@ export const HELP_ANSWERS: HelpAnswer[] = [
   { keys: ['backup', 'restore'], text: 'Encrypted backups can be run manually from <b>Control Panel → Backup</b>. Configure schedule and Google Drive from the control panel.' },
 ]
 
-const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, the customer portal, and system setup. Try asking about a specific page you are on, or tap a suggested question below.'
+const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, the customer portal, and system setup. Ask about a specific page or workflow you are working on.'
 
 const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small'])
 

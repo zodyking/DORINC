@@ -73,6 +73,18 @@ describe.sequential('P2-15 platform help assistant', () => {
     expect(result.capped).toBe(true)
   })
 
+  it('does not keyword-fallback for image questions when AI is unavailable', async () => {
+    const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    const result = await askPlatformHelp(db, {
+      question: 'what is this?',
+      userId: actorId,
+      imageDataUrl: tinyPng,
+    })
+
+    expect(result.answer.toLowerCase()).not.toContain('suggested question')
+    expect(result.answer.toLowerCase()).toMatch(/image|vision|analyze|cap/)
+  })
+
   it('uses OpenRouter when under spend cap (mocked)', async () => {
     await updateAiProviderSettings(db, { dailySpendCapUsd: 50 }, actorId)
 

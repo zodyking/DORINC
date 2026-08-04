@@ -16,17 +16,19 @@ import { BRAND_NAME } from '../../shared/brand'
 
 const HELP_SYSTEM_PROMPT = [
   `You are the ${BRAND_NAME} platform assistant.`,
-  'You ONLY explain how to use the application: navigation, workflows, roles, settings, and features.',
+  'You explain how to use the application: navigation, workflows, roles, settings, and features.',
   'You NEVER modify records, access customer or invoice data, or perform actions for the user.',
-  'Output clean HTML only (never markdown). Format every how-to answer like this:',
-  '1) Optional one-sentence intro wrapped in <p>...</p>.',
-  '2) Numbered steps in <ol><li>...</li></ol> for procedures (most answers).',
-  '3) Use <ul><li>...</li></ul> only for non-sequential options.',
-  '4) Wrap UI labels, menu paths, and button names in <b>...</b>.',
-  '5) Keep each <li> to one clear action. Complete every HTML tag — never truncate mid-tag.',
-  '6) If the user attaches a screenshot, describe what you see and give steps based on that screen.',
+  'Write like a helpful chat assistant — conversational but precise.',
+  'Output clean HTML only (never markdown). Use <p> for paragraphs, <ol>/<ul> for steps or lists, and <b> for UI labels.',
+  'If the user attaches an image, describe what you see first (text, logos, layout, labels), then answer their question.',
+  'If the image is not a DORINC screen, still describe it accurately and help however you can.',
   'If asked to change data, say you cannot do it, then list the exact clicks the user should make.',
 ].join(' ')
+
+export interface PlatformHelpHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 export interface PlatformHelpResult {
   answer: string
@@ -70,23 +72,42 @@ interface OpenRouterChatResponse {
   usage?: { prompt_tokens?: number, completion_tokens?: number, total_tokens?: number }
 }
 
-async function callOpenRouterHelp(
-  apiKey: string,
-  model: string,
+function buildUserTurn(
   question: string,
   pageContext?: string,
   imageDataUrl?: string,
-): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
-  const userText = pageContext
-    ? `Current page: ${pageContext}\n\nQuestion: ${question}`
-    : question
+): string | OpenRouterMessageContent[] {
+  const prefix = pageContext ? `Current page: ${pageContext}\n\n` : ''
+  const userText = `${prefix}${question}`
 
-  const userContent: string | OpenRouterMessageContent[] = imageDataUrl
-    ? [
-        { type: 'text', text: userText },
-        { type: 'image_url', image_url: { url: imageDataUrl } },
-      ]
-    : userText
+  if (!imageDataUrl) return userText
+
+  return [
+    { type: 'text', text: userText },
+    { type: 'image_url', image_url: { url: imageDataUrl } },
+  ]
+}
+
+async function callOpenRouterHelp(
+  apiKey: string,
+  model: string,
+  input: {
+    question: string
+    pageContext?: string
+    imageDataUrl?: string
+    history?: PlatformHelpHistoryMessage[]
+  },
+): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
+  const historyMessages = (input.history ?? []).slice(-40).map(row => ({
+    role: row.role,
+    content: row.content,
+  }))
+
+  const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }> = [
+    { role: 'system', content: HELP_SYSTEM_PROMPT },
+    ...historyMessages,
+    { role: 'user', content: buildUserTurn(input.question, input.pageContext, input.imageDataUrl) },
+  ]
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -98,12 +119,9 @@ async function callOpenRouterHelp(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1024,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: HELP_SYSTEM_PROMPT },
-        { role: 'user', content: userContent },
-      ],
+      max_tokens: input.imageDataUrl ? 2048 : 1024,
+      temperature: 0.3,
+      messages,
     }),
   })
 
@@ -123,9 +141,31 @@ async function callOpenRouterHelp(
   }
 }
 
+function visionFailureMessage(capped: boolean): string {
+  if (capped) {
+    return formatPlatformHelpHtml(
+      '<p>AI spend cap reached — I cannot analyze images until the cap resets or an admin raises it.</p>',
+    )
+  }
+  return formatPlatformHelpHtml(
+    '<p>I could not analyze that image.</p>'
+    + '<ol>'
+    + '<li>Open <b>Control Panel → AI</b>.</li>'
+    + '<li>Confirm AI is enabled and a vision model is selected for platform help (for example <b>GPT-4o</b> or <b>Claude Sonnet</b>).</li>'
+    + '<li>Click <b>Save AI settings</b>, then try again.</li>'
+    + '</ol>',
+  )
+}
+
 export async function askPlatformHelp(
   db: Db,
-  input: { question: string, pageContext?: string, userId: string, imageDataUrl?: string },
+  input: {
+    question: string
+    pageContext?: string
+    userId: string
+    imageDataUrl?: string
+    history?: PlatformHelpHistoryMessage[]
+  },
 ): Promise<PlatformHelpResult> {
   const settings = await getAiProviderSettings(db)
 
@@ -149,11 +189,11 @@ export async function askPlatformHelp(
         if (input.imageDataUrl && !(await modelSupportsVision(db, model))) {
           return {
             answer: formatPlatformHelpHtml(
-              '<p>This help model does not support screenshots.</p>'
+              '<p>This help model does not support image analysis.</p>'
               + '<ol>'
               + '<li>Open <b>Control Panel → AI</b>.</li>'
-              + '<li>Select a vision-capable model (for example <b>GPT-4o</b> or <b>Claude 3.5 Sonnet</b>) for platform help.</li>'
-              + '<li>Click <b>Save AI settings</b>, then try your screenshot again.</li>'
+              + '<li>Select a vision-capable model for platform help.</li>'
+              + '<li>Click <b>Save AI settings</b>, then send your image again.</li>'
               + '</ol>',
             ),
             source: 'fallback',
@@ -164,9 +204,7 @@ export async function askPlatformHelp(
         const { answer, promptTokens, completionTokens } = await callOpenRouterHelp(
           apiKey,
           model,
-          input.question,
-          input.pageContext,
-          input.imageDataUrl,
+          input,
         )
         const estimatedCostUsd = estimateTokenCostUsd(promptTokens, completionTokens)
         await logAiUsage(db, {
@@ -184,7 +222,21 @@ export async function askPlatformHelp(
       if (e instanceof AiSpendCapExceededError) {
         capped = true
       }
-      // Fall through to keyword matching on any AI failure
+      if (input.imageDataUrl) {
+        return {
+          answer: visionFailureMessage(capped),
+          source: 'fallback',
+          capped,
+        }
+      }
+    }
+  }
+
+  if (input.imageDataUrl) {
+    return {
+      answer: visionFailureMessage(capped),
+      source: 'fallback',
+      capped,
     }
   }
 

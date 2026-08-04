@@ -1,30 +1,35 @@
 <script setup lang="ts">
-// Floating platform help chat — staff app only (mockup: Platform help assistant / P2-15).
-import { initials } from '~/utils/users-ui'
+// Platform help chat — staff app (ChatGPT-style UI with vision support).
 import {
   helpContextLabel,
   helpPageKeyFromRoute,
-  helpSuggestionsForPage,
   isPlatformHelpWidgetVisible,
 } from '~/utils/platform-help-ui'
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'typing'
+  html: string
+  text: string
+  imageDataUrl?: string
+}
 
 const route = useRoute()
 const auth = useAuthStore()
 
 const panelOpen = ref(false)
-const booted = ref(false)
+const fullscreen = ref(false)
 const busy = ref(false)
 const input = ref('')
 const pendingImage = ref<{ dataUrl: string, name: string } | null>(null)
-const messages = ref<Array<{ role: 'user' | 'bot' | 'typing', html: string }>>([])
+const messages = ref<ChatMessage[]>([])
 
 const canUseHelp = computed(() => auth.can('ai.help.all'))
 const pageKey = computed(() => helpPageKeyFromRoute(route.path, route.query))
 const contextLabel = computed(() => helpContextLabel(pageKey.value))
-const suggestions = computed(() => helpSuggestionsForPage(pageKey.value))
 
 const displayName = computed(() => auth.user?.name ?? 'there')
-const avInitials = computed(() => initials(displayName.value))
+const storageKey = computed(() => `dorinc-help-chat-${auth.user?.id ?? 'anon'}`)
 
 const { data: helpStatus, refresh: refreshHelpStatus } = useClientFetch<{
   enabled: boolean
@@ -50,42 +55,83 @@ watch(widgetVisible, (visible) => {
   if (!visible) closePanel()
 })
 
-watch(pageKey, () => {
-  if (panelOpen.value && booted.value) {
-    // refresh suggestions when navigating with panel open
+function createId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function welcomeMessage(): ChatMessage {
+  const first = displayName.value.split(' ')[0]
+  const html = `<p>Hi ${first}! I'm your <b>Platform Assistant</b>. Ask how to use DORINC, or attach a screenshot and I'll walk you through what I see.</p>`
+  return {
+    id: 'welcome',
+    role: 'assistant',
+    html,
+    text: stripHtml(html),
   }
-})
+}
 
-watch(() => route.path, () => {
-  if (panelOpen.value) bootChat()
-})
+function loadStoredMessages() {
+  if (!import.meta.client) return
+  try {
+    const raw = sessionStorage.getItem(storageKey.value)
+    if (!raw) {
+      messages.value = [welcomeMessage()]
+      return
+    }
+    const parsed = JSON.parse(raw) as ChatMessage[]
+    messages.value = parsed.length ? parsed : [welcomeMessage()]
+  }
+  catch {
+    messages.value = [welcomeMessage()]
+  }
+}
 
-function bootChat() {
-  if (booted.value) return
-  booted.value = true
-  messages.value = [{
-    role: 'bot',
-    html: `Hi ${displayName.value.split(' ')[0]}! I'm the <b>Platform Assistant</b> — I answer questions about how to use DORINC (workflows, roles, settings). I don't edit invoice data. What can I help with?`,
-  }]
+function persistMessages() {
+  if (!import.meta.client) return
+  const toStore = messages.value.filter(m => m.role !== 'typing')
+  sessionStorage.setItem(storageKey.value, JSON.stringify(toStore))
 }
 
 function openPanel() {
   panelOpen.value = true
-  bootChat()
+  if (!messages.value.length) loadStoredMessages()
   nextTick(() => {
     const el = document.getElementById('help-input') as HTMLTextAreaElement | null
     el?.focus()
+    resizeInput()
   })
 }
 
 function closePanel() {
   panelOpen.value = false
+  fullscreen.value = false
   pendingImage.value = null
 }
 
 function togglePanel() {
   if (panelOpen.value) closePanel()
   else openPanel()
+}
+
+function toggleFullscreen() {
+  fullscreen.value = !fullscreen.value
+}
+
+function clearChatHistory() {
+  if (busy.value) return
+  messages.value = [welcomeMessage()]
+  pendingImage.value = null
+  input.value = ''
+  sessionStorage.removeItem(storageKey.value)
 }
 
 const imageInputRef = ref<HTMLInputElement | null>(null)
@@ -99,10 +145,7 @@ async function onImageSelected(event: Event) {
   if (!file) return
   if (!file.type.startsWith('image/')) return
   if (file.size > 4 * 1024 * 1024) {
-    messages.value.push({
-      role: 'bot',
-      html: '<p>Please attach an image under 4 MB.</p>',
-    })
+    pushAssistant('<p>Please attach an image under 4 MB.</p>')
     return
   }
   const dataUrl = await readFileAsDataUrl(file)
@@ -123,21 +166,53 @@ function clearPendingImage() {
   pendingImage.value = null
 }
 
-async function askQuestion(q: string) {
-  const text = q.trim()
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function pushAssistant(html: string) {
+  messages.value.push({
+    id: createId(),
+    role: 'assistant',
+    html,
+    text: stripHtml(html),
+  })
+  persistMessages()
+}
+
+function buildApiHistory() {
+  return messages.value
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && m.id !== 'welcome')
+    .slice(-40)
+    .map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.text,
+    }))
+}
+
+async function sendMessage() {
+  const text = input.value.trim()
   if ((!text && !pendingImage.value) || busy.value) return
 
-  const question = text || 'What do you see in this screenshot? How do I use this screen?'
-  const userHtml = pendingImage.value
-    ? `${escapeHtml(text || 'Screenshot attached')}<br><img src="${pendingImage.value.dataUrl}" alt="Attached screenshot" class="help-attached-img">`
+  const question = text || 'What is in this image? Describe it in detail and explain what it is used for.'
+  const imageDataUrl = pendingImage.value?.dataUrl
+  const userHtml = imageDataUrl
+    ? `${escapeHtml(text || 'What is in this image?')}<div class="help-attached-wrap"><img src="${imageDataUrl}" alt="Attached image" class="help-attached-img"></div>`
     : escapeHtml(question)
 
-  messages.value.push({ role: 'user', html: userHtml })
-  const imageDataUrl = pendingImage.value?.dataUrl
+  messages.value.push({
+    id: createId(),
+    role: 'user',
+    html: userHtml,
+    text: question,
+    imageDataUrl,
+  })
   input.value = ''
   pendingImage.value = null
-  messages.value.push({ role: 'typing', html: 'Thinking…' })
+  resizeInput()
+  messages.value.push({ id: 'typing', role: 'typing', html: '', text: '' })
   busy.value = true
+  scrollMessages()
 
   try {
     const res = await $fetch<{ answer: string, source: 'ai' | 'fallback', capped: boolean }>('/api/ai/help', {
@@ -146,21 +221,19 @@ async function askQuestion(q: string) {
         question,
         pageContext: contextLabel.value.replace('Viewing · ', ''),
         imageDataUrl,
+        history: buildApiHistory().slice(0, -1),
       },
     })
     messages.value = messages.value.filter(m => m.role !== 'typing')
     let answer = res.answer
-    if (res.capped && res.source === 'fallback') {
-      answer += '<br><br><small style="color:#94a3b8">AI spend cap reached — showing built-in help.</small>'
+    if (res.capped && res.source === 'fallback' && !imageDataUrl) {
+      answer += '<p><small>AI spend cap reached — showing built-in help where possible.</small></p>'
     }
-    messages.value.push({ role: 'bot', html: answer })
+    pushAssistant(answer)
   }
   catch {
     messages.value = messages.value.filter(m => m.role !== 'typing')
-    messages.value.push({
-      role: 'bot',
-      html: '<p>Sorry, I could not reach the help service. Try a suggested question below.</p>',
-    })
+    pushAssistant('<p>Sorry, I could not reach the help service. Check your connection and try again.</p>')
   }
   finally {
     busy.value = false
@@ -170,21 +243,18 @@ async function askQuestion(q: string) {
 
 function onSubmit(e: Event) {
   e.preventDefault()
-  askQuestion(input.value)
+  sendMessage()
 }
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    askQuestion(input.value)
+    sendMessage()
   }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 const msgsEl = ref<HTMLElement | null>(null)
+const inputEl = ref<HTMLTextAreaElement | null>(null)
 
 function scrollMessages() {
   nextTick(() => {
@@ -192,14 +262,31 @@ function scrollMessages() {
   })
 }
 
+function resizeInput() {
+  nextTick(() => {
+    const el = inputEl.value
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  })
+}
+
+watch(input, resizeInput)
+
 watch(panelOpen, (open) => {
   document.body.classList.toggle('help-on', open && widgetVisible.value)
   document.body.classList.toggle('help-chat-open', open)
+  document.body.classList.toggle('help-fullscreen', open && fullscreen.value)
+})
+
+watch(fullscreen, (on) => {
+  document.body.classList.toggle('help-fullscreen', on && panelOpen.value)
 })
 
 const { registerWidget, unregisterWidget } = usePlatformHelpShell()
 
 onMounted(() => {
+  loadStoredMessages()
   registerWidget({
     visible: widgetVisible,
     panelOpen,
@@ -209,7 +296,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   unregisterWidget()
-  document.body.classList.remove('help-on', 'help-chat-open')
+  document.body.classList.remove('help-on', 'help-chat-open', 'help-fullscreen')
 })
 </script>
 
@@ -217,50 +304,80 @@ onUnmounted(() => {
   <template v-if="widgetVisible">
     <div
       class="help-backdrop"
-      :class="{ open: panelOpen }"
+      :class="{ open: panelOpen, 'help-backdrop--fullscreen': fullscreen }"
       aria-hidden="true"
       @click="closePanel"
     />
-    <div class="help-widget help-widget--shell" aria-live="polite">
+    <div
+      class="help-widget help-widget--shell"
+      :class="{ 'help-widget--fullscreen': fullscreen && panelOpen }"
+      aria-live="polite"
+    >
       <div
-        class="help-panel"
-        :class="{ open: panelOpen }"
+        class="help-panel help-panel--chat"
+        :class="{ open: panelOpen, 'help-panel--fullscreen': fullscreen }"
         role="dialog"
         aria-label="Platform Assistant"
       >
-        <header class="hh">
-          <span class="av">✦</span>
-          <div class="info">
-            <b>Platform Assistant</b>
-            <small>{{ contextLabel }}</small>
+        <header class="help-head">
+          <div class="help-head-brand">
+            <span class="help-head-av" aria-hidden="true">✦</span>
+            <div class="help-head-title">
+              <b>Platform Assistant</b>
+              <small>{{ contextLabel }}</small>
+            </div>
           </div>
-          <button class="xbtn" aria-label="Close chat" @click="closePanel">
-            ✕
-          </button>
+          <div class="help-head-actions">
+            <button
+              type="button"
+              class="help-head-btn"
+              title="Clear chat"
+              aria-label="Clear chat history"
+              :disabled="busy"
+              @click="clearChatHistory"
+            >
+              🗑
+            </button>
+            <button
+              type="button"
+              class="help-head-btn"
+              :title="fullscreen ? 'Exit full screen' : 'Full screen'"
+              :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'"
+              @click="toggleFullscreen"
+            >
+              {{ fullscreen ? '⤡' : '⤢' }}
+            </button>
+            <button type="button" class="help-head-btn" aria-label="Close chat" @click="closePanel">
+              ✕
+            </button>
+          </div>
         </header>
-        <div ref="msgsEl" class="help-msgs">
-          <div
-            v-for="(msg, i) in messages"
-            :key="i"
-            class="help-msg"
-            :class="msg.role"
-          >
-            <span class="who">{{ msg.role === 'bot' || msg.role === 'typing' ? '✦' : avInitials }}</span>
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="bubble" v-html="msg.html" />
+
+        <div ref="msgsEl" class="help-msgs help-msgs--chat">
+          <div class="help-thread">
+            <div
+              v-for="msg in messages"
+              :key="msg.id"
+              class="help-row"
+              :class="msg.role"
+            >
+              <div v-if="msg.role !== 'user'" class="help-row-av" aria-hidden="true">
+                {{ msg.role === 'typing' ? '✦' : '✦' }}
+              </div>
+              <div class="help-row-body">
+                <div v-if="msg.role === 'user'" class="help-row-label">You</div>
+                <div v-else-if="msg.role === 'assistant'" class="help-row-label">Assistant</div>
+                <div v-if="msg.role === 'typing'" class="help-typing">
+                  <span /><span /><span />
+                </div>
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <div v-else class="help-row-content" v-html="msg.html" />
+              </div>
+            </div>
           </div>
         </div>
-        <div class="help-suggest">
-          <button
-            v-for="(q, i) in suggestions"
-            :key="i"
-            type="button"
-            @click="askQuestion(q)"
-          >
-            {{ q }}
-          </button>
-        </div>
-        <footer class="help-foot">
+
+        <footer class="help-composer">
           <div v-if="pendingImage" class="help-attach-preview">
             <img :src="pendingImage.dataUrl" alt="Attachment preview">
             <span>{{ pendingImage.name }}</span>
@@ -268,7 +385,7 @@ onUnmounted(() => {
               ✕
             </button>
           </div>
-          <form @submit="onSubmit">
+          <form class="help-composer-box" @submit="onSubmit">
             <input
               ref="imageInputRef"
               type="file"
@@ -277,33 +394,41 @@ onUnmounted(() => {
               tabindex="-1"
               @change="onImageSelected"
             >
-            <button
-              v-if="imageUploadEnabled"
-              type="button"
-              class="help-attach"
-              aria-label="Attach screenshot"
-              :disabled="busy"
-              @click="openImagePicker"
-            >
-              📷
-            </button>
             <textarea
               id="help-input"
+              ref="inputEl"
               v-model="input"
               rows="1"
-              placeholder="Ask how to use DORINC…"
+              placeholder="Message Platform Assistant…"
               aria-label="Message"
               :disabled="busy"
               @keydown="onKeydown"
+              @input="resizeInput"
             />
-            <button type="submit" class="send" aria-label="Send" :disabled="busy || (!input.trim() && !pendingImage)">
-              ↑
-            </button>
+            <div class="help-composer-toolbar">
+              <button
+                v-if="imageUploadEnabled"
+                type="button"
+                class="help-composer-icon"
+                aria-label="Attach image"
+                :disabled="busy"
+                @click="openImagePicker"
+              >
+                📎
+              </button>
+              <button
+                type="submit"
+                class="help-composer-send"
+                aria-label="Send message"
+                :disabled="busy || (!input.trim() && !pendingImage)"
+              >
+                ↑
+              </button>
+            </div>
           </form>
-          <div class="hint">
-            Answers are about this platform only · not invoice content
-            <span v-if="imageUploadEnabled"> · attach screenshots on vision models</span>
-          </div>
+          <p class="help-composer-note">
+            Platform help only · attach screenshots for vision models
+          </p>
         </footer>
       </div>
       <button
