@@ -190,7 +190,8 @@ watch(() => route.path, () => {
           :aria-expanded="shellPanelOpen"
           @click="toggleFromTopbar"
         >
-          {{ shellPanelOpen ? '✕' : '✦' }}
+          <span v-if="!shellPanelOpen" class="help-topbar-pulse" aria-hidden="true" />
+          <span class="help-topbar-icon">{{ shellPanelOpen ? '✕' : '✦' }}</span>
         </button>
         <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
         <span class="spacer" />
@@ -286,13 +287,5 @@ watch(() => route.path, () => {
 }
 .dm-header-btn svg {
   display: block;
-}
-.help-topbar-btn {
-  font-size: 17px;
-  font-weight: 700;
-  color: #4f46e5;
-}
-.help-topbar-btn.open {
-  color: #0f172a;
 }
 </style>
