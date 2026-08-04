@@ -499,11 +499,15 @@ export async function createInvoiceDraft(
     else {
       await syncInvoiceNumberSequence(db)
     }
+    const savepoint = `invoice_insert_${attempt}`
+    await db.execute(sql.raw(`SAVEPOINT ${savepoint}`))
     try {
       ;[row] = await db.insert(invoices).values(draftValues).returning()
+      await db.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`))
       break
     }
     catch (err) {
+      await db.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`))
       if (isPgUniqueViolation(err, 'invoices_invoice_number_unique') && attempt < 2) {
         continue
       }
