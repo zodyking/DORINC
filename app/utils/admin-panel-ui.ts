@@ -323,9 +323,13 @@ export function securitySectionTone(
 /** Parse optional USD spend cap from number input (v-model may bind number or string). */
 export function parseOptionalSpendCap(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return null
+    return value
+  }
   const trimmed = String(value).trim()
   if (!trimmed) return null
   const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : null
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return parsed
 }

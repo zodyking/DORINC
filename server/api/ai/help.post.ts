@@ -5,7 +5,6 @@ import { useDb } from '../../db/client'
 import { validateBody } from '../../utils/validate'
 import { platformHelpAskSchema } from '../../../shared/validators/ai'
 import { writeAudit } from '../../services/audit.service'
-import { apiError } from '../../utils/api-error'
 
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'ai.help.all')
@@ -13,15 +12,15 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, platformHelpAskSchema)
   const db = useDb()
 
-  try {
-    const result = await askPlatformHelp(db, {
-      question: body.question,
-      pageContext: body.pageContext,
-      userId: user.id,
-      imageDataUrls: body.imageDataUrls,
-      history: body.history,
-    })
+  const result = await askPlatformHelp(db, {
+    question: body.question,
+    pageContext: body.pageContext,
+    userId: user.id,
+    imageDataUrls: body.imageDataUrls,
+    history: body.history,
+  })
 
+  try {
     await writeAudit(event, {
       entityType: 'ai_help',
       entityId: user.id,
@@ -34,10 +33,10 @@ export default defineEventHandler(async (event) => {
       permissionKey: 'ai.help.all',
       riskLevel: 'normal',
     })
+  }
+  catch (auditErr) {
+    console.error('[ai-help] audit write failed:', (auditErr as Error).message)
+  }
 
-    return result
-  }
-  catch (err) {
-    throw apiError(event, 'UPSTREAM_ERROR', (err as Error).message || 'Help request failed')
-  }
+  return result
 })

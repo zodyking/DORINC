@@ -24,13 +24,18 @@ export default defineEventHandler(async (event) => {
   try {
     const { aiJob, workerJob } = await enqueueInvoiceDescription(db, id, lineId, actor.id)
 
-    await writeAudit(event, {
-      entityType: 'invoice',
-      entityId: id,
-      action: 'ai.description.queued',
-      afterData: { aiJobId: aiJob.id, workerJobId: workerJob.id, lineItemId: lineId },
-      permissionKey: 'ai.describe.all',
-    })
+    try {
+      await writeAudit(event, {
+        entityType: 'invoice',
+        entityId: id,
+        action: 'ai.description.queued',
+        afterData: { aiJobId: aiJob.id, workerJobId: workerJob.id, lineItemId: lineId },
+        permissionKey: 'ai.describe.all',
+      })
+    }
+    catch (auditErr) {
+      console.error('[ai-describe] audit write failed:', (auditErr as Error).message)
+    }
 
     return { aiJob, workerJob }
   }
@@ -44,6 +49,7 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'NOT_CONFIGURED') throw apiError(event, 'CONFLICT', 'AI is not configured')
       if (err.code === 'FEATURE_DISABLED') throw apiError(event, 'CONFLICT', err.message)
       if (err.code === 'LINE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Line item not found')
+      if (err.code === 'SPEND_CAP_EXCEEDED') throw apiError(event, 'CONFLICT', err.message)
     }
     throw err
   }

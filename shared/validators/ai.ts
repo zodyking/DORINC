@@ -141,6 +141,38 @@ export const platformHelpHistoryMessageSchema = z.object({
   content: z.string().trim().min(1).max(4000),
 })
 
+function sanitizePlatformHelpHistory(
+  history: z.infer<typeof platformHelpHistoryMessageSchema>[] | undefined,
+) {
+  if (!history?.length) return undefined
+  const trimmed = history
+    .map(row => ({
+      role: row.role,
+      content: row.content.trim().slice(0, 4000),
+    }))
+    .filter(row => row.content.length > 0)
+    .slice(-40)
+  return trimmed.length ? trimmed : undefined
+}
+
+const platformHelpHistoryInputSchema = z.preprocess(
+  (val) => {
+    if (!Array.isArray(val)) return val
+    return val
+      .map((row: unknown) => {
+        if (!row || typeof row !== 'object') return row
+        const item = row as { role?: string, content?: string }
+        return {
+          role: item.role,
+          content: typeof item.content === 'string' ? item.content.trim().slice(0, 4000) : item.content,
+        }
+      })
+      .filter((row: { content?: string }) => typeof row.content === 'string' && row.content.length > 0)
+      .slice(-40)
+  },
+  z.array(platformHelpHistoryMessageSchema).max(40).optional(),
+)
+
 const platformHelpImageDataUrlSchema = z.string().regex(
   /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=]+$/i,
   'Invalid image attachment',
@@ -148,8 +180,11 @@ const platformHelpImageDataUrlSchema = z.string().regex(
 
 export const platformHelpAskSchema = z.object({
   question: z.string().trim().min(1).max(2000),
-  pageContext: z.string().trim().min(1).max(120).optional(),
-  history: z.array(platformHelpHistoryMessageSchema).max(40).optional(),
+  pageContext: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() ? val.trim() : undefined),
+    z.string().trim().min(1).max(120).optional(),
+  ),
+  history: platformHelpHistoryInputSchema,
   /** Base64 data URL screenshot for vision-capable platform help models. */
   imageDataUrl: platformHelpImageDataUrlSchema.optional(),
   /** Multiple screenshots for vision-capable platform help models. */
@@ -163,7 +198,7 @@ export const platformHelpAskSchema = z.object({
   return {
     question: body.question,
     pageContext: body.pageContext,
-    history: body.history,
+    history: sanitizePlatformHelpHistory(body.history),
     imageDataUrls,
   }
 })
