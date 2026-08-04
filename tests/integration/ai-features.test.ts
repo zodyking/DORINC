@@ -15,7 +15,6 @@ import { users } from '../../server/db/schema/auth'
 import { workerJobs } from '../../server/db/schema/jobs'
 import {
   enqueueInvoiceDescription,
-  enqueueInvoiceLineAudit,
   executeInvoiceLineAudit,
   enqueueServiceLogExtraction,
   reviewAiSuggestion,
