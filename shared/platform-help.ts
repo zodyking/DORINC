@@ -59,7 +59,7 @@ export const HELP_ANSWERS: HelpAnswer[] = [
 
 const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, the customer portal, and system setup. Ask about a specific page or workflow you are working on.'
 
-const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small'])
+const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small', 'h4', 'h3', 'em'])
 
 /** Normalize AI/fallback help answers into clean, safe HTML with numbered steps. */
 export function formatPlatformHelpHtml(raw: string): string {
@@ -68,6 +68,10 @@ export function formatPlatformHelpHtml(raw: string): string {
 
   // Drop truncated HTML tags (common when max_tokens cuts off mid-response).
   text = text.replace(/<[^>]*$/, '')
+
+  // Markdown headings → section headers.
+  text = text.replace(/^#{1,4}\s+(.+)$/gm, (_, title: string) => `<h4>${title.trim()}</h4>`)
+  text = text.replace(/^\*\*(.+?)\*\*\s*$/gm, (_, title: string) => `<h4>${title.trim()}</h4>`)
 
   // Convert markdown-style numbered steps to an ordered list.
   if (!/<ol[\s>]/i.test(text) && /^\s*\d+\.\s+/m.test(text)) {

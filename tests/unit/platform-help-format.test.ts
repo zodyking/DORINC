@@ -15,6 +15,12 @@ describe('formatPlatformHelpHtml', () => {
     expect(html).toBe('<p>Complete the form and click')
   })
 
+  it('converts markdown headings to h4 section headers', () => {
+    const html = formatPlatformHelpHtml('### Steps\n1. Open Customers\n2. Save')
+    expect(html).toContain('<h4>Steps</h4>')
+    expect(html).toContain('<ol>')
+  })
+
   it('removes disallowed tags but keeps allowed formatting', () => {
     const html = formatPlatformHelpHtml('<p>Go to <b>Customers</b></p><script>alert(1)</script>')
     expect(html).toContain('<b>Customers</b>')
