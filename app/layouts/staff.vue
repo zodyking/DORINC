@@ -181,8 +181,6 @@ watch(() => route.path, () => {
       <!-- TOPBAR -->
       <header class="topbar">
         <button class="burger" aria-label="Open navigation" @click="sidebarOpen = !sidebarOpen">☰</button>
-        <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
-        <span class="spacer" />
         <button
           v-if="shellWidgetVisible"
           type="button"
@@ -194,6 +192,8 @@ watch(() => route.path, () => {
         >
           {{ shellPanelOpen ? '✕' : '✦' }}
         </button>
+        <span class="crumb">Workspace / <b>{{ crumb }}</b></span>
+        <span class="spacer" />
         <div v-if="canUseMessages" class="notif-wrap">
           <button
             class="iconbtn dm-header-btn"
