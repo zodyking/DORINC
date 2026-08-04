@@ -211,6 +211,7 @@ export interface OpenRouterModelOption {
   label: string
   promptPerMillion: number | null
   completionPerMillion: number | null
+  supportsVision: boolean
 }
 
 interface OpenRouterModelRow {
@@ -229,6 +230,49 @@ function formatUsdPerMillion(perToken: string | undefined): { text: string, perM
   if (perMillion < 0.01) return { text: `$${perMillion.toFixed(4)}`, perMillion }
   if (perMillion < 1) return { text: `$${perMillion.toFixed(3)}`, perMillion }
   return { text: `$${perMillion.toFixed(2)}`, perMillion }
+}
+
+function isVisionCapableModel(row: OpenRouterModelRow): boolean {
+  const inputs = row.architecture?.input_modalities ?? []
+  if (inputs.some(m => m.toLowerCase() === 'image')) return true
+  const modality = row.architecture?.modality?.toLowerCase() ?? ''
+  return modality.includes('image') || modality.includes('multimodal')
+}
+
+function modelIdVisionHeuristic(modelId: string): boolean {
+  const id = modelId.toLowerCase()
+  return id.includes('gpt-4o')
+    || id.includes('gpt-4-turbo')
+    || id.includes('claude-3')
+    || id.includes('claude-sonnet-4')
+    || id.includes('claude-opus-4')
+    || id.includes('gemini')
+    || id.includes('pixtral')
+    || id.includes('llava')
+    || id.includes('qwen-vl')
+    || id.includes('vision')
+}
+
+let visionCapabilityCache: { modelId: string, supportsVision: boolean, at: number } | null = null
+const VISION_CACHE_MS = 60 * 60 * 1000
+
+export async function modelSupportsVision(db: Db, modelId: string): Promise<boolean> {
+  if (visionCapabilityCache
+    && visionCapabilityCache.modelId === modelId
+    && Date.now() - visionCapabilityCache.at < VISION_CACHE_MS) {
+    return visionCapabilityCache.supportsVision
+  }
+
+  try {
+    const models = await listOpenRouterModels(await resolveOpenRouterApiKey(db))
+    const row = models.find(m => m.id === modelId)
+    const supportsVision = row?.supportsVision ?? modelIdVisionHeuristic(modelId)
+    visionCapabilityCache = { modelId, supportsVision, at: Date.now() }
+    return supportsVision
+  }
+  catch {
+    return modelIdVisionHeuristic(modelId)
+  }
 }
 
 function isTextCapableModel(row: OpenRouterModelRow): boolean {
@@ -265,6 +309,7 @@ function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
     label: `${name} — ${cost}`,
     promptPerMillion: prompt.perMillion,
     completionPerMillion: completion.perMillion,
+    supportsVision: isVisionCapableModel(row),
   }
 }
 

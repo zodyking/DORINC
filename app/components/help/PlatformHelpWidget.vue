@@ -15,6 +15,7 @@ const panelOpen = ref(false)
 const booted = ref(false)
 const busy = ref(false)
 const input = ref('')
+const pendingImage = ref<{ dataUrl: string, name: string } | null>(null)
 const messages = ref<Array<{ role: 'user' | 'bot' | 'typing', html: string }>>([])
 
 const canUseHelp = computed(() => auth.can('ai.help.all'))
@@ -25,7 +26,12 @@ const suggestions = computed(() => helpSuggestionsForPage(pageKey.value))
 const displayName = computed(() => auth.user?.name ?? 'there')
 const avInitials = computed(() => initials(displayName.value))
 
-const { data: helpStatus, refresh: refreshHelpStatus } = useClientFetch<{ enabled: boolean, aiAvailable: boolean, capped: boolean }>(
+const { data: helpStatus, refresh: refreshHelpStatus } = useClientFetch<{
+  enabled: boolean
+  aiAvailable: boolean
+  capped: boolean
+  imageUploadEnabled: boolean
+}>(
   '/api/ai/help-status',
   { immediate: false },
 )
@@ -37,6 +43,8 @@ watch([() => auth.loaded, canUseHelp], ([loaded, can]) => {
 const widgetVisible = computed(() =>
   isPlatformHelpWidgetVisible(canUseHelp.value, helpStatus.value),
 )
+
+const imageUploadEnabled = computed(() => Boolean(helpStatus.value?.imageUploadEnabled))
 
 watch(widgetVisible, (visible) => {
   if (!visible) closePanel()
@@ -72,6 +80,7 @@ function openPanel() {
 
 function closePanel() {
   panelOpen.value = false
+  pendingImage.value = null
 }
 
 function togglePanel() {
@@ -79,12 +88,54 @@ function togglePanel() {
   else openPanel()
 }
 
+const imageInputRef = ref<HTMLInputElement | null>(null)
+
+function openImagePicker() {
+  imageInputRef.value?.click()
+}
+
+async function onImageSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) return
+  if (file.size > 4 * 1024 * 1024) {
+    messages.value.push({
+      role: 'bot',
+      html: '<p>Please attach an image under 4 MB.</p>',
+    })
+    return
+  }
+  const dataUrl = await readFileAsDataUrl(file)
+  pendingImage.value = { dataUrl, name: file.name }
+  ;(event.target as HTMLInputElement).value = ''
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function clearPendingImage() {
+  pendingImage.value = null
+}
+
 async function askQuestion(q: string) {
   const text = q.trim()
-  if (!text || busy.value) return
+  if ((!text && !pendingImage.value) || busy.value) return
 
-  messages.value.push({ role: 'user', html: escapeHtml(text) })
+  const question = text || 'What do you see in this screenshot? How do I use this screen?'
+  const userHtml = pendingImage.value
+    ? `${escapeHtml(text || 'Screenshot attached')}<br><img src="${pendingImage.value.dataUrl}" alt="Attached screenshot" class="help-attached-img">`
+    : escapeHtml(question)
+
+  messages.value.push({ role: 'user', html: userHtml })
+  const imageDataUrl = pendingImage.value?.dataUrl
   input.value = ''
+  pendingImage.value = null
   messages.value.push({ role: 'typing', html: 'Thinking…' })
   busy.value = true
 
@@ -92,8 +143,9 @@ async function askQuestion(q: string) {
     const res = await $fetch<{ answer: string, source: 'ai' | 'fallback', capped: boolean }>('/api/ai/help', {
       method: 'POST',
       body: {
-        question: text,
+        question,
         pageContext: contextLabel.value.replace('Viewing · ', ''),
+        imageDataUrl,
       },
     })
     messages.value = messages.value.filter(m => m.role !== 'typing')
@@ -107,7 +159,7 @@ async function askQuestion(q: string) {
     messages.value = messages.value.filter(m => m.role !== 'typing')
     messages.value.push({
       role: 'bot',
-      html: 'Sorry, I could not reach the help service. Try a suggested question below.',
+      html: '<p>Sorry, I could not reach the help service. Try a suggested question below.</p>',
     })
   }
   finally {
@@ -198,7 +250,32 @@ onUnmounted(() => {
           </button>
         </div>
         <footer class="help-foot">
+          <div v-if="pendingImage" class="help-attach-preview">
+            <img :src="pendingImage.dataUrl" alt="Attachment preview">
+            <span>{{ pendingImage.name }}</span>
+            <button type="button" class="help-attach-clear" aria-label="Remove attachment" @click="clearPendingImage">
+              ✕
+            </button>
+          </div>
           <form @submit="onSubmit">
+            <input
+              ref="imageInputRef"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              class="sr-only"
+              tabindex="-1"
+              @change="onImageSelected"
+            >
+            <button
+              v-if="imageUploadEnabled"
+              type="button"
+              class="help-attach"
+              aria-label="Attach screenshot"
+              :disabled="busy"
+              @click="openImagePicker"
+            >
+              📷
+            </button>
             <textarea
               id="help-input"
               v-model="input"
@@ -208,12 +285,13 @@ onUnmounted(() => {
               :disabled="busy"
               @keydown="onKeydown"
             />
-            <button type="submit" class="send" aria-label="Send" :disabled="busy || !input.trim()">
+            <button type="submit" class="send" aria-label="Send" :disabled="busy || (!input.trim() && !pendingImage)">
               ↑
             </button>
           </form>
           <div class="hint">
             Answers are about this platform only · not invoice content
+            <span v-if="imageUploadEnabled"> · attach screenshots on vision models</span>
           </div>
         </footer>
       </div>
@@ -230,3 +308,17 @@ onUnmounted(() => {
     </div>
   </template>
 </template>
+
+<style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>

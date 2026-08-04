@@ -39,7 +39,8 @@ export const HELP_PAGE_LABELS: Record<string, string> = {
 
 export const HELP_ANSWERS: HelpAnswer[] = [
   { keys: ['attention', 'needs', 'review queue', 'dashboard'], text: 'The <b>Needs attention</b> table on your dashboard lists overdue invoices and drafts. The right sidebar shows your <b>Review queue</b> — service logs, portal requests, and AI extractions waiting for action. Click any row to jump straight there.' },
-  { keys: ['create', 'new invoice', 'wizard'], text: 'Go to <b>Invoices → New Invoice</b> or click <b>+ New Invoice</b> on the dashboard. The wizard lets you pick customer & vehicle, add line items, then review. You can <b>Save draft</b> at any step — the invoice keeps its number and you can resume from Invoices or the Editor.' },
+  { keys: ['create', 'new invoice', 'wizard'], text: '<p>To create an invoice:</p><ol><li>Go to <b>Invoices → New Invoice</b> or click <b>+ New Invoice</b> on the dashboard.</li><li>Choose customer and vehicle, then add line items.</li><li>Review totals and click <b>Save draft</b> or <b>Finalize &amp; send</b>.</li></ol>' },
+  { keys: ['add customer', 'create customer', 'new customer'], text: '<p>I cannot add customers for you, but you can in the UI:</p><ol><li>Open <b>Customers</b> from the left navigation.</li><li>Click <b>New Customer</b> (or <b>Add Customer</b>).</li><li>Complete the required fields (name, contact info, billing/shipping, payment terms, price list).</li><li>Click <b>Save</b>.</li></ol>' },
   { keys: ['finalize', 'send', 'lock'], text: '<b>Finalize & send</b> locks the invoice, generates the official PDF, and notifies the customer by email and portal. After finalize, line totals cannot be edited without creating a revision.' },
   { keys: ['draft', 'save'], text: 'Drafts can be saved at any wizard step or from the Invoice Editor. Saving assigns an invoice number and updates totals. Find drafts in <b>Invoices</b> with the Draft status filter.' },
   { keys: ['payment', 'record', 'balance'], text: 'Open the invoice detail page and click <b>Record payment</b>. Enter amount, method, and date. Amounts over the open balance are rejected.' },
@@ -58,6 +59,79 @@ export const HELP_ANSWERS: HelpAnswer[] = [
 
 const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, the customer portal, and system setup. Try asking about a specific page you are on, or tap a suggested question below.'
 
+const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small'])
+
+/** Normalize AI/fallback help answers into clean, safe HTML with numbered steps. */
+export function formatPlatformHelpHtml(raw: string): string {
+  let text = raw.trim()
+  if (!text) return ''
+
+  // Drop truncated HTML tags (common when max_tokens cuts off mid-response).
+  text = text.replace(/<[^>]*$/, '')
+
+  // Convert markdown-style numbered steps to an ordered list.
+  if (!/<ol[\s>]/i.test(text) && /^\s*\d+\.\s+/m.test(text)) {
+    const lines = text.split(/\n+/)
+    const parts: string[] = []
+    let inList = false
+    for (const line of lines) {
+      const step = line.match(/^\s*\d+\.\s+(.*)$/)
+      if (step) {
+        if (!inList) {
+          parts.push('<ol>')
+          inList = true
+        }
+        parts.push(`<li>${step[1]!.trim()}</li>`)
+      }
+      else {
+        if (inList) {
+          parts.push('</ol>')
+          inList = false
+        }
+        const trimmed = line.trim()
+        if (trimmed) parts.push(`<p>${trimmed}</p>`)
+      }
+    }
+    if (inList) parts.push('</ol>')
+    text = parts.join('')
+  }
+
+  // Convert markdown bullet lists when no HTML list present.
+  if (!/<ul[\s>]/i.test(text) && /^\s*[-*•]\s+/m.test(text)) {
+    const lines = text.split(/\n+/)
+    const parts: string[] = []
+    let inList = false
+    for (const line of lines) {
+      const bullet = line.match(/^\s*[-*•]\s+(.*)$/)
+      if (bullet) {
+        if (!inList) {
+          parts.push('<ul>')
+          inList = true
+        }
+        parts.push(`<li>${bullet[1]!.trim()}</li>`)
+      }
+      else {
+        if (inList) {
+          parts.push('</ul>')
+          inList = false
+        }
+        const trimmed = line.trim()
+        if (trimmed && !/^<\/?(?:p|ol|ul|li)/i.test(trimmed)) parts.push(`<p>${trimmed}</p>`)
+        else if (trimmed) parts.push(trimmed)
+      }
+    }
+    if (inList) parts.push('</ul>')
+    text = parts.join('')
+  }
+
+  text = text.replace(/<\/?([a-z0-9]+)\b[^>]*>/gi, (match, name: string) =>
+    ALLOWED_HELP_TAG_NAMES.has(name.toLowerCase()) ? match : '',
+  )
+
+  text = text.replace(/<script[\s\S]*?<\/script>/gi, '')
+  return text.trim()
+}
+
 /** Keyword scoring fallback when AI is unavailable or capped. */
 export function matchPlatformHelpAnswer(question: string): string {
   const lower = question.toLowerCase()
@@ -74,6 +148,11 @@ export function matchPlatformHelpAnswer(question: string): string {
     }
   }
   return best?.text ?? DEFAULT_FALLBACK
+}
+
+/** Apply list formatting to fallback answers for consistent chat rendering. */
+export function formatPlatformHelpAnswer(raw: string): string {
+  return formatPlatformHelpHtml(raw)
 }
 
 export function helpSuggestionsForPage(pageKey: string): string[] {

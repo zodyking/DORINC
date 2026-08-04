@@ -1279,6 +1279,36 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
   background:#fff; border:1px solid #e2e8f0; color:#334155;
   border-top-left-radius:4px;
 }
+.help-msg.bot .bubble p{ margin:0 0 8px; }
+.help-msg.bot .bubble p:last-child{ margin-bottom:0; }
+.help-msg.bot .bubble ol,
+.help-msg.bot .bubble ul{
+  margin:0 0 8px 1.15rem; padding:0;
+}
+.help-msg.bot .bubble li{ margin:0 0 6px; }
+.help-msg.bot .bubble li:last-child{ margin-bottom:0; }
+.help-msg.user .bubble :deep(.help-attached-img){
+  display:block; max-width:100%; margin-top:8px; border-radius:8px; border:1px solid rgba(255,255,255,.25);
+}
+.help-foot .help-attach-preview{
+  display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:8px 10px;
+  background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+}
+.help-foot .help-attach-preview img{
+  width:44px; height:44px; object-fit:cover; border-radius:8px; flex:none;
+}
+.help-foot .help-attach-preview span{
+  flex:1; min-width:0; font-size:12px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.help-foot .help-attach-clear{
+  appearance:none; border:none; background:transparent; color:#94a3b8; cursor:pointer; font-size:14px;
+}
+.help-foot .help-attach{
+  appearance:none; border:1px solid #e2e8f0; background:#f8fafc; color:#475569;
+  width:42px; height:42px; border-radius:10px; cursor:pointer; font-size:18px; flex:none;
+}
+.help-foot .help-attach:hover{ background:#eef2ff; border-color:#c7d2fe; }
+.help-foot .help-attach:disabled{ opacity:.45; cursor:not-allowed; }
 .help-msg.user .bubble{
   background:#4f46e5; color:#fff; border-top-right-radius:4px;
 }

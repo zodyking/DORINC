@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
       question: body.question,
       pageContext: body.pageContext,
       userId: user.id,
+      imageDataUrl: body.imageDataUrl,
     })
 
     await writeAudit(event, {
