@@ -6,13 +6,23 @@ import {
   isPlatformHelpWidgetVisible,
 } from '~/utils/platform-help-ui'
 
+interface PendingAttachment {
+  id: string
+  dataUrl: string
+  name: string
+  size: number
+}
+
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'typing'
   html: string
   text: string
-  imageDataUrl?: string
+  imageDataUrls?: string[]
 }
+
+const MAX_ATTACHMENTS = 4
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -21,7 +31,8 @@ const panelOpen = ref(false)
 const fullscreen = ref(false)
 const busy = ref(false)
 const input = ref('')
-const pendingImage = ref<{ dataUrl: string, name: string } | null>(null)
+const pendingAttachments = ref<PendingAttachment[]>([])
+const attachError = ref('')
 const messages = ref<ChatMessage[]>([])
 
 const canUseHelp = computed(() => auth.can('ai.help.all'))
@@ -50,6 +61,7 @@ const widgetVisible = computed(() =>
 )
 
 const imageUploadEnabled = computed(() => Boolean(helpStatus.value?.imageUploadEnabled))
+const canAddAttachments = computed(() => pendingAttachments.value.length < MAX_ATTACHMENTS)
 
 watch(widgetVisible, (visible) => {
   if (!visible) closePanel()
@@ -66,6 +78,12 @@ function stripHtml(html: string): string {
     .replace(/<[^>]+>/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function welcomeMessage(): ChatMessage {
@@ -114,7 +132,8 @@ function openPanel() {
 function closePanel() {
   panelOpen.value = false
   fullscreen.value = false
-  pendingImage.value = null
+  pendingAttachments.value = []
+  attachError.value = ''
 }
 
 function togglePanel() {
@@ -129,7 +148,8 @@ function toggleFullscreen() {
 function clearChatHistory() {
   if (busy.value) return
   messages.value = [welcomeMessage()]
-  pendingImage.value = null
+  pendingAttachments.value = []
+  attachError.value = ''
   input.value = ''
   sessionStorage.removeItem(storageKey.value)
 }
@@ -137,20 +157,46 @@ function clearChatHistory() {
 const imageInputRef = ref<HTMLInputElement | null>(null)
 
 function openImagePicker() {
+  if (!canAddAttachments.value || busy.value) return
   imageInputRef.value?.click()
 }
 
 async function onImageSelected(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/')) return
-  if (file.size > 4 * 1024 * 1024) {
-    pushAssistant('<p>Please attach an image under 4 MB.</p>')
-    return
+  const inputEl = event.target as HTMLInputElement
+  const files = [...(inputEl.files ?? [])]
+  inputEl.value = ''
+  if (!files.length) return
+
+  attachError.value = ''
+  const errors: string[] = []
+
+  for (const file of files) {
+    if (pendingAttachments.value.length >= MAX_ATTACHMENTS) {
+      errors.push(`Up to ${MAX_ATTACHMENTS} attachments allowed`)
+      break
+    }
+    if (!file.type.startsWith('image/')) {
+      errors.push(`${file.name} is not an image`)
+      continue
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      errors.push(`${file.name} must be under 4 MB`)
+      continue
+    }
+    if (pendingAttachments.value.some(item => item.name === file.name && item.size === file.size)) {
+      continue
+    }
+
+    const dataUrl = await readFileAsDataUrl(file)
+    pendingAttachments.value.push({
+      id: createId(),
+      dataUrl,
+      name: file.name,
+      size: file.size,
+    })
   }
-  const dataUrl = await readFileAsDataUrl(file)
-  pendingImage.value = { dataUrl, name: file.name }
-  ;(event.target as HTMLInputElement).value = ''
+
+  if (errors.length) attachError.value = errors.join(' · ')
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -162,12 +208,24 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
-function clearPendingImage() {
-  pendingImage.value = null
+function removeAttachment(id: string) {
+  pendingAttachments.value = pendingAttachments.value.filter(item => item.id !== id)
+  attachError.value = ''
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function buildUserMessageHtml(text: string, imageDataUrls: string[]): string {
+  const parts = [escapeHtml(text)]
+  if (imageDataUrls.length) {
+    const thumbs = imageDataUrls.map((url, index) =>
+      `<img src="${url}" alt="Attached image ${index + 1}" class="help-attached-img">`,
+    ).join('')
+    parts.push(`<div class="help-attached-wrap">${thumbs}</div>`)
+  }
+  return parts.join('')
 }
 
 function pushAssistant(html: string) {
@@ -192,23 +250,24 @@ function buildApiHistory() {
 
 async function sendMessage() {
   const text = input.value.trim()
-  if ((!text && !pendingImage.value) || busy.value) return
+  const attachments = pendingAttachments.value.slice()
+  if ((!text && !attachments.length) || busy.value) return
 
-  const question = text || 'What is in this image? Describe it in detail and explain what it is used for.'
-  const imageDataUrl = pendingImage.value?.dataUrl
-  const userHtml = imageDataUrl
-    ? `${escapeHtml(text || 'What is in this image?')}<div class="help-attached-wrap"><img src="${imageDataUrl}" alt="Attached image" class="help-attached-img"></div>`
-    : escapeHtml(question)
+  const imageDataUrls = attachments.map(item => item.dataUrl)
+  const question = text || (attachments.length > 1
+    ? 'What is in these images? Describe them and explain how they relate to using DORINC.'
+    : 'What is in this image? Describe it in detail and explain what it is used for.')
 
   messages.value.push({
     id: createId(),
     role: 'user',
-    html: userHtml,
+    html: buildUserMessageHtml(question, imageDataUrls),
     text: question,
-    imageDataUrl,
+    imageDataUrls,
   })
   input.value = ''
-  pendingImage.value = null
+  pendingAttachments.value = []
+  attachError.value = ''
   resizeInput()
   messages.value.push({ id: 'typing', role: 'typing', html: '', text: '' })
   busy.value = true
@@ -220,13 +279,13 @@ async function sendMessage() {
       body: {
         question,
         pageContext: contextLabel.value.replace('Viewing · ', ''),
-        imageDataUrl,
+        imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
         history: buildApiHistory().slice(0, -1),
       },
     })
     messages.value = messages.value.filter(m => m.role !== 'typing')
     let answer = res.answer
-    if (res.capped && res.source === 'fallback' && !imageDataUrl) {
+    if (res.capped && res.source === 'fallback' && !imageDataUrls.length) {
       answer += '<p><small>AI spend cap reached — showing built-in help where possible.</small></p>'
     }
     pushAssistant(answer)
@@ -378,13 +437,34 @@ onUnmounted(() => {
         </div>
 
         <footer class="help-composer">
-          <div v-if="pendingImage" class="help-attach-preview">
-            <img :src="pendingImage.dataUrl" alt="Attachment preview">
-            <span>{{ pendingImage.name }}</span>
-            <button type="button" class="help-attach-clear" aria-label="Remove attachment" @click="clearPendingImage">
-              ✕
-            </button>
+          <div
+            v-if="pendingAttachments.length"
+            class="help-compose-attachments"
+            aria-label="Pending attachments"
+          >
+            <div
+              v-for="attachment in pendingAttachments"
+              :key="attachment.id"
+              class="help-compose-chip"
+            >
+              <img
+                class="help-compose-chip-thumb"
+                :src="attachment.dataUrl"
+                :alt="attachment.name"
+              >
+              <span class="help-compose-chip-name" :title="attachment.name">{{ attachment.name }}</span>
+              <small class="help-compose-chip-size">{{ formatFileSize(attachment.size) }}</small>
+              <button
+                type="button"
+                class="help-compose-chip-remove"
+                :aria-label="`Remove ${attachment.name}`"
+                @click="removeAttachment(attachment.id)"
+              >
+                ✕
+              </button>
+            </div>
           </div>
+          <p v-if="attachError" class="help-compose-attach-error">{{ attachError }}</p>
           <form class="help-composer-box" @submit="onSubmit">
             <input
               ref="imageInputRef"
@@ -392,6 +472,7 @@ onUnmounted(() => {
               accept="image/jpeg,image/png,image/webp,image/gif"
               class="sr-only"
               tabindex="-1"
+              multiple
               @change="onImageSelected"
             >
             <textarea
@@ -411,7 +492,8 @@ onUnmounted(() => {
                 type="button"
                 class="help-composer-icon"
                 aria-label="Attach image"
-                :disabled="busy"
+                :disabled="busy || !canAddAttachments"
+                :title="canAddAttachments ? 'Attach image' : `Up to ${MAX_ATTACHMENTS} attachments`"
                 @click="openImagePicker"
               >
                 📎
@@ -420,14 +502,14 @@ onUnmounted(() => {
                 type="submit"
                 class="help-composer-send"
                 aria-label="Send message"
-                :disabled="busy || (!input.trim() && !pendingImage)"
+                :disabled="busy || (!input.trim() && !pendingAttachments.length)"
               >
                 ↑
               </button>
             </div>
           </form>
           <p class="help-composer-note">
-            Platform help only · attach screenshots for vision models
+            Platform help only · attach up to {{ MAX_ATTACHMENTS }} screenshots
           </p>
         </footer>
       </div>

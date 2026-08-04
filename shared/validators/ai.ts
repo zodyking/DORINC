@@ -141,15 +141,31 @@ export const platformHelpHistoryMessageSchema = z.object({
   content: z.string().trim().min(1).max(4000),
 })
 
+const platformHelpImageDataUrlSchema = z.string().regex(
+  /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=]+$/i,
+  'Invalid image attachment',
+).max(6_000_000)
+
 export const platformHelpAskSchema = z.object({
   question: z.string().trim().min(1).max(2000),
   pageContext: z.string().trim().min(1).max(120).optional(),
   history: z.array(platformHelpHistoryMessageSchema).max(40).optional(),
   /** Base64 data URL screenshot for vision-capable platform help models. */
-  imageDataUrl: z.string().regex(
-    /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[a-z0-9+/=]+$/i,
-    'Invalid image attachment',
-  ).max(6_000_000).optional(),
+  imageDataUrl: platformHelpImageDataUrlSchema.optional(),
+  /** Multiple screenshots for vision-capable platform help models. */
+  imageDataUrls: z.array(platformHelpImageDataUrlSchema).min(1).max(4).optional(),
+}).transform((body) => {
+  const imageDataUrls = body.imageDataUrls?.length
+    ? body.imageDataUrls
+    : body.imageDataUrl
+      ? [body.imageDataUrl]
+      : undefined
+  return {
+    question: body.question,
+    pageContext: body.pageContext,
+    history: body.history,
+    imageDataUrls,
+  }
 })
 
 export type PlatformHelpAsk = z.infer<typeof platformHelpAskSchema>
