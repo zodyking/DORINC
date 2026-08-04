@@ -232,6 +232,11 @@ const autosaveTick = ref(0)
 
 const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canDescribe = computed(() => auth.can('ai.describe.all'))
+const saveButtonLabel = computed(() => {
+  if (auditBusy.value) return 'Checking lines…'
+  if (busy.value) return 'Saving…'
+  return 'Save invoice'
+})
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
 const removableInvoice = computed(() =>
   invoice.value && invoice.value.status !== 'void' && invoice.value.status !== 'paid',
@@ -1125,22 +1130,23 @@ if (import.meta.client) {
               </table>
             </div>
           </div>
-
-          <div v-if="editable" class="savebar">
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="busy || auditBusy"
-              @click="saveInvoice"
-            >
-              {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save' }}
-            </button>
-            <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
-          </div>
-          <div v-else class="savebar">
-            <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
-          </div>
         </div>
+      </div>
+
+      <div v-if="editable" class="savebar ed-editor-savebar">
+        <button
+          type="button"
+          class="btn primary"
+          data-testid="invoice-editor-save"
+          :disabled="busy || auditBusy"
+          @click="saveInvoice"
+        >
+          {{ saveButtonLabel }}
+        </button>
+        <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
+      </div>
+      <div v-else-if="invoice" class="savebar ed-editor-savebar">
+        <NuxtLink :to="`/invoices/${id}`" class="btn">Back to invoice</NuxtLink>
       </div>
 
       <div v-show="activeTab === 'servicelog' && serviceLogData?.log" class="ed-pane" :class="{ active: activeTab === 'servicelog' }">
