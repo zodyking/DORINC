@@ -10,6 +10,59 @@ const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, pro
 Return JSON only: { "description": "..." }.
 Keep factual accuracy. Do not add parts, prices, quantities, or hours. Wording only — shorter is fine.`
 
+function buildLineAuditSystemPrompt(rules) {
+  return [
+    'You audit invoice line items before they are saved to a customer-facing invoice.',
+    'Return JSON only with this shape:',
+    '{ "lines": [ { "lineItemId": "uuid", "status": "ok"|"needs_fix", "issues": ["..."],',
+    '"suggested": { "description": "...", "quantity": "...", "unitPrice": "..." } | null } ] }',
+    'For each line provided, return exactly one entry with the same lineItemId.',
+    'Use status "ok" when the line already meets all rules — set suggested to null.',
+    'Use status "needs_fix" when any rule is violated — suggested must contain corrected description, quantity, and unitPrice as decimal strings.',
+    'Rules to enforce:',
+    rules,
+  ].join(' ')
+}
+
+function normalizeAuditLines(inputLines, aiLines) {
+  const normalized = inputLines.map((input) => {
+    const ai = aiLines.find(row => String(row.lineItemId) === input.lineItemId)
+    const original = {
+      description: input.description,
+      quantity: String(input.quantity),
+      unitPrice: String(input.unitPrice),
+    }
+    const status = ai?.status === 'needs_fix' ? 'needs_fix' : 'ok'
+    const issues = Array.isArray(ai?.issues)
+      ? ai.issues.map(i => String(i)).filter(Boolean).slice(0, 20)
+      : []
+    let suggested = null
+    if (status === 'needs_fix' && ai?.suggested && typeof ai.suggested === 'object') {
+      suggested = {
+        description: String(ai.suggested.description ?? original.description).slice(0, 500),
+        quantity: String(ai.suggested.quantity ?? original.quantity).slice(0, 30),
+        unitPrice: String(ai.suggested.unitPrice ?? original.unitPrice).slice(0, 30),
+      }
+    }
+    return {
+      lineItemId: input.lineItemId,
+      sortOrder: input.sortOrder,
+      lineType: input.lineType === 'part' || input.lineType === 'fee' ? input.lineType : 'labor',
+      status,
+      issues,
+      original,
+      suggested,
+    }
+  })
+  const issuesFound = normalized.filter(l => l.status === 'needs_fix').length
+  return {
+    kind: 'invoice_line_audit',
+    checkedAt: new Date().toISOString(),
+    lines: normalized,
+    summary: { totalLines: normalized.length, issuesFound },
+  }
+}
+
 function estimateCost(model, promptTokens, completionTokens) {
   const isHaiku = model.includes('haiku')
   const isSonnet = model.includes('sonnet') || model.includes('gpt-4')
@@ -206,6 +259,11 @@ async function processDescription(pool, aiJobId, settings) {
   await pool.query(`UPDATE ai_jobs SET status = 'processing', started_at = now() WHERE id = $1`, [aiJobId])
 
   const input = job.input_payload
+  if (input.mode === 'line_audit') {
+    await processLineAudit(pool, aiJobId, job, input, settings)
+    return
+  }
+
   const userPrompt = [
     `Line type: ${input.lineType ?? 'labor'}`,
     `Original mechanic note: ${input.originalDescription ?? ''}`,
@@ -250,6 +308,61 @@ async function processDescription(pool, aiJobId, settings) {
   })
 
   await completeAiJob(pool, aiJobId, { suggestionId: sugRows[0].id })
+}
+
+async function processLineAudit(pool, aiJobId, job, input, settings) {
+  const inputLines = input.lines ?? []
+  const rules = String(input.rules ?? '')
+  const complaint = input.complaint ? String(input.complaint) : null
+
+  const userPrompt = [
+    complaint ? `Invoice complaint context: ${complaint}` : '',
+    'Audit each line item below. Apply the rules strictly.',
+    JSON.stringify({ lines: inputLines }, null, 2),
+  ].filter(Boolean).join('\n\n')
+
+  const model = modelFor(settings, 'invoice_description')
+  const result = await openRouterChat(settings.apiKey, model, [
+    { role: 'system', content: buildLineAuditSystemPrompt(rules) },
+    { role: 'user', content: userPrompt },
+  ], 0.3)
+
+  const parsedRaw = parseJsonBlock(result.content)
+  const auditContent = normalizeAuditLines(inputLines, parsedRaw.lines ?? [])
+
+  await logUsage(pool, {
+    aiJobId,
+    featureType: 'invoice_description',
+    model: result.model,
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
+    totalTokens: result.totalTokens,
+    estimatedCostUsd: result.estimatedCostUsd,
+    createdBy: job.created_by,
+  })
+
+  if (auditContent.summary.issuesFound === 0) {
+    await completeAiJob(pool, aiJobId, { issuesFound: 0, suggestionId: null, auditContent })
+    return
+  }
+
+  const { rows: sugRows } = await pool.query(
+    `INSERT INTO ai_suggestions
+      (ai_job_id, feature_type, entity_type, entity_id, original_content, suggested_content, status)
+     VALUES ($1, 'invoice_description', 'invoice', $2, $3, $4, 'pending')
+     RETURNING id`,
+    [
+      aiJobId,
+      job.entity_id,
+      JSON.stringify({ kind: 'invoice_line_audit', lines: inputLines }),
+      JSON.stringify(auditContent),
+    ],
+  )
+
+  await completeAiJob(pool, aiJobId, {
+    issuesFound: auditContent.summary.issuesFound,
+    suggestionId: sugRows[0].id,
+  })
 }
 
 async function handleAiWorkerJob(pool, job) {

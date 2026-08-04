@@ -42,6 +42,13 @@ import {
   unregisterSessionSaveHandler,
 } from '~/composables/useSessionLogoutHandlers'
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
+import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
+import type { AiSuggestionRow } from '~/utils/ai-ui'
+import {
+  latestLineAuditSuggestion,
+  pendingLineAuditSuggestion,
+  pollAiJobUntilDone,
+} from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
 definePageMeta({ layout: 'staff' })
@@ -150,6 +157,7 @@ function loadInvoiceEditor() {
 
 onMounted(() => {
   loadInvoiceEditor()
+  if (canDescribe.value && idValid.value) void refreshAuditReport()
 })
 
 watch([() => auth.loaded, canLoadEditor, idValid], () => {
@@ -455,18 +463,37 @@ async function patchHeader(opts: { refreshAfter?: boolean, manageBusy?: boolean 
   }
 }
 
+async function syncInvoiceDraftToServer() {
+  for (const line of lines.value) {
+    if (!isDraftLineValid(line)) continue
+    await patchLine(line, { refreshAfter: false, manageBusy: false })
+  }
+  await patchHeader({ refreshAfter: false, manageBusy: false })
+}
+
+async function completeSaveDraft() {
+  await releaseEditSession()
+  await navigateTo({ path: `/invoices/${id}`, query: { saved: 'draft' } })
+}
+
+async function completeFinalizeAndSend() {
+  if (canApprove.value) await $fetch(`/api/invoices/${id}/approve`, { method: 'POST' })
+  if (canSend.value) {
+    const sendResult = await $fetch<{ message?: string }>(`/api/invoices/${id}/send`, { method: 'POST' })
+    saveError.value = sendResult.message ?? 'Invoice queued for email delivery.'
+  }
+  await navigateTo(`/invoices/${id}`)
+}
+
 async function saveDraft() {
   if (!editable.value || !invoice.value) return
   busy.value = true
   saveError.value = ''
   try {
-    for (const line of lines.value) {
-      if (!isDraftLineValid(line)) continue
-      await patchLine(line, { refreshAfter: false, manageBusy: false })
-    }
-    await patchHeader({ refreshAfter: false, manageBusy: false })
-    await releaseEditSession()
-    await navigateTo({ path: `/invoices/${id}`, query: { saved: 'draft' } })
+    await syncInvoiceDraftToServer()
+    const auditOk = await runLineAuditBeforeSave('draft')
+    if (!auditOk) return
+    await completeSaveDraft()
   }
   catch (e: unknown) {
     if (!saveError.value) {
@@ -532,19 +559,6 @@ async function patchLine(
   finally {
     if (manageBusy) busy.value = false
   }
-}
-
-async function saveLineDescription(line: LineItem, description: string) {
-  await $fetch(`/api/invoices/${id}/line-items/${line.id}`, {
-    method: 'PATCH',
-    body: { description: description.trim() },
-  })
-}
-
-/** Refresh or re-acquire the edit lock (server purges stale sessions after ~90s). */
-async function ensureInvoiceEditLock(): Promise<boolean> {
-  await acquireEditSession()
-  return canEdit.value
 }
 
 async function applyCatalogToExistingLine(line: LineItem, item: CatalogQuickItem) {
@@ -642,13 +656,10 @@ async function finalizeAndSend() {
   busy.value = true
   saveError.value = ''
   try {
-    await patchHeader()
-    if (canApprove.value) await $fetch(`/api/invoices/${id}/approve`, { method: 'POST' })
-    if (canSend.value) {
-      const sendResult = await $fetch<{ message?: string }>(`/api/invoices/${id}/send`, { method: 'POST' })
-      saveError.value = sendResult.message ?? 'Invoice queued for email delivery.'
-    }
-    await navigateTo(`/invoices/${id}`)
+    await syncInvoiceDraftToServer()
+    const auditOk = await runLineAuditBeforeSave('finalize')
+    if (!auditOk) return
+    await completeFinalizeAndSend()
   }
   catch (e: unknown) {
     saveError.value = syncFetchErrorMessage(e, 'Finalize failed')
@@ -666,22 +677,13 @@ function copyComplaintFromLog() {
   void patchHeader()
 }
 
-interface AiSuggestionRow {
-  id: string
-  status: string
-  featureType: string
-  originalContent: Record<string, unknown> | null
-  suggestedContent: Record<string, unknown>
-}
-
 const selectedLineId = ref<string | null>(null)
-const aiPopOpen = ref(false)
-const aiPopText = ref('')
-const aiPopOriginal = ref('')
-const aiPopSuggestionId = ref<string | null>(null)
-const aiBusy = ref(false)
-const aiError = ref('')
-const aiPopAnchor = ref<{ x: number, y: number } | null>(null)
+const auditModalOpen = ref(false)
+const auditRequireReview = ref(false)
+const auditBusy = ref(false)
+const auditError = ref('')
+const pendingSaveAction = ref<'draft' | 'finalize' | null>(null)
+const activeAuditSuggestion = ref<AiSuggestionRow | null>(null)
 
 const { data: invoiceAiData, refresh: refreshInvoiceAi } = useClientFetch<{ suggestions: AiSuggestionRow[] }>(
   () => (idValid.value ? `/api/invoices/${id}/ai-suggestions` : null),
@@ -690,188 +692,112 @@ const { data: invoiceAiData, refresh: refreshInvoiceAi } = useClientFetch<{ sugg
 
 const invoiceAiSuggestions = computed(() => invoiceAiData.value?.suggestions ?? [])
 
-const selectedLine = computed(() =>
-  lines.value.find(l => l.id === selectedLineId.value) ?? null,
+const latestAuditSuggestion = computed(() =>
+  latestLineAuditSuggestion(invoiceAiSuggestions.value),
 )
 
-let aiPollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopAiPoll() {
-  if (aiPollTimer) {
-    clearInterval(aiPollTimer)
-    aiPollTimer = null
-  }
+async function refreshAuditReport() {
+  await refreshInvoiceAi()
+  activeAuditSuggestion.value = latestAuditSuggestion.value
 }
 
-function startAiPoll(lineId: string) {
-  stopAiPoll()
-  aiPollTimer = setInterval(async () => {
-    await refreshInvoiceAi()
-    const pending = invoiceAiSuggestions.value.find((s) => {
-      if (s.status !== 'pending') return false
-      const lid = s.originalContent?.lineItemId ?? s.suggestedContent.lineItemId
-      return lid === lineId
+function shouldSkipLineAuditError(e: unknown): boolean {
+  const err = e as { data?: { message?: string } }
+  const message = err.data?.message?.toLowerCase() ?? ''
+  return message.includes('not configured')
+    || message.includes('disabled')
+    || message.includes('spend cap')
+}
+
+async function runLineAuditBeforeSave(action: 'draft' | 'finalize'): Promise<boolean> {
+  pendingSaveAction.value = action
+  auditError.value = ''
+
+  if (!canDescribe.value || !lines.value.length) return true
+
+  auditBusy.value = true
+  try {
+    const { aiJob } = await $fetch<{ aiJob: { id: string } }>(`/api/invoices/${id}/line-audit`, {
+      method: 'POST',
     })
+    await pollAiJobUntilDone(aiJob.id)
+    await refreshAuditReport()
+
+    const pending = pendingLineAuditSuggestion(invoiceAiSuggestions.value)
     if (pending) {
-      aiPopSuggestionId.value = pending.id
-      aiPopText.value = String(pending.suggestedContent.description ?? '')
-      aiPopOriginal.value = String(pending.originalContent?.description ?? selectedLine.value?.description ?? '')
-      stopAiPoll()
+      activeAuditSuggestion.value = pending
+      auditRequireReview.value = true
+      auditModalOpen.value = true
+      return false
     }
-  }, 2000)
-}
 
-onBeforeUnmount(() => stopAiPoll())
-
-function positionAiPop(event: MouseEvent) {
-  aiPopAnchor.value = { x: event.clientX, y: event.clientY + 8 }
-}
-
-async function openAiPopover(line: LineItem, event: MouseEvent) {
-  if (!editable.value || !canDescribe.value) return
-  await acquireEditSession()
-  if (!canEdit.value) {
-    aiError.value = sessionError.value || 'This invoice is locked — refresh the page and try again'
-    return
+    pendingSaveAction.value = null
+    return true
   }
-  selectedLineId.value = line.id
-  aiPopOriginal.value = line.description
-  aiPopText.value = ''
-  aiPopSuggestionId.value = null
-  aiError.value = ''
-  aiPopOpen.value = true
-  positionAiPop(event)
-  aiBusy.value = true
+  catch (e: unknown) {
+    if (shouldSkipLineAuditError(e)) {
+      pendingSaveAction.value = null
+      return true
+    }
+    saveError.value = syncFetchErrorMessage(e, 'Line audit failed')
+    pendingSaveAction.value = null
+    return false
+  }
+  finally {
+    auditBusy.value = false
+  }
+}
+
+async function openAuditReport() {
+  auditError.value = ''
+  auditRequireReview.value = false
+  await refreshAuditReport()
+  if (!activeAuditSuggestion.value) {
+    auditError.value = 'No audit report yet — save the invoice to run a line-item check.'
+  }
+  auditModalOpen.value = true
+}
+
+async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 'accept' | 'reject' }>) {
+  if (!activeAuditSuggestion.value) return
+  auditBusy.value = true
+  auditError.value = ''
   try {
-    await $fetch(`/api/invoices/${id}/line-items/${line.id}/ai-describe`, { method: 'POST' })
-    startAiPoll(line.id)
-    await refreshInvoiceAi()
-    const pending = invoiceAiSuggestions.value.find((s) => {
-      if (s.status !== 'pending') return false
-      const lid = s.originalContent?.lineItemId ?? s.suggestedContent.lineItemId
-      return lid === line.id
+    await $fetch(`/api/invoices/${id}/line-audit/review`, {
+      method: 'POST',
+      body: {
+        suggestionId: activeAuditSuggestion.value.id,
+        decisions,
+      },
     })
-    if (pending) {
-      aiPopSuggestionId.value = pending.id
-      aiPopText.value = String(pending.suggestedContent.description ?? '')
-    }
+    auditModalOpen.value = false
+    auditRequireReview.value = false
+    await Promise.all([refreshInvoice(), refreshAuditReport()])
+
+    const action = pendingSaveAction.value
+    pendingSaveAction.value = null
+    if (action === 'draft') await completeSaveDraft()
+    else if (action === 'finalize') await completeFinalizeAndSend()
   }
   catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'AI assist unavailable — edit manually'
+    auditError.value = syncFetchErrorMessage(e, 'Could not apply audit changes')
   }
   finally {
-    aiBusy.value = false
+    auditBusy.value = false
   }
 }
 
-async function insertAiDescription(retry = false) {
-  if (!selectedLineId.value || !aiPopText.value.trim()) return
-  const line = selectedLine.value
-  if (!line) return
-
-  aiBusy.value = true
-  aiError.value = ''
-  try {
-    if (!(await ensureInvoiceEditLock())) {
-      aiError.value = sessionError.value || 'This invoice is locked — refresh the page and try again'
-      return
-    }
-
-    const description = aiPopText.value.trim()
-    await saveLineDescription(line, description)
-    line.description = description
-
-    if (aiPopSuggestionId.value) {
-      try {
-        await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
-          method: 'POST',
-          body: {
-            action: 'edit',
-            lineItemId: line.id,
-            content: {
-              description,
-              lineItemId: line.id,
-              originalDescription: aiPopOriginal.value,
-            },
-          },
-        })
-      }
-      catch {
-        // Line is saved; marking the suggestion reviewed is best-effort.
-      }
-    }
-
-    stopAiPoll()
-    aiPopOpen.value = false
-    await Promise.all([refreshInvoice(), refreshInvoiceAi()])
-  }
-  catch (e: unknown) {
-    const err = e as { data?: { code?: string } }
-    if (!retry && err.data?.code === 'EDIT_SESSION_ACTIVE') {
-      await acquireEditSession()
-      if (canEdit.value) {
-        aiBusy.value = false
-        return insertAiDescription(true)
-      }
-    }
-    aiError.value = syncFetchErrorMessage(e, 'Could not apply description')
-  }
-  finally {
-    aiBusy.value = false
-  }
-}
-
-async function regenerateAiDescription() {
-  const line = selectedLine.value
-  if (!line) return
-  const oldSuggestionId = aiPopSuggestionId.value
-  aiPopSuggestionId.value = null
-  aiPopText.value = ''
-  aiBusy.value = true
-  aiError.value = ''
-  try {
-    if (oldSuggestionId) {
-      await $fetch(`/api/ai/suggestions/${oldSuggestionId}/review`, {
-        method: 'POST',
-        body: { action: 'reject' },
-      })
-    }
-    await $fetch(`/api/invoices/${id}/line-items/${line.id}/ai-describe`, { method: 'POST' })
-    startAiPoll(line.id)
-    await refreshInvoiceAi()
-  }
-  catch (e: unknown) {
-    aiError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Regenerate failed'
-  }
-  finally {
-    aiBusy.value = false
-  }
-}
-
-async function dismissAiPopover() {
-  if (aiPopSuggestionId.value) {
-    try {
-      await $fetch(`/api/ai/suggestions/${aiPopSuggestionId.value}/review`, {
-        method: 'POST',
-        body: { action: 'reject' },
-      })
-      await refreshInvoiceAi()
-    }
-    catch { /* dismiss anyway */ }
-  }
-  stopAiPoll()
-  aiPopOpen.value = false
+function closeAuditModal() {
+  auditModalOpen.value = false
+  auditRequireReview.value = false
+  pendingSaveAction.value = null
 }
 
 function onAiKeydown(e: KeyboardEvent) {
   if (!editable.value || !canDescribe.value) return
   if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
     e.preventDefault()
-    const line = selectedLine.value ?? lines.value[0]
-    if (line) {
-      selectedLineId.value = line.id
-      void openAiPopover(line, { clientX: window.innerWidth / 2, clientY: 120 } as MouseEvent)
-    }
+    void openAuditReport()
   }
 }
 
@@ -879,14 +805,6 @@ if (import.meta.client) {
   window.addEventListener('keydown', onAiKeydown)
   onBeforeUnmount(() => window.removeEventListener('keydown', onAiKeydown))
 }
-
-const aiPopStyle = computed(() => {
-  if (!import.meta.client || !aiPopAnchor.value) return {}
-  return {
-    left: `${Math.min(aiPopAnchor.value.x, window.innerWidth - 400)}px`,
-    top: `${Math.min(aiPopAnchor.value.y, window.innerHeight - 280)}px`,
-  }
-})
 </script>
 
 <template>
@@ -1082,9 +1000,9 @@ const aiPopStyle = computed(() => {
                 <button
                   type="button"
                   class="btn sm ai-btn"
-                  :disabled="!editable || !canDescribe || aiBusy || !lines.length"
-                  title="AI description assist (Ctrl+Shift+D)"
-                  @click="openAiPopover(lines.find(l => l.id === selectedLineId) ?? lines[0]!, $event)"
+                  :disabled="!editable || !canDescribe || auditBusy"
+                  title="View line audit report (Ctrl+Shift+D)"
+                  @click="openAuditReport"
                 >
                   <span class="dot">✦</span> AI
                 </button>
@@ -1204,7 +1122,7 @@ const aiPopStyle = computed(() => {
 
           <div v-if="editable" class="savebar">
             <button type="button" class="btn" :disabled="busy" @click="saveDraft">
-              {{ busy ? 'Saving…' : 'Save draft' }}
+              {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save draft' }}
             </button>
             <NuxtLink :to="`/invoices/${id}`" class="btn">Cancel</NuxtLink>
             <button
@@ -1294,44 +1212,14 @@ const aiPopStyle = computed(() => {
         />
       </div>
 
-      <Teleport to="body">
-        <div
-          v-if="aiPopOpen"
-          class="ai-pop open"
-          role="dialog"
-          aria-label="AI description assist"
-          :style="aiPopStyle"
-        >
-          <div class="ph">
-            <b>✦ Description assist</b>
-            <kbd>Ctrl+Shift+D</kbd>
-          </div>
-          <p v-if="aiPopOriginal" class="help" style="margin:0 0 8px;">
-            Original: <span style="color:#64748b;">{{ aiPopOriginal }}</span>
-          </p>
-          <p v-if="aiError" class="help" style="color:#dc2626; margin:0 0 8px;">{{ aiError }}</p>
-          <div v-if="aiBusy && !aiPopText" class="body">Generating customer-facing wording…</div>
-          <textarea
-            v-else
-            v-model="aiPopText"
-            class="body"
-            rows="5"
-            style="width:100%; resize:vertical; font:inherit;"
-            placeholder="AI suggestion appears here — edit before inserting"
-          />
-          <div class="acts">
-            <button type="button" class="btn sm primary" :disabled="aiBusy || !aiPopText.trim()" @click="insertAiDescription">
-              Insert into selected line
-            </button>
-            <button type="button" class="btn sm" :disabled="aiBusy" @click="regenerateAiDescription">
-              Regenerate
-            </button>
-            <button type="button" class="btn sm" @click="dismissAiPopover">
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </Teleport>
+      <InvoiceLineAuditModal
+        :open="auditModalOpen"
+        :suggestion="activeAuditSuggestion"
+        :busy="auditBusy"
+        :require-review="auditRequireReview"
+        @close="closeAuditModal"
+        @submit="submitAuditReview"
+      />
     </template>
 
     <div v-else class="cp-state">Loading invoice…</div>

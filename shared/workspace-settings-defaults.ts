@@ -5,6 +5,7 @@ import {
   DEFAULT_PART_DESCRIPTION_VERBS,
   DEFAULT_FEE_DESCRIPTION_VERBS,
 } from './line-item-type-from-description'
+import { DEFAULT_INVOICE_LINE_AI_RULES } from './invoice-line-ai-rules'
 
 export interface BusinessProfile {
   businessName: string
@@ -65,12 +66,15 @@ export interface InvoiceWorkspaceSettings {
   defaultPaymentTermsDays: number
   shopSuppliesPercent: string
   managerApprovalThreshold: string
+  /** Editable rule set for invoice line-item AI audit before save. */
+  lineItemAiRules: string
 }
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   defaultPaymentTermsDays: 30,
   shopSuppliesPercent: '3.5',
   managerApprovalThreshold: '5000.00',
+  lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
 }
 
 /** App-wide email notification toggles (Control Panel → Notifications). */

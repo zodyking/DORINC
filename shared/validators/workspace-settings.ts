@@ -30,6 +30,7 @@ export const invoiceWorkspaceSettingsSchema = z.object({
   defaultPaymentTermsDays: z.coerce.number().int().min(0).max(365).default(30),
   shopSuppliesPercent: z.string().regex(/^\d+(\.\d{1,2})?$/).default('3.5'),
   managerApprovalThreshold: z.string().regex(/^\d+(\.\d{1,2})?$/).default('5000.00'),
+  lineItemAiRules: z.string().max(12000).default(''),
 })
 
 export const chatWorkspaceSettingsSchema = z.object({

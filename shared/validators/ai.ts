@@ -98,6 +98,44 @@ export const invoiceDescriptionContentSchema = z.object({
 
 export type InvoiceDescriptionContent = z.infer<typeof invoiceDescriptionContentSchema>
 
+export const invoiceLineAuditFieldSchema = z.object({
+  description: z.string().max(500),
+  quantity: z.string().max(30),
+  unitPrice: z.string().max(30),
+})
+
+export const invoiceLineAuditLineSchema = z.object({
+  lineItemId: z.string().uuid(),
+  sortOrder: z.number().int().min(0).optional(),
+  lineType: z.enum(['part', 'labor', 'fee']),
+  status: z.enum(['ok', 'needs_fix']),
+  issues: z.array(z.string().max(500)).max(20),
+  original: invoiceLineAuditFieldSchema,
+  suggested: invoiceLineAuditFieldSchema.nullable(),
+})
+
+export const invoiceLineAuditContentSchema = z.object({
+  kind: z.literal('invoice_line_audit'),
+  checkedAt: z.string().max(40),
+  lines: z.array(invoiceLineAuditLineSchema).max(200),
+  summary: z.object({
+    totalLines: z.number().int().min(0),
+    issuesFound: z.number().int().min(0),
+  }),
+})
+
+export type InvoiceLineAuditContent = z.infer<typeof invoiceLineAuditContentSchema>
+
+export const invoiceLineAuditReviewSchema = z.object({
+  suggestionId: z.string().uuid(),
+  decisions: z.array(z.object({
+    lineItemId: z.string().uuid(),
+    action: z.enum(['accept', 'reject']),
+  })).min(1).max(200),
+})
+
+export type InvoiceLineAuditReview = z.infer<typeof invoiceLineAuditReviewSchema>
+
 export const platformHelpHistoryMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().trim().min(1).max(4000),

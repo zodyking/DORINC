@@ -15,8 +15,10 @@ import { users } from '../../server/db/schema/auth'
 import { workerJobs } from '../../server/db/schema/jobs'
 import {
   enqueueInvoiceDescription,
+  enqueueInvoiceLineAudit,
   enqueueServiceLogExtraction,
   reviewAiSuggestion,
+  reviewInvoiceLineAudit,
 } from '../../server/services/ai-features.service'
 import { updateAiProviderSettings } from '../../server/services/ai-provider.service'
 import { uploadFile } from '../../server/services/files.service'
@@ -57,6 +59,21 @@ const mockExtractionJson = {
 
 const mockDescriptionJson = {
   description: 'Replaced failed outlet NOx sensor and completed ECM relearn procedure.',
+}
+
+const mockLineAuditJson = {
+  lines: [
+    {
+      lineItemId: '',
+      status: 'needs_fix',
+      issues: ['Quantity mentioned in description does not match qty field'],
+      suggested: {
+        description: 'Replace failed NOx sensor and complete ECM relearn',
+        quantity: '1.5',
+        unitPrice: '145.00',
+      },
+    },
+  ],
 }
 
 beforeAll(async () => {
@@ -287,6 +304,65 @@ describe('P2-14 invoice description AI writer', () => {
     expect(lineAfter.description).toBe(mockDescriptionJson.description)
     expect(lineAfter.quantity).toBe(qty)
     expect(lineAfter.unitPrice).toBe(price)
+
+    fetchMock.mockRestore()
+  })
+})
+
+describe('invoice line audit before save', () => {
+  it('queues audit and returns pending suggestion when issues are found', async () => {
+    await ensureAiReady()
+    mockLineAuditJson.lines[0]!.lineItemId = lineItemId
+    const fetchMock = trackFetchMock(mockLineAuditJson)
+
+    const { aiJob, workerJob } = await enqueueInvoiceLineAudit(db, invoiceId, actorId)
+    createdJobIds.push(aiJob.id)
+    createdWorkerJobIds.push(workerJob.id)
+
+    await pool.query(`UPDATE worker_jobs SET run_after = now() WHERE id = $1`, [workerJob.id])
+    const result = await processAiJobs(pool)
+    expect(result.processed).toBe(1)
+
+    const { rows: suggestions } = await pool.query(
+      `SELECT * FROM ai_suggestions WHERE ai_job_id = $1`,
+      [aiJob.id],
+    )
+    expect(suggestions[0].status).toBe('pending')
+    expect(suggestions[0].suggested_content.kind).toBe('invoice_line_audit')
+    expect(suggestions[0].suggested_content.summary.issuesFound).toBe(1)
+    createdSuggestionIds.push(suggestions[0].id)
+
+    fetchMock.mockRestore()
+  })
+
+  it('accepting audit fixes updates description, qty, and unit price', async () => {
+    await ensureAiReady()
+    mockLineAuditJson.lines[0]!.lineItemId = lineItemId
+    const fetchMock = trackFetchMock(mockLineAuditJson)
+
+    const { aiJob, workerJob } = await enqueueInvoiceLineAudit(db, invoiceId, actorId)
+    createdJobIds.push(aiJob.id)
+    createdWorkerJobIds.push(workerJob.id)
+    await pool.query(`UPDATE worker_jobs SET run_after = now() WHERE id = $1`, [workerJob.id])
+    await processAiJobs(pool)
+
+    const { rows: suggestions } = await pool.query(
+      `SELECT id FROM ai_suggestions WHERE ai_job_id = $1`,
+      [aiJob.id],
+    )
+    const suggestionId = suggestions[0].id as string
+    createdSuggestionIds.push(suggestionId)
+
+    await reviewInvoiceLineAudit(db, {
+      suggestionId,
+      decisions: [{ lineItemId, action: 'accept' }],
+    }, actorId)
+
+    const after = await getInvoiceDetail(db, invoiceId)
+    const lineAfter = after.lineItems.find(l => l.id === lineItemId)!
+    expect(lineAfter.description).toBe(mockLineAuditJson.lines[0]!.suggested!.description)
+    expect(lineAfter.quantity).toBe('1.5')
+    expect(lineAfter.unitPrice).toBe('145.00')
 
     fetchMock.mockRestore()
   })

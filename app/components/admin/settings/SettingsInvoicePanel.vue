@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceWorkspaceSettings } from '#shared/workspace-settings-defaults'
+import { DEFAULT_INVOICE_LINE_AI_RULES } from '#shared/invoice-line-ai-rules'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
 
 const emit = defineEmits<{ saved: [] }>()
@@ -20,6 +21,7 @@ const { data: templatesData, refresh: refreshTemplates } = useClientFetch<{
 const form = reactive({
   defaultPaymentTermsDays: 30,
   managerApprovalThreshold: '5000.00',
+  lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
 })
 
 watch(() => settingsData.value?.settings, (s) => {
@@ -152,6 +154,41 @@ async function onTemplateChange(ev: Event) {
           <input v-model="form.managerApprovalThreshold" type="text" inputmode="decimal" placeholder="5000.00">
           <span class="help">Invoices at or above this total require manager approval.</span>
         </label>
+
+        <p v-if="message" class="settings-ok">{{ message }}</p>
+        <p v-if="error" class="settings-err">{{ error }}</p>
+
+        <div class="settings-actions">
+          <button type="submit" class="btn primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save invoice settings' }}</button>
+        </div>
+      </div>
+    </form>
+
+    <form class="card" style="margin-top:16px;" @submit.prevent="save">
+      <div class="chead"><h3>Line item AI audit rules</h3></div>
+      <div class="cbody settings-form">
+        <label class="fld">
+          Audit rules (used before save on the invoice editor)
+          <textarea
+            v-model="form.lineItemAiRules"
+            rows="12"
+            spellcheck="false"
+            placeholder="One rule per line…"
+          />
+          <span class="help">
+            The invoice description writer runs these checks once when you save or finalize.
+            Edit the rules for your shop, or restore the built-in defaults.
+          </span>
+        </label>
+        <div class="settings-actions" style="margin-top:8px;">
+          <button
+            type="button"
+            class="btn sm"
+            @click="form.lineItemAiRules = DEFAULT_INVOICE_LINE_AI_RULES"
+          >
+            Restore default rules
+          </button>
+        </div>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>

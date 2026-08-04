@@ -28,10 +28,15 @@ import { enqueueJob } from './jobs.service'
 import { getFileWithData } from './files.service'
 import { getServiceLog, updateServiceLog } from './service-logs.service'
 import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } from './invoices.service'
+import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
+import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
   invoiceDescriptionContentSchema,
+  invoiceLineAuditContentSchema,
   serviceLogExtractionContentSchema,
   type AiSuggestionReview,
+  type InvoiceLineAuditContent,
+  type InvoiceLineAuditReview,
 } from '../../shared/validators/ai'
 
 export type AiFeaturesServiceErrorCode
@@ -151,6 +156,69 @@ export async function enqueueInvoiceDescription(
   return { aiJob, workerJob }
 }
 
+function buildLineAuditSystemPrompt(rules: string): string {
+  return [
+    'You audit invoice line items before they are saved to a customer-facing invoice.',
+    'Return JSON only with this shape:',
+    '{ "lines": [ { "lineItemId": "uuid", "status": "ok"|"needs_fix", "issues": ["..."],',
+    '"suggested": { "description": "...", "quantity": "...", "unitPrice": "..." } | null } ] }',
+    'For each line provided, return exactly one entry with the same lineItemId.',
+    'Use status "ok" when the line already meets all rules — set suggested to null.',
+    'Use status "needs_fix" when any rule is violated — suggested must contain corrected description, quantity, and unitPrice as decimal strings.',
+    'Rules to enforce:',
+    rules,
+  ].join(' ')
+}
+
+export async function enqueueInvoiceLineAudit(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+) {
+  await assertAiFeatureEnabled(db, 'invoice_description')
+  const invoice = await getInvoiceDetail(db, invoiceId)
+  if (!INVOICE_EDITABLE_STATUSES.includes(invoice.status)) {
+    throw new AiFeaturesServiceError('NOT_FOUND', 'Paid and void invoices cannot use AI line audit')
+  }
+  if (!invoice.lineItems.length) {
+    throw new AiFeaturesServiceError('NOT_FOUND', 'Invoice has no line items to audit')
+  }
+
+  const invoiceSettings = await getInvoiceWorkspaceSettings(db)
+  const rules = normalizeInvoiceLineAiRules(invoiceSettings.lineItemAiRules)
+
+  const aiJob = await createAiJob(db, {
+    jobType: 'invoice_description',
+    entityType: 'invoice',
+    entityId: invoiceId,
+    inputPayload: {
+      mode: 'line_audit',
+      complaint: invoice.complaint,
+      rules,
+      lines: invoice.lineItems.map(line => ({
+        lineItemId: line.id,
+        sortOrder: line.sortOrder,
+        lineType: line.lineType,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        lineAmount: line.lineAmount,
+      })),
+    },
+    createdBy: actorId,
+  })
+
+  const workerJob = await enqueueJob(db, 'invoice_description_ai', {
+    aiJobId: aiJob.id,
+    invoiceId,
+    mode: 'line_audit',
+  })
+
+  await linkAiJobWorker(db, aiJob.id, workerJob.id)
+
+  return { aiJob, workerJob }
+}
+
 const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.
 Return JSON only with keys: complaint (customer symptoms, string or null), internalNotes (mechanic notes, string or null),
 draftLineItems (array of {description, qty, rate, amount} — use plain numbers without currency symbols when possible).
@@ -232,9 +300,178 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
   return { suggestion, parsed }
 }
 
+function normalizeAuditLines(
+  inputLines: Array<{
+    lineItemId: string
+    sortOrder?: number
+    lineType: string
+    description: string
+    quantity: string
+    unitPrice: string
+  }>,
+  aiLines: Array<Record<string, unknown>>,
+): InvoiceLineAuditContent {
+  const normalized = inputLines.map((input) => {
+    const ai = aiLines.find(row => String(row.lineItemId) === input.lineItemId)
+    const original = {
+      description: input.description,
+      quantity: String(input.quantity),
+      unitPrice: String(input.unitPrice),
+    }
+    const status = ai?.status === 'needs_fix' ? 'needs_fix' as const : 'ok' as const
+    const issues = Array.isArray(ai?.issues)
+      ? ai.issues.map(i => String(i)).filter(Boolean).slice(0, 20)
+      : []
+    let suggested = null
+    if (status === 'needs_fix' && ai?.suggested && typeof ai.suggested === 'object') {
+      const s = ai.suggested as Record<string, unknown>
+      suggested = {
+        description: String(s.description ?? original.description).slice(0, 500),
+        quantity: String(s.quantity ?? original.quantity).slice(0, 30),
+        unitPrice: String(s.unitPrice ?? original.unitPrice).slice(0, 30),
+      }
+    }
+    return {
+      lineItemId: input.lineItemId,
+      sortOrder: input.sortOrder,
+      lineType: (input.lineType === 'part' || input.lineType === 'fee' ? input.lineType : 'labor') as 'part' | 'labor' | 'fee',
+      status,
+      issues,
+      original,
+      suggested,
+    }
+  })
+
+  const issuesFound = normalized.filter(l => l.status === 'needs_fix').length
+  return invoiceLineAuditContentSchema.parse({
+    kind: 'invoice_line_audit',
+    checkedAt: new Date().toISOString(),
+    lines: normalized,
+    summary: { totalLines: normalized.length, issuesFound },
+  })
+}
+
+export async function runInvoiceLineAuditJob(db: Db, aiJobId: string) {
+  const job = await getAiJob(db, aiJobId)
+  if (!job) throw new AiFeaturesServiceError('NOT_FOUND', 'AI job not found')
+  if (job.inputPayload.mode !== 'line_audit') {
+    throw new AiFeaturesServiceError('INVALID_CONTENT', 'Not a line audit job')
+  }
+
+  const { model } = await assertAiFeatureEnabled(db, 'invoice_description')
+  const apiKey = await getDecryptedApiKey(db)
+  if (!apiKey) throw new AiProviderServiceError('NOT_CONFIGURED')
+
+  await updateAiJobStatus(db, aiJobId, 'processing')
+
+  const inputLines = (job.inputPayload.lines ?? []) as Array<{
+    lineItemId: string
+    sortOrder?: number
+    lineType: string
+    description: string
+    quantity: string
+    unitPrice: string
+    lineAmount?: string
+  }>
+  const rules = String(job.inputPayload.rules ?? '')
+  const complaint = job.inputPayload.complaint ? String(job.inputPayload.complaint) : null
+
+  const userPrompt = [
+    complaint ? `Invoice complaint context: ${complaint}` : '',
+    'Audit each line item below. Apply the rules strictly.',
+    JSON.stringify({ lines: inputLines }, null, 2),
+  ].filter(Boolean).join('\n\n')
+
+  const result = await openRouterChat(apiKey, model, [
+    { role: 'system', content: buildLineAuditSystemPrompt(rules) },
+    { role: 'user', content: userPrompt },
+  ], 'invoice_description')
+
+  const parsedRaw = parseOpenRouterJson(result.content) as { lines?: Array<Record<string, unknown>> }
+  const auditContent = normalizeAuditLines(inputLines, parsedRaw.lines ?? [])
+
+  await logAiUsage(db, {
+    aiJobId,
+    featureType: 'invoice_description',
+    model: result.model,
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
+    totalTokens: result.totalTokens,
+    estimatedCostUsd: result.estimatedCostUsd,
+    createdBy: job.createdBy ?? undefined,
+  })
+
+  const originalContent = {
+    kind: 'invoice_line_audit',
+    lines: inputLines,
+  }
+
+  if (auditContent.summary.issuesFound === 0) {
+    await updateAiJobStatus(db, aiJobId, 'done', {
+      outputPayload: { issuesFound: 0, suggestionId: null, auditContent },
+    })
+    return { auditContent, suggestion: null }
+  }
+
+  const suggestion = await createAiSuggestion(db, {
+    aiJobId,
+    featureType: 'invoice_description',
+    entityType: 'invoice',
+    entityId: job.entityId,
+    originalContent,
+    suggestedContent: auditContent,
+  })
+
+  await updateAiJobStatus(db, aiJobId, 'done', {
+    outputPayload: { issuesFound: auditContent.summary.issuesFound, suggestionId: suggestion.id },
+  })
+
+  return { auditContent, suggestion }
+}
+
+export async function reviewInvoiceLineAudit(
+  db: Db,
+  review: InvoiceLineAuditReview,
+  actorId: string,
+) {
+  const suggestion = await getAiSuggestion(db, review.suggestionId)
+  if (!suggestion) throw new AiFeaturesServiceError('NOT_FOUND', 'Suggestion not found')
+  if (suggestion.status !== 'pending') {
+    throw new AiFeaturesServiceError('NOT_PENDING', 'Audit report was already reviewed')
+  }
+
+  const parsed = invoiceLineAuditContentSchema.safeParse(suggestion.suggestedContent)
+  if (!parsed.success || parsed.data.kind !== 'invoice_line_audit') {
+    throw new AiFeaturesServiceError('INVALID_CONTENT', 'Invalid line audit report')
+  }
+
+  const decisionMap = new Map(review.decisions.map(d => [d.lineItemId, d.action]))
+  const needsFix = parsed.data.lines.filter(l => l.status === 'needs_fix')
+
+  for (const line of needsFix) {
+    const action = decisionMap.get(line.lineItemId)
+    if (action !== 'accept' || !line.suggested) continue
+    await updateInvoiceLineItem(db, suggestion.entityId, line.lineItemId, {
+      description: line.suggested.description,
+      quantity: line.suggested.quantity,
+      unitPrice: line.suggested.unitPrice,
+    }, actorId)
+  }
+
+  const allRejected = needsFix.length > 0 && needsFix.every(l => decisionMap.get(l.lineItemId) === 'reject')
+  const anyAccepted = needsFix.some(l => decisionMap.get(l.lineItemId) === 'accept')
+
+  const status = anyAccepted ? 'accepted' : allRejected ? 'rejected' : 'edited'
+  return updateAiSuggestionReview(db, review.suggestionId, status, actorId)
+}
+
 export async function runInvoiceDescriptionJob(db: Db, aiJobId: string) {
   const job = await getAiJob(db, aiJobId)
   if (!job) throw new AiFeaturesServiceError('NOT_FOUND', 'AI job not found')
+
+  if (job.inputPayload.mode === 'line_audit') {
+    return runInvoiceLineAuditJob(db, aiJobId)
+  }
 
   const { model } = await assertAiFeatureEnabled(db, 'invoice_description')
   const apiKey = await getDecryptedApiKey(db)
@@ -325,6 +562,9 @@ export async function reviewAiSuggestion(
     }
   }
   else if (suggestion.featureType === 'invoice_description') {
+    if ((suggestion.suggestedContent as { kind?: string }).kind === 'invoice_line_audit') {
+      throw new AiFeaturesServiceError('INVALID_CONTENT', 'Use the line audit review endpoint for this report')
+    }
     const parsed = invoiceDescriptionContentSchema.safeParse({
       ...content,
       lineItemId: review.lineItemId

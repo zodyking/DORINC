@@ -15,6 +15,7 @@ import {
   type LineTypeVerbSettings,
   type NotificationSettings,
 } from '../../shared/workspace-settings-defaults'
+import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
   businessProfileSchema,
   catalogKeywordMapSchema,
@@ -124,6 +125,7 @@ export async function getInvoiceWorkspaceSettings(db: Db): Promise<InvoiceWorksp
     ...DEFAULT_INVOICE_SETTINGS,
     ...raw,
     managerApprovalThreshold: threshold ?? raw?.managerApprovalThreshold ?? DEFAULT_INVOICE_SETTINGS.managerApprovalThreshold,
+    lineItemAiRules: normalizeInvoiceLineAiRules(raw?.lineItemAiRules ?? DEFAULT_INVOICE_SETTINGS.lineItemAiRules),
   }
   return invoiceWorkspaceSettingsSchema.parse(merged)
 }
@@ -137,6 +139,7 @@ export async function saveInvoiceWorkspaceSettings(
   await writeJson(db, WORKSPACE_SETTING_KEYS.invoice, {
     defaultPaymentTermsDays: settings.defaultPaymentTermsDays,
     shopSuppliesPercent: settings.shopSuppliesPercent,
+    lineItemAiRules: settings.lineItemAiRules.trim(),
   }, updatedBy)
   await writeJson(db, MANAGER_APPROVAL_THRESHOLD_KEY, {
     amount: settings.managerApprovalThreshold,

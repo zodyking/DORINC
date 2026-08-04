@@ -41,6 +41,7 @@ export function pendingDescriptionSuggestion(
 ): AiSuggestionRow | null {
   return suggestions.find((s) => {
     if (s.status !== 'pending' || s.featureType !== 'invoice_description') return false
+    if ((s.suggestedContent as { kind?: string }).kind === 'invoice_line_audit') return false
     const orig = s.originalContent?.lineItemId ?? s.suggestedContent.lineItemId
     return orig === lineItemId
   }) ?? null
