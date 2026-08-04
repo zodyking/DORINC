@@ -400,6 +400,13 @@
       "when": 1784261000000,
       "tag": "0059_billing_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1784262000000,
+      "tag": "0060_namecheap_manual_domains",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
         namecheapEnabled: before.namecheapEnabled,
         hasNamecheapApiKey: before.hasNamecheapApiKey,
         namecheapMonitoredDomains: before.namecheapMonitoredDomains,
+        namecheapManualDomains: before.namecheapManualDomains,
         openrouterBillingEnabled: before.openrouterBillingEnabled,
         hasOpenrouterManagementKey: before.hasOpenrouterManagementKey,
       },

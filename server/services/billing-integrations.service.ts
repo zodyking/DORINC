@@ -26,6 +26,7 @@ function toView(row: typeof billingIntegrations.$inferSelect): BillingIntegratio
     namecheapClientIp: row.namecheapClientIp,
     namecheapUseSandbox: row.namecheapUseSandbox,
     namecheapMonitoredDomains: row.namecheapMonitoredDomains ?? [],
+    namecheapManualDomains: row.namecheapManualDomains ?? [],
     openrouterBillingEnabled: row.openrouterBillingEnabled,
     hasOpenrouterManagementKey: row.encryptedOpenrouterManagementKey != null && row.encryptedOpenrouterManagementKey.length > 0,
     updatedAt: row.updatedAt.toISOString(),

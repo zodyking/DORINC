@@ -1,6 +1,7 @@
 import { boolean, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { bytea } from './ai'
 import { users } from './auth'
+import type { NamecheapManualDomain } from '../../../shared/validators/billing-integrations'
 
 /** Singleton credentials + watch lists for external billing providers. */
 export const billingIntegrations = pgTable('billing_integrations', {
@@ -15,6 +16,7 @@ export const billingIntegrations = pgTable('billing_integrations', {
   encryptedNamecheapApiKey: bytea('encrypted_namecheap_api_key'),
   namecheapUseSandbox: boolean('namecheap_use_sandbox').notNull().default(false),
   namecheapMonitoredDomains: jsonb('namecheap_monitored_domains').$type<string[]>().notNull().default([]),
+  namecheapManualDomains: jsonb('namecheap_manual_domains').$type<NamecheapManualDomain[]>().notNull().default([]),
   openrouterBillingEnabled: boolean('openrouter_billing_enabled').notNull().default(true),
   encryptedOpenrouterManagementKey: bytea('encrypted_openrouter_management_key'),
   updatedBy: uuid('updated_by').references(() => users.id),

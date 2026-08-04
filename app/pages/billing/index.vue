@@ -164,7 +164,7 @@ async function reload() {
           </div>
           <div class="cbody">
             <p v-if="dashboard.namecheap.error" class="err">{{ dashboard.namecheap.error }}</p>
-            <template v-else-if="dashboard.namecheap.configured">
+            <template v-if="dashboard.namecheap.configured">
               <div v-if="dashboard.namecheap.domains.length" class="tscroll">
                 <table class="tbl compact">
                   <thead>
@@ -179,7 +179,8 @@ async function reload() {
                     <tr v-for="domain in dashboard.namecheap.domains" :key="domain.name">
                       <td>
                         <b>{{ domain.name }}</b>
-                        <span v-if="domain.autoRenew" class="tag">Auto-renew</span>
+                        <span v-if="domain.source === 'manual'" class="tag manual">Manual</span>
+                        <span v-else-if="domain.autoRenew" class="tag">Auto-renew</span>
                       </td>
                       <td>{{ domain.renewalDate }}</td>
                       <td><span class="pill sm" :class="daysBadgeClass(domain.daysUntilRenewal)">{{ domain.daysUntilRenewal }}d</span></td>
@@ -188,7 +189,7 @@ async function reload() {
                   </tbody>
                 </table>
               </div>
-              <p v-else class="muted">No domains selected — choose domains in Control Panel → Billing.</p>
+              <p v-else class="muted">No domains configured — add manual domains or API watch list in Control Panel → Billing.</p>
             </template>
             <p v-else class="muted">Configure Namecheap in Control Panel → Billing.</p>
           </div>
@@ -383,6 +384,11 @@ async function reload() {
   background: #e0f2fe;
   padding: 2px 6px;
   border-radius: 999px;
+}
+
+.tag.manual {
+  color: #7c3aed;
+  background: #ede9fe;
 }
 
 .pill.sm {

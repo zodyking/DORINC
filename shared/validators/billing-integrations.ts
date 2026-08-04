@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+export const namecheapManualDomainSchema = z.object({
+  name: z.string().trim().min(3).max(253),
+  renewalDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+  renewalCost: z.coerce.number().min(0).max(999999),
+})
+
+export type NamecheapManualDomain = z.infer<typeof namecheapManualDomainSchema>
+
 export const billingIntegrationsPatchSchema = z.object({
   vultrEnabled: z.boolean().optional(),
   vultrApiKey: z.string().trim().min(8).max(512).optional(),
@@ -11,6 +19,7 @@ export const billingIntegrationsPatchSchema = z.object({
   namecheapApiKey: z.string().trim().min(8).max(512).optional(),
   namecheapUseSandbox: z.boolean().optional(),
   namecheapMonitoredDomains: z.array(z.string().trim().min(3).max(253)).max(500).optional(),
+  namecheapManualDomains: z.array(namecheapManualDomainSchema).max(500).optional(),
   openrouterBillingEnabled: z.boolean().optional(),
   openrouterManagementKey: z.string().trim().min(8).max(512).optional(),
 })
@@ -29,6 +38,7 @@ export interface BillingIntegrationsView {
   namecheapClientIp: string | null
   namecheapUseSandbox: boolean
   namecheapMonitoredDomains: string[]
+  namecheapManualDomains: NamecheapManualDomain[]
   openrouterBillingEnabled: boolean
   hasOpenrouterManagementKey: boolean
   updatedAt: string | Date
@@ -43,6 +53,7 @@ export interface BillingDashboardDomain {
   renewalCost: number | null
   renewalCostStatus: 'ok' | 'premium-domain-price-unavailable' | 'pricing-unavailable'
   currency: string
+  source: 'manual' | 'api'
 }
 
 export interface BillingDashboardPayload {

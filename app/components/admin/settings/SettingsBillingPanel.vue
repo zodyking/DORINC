@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BillingIntegrationsView } from '#shared/validators/billing-integrations'
+import type { BillingIntegrationsView, NamecheapManualDomain } from '#shared/validators/billing-integrations'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
 
 const emit = defineEmits<{ saved: [] }>()
@@ -27,6 +27,12 @@ interface NamecheapDomainOption {
 
 const { data, refresh, pending } = useClientFetch<IntegrationsResponse>('/api/admin/billing/integrations')
 
+interface ManualDomainFormRow {
+  name: string
+  renewalDate: string
+  renewalCost: string
+}
+
 const form = reactive({
   vultrEnabled: false,
   vultrApiKey: '',
@@ -38,9 +44,33 @@ const form = reactive({
   namecheapApiKey: '',
   namecheapUseSandbox: false,
   namecheapMonitoredDomains: [] as string[],
+  namecheapManualDomains: [] as ManualDomainFormRow[],
   openrouterBillingEnabled: true,
   openrouterManagementKey: '',
 })
+
+function manualDomainToForm(row: NamecheapManualDomain): ManualDomainFormRow {
+  return {
+    name: row.name,
+    renewalDate: row.renewalDate,
+    renewalCost: String(row.renewalCost),
+  }
+}
+
+function formManualDomainsForSave(): NamecheapManualDomain[] {
+  return form.namecheapManualDomains
+    .map(row => ({
+      name: row.name.trim(),
+      renewalDate: row.renewalDate.trim(),
+      renewalCost: Number(row.renewalCost),
+    }))
+    .filter(row =>
+      row.name.length >= 3
+      && /^\d{4}-\d{2}-\d{2}$/.test(row.renewalDate)
+      && Number.isFinite(row.renewalCost)
+      && row.renewalCost >= 0,
+    )
+}
 
 function hydrate(s: BillingIntegrationsView) {
   form.vultrEnabled = s.vultrEnabled
@@ -53,6 +83,7 @@ function hydrate(s: BillingIntegrationsView) {
   form.namecheapApiKey = s.hasNamecheapApiKey ? SAVED_PASSWORD_MASK : ''
   form.namecheapUseSandbox = s.namecheapUseSandbox
   form.namecheapMonitoredDomains = [...s.namecheapMonitoredDomains]
+  form.namecheapManualDomains = s.namecheapManualDomains.map(manualDomainToForm)
   form.openrouterBillingEnabled = s.openrouterBillingEnabled
   form.openrouterManagementKey = s.hasOpenrouterManagementKey ? SAVED_PASSWORD_MASK : ''
 }
@@ -130,6 +161,14 @@ function toggleDomain(name: string, checked: boolean) {
   form.namecheapMonitoredDomains = [...set]
 }
 
+function addManualDomain() {
+  form.namecheapManualDomains.push({ name: '', renewalDate: '', renewalCost: '' })
+}
+
+function removeManualDomain(index: number) {
+  form.namecheapManualDomains.splice(index, 1)
+}
+
 const saveBusy = ref(false)
 const testBusy = ref<'vultr' | 'namecheap' | 'openrouter' | null>(null)
 const message = ref('')
@@ -149,6 +188,7 @@ async function save() {
       namecheapClientIp: form.namecheapClientIp.trim() || undefined,
       namecheapUseSandbox: form.namecheapUseSandbox,
       namecheapMonitoredDomains: form.namecheapMonitoredDomains,
+      namecheapManualDomains: formManualDomainsForSave(),
       openrouterBillingEnabled: form.openrouterBillingEnabled,
     }
 
@@ -282,7 +322,7 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
           <div class="tglrow">
             <div>
               <div class="notif-label">Enable Namecheap monitoring</div>
-              <div class="notif-desc">Domain expiration dates and renewal pricing. Your server IP must be whitelisted in Namecheap.</div>
+              <div class="notif-desc">Track domain renewals via manual entries or the Namecheap API (API access requires 20+ domains in your account).</div>
             </div>
             <span class="tgl">
               <input v-model="form.namecheapEnabled" type="checkbox">
@@ -317,10 +357,40 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
             </button>
           </div>
 
+          <template v-if="form.namecheapEnabled">
+            <hr class="section-divider">
+            <div class="notif-label">Manual domains</div>
+            <p class="settings-help">
+              Enter domains manually until Namecheap approves API access. These appear on the Billing dashboard immediately after save.
+            </p>
+            <div v-if="form.namecheapManualDomains.length" class="manual-domain-list">
+              <div v-for="(row, index) in form.namecheapManualDomains" :key="index" class="manual-domain-row">
+                <label class="fld">
+                  Domain
+                  <input v-model="row.name" type="text" maxlength="253" placeholder="example.com">
+                </label>
+                <label class="fld">
+                  Expiry date
+                  <input v-model="row.renewalDate" type="date">
+                </label>
+                <label class="fld">
+                  Renewal cost (USD)
+                  <input v-model="row.renewalCost" type="number" min="0" step="0.01" placeholder="15.88">
+                </label>
+                <button type="button" class="btn sm danger" @click="removeManualDomain(index)">
+                  Remove
+                </button>
+              </div>
+            </div>
+            <button type="button" class="btn sm" @click="addManualDomain">
+              + Add domain
+            </button>
+          </template>
+
           <template v-if="hasNamecheapKey && form.namecheapEnabled">
             <hr class="section-divider">
-            <div class="notif-label">Watched domains</div>
-            <p class="settings-help">Select domains to track renewal dates and estimated renewal cost.</p>
+            <div class="notif-label">Watched domains (API)</div>
+            <p class="settings-help">When API access is approved, select domains to sync renewal dates and pricing automatically.</p>
             <button type="button" class="btn sm" :disabled="namecheapDomainsLoading" @click="loadNamecheapDomains">
               {{ namecheapDomainsLoading ? 'Loading…' : 'Refresh domain list' }}
             </button>
@@ -437,5 +507,33 @@ async function testConnection(provider: 'vultr' | 'namecheap' | 'openrouter') {
   align-self: flex-start;
   font-size: 12px;
   padding: 6px 10px;
+}
+
+.manual-domain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.manual-domain-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+@media (max-width: 900px) {
+  .manual-domain-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.btn.sm.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
 }
 </style>

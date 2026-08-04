@@ -12,6 +12,7 @@ import {
   fetchNamecheapRenewalPrice,
   parseNamecheapExpiry,
 } from './namecheap-billing.service'
+import { mapManualNamecheapDomains, mergeNamecheapDashboardDomains } from './namecheap-manual-domains.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
 import {
   fetchVultrAccount,
@@ -46,7 +47,8 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   }
 
   const namecheapBlock: BillingDashboardPayload['namecheap'] = {
-    configured: settings.namecheapEnabled && settings.hasNamecheapApiKey,
+    configured: settings.namecheapEnabled
+      && (settings.hasNamecheapApiKey || settings.namecheapManualDomains.length > 0),
     domains: [],
     error: null,
     lastUpdated: nowIso,
@@ -91,49 +93,62 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     }
   }
 
-  if (settings.namecheapEnabled && settings.hasNamecheapApiKey) {
-    try {
-      const creds = await getNamecheapCredentials(db)
-      if (!creds) throw new Error('Namecheap credentials incomplete')
-      const allDomains = await fetchNamecheapDomains(creds)
-      const watched = new Set(settings.namecheapMonitoredDomains.map(d => d.toLowerCase()))
-      const selected = allDomains.filter(row =>
-        watched.size === 0 ? false : watched.has(row.name.toLowerCase()),
-      )
+  if (settings.namecheapEnabled) {
+    const apiDomains: BillingDashboardDomain[] = []
 
-      for (const row of selected) {
-        const expiry = parseNamecheapExpiry(row.expires)
-        const days = expiry ? daysUntil(expiry) : 0
-        let renewalCost: number | null = null
-        let renewalCostStatus: 'ok' | 'premium-domain-price-unavailable' | 'pricing-unavailable' = 'pricing-unavailable'
+    if (settings.hasNamecheapApiKey) {
+      try {
+        const creds = await getNamecheapCredentials(db)
+        if (!creds) throw new Error('Namecheap credentials incomplete')
+        const allDomains = await fetchNamecheapDomains(creds)
+        const watched = new Set(settings.namecheapMonitoredDomains.map(d => d.toLowerCase()))
+        const selected = allDomains.filter(row =>
+          watched.size === 0 ? false : watched.has(row.name.toLowerCase()),
+        )
 
-        if (row.isPremium) {
-          renewalCostStatus = 'premium-domain-price-unavailable'
-        }
-        else {
-          try {
-            renewalCost = await fetchNamecheapRenewalPrice(creds, domainTld(row.name))
-            renewalCostStatus = renewalCost == null ? 'pricing-unavailable' : 'ok'
+        for (const row of selected) {
+          const expiry = parseNamecheapExpiry(row.expires)
+          const days = expiry ? daysUntil(expiry) : 0
+          let renewalCost: number | null = null
+          let renewalCostStatus: 'ok' | 'premium-domain-price-unavailable' | 'pricing-unavailable' = 'pricing-unavailable'
+
+          if (row.isPremium) {
+            renewalCostStatus = 'premium-domain-price-unavailable'
           }
-          catch {
-            renewalCostStatus = 'pricing-unavailable'
+          else {
+            try {
+              renewalCost = await fetchNamecheapRenewalPrice(creds, domainTld(row.name))
+              renewalCostStatus = renewalCost == null ? 'pricing-unavailable' : 'ok'
+            }
+            catch {
+              renewalCostStatus = 'pricing-unavailable'
+            }
           }
-        }
 
-        namecheapBlock.domains.push({
-          name: row.name,
-          renewalDate: expiry ? expiry.toISOString().slice(0, 10) : row.expires,
-          daysUntilRenewal: days,
-          autoRenew: row.autoRenew,
-          premium: row.isPremium,
-          renewalCost,
-          renewalCostStatus,
-          currency: 'USD',
-        })
+          apiDomains.push({
+            name: row.name,
+            renewalDate: expiry ? expiry.toISOString().slice(0, 10) : row.expires,
+            daysUntilRenewal: days,
+            autoRenew: row.autoRenew,
+            premium: row.isPremium,
+            renewalCost,
+            renewalCostStatus,
+            currency: 'USD',
+            source: 'api',
+          })
+        }
+      }
+      catch (e) {
+        namecheapBlock.error = (e as Error).message
       }
     }
-    catch (e) {
-      namecheapBlock.error = (e as Error).message
+
+    namecheapBlock.domains = settings.hasNamecheapApiKey
+      ? mergeNamecheapDashboardDomains(settings.namecheapManualDomains, apiDomains)
+      : mapManualNamecheapDomains(settings.namecheapManualDomains)
+
+    if (namecheapBlock.domains.length > 0 && namecheapBlock.error && settings.namecheapManualDomains.length > 0) {
+      namecheapBlock.error = null
     }
   }
 
@@ -173,7 +188,8 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   return {
     configured: {
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
-      namecheap: settings.namecheapEnabled && settings.hasNamecheapApiKey,
+      namecheap: settings.namecheapEnabled
+        && (settings.hasNamecheapApiKey || settings.namecheapManualDomains.length > 0),
       openrouter: settings.openrouterBillingEnabled,
     },
     vultr: vultrBlock,
