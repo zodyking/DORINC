@@ -184,6 +184,42 @@ function buildCustomerSnapshot(customer: Awaited<ReturnType<typeof getCustomer>>
   }
 }
 
+export interface RecalculateInvoiceTotalsOptions {
+  /** When true, refresh invoice.taxExempt from the live customer before totals (save paths only). */
+  syncTaxExemptFromCustomer?: boolean
+}
+
+async function syncInvoiceTaxExemptFromCustomer(
+  db: Db,
+  invoice: Awaited<ReturnType<typeof getInvoice>>,
+  actorId: string,
+): Promise<boolean> {
+  if (!invoice.customerId) return false
+
+  let customer
+  try {
+    customer = await getCustomer(db, invoice.customerId)
+  }
+  catch {
+    return false
+  }
+
+  if (customer.taxExempt === invoice.taxExempt) return false
+
+  const customerSnapshot = invoice.customerSnapshot
+    ? { ...invoice.customerSnapshot, taxExempt: customer.taxExempt }
+    : buildCustomerSnapshot(customer)
+
+  await db.update(invoices).set({
+    taxExempt: customer.taxExempt,
+    customerSnapshot,
+    updatedBy: actorId,
+    updatedAt: new Date(),
+  }).where(eq(invoices.id, invoice.id))
+
+  return true
+}
+
 function buildVehicleSnapshot(vehicle: Awaited<ReturnType<typeof getVehicle>>): InvoiceVehicleSnapshot {
   return {
     unitType: vehicle.unitType,
@@ -294,7 +330,7 @@ async function copyServiceLogDraftLineItems(
     })
   }
 
-  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  await recalculateInvoiceTotals(db, invoiceId, actorId, { syncTaxExemptFromCustomer: true })
 }
 
 export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: string) {
@@ -413,7 +449,7 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
 
   if (source === 'duplicate' || source === 'revision') {
     await copyLineItems(db, input.sourceInvoiceId!, invoice.id, actorId)
-    await recalculateInvoiceTotals(db, invoice.id, actorId)
+    await recalculateInvoiceTotals(db, invoice.id, actorId, { syncTaxExemptFromCustomer: true })
     return getInvoice(db, invoice.id)
   }
 
@@ -899,17 +935,13 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
     }
   }
 
-  if (!changedFields.length) return { invoice: before, before, changedFields }
-
-  const [updated] = await db.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
-  const totalsFields = ['taxRate', 'discountAmount', 'customerId', 'taxExempt']
-  if (changedFields.some(f => totalsFields.includes(f))) {
-    await recalculateInvoiceTotals(db, id, actorId)
-    const refreshed = await getInvoice(db, id)
-    return { invoice: refreshed, before, changedFields }
+  if (changedFields.length) {
+    await db.update(invoices).set(changes).where(eq(invoices.id, id))
   }
 
-  return { invoice: updated!, before, changedFields }
+  await recalculateInvoiceTotals(db, id, actorId, { syncTaxExemptFromCustomer: true })
+  const refreshed = await getInvoice(db, id)
+  return { invoice: refreshed, before, changedFields }
 }
 
 export async function updateInvoiceDates(
@@ -975,7 +1007,7 @@ export async function addInvoiceLineItem(
     updatedBy: actorId,
   }).returning()
 
-  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  await recalculateInvoiceTotals(db, invoiceId, actorId, { syncTaxExemptFromCustomer: true })
   return row!
 }
 
@@ -1039,7 +1071,7 @@ export async function updateInvoiceLineItem(
     .where(eq(invoiceLineItems.id, lineId))
     .returning()
 
-  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  await recalculateInvoiceTotals(db, invoiceId, actorId, { syncTaxExemptFromCustomer: true })
   return { line: updated!, changedFields, before: existing }
 }
 
@@ -1052,12 +1084,24 @@ export async function deleteInvoiceLineItem(db: Db, invoiceId: string, lineId: s
   if (!existing) throw new InvoicesServiceError('LINE_NOT_FOUND')
 
   await db.delete(invoiceLineItems).where(eq(invoiceLineItems.id, lineId))
-  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  await recalculateInvoiceTotals(db, invoiceId, actorId, { syncTaxExemptFromCustomer: true })
   return { deleted: existing }
 }
 
-export async function recalculateInvoiceTotals(db: Db, invoiceId: string, actorId: string) {
-  const invoice = await getInvoice(db, invoiceId)
+export async function recalculateInvoiceTotals(
+  db: Db,
+  invoiceId: string,
+  actorId: string,
+  opts: RecalculateInvoiceTotalsOptions = {},
+) {
+  let invoice = await getInvoice(db, invoiceId)
+  if (opts.syncTaxExemptFromCustomer) {
+    const synced = await syncInvoiceTaxExemptFromCustomer(db, invoice, actorId)
+    if (synced) {
+      invoice = await getInvoice(db, invoiceId)
+    }
+  }
+
   const lines = await listInvoiceLineItems(db, invoiceId)
   const taxRate = await resolveInvoiceTaxRateForTotals(db, invoice)
 
@@ -1112,7 +1156,7 @@ export async function recalculateOpenInvoiceTaxTotals(db: Db, actorId: string) {
     .where(inArray(invoices.status, TAX_SYNCABLE_STATUSES))
 
   for (const row of rows) {
-    await recalculateInvoiceTotals(db, row.id, actorId)
+    await recalculateInvoiceTotals(db, row.id, actorId, { syncTaxExemptFromCustomer: true })
   }
 
   return { count: rows.length }
@@ -1139,7 +1183,7 @@ export async function transitionInvoice(
 
   if (to === 'sent') {
     if (before.status === 'draft' || before.status === 'pending_manager_approval') {
-      await recalculateInvoiceTotals(db, id, actorId)
+      await recalculateInvoiceTotals(db, id, actorId, { syncTaxExemptFromCustomer: true })
     }
     changes.approvedBy = actorId
     changes.approvedAt = new Date()

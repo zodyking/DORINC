@@ -744,7 +744,7 @@ export async function convertEstimateToInvoice(
       updatedAt: new Date(),
     }).where(eq(invoicesTable.id, invoice.id))
 
-    await recalculateInvoiceTotals(tx, invoice.id, actorId)
+    await recalculateInvoiceTotals(tx, invoice.id, actorId, { syncTaxExemptFromCustomer: true })
 
     const [estimate] = await tx.update(estimates).set({
       convertedInvoiceId: invoice.id,

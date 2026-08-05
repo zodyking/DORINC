@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createCatalogItem, createCategory } from '../../server/services/catalog.service'
-import { createCustomer } from '../../server/services/customers.service'
+import { createCustomer, updateCustomer } from '../../server/services/customers.service'
 import {
   addInvoiceLineItem,
   createInvoice,
@@ -437,5 +437,78 @@ describe('invoice tax from business settings', () => {
     await recalculateInvoiceTotals(db, invoice.id, ACTOR)
     const after = await getInvoice(db, invoice.id)
     expect(after.taxRate).toBe(sent.taxRate)
+  })
+})
+
+describe('invoice tax exemption sync on save', () => {
+  it('refreshes taxExempt from the live customer when saving, not when opening', async () => {
+    await saveBusinessProfile(db, {
+      businessName: 'Tax Exempt Sync Shop',
+      phone: '',
+      email: '',
+      website: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'US',
+      taxId: '',
+      defaultTaxRatePercent: '10',
+    }, ACTOR)
+
+    const taxableCustomer = await createCustomer(db, {
+      displayName: `InvTaxSync-${stamp} Fleet`,
+      accountKind: 'fleet',
+      email: `inv-tax-sync-${stamp}@test.dorinc.local`,
+      taxExempt: false,
+      paymentTerms: 'net_30',
+    }, ACTOR)
+
+    const invoice = await createInvoice(db, {
+      customerId: taxableCustomer.id,
+      vehicleId: vehicle.id,
+      invoiceDate: '2026-08-05',
+      creationSource: 'blank',
+    }, ACTOR)
+
+    await addInvoiceLineItem(db, invoice.id, {
+      lineType: 'labor',
+      description: 'Brake service',
+      quantity: '1',
+      unitPrice: '1000.00',
+      taxable: true,
+      sortOrder: 1,
+    }, ACTOR)
+
+    const initial = await getInvoice(db, invoice.id)
+    expect(initial.taxExempt).toBe(false)
+    expect(initial.taxAmount).toBe('100.00')
+    expect(initial.total).toBe('1100.00')
+
+    await updateCustomer(db, taxableCustomer.id, { taxExempt: true })
+
+    await recalculateInvoiceTotals(db, invoice.id, ACTOR)
+    const afterOpenRecalc = await getInvoice(db, invoice.id)
+    expect(afterOpenRecalc.taxExempt).toBe(false)
+    expect(afterOpenRecalc.taxAmount).toBe('100.00')
+
+    await updateInvoiceDraft(db, invoice.id, {}, ACTOR)
+    const afterSave = await getInvoice(db, invoice.id)
+    expect(afterSave.taxExempt).toBe(true)
+    expect(afterSave.customerSnapshot.taxExempt).toBe(true)
+    expect(afterSave.taxAmount).toBe('0')
+    expect(afterSave.total).toBe('1000.00')
+
+    await updateCustomer(db, taxableCustomer.id, { taxExempt: false })
+    await updateInvoiceDraft(db, invoice.id, {}, ACTOR)
+    const afterRemoveExemption = await getInvoice(db, invoice.id)
+    expect(afterRemoveExemption.taxExempt).toBe(false)
+    expect(afterRemoveExemption.taxAmount).toBe('100.00')
+    expect(afterRemoveExemption.total).toBe('1100.00')
+
+    await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id))
+    await db.delete(invoices).where(eq(invoices.id, invoice.id))
+    await db.delete(customers).where(eq(customers.id, taxableCustomer.id))
   })
 })

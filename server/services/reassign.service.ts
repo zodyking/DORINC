@@ -130,7 +130,7 @@ export async function reassignVehicle(
       }).where(and(eq(invoices.vehicleId, vehicleId), ne(invoices.status, 'void')))
       for (const row of invoiceRows) {
         if (row.status === 'draft') {
-          await recalculateInvoiceTotals(db, row.id, actorId)
+          await recalculateInvoiceTotals(db, row.id, actorId, { syncTaxExemptFromCustomer: true })
         }
       }
     }
@@ -224,7 +224,7 @@ export async function reassignInvoiceCustomer(
     updatedAt: new Date(),
   }).where(eq(invoices.id, invoiceId))
 
-  await recalculateInvoiceTotals(db, invoiceId, actorId)
+  await recalculateInvoiceTotals(db, invoiceId, actorId, { syncTaxExemptFromCustomer: true })
   const invoice = await getInvoice(db, invoiceId)
 
   return {

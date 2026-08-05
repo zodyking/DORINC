@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const actorId = auth?.user.id ?? 'system'
+    // Recalculate line totals on open, but do not refresh taxExempt from the customer until save.
     await recalculateInvoiceTotals(db, id, actorId)
     const invoice = await getInvoiceDetail(db, id)
 
