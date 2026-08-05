@@ -29,6 +29,7 @@ function toView(row: typeof billingIntegrations.$inferSelect): BillingIntegratio
     namecheapMonitoredDomains: row.namecheapMonitoredDomains ?? [],
     namecheapManualDomains: row.namecheapManualDomains ?? [],
     openrouterBillingEnabled: row.openrouterBillingEnabled,
+    hasOpenrouterManagementKey: row.encryptedOpenrouterManagementKey != null && row.encryptedOpenrouterManagementKey.length > 0,
     hasAiOpenRouterKey: false,
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -65,6 +66,7 @@ export async function updateBillingIntegrations(
   const {
     vultrApiKey,
     namecheapApiKey,
+    openrouterManagementKey,
     ...rest
   } = patch
 
@@ -81,6 +83,10 @@ export async function updateBillingIntegrations(
   if (namecheapApiKey !== undefined) {
     await ensureEncryptionReadyForSettings(db)
     update.encryptedNamecheapApiKey = encryptBuffer(Buffer.from(namecheapApiKey, 'utf8'))
+  }
+  if (openrouterManagementKey !== undefined) {
+    await ensureEncryptionReadyForSettings(db)
+    update.encryptedOpenrouterManagementKey = encryptBuffer(Buffer.from(openrouterManagementKey, 'utf8'))
   }
 
   const [updated] = await db.update(billingIntegrations)
@@ -103,6 +109,12 @@ async function readSecret(buffer: Buffer | null | undefined): Promise<string | n
 
 export async function getVultrApiKey(db: Db): Promise<string | null> {
   const [row] = await db.select({ key: billingIntegrations.encryptedVultrApiKey })
+    .from(billingIntegrations).limit(1)
+  return readSecret(row?.key)
+}
+
+export async function getOpenRouterManagementKey(db: Db): Promise<string | null> {
+  const [row] = await db.select({ key: billingIntegrations.encryptedOpenrouterManagementKey })
     .from(billingIntegrations).limit(1)
   return readSecret(row?.key)
 }

@@ -1,6 +1,7 @@
 import type { Db } from '../db/client'
 import { getAiProviderSettings, getDecryptedApiKey } from './ai-provider.service'
 import { getAiUsageSummary } from './ai-jobs.service'
+import { getOpenRouterManagementKey } from './billing-integrations.service'
 
 export interface OpenRouterCreditsSummary {
   totalCredits: number
@@ -17,13 +18,25 @@ export interface OpenRouterKeySummary {
   isManagementKey: boolean
 }
 
+const OPENROUTER_FETCH_TIMEOUT_MS = 15_000
+
 async function openRouterFetch<T>(apiKey: string, path: string): Promise<T> {
-  const res = await fetch(`https://openrouter.ai/api/v1${path}`, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: 'application/json',
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`https://openrouter.ai/api/v1${path}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(OPENROUTER_FETCH_TIMEOUT_MS),
+    })
+  }
+  catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('OpenRouter API timed out', { cause: err })
+    }
+    throw err
+  }
   const payload = await res.json().catch(() => ({})) as T & { error?: { message?: string } }
   if (!res.ok) {
     const message = (payload as { error?: { message?: string } }).error?.message || `OpenRouter returned ${res.status}`
@@ -59,6 +72,56 @@ export async function fetchOpenRouterKeyUsage(apiKey: string): Promise<OpenRoute
   }
 }
 
+async function loadOpenRouterCredits(
+  managementKey: string | null,
+  aiKey: string,
+  keyUsage: OpenRouterKeySummary,
+): Promise<{ credits: OpenRouterCreditsSummary | null, creditsNote: string | null }> {
+  const creditErrors: string[] = []
+  let creditsNote: string | null = null
+
+  if (managementKey) {
+    try {
+      return { credits: await fetchOpenRouterCredits(managementKey), creditsNote: null }
+    }
+    catch (e) {
+      creditErrors.push((e as Error).message)
+    }
+  }
+
+  if (keyUsage.isManagementKey) {
+    try {
+      return { credits: await fetchOpenRouterCredits(aiKey), creditsNote: null }
+    }
+    catch (e) {
+      creditErrors.push((e as Error).message)
+    }
+  }
+
+  if (keyUsage.limitRemaining != null) {
+    return {
+      credits: {
+        totalCredits: keyUsage.limit ?? keyUsage.limitRemaining,
+        totalUsage: (keyUsage.limit ?? 0) - keyUsage.limitRemaining,
+        remainingCredits: keyUsage.limitRemaining,
+      },
+      creditsNote: managementKey
+        ? null
+        : 'Showing key budget. Add an OpenRouter management key in Control Panel → Billing for account credits.',
+    }
+  }
+
+  if (!managementKey) {
+    creditsNote = 'Add an OpenRouter management key in Control Panel → Billing to monitor account credits.'
+  }
+
+  if (creditErrors.length) {
+    creditsNote = [creditsNote, ...creditErrors].filter(Boolean).join(' ')
+  }
+
+  return { credits: null, creditsNote }
+}
+
 export async function resolveOpenRouterBilling(db: Db): Promise<{
   credits: OpenRouterCreditsSummary | null
   keyUsage: OpenRouterKeySummary | null
@@ -80,9 +143,9 @@ export async function resolveOpenRouterBilling(db: Db): Promise<{
     }
   }
 
-  let apiKey: string | null = null
+  let apiKey: string
   try {
-    apiKey = await getDecryptedApiKey(db)
+    apiKey = (await getDecryptedApiKey(db)) ?? ''
   }
   catch (e) {
     return {
@@ -104,11 +167,7 @@ export async function resolveOpenRouterBilling(db: Db): Promise<{
     }
   }
 
-  let credits: OpenRouterCreditsSummary | null = null
-  let keyUsage: OpenRouterKeySummary | null = null
-  let creditsNote: string | null = null
-  const creditErrors: string[] = []
-
+  let keyUsage: OpenRouterKeySummary
   try {
     keyUsage = await fetchOpenRouterKeyUsage(apiKey)
   }
@@ -122,21 +181,21 @@ export async function resolveOpenRouterBilling(db: Db): Promise<{
     }
   }
 
-  if (keyUsage.isManagementKey) {
-    try {
-      credits = await fetchOpenRouterCredits(apiKey)
-    }
-    catch (e) {
-      creditErrors.push((e as Error).message)
-    }
+  let managementKey: string | null
+  try {
+    managementKey = await getOpenRouterManagementKey(db)
   }
-  else {
-    creditsNote = 'Account-wide credits require an OpenRouter management key. Showing usage for your AI API key.'
+  catch (e) {
+    return {
+      credits: null,
+      keyUsage,
+      internalMonthlyUsd,
+      creditsNote: null,
+      error: (e as Error).message,
+    }
   }
 
-  if (creditErrors.length) {
-    creditsNote = creditErrors.join('; ')
-  }
+  const { credits, creditsNote } = await loadOpenRouterCredits(managementKey, apiKey, keyUsage)
 
   return {
     credits,

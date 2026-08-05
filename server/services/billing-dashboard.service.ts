@@ -2,28 +2,16 @@ import type { Db } from '../db/client'
 import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
 import {
   getBillingIntegrations,
-  getNamecheapCredentials,
   getVultrApiKey,
 } from './billing-integrations.service'
 import { getAiProviderSettings } from './ai-provider.service'
-import {
-  domainTld,
-  fetchNamecheapDomains,
-  fetchNamecheapRenewalPrice,
-  parseNamecheapExpiry,
-} from './namecheap-billing.service'
-import { mapManualNamecheapDomains, mergeNamecheapDashboardDomains } from './namecheap-manual-domains.service'
+import { mapManualNamecheapDomains } from './namecheap-manual-domains.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
 import {
   fetchVultrAccount,
   fetchVultrBillingHistory,
   fetchVultrInstances,
 } from './vultr-billing.service'
-
-function daysUntil(date: Date): number {
-  const ms = date.getTime() - Date.now()
-  return Math.ceil(ms / (24 * 60 * 60 * 1000))
-}
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
@@ -48,9 +36,8 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   }
 
   const namecheapBlock: BillingDashboardPayload['namecheap'] = {
-    configured: settings.namecheapEnabled
-      && (settings.hasNamecheapApiKey || settings.namecheapManualDomains.length > 0),
-    domains: [],
+    configured: settings.namecheapManualDomains.length > 0,
+    domains: mapManualNamecheapDomains(settings.namecheapManualDomains),
     error: null,
     lastUpdated: nowIso,
   }
@@ -95,65 +82,6 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     }
   }
 
-  if (settings.namecheapEnabled) {
-    const apiDomains: BillingDashboardDomain[] = []
-
-    if (settings.hasNamecheapApiKey) {
-      try {
-        const creds = await getNamecheapCredentials(db)
-        if (!creds) throw new Error('Namecheap credentials incomplete')
-        const allDomains = await fetchNamecheapDomains(creds)
-        const watched = new Set(settings.namecheapMonitoredDomains.map(d => d.toLowerCase()))
-        const selected = allDomains.filter(row =>
-          watched.size === 0 ? false : watched.has(row.name.toLowerCase()),
-        )
-
-        for (const row of selected) {
-          const expiry = parseNamecheapExpiry(row.expires)
-          const days = expiry ? daysUntil(expiry) : 0
-          let renewalCost: number | null = null
-          let renewalCostStatus: 'ok' | 'premium-domain-price-unavailable' | 'pricing-unavailable' = 'pricing-unavailable'
-
-          if (row.isPremium) {
-            renewalCostStatus = 'premium-domain-price-unavailable'
-          }
-          else {
-            try {
-              renewalCost = await fetchNamecheapRenewalPrice(creds, domainTld(row.name))
-              renewalCostStatus = renewalCost == null ? 'pricing-unavailable' : 'ok'
-            }
-            catch {
-              renewalCostStatus = 'pricing-unavailable'
-            }
-          }
-
-          apiDomains.push({
-            name: row.name,
-            renewalDate: expiry ? expiry.toISOString().slice(0, 10) : row.expires,
-            daysUntilRenewal: days,
-            autoRenew: row.autoRenew,
-            premium: row.isPremium,
-            renewalCost,
-            renewalCostStatus,
-            currency: 'USD',
-            source: 'api',
-          })
-        }
-      }
-      catch (e) {
-        namecheapBlock.error = (e as Error).message
-      }
-    }
-
-    namecheapBlock.domains = settings.hasNamecheapApiKey
-      ? mergeNamecheapDashboardDomains(settings.namecheapManualDomains, apiDomains)
-      : mapManualNamecheapDomains(settings.namecheapManualDomains)
-
-    if (namecheapBlock.domains.length > 0 && namecheapBlock.error && settings.namecheapManualDomains.length > 0) {
-      namecheapBlock.error = null
-    }
-  }
-
   if (settings.openrouterBillingEnabled) {
     try {
       const resolved = await resolveOpenRouterBilling(db)
@@ -188,8 +116,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   return {
     configured: {
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
-      namecheap: settings.namecheapEnabled
-        && (settings.hasNamecheapApiKey || settings.namecheapManualDomains.length > 0),
+      namecheap: settings.namecheapManualDomains.length > 0,
       openrouter: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
     },
     vultr: vultrBlock,
