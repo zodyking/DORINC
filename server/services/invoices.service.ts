@@ -1146,6 +1146,9 @@ export async function recalculateInvoiceTotals(
 
   const [updated] = await db.update(invoices).set(updateValues).where(eq(invoices.id, invoiceId)).returning()
 
+  const { invalidateOfficialInvoicePdf } = await import('./invoice-pdf.service')
+  await invalidateOfficialInvoicePdf(db, invoiceId).catch(() => {})
+
   return { invoice: updated!, totals }
 }
 

@@ -108,6 +108,11 @@ export interface GenerateInvoicePdfOptions {
   allowDraft?: boolean
 }
 
+/** Clear stored official PDF when invoice financials change so downloads regenerate. */
+export async function invalidateOfficialInvoicePdf(db: Db, invoiceId: string) {
+  await clearOfficialInvoicePdf(db, invoiceId)
+}
+
 /** Clear the official invoice PDF row so a new Blade render can be stored. */
 async function clearOfficialInvoicePdf(db: Db, invoiceId: string) {
   const existing = await getInvoicePdfRecord(db, invoiceId)

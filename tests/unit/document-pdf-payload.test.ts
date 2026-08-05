@@ -56,6 +56,7 @@ describe('document-pdf-payload', () => {
       ],
       feesAmount: '12.00',
       discountAmount: '0',
+      taxRate: '0.0195121951',
       taxAmount: '8.00',
       total: '430.00',
       balanceDue: '430.00',
@@ -125,6 +126,33 @@ describe('document-pdf-payload', () => {
       '739 E New York Ave',
       'Brooklyn, NY 11213',
     ])
+  })
+
+  it('uses tax-exempt totals in PDF data even when stored taxAmount is stale', () => {
+    const data = buildInvoicePdfData({
+      invoiceNumberFormatted: 'INV-000716',
+      invoiceDate: '2026-07-21',
+      paymentTerms: 'due_on_receipt',
+      status: 'sent',
+      taxExempt: true,
+      taxRate: '0.088750',
+      lineItems: [
+        { description: 'Labor', lineType: 'labor', quantity: '1', unitPrice: '425.00', lineAmount: '425.00', taxable: true },
+        { description: 'Parts bundle', lineType: 'part', quantity: '1', unitPrice: '990.00', lineAmount: '990.00', taxable: true },
+      ],
+      feesAmount: '0',
+      discountAmount: '0',
+      taxAmount: '125.51',
+      total: '1540.51',
+      balanceDue: '1415.00',
+      amountPaid: '0',
+    })
+
+    expect(data.totals.taxExempt).toBe(true)
+    expect(data.totals.tax).toBe('$0.00')
+    expect(data.totals.total).toBe('$1,415.00')
+    expect(data.totals.balanceDue).toBe('$1,415.00')
+    expect(data.totals.waivedTax).toBe('$125.51')
   })
 
   it('shows payment status on invoice PDFs instead of workflow status', () => {

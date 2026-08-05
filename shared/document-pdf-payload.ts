@@ -1,5 +1,5 @@
 import { formatMoney, parseMoney } from './money'
-import { computeWaivedTaxAmount, taxableSubtotalFromLines } from './invoice-tax-exempt'
+import { resolveInvoicePdfTotals } from './invoice-tax-exempt'
 import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
@@ -171,7 +171,12 @@ export function formatPdfVehicleYearMakeModel(vehicle: PdfVehicleSnapshotInput):
 }
 
 function moneyDisplay(value: string): string {
-  return `$${formatMoney(parseMoney(value))}`
+  const cents = parseMoney(value)
+  const num = Number(cents) / 100
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(num)
 }
 
 function formatDisplayDate(isoDate: string): string {
@@ -296,6 +301,7 @@ export interface BuildInvoicePdfPayloadInput {
   taxAmount: string
   taxExempt?: boolean
   taxRate?: string | null
+  amountPaid?: string
   total: string
   balanceDue: string
 }
@@ -364,22 +370,26 @@ export function buildInvoicePdfData(
       unitPrice: moneyDisplay(line.unitPrice),
       lineAmount: moneyDisplay(line.lineAmount),
     })),
-    totals: {
-      parts: moneyDisplay(formatMoney(partsTotal)),
-      labor: moneyDisplay(formatMoney(laborTotal)),
-      discount: moneyDisplay(detail.discountAmount),
-      tax: moneyDisplay(detail.taxAmount),
-      taxExempt: detail.taxExempt ?? false,
-      waivedTax: detail.taxExempt
-        ? computeWaivedTaxAmount({
-            taxExempt: true,
-            taxRate: detail.taxRate,
-            taxableSubtotal: taxableSubtotalFromLines(detail.lineItems),
-          })
-        : null,
-      total: moneyDisplay(detail.total),
-      balanceDue: moneyDisplay(detail.balanceDue),
-    },
+    totals: (() => {
+      const resolved = resolveInvoicePdfTotals({
+        lineItems: detail.lineItems,
+        taxExempt: detail.taxExempt,
+        taxRate: detail.taxRate,
+        feesAmount: detail.feesAmount,
+        discountAmount: detail.discountAmount,
+        amountPaid: detail.amountPaid,
+      })
+      return {
+        parts: moneyDisplay(formatMoney(partsTotal)),
+        labor: moneyDisplay(formatMoney(laborTotal)),
+        discount: moneyDisplay(detail.discountAmount),
+        tax: moneyDisplay(resolved.taxAmount),
+        taxExempt: resolved.taxExempt,
+        waivedTax: resolved.waivedTaxAmount ? moneyDisplay(resolved.waivedTaxAmount) : null,
+        total: moneyDisplay(resolved.total),
+        balanceDue: moneyDisplay(resolved.balanceDue),
+      }
+    })(),
     note: detail.complaint ?? detail.customerNotes ?? '—',
     company,
     customerSupport: buildInvoiceCustomerSupportNote(company, options.portalUrl),
