@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import type { BillingIntegrationsView, NamecheapManualDomain } from '#shared/validators/billing-integrations'
-import { BILLING_PROVIDER_LABELS } from '~/utils/billing-ui'
+import { BILLING_PROVIDER_ACCOUNT_URLS, BILLING_PROVIDER_LABELS, billingProviderManageLabel } from '~/utils/billing-ui'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
 
 const labels = BILLING_PROVIDER_LABELS
+
+function openProviderAccount(provider: keyof typeof BILLING_PROVIDER_ACCOUNT_URLS) {
+  window.open(BILLING_PROVIDER_ACCOUNT_URLS[provider], '_blank', 'noopener,noreferrer')
+}
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -291,7 +295,7 @@ onBeforeUnmount(() => {
     <div v-if="pending" class="card"><div class="cbody">Loading…</div></div>
 
     <div v-else class="stack">
-      <div class="card">
+      <div class="card provider-settings-card">
         <div class="chead provider-card-head">
           <div>
             <h3>{{ labels.vultr.name }}</h3>
@@ -309,41 +313,49 @@ onBeforeUnmount(() => {
               <span class="tr" />
             </span>
           </div>
-          <label class="fld">
-            API key
-            <input v-model="form.vultrApiKey" type="password" maxlength="512" autocomplete="off" placeholder="Vultr API token">
-          </label>
-          <div class="settings-actions">
-            <button type="button" class="btn" :disabled="testBusy || saveBusy" @click="testVultrConnection">
-              {{ testBusy ? 'Testing…' : 'Test connection' }}
-            </button>
+          <div class="settings-field-block">
+            <label class="fld">
+              API key
+              <input v-model="form.vultrApiKey" type="password" maxlength="512" autocomplete="off" placeholder="Vultr API token">
+            </label>
+            <div class="settings-actions">
+              <button type="button" class="btn" :disabled="testBusy || saveBusy" @click="testVultrConnection">
+                {{ testBusy ? 'Testing…' : 'Test connection' }}
+              </button>
+            </div>
           </div>
 
           <template v-if="hasVultrKey && form.vultrEnabled">
-            <hr class="section-divider">
-            <div class="notif-label">Monitored servers</div>
-            <button type="button" class="btn sm" :disabled="vultrInstancesLoading || saveBusy" @click="loadVultrInstances">
-              {{ vultrInstancesLoading ? 'Loading…' : 'Refresh list' }}
-            </button>
-            <p v-if="vultrInstancesError" class="settings-err">{{ vultrInstancesError }}</p>
-            <div v-if="vultrInstances.length" class="picker-list">
-              <label v-for="inst in vultrInstances" :key="inst.id" class="settings-check">
-                <input
-                  type="checkbox"
-                  :checked="form.vultrMonitoredInstanceIds.includes(inst.id)"
-                  @change="toggleInstance(inst.id, ($event.target as HTMLInputElement).checked)"
-                >
-                <span>
-                  <b>{{ inst.label || inst.id }}</b>
-                  <small>{{ inst.region }} · {{ inst.plan }} · {{ inst.status }}</small>
-                </span>
-              </label>
+            <div class="settings-field-block">
+              <div class="notif-label">Monitored servers</div>
+              <button type="button" class="btn sm" :disabled="vultrInstancesLoading || saveBusy" @click="loadVultrInstances">
+                {{ vultrInstancesLoading ? 'Loading…' : 'Refresh list' }}
+              </button>
+              <p v-if="vultrInstancesError" class="settings-err">{{ vultrInstancesError }}</p>
+              <div v-if="vultrInstances.length" class="picker-list">
+                <label v-for="inst in vultrInstances" :key="inst.id" class="settings-check">
+                  <input
+                    type="checkbox"
+                    :checked="form.vultrMonitoredInstanceIds.includes(inst.id)"
+                    @change="toggleInstance(inst.id, ($event.target as HTMLInputElement).checked)"
+                  >
+                  <span>
+                    <b>{{ inst.label || inst.id }}</b>
+                    <small>{{ inst.region }} · {{ inst.plan }} · {{ inst.status }}</small>
+                  </span>
+                </label>
+              </div>
             </div>
           </template>
         </div>
+        <footer class="provider-settings-footer">
+          <button type="button" class="btn provider-manage-btn" @click="openProviderAccount('vultr')">
+            {{ billingProviderManageLabel('vultr') }}
+          </button>
+        </footer>
       </div>
 
-      <div class="card">
+      <div class="card provider-settings-card">
         <div class="chead provider-card-head">
           <div>
             <h3>{{ labels.namecheap.name }}</h3>
@@ -375,9 +387,14 @@ onBeforeUnmount(() => {
             + Add domain
           </button>
         </div>
+        <footer class="provider-settings-footer">
+          <button type="button" class="btn provider-manage-btn" @click="openProviderAccount('namecheap')">
+            {{ billingProviderManageLabel('namecheap') }}
+          </button>
+        </footer>
       </div>
 
-      <div class="card">
+      <div class="card provider-settings-card">
         <div class="chead provider-card-head">
           <div>
             <h3>{{ labels.openrouter.name }}</h3>
@@ -398,20 +415,27 @@ onBeforeUnmount(() => {
               <span class="tr" />
             </span>
           </div>
-          <p v-if="data?.settings.hasAiOpenRouterKey" class="settings-help">AI API key is configured.</p>
-          <p v-else class="settings-err">Add an OpenRouter key in Control Panel → AI first.</p>
-          <label class="fld">
-            Management API key
-            <input
-              v-model="form.openrouterManagementKey"
-              type="password"
-              maxlength="512"
-              autocomplete="off"
-              placeholder="OpenRouter management key for account credits"
-            >
-          </label>
-          <p class="settings-help">Optional. Required to show available account credit on the Billing page.</p>
+          <div class="settings-field-block">
+            <p v-if="data?.settings.hasAiOpenRouterKey" class="settings-help">AI API key is configured.</p>
+            <p v-else class="settings-err">Add an OpenRouter key in Control Panel → AI first.</p>
+            <label class="fld">
+              Management API key
+              <input
+                v-model="form.openrouterManagementKey"
+                type="password"
+                maxlength="512"
+                autocomplete="off"
+                placeholder="OpenRouter management key for account credits"
+              >
+            </label>
+            <p class="settings-help">Optional. Required to show available account credit on the Billing page. API usage history is recorded automatically when AI features run.</p>
+          </div>
         </div>
+        <footer class="provider-settings-footer">
+          <button type="button" class="btn provider-manage-btn" @click="openProviderAccount('openrouter')">
+            {{ billingProviderManageLabel('openrouter') }}
+          </button>
+        </footer>
       </div>
 
       <p v-if="message" class="settings-ok">{{ message }}</p>
@@ -432,7 +456,38 @@ onBeforeUnmount(() => {
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+}
+
+.provider-settings-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-settings-footer {
+  padding: 0 18px 18px;
+  margin-top: auto;
+}
+
+.provider-manage-btn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 18px;
+  margin-top: 4px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .notif-label {
@@ -456,7 +511,7 @@ onBeforeUnmount(() => {
 .section-divider {
   border: none;
   border-top: 1px solid #e2e8f0;
-  margin: 4px 0;
+  margin: 16px 0;
 }
 
 .picker-list {
@@ -488,15 +543,15 @@ onBeforeUnmount(() => {
 .manual-domain-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .manual-domain-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 10px;
+  gap: 14px;
   align-items: end;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import type { BillingDashboardPayload } from '#shared/validators/billing-integrations'
+import type { BillingProviderKey } from '~/utils/billing-ui'
 import {
+  BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
   billingDate,
+  billingDateTime,
   billingDaysBadgeClass,
   billingMoney,
+  billingProviderManageLabel,
   billingProviderStatus,
 } from '~/utils/billing-ui'
 
@@ -32,6 +36,10 @@ function openRouterAvailableCredit(d: BillingDashboardPayload['openrouter']): st
   return '—'
 }
 
+function openProviderAccount(provider: BillingProviderKey) {
+  window.open(BILLING_PROVIDER_ACCOUNT_URLS[provider], '_blank', 'noopener,noreferrer')
+}
+
 const refreshBusy = ref(false)
 
 async function reload() {
@@ -46,7 +54,7 @@ async function reload() {
 </script>
 
 <template>
-  <section class="page active">
+  <section class="page active billing-page">
     <StaffPageHead subtitle="Monthly infrastructure spend">
       <template #title>Billing</template>
       <template #actions>
@@ -76,7 +84,7 @@ async function reload() {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card billing-breakdown-card">
         <div class="chead">
           <h3>Breakdown</h3>
           <span class="pill muted billing-updated">{{ new Date(dashboard.lastRefreshed).toLocaleString() }}</span>
@@ -92,7 +100,7 @@ async function reload() {
       </div>
 
       <div class="billing-grid">
-        <article class="card">
+        <article class="card billing-provider-card">
           <div class="chead">
             <div>
               <h3>{{ labels.vultr.name }}</h3>
@@ -102,7 +110,7 @@ async function reload() {
               {{ billingProviderStatus(dashboard.vultr.configured, !!dashboard.vultr.error).label }}
             </span>
           </div>
-          <div class="cbody">
+          <div class="cbody billing-card-body">
             <p v-if="dashboard.vultr.error" class="billing-err">{{ dashboard.vultr.error }}</p>
             <template v-else-if="dashboard.vultr.configured">
               <dl class="kv">
@@ -148,9 +156,14 @@ async function reload() {
             </template>
             <p v-else class="billing-muted">Set up in Control Panel → Billing.</p>
           </div>
+          <footer class="billing-card-footer">
+            <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('vultr')">
+              {{ billingProviderManageLabel('vultr') }}
+            </button>
+          </footer>
         </article>
 
-        <article class="card">
+        <article class="card billing-provider-card">
           <div class="chead">
             <div>
               <h3>{{ labels.namecheap.name }}</h3>
@@ -160,7 +173,7 @@ async function reload() {
               {{ billingProviderStatus(dashboard.namecheap.configured, !!dashboard.namecheap.error).label }}
             </span>
           </div>
-          <div class="cbody">
+          <div class="cbody billing-card-body">
             <p v-if="dashboard.namecheap.error" class="billing-err">{{ dashboard.namecheap.error }}</p>
             <template v-else-if="dashboard.namecheap.configured && dashboard.namecheap.domains.length">
               <div class="tscroll">
@@ -186,9 +199,14 @@ async function reload() {
             </template>
             <p v-else class="billing-muted">Add domains in Control Panel → Billing.</p>
           </div>
+          <footer class="billing-card-footer">
+            <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('namecheap')">
+              {{ billingProviderManageLabel('namecheap') }}
+            </button>
+          </footer>
         </article>
 
-        <article class="card">
+        <article class="card billing-provider-card">
           <div class="chead">
             <div>
               <h3>{{ labels.openrouter.name }}</h3>
@@ -198,7 +216,7 @@ async function reload() {
               {{ billingProviderStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).label }}
             </span>
           </div>
-          <div class="cbody">
+          <div class="cbody billing-card-body">
             <p v-if="dashboard.openrouter.error" class="billing-err">{{ dashboard.openrouter.error }}</p>
             <template v-else-if="dashboard.openrouter.configured">
               <p v-if="dashboard.openrouter.creditsNote" class="billing-note">{{ dashboard.openrouter.creditsNote }}</p>
@@ -214,9 +232,36 @@ async function reload() {
                 <dt>Today</dt>
                 <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
               </dl>
+
+              <template v-if="dashboard.openrouter.usageHistory.length">
+                <h4 class="billing-sub">Recent API usage</h4>
+                <div class="tscroll">
+                  <table class="tbl compact">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th class="num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in dashboard.openrouter.usageHistory" :key="row.id">
+                        <td>{{ billingDateTime(row.date) }}</td>
+                        <td>{{ row.description }}</td>
+                        <td class="num">{{ billingMoney(row.amount) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </template>
             <p v-else class="billing-muted">Enable in Control Panel → Billing.</p>
           </div>
+          <footer class="billing-card-footer">
+            <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('openrouter')">
+              {{ billingProviderManageLabel('openrouter') }}
+            </button>
+          </footer>
         </article>
       </div>
     </template>
@@ -224,9 +269,24 @@ async function reload() {
 </template>
 
 <style scoped>
+.billing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 .billing-kpis {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-bottom: 18px;
+  margin-bottom: 0;
+}
+
+.billing-breakdown-card {
+  margin-bottom: 4px;
+}
+
+.billing-breakdown-card .kv {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .billing-updated {
@@ -237,14 +297,43 @@ async function reload() {
 .billing-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 24px;
   align-items: start;
 }
 
 @media (max-width: 1100px) {
   .billing-grid {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
+}
+
+.billing-provider-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.billing-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.billing-card-body .kv {
+  margin: 0;
+}
+
+.billing-card-footer {
+  padding: 0 18px 18px;
+  margin-top: auto;
+}
+
+.billing-manage-btn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 600;
 }
 
 .billing-cat {
@@ -258,7 +347,7 @@ async function reload() {
 }
 
 .billing-sub {
-  margin: 18px 0 10px;
+  margin: 8px 0 12px;
   font-size: 13px;
   font-weight: 600;
   color: #334155;
@@ -287,8 +376,18 @@ async function reload() {
   color: #64748b;
 }
 
-.billing-muted,
 .billing-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.billing-muted {
   margin: 0;
   font-size: 13px;
   color: #64748b;
@@ -319,6 +418,6 @@ async function reload() {
 .tbl.compact th,
 .tbl.compact td {
   font-size: 12.5px;
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 </style>

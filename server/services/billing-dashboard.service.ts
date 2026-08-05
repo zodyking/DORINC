@@ -7,6 +7,7 @@ import {
 import { getAiProviderSettings } from './ai-provider.service'
 import { mapManualNamecheapDomains } from './namecheap-manual-domains.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
+import { listAiUsageLogs } from './ai-jobs.service'
 import {
   fetchVultrAccount,
   fetchVultrBillingHistory,
@@ -15,6 +16,30 @@ import {
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+const AI_USAGE_FEATURE_LABELS: Record<string, string> = {
+  service_log_extraction: 'Service log extraction',
+  invoice_description: 'Invoice description',
+  platform_help: 'Platform help',
+  thumbnail_generate: 'Thumbnail generation',
+}
+
+function formatAiUsageDescription(featureType: string, model: string): string {
+  const label = AI_USAGE_FEATURE_LABELS[featureType] ?? featureType.replace(/_/g, ' ')
+  return `${label} · ${model}`
+}
+
+async function loadOpenRouterUsageHistory(db: Db) {
+  const { items } = await listAiUsageLogs(db, { limit: 12, offset: 0 })
+  return items.map(row => ({
+    id: row.id,
+    date: row.createdAt.toISOString(),
+    description: formatAiUsageDescription(row.featureType, row.model),
+    amount: roundMoney(Number(row.estimatedCostUsd ?? 0)),
+    model: row.model,
+    tokens: row.totalTokens,
+  }))
 }
 
 export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPayload> {
@@ -53,6 +78,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     limitRemaining: null,
     internalMonthlyUsd: null,
     creditsNote: null,
+    usageHistory: [],
     currency: 'USD',
     error: null,
     lastUpdated: nowIso,
@@ -84,7 +110,10 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
 
   if (settings.openrouterBillingEnabled) {
     try {
-      const resolved = await resolveOpenRouterBilling(db)
+      const [resolved, usageHistory] = await Promise.all([
+        resolveOpenRouterBilling(db),
+        loadOpenRouterUsageHistory(db),
+      ])
       openrouterBlock.totalCredits = resolved.credits?.totalCredits ?? null
       openrouterBlock.totalUsage = resolved.credits?.totalUsage ?? null
       openrouterBlock.remainingCredits = resolved.credits?.remainingCredits ?? null
@@ -94,6 +123,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
       openrouterBlock.limitRemaining = resolved.keyUsage?.limitRemaining ?? null
       openrouterBlock.internalMonthlyUsd = resolved.internalMonthlyUsd
       openrouterBlock.creditsNote = resolved.creditsNote
+      openrouterBlock.usageHistory = usageHistory
       openrouterBlock.error = resolved.error
     }
     catch (e) {

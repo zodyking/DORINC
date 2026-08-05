@@ -119,6 +119,14 @@ export interface BillingDashboardPayload {
     limitRemaining: number | null
     internalMonthlyUsd: number | null
     creditsNote: string | null
+    usageHistory: Array<{
+      id: string
+      date: string
+      description: string
+      amount: number
+      model: string
+      tokens: number
+    }>
     currency: string
     error: string | null
     lastUpdated: string
