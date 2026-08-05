@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BillingIntegrationsView, DomainRenewal } from '#shared/validators/billing-integrations'
 import { BILLING_PROVIDER_ACCOUNT_URLS, BILLING_PROVIDER_LABELS, billingProviderManageLabel } from '~/utils/billing-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
 
 const labels = BILLING_PROVIDER_LABELS
@@ -69,8 +70,8 @@ let skipServerHydrate = false
 function hydrate(s: BillingIntegrationsView) {
   form.vultrEnabled = s.vultrEnabled
   form.vultrApiKey = s.hasVultrApiKey ? SAVED_PASSWORD_MASK : ''
-  form.vultrMonitoredInstanceIds = [...s.vultrMonitoredInstanceIds]
-  form.domainRenewals = s.domainRenewals.map(domainRenewalToForm)
+  form.vultrMonitoredInstanceIds = [...(s.vultrMonitoredInstanceIds ?? [])]
+  form.domainRenewals = (s.domainRenewals ?? []).map(domainRenewalToForm)
   form.openrouterBillingEnabled = s.openrouterBillingEnabled
   form.openrouterManagementKey = s.hasOpenrouterManagementKey ? SAVED_PASSWORD_MASK : ''
   if (form.domainRenewals.length === 0) {
@@ -137,14 +138,19 @@ async function loadVultrInstances() {
   }
 }
 
-function fetchErrorMessage(e: unknown, fallback: string): string {
-  const payload = (e as { data?: { message?: string, issues?: Array<{ path?: string, message?: string }> } })?.data
-  const issue = payload?.issues?.find(row => row.message)
+function billingSaveErrorMessage(e: unknown, fallback: string): string {
+  const payload = (e as {
+    data?: {
+      message?: string
+      details?: { issues?: Array<{ path?: string, message?: string }> }
+    }
+  })?.data
+  const issue = payload?.details?.issues?.find(row => row.message)
   if (issue) {
     const path = issue.path ? `${issue.path}: ` : ''
     return `${path}${issue.message}`
   }
-  return payload?.message ?? fallback
+  return syncFetchErrorMessage(e, fallback)
 }
 
 function toggleInstance(id: string, checked: boolean) {
@@ -230,6 +236,9 @@ async function save() {
       timeout: SAVE_TIMEOUT_MS,
       signal: saveAbort.signal,
     })
+    if (!res?.settings?.id) {
+      throw new Error('Server returned an invalid billing settings response')
+    }
     applySavedSettings(res.settings)
     message.value = 'Billing settings saved'
     emit('saved')
@@ -239,7 +248,7 @@ async function save() {
       error.value = 'Save timed out. Check your connection and try again.'
     }
     else {
-      error.value = fetchErrorMessage(e, 'Save failed')
+      error.value = billingSaveErrorMessage(e, 'Save failed')
     }
   }
   finally {
@@ -268,7 +277,7 @@ async function testVultrConnection() {
     message.value = res.message
   }
   catch (e: unknown) {
-    error.value = fetchErrorMessage(e, 'Connection test failed')
+    error.value = billingSaveErrorMessage(e, 'Connection test failed')
   }
   finally {
     testBusy.value = false

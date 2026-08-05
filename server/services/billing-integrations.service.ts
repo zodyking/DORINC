@@ -56,22 +56,35 @@ export async function updateBillingIntegrations(
   patch: BillingIntegrationsPatch,
   actorId: string,
 ): Promise<BillingIntegrationsView> {
-  const current = await ensureBillingIntegrations(db)
+  const [existing] = await db.select().from(billingIntegrations).limit(1)
+  const row = existing ?? (await db.insert(billingIntegrations).values({}).returning())[0]
+  if (!row) {
+    throw new Error('Billing settings could not be initialized')
+  }
+
   const {
     vultrApiKey,
     openrouterManagementKey,
     domainRenewals,
-    ...rest
+    vultrEnabled,
+    vultrMonitoredInstanceIds,
+    openrouterBillingEnabled,
   } = patch
 
   const update: Partial<typeof billingIntegrations.$inferInsert> = {
-    vultrEnabled: rest.vultrEnabled,
-    vultrMonitoredInstanceIds: rest.vultrMonitoredInstanceIds,
-    openrouterBillingEnabled: rest.openrouterBillingEnabled,
     updatedBy: actorId,
     updatedAt: new Date(),
   }
 
+  if (vultrEnabled !== undefined) {
+    update.vultrEnabled = vultrEnabled
+  }
+  if (vultrMonitoredInstanceIds !== undefined) {
+    update.vultrMonitoredInstanceIds = vultrMonitoredInstanceIds
+  }
+  if (openrouterBillingEnabled !== undefined) {
+    update.openrouterBillingEnabled = openrouterBillingEnabled
+  }
   if (domainRenewals !== undefined) {
     update.domainRenewals = normalizeDomainRenewals(domainRenewals)
   }
@@ -87,10 +100,14 @@ export async function updateBillingIntegrations(
 
   const [updated] = await db.update(billingIntegrations)
     .set(update)
-    .where(eq(billingIntegrations.id, current.id))
+    .where(eq(billingIntegrations.id, row.id))
     .returning()
 
-  return composeBillingIntegrationsView(db, updated!)
+  if (!updated) {
+    throw new Error('Billing settings row was not updated')
+  }
+
+  return composeBillingIntegrationsView(db, updated)
 }
 
 async function readSecret(buffer: Buffer | null | undefined): Promise<string | null> {

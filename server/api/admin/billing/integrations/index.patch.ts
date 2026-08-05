@@ -48,11 +48,19 @@ export default defineEventHandler(async (event) => {
   }
   catch (err) {
     const msg = (err as Error).message ?? 'Failed to save billing integrations'
+    console.error('[billing-integrations] PATCH failed', err)
     if (msg.includes('ENCRYPTION_MASTER_KEY')) {
       throw apiError(
         event,
         'SERVICE_UNAVAILABLE',
         'Encryption is not configured. Complete Security setup in the Server Setup Wizard first.',
+      )
+    }
+    if (/column "domain_renewals" does not exist/i.test(msg)) {
+      throw apiError(
+        event,
+        'SERVICE_UNAVAILABLE',
+        'Billing database schema is out of date. Restart the app to apply migrations, then try again.',
       )
     }
     throw apiError(event, 'INTERNAL_ERROR', msg)
