@@ -3,6 +3,7 @@ import {
   BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
   billingProviderManageLabel,
+  formatVultrInstanceStatus,
 } from '../../app/utils/billing-ui'
 
 describe('billing-ui helpers', () => {
@@ -20,5 +21,10 @@ describe('billing-ui helpers', () => {
 
   it('keeps provider labels stable', () => {
     expect(BILLING_PROVIDER_LABELS.openrouter.category).toBe('Artificial intelligence')
+  })
+
+  it('formats Vultr instance status labels', () => {
+    expect(formatVultrInstanceStatus('running')).toBe('Running')
+    expect(formatVultrInstanceStatus('power_off')).toBe('Power Off')
   })
 })

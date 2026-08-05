@@ -54,3 +54,11 @@ export function billingDaysBadgeClass(days: number): string {
   if (days <= 90) return 'amber'
   return 'ok'
 }
+
+export function formatVultrInstanceStatus(status: string): string {
+  const value = status.trim()
+  if (!value) return 'Unknown'
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase())
+}

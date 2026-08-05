@@ -10,6 +10,7 @@ import {
   billingMoney,
   billingProviderManageLabel,
   billingProviderStatus,
+  formatVultrInstanceStatus,
 } from '~/utils/billing-ui'
 
 definePageMeta({ layout: 'staff', permission: 'billing.read.all' })
@@ -113,7 +114,7 @@ async function reload() {
             <p v-if="dashboard.vultr.error" class="billing-err">{{ dashboard.vultr.error }}</p>
             <template v-else-if="dashboard.vultr.configured">
               <dl class="kv">
-                <dt>MTD usage</dt>
+                <dt>Current usage</dt>
                 <dd>{{ billingMoney(dashboard.vultr.monthToDateUsage) }}</dd>
                 <dt>Balance</dt>
                 <dd>{{ billingMoney(dashboard.vultr.accountBalance) }}</dd>
@@ -124,9 +125,26 @@ async function reload() {
               <div v-if="dashboard.vultr.monitoredInstances.length" class="billing-section">
                 <h4 class="billing-sub">Servers</h4>
                 <ul class="billing-list">
-                  <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id">
-                    <strong>{{ inst.label }}</strong>
-                    <span>{{ inst.region }} · {{ inst.plan }}</span>
+                  <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id" class="billing-server">
+                    <div class="billing-server__name">{{ inst.label }}</div>
+                    <dl class="billing-server__details">
+                      <div>
+                        <dt>Plan</dt>
+                        <dd>{{ inst.plan || '—' }}</dd>
+                      </div>
+                      <div>
+                        <dt>Region</dt>
+                        <dd>{{ inst.region || '—' }}</dd>
+                      </div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>{{ formatVultrInstanceStatus(inst.status) }}</dd>
+                      </div>
+                      <div v-if="inst.mainIp">
+                        <dt>IP address</dt>
+                        <dd class="mono">{{ inst.mainIp }}</dd>
+                      </div>
+                    </dl>
                   </li>
                 </ul>
               </div>
@@ -389,17 +407,57 @@ section.page.active.billing-page {
 }
 
 .billing-list li {
-  padding: 10px 12px;
+  padding: 14px 16px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
 }
 
-.billing-list span {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
+.billing-server__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.billing-server__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .billing-server__details {
+    grid-template-columns: 1fr;
+  }
+}
+
+.billing-server__details div {
+  min-width: 0;
+}
+
+.billing-server__details dt {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #64748b;
+  margin-bottom: 3px;
+}
+
+.billing-server__details dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.billing-server__details dd.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .billing-note {
