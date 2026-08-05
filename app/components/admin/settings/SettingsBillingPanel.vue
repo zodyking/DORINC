@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { BillingIntegrationsView, DomainRenewal } from '#shared/validators/billing-integrations'
 import { BILLING_PROVIDER_ACCOUNT_URLS, BILLING_PROVIDER_LABELS, billingProviderManageLabel } from '~/utils/billing-ui'
+import { FetchHardTimeoutError, fetchJsonWithHardTimeout } from '~/utils/fetch-json-hard-timeout'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
+
+const props = defineProps<{ active?: boolean }>()
 
 const labels = BILLING_PROVIDER_LABELS
 
@@ -25,7 +28,19 @@ interface VultrInstanceOption {
   mainIp: string | null
 }
 
-const { data, pending } = useClientFetch<IntegrationsResponse>('/api/admin/billing/integrations')
+const { data, pending, refresh } = useClientFetch<IntegrationsResponse>(
+  '/api/admin/billing/integrations',
+  { immediate: false },
+)
+
+const integrationsLoaded = ref(false)
+
+watch(() => props.active, (active) => {
+  if (active && !integrationsLoaded.value) {
+    integrationsLoaded.value = true
+    void refresh()
+  }
+}, { immediate: true })
 
 interface DomainRenewalFormRow {
   name: string
@@ -212,7 +227,7 @@ const message = ref('')
 const error = ref('')
 
 async function save() {
-  if (saveBusy.value) return
+  if (saveBusy.value || pending.value) return
 
   saveBusy.value = true
   message.value = ''
@@ -230,12 +245,20 @@ async function save() {
   saveAbort = new AbortController()
 
   try {
-    const res = await $fetch<IntegrationsResponse>('/api/admin/billing/integrations', {
-      method: 'PATCH',
-      body: buildSaveBody(),
-      timeout: SAVE_TIMEOUT_MS,
-      signal: saveAbort.signal,
-    })
+    if (!integrationsLoaded.value) {
+      integrationsLoaded.value = true
+      await refresh()
+    }
+
+    const res = await fetchJsonWithHardTimeout<IntegrationsResponse>(
+      '/api/admin/billing/integrations',
+      {
+        method: 'PATCH',
+        body: buildSaveBody(),
+        timeoutMs: SAVE_TIMEOUT_MS,
+        signal: saveAbort.signal,
+      },
+    )
     if (!res?.settings?.id) {
       throw new Error('Server returned an invalid billing settings response')
     }
@@ -244,8 +267,8 @@ async function save() {
     emit('saved')
   }
   catch (e: unknown) {
-    if ((e as Error).name === 'AbortError') {
-      error.value = 'Save timed out. Check your connection and try again.'
+    if (e instanceof FetchHardTimeoutError || (e as Error).name === 'AbortError') {
+      error.value = 'Save timed out. Wait for the page to finish loading, then try again.'
     }
     else {
       error.value = billingSaveErrorMessage(e, 'Save failed')
@@ -449,8 +472,8 @@ onBeforeUnmount(() => {
       <p v-if="error" class="settings-err">{{ error }}</p>
 
       <div class="settings-actions billing-save-bar">
-        <button type="button" class="btn primary" :disabled="saveBusy || testBusy" @click="save">
-          {{ saveBusy ? 'Saving…' : 'Save billing settings' }}
+        <button type="button" class="btn primary" :disabled="saveBusy || testBusy || pending" @click="save">
+          {{ pending ? 'Loading…' : saveBusy ? 'Saving…' : 'Save billing settings' }}
         </button>
       </div>
     </div>
