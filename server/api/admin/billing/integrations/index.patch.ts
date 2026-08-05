@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   try {
     const settings = await updateBillingIntegrations(db, body, user.id)
 
-    await writeAudit(event, {
+    void writeAudit(event, {
       entityType: 'billing_integrations',
       entityId: settings.id,
       action: 'billing.integrations.updated',
@@ -27,23 +27,23 @@ export default defineEventHandler(async (event) => {
         hasVultrApiKey: before.hasVultrApiKey,
         vultrMonitoredInstanceIds: before.vultrMonitoredInstanceIds,
         namecheapEnabled: before.namecheapEnabled,
-        hasNamecheapApiKey: before.hasNamecheapApiKey,
-        namecheapMonitoredDomains: before.namecheapMonitoredDomains,
         namecheapManualDomains: before.namecheapManualDomains,
         openrouterBillingEnabled: before.openrouterBillingEnabled,
+        hasOpenrouterManagementKey: before.hasOpenrouterManagementKey,
       },
       afterData: {
         vultrEnabled: settings.vultrEnabled,
         hasVultrApiKey: settings.hasVultrApiKey,
         vultrMonitoredInstanceIds: settings.vultrMonitoredInstanceIds,
         namecheapEnabled: settings.namecheapEnabled,
-        hasNamecheapApiKey: settings.hasNamecheapApiKey,
-        namecheapMonitoredDomains: settings.namecheapMonitoredDomains,
         namecheapManualDomains: settings.namecheapManualDomains,
         openrouterBillingEnabled: settings.openrouterBillingEnabled,
+        hasOpenrouterManagementKey: settings.hasOpenrouterManagementKey,
       },
       permissionKey: 'system.admin.all',
       riskLevel: 'sensitive',
+    }).catch((err) => {
+      console.error('[billing-integrations] audit write failed', err)
     })
 
     return { settings }

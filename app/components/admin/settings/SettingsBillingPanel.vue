@@ -20,7 +20,7 @@ interface VultrInstanceOption {
   mainIp: string | null
 }
 
-const { data, refresh, pending } = useClientFetch<IntegrationsResponse>('/api/admin/billing/integrations')
+const { data, pending } = useClientFetch<IntegrationsResponse>('/api/admin/billing/integrations')
 
 interface ManualDomainFormRow {
   name: string
@@ -60,6 +60,8 @@ function formManualDomainsForSave(): NamecheapManualDomain[] {
     )
 }
 
+let skipServerHydrate = false
+
 function hydrate(s: BillingIntegrationsView) {
   form.vultrEnabled = s.vultrEnabled
   form.vultrApiKey = s.hasVultrApiKey ? SAVED_PASSWORD_MASK : ''
@@ -73,7 +75,7 @@ function hydrate(s: BillingIntegrationsView) {
 }
 
 watch(() => data.value?.settings, (s) => {
-  if (!s) return
+  if (!s || skipServerHydrate) return
   hydrate(s)
 }, { immediate: true })
 
@@ -83,29 +85,47 @@ const hasVultrKey = computed(() =>
 )
 
 function applySavedSettings(settings: BillingIntegrationsView) {
+  skipServerHydrate = true
   if (data.value) {
     data.value = { settings }
   }
   hydrate(settings)
+  nextTick(() => {
+    skipServerHydrate = false
+  })
 }
 
+const SAVE_TIMEOUT_MS = 30_000
 const PROVIDER_LIST_TIMEOUT_MS = 20_000
+
+let saveAbort: AbortController | null = null
+let vultrAbort: AbortController | null = null
 
 const vultrInstances = ref<VultrInstanceOption[]>([])
 const vultrInstancesLoading = ref(false)
 const vultrInstancesError = ref('')
 
+function cancelVultrLoad() {
+  vultrAbort?.abort()
+  vultrAbort = null
+  vultrInstancesLoading.value = false
+}
+
 async function loadVultrInstances() {
-  if (!hasVultrKey.value) return
+  if (!hasVultrKey.value || vultrInstancesLoading.value) return
+  cancelVultrLoad()
+  vultrAbort = new AbortController()
   vultrInstancesLoading.value = true
   vultrInstancesError.value = ''
   try {
     const res = await $fetch<{ instances: VultrInstanceOption[] }>('/api/admin/billing/vultr/instances', {
       timeout: PROVIDER_LIST_TIMEOUT_MS,
+      signal: vultrAbort.signal,
     })
     vultrInstances.value = res.instances
   }
   catch (e: unknown) {
+    if ((e as Error).name === 'AbortError') return
     vultrInstancesError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not load Vultr instances'
   }
   finally {
@@ -113,9 +133,15 @@ async function loadVultrInstances() {
   }
 }
 
-watch(hasVultrKey, (ok) => {
-  if (ok && data.value?.settings.hasVultrApiKey) void loadVultrInstances()
-}, { immediate: true })
+function fetchErrorMessage(e: unknown, fallback: string): string {
+  const payload = (e as { data?: { message?: string, issues?: Array<{ path?: string, message?: string }> } })?.data
+  const issue = payload?.issues?.find(row => row.message)
+  if (issue) {
+    const path = issue.path ? `${issue.path}: ` : ''
+    return `${path}${issue.message}`
+  }
+  return payload?.message ?? fallback
+}
 
 function toggleInstance(id: string, checked: boolean) {
   const set = new Set(form.vultrMonitoredInstanceIds)
@@ -135,16 +161,6 @@ function removeManualDomain(index: number) {
   }
 }
 
-function fetchErrorMessage(e: unknown, fallback: string): string {
-  const payload = (e as { data?: { message?: string, issues?: Array<{ path?: string, message?: string }> } })?.data
-  const issue = payload?.issues?.find(row => row.message)
-  if (issue) {
-    const path = issue.path ? `${issue.path}: ` : ''
-    return `${path}${issue.message}`
-  }
-  return payload?.message ?? fallback
-}
-
 function validateManualDomainsBeforeSave(): string | null {
   for (const row of form.namecheapManualDomains) {
     const name = row.name.trim()
@@ -160,12 +176,36 @@ function validateManualDomainsBeforeSave(): string | null {
   return null
 }
 
+function buildSaveBody(): Record<string, unknown> {
+  const manualDomains = formManualDomainsForSave()
+  const body: Record<string, unknown> = {
+    vultrEnabled: form.vultrEnabled,
+    vultrMonitoredInstanceIds: form.vultrMonitoredInstanceIds,
+    namecheapEnabled: manualDomains.length > 0,
+    namecheapManualDomains: manualDomains,
+    openrouterBillingEnabled: form.openrouterBillingEnabled,
+  }
+
+  const vultrKey = passwordForSave(form.vultrApiKey, !!data.value?.settings.hasVultrApiKey)
+  if (vultrKey) body.vultrApiKey = vultrKey
+
+  const managementKey = passwordForSave(
+    form.openrouterManagementKey,
+    !!data.value?.settings.hasOpenrouterManagementKey,
+  )
+  if (managementKey) body.openrouterManagementKey = managementKey
+
+  return body
+}
+
 const saveBusy = ref(false)
 const testBusy = ref(false)
 const message = ref('')
 const error = ref('')
 
 async function save() {
+  if (saveBusy.value) return
+
   saveBusy.value = true
   message.value = ''
   error.value = ''
@@ -177,46 +217,43 @@ async function save() {
     return
   }
 
+  cancelVultrLoad()
+  saveAbort?.abort()
+  saveAbort = new AbortController()
+
   try {
-    const manualDomains = formManualDomainsForSave()
-    const body: Record<string, unknown> = {
-      vultrEnabled: form.vultrEnabled,
-      vultrMonitoredInstanceIds: form.vultrMonitoredInstanceIds,
-      namecheapEnabled: manualDomains.length > 0,
-      namecheapManualDomains: manualDomains,
-      openrouterBillingEnabled: form.openrouterBillingEnabled,
-    }
-
-    const vultrKey = passwordForSave(form.vultrApiKey, !!data.value?.settings.hasVultrApiKey)
-    if (vultrKey) body.vultrApiKey = vultrKey
-
-    const managementKey = passwordForSave(
-      form.openrouterManagementKey,
-      !!data.value?.settings.hasOpenrouterManagementKey,
-    )
-    if (managementKey) body.openrouterManagementKey = managementKey
-
-    const res = await $fetch<IntegrationsResponse>('/api/admin/billing/integrations', { method: 'PATCH', body })
+    const res = await $fetch<IntegrationsResponse>('/api/admin/billing/integrations', {
+      method: 'PATCH',
+      body: buildSaveBody(),
+      timeout: SAVE_TIMEOUT_MS,
+      signal: saveAbort.signal,
+    })
     applySavedSettings(res.settings)
     message.value = 'Billing settings saved'
     emit('saved')
-    void refresh()
-    if (res.settings.hasVultrApiKey && res.settings.vultrEnabled) {
-      void loadVultrInstances()
-    }
   }
   catch (e: unknown) {
-    error.value = fetchErrorMessage(e, 'Save failed')
+    if ((e as Error).name === 'AbortError') {
+      error.value = 'Save timed out. Check your connection and try again.'
+    }
+    else {
+      error.value = fetchErrorMessage(e, 'Save failed')
+    }
   }
   finally {
+    saveAbort = null
     saveBusy.value = false
   }
 }
 
 async function testVultrConnection() {
+  if (testBusy.value || saveBusy.value) return
+
   testBusy.value = true
   message.value = ''
   error.value = ''
+  cancelVultrLoad()
+
   try {
     const body: Record<string, unknown> = { provider: 'vultr' }
     const key = passwordForSave(form.vultrApiKey, !!data.value?.settings.hasVultrApiKey)
@@ -227,7 +264,6 @@ async function testVultrConnection() {
       timeout: PROVIDER_LIST_TIMEOUT_MS,
     })
     message.value = res.message
-    void loadVultrInstances()
   }
   catch (e: unknown) {
     error.value = fetchErrorMessage(e, 'Connection test failed')
@@ -236,6 +272,11 @@ async function testVultrConnection() {
     testBusy.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  saveAbort?.abort()
+  cancelVultrLoad()
+})
 </script>
 
 <template>
@@ -249,7 +290,7 @@ async function testVultrConnection() {
 
     <div v-if="pending" class="card"><div class="cbody">Loading…</div></div>
 
-    <form v-else class="stack" @submit.prevent="save">
+    <div v-else class="stack">
       <div class="card">
         <div class="chead provider-card-head">
           <div>
@@ -273,7 +314,7 @@ async function testVultrConnection() {
             <input v-model="form.vultrApiKey" type="password" maxlength="512" autocomplete="off" placeholder="Vultr API token">
           </label>
           <div class="settings-actions">
-            <button type="button" class="btn" :disabled="testBusy" @click="testVultrConnection">
+            <button type="button" class="btn" :disabled="testBusy || saveBusy" @click="testVultrConnection">
               {{ testBusy ? 'Testing…' : 'Test connection' }}
             </button>
           </div>
@@ -281,7 +322,7 @@ async function testVultrConnection() {
           <template v-if="hasVultrKey && form.vultrEnabled">
             <hr class="section-divider">
             <div class="notif-label">Monitored servers</div>
-            <button type="button" class="btn sm" :disabled="vultrInstancesLoading" @click="loadVultrInstances">
+            <button type="button" class="btn sm" :disabled="vultrInstancesLoading || saveBusy" @click="loadVultrInstances">
               {{ vultrInstancesLoading ? 'Loading…' : 'Refresh list' }}
             </button>
             <p v-if="vultrInstancesError" class="settings-err">{{ vultrInstancesError }}</p>
@@ -376,12 +417,12 @@ async function testVultrConnection() {
       <p v-if="message" class="settings-ok">{{ message }}</p>
       <p v-if="error" class="settings-err">{{ error }}</p>
 
-      <div class="settings-actions">
-        <button type="submit" class="btn primary" :disabled="saveBusy">
+      <div class="settings-actions billing-save-bar">
+        <button type="button" class="btn primary" :disabled="saveBusy || testBusy" @click="save">
           {{ saveBusy ? 'Saving…' : 'Save billing settings' }}
         </button>
       </div>
-    </form>
+    </div>
   </div>
 </template>
 
@@ -489,5 +530,13 @@ async function testVultrConnection() {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: #6366f1;
+}
+
+.billing-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0) 0%, #f8fafc 28%);
 }
 </style>
