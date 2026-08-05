@@ -20,6 +20,14 @@ describe('outbound-notification-mail', () => {
     expect(prepareNotificationPlainText('> quoted line\n\nBody text')).toBe('quoted line\n\nBody text')
   })
 
+  it('removes style blocks that leak as visible text in some clients', () => {
+    const html = `<!doctype html><html><head><style>body { margin: 0; } .email-container { width: 100%; }</style></head><body><p>Hello</p></body></html>`
+    const out = sanitizeNotificationHtml(html)
+    expect(out).not.toContain('<style')
+    expect(out).not.toContain('.email-container')
+    expect(out).toContain('<p>Hello</p>')
+  })
+
   it('removes quoted-reply containers and injects a uniqueness marker', () => {
     const html = `<!doctype html><html><body><blockquote><p>Old</p></blockquote><p>Hello</p></body></html>`
     const out = sanitizeNotificationHtml(html)

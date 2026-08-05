@@ -41,7 +41,9 @@ describe('email layout', () => {
     })
 
     expect(html).toContain('<!doctype html>')
-    expect(html).toContain('background: #ffffff')
+    expect(html).not.toContain('<style')
+    expect(html).not.toContain('.email-container {')
+    expect(html).toContain('background:#ffffff')
     expect(html).toContain(EMAIL_TOKENS.ink)
     expect(html).toContain('Portal access')
     expect(html).toContain('Your password is ready')
@@ -74,7 +76,7 @@ describe('email layout', () => {
     expect(mail.html).toContain('Details')
     expect(mail.html).toContain('a@b.com')
     expect(mail.html).toContain('class="button"')
-    expect(mail.html).toContain('detail-label')
+    expect(mail.html).not.toContain('<style')
     expect(mail.html).not.toContain('mobile-block')
   })
 

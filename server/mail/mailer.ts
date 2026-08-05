@@ -126,12 +126,13 @@ export async function sendMail(message: MailMessage): Promise<{ delivered: boole
   }
 
   try {
+    const html = message.html ? sanitizeNotificationHtml(message.html) : undefined
     await getTransport().sendMail({
       from: config.from,
       to: message.to,
       subject: message.subject,
-      text: message.text,
-      html: message.html,
+      text: prepareNotificationPlainText(message.text),
+      html,
       messageId: message.messageId,
       inReplyTo: message.inReplyTo,
       references: message.references,

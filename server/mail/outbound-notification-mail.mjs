@@ -35,16 +35,24 @@ export function prepareNotificationPlainText(text) {
 const QUOTE_CONTAINER_RE = /<blockquote[\s\S]*?<\/blockquote>/gi
 const GMAIL_QUOTE_RE = /<div[^>]*class="[^"]*gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi
 const GMAIL_EXTRA_RE = /<div[^>]*class="[^"]*gmail_extra[^"]*"[^>]*>[\s\S]*?<\/div>/gi
+const STYLE_BLOCK_RE = /<style[^>]*>[\s\S]*?<\/style>/gi
 
 /**
- * Strip quoted-reply containers and add a per-message uniqueness marker so Gmail
- * does not collapse repeated notification boilerplate in a conversation thread.
+ * Remove document-level CSS blocks that some clients render as visible plain text.
  *
+ * @param {string | undefined} html
+ */
+export function stripStyleBlocksFromHtml(html) {
+  if (!html) return html
+  return String(html).replace(STYLE_BLOCK_RE, '')
+}
+
+/**
  * @param {string | undefined} html
  */
 export function sanitizeNotificationHtml(html) {
   if (!html) return html
-  let out = String(html)
+  let out = stripStyleBlocksFromHtml(String(html))
     .replace(QUOTE_CONTAINER_RE, '')
     .replace(GMAIL_QUOTE_RE, '')
     .replace(GMAIL_EXTRA_RE, '')

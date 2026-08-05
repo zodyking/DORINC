@@ -203,7 +203,7 @@ export function emailHighlight(highlight) {
     `<div style="font-size:12px;color:${EMAIL_TOKENS.muted};padding-bottom:7px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.label)}</div>`,
     `<div style="color:${EMAIL_TOKENS.ink};font-size:34px;line-height:40px;font-weight:750;letter-spacing:-0.6px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.value)}</div>`,
     `</td>`,
-    statusHtml ? `<td align="right" valign="middle" class="highlight-status">${statusHtml}</td>` : '',
+    statusHtml ? `<td align="right" valign="middle" style="padding-top:0;text-align:right;">${statusHtml}</td>` : '',
     `</tr></table>`,
   ].join('')
 }
@@ -239,8 +239,8 @@ export function emailDetails(rows) {
       `<tr>`,
       `<td style="padding:0 0 ${isLast ? '0' : '14px'} 0;">`,
       `<table role="presentation" width="100%"><tr>`,
-      `<td class="detail-label" width="34%" valign="top" style="${labelStyle}">${escapeHtml(row.label)}</td>`,
-      `<td class="detail-value" valign="top" style="${valueStyle}">${escapeHtml(row.value)}</td>`,
+      `<td width="34%" valign="top" style="${labelStyle}">${escapeHtml(row.label)}</td>`,
+      `<td valign="top" style="${valueStyle}">${escapeHtml(row.value)}</td>`,
       `</tr></table>`,
       `</td>`,
       `</tr>`,
@@ -358,6 +358,31 @@ export function wrapEmailHtml(opts) {
       : '',
   ].filter(Boolean).join('')
 
+  const bodyStyle = [
+    'margin:0',
+    'padding:0',
+    'width:100%',
+    `background:${t.bg}`,
+    'color:#1f2937',
+    `font-family:${t.font}`,
+    '-webkit-font-smoothing:antialiased',
+    '-webkit-text-size-adjust:100%',
+  ].join(';')
+  const shellStyle = `width:100%;background:${t.bg};border-spacing:0;border-collapse:collapse;`
+  const outerStyle = 'padding:28px 12px;'
+  const containerStyle = [
+    `background:${t.surface}`,
+    `border:1px solid ${t.border}`,
+    'border-radius:18px',
+    'box-shadow:0 12px 36px rgba(15,23,42,.07)',
+    'width:100%',
+    'max-width:620px',
+    'margin:0 auto',
+    'border-spacing:0',
+    'border-collapse:collapse',
+  ].join(';')
+  const sidePad = 'padding-left:28px;padding-right:28px;'
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -366,75 +391,18 @@ export function wrapEmailHtml(opts) {
   <meta name="x-apple-disable-message-reformatting">
   <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
   <title>${title}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      background: ${t.bg};
-      color: #1f2937;
-      font-family: ${t.font};
-      -webkit-font-smoothing: antialiased;
-      -webkit-text-size-adjust: 100%;
-    }
-    table { border-spacing: 0; border-collapse: collapse; }
-    img { display: block; border: 0; max-width: 100%; }
-    a { color: ${t.accent}; text-decoration: none; }
-    .email-shell { width: 100%; background: ${t.bg}; }
-    .email-outer { padding: 28px 12px; }
-    .email-container {
-      width: 100%;
-      max-width: 620px;
-      margin: 0 auto;
-      background: ${t.surface};
-      border: 1px solid ${t.border};
-      border-radius: 18px;
-      box-shadow: 0 12px 36px rgba(15, 23, 42, 0.07);
-      overflow: hidden;
-    }
-    .mobile-padding { padding-left: 28px; padding-right: 28px; }
-    .button {
-      display: inline-block;
-      padding: 13px 20px;
-      background: ${t.buttonBg};
-      color: #ffffff !important;
-      border-radius: ${t.radiusBtn};
-      font-size: 14px;
-      font-weight: 700;
-      line-height: 18px;
-    }
-    .secondary-link { font-size: 13px; font-weight: 600; color: #4b5563; }
-    .data-label { color: ${t.muted}; font-size: 12px; line-height: 18px; }
-    .data-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; word-break: break-word; }
-    .detail-label { color: ${t.muted}; font-size: 12px; line-height: 20px; }
-    .detail-value { color: ${t.ink}; font-size: 14px; font-weight: 600; line-height: 20px; word-break: break-word; }
-    @media screen and (max-width: 620px) {
-      .email-outer { padding: 0 !important; }
-      .email-container {
-        border-left: 0 !important;
-        border-right: 0 !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-      }
-      .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
-      .mobile-align-left { text-align: left !important; }
-      .detail-label { width: 32% !important; white-space: normal !important; }
-      .detail-value { width: 68% !important; }
-      .highlight-status { padding-top: 12px !important; text-align: left !important; }
-    }
-  </style>
 </head>
-<body>
+<body style="${bodyStyle}">
   ${preheader ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0;">${preheader}</div>` : ''}
 
-  <table role="presentation" width="100%" class="email-shell">
+  <table role="presentation" width="100%" style="${shellStyle}">
     <tr>
-      <td align="center" class="email-outer">
-        <table role="presentation" width="100%" class="email-container" style="background:${t.surface};border:1px solid ${t.border};border-radius:18px;box-shadow:0 12px 36px rgba(15,23,42,.07);">
+      <td align="center" style="${outerStyle}">
+        <table role="presentation" width="100%" style="${containerStyle}">
 
           <!-- Header -->
           <tr>
-            <td class="mobile-padding" style="padding-top:32px; padding-bottom:24px;">
+            <td style="${sidePad}padding-top:32px;padding-bottom:24px;">
               <table role="presentation" width="100%">
                 <tr>
                   <td valign="middle">
@@ -453,7 +421,7 @@ export function wrapEmailHtml(opts) {
 
           <!-- Divider -->
           <tr>
-            <td class="mobile-padding">
+            <td style="${sidePad}">
               <div style="height:1px; background:${t.line};"></div>
             </td>
           </tr>
@@ -461,7 +429,7 @@ export function wrapEmailHtml(opts) {
           ${mainIntro
             ? `<!-- Main content -->
           <tr>
-            <td class="mobile-padding" style="padding-top:42px; padding-bottom:10px;">
+            <td style="${sidePad}padding-top:42px;padding-bottom:10px;">
               ${mainIntro}
             </td>
           </tr>`
@@ -470,7 +438,7 @@ export function wrapEmailHtml(opts) {
           ${opts.highlightHtml
             ? `<!-- Highlight -->
           <tr>
-            <td class="mobile-padding" style="padding-top:28px;">
+            <td style="${sidePad}padding-top:28px;">
               ${opts.highlightHtml}
             </td>
           </tr>`
@@ -479,7 +447,7 @@ export function wrapEmailHtml(opts) {
           ${opts.detailsHtml
             ? `<!-- Details -->
           <tr>
-            <td class="mobile-padding" style="padding-top:30px;">
+            <td style="${sidePad}padding-top:30px;">
               ${opts.detailsHtml}
             </td>
           </tr>`
@@ -488,7 +456,7 @@ export function wrapEmailHtml(opts) {
           ${opts.bodyHtml
             ? `<!-- Body -->
           <tr>
-            <td class="mobile-padding" style="padding-top:24px;">
+            <td style="${sidePad}padding-top:24px;">
               ${opts.bodyHtml}
             </td>
           </tr>`
@@ -497,7 +465,7 @@ export function wrapEmailHtml(opts) {
           ${opts.noteHtml
             ? `<!-- Note -->
           <tr>
-            <td class="mobile-padding" style="padding-top:30px;">
+            <td style="${sidePad}padding-top:30px;">
               ${opts.noteHtml}
             </td>
           </tr>`
@@ -506,7 +474,7 @@ export function wrapEmailHtml(opts) {
           ${opts.actionsHtml
             ? `<!-- Actions -->
           <tr>
-            <td class="mobile-padding" align="center" style="padding-top:30px; padding-bottom:38px;">
+            <td style="${sidePad}padding-top:30px;padding-bottom:38px;" align="center">
               ${opts.actionsHtml}
             </td>
           </tr>`
@@ -515,14 +483,14 @@ export function wrapEmailHtml(opts) {
           ${showFooter
             ? `<!-- Footer divider -->
           <tr>
-            <td class="mobile-padding">
+            <td style="${sidePad}">
               <div style="height:1px; background:${t.line};"></div>
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td class="mobile-padding" style="padding-top:24px; padding-bottom:36px; color:${t.faint}; font-size:11px; line-height:18px; font-family:${t.font};">
+            <td style="${sidePad}padding-top:24px;padding-bottom:36px;color:${t.faint};font-size:11px;line-height:18px;font-family:${t.font};">
               ${footerNote ? `<p style="margin:0;">${footerNote}</p>` : ''}
               ${showFooterLinks ? `<p style="margin:10px 0 0;">
                 <a href="${escapeHtml(brand.settingsUrl)}" style="color:#6b7280;">Notification settings</a>
