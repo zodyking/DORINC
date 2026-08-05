@@ -611,6 +611,17 @@ section.page.active.page--invoice-pdf {
   padding: 0 18px 18px;
 }
 
+/* Billing page — flex stack so KPI/breakdown/provider cards keep even gaps on mobile */
+section.page.active.billing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+section.page.active.billing-page .kpis.billing-kpis {
+  margin-bottom: 0;
+}
+
 .portal-pwa-wrap {
   padding: 0 28px;
   background: #fff;

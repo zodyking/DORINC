@@ -73,6 +73,7 @@ async function reload() {
     </div>
 
     <template v-else-if="dashboard">
+      <div class="billing-stack">
       <div class="kpis billing-kpis">
         <div class="kpi">
           <div class="t">Est. monthly</div>
@@ -122,7 +123,7 @@ async function reload() {
                 <dd>{{ billingMoney(dashboard.vultr.lastPaymentAmount) }} · {{ billingDate(dashboard.vultr.lastPaymentDate) }}</dd>
               </dl>
 
-              <template v-if="dashboard.vultr.monitoredInstances.length">
+              <div v-if="dashboard.vultr.monitoredInstances.length" class="billing-section">
                 <h4 class="billing-sub">Servers</h4>
                 <ul class="billing-list">
                   <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id">
@@ -130,9 +131,9 @@ async function reload() {
                     <span>{{ inst.region }} · {{ inst.plan }}</span>
                   </li>
                 </ul>
-              </template>
+              </div>
 
-              <template v-if="dashboard.vultr.invoices.length">
+              <div v-if="dashboard.vultr.invoices.length" class="billing-section">
                 <h4 class="billing-sub">Recent invoices</h4>
                 <div class="tscroll">
                   <table class="tbl compact">
@@ -152,7 +153,7 @@ async function reload() {
                     </tbody>
                   </table>
                 </div>
-              </template>
+              </div>
             </template>
             <p v-else class="billing-muted">Set up in Control Panel → Billing.</p>
           </div>
@@ -233,7 +234,7 @@ async function reload() {
                 <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
               </dl>
 
-              <template v-if="dashboard.openrouter.usageHistory.length">
+              <div v-if="dashboard.openrouter.usageHistory.length" class="billing-section">
                 <h4 class="billing-sub">Recent API usage</h4>
                 <div class="tscroll">
                   <table class="tbl compact">
@@ -253,7 +254,7 @@ async function reload() {
                     </tbody>
                   </table>
                 </div>
-              </template>
+              </div>
             </template>
             <p v-else class="billing-muted">Enable in Control Panel → Billing.</p>
           </div>
@@ -264,12 +265,19 @@ async function reload() {
           </footer>
         </article>
       </div>
+      </div>
     </template>
   </section>
 </template>
 
 <style scoped>
-.billing-page {
+section.page.active.billing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.billing-stack {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -281,7 +289,7 @@ async function reload() {
 }
 
 .billing-breakdown-card {
-  margin-bottom: 4px;
+  margin: 0;
 }
 
 .billing-breakdown-card .kv {
@@ -299,12 +307,13 @@ async function reload() {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
   align-items: start;
+  margin: 0;
 }
 
 @media (max-width: 1100px) {
   .billing-grid {
     grid-template-columns: 1fr;
-    gap: 28px;
+    gap: 24px;
   }
 }
 
@@ -316,7 +325,7 @@ async function reload() {
 .billing-card-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   padding-top: 18px;
   padding-bottom: 18px;
 }
@@ -325,9 +334,28 @@ async function reload() {
   margin: 0;
 }
 
+.billing-card-body .kv + .billing-sub,
+.billing-card-body .billing-note + .kv {
+  margin-top: 0;
+}
+
+.billing-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.billing-section + .billing-section {
+  margin-top: 4px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
 .billing-card-footer {
-  padding: 0 18px 18px;
+  padding: 16px 18px 18px;
   margin-top: auto;
+  border-top: 1px solid #e2e8f0;
 }
 
 .billing-manage-btn {
@@ -347,7 +375,7 @@ async function reload() {
 }
 
 .billing-sub {
-  margin: 8px 0 12px;
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: #334155;

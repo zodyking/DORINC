@@ -465,8 +465,9 @@ onBeforeUnmount(() => {
 }
 
 .provider-settings-footer {
-  padding: 0 18px 18px;
+  padding: 16px 18px 18px;
   margin-top: auto;
+  border-top: 1px solid #e2e8f0;
 }
 
 .provider-manage-btn {
