@@ -11,10 +11,51 @@ export interface VultrAccountSummary {
 export interface VultrInstanceRow {
   id: string
   label: string
+  hostname: string | null
+  os: string | null
   region: string
   plan: string
+  vcpuCount: number | null
+  ramMb: number | null
+  diskGb: number | null
+  allowedBandwidthGb: number | null
   status: string
+  powerStatus: string | null
+  serverStatus: string | null
   mainIp: string | null
+  v6MainIp: string | null
+  internalIp: string | null
+  gatewayV4: string | null
+  dateCreated: string | null
+  features: string[]
+  tags: string[]
+}
+
+export function mapVultrInstanceRow(row: Record<string, unknown>): VultrInstanceRow {
+  const features = Array.isArray(row.features) ? row.features.map(String) : []
+  const tags = Array.isArray(row.tags) ? row.tags.map(String) : []
+  return {
+    id: String(row.id ?? ''),
+    label: String(row.label ?? 'Server'),
+    hostname: row.hostname ? String(row.hostname) : null,
+    os: row.os ? String(row.os) : null,
+    region: String(row.region ?? ''),
+    plan: String(row.plan ?? ''),
+    vcpuCount: row.vcpu_count != null ? Number(row.vcpu_count) : null,
+    ramMb: row.ram != null ? Number(row.ram) : null,
+    diskGb: row.disk != null ? Number(row.disk) : null,
+    allowedBandwidthGb: row.allowed_bandwidth != null ? Number(row.allowed_bandwidth) : null,
+    status: String(row.status ?? 'unknown'),
+    powerStatus: row.power_status ? String(row.power_status) : null,
+    serverStatus: row.server_status ? String(row.server_status) : null,
+    mainIp: row.main_ip ? String(row.main_ip) : null,
+    v6MainIp: row.v6_main_ip ? String(row.v6_main_ip) : null,
+    internalIp: row.internal_ip ? String(row.internal_ip) : null,
+    gatewayV4: row.gateway_v4 ? String(row.gateway_v4) : null,
+    dateCreated: row.date_created ? String(row.date_created) : null,
+    features,
+    tags,
+  }
 }
 
 export interface VultrBillingHistoryRow {
@@ -61,14 +102,7 @@ export async function fetchVultrAccount(apiKey: string): Promise<VultrAccountSum
 
 export async function fetchVultrInstances(apiKey: string): Promise<VultrInstanceRow[]> {
   const payload = await vultrFetch<{ instances?: Array<Record<string, unknown>> }>(apiKey, '/instances')
-  return (payload.instances ?? []).map(row => ({
-    id: String(row.id ?? ''),
-    label: String(row.label ?? 'Server'),
-    region: String(row.region ?? ''),
-    plan: String(row.plan ?? ''),
-    status: String(row.status ?? row.power_status ?? 'unknown'),
-    mainIp: row.main_ip ? String(row.main_ip) : null,
-  }))
+  return (payload.instances ?? []).map(mapVultrInstanceRow)
 }
 
 export async function fetchVultrBillingHistory(apiKey: string, limit = 12): Promise<VultrBillingHistoryRow[]> {

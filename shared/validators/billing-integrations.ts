@@ -52,6 +52,29 @@ export interface BillingDashboardDomain {
   currency: string
 }
 
+export interface BillingVultrInstance {
+  id: string
+  label: string
+  hostname: string | null
+  os: string | null
+  region: string
+  plan: string
+  vcpuCount: number | null
+  ramMb: number | null
+  diskGb: number | null
+  allowedBandwidthGb: number | null
+  status: string
+  powerStatus: string | null
+  serverStatus: string | null
+  mainIp: string | null
+  v6MainIp: string | null
+  internalIp: string | null
+  gatewayV4: string | null
+  dateCreated: string | null
+  features: string[]
+  tags: string[]
+}
+
 export interface BillingDashboardPayload {
   configured: {
     vultr: boolean
@@ -65,14 +88,7 @@ export interface BillingDashboardPayload {
     accountBalance: number | null
     lastPaymentDate: string | null
     lastPaymentAmount: number | null
-    monitoredInstances: Array<{
-      id: string
-      label: string
-      region: string
-      plan: string
-      status: string
-      mainIp: string | null
-    }>
+    monitoredInstances: BillingVultrInstance[]
     invoices: Array<{
       id: string
       date: string

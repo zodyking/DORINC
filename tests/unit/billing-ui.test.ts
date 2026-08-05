@@ -3,7 +3,9 @@ import {
   BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
   billingProviderManageLabel,
+  formatVultrCount,
   formatVultrInstanceStatus,
+  formatVultrRam,
 } from '../../app/utils/billing-ui'
 
 describe('billing-ui helpers', () => {
@@ -26,5 +28,10 @@ describe('billing-ui helpers', () => {
   it('formats Vultr instance status labels', () => {
     expect(formatVultrInstanceStatus('running')).toBe('Running')
     expect(formatVultrInstanceStatus('power_off')).toBe('Power Off')
+  })
+
+  it('formats Vultr vCPU counts', () => {
+    expect(formatVultrCount(1, 'vCPU')).toBe('1 vCPU')
+    expect(formatVultrCount(4, 'vCPU')).toBe('4 vCPUs')
   })
 })

@@ -62,3 +62,37 @@ export function formatVultrInstanceStatus(status: string): string {
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase())
 }
+
+export function formatVultrCount(value: number | null, unit: string): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  if (unit === 'vCPU') return value === 1 ? '1 vCPU' : `${value} vCPUs`
+  return `${value} ${unit}`
+}
+
+export function formatVultrRam(mb: number | null): string {
+  if (mb == null || Number.isNaN(mb)) return '—'
+  if (mb >= 1024) {
+    const gb = mb / 1024
+    return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB RAM`
+  }
+  return `${mb} MB RAM`
+}
+
+export function formatVultrDisk(gb: number | null): string {
+  if (gb == null || Number.isNaN(gb)) return '—'
+  return `${gb} GB disk`
+}
+
+export function formatVultrBandwidth(gb: number | null): string {
+  if (gb == null || Number.isNaN(gb)) return '—'
+  if (gb >= 1024) {
+    const tb = gb / 1024
+    return `${Number.isInteger(tb) ? tb : tb.toFixed(1)} TB / month`
+  }
+  return `${gb} GB / month`
+}
+
+export function formatVultrFeatureList(values: string[]): string {
+  if (!values.length) return '—'
+  return values.map(value => formatVultrInstanceStatus(value)).join(', ')
+}

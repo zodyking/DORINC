@@ -10,7 +10,12 @@ import {
   billingMoney,
   billingProviderManageLabel,
   billingProviderStatus,
+  formatVultrBandwidth,
+  formatVultrCount,
+  formatVultrDisk,
+  formatVultrFeatureList,
   formatVultrInstanceStatus,
+  formatVultrRam,
 } from '~/utils/billing-ui'
 
 definePageMeta({ layout: 'staff', permission: 'billing.read.all' })
@@ -126,25 +131,98 @@ async function reload() {
                 <h4 class="billing-sub">Servers</h4>
                 <ul class="billing-list">
                   <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id" class="billing-server">
-                    <div class="billing-server__name">{{ inst.label }}</div>
-                    <dl class="billing-server__details">
-                      <div>
-                        <dt>Plan</dt>
-                        <dd>{{ inst.plan || '—' }}</dd>
-                      </div>
-                      <div>
-                        <dt>Region</dt>
-                        <dd>{{ inst.region || '—' }}</dd>
-                      </div>
-                      <div>
-                        <dt>Status</dt>
-                        <dd>{{ formatVultrInstanceStatus(inst.status) }}</dd>
-                      </div>
-                      <div v-if="inst.mainIp">
-                        <dt>IP address</dt>
-                        <dd class="mono">{{ inst.mainIp }}</dd>
-                      </div>
-                    </dl>
+                    <div class="billing-server__head">
+                      <div class="billing-server__name">{{ inst.label }}</div>
+                      <p v-if="inst.hostname && inst.hostname !== inst.label" class="billing-server__hostname mono">
+                        {{ inst.hostname }}
+                      </p>
+                    </div>
+
+                    <div class="billing-server__group">
+                      <div class="billing-server__group-title">Compute</div>
+                      <dl class="billing-server__details">
+                        <div>
+                          <dt>Plan</dt>
+                          <dd>{{ inst.plan || '—' }}</dd>
+                        </div>
+                        <div>
+                          <dt>Operating system</dt>
+                          <dd>{{ inst.os || '—' }}</dd>
+                        </div>
+                        <div>
+                          <dt>vCPUs</dt>
+                          <dd>{{ formatVultrCount(inst.vcpuCount, 'vCPU') }}</dd>
+                        </div>
+                        <div>
+                          <dt>Memory</dt>
+                          <dd>{{ formatVultrRam(inst.ramMb) }}</dd>
+                        </div>
+                        <div>
+                          <dt>Storage</dt>
+                          <dd>{{ formatVultrDisk(inst.diskGb) }}</dd>
+                        </div>
+                        <div>
+                          <dt>Bandwidth</dt>
+                          <dd>{{ formatVultrBandwidth(inst.allowedBandwidthGb) }}</dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <div class="billing-server__group">
+                      <div class="billing-server__group-title">Location & network</div>
+                      <dl class="billing-server__details">
+                        <div>
+                          <dt>Region</dt>
+                          <dd>{{ inst.region || '—' }}</dd>
+                        </div>
+                        <div v-if="inst.mainIp">
+                          <dt>IPv4 address</dt>
+                          <dd class="mono">{{ inst.mainIp }}</dd>
+                        </div>
+                        <div v-if="inst.gatewayV4">
+                          <dt>Gateway</dt>
+                          <dd class="mono">{{ inst.gatewayV4 }}</dd>
+                        </div>
+                        <div v-if="inst.v6MainIp">
+                          <dt>IPv6 address</dt>
+                          <dd class="mono">{{ inst.v6MainIp }}</dd>
+                        </div>
+                        <div v-if="inst.internalIp">
+                          <dt>Internal IP</dt>
+                          <dd class="mono">{{ inst.internalIp }}</dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <div class="billing-server__group">
+                      <div class="billing-server__group-title">Status</div>
+                      <dl class="billing-server__details">
+                        <div>
+                          <dt>Deployment</dt>
+                          <dd>{{ formatVultrInstanceStatus(inst.status) }}</dd>
+                        </div>
+                        <div v-if="inst.powerStatus">
+                          <dt>Power</dt>
+                          <dd>{{ formatVultrInstanceStatus(inst.powerStatus) }}</dd>
+                        </div>
+                        <div v-if="inst.serverStatus">
+                          <dt>Server health</dt>
+                          <dd>{{ formatVultrInstanceStatus(inst.serverStatus) }}</dd>
+                        </div>
+                        <div v-if="inst.dateCreated">
+                          <dt>Created</dt>
+                          <dd>{{ billingDate(inst.dateCreated) }}</dd>
+                        </div>
+                        <div v-if="inst.features.length">
+                          <dt>Features</dt>
+                          <dd>{{ formatVultrFeatureList(inst.features) }}</dd>
+                        </div>
+                        <div v-if="inst.tags.length">
+                          <dt>Tags</dt>
+                          <dd>{{ inst.tags.join(', ') }}</dd>
+                        </div>
+                      </dl>
+                    </div>
                   </li>
                 </ul>
               </div>
@@ -407,17 +485,52 @@ section.page.active.billing-page {
 }
 
 .billing-list li {
-  padding: 14px 16px;
+  padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.billing-server__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .billing-server__name {
   font-size: 14px;
   font-weight: 700;
   color: #0f172a;
-  margin-bottom: 10px;
+}
+
+.billing-server__hostname {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.billing-server__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.billing-server__head + .billing-server__group {
+  padding-top: 0;
+  border-top: none;
+}
+
+.billing-server__group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6366f1;
 }
 
 .billing-server__details {
