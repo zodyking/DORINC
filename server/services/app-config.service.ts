@@ -221,6 +221,14 @@ export function getSessionSecret(): string | null {
   return envSessionSecret() ?? cache.sessionSecretHex
 }
 
+/** Re-read DB settings when env is unset (e.g. boot cache warm failed). */
+export async function resolveSessionSecret(db: Db): Promise<string | null> {
+  const existing = getSessionSecret()
+  if (existing) return existing
+  await refreshAppConfigCache(db)
+  return getSessionSecret()
+}
+
 export function getAppUrl(): string {
   return envAppUrl() ?? cache.appUrl ?? 'http://localhost:3000'
 }

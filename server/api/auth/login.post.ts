@@ -13,6 +13,7 @@ import {
   getCachedAccessGateSettings,
   recordAccessEvent,
 } from '../../services/access-gate.service'
+import { resolveSessionSecret } from '../../services/app-config.service'
 import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
@@ -131,6 +132,15 @@ export default defineEventHandler(async (event) => {
 
     // Staff complete sign-in after granting device location (geofence exempt for super admin).
     if (body.portal === 'staff' && !body.geo) {
+      const sessionSecret = await resolveSessionSecret(useDb())
+      if (!sessionSecret) {
+        console.error('[auth] staff login blocked: SESSION_SECRET is not configured')
+        throw apiError(
+          event,
+          'SERVICE_UNAVAILABLE',
+          'Server security is not configured. Set SESSION_SECRET in the environment or complete Security setup, then restart the app.',
+        )
+      }
       return {
         needsLocation: true,
         loginToken: createPendingLoginToken(result.sessionToken),
