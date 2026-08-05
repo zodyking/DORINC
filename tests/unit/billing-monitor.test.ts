@@ -10,9 +10,9 @@ describe('billing permissions', () => {
 })
 
 describe('billing dashboard totals', () => {
-  it('rounds monthly and yearly estimates', () => {
-    const vultrUsd = 7.42
-    const openrouterUsd = 18.2
+  it('rounds monthly and yearly estimates from plan cost and usage', () => {
+    const vultrUsd = 20
+    const openrouterUsd = 0.09
     const namecheapMonthlyUsd = 15.88
     const namecheapYearlyUsd = 31.76
 
@@ -20,7 +20,7 @@ describe('billing dashboard totals', () => {
     const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + namecheapMonthlyUsd)
     const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + namecheapYearlyUsd)
 
-    expect(estimatedMonthlyUsd).toBe(41.5)
-    expect(estimatedYearlyUsd).toBe(339.2)
+    expect(estimatedMonthlyUsd).toBe(35.97)
+    expect(estimatedYearlyUsd).toBe(272.84)
   })
 })

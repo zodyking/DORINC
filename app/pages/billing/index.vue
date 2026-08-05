@@ -120,12 +120,10 @@ async function reload() {
             <p v-if="dashboard.vultr.error" class="billing-err">{{ dashboard.vultr.error }}</p>
             <template v-else-if="dashboard.vultr.configured">
               <dl class="kv">
-                <dt>Current usage</dt>
-                <dd>{{ billingMoney(dashboard.vultr.monthToDateUsage) }}</dd>
+                <dt>Est. monthly</dt>
+                <dd>{{ formatVultrMonthlyCost(dashboard.vultr.planCostMonthly) }}</dd>
                 <dt>Balance</dt>
                 <dd>{{ billingMoney(dashboard.vultr.accountBalance) }}</dd>
-                <dt>Plan cost</dt>
-                <dd>{{ formatVultrMonthlyCost(dashboard.vultr.planCostMonthly) }}</dd>
               </dl>
 
               <div v-if="dashboard.vultr.monitoredInstances.length" class="billing-section">
@@ -323,13 +321,9 @@ async function reload() {
               <dl class="kv">
                 <dt>Available credit</dt>
                 <dd>{{ openRouterAvailableCredit(dashboard.openrouter) }}</dd>
-                <dt>Purchased</dt>
-                <dd>{{ billingMoney(dashboard.openrouter.totalCredits) }}</dd>
-                <dt>Used</dt>
-                <dd>{{ billingMoney(dashboard.openrouter.totalUsage) }}</dd>
-                <dt>This month</dt>
+                <dt>Used this month</dt>
                 <dd>{{ billingMoney(dashboard.openrouter.usageMonthly) }}</dd>
-                <dt>Today</dt>
+                <dt>Used today</dt>
                 <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
               </dl>
 

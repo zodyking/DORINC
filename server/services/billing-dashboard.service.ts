@@ -135,7 +135,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     }
   }
 
-  const vultrUsd = vultrBlock.monthToDateUsage ?? 0
+  const vultrUsd = vultrBlock.planCostMonthly ?? 0
   const openrouterUsd = openrouterBlock.usageMonthly ?? openrouterBlock.internalMonthlyUsd ?? 0
   const namecheapMonthlyUsd = namecheapBlock.domains
     .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30)
