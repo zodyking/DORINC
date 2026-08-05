@@ -473,7 +473,7 @@ async function testAiConnection() {
           :open="openSections.billing"
           @update:open="setSectionOpen('billing', $event)"
         >
-          <SettingsBillingPanel @saved="refresh()" />
+          <SettingsBillingPanel :active="openSections.billing" @saved="refresh()" />
         </ControlPanelSection>
 
         <p class="cp-sections-sublabel">System</p>
