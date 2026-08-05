@@ -9,9 +9,12 @@ import { mapDomainRenewalsForDashboard } from './domain-renewals.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
 import { listAiUsageLogs } from './ai-jobs.service'
 import {
+  attachVultrInstancePlanCosts,
   fetchVultrAccount,
   fetchVultrBillingHistory,
   fetchVultrInstances,
+  fetchVultrPlanPriceMap,
+  sumVultrMonthlyPlanCost,
 } from './vultr-billing.service'
 
 function roundMoney(value: number): number {
@@ -52,8 +55,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     currency: 'USD',
     monthToDateUsage: null,
     accountBalance: null,
-    lastPaymentDate: null,
-    lastPaymentAmount: null,
+    planCostMonthly: null,
     monitoredInstances: [],
     invoices: [],
     error: null,
@@ -88,19 +90,21 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     try {
       const apiKey = await getVultrApiKey(db)
       if (!apiKey) throw new Error('Vultr API key missing')
-      const [account, instances, history] = await Promise.all([
+      const [account, instances, history, planPrices] = await Promise.all([
         fetchVultrAccount(apiKey),
         fetchVultrInstances(apiKey),
         fetchVultrBillingHistory(apiKey),
+        fetchVultrPlanPriceMap(apiKey),
       ])
       const watched = new Set(settings.vultrMonitoredInstanceIds)
+      const monitored = attachVultrInstancePlanCosts(
+        instances.filter(row => watched.size > 0 && watched.has(row.id)),
+        planPrices,
+      )
       vultrBlock.monthToDateUsage = account.pendingCharges
       vultrBlock.accountBalance = account.balance
-      vultrBlock.lastPaymentDate = account.lastPaymentDate
-      vultrBlock.lastPaymentAmount = account.lastPaymentAmount
-      vultrBlock.monitoredInstances = instances.filter(row =>
-        watched.size === 0 ? false : watched.has(row.id),
-      )
+      vultrBlock.planCostMonthly = sumVultrMonthlyPlanCost(monitored)
+      vultrBlock.monitoredInstances = monitored
       vultrBlock.invoices = history
     }
     catch (e) {

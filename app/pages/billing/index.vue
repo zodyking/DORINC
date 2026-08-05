@@ -15,6 +15,7 @@ import {
   formatVultrDisk,
   formatVultrFeatureList,
   formatVultrInstanceStatus,
+  formatVultrMonthlyCost,
   formatVultrRam,
 } from '~/utils/billing-ui'
 
@@ -123,8 +124,8 @@ async function reload() {
                 <dd>{{ billingMoney(dashboard.vultr.monthToDateUsage) }}</dd>
                 <dt>Balance</dt>
                 <dd>{{ billingMoney(dashboard.vultr.accountBalance) }}</dd>
-                <dt>Last payment</dt>
-                <dd>{{ billingMoney(dashboard.vultr.lastPaymentAmount) }} · {{ billingDate(dashboard.vultr.lastPaymentDate) }}</dd>
+                <dt>Plan cost</dt>
+                <dd>{{ formatVultrMonthlyCost(dashboard.vultr.planCostMonthly) }}</dd>
               </dl>
 
               <div v-if="dashboard.vultr.monitoredInstances.length" class="billing-section">
@@ -144,6 +145,10 @@ async function reload() {
                         <div>
                           <dt>Plan</dt>
                           <dd>{{ inst.plan || '—' }}</dd>
+                        </div>
+                        <div>
+                          <dt>Plan cost</dt>
+                          <dd>{{ formatVultrMonthlyCost(inst.monthlyPlanCost) }}</dd>
                         </div>
                         <div>
                           <dt>Operating system</dt>

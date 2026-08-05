@@ -31,6 +31,48 @@ export interface VultrInstanceRow {
   tags: string[]
 }
 
+export interface VultrPlanPriceRow {
+  id: string
+  monthlyCost: number
+}
+
+export function mapVultrPlanPriceRow(row: Record<string, unknown>): VultrPlanPriceRow | null {
+  const id = String(row.id ?? '').trim()
+  if (!id) return null
+  return {
+    id,
+    monthlyCost: Number(row.monthly_cost ?? 0),
+  }
+}
+
+export function buildVultrPlanPriceMap(plans: VultrPlanPriceRow[]): Map<string, number> {
+  return new Map(plans.map(plan => [plan.id, plan.monthlyCost]))
+}
+
+export function attachVultrInstancePlanCosts(
+  instances: VultrInstanceRow[],
+  planPrices: Map<string, number>,
+): Array<VultrInstanceRow & { monthlyPlanCost: number | null }> {
+  return instances.map(instance => ({
+    ...instance,
+    monthlyPlanCost: planPrices.has(instance.plan) ? planPrices.get(instance.plan)! : null,
+  }))
+}
+
+export function sumVultrMonthlyPlanCost(
+  instances: Array<{ monthlyPlanCost: number | null }>,
+): number | null {
+  if (!instances.length) return null
+  let total = 0
+  let priced = false
+  for (const instance of instances) {
+    if (instance.monthlyPlanCost == null) continue
+    total += instance.monthlyPlanCost
+    priced = true
+  }
+  return priced ? total : null
+}
+
 export function mapVultrInstanceRow(row: Record<string, unknown>): VultrInstanceRow {
   const features = Array.isArray(row.features) ? row.features.map(String) : []
   const tags = Array.isArray(row.tags) ? row.tags.map(String) : []
@@ -103,6 +145,14 @@ export async function fetchVultrAccount(apiKey: string): Promise<VultrAccountSum
 export async function fetchVultrInstances(apiKey: string): Promise<VultrInstanceRow[]> {
   const payload = await vultrFetch<{ instances?: Array<Record<string, unknown>> }>(apiKey, '/instances')
   return (payload.instances ?? []).map(mapVultrInstanceRow)
+}
+
+export async function fetchVultrPlanPriceMap(apiKey: string): Promise<Map<string, number>> {
+  const payload = await vultrFetch<{ plans?: Array<Record<string, unknown>> }>(apiKey, '/plans?per_page=500')
+  const plans = (payload.plans ?? [])
+    .map(mapVultrPlanPriceRow)
+    .filter((row): row is VultrPlanPriceRow => row != null)
+  return buildVultrPlanPriceMap(plans)
 }
 
 export async function fetchVultrBillingHistory(apiKey: string, limit = 12): Promise<VultrBillingHistoryRow[]> {

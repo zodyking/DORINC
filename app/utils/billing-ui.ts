@@ -96,3 +96,8 @@ export function formatVultrFeatureList(values: string[]): string {
   if (!values.length) return '—'
   return values.map(value => formatVultrInstanceStatus(value)).join(', ')
 }
+
+export function formatVultrMonthlyCost(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return `${billingMoney(value)}/month`
+}

@@ -73,6 +73,7 @@ export interface BillingVultrInstance {
   dateCreated: string | null
   features: string[]
   tags: string[]
+  monthlyPlanCost: number | null
 }
 
 export interface BillingDashboardPayload {
@@ -86,8 +87,7 @@ export interface BillingDashboardPayload {
     currency: string
     monthToDateUsage: number | null
     accountBalance: number | null
-    lastPaymentDate: string | null
-    lastPaymentAmount: number | null
+    planCostMonthly: number | null
     monitoredInstances: BillingVultrInstance[]
     invoices: Array<{
       id: string
