@@ -103,6 +103,31 @@ const hasNamecheapKey = computed(() =>
   || (!isSavedPasswordMask(form.namecheapApiKey) && form.namecheapApiKey.trim().length >= 8),
 )
 
+function hasCompleteNamecheapApiFields(settings: BillingIntegrationsView): boolean {
+  return !!(
+    settings.namecheapApiUser?.trim()
+    && settings.namecheapUsername?.trim()
+    && settings.namecheapClientIp?.trim()
+  )
+}
+
+function hasCompleteNamecheapApiForm(): boolean {
+  return !!(
+    form.namecheapApiUser.trim()
+    && form.namecheapUsername.trim()
+    && form.namecheapClientIp.trim()
+  )
+}
+
+function applySavedSettings(settings: BillingIntegrationsView) {
+  if (data.value) {
+    data.value = { settings }
+  }
+  hydrate(settings)
+}
+
+const PROVIDER_LIST_TIMEOUT_MS = 20_000
+
 const vultrInstances = ref<VultrInstanceOption[]>([])
 const vultrInstancesLoading = ref(false)
 const vultrInstancesError = ref('')
@@ -116,7 +141,9 @@ async function loadVultrInstances() {
   vultrInstancesLoading.value = true
   vultrInstancesError.value = ''
   try {
-    const res = await $fetch<{ instances: VultrInstanceOption[] }>('/api/admin/billing/vultr/instances')
+    const res = await $fetch<{ instances: VultrInstanceOption[] }>('/api/admin/billing/vultr/instances', {
+      timeout: PROVIDER_LIST_TIMEOUT_MS,
+    })
     vultrInstances.value = res.instances
   }
   catch (e: unknown) {
@@ -132,7 +159,9 @@ async function loadNamecheapDomains() {
   namecheapDomainsLoading.value = true
   namecheapDomainsError.value = ''
   try {
-    const res = await $fetch<{ domains: NamecheapDomainOption[] }>('/api/admin/billing/namecheap/domains')
+    const res = await $fetch<{ domains: NamecheapDomainOption[] }>('/api/admin/billing/namecheap/domains', {
+      timeout: PROVIDER_LIST_TIMEOUT_MS,
+    })
     namecheapDomains.value = res.domains
   }
   catch (e: unknown) {
@@ -148,7 +177,9 @@ watch(hasVultrKey, (ok) => {
 }, { immediate: true })
 
 watch(hasNamecheapKey, (ok) => {
-  if (ok && data.value?.settings.hasNamecheapApiKey) void loadNamecheapDomains()
+  const settings = data.value?.settings
+  if (!ok || !settings?.hasNamecheapApiKey || !hasCompleteNamecheapApiFields(settings)) return
+  void loadNamecheapDomains()
 }, { immediate: true })
 
 function toggleInstance(id: string, checked: boolean) {
@@ -181,6 +212,24 @@ function fetchErrorMessage(e: unknown, fallback: string): string {
     return `${path}${issue.message}`
   }
   return data?.message ?? fallback
+}
+
+function validateNamecheapApiBeforeSave(): string | null {
+  const hasNewKey = !isSavedPasswordMask(form.namecheapApiKey) && form.namecheapApiKey.trim().length >= 8
+  const hasSavedKey = !!data.value?.settings.hasNamecheapApiKey
+  const usingApi = hasNewKey || hasSavedKey
+  if (!usingApi) return null
+
+  const partialApi = !!(
+    form.namecheapApiUser.trim()
+    || form.namecheapUsername.trim()
+    || form.namecheapClientIp.trim()
+    || hasNewKey
+  )
+  if (partialApi && !hasCompleteNamecheapApiForm()) {
+    return 'Namecheap API requires API user, username, and whitelisted client IP. Leave API fields blank to use manual domains only.'
+  }
+  return null
 }
 
 function validateManualDomainsBeforeSave(): string | null {
@@ -221,6 +270,13 @@ async function save() {
     return
   }
 
+  const namecheapApiValidationError = validateNamecheapApiBeforeSave()
+  if (namecheapApiValidationError) {
+    error.value = namecheapApiValidationError
+    saveBusy.value = false
+    return
+  }
+
   try {
     const manualDomains = formManualDomainsForSave()
     const body: Record<string, unknown> = {
@@ -242,19 +298,27 @@ async function save() {
     const namecheapKey = passwordForSave(form.namecheapApiKey, !!data.value?.settings.hasNamecheapApiKey)
     if (namecheapKey) body.namecheapApiKey = namecheapKey
 
-    await $fetch('/api/admin/billing/integrations', { method: 'PATCH', body })
+    const res = await $fetch<IntegrationsResponse>('/api/admin/billing/integrations', { method: 'PATCH', body })
+    applySavedSettings(res.settings)
     message.value = 'Billing integrations saved'
-    await refresh()
-    if (data.value?.settings) hydrate(data.value.settings)
-    if (data.value?.settings.hasVultrApiKey) await loadVultrInstances()
-    if (data.value?.settings.hasNamecheapApiKey) await loadNamecheapDomains()
     emit('saved')
+    void refresh()
+    void refreshProviderListsAfterSave(res.settings)
   }
   catch (e: unknown) {
     error.value = fetchErrorMessage(e, 'Save failed')
   }
   finally {
     saveBusy.value = false
+  }
+}
+
+async function refreshProviderListsAfterSave(settings: BillingIntegrationsView) {
+  if (settings.hasVultrApiKey && settings.vultrEnabled) {
+    await loadVultrInstances()
+  }
+  if (settings.hasNamecheapApiKey && settings.namecheapEnabled && hasCompleteNamecheapApiFields(settings)) {
+    await loadNamecheapDomains()
   }
 }
 
@@ -276,10 +340,14 @@ async function testConnection(provider: 'vultr' | 'namecheap') {
       const key = passwordForSave(form.namecheapApiKey, !!data.value?.settings.hasNamecheapApiKey)
       if (key) body.namecheapApiKey = key
     }
-    const res = await $fetch<{ message: string }>('/api/admin/billing/test-connection', { method: 'POST', body })
+    const res = await $fetch<{ message: string }>('/api/admin/billing/test-connection', {
+      method: 'POST',
+      body,
+      timeout: PROVIDER_LIST_TIMEOUT_MS,
+    })
     message.value = res.message
-    if (provider === 'vultr') await loadVultrInstances()
-    if (provider === 'namecheap') await loadNamecheapDomains()
+    if (provider === 'vultr') void loadVultrInstances()
+    if (provider === 'namecheap') void loadNamecheapDomains()
   }
   catch (e: unknown) {
     error.value = fetchErrorMessage(e, 'Connection test failed')

@@ -1,4 +1,5 @@
 const VULTR_API = 'https://api.vultr.com/v2'
+const VULTR_FETCH_TIMEOUT_MS = 15_000
 
 export interface VultrAccountSummary {
   balance: number
@@ -24,12 +25,22 @@ export interface VultrBillingHistoryRow {
 }
 
 async function vultrFetch<T>(apiKey: string, path: string): Promise<T> {
-  const res = await fetch(`${VULTR_API}${path}`, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${VULTR_API}${path}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(VULTR_FETCH_TIMEOUT_MS),
+    })
+  }
+  catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('Vultr API timed out — check your API key and network access', { cause: err })
+    }
+    throw err
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(body || `Vultr API returned ${res.status}`)

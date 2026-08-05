@@ -1,5 +1,6 @@
 const NAMECHEAP_PROD = 'https://api.namecheap.com/xml.response'
 const NAMECHEAP_SANDBOX = 'https://api.sandbox.namecheap.com/xml.response'
+const NAMECHEAP_FETCH_TIMEOUT_MS = 15_000
 
 export interface NamecheapCredentials {
   apiUser: string
@@ -59,7 +60,16 @@ async function namecheapRequest(creds: NamecheapCredentials, params: Record<stri
     url.searchParams.set(key, value)
   }
 
-  const res = await fetch(url.toString())
+  let res: Response
+  try {
+    res = await fetch(url.toString(), { signal: AbortSignal.timeout(NAMECHEAP_FETCH_TIMEOUT_MS) })
+  }
+  catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('Namecheap API timed out — check credentials, whitelisted IP, and network access', { cause: err })
+    }
+    throw err
+  }
   if (!res.ok) throw new Error(`Namecheap API returned ${res.status}`)
   const xml = await res.text()
   assertNamecheapOk(xml)
