@@ -5,6 +5,7 @@ import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { ensureEncryptionReadyForSettings } from './app-config.service'
 import type { BillingIntegrationsPatch, BillingIntegrationsView } from '../../shared/validators/billing-integrations'
 import { getAiProviderSettings } from './ai-provider.service'
+import { normalizeDomainRenewals } from './domain-renewals.service'
 
 export class BillingIntegrationsServiceError extends Error {
   constructor(public readonly code: 'NOT_CONFIGURED' | 'KEY_MISSING', message?: string) {
@@ -20,14 +21,7 @@ function toView(row: typeof billingIntegrations.$inferSelect): BillingIntegratio
     vultrEnabled: row.vultrEnabled,
     hasVultrApiKey: row.encryptedVultrApiKey != null && row.encryptedVultrApiKey.length > 0,
     vultrMonitoredInstanceIds: row.vultrMonitoredInstanceIds ?? [],
-    namecheapEnabled: row.namecheapEnabled,
-    hasNamecheapApiKey: row.encryptedNamecheapApiKey != null && row.encryptedNamecheapApiKey.length > 0,
-    namecheapApiUser: row.namecheapApiUser,
-    namecheapUsername: row.namecheapUsername,
-    namecheapClientIp: row.namecheapClientIp,
-    namecheapUseSandbox: row.namecheapUseSandbox,
-    namecheapMonitoredDomains: row.namecheapMonitoredDomains ?? [],
-    namecheapManualDomains: row.namecheapManualDomains ?? [],
+    domainRenewals: row.domainRenewals ?? [],
     openrouterBillingEnabled: row.openrouterBillingEnabled,
     hasOpenrouterManagementKey: row.encryptedOpenrouterManagementKey != null && row.encryptedOpenrouterManagementKey.length > 0,
     hasAiOpenRouterKey: false,
@@ -65,24 +59,26 @@ export async function updateBillingIntegrations(
   const current = await ensureBillingIntegrations(db)
   const {
     vultrApiKey,
-    namecheapApiKey,
     openrouterManagementKey,
+    domainRenewals,
     ...rest
   } = patch
 
   const update: Partial<typeof billingIntegrations.$inferInsert> = {
-    ...rest,
+    vultrEnabled: rest.vultrEnabled,
+    vultrMonitoredInstanceIds: rest.vultrMonitoredInstanceIds,
+    openrouterBillingEnabled: rest.openrouterBillingEnabled,
     updatedBy: actorId,
     updatedAt: new Date(),
+  }
+
+  if (domainRenewals !== undefined) {
+    update.domainRenewals = normalizeDomainRenewals(domainRenewals)
   }
 
   if (vultrApiKey !== undefined) {
     await ensureEncryptionReadyForSettings(db)
     update.encryptedVultrApiKey = encryptBuffer(Buffer.from(vultrApiKey, 'utf8'))
-  }
-  if (namecheapApiKey !== undefined) {
-    await ensureEncryptionReadyForSettings(db)
-    update.encryptedNamecheapApiKey = encryptBuffer(Buffer.from(namecheapApiKey, 'utf8'))
   }
   if (openrouterManagementKey !== undefined) {
     await ensureEncryptionReadyForSettings(db)
@@ -117,24 +113,4 @@ export async function getOpenRouterManagementKey(db: Db): Promise<string | null>
   const [row] = await db.select({ key: billingIntegrations.encryptedOpenrouterManagementKey })
     .from(billingIntegrations).limit(1)
   return readSecret(row?.key)
-}
-
-export async function getNamecheapCredentials(db: Db): Promise<{
-  apiUser: string
-  apiKey: string
-  username: string
-  clientIp: string
-  useSandbox: boolean
-} | null> {
-  const [row] = await db.select().from(billingIntegrations).limit(1)
-  if (!row?.namecheapApiUser || !row.namecheapUsername || !row.namecheapClientIp) return null
-  const apiKey = await readSecret(row.encryptedNamecheapApiKey)
-  if (!apiKey) return null
-  return {
-    apiUser: row.namecheapApiUser,
-    apiKey,
-    username: row.namecheapUsername,
-    clientIp: row.namecheapClientIp,
-    useSandbox: row.namecheapUseSandbox,
-  }
 }

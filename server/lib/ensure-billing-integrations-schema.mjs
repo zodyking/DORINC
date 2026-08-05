@@ -1,5 +1,5 @@
-// Idempotent creation of billing_integrations (migration 0059).
-// Runs on boot after Drizzle migrate so billing works without manual migration steps.
+// Idempotent billing_integrations table for infrastructure billing settings.
+// Runs on boot after Drizzle migrate.
 
 const BILLING_INTEGRATIONS_SQL = `
 CREATE TABLE IF NOT EXISTS "billing_integrations" (
@@ -7,14 +7,7 @@ CREATE TABLE IF NOT EXISTS "billing_integrations" (
   "vultr_enabled" boolean DEFAULT false NOT NULL,
   "encrypted_vultr_api_key" bytea,
   "vultr_monitored_instance_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "namecheap_enabled" boolean DEFAULT false NOT NULL,
-  "namecheap_api_user" text,
-  "namecheap_username" text,
-  "namecheap_client_ip" text,
-  "encrypted_namecheap_api_key" bytea,
-  "namecheap_use_sandbox" boolean DEFAULT false NOT NULL,
-  "namecheap_monitored_domains" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "namecheap_manual_domains" jsonb DEFAULT '[]'::jsonb NOT NULL,
+  "domain_renewals" jsonb DEFAULT '[]'::jsonb NOT NULL,
   "openrouter_billing_enabled" boolean DEFAULT true NOT NULL,
   "encrypted_openrouter_management_key" bytea,
   "updated_by" uuid REFERENCES "users"("id"),
@@ -23,14 +16,39 @@ CREATE TABLE IF NOT EXISTS "billing_integrations" (
 );
 `.trim()
 
-const NAMECHEAP_MANUAL_DOMAINS_COLUMN_SQL = `
+const DOMAIN_RENEWALS_COLUMN_SQL = `
 ALTER TABLE "billing_integrations"
-ADD COLUMN IF NOT EXISTS "namecheap_manual_domains" jsonb DEFAULT '[]'::jsonb NOT NULL;
+ADD COLUMN IF NOT EXISTS "domain_renewals" jsonb DEFAULT '[]'::jsonb NOT NULL;
+`.trim()
+
+const MIGRATE_LEGACY_MANUAL_DOMAINS_SQL = `
+UPDATE "billing_integrations"
+SET "domain_renewals" = "namecheap_manual_domains"
+WHERE to_regclass('public.billing_integrations') IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'billing_integrations'
+      AND column_name = 'namecheap_manual_domains'
+  )
+  AND ("domain_renewals" IS NULL OR "domain_renewals" = '[]'::jsonb)
+  AND "namecheap_manual_domains" IS NOT NULL
+  AND "namecheap_manual_domains" <> '[]'::jsonb;
+`.trim()
+
+const DROP_LEGACY_NAMECHEAP_COLUMNS_SQL = `
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_enabled";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_api_user";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_username";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_client_ip";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "encrypted_namecheap_api_key";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_use_sandbox";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_monitored_domains";
+ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_manual_domains";
 `.trim()
 
 /**
- * Create billing_integrations when missing and ensure newer columns exist. Safe on every boot.
- *
  * @param {import('pg').Pool} pool
  * @returns {Promise<boolean>} true when the table was created
  */
@@ -38,10 +56,12 @@ export async function ensureBillingIntegrationsSchema(pool) {
   const { rows } = await pool.query(`SELECT to_regclass('public.billing_integrations') AS reg`)
   if (!rows[0]?.reg) {
     await pool.query(BILLING_INTEGRATIONS_SQL)
-    console.log('[migrate] ensured billing integrations table (0059_billing_integrations)')
+    console.log('[migrate] ensured billing integrations table')
     return true
   }
 
-  await pool.query(NAMECHEAP_MANUAL_DOMAINS_COLUMN_SQL)
+  await pool.query(DOMAIN_RENEWALS_COLUMN_SQL)
+  await pool.query(MIGRATE_LEGACY_MANUAL_DOMAINS_SQL)
+  await pool.query(DROP_LEGACY_NAMECHEAP_COLUMNS_SQL)
   return false
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BillingIntegrationsView, NamecheapManualDomain } from '#shared/validators/billing-integrations'
+import type { BillingIntegrationsView, DomainRenewal } from '#shared/validators/billing-integrations'
 import { BILLING_PROVIDER_ACCOUNT_URLS, BILLING_PROVIDER_LABELS, billingProviderManageLabel } from '~/utils/billing-ui'
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
 
@@ -26,7 +26,7 @@ interface VultrInstanceOption {
 
 const { data, pending } = useClientFetch<IntegrationsResponse>('/api/admin/billing/integrations')
 
-interface ManualDomainFormRow {
+interface DomainRenewalFormRow {
   name: string
   renewalDate: string
   renewalCost: string
@@ -36,12 +36,12 @@ const form = reactive({
   vultrEnabled: false,
   vultrApiKey: '',
   vultrMonitoredInstanceIds: [] as string[],
-  namecheapManualDomains: [] as ManualDomainFormRow[],
+  domainRenewals: [] as DomainRenewalFormRow[],
   openrouterBillingEnabled: true,
   openrouterManagementKey: '',
 })
 
-function manualDomainToForm(row: NamecheapManualDomain): ManualDomainFormRow {
+function domainRenewalToForm(row: DomainRenewal): DomainRenewalFormRow {
   return {
     name: row.name,
     renewalDate: row.renewalDate,
@@ -49,8 +49,8 @@ function manualDomainToForm(row: NamecheapManualDomain): ManualDomainFormRow {
   }
 }
 
-function formManualDomainsForSave(): NamecheapManualDomain[] {
-  return form.namecheapManualDomains
+function formDomainRenewalsForSave(): DomainRenewal[] {
+  return form.domainRenewals
     .map(row => ({
       name: row.name.trim(),
       renewalDate: row.renewalDate.trim(),
@@ -70,11 +70,11 @@ function hydrate(s: BillingIntegrationsView) {
   form.vultrEnabled = s.vultrEnabled
   form.vultrApiKey = s.hasVultrApiKey ? SAVED_PASSWORD_MASK : ''
   form.vultrMonitoredInstanceIds = [...s.vultrMonitoredInstanceIds]
-  form.namecheapManualDomains = s.namecheapManualDomains.map(manualDomainToForm)
+  form.domainRenewals = s.domainRenewals.map(domainRenewalToForm)
   form.openrouterBillingEnabled = s.openrouterBillingEnabled
   form.openrouterManagementKey = s.hasOpenrouterManagementKey ? SAVED_PASSWORD_MASK : ''
-  if (form.namecheapManualDomains.length === 0) {
-    addManualDomain()
+  if (form.domainRenewals.length === 0) {
+    addDomainRenewal()
   }
 }
 
@@ -154,19 +154,19 @@ function toggleInstance(id: string, checked: boolean) {
   form.vultrMonitoredInstanceIds = [...set]
 }
 
-function addManualDomain() {
-  form.namecheapManualDomains.push({ name: '', renewalDate: '', renewalCost: '' })
+function addDomainRenewal() {
+  form.domainRenewals.push({ name: '', renewalDate: '', renewalCost: '' })
 }
 
-function removeManualDomain(index: number) {
-  form.namecheapManualDomains.splice(index, 1)
-  if (form.namecheapManualDomains.length === 0) {
-    addManualDomain()
+function removeDomainRenewal(index: number) {
+  form.domainRenewals.splice(index, 1)
+  if (form.domainRenewals.length === 0) {
+    addDomainRenewal()
   }
 }
 
-function validateManualDomainsBeforeSave(): string | null {
-  for (const row of form.namecheapManualDomains) {
+function validateDomainRenewalsBeforeSave(): string | null {
+  for (const row of form.domainRenewals) {
     const name = row.name.trim()
     const renewalDate = row.renewalDate.trim()
     const renewalCost = row.renewalCost.trim()
@@ -181,12 +181,10 @@ function validateManualDomainsBeforeSave(): string | null {
 }
 
 function buildSaveBody(): Record<string, unknown> {
-  const manualDomains = formManualDomainsForSave()
   const body: Record<string, unknown> = {
     vultrEnabled: form.vultrEnabled,
     vultrMonitoredInstanceIds: form.vultrMonitoredInstanceIds,
-    namecheapEnabled: manualDomains.length > 0,
-    namecheapManualDomains: manualDomains,
+    domainRenewals: formDomainRenewalsForSave(),
     openrouterBillingEnabled: form.openrouterBillingEnabled,
   }
 
@@ -214,9 +212,9 @@ async function save() {
   message.value = ''
   error.value = ''
 
-  const manualValidationError = validateManualDomainsBeforeSave()
-  if (manualValidationError) {
-    error.value = manualValidationError
+  const domainValidationError = validateDomainRenewalsBeforeSave()
+  if (domainValidationError) {
+    error.value = domainValidationError
     saveBusy.value = false
     return
   }
@@ -364,8 +362,8 @@ onBeforeUnmount(() => {
         </div>
         <div class="cbody settings-form">
           <p class="settings-help">Enter each domain manually. Saved domains appear on the Billing page.</p>
-          <div v-if="form.namecheapManualDomains.length" class="manual-domain-list">
-            <div v-for="(row, index) in form.namecheapManualDomains" :key="index" class="manual-domain-row">
+          <div v-if="form.domainRenewals.length" class="manual-domain-list">
+            <div v-for="(row, index) in form.domainRenewals" :key="index" class="manual-domain-row">
               <label class="fld">
                 Domain
                 <input v-model="row.name" type="text" maxlength="253" placeholder="example.com">
@@ -378,12 +376,12 @@ onBeforeUnmount(() => {
                 Cost (USD)
                 <input v-model="row.renewalCost" type="number" min="0" step="0.01" placeholder="15.88">
               </label>
-              <button type="button" class="btn sm danger" @click="removeManualDomain(index)">
+              <button type="button" class="btn sm danger" @click="removeDomainRenewal(index)">
                 Remove
               </button>
             </div>
           </div>
-          <button type="button" class="btn sm" @click="addManualDomain">
+          <button type="button" class="btn sm" @click="addDomainRenewal">
             + Add domain
           </button>
         </div>

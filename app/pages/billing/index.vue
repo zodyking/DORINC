@@ -25,8 +25,6 @@ const { data, pending, error, refresh } = useClientFetch<DashboardResponse>('/ap
 const dashboard = computed(() => data.value?.dashboard)
 
 function renewalCostLabel(domain: BillingDashboardPayload['namecheap']['domains'][number]): string {
-  if (domain.renewalCostStatus === 'premium-domain-price-unavailable') return 'Premium'
-  if (domain.renewalCostStatus === 'pricing-unavailable') return '—'
   return billingMoney(domain.renewalCost, domain.currency)
 }
 

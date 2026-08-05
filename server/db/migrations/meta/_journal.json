@@ -407,6 +407,13 @@
       "when": 1784262000000,
       "tag": "0060_namecheap_manual_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1784263000000,
+      "tag": "0061_billing_domain_renewals",
+      "breakpoints": true
     }
   ]
 }

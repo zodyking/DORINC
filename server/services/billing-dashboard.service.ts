@@ -5,7 +5,7 @@ import {
   getVultrApiKey,
 } from './billing-integrations.service'
 import { getAiProviderSettings } from './ai-provider.service'
-import { mapManualNamecheapDomains } from './namecheap-manual-domains.service'
+import { mapDomainRenewalsForDashboard } from './domain-renewals.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
 import { listAiUsageLogs } from './ai-jobs.service'
 import {
@@ -61,8 +61,8 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   }
 
   const namecheapBlock: BillingDashboardPayload['namecheap'] = {
-    configured: settings.namecheapManualDomains.length > 0,
-    domains: mapManualNamecheapDomains(settings.namecheapManualDomains),
+    configured: settings.domainRenewals.length > 0,
+    domains: mapDomainRenewalsForDashboard(settings.domainRenewals),
     error: null,
     lastUpdated: nowIso,
   }
@@ -134,11 +134,11 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   const vultrUsd = vultrBlock.monthToDateUsage ?? 0
   const openrouterUsd = openrouterBlock.usageMonthly ?? openrouterBlock.internalMonthlyUsd ?? 0
   const namecheapMonthlyUsd = namecheapBlock.domains
-    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30 && d.renewalCost != null)
-    .reduce((sum, d) => sum + (d.renewalCost ?? 0), 0)
+    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30)
+    .reduce((sum, d) => sum + d.renewalCost, 0)
   const namecheapYearlyUsd = namecheapBlock.domains
-    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 365 && d.renewalCost != null)
-    .reduce((sum, d) => sum + (d.renewalCost ?? 0), 0)
+    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 365)
+    .reduce((sum, d) => sum + d.renewalCost, 0)
 
   const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + namecheapMonthlyUsd)
   const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + namecheapYearlyUsd)
@@ -146,7 +146,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   return {
     configured: {
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
-      namecheap: settings.namecheapManualDomains.length > 0,
+      namecheap: settings.domainRenewals.length > 0,
       openrouter: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
     },
     vultr: vultrBlock,
