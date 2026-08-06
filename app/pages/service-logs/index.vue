@@ -4,8 +4,9 @@ import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRo
 import ServiceLogSheetEditorModal from '~/components/service-logs/ServiceLogSheetEditorModal.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
-import { openServiceLogSheetPrint } from '~/utils/service-log-sheet'
-import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { fetchServiceLogSheetPdf } from '~/utils/service-log-sheet'
+import { PdfViewerDialog } from '~/utils/pdf-viewer'
+import { fetchErrorMessage, syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   serviceLogInvoiceLinkStatusClass,
   type ServiceLogInvoiceLinkStatus,
@@ -58,6 +59,9 @@ const showPageActions = computed(() => canUpload.value || canPrintSheet.value ||
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
 const editSheetOpen = ref(false)
 const sheetBusy = ref(false)
+const sheetPdfDialogOpen = ref(false)
+const sheetPdfBlob = ref<Blob | null>(null)
+const { url: sheetPdfUrl, setFromBlob: setSheetPdfBlob, revoke: revokeSheetPdf } = usePdfBlobUrl()
 
 type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'customer' | 'unit'
 
@@ -193,15 +197,26 @@ async function printServiceLogSheet() {
   if (sheetBusy.value) return
   sheetBusy.value = true
   actionError.value = ''
+  revokeSheetPdf()
+  sheetPdfBlob.value = null
   try {
-    await openServiceLogSheetPrint({ autoprint: true })
+    const blob = await fetchServiceLogSheetPdf()
+    sheetPdfBlob.value = blob
+    setSheetPdfBlob(blob)
+    sheetPdfDialogOpen.value = true
   }
   catch (err) {
-    actionError.value = syncFetchErrorMessage(err, 'Could not open service log sheet')
+    actionError.value = await fetchErrorMessage(err, 'Could not open service log sheet PDF')
   }
   finally {
     sheetBusy.value = false
   }
+}
+
+function closeSheetPdfDialog() {
+  sheetPdfDialogOpen.value = false
+  sheetPdfBlob.value = null
+  revokeSheetPdf()
 }
 </script>
 
@@ -217,7 +232,7 @@ async function printServiceLogSheet() {
           :disabled="sheetBusy"
           @click="printServiceLogSheet"
         >
-          {{ sheetBusy ? 'Opening…' : 'Print Service Log Sheet' }}
+          {{ sheetBusy ? 'Rendering…' : 'Print Service Log Sheet' }}
         </button>
         <button
           v-if="canEditSheet"
@@ -239,6 +254,16 @@ async function printServiceLogSheet() {
     </StaffPageHead>
 
     <ServiceLogSheetEditorModal v-model:open="editSheetOpen" />
+
+    <PdfViewerDialog
+      v-model:open="sheetPdfDialogOpen"
+      :src="sheetPdfUrl"
+      :blob="sheetPdfBlob"
+      title="Service Log Sheet PDF"
+      :download-href="sheetPdfUrl || undefined"
+      download-filename="service-log-sheet.pdf"
+      @close="closeSheetPdfDialog"
+    />
 
     <ListFilterBar
       v-model:search="q"

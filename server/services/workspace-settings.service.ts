@@ -224,8 +224,12 @@ export async function isDirectMessagingEnabled(db: Db): Promise<boolean> {
 }
 
 export async function getServiceLogSheetSettings(db: Db): Promise<ServiceLogSheetSettings> {
-  const raw = await readJson<Partial<ServiceLogSheetSettings>>(db, WORKSPACE_SETTING_KEYS.serviceLogSheet)
-  return serviceLogSheetSettingsSchema.parse({ ...DEFAULT_SERVICE_LOG_SHEET_SETTINGS, ...raw })
+  const raw = await readJson<Record<string, unknown>>(db, WORKSPACE_SETTING_KEYS.serviceLogSheet)
+  // v1 was { mode, itemIds } — ignore and fall back to the Letter template default.
+  if (!raw || raw.version !== 2 || !Array.isArray(raw.sections)) {
+    return structuredClone(DEFAULT_SERVICE_LOG_SHEET_SETTINGS)
+  }
+  return serviceLogSheetSettingsSchema.parse(raw)
 }
 
 export async function saveServiceLogSheetSettings(

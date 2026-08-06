@@ -6,6 +6,16 @@ import {
   DEFAULT_FEE_DESCRIPTION_VERBS,
 } from './line-item-type-from-description'
 import { DEFAULT_INVOICE_LINE_AI_RULES } from './invoice-line-ai-rules'
+import {
+  DEFAULT_SERVICE_LOG_SHEET_DOCUMENT,
+  defaultServiceLogSheetDocument,
+  type ServiceLogSheetDocument,
+  type ServiceLogSheetLine,
+  type ServiceLogSheetSection,
+} from './service-log-sheet-default'
+
+export type { ServiceLogSheetDocument, ServiceLogSheetLine, ServiceLogSheetSection }
+export { DEFAULT_SERVICE_LOG_SHEET_DOCUMENT, defaultServiceLogSheetDocument }
 
 export interface BusinessProfile {
   businessName: string
@@ -136,19 +146,11 @@ export const DEFAULT_CHAT_SETTINGS: ChatWorkspaceSettings = {
   directMessagingEnabled: false,
 }
 
-/**
- * Which catalog items appear on the printable blank service log sheet.
- * mode `all` = every active catalog item; `selected` = only `itemIds` (order preserved).
- */
-export interface ServiceLogSheetSettings {
-  mode: 'all' | 'selected'
-  itemIds: string[]
-}
+/** Editable Letter service-log sheet document (sections + lines). */
+export type ServiceLogSheetSettings = ServiceLogSheetDocument
 
-export const DEFAULT_SERVICE_LOG_SHEET_SETTINGS: ServiceLogSheetSettings = {
-  mode: 'all',
-  itemIds: [],
-}
+export const DEFAULT_SERVICE_LOG_SHEET_SETTINGS: ServiceLogSheetSettings
+  = DEFAULT_SERVICE_LOG_SHEET_DOCUMENT
 
 export const NOTIFICATION_SETTING_META: Array<{
   key: keyof NotificationSettings
