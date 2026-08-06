@@ -5,8 +5,12 @@ import { parseMoney } from '../../shared/money'
 import {
   defaultServiceLogSheetDocument,
   type ServiceLogSheetDocument,
-  type ServiceLogSheetSection,
 } from '../../shared/service-log-sheet-default'
+import {
+  sectionsByColumn,
+  sheetGridRows,
+  type SheetColumnRow,
+} from '../../shared/service-log-sheet-layout'
 import {
   SERVICE_LOG_SHEET_DOCUMENT_CSS,
   SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
@@ -144,59 +148,47 @@ export async function resetServiceLogSheetDocument(
   return saveServiceLogSheetSettings(db, defaultServiceLogSheetDocument(), updatedBy)
 }
 
-function sectionsByColumn(document: ServiceLogSheetDocument): {
-  left: ServiceLogSheetSection[]
-  right: ServiceLogSheetSection[]
-} {
-  return {
-    left: document.sections.filter(s => s.column === 'left'),
-    right: document.sections.filter(s => s.column === 'right'),
+/** One column group of a catalog row: check | service | price | new. */
+function renderGroupCells(row: SheetColumnRow | null, groupEnd: boolean): string {
+  if (!row) {
+    return `<td class="void-cell"></td>
+              <td class="void-cell"></td>
+              <td class="void-cell"></td>
+              <td class="void-cell"></td>`
   }
+
+  if (row.kind === 'title') {
+    return `<td colspan="4" class="category-title">${escapeHtml(row.title)}</td>`
+  }
+
+  const item = row.item
+  const subtext = item.subtext?.trim()
+    ? `<span class="service-subtext">${escapeHtml(item.subtext.trim())}</span>`
+    : ''
+  const price = escapeHtml(item.price?.trim() || '—')
+  const end = groupEnd ? ' group-end' : ''
+
+  return `<td class="check-cell${end}"><span class="checkbox"></span></td>
+              <td class="service-name${end}">${escapeHtml(item.name)}${subtext}</td>
+              <td class="price-cell${end}">${price}</td>
+              <td class="new-price-cell${end}">&nbsp;</td>`
 }
 
-function renderSectionHtml(section: ServiceLogSheetSection): string {
-  // Flat 4-column rows (check | name | price | new) — no nested price tables.
-  // DomPDF clips nested table price cells and treats huge nested grids poorly.
-  const rows = section.items.map((item) => {
-    const subtext = item.subtext?.trim()
-      ? `<span class="service-subtext">${escapeHtml(item.subtext.trim())}</span>`
-      : ''
-    const price = escapeHtml(item.price?.trim() || '—')
-    return `<tr>
-                <td class="check-cell"><span class="checkbox"></span></td>
-                <td class="service-name">${escapeHtml(item.name)}${subtext}</td>
-                <td class="price-cell">${price}</td>
-                <td class="new-price-cell">&nbsp;</td>
-              </tr>`
-  }).join('\n')
-
-  return `<table class="category">
-          <colgroup>
-            <col class="check-column">
-            <col>
-            <col class="price-column">
-            <col class="new-column">
-          </colgroup>
-          <tbody>
-            <tr>
-              <td colspan="4" class="category-title">${escapeHtml(section.title)}</td>
-            </tr>
-            ${rows || `<tr><td colspan="4" class="service-name" style="color:#6b7280;">No services</td></tr>`}
-          </tbody>
-        </table>`
-}
-
-function renderColumnHtml(sections: ServiceLogSheetSection[]): string {
-  return sections.map(section => renderSectionHtml(section)).join('\n')
+function renderCatalogRowsHtml(document: ServiceLogSheetDocument): string {
+  return sheetGridRows(document).map(row => `<tr>
+              ${renderGroupCells(row.left, row.leftEnd)}
+              <td class="grid-gap"></td>
+              ${renderGroupCells(row.right, row.rightEnd)}
+            </tr>`).join('\n')
 }
 
 const BLANK_WORK_ROWS = 24
 
 function renderBlankWorkRows(count: number): string {
   return Array.from({ length: count }, () => `<tr>
-      <td class="desc">&nbsp;</td>
-      <td class="qty">&nbsp;</td>
-      <td class="total">&nbsp;</td>
+      <td class="w-desc">&nbsp;</td>
+      <td class="w-qty">&nbsp;</td>
+      <td class="w-total">&nbsp;</td>
     </tr>`).join('\n')
 }
 
@@ -204,11 +196,11 @@ function renderSheetHeaderHtml(businessName: string, companyDetails: string): st
   // Invoice-style: plain table + divs (avoid h1/h2 default DomPDF spacing quirks).
   return `<table class="header">
       <tr>
-        <td>
+        <td class="head-company">
           <div class="company-name">${businessName}</div>
           <div class="company-details">${companyDetails}</div>
         </td>
-        <td class="document-title">
+        <td class="head-doc document-title">
           <div class="doc-title">Service Log Sheet</div>
           <div class="doc-sub">Blank field log and work authorization</div>
         </td>
@@ -231,18 +223,27 @@ export function renderServiceLogSheetHtml(
   const title = escapeHtml(business.businessName)
   const hasSections = left.length + right.length > 0
 
-  // One catalog table: label row + content row. valign=top required for DomPDF.
-  // Separate col-heads table previously stranded on page 1 while the grid moved to page 2.
+  // One flat table: DomPDF cannot split a table containing nested tables, so a
+  // nested grid that outgrows page 1 moves wholesale to page 2 and leaves the
+  // first page blank. Flat rows split like invoice line items and repeat <thead>.
   const catalogBody = hasSections
     ? `<table class="catalog-grid">
-      <tr class="col-label-row">
-        <td valign="bottom">Service <span class="h-price">Price / New</span></td>
-        <td valign="bottom">Service <span class="h-price">Price / New</span></td>
-      </tr>
-      <tr>
-        <td valign="top">${renderColumnHtml(left)}</td>
-        <td valign="top">${renderColumnHtml(right)}</td>
-      </tr>
+      <thead>
+        <tr>
+          <th class="check-cell"></th>
+          <th class="service-name">Service</th>
+          <th class="price-cell">Price</th>
+          <th class="new-price-cell">New</th>
+          <th class="grid-gap"></th>
+          <th class="check-cell"></th>
+          <th class="service-name">Service</th>
+          <th class="price-cell">Price</th>
+          <th class="new-price-cell">New</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${renderCatalogRowsHtml(document)}
+      </tbody>
     </table>`
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Service Log Sheet to add categories and services.</div>`
 
@@ -262,19 +263,19 @@ export function renderServiceLogSheetHtml(
 
     <table class="top-fields">
       <tr>
-        <td style="width:38%">
+        <td class="f-customer">
           <span class="field-label">Customer Name</span>
           <div class="field-box"></div>
         </td>
-        <td style="width:18%">
+        <td class="f-invoice-date">
           <span class="field-label">Invoice Date</span>
           <div class="field-box"></div>
         </td>
-        <td style="width:18%">
+        <td class="f-due-date">
           <span class="field-label">Due Date</span>
           <div class="field-box"></div>
         </td>
-        <td style="width:26%">
+        <td class="f-unit">
           <span class="field-label">Bus or Unit Number</span>
           <div class="field-box"></div>
         </td>
@@ -294,21 +295,27 @@ export function renderServiceLogSheetHtml(
     <div class="back-title">Additional / Custom Work</div>
     <div class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</div>
     <table class="blank-work-table">
-      <colgroup>
-        <col class="desc">
-        <col class="qty">
-        <col class="total">
-      </colgroup>
       <thead>
         <tr>
-          <th class="desc">Service Description</th>
-          <th class="qty">Quantity</th>
-          <th class="total">Total</th>
+          <th class="w-desc">Service Description</th>
+          <th class="w-qty">Quantity</th>
+          <th class="w-total">Total</th>
         </tr>
       </thead>
       <tbody>
         ${renderBlankWorkRows(BLANK_WORK_ROWS)}
       </tbody>
+    </table>
+
+    <table class="sign-row">
+      <tr>
+        <td class="sign-left">
+          <div class="sign-line">Customer Signature / Authorization</div>
+        </td>
+        <td class="sign-right">
+          <div class="sign-line">Date</div>
+        </td>
+      </tr>
     </table>
   </div>
 </body>
