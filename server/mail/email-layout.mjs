@@ -1,8 +1,8 @@
 /**
  * Shared transactional email layout.
- * Flat white shell: company name header, blue eyebrow, full-width dark CTA.
- * Branding comes from business settings when provided.
- * Usable from Nuxt (TS) and Node workers (.mjs).
+ * Flat white shell: company name only in the header (no type badge), blue eyebrow
+ * in the body, full-width dark CTA. Branding comes from business settings when
+ * provided. Usable from Nuxt (TS) and Node workers (.mjs).
  */
 
 export const EMAIL_BRAND_NAME = 'DORINC'
@@ -317,7 +317,7 @@ export function emailActions(actions) {
  *   footerNote?: string | null,
  *   footerLinks?: boolean,
  *   footerAddress?: boolean,
- *   headerBadge?: string,
+ *   headerBadge?: string, // ignored — kept for call-site compatibility
  *   appUrl?: string,
  *   brand?: EmailBrandOpts,
  *   logoUrl?: string | null,
@@ -345,9 +345,6 @@ export function wrapEmailHtml(opts) {
     : (opts.footerNote !== undefined
         ? escapeHtml(opts.footerNote)
         : `This email was sent because activity occurred in your ${brandName} accounting workspace.`)
-  const headerBadge = opts.headerBadge !== undefined
-    ? escapeHtml(opts.headerBadge)
-    : 'Notification'
   const showFooterLinks = opts.footerLinks !== false
   const showFooterAddress = opts.footerAddress !== false
   const showFooter = Boolean(footerNote || showFooterLinks || (showFooterAddress && addressBlock))
@@ -391,21 +388,12 @@ export function wrapEmailHtml(opts) {
 
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${t.surface}" style="width:100%;max-width:620px;margin:0 auto;background:${t.surface};border-collapse:collapse;border-spacing:0;">
 
-          <!-- Header -->
+          <!-- Header: company name only (no type badge — badges sat flush against the brand) -->
           <tr>
             <td bgcolor="${t.surface}" style="padding:34px 0 24px 0;background:${t.surface};border-bottom:1px solid ${t.border};">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
-                <tr>
-                  <td valign="middle">
-                    <div style="font-size:20px;line-height:27px;font-weight:700;letter-spacing:-0.3px;color:${t.ink};font-family:${t.font};">
-                      ${escapeHtml(brandName)}
-                    </div>
-                  </td>
-                  <td align="right" valign="middle" style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${t.faint};white-space:nowrap;font-family:${t.font};">
-                    ${headerBadge}
-                  </td>
-                </tr>
-              </table>
+              <div style="font-size:20px;line-height:27px;font-weight:700;letter-spacing:-0.3px;color:${t.ink};font-family:${t.font};">
+                ${escapeHtml(brandName)}
+              </div>
             </td>
           </tr>
 

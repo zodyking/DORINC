@@ -258,7 +258,7 @@ describe('system email templates', () => {
       isTeamChat: true,
     })
     expect(mail.subject).toBe('Brandon Sent A Team Message')
-    expect(mail.html).toContain('Team notification')
+    expect(mail.html).not.toContain('Team notification') // former header badge — removed from layout
     expect(mail.html).toContain('Team message')
     expect(mail.html).toContain('Open message')
     expect(mail.html).toContain('Sent To')
