@@ -59,6 +59,8 @@ describe('renderServiceLogSheetHtml', () => {
   it('renders Letter two-column template content', () => {
     const html = renderServiceLogSheetHtml(payload)
     expect(html).toContain('Devon Onsite Repairs INC')
+    expect(html).toContain('Service Log Sheet')
+    expect(html).not.toContain('Service Catalog')
     expect(html).toContain('Steam Clean Engine')
     expect(html).toContain('Replace Heavy Duty Battery')
     expect(html).toContain('1000 cranking amps')
@@ -66,8 +68,11 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('$3,750')
     expect(html).toContain('catalog-grid')
     expect(html).toContain('Customer Complaint or Vehicle Symptoms')
-    // DomPDF-friendly table layout (not CSS grid columns)
     expect(html).toContain('<table class="catalog-grid">')
+    expect(html).toContain('page-back')
+    expect(html).toContain('Service Description')
+    expect(html).toContain('Quantity')
+    expect(html).toContain('blank-work-table')
   })
 
   it('places Cleaning on the left and Battery on the right', () => {
