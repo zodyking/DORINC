@@ -216,6 +216,8 @@ export async function enqueueOutsideGeoVerificationEmail(
   },
 ) {
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'outside_geofence_verification')
   const appUrl = brand.appUrl || getAppUrl()
   const mail = buildOutsideGeofenceVerificationEmail({
     name: input.name,
@@ -225,6 +227,7 @@ export async function enqueueOutsideGeoVerificationEmail(
     brandName: brand.brandName,
     appUrl,
     brand,
+    templateOverride,
   })
   return enqueueJob(db, 'email_send', {
     to: input.to,

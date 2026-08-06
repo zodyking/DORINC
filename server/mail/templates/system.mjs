@@ -3,6 +3,7 @@
  */
 import {
   EMAIL_BRAND_NAME,
+  EMAIL_TOKENS,
   buildStyledEmail,
   emailQuotedMessage,
   escapeHtml,
@@ -63,6 +64,7 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'Account verification',
     subject,
     text,
     eyebrow: 'Account verification',
@@ -99,6 +101,7 @@ export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, bra
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'Password reset',
     subject,
     text,
     eyebrow: 'Password reset',
@@ -148,6 +151,7 @@ export function buildOutsideGeofenceVerificationEmail({
   const verifyUrl = base ? `${base}/auth/verify-location` : undefined
 
   return styledEmail({
+    headerBadge: 'Security verification',
     subject,
     text,
     eyebrow: 'Security verification',
@@ -198,6 +202,7 @@ export function buildSmtpTestEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'System test',
     subject,
     text,
     eyebrow: 'System test',
@@ -238,6 +243,7 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'Portal access',
     subject,
     text,
     eyebrow: 'Portal access',
@@ -281,6 +287,7 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'Staff invite',
     subject,
     text,
     eyebrow: 'Staff invite',
@@ -328,6 +335,7 @@ export function buildBackupNotificationEmail({
   lines.push('', `Time: ${when}`)
 
   return styledEmail({
+    headerBadge: 'Backup',
     subject,
     text: lines.join('\n'),
     eyebrow: 'Backup',
@@ -381,6 +389,7 @@ export function buildInvoiceAttachedEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'Invoice',
     subject,
     text,
     eyebrow: 'Invoice',
@@ -456,6 +465,7 @@ export function buildLoginNotificationEmail({
   const loginUrl = `${base}${portal === 'customer' ? '/auth/login?portal=customer' : '/auth/login'}`
 
   return styledEmail({
+    headerBadge: 'Sign-in alert',
     subject,
     text,
     eyebrow: 'Sign-in alert',
@@ -500,12 +510,14 @@ export function buildCustomerAutoResponderEmail({
     .split(/\n{2,}/)
     .map(p => p.trim())
     .filter(Boolean)
+  const t = EMAIL_TOKENS
   const bodyHtml = bodyParagraphs
-    .map(p => `<p style="margin:0 0 14px;color:#334155;font-size:16px;line-height:27px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .map(p => `<p style="margin:0 0 14px;color:${t.ink};font-size:16px;line-height:26px;font-family:${t.font};">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
     .join('')
   const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
 
   return styledEmail({
+    headerBadge: 'Auto reply',
     subject,
     text,
     eyebrow: 'Message received',
@@ -522,7 +534,7 @@ export function buildCustomerAutoResponderEmail({
     brand,
     templateOverride,
     templateVars: { recipientName, brandName: resolvedBrand, subject },
-})
+  })
 }
 
 export function buildDeletionRequestSubmittedEmail({
@@ -548,6 +560,7 @@ export function buildDeletionRequestSubmittedEmail({
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'Deletion request',
     subject,
     text,
     eyebrow: 'Deletion request',
@@ -593,6 +606,7 @@ export function buildDeletionRequestResultEmail({
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
 
   return styledEmail({
+    headerBadge: 'Deletion request',
     subject,
     text,
     eyebrow: 'Deletion request',
@@ -642,6 +656,7 @@ export function buildUserSignupPendingEmail({
   ].join('\n')
 
   return styledEmail({
+    headerBadge: 'User approval',
     subject,
     text,
     eyebrow: 'User approval',
@@ -683,6 +698,7 @@ export function buildInvoicePendingApprovalEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'Invoice approval',
     subject,
     text,
     eyebrow: 'Invoice approval',
@@ -746,6 +762,7 @@ export function buildCustomerServiceRequestStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'Portal request',
     subject,
     text,
     eyebrow: 'Portal request',
@@ -799,6 +816,7 @@ export function buildCustomerChangeRequestStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'Portal request',
     subject,
     text,
     eyebrow: 'Portal request',
@@ -962,6 +980,7 @@ export function buildServiceLogSentToInvoiceStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
+    headerBadge: 'Draft invoice',
     subject,
     text,
     eyebrow: 'Draft invoice',

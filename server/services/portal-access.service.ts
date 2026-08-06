@@ -359,6 +359,7 @@ function buildCredentialEmail(
   username: string,
   tempPassword: string,
   brand?: Awaited<ReturnType<typeof import('./email-branding.service').resolveEmailBrand>>,
+  templateOverride?: Awaited<ReturnType<typeof import('./email-templates.service').getActiveEmailTemplateContent>>,
 ) {
   return buildPortalCredentialEmail({
     name,
@@ -366,6 +367,7 @@ function buildCredentialEmail(
     tempPassword,
     appUrl: brand?.appUrl || getAppUrl(),
     brand,
+    templateOverride,
   })
 }
 
@@ -419,8 +421,10 @@ export async function sendPortalCredentials(
 
   const sendType = priorSends.length ? 'resend' as const : 'initial' as const
   const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
   const brand = await resolveEmailBrand(db)
-  const mail = buildCredentialEmail(contact.name, username, tempPassword, brand)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'portal_credentials')
+  const mail = buildCredentialEmail(contact.name, username, tempPassword, brand, templateOverride)
 
   const [log] = await db.insert(customerCredentialEmailLogs).values({
     customerId,

@@ -257,7 +257,9 @@ async function queueBackupNotification(
   if (!to) return
 
   const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'backup_notification')
   const mail = buildBackupNotificationEmail({
     success: opts.success,
     filename: opts.filename,
@@ -266,6 +268,7 @@ async function queueBackupNotification(
     error: opts.error,
     appUrl: brand.appUrl || getAppUrl(),
     brand,
+    templateOverride,
   })
 
   await enqueueJob(db, 'email_send', {

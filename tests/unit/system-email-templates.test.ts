@@ -279,4 +279,50 @@ describe('system email templates', () => {
     })
     expect(mail.subject).toBe('Brandon K. — Direct message')
   })
+
+  it('uses the flat white layout tokens across system templates', () => {
+    const samples = [
+      buildSignupVerificationEmail({ name: 'Alex', verifyUrl: `${appUrl}/v`, appUrl, brand }),
+      buildPortalCredentialEmail({ name: 'Pat', username: 'pat', tempPassword: 'x', appUrl, brand }),
+      buildSmtpTestEmail({ source: 'test', appUrl, brand }),
+      buildBackupNotificationEmail({ success: true, filename: 'b.enc', trigger: 'manual', appUrl, brand }),
+      buildInvoiceAttachedEmail({ recipientName: 'Pat', invoiceNumber: 'INV-1', appUrl, brand }),
+      buildLoginNotificationEmail({
+        name: 'Alex',
+        email: 'a@example.com',
+        portal: 'staff',
+        signedInAt: '2026-07-10T20:00:00.000Z',
+        appUrl,
+        brand,
+      }),
+      buildCustomerServiceRequestStaffEmail({
+        recipientName: 'Alex',
+        customerName: 'Fleet',
+        vehicleUnit: '1',
+        serviceCategory: 'PM',
+        urgency: 'soon',
+        message: 'Check brakes',
+        detailUrl: `${appUrl}/service-logs/1`,
+        appUrl,
+        brand,
+      }),
+      buildChatMessageReceivedEmail({
+        recipientName: 'Pat',
+        senderName: 'Sam',
+        channelLabel: 'Team',
+        messagePreview: 'Hello',
+        messagesUrl: `${appUrl}/messages`,
+        appUrl,
+        brand,
+        isTeamChat: true,
+      }),
+    ]
+    for (const mail of samples) {
+      expect(mail.html).toContain('background:#ffffff')
+      expect(mail.html).toContain('#111827')
+      expect(mail.html).not.toContain('Accounting workspace')
+      expect(mail.html).not.toContain('<img')
+      expect(mail.html).not.toContain('#334155')
+    }
+  })
 })

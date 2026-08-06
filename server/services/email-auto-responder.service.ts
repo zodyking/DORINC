@@ -49,6 +49,8 @@ export async function sendCustomerAutoResponderIfEnabled(
   if (!to) return { sent: false }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'customer_auto_responder')
   const autoSubject = auto.subject.trim() || 'We received your message'
   const { subject: replySubject, inReplyTo, references } = buildReplyThreadHeaders({
     subject: input.inboundSubject,
@@ -63,6 +65,7 @@ export async function sendCustomerAutoResponderIfEnabled(
     message: auto.message.trim(),
     appUrl: brand.appUrl,
     brand,
+    templateOverride,
   })
 
   const internetMessageId = generateInternetMessageId()

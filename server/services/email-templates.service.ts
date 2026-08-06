@@ -105,6 +105,7 @@ async function renderFromFields(
       note ? `${note.title}: ${note.body}` : '',
       resolved.primaryActionLabel ? `${resolved.primaryActionLabel}: ${sampleActionHref}` : '',
     ].filter(Boolean).join('\n'),
+    headerBadge: resolved.eyebrow || def.name || 'Notification',
     eyebrow: resolved.eyebrow || undefined,
     headline: resolved.headline,
     lead: resolved.lead,
