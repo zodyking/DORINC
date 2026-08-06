@@ -8,7 +8,7 @@ import {
   type ServiceLogSheetSection,
 } from '../../shared/service-log-sheet-default'
 import {
-  SERVICE_LOG_SHEET_CSS,
+  SERVICE_LOG_SHEET_DOCUMENT_CSS,
   SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
 } from '../../shared/service-log-sheet-styles'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
@@ -154,17 +154,7 @@ function sectionsByColumn(document: ServiceLogSheetDocument): {
   }
 }
 
-function renderSectionHtml(section: ServiceLogSheetSection, showHeader: boolean): string {
-  const thead = showHeader
-    ? `<thead>
-              <tr>
-                <th></th>
-                <th>Service</th>
-                <th>Price / New Price</th>
-              </tr>
-            </thead>`
-    : ''
-
+function renderSectionHtml(section: ServiceLogSheetSection): string {
   const rows = section.items.map((item) => {
     const subtext = item.subtext?.trim()
       ? `<span class="service-subtext">${escapeHtml(item.subtext.trim())}</span>`
@@ -190,7 +180,6 @@ function renderSectionHtml(section: ServiceLogSheetSection, showHeader: boolean)
               <col>
               <col class="price-column">
             </colgroup>
-            ${thead}
             <tbody>
               ${rows || `<tr><td colspan="3" class="service-name" style="color:#6b7280;">No services</td></tr>`}
             </tbody>
@@ -198,10 +187,8 @@ function renderSectionHtml(section: ServiceLogSheetSection, showHeader: boolean)
         </section>`
 }
 
-function renderColumnHtml(sections: ServiceLogSheetSection[], showHeaderOnFirst: boolean): string {
-  return sections.map((section, index) =>
-    renderSectionHtml(section, showHeaderOnFirst && index === 0),
-  ).join('\n')
+function renderColumnHtml(sections: ServiceLogSheetSection[]): string {
+  return sections.map(section => renderSectionHtml(section)).join('\n')
 }
 
 const BLANK_WORK_ROWS = 24
@@ -244,11 +231,23 @@ export function renderServiceLogSheetHtml(
   const title = escapeHtml(business.businessName)
   const hasSections = left.length + right.length > 0
 
+  // Shared Price headers above both columns (avoids left-only thead asymmetry).
+  // valign="top" is required — DomPDF often ignores CSS vertical-align on nested tables.
+  const colHeadCell = `<table class="col-head-inner"><tr>
+        <td class="h-service">Service</td>
+        <td class="h-price">Price / New</td>
+      </tr></table>`
   const catalogBody = hasSections
-    ? `<table class="catalog-grid">
+    ? `<table class="col-heads">
       <tr>
-        <td>${renderColumnHtml(left, true)}</td>
-        <td>${renderColumnHtml(right, false)}</td>
+        <td valign="bottom">${colHeadCell}</td>
+        <td valign="bottom">${colHeadCell}</td>
+      </tr>
+    </table>
+    <table class="catalog-grid">
+      <tr>
+        <td valign="top">${renderColumnHtml(left)}</td>
+        <td valign="top">${renderColumnHtml(right)}</td>
       </tr>
     </table>`
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Service Log Sheet to add categories and services.</div>`
@@ -261,7 +260,7 @@ export function renderServiceLogSheetHtml(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title} Service Log Sheet</title>
-  <style>${SERVICE_LOG_SHEET_CSS}</style>
+  <style>${SERVICE_LOG_SHEET_DOCUMENT_CSS}</style>
 </head>
 <body>
   <main class="page page-front">

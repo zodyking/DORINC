@@ -2,7 +2,8 @@
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import {
-  SERVICE_LOG_SHEET_CSS,
+  SERVICE_LOG_SHEET_DOCUMENT_CSS,
+  SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
   SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
 } from '#shared/service-log-sheet-styles'
 import type {
@@ -54,7 +55,7 @@ const EDIT_CSS = `
 .sl-wysiwyg-stack {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   align-items: center;
 }
 .sl-paper-edit.page {
@@ -67,8 +68,12 @@ const EDIT_CSS = `
   background: #fff !important;
   box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
 }
+.sl-paper-edit .catalog-grid > tbody > tr > td,
+.sl-paper-edit .catalog-grid > tr > td {
+  vertical-align: top !important;
+}
 .sl-paper-edit .category { position: relative; }
-.sl-paper-edit .category.is-selected { outline: 2px solid #6366f1; outline-offset: 1px; }
+.sl-paper-edit .category.is-selected { outline: 1.5px solid #6366f1; outline-offset: 1px; }
 .sl-paper-edit .service-table tr.is-selected td { background: #eef2ff; }
 .sl-paper-edit .sheet-input {
   width: 100%; border: 0; background: transparent; font: inherit; color: inherit;
@@ -76,20 +81,27 @@ const EDIT_CSS = `
 }
 .sl-paper-edit .sheet-input:focus { outline: 1px solid #6366f1; background: #fff; }
 .sl-paper-edit .category-title .sheet-input {
-  font-size: 6.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 8px;
+  font-size: 7.5pt; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.15;
 }
-.sl-paper-edit .service-name .sheet-input { font-size: 6.4px; font-weight: 600; line-height: 8px; }
-.sl-paper-edit .service-subtext .sheet-input { font-size: 5.5px; font-weight: 400; color: #6b7280; line-height: 7px; }
-.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 5.8px; font-weight: 700; }
-.sl-paper-edit .sec-tools, .sl-paper-edit .row-tools { display: none; gap: 2px; position: absolute; z-index: 2; }
+.sl-paper-edit .service-name > .sheet-input { font-size: 8pt; font-weight: 600; line-height: 1.12; }
+.sl-paper-edit .service-subtext .sheet-input { font-size: 6.5pt; font-weight: 400; color: #6b7280; line-height: 1.1; }
+.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 7pt; font-weight: 700; }
+.sl-paper-edit .sec-tools {
+  display: none; gap: 2px; position: absolute; z-index: 3;
+  top: 1px; right: 1px; margin: 0; padding: 0;
+}
 .sl-paper-edit .category.is-selected .sec-tools,
-.sl-paper-edit .category:hover .sec-tools { display: flex; top: -18px; right: 0; }
+.sl-paper-edit .category:hover .sec-tools { display: flex; }
+.sl-paper-edit .row-tools {
+  display: none; gap: 2px; position: absolute; z-index: 2;
+  right: 0; top: 0; white-space: nowrap;
+}
+.sl-paper-edit .service-name { position: relative; }
 .sl-paper-edit .service-table tr.is-selected .row-tools,
 .sl-paper-edit .service-table tr:hover .row-tools { display: flex; }
-.sl-paper-edit .row-tools { position: static; justify-content: flex-end; white-space: nowrap; }
 .sl-paper-edit .mini {
   appearance: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
-  border-radius: 4px; font-size: 9px; line-height: 1; padding: 2px 4px; cursor: pointer;
+  border-radius: 3px; font-size: 8px; line-height: 1; padding: 1px 3px; cursor: pointer;
 }
 .sl-paper-edit .mini.danger { color: #dc2626; border-color: #fecaca; }
 `
@@ -102,7 +114,7 @@ function mountSheetStyles() {
     el.id = STYLE_ID
     document.head.appendChild(el)
   }
-  el.textContent = `${SERVICE_LOG_SHEET_CSS}\n${EDIT_CSS}`
+  el.textContent = `${SERVICE_LOG_SHEET_DOCUMENT_CSS}\n${SERVICE_LOG_SHEET_EDITOR_CHROME_CSS}\n${EDIT_CSS}`
 }
 
 function unmountSheetStyles() {
@@ -468,11 +480,27 @@ function onScrimClick(e: MouseEvent) {
                 <div class="complaint-box" />
               </section>
 
+              <table class="col-heads">
+                <tr>
+                  <td valign="bottom">
+                    <table class="col-head-inner"><tr>
+                      <td class="h-service">Service</td>
+                      <td class="h-price">Price / New</td>
+                    </tr></table>
+                  </td>
+                  <td valign="bottom">
+                    <table class="col-head-inner"><tr>
+                      <td class="h-service">Service</td>
+                      <td class="h-price">Price / New</td>
+                    </tr></table>
+                  </td>
+                </tr>
+              </table>
               <table class="catalog-grid">
                 <tr>
-                  <td>
+                  <td valign="top">
                     <section
-                      v-for="(section, sIdx) in leftSections"
+                      v-for="section in leftSections"
                       :key="section.id"
                       class="category"
                       :class="{ 'is-selected': selectedSectionId === section.id }"
@@ -495,13 +523,6 @@ function onScrimClick(e: MouseEvent) {
                           <col>
                           <col class="price-column">
                         </colgroup>
-                        <thead v-if="sIdx === 0">
-                          <tr>
-                            <th />
-                            <th>Service</th>
-                            <th>Price / New Price</th>
-                          </tr>
-                        </thead>
                         <tbody>
                           <tr
                             v-for="item in section.items"
@@ -512,7 +533,10 @@ function onScrimClick(e: MouseEvent) {
                             <td class="check-cell"><span class="checkbox" /></td>
                             <td class="service-name">
                               <input v-model="item.name" class="sheet-input" type="text" maxlength="200" aria-label="Service name">
-                              <span class="service-subtext">
+                              <span
+                                v-if="item.subtext || selectedItemId === item.id"
+                                class="service-subtext"
+                              >
                                 <input v-model="item.subtext" class="sheet-input" type="text" maxlength="200" placeholder="Note" aria-label="Service note">
                               </span>
                               <span class="row-tools">
@@ -536,7 +560,7 @@ function onScrimClick(e: MouseEvent) {
                       </table>
                     </section>
                   </td>
-                  <td>
+                  <td valign="top">
                     <section
                       v-for="section in rightSections"
                       :key="section.id"
@@ -571,7 +595,10 @@ function onScrimClick(e: MouseEvent) {
                             <td class="check-cell"><span class="checkbox" /></td>
                             <td class="service-name">
                               <input v-model="item.name" class="sheet-input" type="text" maxlength="200" aria-label="Service name">
-                              <span class="service-subtext">
+                              <span
+                                v-if="item.subtext || selectedItemId === item.id"
+                                class="service-subtext"
+                              >
                                 <input v-model="item.subtext" class="sheet-input" type="text" maxlength="200" placeholder="Note" aria-label="Service note">
                               </span>
                               <span class="row-tools">
@@ -687,27 +714,27 @@ function onScrimClick(e: MouseEvent) {
 .sl-wysiwyg-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 6px 10px;
   background: #fff;
   border-bottom: 1px solid #cbd5e1;
 }
 .sl-wysiwyg-bar-text h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
 }
 .sl-wysiwyg-bar-text p {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: #64748b;
-  font-size: 12.5px;
+  font-size: 11px;
 }
 .sl-wysiwyg-bar-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 .sl-wysiwyg-status {
@@ -783,8 +810,8 @@ function onScrimClick(e: MouseEvent) {
   font-size: 13px;
 }
 .btn.sm {
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
 }
 .sr-only {
   position: absolute;
