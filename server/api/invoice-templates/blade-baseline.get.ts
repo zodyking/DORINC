@@ -2,6 +2,7 @@ import {
   isPresetBladeMarker,
   parsePresetSlugFromMarker,
 } from '../../../shared/invoice-template-blade'
+import { BLADE_INVOICE_TEMPLATE_MARKER } from '../../../shared/invoice-template-design'
 import { resolveBladeSourceForEditor } from '../../utils/invoice-blade-baseline'
 import { requirePermission } from '../../utils/require-permission'
 
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const source = await resolveBladeSourceForEditor(marker || 'laravel-blade:invoices/pdf')
+    const source = await resolveBladeSourceForEditor(marker || BLADE_INVOICE_TEMPLATE_MARKER)
     return { source }
   }
   catch (err) {
