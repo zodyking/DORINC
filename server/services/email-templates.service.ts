@@ -4,6 +4,7 @@ import { emailTemplates } from '../db/schema/email-templates'
 import {
   EMAIL_TEMPLATE_CATALOG,
   applyEmailTemplateContent,
+  buildEmailTemplatePreviewDetails,
   getEmailTemplateDefinition,
   hasEmailTemplateHtmlSource,
   normalizeEmailTemplateContent,
@@ -113,10 +114,7 @@ async function renderFromFields(
     primaryAction: resolved.primaryActionLabel
       ? { href: sampleActionHref, label: resolved.primaryActionLabel }
       : undefined,
-    details: Object.entries(vars).slice(0, 6).map(([label, value]) => ({
-      label,
-      value,
-    })),
+    details: buildEmailTemplatePreviewDetails(def, vars),
     appUrl,
     brand,
   })

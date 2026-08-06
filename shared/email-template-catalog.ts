@@ -101,6 +101,103 @@ export function hasEmailTemplateHtmlSource(
 
 const v = (key: string, label: string): EmailTemplateVariable => ({ key, label })
 
+/** Never show these as labeled detail rows — brand is in the header; URLs are CTAs. */
+const EMAIL_PREVIEW_DETAIL_OMIT_KEYS = new Set([
+  'brandName',
+  'brandLegal',
+  'verifyUrl',
+  'resetUrl',
+  'detailUrl',
+  'messagesUrl',
+  'invoiceUrl',
+  'reviewUrl',
+  'usersUrl',
+  'loginUrl',
+  // Interpolation-only helpers (not reader-facing fields)
+  'statusWord',
+  'statusWordLower',
+  'kindLabelLower',
+  'requestKindLabelLower',
+  'entityTypeLabelLower',
+  'statusLabelTitle',
+  'leadMessage',
+  'noteBody',
+])
+
+const EMAIL_FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  tempPassword: 'Temporary Password',
+  brandName: 'Business Name',
+  ipAddress: 'IP Address',
+  resetUrl: 'Reset Link',
+  verifyUrl: 'Verification Link',
+}
+
+/**
+ * Convert a camelCase/snake_case key (or loose label) into Title Case words.
+ */
+export function titleCaseEmailFieldLabel(keyOrLabel: string): string {
+  const override = EMAIL_FIELD_LABEL_OVERRIDES[keyOrLabel]
+  if (override) return override
+
+  const spaced = String(keyOrLabel ?? '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!spaced) return ''
+
+  const acronyms = new Set(['ip', 'url', 'id', 'pdf', 'smtp', 'html', 'cta'])
+  return spaced.split(' ').map((word) => {
+    return word.split('-').map((part) => {
+      const lower = part.toLowerCase()
+      if (acronyms.has(lower)) return lower.toUpperCase()
+      if (!lower) return part
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    }).join('-')
+  }).join(' ')
+}
+
+/**
+ * Build human-readable detail rows for Control Panel email previews.
+ * Uses catalog labels (Title Case), omits brandName and CTA URLs.
+ */
+export function buildEmailTemplatePreviewDetails(
+  def: Pick<EmailTemplateDefinition, 'variables' | 'sampleVars'>,
+  vars: Record<string, string | null | undefined> = def.sampleVars,
+  limit = 6,
+): Array<{ label: string, value: string }> {
+  const labelByKey = new Map(def.variables.map(item => [item.key, item.label]))
+  const seen = new Set<string>()
+  const rows: Array<{ label: string, value: string }> = []
+
+  // Prefer catalog variable order so previews stay stable and intentional.
+  const keys = [
+    ...def.variables.map(item => item.key),
+    ...Object.keys(vars),
+  ]
+
+  for (const key of keys) {
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (EMAIL_PREVIEW_DETAIL_OMIT_KEYS.has(key)) continue
+    if (/Url$/i.test(key) || /Link$/i.test(key)) continue
+    if (/Lower$/i.test(key)) continue
+
+    const raw = vars[key]
+    if (raw == null || String(raw).trim() === '') continue
+
+    const catalogLabel = labelByKey.get(key)
+    const label = EMAIL_FIELD_LABEL_OVERRIDES[key]
+      || catalogLabel
+      || titleCaseEmailFieldLabel(key)
+
+    rows.push({ label, value: String(raw) })
+    if (rows.length >= limit) break
+  }
+
+  return rows
+}
+
 export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
   {
     typeKey: 'signup_verification',
@@ -118,7 +215,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       primaryActionLabel: 'Verify email address',
       htmlSource: '',
     },
-    variables: [v('name', 'Recipient name'), v('brandName', 'Business name'), v('verifyUrl', 'Verification link')],
+    variables: [v('name', 'Name'), v('brandName', 'Business Name'), v('verifyUrl', 'Verification Link')],
     sampleVars: {
       name: 'Alex Morgan',
       brandName: 'Devon On Site Repairs',
@@ -141,7 +238,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       primaryActionLabel: 'Reset password',
       htmlSource: '',
     },
-    variables: [v('name', 'Recipient name'), v('brandName', 'Business name'), v('resetUrl', 'Reset link')],
+    variables: [v('name', 'Name'), v('brandName', 'Business Name'), v('resetUrl', 'Reset Link')],
     sampleVars: {
       name: 'Alex Morgan',
       brandName: 'Devon On Site Repairs',
@@ -165,11 +262,11 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('name', 'Recipient name'),
-      v('brandName', 'Business name'),
-      v('code', 'Verification code'),
+      v('name', 'Name'),
+      v('brandName', 'Business Name'),
+      v('code', 'Verification Code'),
       v('locationLabel', 'Location'),
-      v('ipAddress', 'IP address'),
+      v('ipAddress', 'IP Address'),
     ],
     sampleVars: {
       name: 'Alex Morgan',
@@ -196,10 +293,10 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('brandName', 'Business name'),
-      v('source', 'Source label'),
-      v('actorName', 'Sent by'),
-      v('sentAt', 'Sent at'),
+      v('brandName', 'Business Name'),
+      v('source', 'Source'),
+      v('actorName', 'Sent By'),
+      v('sentAt', 'Sent At'),
     ],
     sampleVars: {
       brandName: 'Devon On Site Repairs',
@@ -225,10 +322,10 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('name', 'Customer name'),
-      v('brandName', 'Business name'),
+      v('name', 'Customer Name'),
+      v('brandName', 'Business Name'),
       v('username', 'Username'),
-      v('tempPassword', 'Temporary password'),
+      v('tempPassword', 'Temporary Password'),
     ],
     sampleVars: {
       name: 'Pat Rivera',
@@ -254,10 +351,10 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('name', 'Invitee name'),
-      v('brandName', 'Business name'),
+      v('name', 'Name'),
+      v('brandName', 'Business Name'),
       v('email', 'Email'),
-      v('tempPassword', 'Temporary password'),
+      v('tempPassword', 'Temporary Password'),
     ],
     sampleVars: {
       name: 'Casey Quinn',
@@ -283,12 +380,12 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('filename', 'Backup filename'),
+      v('filename', 'Filename'),
       v('trigger', 'Trigger'),
-      v('statusWord', 'Status (Completed/Failed)'),
-      v('statusWordLower', 'Status lowercase'),
-      v('leadMessage', 'Lead message'),
-      v('noteBody', 'Note body'),
+      v('statusWord', 'Status'),
+      v('statusWordLower', 'Status Lowercase'),
+      v('leadMessage', 'Lead Message'),
+      v('noteBody', 'Note Body'),
     ],
     sampleVars: {
       filename: 'dorinc-2026-07-09.enc',
@@ -316,9 +413,9 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Customer name'),
-      v('invoiceNumber', 'Invoice number'),
-      v('dueDate', 'Due date'),
+      v('recipientName', 'Customer Name'),
+      v('invoiceNumber', 'Invoice Number'),
+      v('dueDate', 'Due Date'),
       v('total', 'Total'),
     ],
     sampleVars: {
@@ -345,9 +442,9 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Customer name'),
-      v('invoiceNumber', 'Invoice number'),
-      v('dueDate', 'Due date'),
+      v('recipientName', 'Customer Name'),
+      v('invoiceNumber', 'Invoice Number'),
+      v('dueDate', 'Due Date'),
       v('total', 'Total'),
     ],
     sampleVars: {
@@ -374,8 +471,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Customer name'),
-      v('estimateNumber', 'Estimate number'),
+      v('recipientName', 'Customer Name'),
+      v('estimateNumber', 'Estimate Number'),
     ],
     sampleVars: {
       recipientName: 'Pat Rivera',
@@ -399,12 +496,12 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Customer name'),
-      v('kindLabel', 'Request type'),
-      v('kindLabelLower', 'Request type (lowercase)'),
-      v('requestTitle', 'Request title'),
+      v('recipientName', 'Customer Name'),
+      v('kindLabel', 'Request Type'),
+      v('kindLabelLower', 'Request Type Lowercase'),
+      v('requestTitle', 'Request Title'),
       v('statusLabel', 'Status'),
-      v('reviewReason', 'Staff note'),
+      v('reviewReason', 'Staff Note'),
     ],
     sampleVars: {
       recipientName: 'Pat Rivera',
@@ -432,11 +529,11 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('name', 'User name'),
-      v('brandName', 'Business name'),
+      v('name', 'Name'),
+      v('brandName', 'Business Name'),
       v('email', 'Email'),
-      v('when', 'Sign-in time'),
-      v('ipAddress', 'IP address'),
+      v('when', 'Sign-In Time'),
+      v('ipAddress', 'IP Address'),
       v('device', 'Device'),
     ],
     sampleVars: {
@@ -465,9 +562,9 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Customer name'),
-      v('brandName', 'Business name'),
-      v('subject', 'Original subject'),
+      v('recipientName', 'Customer Name'),
+      v('brandName', 'Business Name'),
+      v('subject', 'Original Subject'),
     ],
     sampleVars: {
       recipientName: 'Pat Rivera',
@@ -492,11 +589,11 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('reviewerName', 'Reviewer name'),
-      v('submitterName', 'Submitter name'),
-      v('entityTypeLabel', 'Record type'),
-      v('entityTypeLabelLower', 'Record type (lowercase)'),
-      v('entityLabel', 'Record label'),
+      v('reviewerName', 'Reviewer Name'),
+      v('submitterName', 'Submitter Name'),
+      v('entityTypeLabel', 'Record Type'),
+      v('entityTypeLabelLower', 'Record Type Lowercase'),
+      v('entityLabel', 'Record'),
       v('reason', 'Reason'),
     ],
     sampleVars: {
@@ -525,14 +622,14 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('requestorName', 'Requestor name'),
+      v('requestorName', 'Requestor Name'),
       v('statusLabel', 'Status'),
-      v('statusLabelTitle', 'Status (title case)'),
-      v('entityTypeLabel', 'Record type'),
-      v('entityTypeLabelLower', 'Record type (lowercase)'),
-      v('entityLabel', 'Record label'),
-      v('reviewReason', 'Reviewer note'),
-      v('reviewedByName', 'Reviewed by'),
+      v('statusLabelTitle', 'Status Title'),
+      v('entityTypeLabel', 'Record Type'),
+      v('entityTypeLabelLower', 'Record Type Lowercase'),
+      v('entityLabel', 'Record'),
+      v('reviewReason', 'Reviewer Note'),
+      v('reviewedByName', 'Reviewed By'),
     ],
     sampleVars: {
       requestorName: 'Alex Morgan',
@@ -562,9 +659,9 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('adminName', 'Admin name'),
-      v('userName', 'User name'),
-      v('userEmail', 'User email'),
+      v('adminName', 'Admin Name'),
+      v('userName', 'Name'),
+      v('userEmail', 'User Email'),
     ],
     sampleVars: {
       adminName: 'Jordan Lee',
@@ -589,9 +686,9 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('approverName', 'Approver name'),
-      v('invoiceNumber', 'Invoice number'),
-      v('customerName', 'Customer name'),
+      v('approverName', 'Approver Name'),
+      v('invoiceNumber', 'Invoice Number'),
+      v('customerName', 'Customer Name'),
       v('total', 'Total'),
     ],
     sampleVars: {
@@ -618,12 +715,12 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Staff recipient'),
-      v('customerName', 'Customer name'),
+      v('recipientName', 'Recipient'),
+      v('customerName', 'Customer Name'),
       v('vehicleUnit', 'Vehicle'),
       v('serviceCategory', 'Category'),
       v('urgency', 'Urgency'),
-      v('message', 'Customer message'),
+      v('message', 'Message'),
     ],
     sampleVars: {
       recipientName: 'Alex Morgan',
@@ -651,12 +748,12 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Staff recipient'),
-      v('customerName', 'Customer name'),
-      v('requestKindLabel', 'Request type'),
-      v('requestKindLabelLower', 'Request type (lowercase)'),
+      v('recipientName', 'Recipient'),
+      v('customerName', 'Customer Name'),
+      v('requestKindLabel', 'Request Type'),
+      v('requestKindLabelLower', 'Request Type Lowercase'),
       v('topic', 'Topic'),
-      v('message', 'Customer message'),
+      v('message', 'Message'),
     ],
     sampleVars: {
       recipientName: 'Alex Morgan',
@@ -684,10 +781,10 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Staff recipient'),
-      v('customerName', 'Customer name'),
-      v('customerEmail', 'Customer email'),
-      v('subject', 'Email subject'),
+      v('recipientName', 'Recipient'),
+      v('customerName', 'Customer Name'),
+      v('customerEmail', 'Customer Email'),
+      v('subject', 'Subject'),
     ],
     sampleVars: {
       recipientName: 'Alex Morgan',
@@ -713,10 +810,10 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Recipient name'),
-      v('senderName', 'Sender name'),
+      v('recipientName', 'Name'),
+      v('senderName', 'Sender'),
       v('channelLabel', 'Channel'),
-      v('messagePreview', 'Message preview'),
+      v('messagePreview', 'Message'),
     ],
     sampleVars: {
       recipientName: 'Alex Morgan',
@@ -742,12 +839,12 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       htmlSource: '',
     },
     variables: [
-      v('recipientName', 'Recipient name'),
-      v('senderName', 'Sender name'),
-      v('serviceLogLabel', 'Service log'),
-      v('customerName', 'Customer name'),
+      v('recipientName', 'Name'),
+      v('senderName', 'Sender'),
+      v('serviceLogLabel', 'Service Log'),
+      v('customerName', 'Customer Name'),
       v('vehicleUnit', 'Vehicle'),
-      v('invoiceNumber', 'Invoice number'),
+      v('invoiceNumber', 'Invoice Number'),
     ],
     sampleVars: {
       recipientName: 'Alex Morgan',
