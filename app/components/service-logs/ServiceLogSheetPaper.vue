@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SERVICE_LOG_SHEET_SCOPE_CLASS } from '#shared/service-log-sheet-styles'
 import type { ServiceLogSheetEditor } from '~/composables/useServiceLogSheetEditor'
 
 /**
@@ -15,10 +16,11 @@ defineProps<{
 const emit = defineEmits<{ catalog: [sectionId: string] }>()
 
 const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
+const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
 </script>
 
 <template>
-  <div class="sl-pages">
+  <div class="sl-pages" :class="scopeClass">
     <div class="page page-front">
       <table class="header">
         <tr>
@@ -62,7 +64,7 @@ const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
         <div class="complaint-box" />
       </div>
 
-      <table v-if="api.gridRows.value.length" class="catalog-grid">
+      <table v-if="api.gridRows.length" class="catalog-grid">
         <thead>
           <tr>
             <th class="check-cell" />
@@ -77,7 +79,7 @@ const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, index) in api.gridRows.value" :key="index">
+          <tr v-for="(row, index) in api.gridRows" :key="index">
             <ServiceLogSheetGroupCells
               :api="api"
               :row="row.left"

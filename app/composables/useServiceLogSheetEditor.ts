@@ -1,3 +1,4 @@
+import { computed, reactive, ref } from 'vue'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import type {
   ServiceLogSheetDocument,
@@ -9,6 +10,13 @@ import {
   sheetFrontPageFill,
   sheetGridRows,
 } from '#shared/service-log-sheet-layout'
+
+/**
+ * Editor API is a reactive object (same pattern as useDirectMessages) so child
+ * templates can read `api.gridRows` / `api.doc` without `.value`. Passing a plain
+ * bag of refs as a prop made paper/lines views resolve nested refs inconsistently
+ * and the catalog rendered blank.
+ */
 
 export interface SheetCatalogPick {
   id: string
@@ -179,7 +187,7 @@ export function useServiceLogSheetEditor() {
     }
   }
 
-  return {
+  return reactive({
     doc,
     sections,
     leftSections,
@@ -202,7 +210,7 @@ export function useServiceLogSheetEditor() {
     moveItem,
     addCatalogItem,
     cleanDocument,
-  }
+  })
 }
 
 export type ServiceLogSheetEditor = ReturnType<typeof useServiceLogSheetEditor>

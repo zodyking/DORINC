@@ -12,11 +12,11 @@ const emit = defineEmits<{ catalog: [sectionId: string] }>()
 const activeColumn = ref<'left' | 'right'>('left')
 
 const columnSections = computed<ServiceLogSheetSection[]>(() =>
-  activeColumn.value === 'left' ? props.api.leftSections.value : props.api.rightSections.value,
+  activeColumn.value === 'left' ? props.api.leftSections : props.api.rightSections,
 )
 
 function columnLines(column: 'left' | 'right'): number {
-  const sections = column === 'left' ? props.api.leftSections.value : props.api.rightSections.value
+  const sections = column === 'left' ? props.api.leftSections : props.api.rightSections
   return sections.reduce((total, section) => total + section.items.length, 0)
 }
 </script>
@@ -54,7 +54,7 @@ function columnLines(column: 'left' | 'right'): number {
       v-for="(section, sectionIndex) in columnSections"
       :key="section.id"
       class="sl-card"
-      :class="{ 'is-selected': api.selectedSectionId.value === section.id }"
+      :class="{ 'is-selected': api.selectedSectionId === section.id }"
     >
       <header class="sl-card-head">
         <label class="sl-field sl-field-grow">

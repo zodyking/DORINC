@@ -30,10 +30,10 @@ const line = computed(() => {
 })
 
 const isSelectedSection = computed(() =>
-  props.row ? props.api.selectedSectionId.value === props.row.sectionId : false,
+  props.row ? props.api.selectedSectionId === props.row.sectionId : false,
 )
 const isSelectedItem = computed(() =>
-  line.value ? props.api.selectedItemId.value === line.value.id : false,
+  line.value ? props.api.selectedItemId === line.value.id : false,
 )
 </script>
 
