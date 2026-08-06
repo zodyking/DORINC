@@ -95,12 +95,11 @@ const nav = computed<NavSection[]>(() => {
     },
   ]
 
-  if (isSuperAdmin.value || auth.can('roles.manage.all') || auth.can('templates.read.all')) {
+  if (isSuperAdmin.value || auth.can('roles.manage.all')) {
     sections.push({
       label: 'Administration',
       items: [
         { label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' },
-        { label: 'Email Templates', to: '/templates/email', icon: 'email-templates', permission: 'templates.read.all' },
         { label: 'Roles & Permissions', to: '/admin/roles', icon: 'users', permission: 'roles.manage.all' },
       ],
     })
