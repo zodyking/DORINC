@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
 import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
+import ServiceLogSheetEditorModal from '~/components/service-logs/ServiceLogSheetEditorModal.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
+import { openServiceLogSheetPrint } from '~/utils/service-log-sheet'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   serviceLogInvoiceLinkStatusClass,
@@ -46,7 +48,16 @@ interface ServiceLogRow {
 const auth = useAuthStore()
 const canUpload = computed(() => auth.can('service_logs.upload.own'))
 const canReview = computed(() => auth.can('service_logs.review.all'))
+const canEditSheet = computed(() => auth.can('catalog.manage.all'))
+const canPrintSheet = computed(() =>
+  auth.can('service_logs.read.all')
+  || auth.can('service_logs.read.own')
+  || auth.can('service_logs.upload.own'),
+)
+const showPageActions = computed(() => canUpload.value || canPrintSheet.value || canEditSheet.value)
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
+const editSheetOpen = ref(false)
+const sheetBusy = ref(false)
 
 type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'customer' | 'unit'
 
@@ -177,16 +188,57 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
     pdfOpenBusy.value = null
   }
 }
+
+async function printServiceLogSheet() {
+  if (sheetBusy.value) return
+  sheetBusy.value = true
+  actionError.value = ''
+  try {
+    await openServiceLogSheetPrint({ autoprint: true })
+  }
+  catch (err) {
+    actionError.value = syncFetchErrorMessage(err, 'Could not open service log sheet')
+  }
+  finally {
+    sheetBusy.value = false
+  }
+}
 </script>
 
 <template>
   <section class="page active">
     <StaffPageHead :subtitle="pageSubtitle">
       <template #title>{{ pageTitle }}</template>
-      <template v-if="canUpload" #actions>
-        <NuxtLink to="/service-logs/new" class="btn primary" @click="armWizardSpeechFromCreateClick">+ New service log</NuxtLink>
+      <template v-if="showPageActions" #actions>
+        <button
+          v-if="canPrintSheet"
+          type="button"
+          class="btn"
+          :disabled="sheetBusy"
+          @click="printServiceLogSheet"
+        >
+          {{ sheetBusy ? 'Opening…' : 'Print Service Log Sheet' }}
+        </button>
+        <button
+          v-if="canEditSheet"
+          type="button"
+          class="btn"
+          @click="editSheetOpen = true"
+        >
+          Edit Service Log Sheet
+        </button>
+        <NuxtLink
+          v-if="canUpload"
+          to="/service-logs/new"
+          class="btn primary"
+          @click="armWizardSpeechFromCreateClick"
+        >
+          + New service log
+        </NuxtLink>
       </template>
     </StaffPageHead>
+
+    <ServiceLogSheetEditorModal v-model:open="editSheetOpen" />
 
     <ListFilterBar
       v-model:search="q"

@@ -7,6 +7,7 @@ import {
   DEFAULT_LINE_TYPE_VERBS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  DEFAULT_SERVICE_LOG_SHEET_SETTINGS,
   defaultCatalogKeywordMap,
   type BusinessProfile,
   type CatalogKeywordMap,
@@ -14,6 +15,7 @@ import {
   type InvoiceWorkspaceSettings,
   type LineTypeVerbSettings,
   type NotificationSettings,
+  type ServiceLogSheetSettings,
 } from '../../shared/workspace-settings-defaults'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
@@ -23,6 +25,7 @@ import {
   invoiceWorkspaceSettingsSchema,
   lineTypeVerbsSchema,
   notificationSettingsSchema,
+  serviceLogSheetSettingsSchema,
 } from '../../shared/validators/workspace-settings'
 import { MANAGER_APPROVAL_THRESHOLD_KEY } from './billing-settings.service'
 import { taxRatePercentToDecimal } from '../../shared/tax'
@@ -34,6 +37,7 @@ export const WORKSPACE_SETTING_KEYS = {
   invoice: 'workspace.invoice_settings',
   notifications: 'workspace.notification_settings',
   chat: 'workspace.chat_settings',
+  serviceLogSheet: 'workspace.service_log_sheet',
 } as const
 
 async function readJson<T>(db: Db, key: string): Promise<T | null> {
@@ -217,4 +221,19 @@ export async function saveChatWorkspaceSettings(
 export async function isDirectMessagingEnabled(db: Db): Promise<boolean> {
   const settings = await getChatWorkspaceSettings(db)
   return settings.directMessagingEnabled === true
+}
+
+export async function getServiceLogSheetSettings(db: Db): Promise<ServiceLogSheetSettings> {
+  const raw = await readJson<Partial<ServiceLogSheetSettings>>(db, WORKSPACE_SETTING_KEYS.serviceLogSheet)
+  return serviceLogSheetSettingsSchema.parse({ ...DEFAULT_SERVICE_LOG_SHEET_SETTINGS, ...raw })
+}
+
+export async function saveServiceLogSheetSettings(
+  db: Db,
+  input: ServiceLogSheetSettings,
+  updatedBy: string,
+) {
+  const settings = serviceLogSheetSettingsSchema.parse(input)
+  await writeJson(db, WORKSPACE_SETTING_KEYS.serviceLogSheet, settings, updatedBy)
+  return settings
 }
