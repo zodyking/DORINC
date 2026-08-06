@@ -105,6 +105,12 @@ export const invoiceMarkPaidSchema = z.object({
   notes: z.string().max(2000).nullish(),
 })
 
+export const invoiceBulkReconcileSchema = z.object({
+  invoiceIds: z.array(uuidSchema).min(1).max(500),
+  action: z.enum(['paid', 'unpaid']),
+  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullish(),
+})
+
 export const invoiceListQuerySchema = paginationSchema.extend({
   q: z.string().max(200).optional(),
   status: invoiceStatusSchema.optional(),
