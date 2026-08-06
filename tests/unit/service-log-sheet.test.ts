@@ -57,7 +57,7 @@ describe('renderServiceLogSheetHtml', () => {
   }
 
   it('renders Letter two-column template content', () => {
-    const html = renderServiceLogSheetHtml(payload)
+    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
     expect(html).toContain('Devon Onsite Repairs INC')
     expect(html).toContain('Service Log Sheet')
     expect(html).not.toContain('Service Catalog')
@@ -69,10 +69,15 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('catalog-grid')
     expect(html).toContain('Customer Complaint or Vehicle Symptoms')
     expect(html).toContain('<table class="catalog-grid">')
+    expect(html).toContain('valign="top"')
+    expect(html).toContain('col-heads')
     expect(html).toContain('page-back')
     expect(html).toContain('Service Description')
     expect(html).toContain('Quantity')
     expect(html).toContain('blank-work-table')
+    // DomPDF uses default_media_type=screen — screen chrome must never ship in PDF HTML.
+    expect(html).not.toMatch(/@media\s+screen/)
+    expect(html).not.toContain('width: 8.5in')
   })
 
   it('places Cleaning on the left and Battery on the right', () => {
