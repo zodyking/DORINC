@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SERVICE_LOG_SHEET_SCOPE_CLASS } from '#shared/service-log-sheet-styles'
+import { SERVICE_LOG_SHEET_PAGE_MARGIN_IN, SERVICE_LOG_SHEET_SCOPE_CLASS } from '#shared/service-log-sheet-styles'
 import type { ServiceLogSheetEditor } from '~/composables/useServiceLogSheetEditor'
 
 /**
@@ -8,7 +8,7 @@ import type { ServiceLogSheetEditor } from '~/composables/useServiceLogSheetEdit
  * The markup mirrors renderServiceLogSheetHtml() cell for cell and uses the same
  * shared document CSS, so what the editor shows is what DomPDF prints.
  */
-defineProps<{
+const props = defineProps<{
   api: ServiceLogSheetEditor
   business: { businessName: string, phone: string, email: string, addressLine: string }
 }>()
@@ -17,11 +17,24 @@ const emit = defineEmits<{ catalog: [sectionId: string] }>()
 
 const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
 const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
+const gridRows = computed(() => props.api.gridRows ?? [])
+
+/** Inline Letter chrome — never depend only on injected styles for visibility. */
+const pageStyle = {
+  width: '8.5in',
+  minHeight: '11in',
+  height: '11in',
+  padding: `${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in`,
+  background: '#ffffff',
+  color: '#111111',
+  boxSizing: 'border-box' as const,
+  boxShadow: '0 18px 50px -20px rgba(15, 23, 42, 0.45)',
+}
 </script>
 
 <template>
   <div class="sl-pages" :class="scopeClass">
-    <div class="page page-front">
+    <div class="page page-front" :style="pageStyle">
       <table class="header">
         <tr>
           <td class="head-company">
@@ -64,7 +77,7 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
         <div class="complaint-box" />
       </div>
 
-      <table v-if="api.gridRows.length" class="catalog-grid">
+      <table v-if="gridRows.length" class="catalog-grid">
         <thead>
           <tr>
             <th class="check-cell" />
@@ -79,23 +92,13 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, index) in api.gridRows" :key="index">
-            <ServiceLogSheetGroupCells
-              :api="api"
-              :row="row.left"
-              :group-end="row.leftEnd"
-              column="left"
-              @catalog="emit('catalog', $event)"
-            />
-            <td class="grid-gap" />
-            <ServiceLogSheetGroupCells
-              :api="api"
-              :row="row.right"
-              :group-end="row.rightEnd"
-              column="right"
-              @catalog="emit('catalog', $event)"
-            />
-          </tr>
+          <ServiceLogSheetCatalogRow
+            v-for="(row, index) in gridRows"
+            :key="index"
+            :api="api"
+            :row="row"
+            @catalog="emit('catalog', $event)"
+          />
         </tbody>
       </table>
 
@@ -104,7 +107,7 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
       </div>
     </div>
 
-    <div class="page page-back">
+    <div class="page page-back" :style="pageStyle">
       <table class="header">
         <tr>
           <td class="head-company">
@@ -151,17 +154,7 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* Fallback Letter chrome so the paper never collapses to an empty gray stage
-     if the shared injected stylesheet fails to mount. */
   color: #111111;
   background: transparent;
-}
-.sl-pages :deep(.page) {
-  width: 8.5in;
-  min-height: 11in;
-  height: 11in;
-  padding: 0.4in;
-  background: #ffffff;
-  box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
 }
 </style>
