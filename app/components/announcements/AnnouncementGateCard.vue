@@ -113,25 +113,28 @@ const safeBody = computed(() => sanitizeAnnouncementHtml(props.bodyHtml || ''))
 .ann-gate-hero {
   margin-top: 12px;
   width: 100%;
-  max-height: 280px;
+  max-height: 320px;
   overflow: hidden;
-  background: #0f172a;
+  /* Light fill so letterboxing matches typical banner art (not a dark crop). */
+  background: #e8f1fb;
 }
 
 .ann-gate-card.compact .ann-gate-hero {
-  max-height: 160px;
+  max-height: 180px;
 }
 
+/* contain + top: never crop titles baked into hero artwork */
 .ann-gate-hero img {
   display: block;
   width: 100%;
-  height: 100%;
-  max-height: 280px;
-  object-fit: cover;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  object-position: top center;
 }
 
 .ann-gate-card.compact .ann-gate-hero img {
-  max-height: 160px;
+  max-height: 180px;
 }
 
 .ann-gate-content {
