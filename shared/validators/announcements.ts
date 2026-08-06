@@ -20,11 +20,7 @@ export const announcementTargetInputSchema = z.discriminatedUnion('targetType', 
 ])
 
 const announcementBodyHtmlSchema = z.string()
-  .max(250_000, 'Message body is too large. Remove pasted images and use the Image button after saving.')
-  .refine(
-    value => !/src\s*=\s*["']\s*data:/i.test(value || ''),
-    'Pasted inline images cannot be saved. Save the message first, then use the Image button to upload.',
-  )
+  .max(500_000, 'Message body is too large. Prefer the Image button or paste so images upload as files.')
 
 export const announcementUpsertSchema = z.object({
   title: z.string().trim().min(1).max(200),

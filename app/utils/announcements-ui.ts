@@ -38,9 +38,7 @@ export function localDateTimeToIso(value: string): string | null {
   return d.toISOString()
 }
 
-export function announcementBodyHasInlineDataImages(html: string): boolean {
-  return /src\s*=\s*["']\s*data:/i.test(html || '')
-}
+export { announcementBodyHasInlineDataImages } from './announcement-inline-images'
 
 export function audienceModeLabel(mode: string): string {
   if (mode === 'all') return 'All staff'

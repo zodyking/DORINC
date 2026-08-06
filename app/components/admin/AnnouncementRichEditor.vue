@@ -1,9 +1,21 @@
 <script setup lang="ts">
+import {
+  materializeAnnouncementDataImages,
+  uploadAnnouncementImage,
+} from '~/utils/announcement-inline-images'
+
 const model = defineModel<string>({ default: '' })
 
 const props = defineProps<{
   announcementId?: string | null
+  /** Create/return a persisted announcement id so uploads can run before the first manual save. */
+  ensureAnnouncementId?: () => Promise<string>
   disabled?: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:announcementId': [id: string]
+  error: [message: string]
 }>()
 
 const editorRef = ref<HTMLDivElement | null>(null)
@@ -11,6 +23,8 @@ const linkUrl = ref('')
 const showLinkPrompt = ref(false)
 const uploadBusy = ref(false)
 const uploadError = ref('')
+let savedRange: Range | null = null
+let ensureLock: Promise<string> | null = null
 
 watch(model, (html) => {
   const el = editorRef.value
@@ -27,49 +41,97 @@ function syncFromEditor() {
   model.value = editorRef.value.innerHTML
 }
 
+function saveSelection() {
+  if (!import.meta.client || !editorRef.value) return
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+  if (!editorRef.value.contains(range.commonAncestorContainer)) return
+  savedRange = range.cloneRange()
+}
+
+function restoreSelection() {
+  if (!import.meta.client || !editorRef.value) return
+  editorRef.value.focus()
+  const sel = window.getSelection()
+  if (!sel) return
+  sel.removeAllRanges()
+  if (savedRange) sel.addRange(savedRange)
+}
+
 function exec(command: string, value?: string) {
   if (props.disabled) return
-  editorRef.value?.focus()
+  restoreSelection()
   document.execCommand(command, false, value)
   syncFromEditor()
+  saveSelection()
+}
+
+function formatBlock(tag: 'h2' | 'h3' | 'p') {
+  if (props.disabled) return
+  restoreSelection()
+  // Chrome wants <h2>; Firefox accepts h2. Try both.
+  const ok = document.execCommand('formatBlock', false, `<${tag}>`)
+  if (!ok) document.execCommand('formatBlock', false, tag)
+  syncFromEditor()
+  saveSelection()
 }
 
 function askLink() {
+  saveSelection()
   showLinkPrompt.value = true
   linkUrl.value = 'https://'
 }
 
 function applyLink() {
   const href = linkUrl.value.trim()
-  if (!href) {
-    showLinkPrompt.value = false
-    return
-  }
-  exec('createLink', href)
   showLinkPrompt.value = false
+  if (!href) return
+  exec('createLink', href)
+}
+
+async function resolveAnnouncementId(): Promise<string | null> {
+  if (props.announcementId) return props.announcementId
+  if (!props.ensureAnnouncementId) return null
+  if (!ensureLock) {
+    ensureLock = props.ensureAnnouncementId()
+      .then((id) => {
+        emit('update:announcementId', id)
+        return id
+      })
+      .finally(() => {
+        ensureLock = null
+      })
+  }
+  return ensureLock
+}
+
+function insertImageUrl(url: string) {
+  restoreSelection()
+  const ok = document.execCommand('insertImage', false, url)
+  if (!ok && editorRef.value) {
+    document.execCommand('insertHTML', false, `<img src="${url}" alt="">`)
+  }
+  syncFromEditor()
+  saveSelection()
 }
 
 async function uploadInlineImage(file: File) {
-  if (!props.announcementId) {
-    uploadError.value = 'Save the message first, then add images.'
-    return
-  }
   uploadBusy.value = true
   uploadError.value = ''
   try {
-    const body = new FormData()
-    body.append('file', file)
-    body.append('ownerEntityType', 'announcement')
-    body.append('ownerEntityId', props.announcementId)
-    body.append('fileKind', 'attachment')
-    const res = await $fetch<{ file: { id: string } }>('/api/files', {
-      method: 'POST',
-      body,
-    })
-    exec('insertImage', `/api/files/${res.file.id}/preview`)
+    const id = await resolveAnnouncementId()
+    if (!id) {
+      uploadError.value = 'Could not prepare this message for image upload.'
+      emit('error', uploadError.value)
+      return
+    }
+    const uploaded = await uploadAnnouncementImage(id, file)
+    insertImageUrl(uploaded.url)
   }
   catch {
     uploadError.value = 'Image upload failed'
+    emit('error', uploadError.value)
   }
   finally {
     uploadBusy.value = false
@@ -80,43 +142,78 @@ function onPickImage(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
+  saveSelection()
   if (file) void uploadInlineImage(file)
 }
 
+async function pasteHtmlWithImages(html: string) {
+  uploadBusy.value = true
+  uploadError.value = ''
+  try {
+    const id = await resolveAnnouncementId()
+    if (!id) {
+      uploadError.value = 'Could not prepare this message for image upload.'
+      emit('error', uploadError.value)
+      return
+    }
+    const rewritten = await materializeAnnouncementDataImages(html, id)
+    restoreSelection()
+    document.execCommand('insertHTML', false, rewritten)
+    syncFromEditor()
+    saveSelection()
+  }
+  catch {
+    uploadError.value = 'Could not upload pasted images'
+    emit('error', uploadError.value)
+  }
+  finally {
+    uploadBusy.value = false
+  }
+}
+
 function onPaste(e: ClipboardEvent) {
+  if (props.disabled) return
+  saveSelection()
+
   const items = Array.from(e.clipboardData?.items ?? [])
   const imageItem = items.find(item => item.type.startsWith('image/'))
-  if (!imageItem) return
-
-  e.preventDefault()
-  const file = imageItem.getAsFile()
-  if (!file) return
-
-  if (!props.announcementId) {
-    uploadError.value = 'Save the message first, then paste or upload images.'
+  if (imageItem) {
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (file) void uploadInlineImage(file)
     return
   }
-  void uploadInlineImage(file)
+
+  const html = e.clipboardData?.getData('text/html') || ''
+  if (html && /src\s*=\s*["']\s*data:image\//i.test(html)) {
+    e.preventDefault()
+    void pasteHtmlWithImages(html)
+  }
 }
 </script>
 
 <template>
   <div class="ann-editor" :class="{ disabled }">
     <div class="ann-editor-toolbar" role="toolbar" aria-label="Formatting">
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('bold')"><b>B</b></button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('italic')"><i>I</i></button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('underline')"><u>U</u></button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('formatBlock', 'h2')">H2</button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('formatBlock', 'h3')">H3</button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('insertUnorderedList')">• List</button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="exec('insertOrderedList')">1. List</button>
-      <button type="button" class="btn sm" :disabled="disabled" @click="askLink">Link</button>
-      <label class="btn sm ann-editor-upload" :class="{ disabled: disabled || uploadBusy || !announcementId }">
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="exec('bold')"><b>B</b></button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="exec('italic')"><i>I</i></button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="exec('underline')"><u>U</u></button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="formatBlock('h2')">H2</button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="formatBlock('h3')">H3</button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="formatBlock('p')">P</button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="exec('insertUnorderedList')">• List</button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="exec('insertOrderedList')">1. List</button>
+      <button type="button" class="btn sm" :disabled="disabled" @mousedown.prevent @click="askLink">Link</button>
+      <label
+        class="btn sm ann-editor-upload"
+        :class="{ disabled: disabled || uploadBusy }"
+        @mousedown.prevent="saveSelection"
+      >
         {{ uploadBusy ? 'Uploading…' : 'Image' }}
         <input
           type="file"
           accept="image/*"
-          :disabled="disabled || uploadBusy || !announcementId"
+          :disabled="disabled || uploadBusy"
           @change="onPickImage"
         >
       </label>
@@ -127,14 +224,11 @@ function onPaste(e: ClipboardEvent) {
       class="ann-editor-linkrow"
     >
       <input v-model="linkUrl" type="url" placeholder="https://… or /path" >
-      <button type="button" class="btn sm primary" @click="applyLink">Apply</button>
-      <button type="button" class="btn sm" @click="showLinkPrompt = false">Cancel</button>
+      <button type="button" class="btn sm primary" @mousedown.prevent @click="applyLink">Apply</button>
+      <button type="button" class="btn sm" @mousedown.prevent @click="showLinkPrompt = false">Cancel</button>
     </div>
 
     <p v-if="uploadError" class="help" style="color:#dc2626; margin:8px 0 0;">{{ uploadError }}</p>
-    <p v-if="!announcementId" class="help" style="margin:8px 0 0;">
-      Save once to enable image uploads in the body.
-    </p>
 
     <div
       ref="editorRef"
@@ -145,6 +239,8 @@ function onPaste(e: ClipboardEvent) {
       :contenteditable="disabled ? 'false' : 'true'"
       @input="syncFromEditor"
       @blur="syncFromEditor"
+      @mouseup="saveSelection"
+      @keyup="saveSelection"
       @paste="onPaste"
     />
   </div>

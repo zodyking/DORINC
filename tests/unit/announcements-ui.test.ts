@@ -5,6 +5,13 @@ import {
   announcementSaveErrorMessage,
   localDateTimeToIso,
 } from '../../app/utils/announcements-ui'
+import {
+  dataUrlToFile,
+  extractDataImageSrcs,
+} from '../../app/utils/announcement-inline-images'
+
+const tinyPng
+  = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 describe('announcement editor helpers', () => {
   it('detects pasted data-url images in body html', () => {
@@ -25,27 +32,37 @@ describe('announcement editor helpers', () => {
         message: 'Request validation failed',
         details: {
           issues: [
-            { path: 'bodyHtml', message: 'Pasted inline images cannot be saved. Save the message first, then use the Image button to upload.' },
+            { path: 'bodyHtml', message: 'Message body is too large. Prefer the Image button or paste so images upload as files.' },
           ],
         },
       },
     }, 'fallback')
-    expect(msg).toContain('Pasted inline images cannot be saved')
+    expect(msg).toContain('Message body is too large')
     expect(msg).not.toBe('Request validation failed')
+  })
+
+  it('parses data-url images into File objects', () => {
+    const file = dataUrlToFile(tinyPng, 'shot.png')
+    expect(file).not.toBeNull()
+    expect(file?.type).toBe('image/png')
+    expect(file?.name).toBe('shot.png')
+    expect(file && file.size > 0).toBe(true)
+  })
+
+  it('extracts unique data image sources from html', () => {
+    const html = `<p>x</p><img src="${tinyPng}"><img src='${tinyPng}'>`
+    expect(extractDataImageSrcs(html)).toEqual([tinyPng])
   })
 })
 
 describe('announcementUpsertSchema', () => {
-  it('rejects pasted data-url images with a clear message', () => {
+  it('accepts body html that still contains a data-url image (client materializes on save)', () => {
     const result = announcementUpsertSchema.safeParse({
       title: 'Hello',
-      bodyHtml: '<img src="data:image/png;base64,AAAA">',
+      bodyHtml: `<img src="${tinyPng}">`,
       audience: { targetType: 'all' },
     })
-    expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.issues[0]?.message).toMatch(/Image button/i)
-    }
+    expect(result.success).toBe(true)
   })
 
   it('accepts a normal create payload', () => {
