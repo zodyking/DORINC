@@ -70,7 +70,10 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('Customer Complaint or Vehicle Symptoms')
     expect(html).toContain('<table class="catalog-grid">')
     expect(html).toContain('valign="top"')
-    expect(html).toContain('col-heads')
+    expect(html).toContain('col-label-row')
+    expect(html).toContain('price-cell')
+    expect(html).toContain('new-price-cell')
+    expect(html).not.toContain('price-entry')
     expect(html).toContain('page-back')
     expect(html).toContain('Service Description')
     expect(html).toContain('Quantity')
@@ -78,6 +81,8 @@ describe('renderServiceLogSheetHtml', () => {
     // DomPDF uses default_media_type=screen — screen chrome must never ship in PDF HTML.
     expect(html).not.toMatch(/@media\s+screen/)
     expect(html).not.toContain('width: 8.5in')
+    expect(html).not.toContain('<main')
+    expect(html).not.toContain('<section')
   })
 
   it('places Cleaning on the left and Battery on the right', () => {

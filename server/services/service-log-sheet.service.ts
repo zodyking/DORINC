@@ -155,6 +155,8 @@ function sectionsByColumn(document: ServiceLogSheetDocument): {
 }
 
 function renderSectionHtml(section: ServiceLogSheetSection): string {
+  // Flat 4-column rows (check | name | price | new) — no nested price tables.
+  // DomPDF clips nested table price cells and treats huge nested grids poorly.
   const rows = section.items.map((item) => {
     const subtext = item.subtext?.trim()
       ? `<span class="service-subtext">${escapeHtml(item.subtext.trim())}</span>`
@@ -163,28 +165,25 @@ function renderSectionHtml(section: ServiceLogSheetSection): string {
     return `<tr>
                 <td class="check-cell"><span class="checkbox"></span></td>
                 <td class="service-name">${escapeHtml(item.name)}${subtext}</td>
-                <td class="price-cell">
-                  <table class="price-entry"><tr>
-                    <td class="printed-price">${price}</td>
-                    <td class="new-price">&nbsp;</td>
-                  </tr></table>
-                </td>
+                <td class="price-cell">${price}</td>
+                <td class="new-price-cell">&nbsp;</td>
               </tr>`
   }).join('\n')
 
-  return `<section class="category">
-          <div class="category-title">${escapeHtml(section.title)}</div>
-          <table class="service-table">
-            <colgroup>
-              <col class="check-column">
-              <col>
-              <col class="price-column">
-            </colgroup>
-            <tbody>
-              ${rows || `<tr><td colspan="3" class="service-name" style="color:#6b7280;">No services</td></tr>`}
-            </tbody>
-          </table>
-        </section>`
+  return `<table class="category">
+          <colgroup>
+            <col class="check-column">
+            <col>
+            <col class="price-column">
+            <col class="new-column">
+          </colgroup>
+          <tbody>
+            <tr>
+              <td colspan="4" class="category-title">${escapeHtml(section.title)}</td>
+            </tr>
+            ${rows || `<tr><td colspan="4" class="service-name" style="color:#6b7280;">No services</td></tr>`}
+          </tbody>
+        </table>`
 }
 
 function renderColumnHtml(sections: ServiceLogSheetSection[]): string {
@@ -202,15 +201,16 @@ function renderBlankWorkRows(count: number): string {
 }
 
 function renderSheetHeaderHtml(businessName: string, companyDetails: string): string {
+  // Invoice-style: plain table + divs (avoid h1/h2 default DomPDF spacing quirks).
   return `<table class="header">
       <tr>
         <td>
-          <h2 class="company-name">${businessName}</h2>
+          <div class="company-name">${businessName}</div>
           <div class="company-details">${companyDetails}</div>
         </td>
         <td class="document-title">
-          <h1>Service Log Sheet</h1>
-          <p>Blank field log and work authorization</p>
+          <div class="doc-title">Service Log Sheet</div>
+          <div class="doc-sub">Blank field log and work authorization</div>
         </td>
       </tr>
     </table>`
@@ -231,20 +231,14 @@ export function renderServiceLogSheetHtml(
   const title = escapeHtml(business.businessName)
   const hasSections = left.length + right.length > 0
 
-  // Shared Price headers above both columns (avoids left-only thead asymmetry).
-  // valign="top" is required — DomPDF often ignores CSS vertical-align on nested tables.
-  const colHeadCell = `<table class="col-head-inner"><tr>
-        <td class="h-service">Service</td>
-        <td class="h-price">Price / New</td>
-      </tr></table>`
+  // One catalog table: label row + content row. valign=top required for DomPDF.
+  // Separate col-heads table previously stranded on page 1 while the grid moved to page 2.
   const catalogBody = hasSections
-    ? `<table class="col-heads">
-      <tr>
-        <td valign="bottom">${colHeadCell}</td>
-        <td valign="bottom">${colHeadCell}</td>
+    ? `<table class="catalog-grid">
+      <tr class="col-label-row">
+        <td valign="bottom">Service <span class="h-price">Price / New</span></td>
+        <td valign="bottom">Service <span class="h-price">Price / New</span></td>
       </tr>
-    </table>
-    <table class="catalog-grid">
       <tr>
         <td valign="top">${renderColumnHtml(left)}</td>
         <td valign="top">${renderColumnHtml(right)}</td>
@@ -263,7 +257,7 @@ export function renderServiceLogSheetHtml(
   <style>${SERVICE_LOG_SHEET_DOCUMENT_CSS}</style>
 </head>
 <body>
-  <main class="page page-front">
+  <div class="page page-front">
     ${header}
 
     <table class="top-fields">
@@ -287,18 +281,18 @@ export function renderServiceLogSheetHtml(
       </tr>
     </table>
 
-    <section class="complaint-field">
+    <div class="complaint-field">
       <span class="field-label">Customer Complaint or Vehicle Symptoms</span>
       <div class="complaint-box"></div>
-    </section>
+    </div>
 
     ${catalogBody}
-  </main>
+  </div>
 
-  <main class="page page-back">
+  <div class="page page-back">
     ${header}
-    <h2 class="back-title">Additional / Custom Work</h2>
-    <p class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</p>
+    <div class="back-title">Additional / Custom Work</div>
+    <div class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</div>
     <table class="blank-work-table">
       <colgroup>
         <col class="desc">
@@ -316,7 +310,7 @@ export function renderServiceLogSheetHtml(
         ${renderBlankWorkRows(BLANK_WORK_ROWS)}
       </tbody>
     </table>
-  </main>
+  </div>
 </body>
 </html>`
 }
