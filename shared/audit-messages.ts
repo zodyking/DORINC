@@ -76,6 +76,8 @@ const ACTION_LABELS: Record<string, string> = {
   'invoices.send': 'Invoice finalized and sent',
   'invoices.send_queued': 'Invoice queued for email delivery',
   'invoices.mark_paid': 'Payment recorded',
+  'invoices.mark_unpaid': 'Payment status set to unpaid',
+  'invoices.bulk_reconcile': 'Invoice reconciliation updated',
   'invoices.duplicate': 'Invoice duplicated',
   'invoices.revision': 'Revision invoice created',
   'invoices.reassign_customer': 'Customer reassigned',

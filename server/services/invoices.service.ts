@@ -44,7 +44,7 @@ export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   draft: ['sent'],
   pending_manager_approval: ['sent'],
   sent: ['paid'],
-  paid: [],
+  paid: ['sent'],
   void: [],
 }
 
@@ -840,6 +840,7 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
         dueDate: r.invoice.dueDate,
         total: r.invoice.total,
         balanceDue: r.invoice.balanceDue,
+        amountPaid: r.invoice.amountPaid,
         customerId: r.invoice.customerId,
         vehicleId: r.invoice.vehicleId,
         customerName,
@@ -1304,6 +1305,158 @@ export async function markInvoicePaid(
     const [updated] = await tx.update(invoices).set(changes).where(eq(invoices.id, id)).returning()
     return { invoice: updated!, before }
   })
+}
+
+/** Clear recorded payments and return a paid/partially-paid invoice to sent. */
+export async function markInvoiceUnpaid(
+  db: Db,
+  id: string,
+  actorId: string,
+) {
+  return db.transaction(async (tx) => {
+    const [before] = await tx.select().from(invoices).where(eq(invoices.id, id)).for('update').limit(1)
+    if (!before) throw new InvoicesServiceError('NOT_FOUND')
+
+    const hasPayment = compareMoney(before.amountPaid ?? '0', '0') > 0
+    const canUnpay = before.status === 'paid' || (before.status === 'sent' && hasPayment)
+    if (!canUnpay) {
+      throw new InvoicesServiceError('INVALID_TRANSITION')
+    }
+
+    const lines = await listInvoiceLineItems(tx, id)
+    const totals = calculateInvoiceTotals({
+      lines: lines.map(line => ({
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        taxable: line.taxable,
+      })),
+      taxExempt: before.taxExempt,
+      taxRate: before.taxRate ?? '0',
+      discountAmount: before.discountAmount ?? '0',
+      amountPaid: '0',
+    })
+
+    const [updated] = await tx.update(invoices).set({
+      status: 'sent',
+      amountPaid: '0',
+      balanceDue: totals.balanceDue,
+      subtotal: totals.subtotal,
+      taxAmount: totals.taxAmount,
+      discountAmount: totals.discountAmount,
+      feesAmount: totals.feesAmount,
+      total: totals.total,
+      paidAt: null,
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    }).where(eq(invoices.id, id)).returning()
+
+    return { invoice: updated!, before }
+  })
+}
+
+export type InvoiceReconcileAction = 'paid' | 'unpaid'
+
+export interface InvoiceReconcileResultRow {
+  invoiceId: string
+  ok: boolean
+  error?: string
+  invoiceNumber?: number
+  customerId?: string | null
+  status?: InvoiceStatus
+}
+
+export interface InvoiceReconcileSuccessRow {
+  invoiceId: string
+  invoiceNumber: number
+  customerId: string | null
+  customerSnapshot: typeof invoices.$inferSelect.customerSnapshot
+  status: InvoiceStatus
+  action: InvoiceReconcileAction
+}
+
+/** Bulk mark invoices paid (full remaining balance) or unpaid. */
+export async function bulkReconcileInvoices(
+  db: Db,
+  input: {
+    invoiceIds: string[]
+    action: InvoiceReconcileAction
+    paidAt?: Date
+  },
+  actorId: string,
+): Promise<{ results: InvoiceReconcileResultRow[], succeeded: InvoiceReconcileSuccessRow[] }> {
+  const uniqueIds = [...new Set(input.invoiceIds)]
+  const results: InvoiceReconcileResultRow[] = []
+  const succeeded: InvoiceReconcileSuccessRow[] = []
+
+  for (const invoiceId of uniqueIds) {
+    try {
+      if (input.action === 'paid') {
+        const { invoice } = await markInvoicePaid(db, invoiceId, actorId, {
+          paidAt: input.paidAt,
+        })
+        if (invoice.status !== 'paid') {
+          results.push({
+            invoiceId,
+            ok: false,
+            error: 'Invoice was not fully paid',
+            invoiceNumber: invoice.invoiceNumber,
+            customerId: invoice.customerId,
+            status: invoice.status,
+          })
+          continue
+        }
+        results.push({
+          invoiceId,
+          ok: true,
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: invoice.customerId,
+          status: invoice.status,
+        })
+        succeeded.push({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: invoice.customerId,
+          customerSnapshot: invoice.customerSnapshot,
+          status: invoice.status,
+          action: 'paid',
+        })
+        continue
+      }
+
+      const { invoice } = await markInvoiceUnpaid(db, invoiceId, actorId)
+      results.push({
+        invoiceId,
+        ok: true,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: invoice.customerId,
+        status: invoice.status,
+      })
+      succeeded.push({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: invoice.customerId,
+        customerSnapshot: invoice.customerSnapshot,
+        status: invoice.status,
+        action: 'unpaid',
+      })
+    }
+    catch (err) {
+      const code = err instanceof InvoicesServiceError ? err.code : 'FAILED'
+      let error = 'Could not update invoice'
+      if (code === 'NOT_FOUND') error = 'Invoice not found'
+      else if (code === 'INVALID_TRANSITION') {
+        error = input.action === 'paid'
+          ? 'Only sent invoices with an open balance can be marked paid'
+          : 'Only paid or partially paid invoices can be marked unpaid'
+      }
+      else if (code === 'OVERPAYMENT' || code === 'INVALID_PAYMENT') {
+        error = 'Invalid payment amount'
+      }
+      results.push({ invoiceId, ok: false, error })
+    }
+  }
+
+  return { results, succeeded }
 }
 
 function formatInvoiceExportVehicle(

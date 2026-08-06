@@ -219,20 +219,28 @@ export async function postInvoicePaymentReceivedTeamMessage(
     paidInFull: boolean
   },
 ) {
+  // Fully paid → status-change copy; partial payments keep amount-focused wording.
+  if (opts.paidInFull) {
+    return postInvoicePaymentStatusTeamMessage(db, {
+      senderUserId: opts.senderUserId,
+      invoiceId: opts.invoiceId,
+      invoiceNumber: opts.invoiceNumber,
+      customerId: opts.customerId,
+      customerName: opts.customerName,
+      status: 'paid',
+    })
+  }
+
   const invoiceLabel = formatInvoiceNumber(opts.invoiceNumber)
   const amount = moneyLabel(opts.paymentAmount)
   const refs = [buildEntityRef('invoice', opts.invoiceId, invoiceLabel)]
-  const parts: string[] = []
-
-  if (opts.paidInFull) {
-    parts.push(entityRefToken('invoice', opts.invoiceId, invoiceLabel))
-    parts.push('was paid in full for')
-  }
-  else {
-    parts.push('Partial payment of', amount, 'received for')
-    parts.push(entityRefToken('invoice', opts.invoiceId, invoiceLabel))
-    parts.push('for')
-  }
+  const parts: string[] = [
+    'Partial payment of',
+    amount,
+    'received for',
+    entityRefToken('invoice', opts.invoiceId, invoiceLabel),
+    'for',
+  ]
 
   if (opts.customerId) {
     parts.push(entityRefToken('customer', opts.customerId, opts.customerName))
@@ -245,6 +253,115 @@ export async function postInvoicePaymentReceivedTeamMessage(
   return postTeamChatMessage(db, {
     senderUserId: opts.senderUserId,
     body: parts.join(' '),
+    entityRefs: refs,
+    skipNormalize: true,
+    workflowNotification: true,
+  })
+}
+
+/** Single invoice payment status change (paid / unpaid). */
+export function buildInvoicePaymentStatusTeamMessageBody(opts: {
+  invoiceId: string
+  invoiceNumber: number
+  customerId: string | null
+  customerName: string
+  status: 'paid' | 'unpaid'
+}) {
+  const invoiceLabel = formatInvoiceNumber(opts.invoiceNumber)
+  const refs = [buildEntityRef('invoice', opts.invoiceId, invoiceLabel)]
+  const customerPart = opts.customerId
+    ? entityRefToken('customer', opts.customerId, opts.customerName)
+    : opts.customerName
+  if (opts.customerId) {
+    refs.push(buildEntityRef('customer', opts.customerId, opts.customerName))
+  }
+
+  const body = [
+    entityRefToken('invoice', opts.invoiceId, invoiceLabel),
+    'for',
+    customerPart,
+    'payment status has been set to',
+    opts.status,
+  ].join(' ')
+
+  return { body, refs }
+}
+
+export async function postInvoicePaymentStatusTeamMessage(
+  db: Db,
+  opts: {
+    senderUserId: string
+    invoiceId: string
+    invoiceNumber: number
+    customerId: string | null
+    customerName: string
+    status: 'paid' | 'unpaid'
+  },
+) {
+  const { body, refs } = buildInvoicePaymentStatusTeamMessageBody(opts)
+  return postTeamChatMessage(db, {
+    senderUserId: opts.senderUserId,
+    body,
+    entityRefs: refs,
+    skipNormalize: true,
+    workflowNotification: true,
+  })
+}
+
+/** Bulk reconciliation chat — one line per customer. */
+export function buildBulkInvoicePaymentStatusTeamMessageBody(opts: {
+  status: 'paid' | 'unpaid'
+  groups: Array<{
+    customerId: string | null
+    customerName: string
+    count: number
+    invoices: Array<{ invoiceId: string, invoiceNumber: number }>
+  }>
+}) {
+  const refs: ReturnType<typeof buildEntityRef>[] = []
+  const lines: string[] = []
+
+  for (const group of opts.groups) {
+    const customerPart = group.customerId
+      ? entityRefToken('customer', group.customerId, group.customerName)
+      : group.customerName
+    if (group.customerId) {
+      refs.push(buildEntityRef('customer', group.customerId, group.customerName))
+    }
+    for (const inv of group.invoices) {
+      refs.push(buildEntityRef(
+        'invoice',
+        inv.invoiceId,
+        formatInvoiceNumber(inv.invoiceNumber),
+      ))
+    }
+
+    const noun = group.count === 1 ? 'invoice' : 'invoices'
+    const verb = group.count === 1 ? 'has' : 'have'
+    lines.push(`For ${customerPart} ${group.count} ${noun} ${verb} been set to ${opts.status}`)
+  }
+
+  return { body: lines.join('\n'), refs }
+}
+
+export async function postBulkInvoicePaymentStatusTeamMessage(
+  db: Db,
+  opts: {
+    senderUserId: string
+    status: 'paid' | 'unpaid'
+    groups: Array<{
+      customerId: string | null
+      customerName: string
+      count: number
+      invoices: Array<{ invoiceId: string, invoiceNumber: number }>
+    }>
+  },
+) {
+  if (!opts.groups.length) return null
+  const { body, refs } = buildBulkInvoicePaymentStatusTeamMessageBody(opts)
+  return postTeamChatMessage(db, {
+    senderUserId: opts.senderUserId,
+    body,
     entityRefs: refs,
     skipNormalize: true,
     workflowNotification: true,

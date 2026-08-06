@@ -57,6 +57,7 @@ const auth = useAuthStore()
 const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
+const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const bulkSendRef = ref<InstanceType<typeof BulkSendInvoicesButton> | null>(null)
 
 type InvoiceSort = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'status' | 'customer' | 'unit' | 'amount_high' | 'amount_low'
@@ -283,6 +284,13 @@ async function exportCsv() {
         >
           Bulk send
         </button>
+        <NuxtLink
+          v-if="canRecordPayment"
+          to="/invoices/reconcile"
+          class="btn"
+        >
+          Invoice Reconciliation
+        </NuxtLink>
         <button type="button" class="btn" :disabled="exportBusy" @click="exportCsv">
           {{ exportBusy ? 'Exporting…' : 'Export CSV' }}
         </button>

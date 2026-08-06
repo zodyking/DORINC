@@ -26,6 +26,7 @@ import { phoneDisplay } from '~/utils/phone-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
 import { invoiceDetailSummaryRows } from '~/utils/invoice-editor-ui'
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff' })
 
@@ -261,6 +262,34 @@ const showRecordPayment = computed(() =>
   invoice.value && invoice.value.status === 'sent'
   && Number.parseFloat(invoice.value.balanceDue) > 0,
 )
+const showMarkUnpaid = computed(() => {
+  if (!invoice.value || !canRecordPayment.value) return false
+  if (invoice.value.status === 'paid') return true
+  return invoice.value.status === 'sent'
+    && Number.parseFloat(invoice.value.amountPaid ?? '0') > 0
+})
+
+const markUnpaidBusy = ref(false)
+const markUnpaidError = ref('')
+
+async function markUnpaid() {
+  if (!invoice.value || markUnpaidBusy.value) return
+  if (!confirm(`Mark ${invoice.value.invoiceNumberFormatted} as unpaid? This clears recorded payments.`)) {
+    return
+  }
+  markUnpaidBusy.value = true
+  markUnpaidError.value = ''
+  try {
+    await $fetch(`/api/invoices/${id.value}/mark-unpaid`, { method: 'POST' })
+    await refresh()
+  }
+  catch (e: unknown) {
+    markUnpaidError.value = syncFetchErrorMessage(e, 'Could not mark unpaid')
+  }
+  finally {
+    markUnpaidBusy.value = false
+  }
+}
 
 const viewTab = ref<'detail' | 'photos' | 'pdf'>('detail')
 const pdfPreviewRef = ref<{ refit: () => void } | null>(null)
@@ -408,6 +437,15 @@ const summaryRows = computed(() => {
           Record payment
         </NuxtLink>
         <button
+          v-if="showMarkUnpaid"
+          type="button"
+          class="btn"
+          :disabled="markUnpaidBusy"
+          @click="markUnpaid"
+        >
+          {{ markUnpaidBusy ? 'Updating…' : 'Mark unpaid' }}
+        </button>
+        <button
           v-if="canGeneratePdf"
           type="button"
           class="btn"
@@ -457,6 +495,7 @@ const summaryRows = computed(() => {
 
     <p v-if="savedNotice" class="flash ok" style="margin:-8px 0 16px;">{{ savedNotice }}</p>
     <p v-if="pdfDownloadError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ pdfDownloadError }}</p>
+    <p v-if="markUnpaidError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ markUnpaidError }}</p>
     <p v-if="sendInProgress" class="flash ok" style="margin:-8px 0 16px;">
       Email delivery in progress to {{ sendDelivery?.recipientEmail ?? 'customer' }}.
       Status will change to Sent after the PDF is generated and the email is delivered.
