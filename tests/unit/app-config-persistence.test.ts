@@ -6,6 +6,8 @@ import {
 } from '../../server/services/encryption.service'
 import {
   decryptEncryptedAppSetting,
+  getGoogleOAuthClientConfig,
+  isGoogleOAuthEnvLocked,
   isSmtpEnvLocked,
 } from '../../server/services/app-config.service'
 
@@ -54,5 +56,17 @@ describe('app-config deploy persistence', () => {
 
     const decrypted = decryptEncryptedAppSetting(encrypted, dbHex)
     expect(decrypted?.toString('utf8')).toContain('smtp.test.local')
+  })
+
+  it('locks Google OAuth UI when env credentials are present', () => {
+    delete process.env.GOOGLE_CLIENT_ID
+    delete process.env.GOOGLE_CLIENT_SECRET
+    delete process.env.GOOGLE_OAUTH_FORCE_ENV
+    expect(isGoogleOAuthEnvLocked()).toBe(false)
+
+    process.env.GOOGLE_CLIENT_ID = 'client.apps.googleusercontent.com'
+    process.env.GOOGLE_CLIENT_SECRET = 'secret'
+    expect(isGoogleOAuthEnvLocked()).toBe(true)
+    expect(getGoogleOAuthClientConfig()?.clientId).toContain('googleusercontent')
   })
 })

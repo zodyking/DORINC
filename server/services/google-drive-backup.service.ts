@@ -5,7 +5,15 @@ import type { Db } from '../db/client'
 import { backupIntegrations } from '../db/schema/backups'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { writeAudit } from './audit.service'
-import { ensureMasterKeyHydrated, getAppUrl, getSessionSecret } from './app-config.service'
+import {
+  ensureMasterKeyHydrated,
+  getGoogleOAuthClientConfig,
+  getGoogleOAuthRedirectUri,
+  getSessionSecret,
+  isGoogleOAuthEnvLocked,
+  refreshAppConfigCache,
+  saveGoogleOAuthConfig,
+} from './app-config.service'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -48,6 +56,10 @@ export interface BackupIntegrationView {
   provider: 'google_drive'
   connected: boolean
   configured: boolean
+  envLocked: boolean
+  hasClientSecret: boolean
+  clientIdMasked: string | null
+  redirectUri: string
   accountEmail: string | null
   folderId: string | null
   lastTestedAt: Date | null
@@ -55,14 +67,18 @@ export interface BackupIntegrationView {
 }
 
 export function getGoogleOAuthConfig(): GoogleOAuthConfig | null {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim()
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
-  if (!clientId || !clientSecret) return null
+  const client = getGoogleOAuthClientConfig()
+  if (!client) return null
   return {
-    clientId,
-    clientSecret,
-    redirectUri: `${getAppUrl()}/api/admin/backups/google/callback`,
+    clientId: client.clientId,
+    clientSecret: client.clientSecret,
+    redirectUri: getGoogleOAuthRedirectUri(),
   }
+}
+
+function maskClientId(clientId: string): string {
+  if (clientId.length <= 12) return `${clientId.slice(0, 4)}…`
+  return `${clientId.slice(0, 8)}…${clientId.slice(-4)}`
 }
 
 function signOAuthState(userId: string): string {
@@ -98,7 +114,12 @@ export function verifyOAuthState(state: string, userId: string): boolean {
 
 export function buildGoogleAuthUrl(userId: string): string {
   const config = getGoogleOAuthConfig()
-  if (!config) throw new GoogleDriveBackupError('NOT_CONFIGURED', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set')
+  if (!config) {
+    throw new GoogleDriveBackupError(
+      'NOT_CONFIGURED',
+      'Save Google Client ID and Client Secret in Backup settings, or set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET',
+    )
+  }
   const state = signOAuthState(userId)
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -110,6 +131,37 @@ export function buildGoogleAuthUrl(userId: string): string {
     state,
   })
   return `${GOOGLE_AUTH_URL}?${params.toString()}`
+}
+
+export async function saveGoogleDriveOAuthCredentials(
+  db: Db,
+  input: { clientId: string, clientSecret?: string | null },
+  actorId: string,
+  event: H3Event | null = null,
+): Promise<BackupIntegrationView> {
+  try {
+    await saveGoogleOAuthConfig(db, input, actorId)
+  }
+  catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save Google OAuth credentials'
+    if (message.includes('locked by environment')) {
+      throw new GoogleDriveBackupError('NOT_CONFIGURED', message)
+    }
+    throw new GoogleDriveBackupError('OAUTH_FAILED', message)
+  }
+
+  const integration = await ensureBackupIntegration(db)
+  const saved = getGoogleOAuthConfig()
+  await writeAudit(event, {
+    entityType: 'backup',
+    entityId: integration.id,
+    action: 'backup.google_drive.credentials_saved',
+    afterData: { clientIdMasked: saved ? maskClientId(saved.clientId) : null },
+    permissionKey: 'backups.manage.all',
+    riskLevel: 'sensitive',
+  })
+
+  return getBackupIntegrationView(db)
 }
 
 async function exchangeGoogleCode(code: string): Promise<GoogleTokenResponse> {
@@ -180,11 +232,18 @@ export async function ensureBackupIntegration(db: Db) {
 }
 
 export async function getBackupIntegrationView(db: Db): Promise<BackupIntegrationView> {
+  await ensureMasterKeyHydrated(db)
+  await refreshAppConfigCache(db)
   const row = await ensureBackupIntegration(db)
+  const config = getGoogleOAuthConfig()
   return {
     provider: 'google_drive',
     connected: row.connected,
-    configured: !!getGoogleOAuthConfig(),
+    configured: !!config,
+    envLocked: isGoogleOAuthEnvLocked(),
+    hasClientSecret: !!config?.clientSecret,
+    clientIdMasked: config ? maskClientId(config.clientId) : null,
+    redirectUri: getGoogleOAuthRedirectUri(),
     accountEmail: row.accountEmail,
     folderId: row.folderId,
     lastTestedAt: row.lastTestedAt,
@@ -290,6 +349,7 @@ async function getConnectedIntegrationRow(db: Db) {
 export async function getValidGoogleAccessToken(db: Db): Promise<string> {
   const row = await getConnectedIntegrationRow(db)
   await ensureMasterKeyHydrated(db)
+  await refreshAppConfigCache(db)
   const tokens = decryptTokens(row.encryptedTokens!)
   const expiresAt = row.tokenExpiresAt?.getTime() ?? 0
   if (expiresAt > Date.now() + 60_000) return tokens.accessToken
@@ -311,8 +371,13 @@ export async function getValidGoogleAccessToken(db: Db): Promise<string> {
 }
 
 export async function testGoogleDriveConnection(db: Db): Promise<{ ok: boolean, accountEmail: string, message: string }> {
+  await ensureMasterKeyHydrated(db)
+  await refreshAppConfigCache(db)
   if (!getGoogleOAuthConfig()) {
-    throw new GoogleDriveBackupError('NOT_CONFIGURED', 'Google OAuth credentials are not configured')
+    throw new GoogleDriveBackupError(
+      'NOT_CONFIGURED',
+      'Save Google Client ID and Client Secret in Backup settings before testing',
+    )
   }
 
   const accessToken = await getValidGoogleAccessToken(db)

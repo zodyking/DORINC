@@ -8,6 +8,13 @@ import type { H3Event } from 'h3'
 import type { Db } from '../db/client'
 import { backupRuns, backupSettings, type BackupRunStatus } from '../db/schema/backups'
 import { backupRecoveryTests, type BackupRecoveryTestStatus } from '../db/schema/security'
+import {
+  REQUIRED_BACKUP_TABLES,
+  buildPgDumpArgs,
+  buildPgRestoreArgs,
+  diffRequiredBackupTables,
+  tablesFromPgRestoreList,
+} from '../lib/backup-pg.mjs'
 import { decryptBuffer, encryptBuffer, sha256Hex } from './encryption.service'
 import { writeAudit } from './audit.service'
 import { ensureMasterKeyHydrated, getNotifyEmail, getSmtpConfig, getAppUrl } from './app-config.service'
@@ -20,11 +27,16 @@ import {
   uploadEncryptedBackupToDrive,
 } from './google-drive-backup.service'
 
-export type BackupsServiceErrorCode = 'NOT_FOUND' | 'ALREADY_RUNNING' | 'DUMP_FAILED' | 'KEY_MISSING' | 'RESTORE_FAILED' | 'VERIFY_FAILED'
+export { REQUIRED_BACKUP_TABLES, tablesFromPgRestoreList, diffRequiredBackupTables }
+
+export type BackupsServiceErrorCode = 'NOT_FOUND' | 'ALREADY_RUNNING' | 'DUMP_FAILED' | 'KEY_MISSING' | 'RESTORE_FAILED' | 'VERIFY_FAILED' | 'INCOMPLETE_DUMP'
 
 export class BackupsServiceError extends Error {
-  constructor(public readonly code: BackupsServiceErrorCode) {
-    super(code)
+  constructor(
+    public readonly code: BackupsServiceErrorCode,
+    public readonly details: string[] = [],
+  ) {
+    super(details.length ? `${code}: ${details.join(', ')}` : code)
   }
 }
 
@@ -146,16 +158,7 @@ function backupFilename(now = new Date()): string {
 
 async function runPgDump(conn: PgConn): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const args = [
-      '--format=custom',
-      '--no-owner',
-      '--no-acl',
-      '-h', conn.host,
-      '-p', conn.port,
-      '-U', conn.user,
-      conn.database,
-    ]
-    const child = spawn('pg_dump', args, {
+    const child = spawn('pg_dump', buildPgDumpArgs(conn), {
       env: { ...process.env, PGPASSWORD: conn.password },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -170,6 +173,40 @@ async function runPgDump(conn: PgConn): Promise<Buffer> {
       else reject(new Error(Buffer.concat(errors).toString('utf8') || `pg_dump exited ${code}`))
     })
   })
+}
+
+async function pgRestoreListText(dumpPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('pg_restore', ['--list', dumpPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    const errors: Buffer[] = []
+    child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk))
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout)
+      else reject(new Error(Buffer.concat(errors).toString('utf8') || `pg_restore --list exited ${code}`))
+    })
+  })
+}
+
+/** Fail closed if a dump is missing any table from the current app schema catalog. */
+export async function assertDumpContainsRequiredTables(dump: Buffer): Promise<{ tocEntries: number, tables: string[] }> {
+  const dir = await mkdtemp(join(tmpdir(), 'dorinc-backup-toc-'))
+  const dumpPath = join(dir, 'check.dump')
+  try {
+    await writeFile(dumpPath, dump)
+    const toc = await pgRestoreListText(dumpPath)
+    const { present, missing } = diffRequiredBackupTables(toc)
+    if (missing.length) {
+      throw new BackupsServiceError('INCOMPLETE_DUMP', missing)
+    }
+    const tocEntries = toc.split('\n').filter(line => /^\d+;/.test(line)).length
+    return { tocEntries, tables: present }
+  }
+  finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }
 
 function compressDump(dump: Buffer): Buffer {
@@ -318,6 +355,8 @@ async function executeBackupRun(
   try {
     const conn = parseDatabaseUrl(databaseUrl)
     const dump = await runPgDump(conn)
+    // Ensure newly added feature tables are actually inside the archive.
+    await assertDumpContainsRequiredTables(dump)
     const compressed = compressDump(dump)
     const encrypted = encryptBuffer(compressed)
     const checksum = sha256Hex(encrypted)
@@ -590,43 +629,40 @@ export function decryptUploadedBackupFile(encrypted: Buffer): Buffer {
 }
 
 /** Validate decrypted dump with pg_restore --list (no plaintext artifact retained). */
-export async function verifyBackupRun(db: Db, runId: string): Promise<{ valid: boolean, tocEntries: number }> {
+export async function verifyBackupRun(db: Db, runId: string): Promise<{
+  valid: boolean
+  tocEntries: number
+  tables: string[]
+  missingTables: string[]
+}> {
   const dump = await decryptBackupRun(db, runId)
-  const dir = await mkdtemp(join(tmpdir(), 'dorinc-backup-'))
-  const dumpPath = join(dir, 'verify.dump')
-
   try {
-    await writeFile(dumpPath, dump)
-    const entries = await pgRestoreList(dumpPath)
-    return { valid: entries > 0, tocEntries: entries }
+    const checked = await assertDumpContainsRequiredTables(dump)
+    return {
+      valid: true,
+      tocEntries: checked.tocEntries,
+      tables: checked.tables,
+      missingTables: [],
+    }
   }
-  finally {
-    await rm(dir, { recursive: true, force: true })
+  catch (err) {
+    if (err instanceof BackupsServiceError && err.code === 'INCOMPLETE_DUMP') {
+      return {
+        valid: false,
+        tocEntries: 0,
+        tables: [],
+        missingTables: err.details,
+      }
+    }
+    throw err
   }
 }
 
-async function pgRestoreList(dumpPath: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('pg_restore', ['--list', dumpPath], { stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
-    const errors: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
-    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk))
-    child.on('error', reject)
-    child.on('close', (code) => {
-      if (code === 0) {
-        const entries = stdout.split('\n').filter(line => /^\d+;/.test(line)).length
-        resolve(entries)
-      }
-      else {
-        reject(new Error(Buffer.concat(errors).toString('utf8') || `pg_restore --list exited ${code}`))
-      }
-    })
-  })
-}
-
-/** Restore decrypted dump to a target database URL (integration tests). */
+/** Restore decrypted dump to a target database URL (integration tests + admin restore). */
 export async function restoreBackupToDatabase(dump: Buffer, targetUrl: string): Promise<void> {
+  // Refuse to restore archives that predate required app tables.
+  await assertDumpContainsRequiredTables(dump)
+
   const conn = parseDatabaseUrl(targetUrl)
   const dir = await mkdtemp(join(tmpdir(), 'dorinc-restore-'))
   const dumpPath = join(dir, 'restore.dump')
@@ -635,18 +671,7 @@ export async function restoreBackupToDatabase(dump: Buffer, targetUrl: string): 
     await writeFile(dumpPath, dump)
 
     await new Promise<void>((resolve, reject) => {
-      const args = [
-        '--clean',
-        '--if-exists',
-        '--no-owner',
-        '--no-acl',
-        '-h', conn.host,
-        '-p', conn.port,
-        '-U', conn.user,
-        '-d', conn.database,
-        dumpPath,
-      ]
-      const child = spawn('pg_restore', args, {
+      const child = spawn('pg_restore', buildPgRestoreArgs(conn, dumpPath), {
         env: { ...process.env, PGPASSWORD: conn.password },
         stdio: ['ignore', 'pipe', 'pipe'],
       })

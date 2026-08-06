@@ -3,12 +3,17 @@ import {
   GoogleDriveBackupError,
   verifyOAuthState,
 } from '../../../../services/google-drive-backup.service'
+import { ensureMasterKeyHydrated, refreshAppConfigCache } from '../../../../services/app-config.service'
 import { requirePermission } from '../../../../utils/require-permission'
 import { useDb } from '../../../../db/client'
 import { apiError } from '../../../../utils/api-error'
 
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'backups.manage.all')
+  const db = useDb()
+  await ensureMasterKeyHydrated(db)
+  await refreshAppConfigCache(db)
+
   const query = getQuery(event)
   const code = String(query.code ?? '')
   const state = String(query.state ?? '')
@@ -25,7 +30,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    await connectGoogleDrive(useDb(), code, user.id, event)
+    await connectGoogleDrive(db, code, user.id, event)
     return sendRedirect(event, '/admin?backup_oauth=connected')
   }
   catch (err) {

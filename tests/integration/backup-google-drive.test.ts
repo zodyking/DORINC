@@ -47,10 +47,20 @@ describe('P2-17 Google Drive backup integration', () => {
     delete process.env.GOOGLE_CLIENT_ID
     delete process.env.GOOGLE_CLIENT_SECRET
 
-    const { testGoogleDriveConnection } = await import('../../server/services/google-drive-backup.service')
-    await expect(testGoogleDriveConnection(db)).rejects.toBeInstanceOf(GoogleDriveBackupError)
+    const { testGoogleDriveConnection, getBackupIntegrationView: reloadView } = await import('../../server/services/google-drive-backup.service')
+    const view = await reloadView(db)
+    if (!view.configured) {
+      await expect(testGoogleDriveConnection(db)).rejects.toBeInstanceOf(GoogleDriveBackupError)
+    }
 
     process.env.GOOGLE_CLIENT_ID = prevId
     process.env.GOOGLE_CLIENT_SECRET = prevSecret
+  })
+
+  it('exposes redirect URI for Google Cloud Console setup', async () => {
+    const view = await getBackupIntegrationView(db)
+    expect(view.redirectUri).toMatch(/\/api\/admin\/backups\/google\/callback$/)
+    expect(view).toHaveProperty('envLocked')
+    expect(view).toHaveProperty('hasClientSecret')
   })
 })

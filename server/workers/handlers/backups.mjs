@@ -1,8 +1,15 @@
 // backup_run handler — scheduled encrypted backups + Google Drive upload (SPEC §13, P2-17).
 import { spawn } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { zstdCompressSync } from 'node:zlib'
 import { decryptBuffer, encryptBuffer, hydrateMasterKeyFromDb, sha256Hex } from '../lib/encryption.mjs'
 import { getDatabaseUrl } from '../../lib/runtime-config.mjs'
+import {
+  buildPgDumpArgs,
+  diffRequiredBackupTables,
+} from '../../lib/backup-pg.mjs'
 import { buildBackupNotificationEmail } from '../../mail/templates/system.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 
@@ -57,11 +64,7 @@ function parseDatabaseUrl(url) {
 
 function runPgDump(conn) {
   return new Promise((resolve, reject) => {
-    const args = [
-      '--format=custom', '--no-owner', '--no-acl',
-      '-h', conn.host, '-p', conn.port, '-U', conn.user, conn.database,
-    ]
-    const child = spawn('pg_dump', args, {
+    const child = spawn('pg_dump', buildPgDumpArgs(conn), {
       env: { ...process.env, PGPASSWORD: conn.password },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -77,6 +80,59 @@ function runPgDump(conn) {
   })
 }
 
+function pgRestoreListText(dumpPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('pg_restore', ['--list', dumpPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    const errors = []
+    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8') })
+    child.stderr.on('data', chunk => errors.push(chunk))
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout)
+      else reject(new Error(Buffer.concat(errors).toString('utf8') || `pg_restore --list exited ${code}`))
+    })
+  })
+}
+
+async function assertDumpContainsRequiredTables(dump) {
+  const dir = await mkdtemp(join(tmpdir(), 'dorinc-worker-backup-toc-'))
+  const dumpPath = join(dir, 'check.dump')
+  try {
+    await writeFile(dumpPath, dump)
+    const toc = await pgRestoreListText(dumpPath)
+    const { missing } = diffRequiredBackupTables(toc)
+    if (missing.length) {
+      throw new Error(`INCOMPLETE_DUMP: missing tables ${missing.join(', ')}`)
+    }
+  }
+  finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+async function loadGoogleOAuthCredentials(pool) {
+  const envId = process.env.GOOGLE_CLIENT_ID?.trim()
+  const envSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
+  if (envId && envSecret) return { clientId: envId, clientSecret: envSecret }
+
+  await hydrateMasterKeyFromDb(pool)
+  const { rows } = await pool.query(
+    `SELECT encrypted_value FROM app_settings WHERE key = $1 LIMIT 1`,
+    ['google.oauth'],
+  )
+  const encrypted = rows[0]?.encrypted_value
+  if (!encrypted) return null
+  try {
+    const parsed = JSON.parse(decryptBuffer(Buffer.from(encrypted, 'base64')).toString('utf8'))
+    if (!parsed?.clientId || !parsed?.clientSecret) return null
+    return { clientId: String(parsed.clientId).trim(), clientSecret: String(parsed.clientSecret).trim() }
+  }
+  catch {
+    return null
+  }
+}
+
 async function loadGoogleTokens(pool) {
   const { rows } = await pool.query(
     `SELECT id, encrypted_tokens, token_expires_at, folder_id, connected
@@ -89,17 +145,16 @@ async function loadGoogleTokens(pool) {
   return { row, tokens }
 }
 
-async function refreshGoogleAccessToken(refreshToken) {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim()
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
-  if (!clientId || !clientSecret) throw new Error('Google OAuth not configured')
+async function refreshGoogleAccessToken(pool, refreshToken) {
+  const oauth = await loadGoogleOAuthCredentials(pool)
+  if (!oauth) throw new Error('Google OAuth not configured')
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
+      client_id: oauth.clientId,
+      client_secret: oauth.clientSecret,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
@@ -117,7 +172,7 @@ async function getValidAccessToken(pool, integration) {
     : 0
   if (expiresAt > Date.now() + 60_000) return integration.tokens.accessToken
 
-  const refreshed = await refreshGoogleAccessToken(integration.tokens.refreshToken)
+  const refreshed = await refreshGoogleAccessToken(pool, integration.tokens.refreshToken)
   const nextTokens = {
     accessToken: refreshed.access_token,
     refreshToken: integration.tokens.refreshToken,
@@ -215,6 +270,7 @@ async function executeBackup(pool, trigger) {
   try {
     const conn = parseDatabaseUrl(databaseUrl)
     const dump = await runPgDump(conn)
+    await assertDumpContainsRequiredTables(dump)
     const compressed = zstdCompressSync(dump)
     const encrypted = encryptBuffer(compressed)
     const checksum = sha256Hex(encrypted)
