@@ -11,6 +11,8 @@ import {
 } from '../../shared/invoice-template-design'
 import {
   coerceLayoutMarkerForStorage,
+  isBladeLayoutMarker,
+  isLegacyAccentBladeSource,
   normalizeInvoiceTemplateDesign,
   resolveEffectiveBladeSource,
 } from '../../shared/invoice-template-blade'
@@ -400,17 +402,21 @@ async function buildTemplatePreviewPayload(
       : baseSettings,
   )
 
-  const layoutMarker = input?.bladeSource?.trim() || detail.latestVersion.layoutMarker
+  const rawBladeInput = input?.bladeSource?.trim() || ''
+  const layoutMarker = rawBladeInput || detail.latestVersion.layoutMarker
   let bladeSource: string | undefined
-  if (input?.bladeSource?.trim()) {
-    bladeSource = resolveEffectiveBladeSource(coerceLayoutMarkerForStorage(input.bladeSource)) ?? undefined
+  const { resolveBladeSourceForPdf } = await import('./invoice-template-blade-resolve.service')
+
+  // Inline Blade overrides use the provided source. Storage markers (preset:/laravel-blade:)
+  // and empty input resolve from disk/DB so preview never renders the marker literally.
+  if (rawBladeInput && !isBladeLayoutMarker(rawBladeInput) && !isLegacyAccentBladeSource(rawBladeInput)) {
+    bladeSource = resolveEffectiveBladeSource(coerceLayoutMarkerForStorage(rawBladeInput)) ?? undefined
   }
   else {
-    const { resolveBladeSourceForPdf } = await import('./invoice-template-blade-resolve.service')
     bladeSource = await resolveBladeSourceForPdf(db, {
       templateId: detail.id,
       templateSlug: detail.slug,
-      layoutMarker,
+      layoutMarker: coerceLayoutMarkerForStorage(layoutMarker),
     }) ?? undefined
   }
 
