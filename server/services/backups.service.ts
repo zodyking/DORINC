@@ -10,7 +10,7 @@ import { backupRuns, backupSettings, type BackupRunStatus } from '../db/schema/b
 import { backupRecoveryTests, type BackupRecoveryTestStatus } from '../db/schema/security'
 import { decryptBuffer, encryptBuffer, sha256Hex } from './encryption.service'
 import { writeAudit } from './audit.service'
-import { getNotifyEmail, getSmtpConfig, getAppUrl } from './app-config.service'
+import { ensureMasterKeyHydrated, getNotifyEmail, getSmtpConfig, getAppUrl } from './app-config.service'
 import { getDatabaseUrl } from './runtime-config.service'
 import { enqueueJob } from './jobs.service'
 import { buildBackupNotificationEmail } from '../mail/templates/system'
@@ -586,6 +586,7 @@ export async function getBackupDownload(db: Db, runId: string): Promise<{
 /** Decrypt + decompress a completed backup run — for verify/restore tests only. */
 export async function decryptBackupRun(db: Db, runId: string): Promise<Buffer> {
   const encrypted = await getBackupEncryptedPayload(db, runId)
+  await ensureMasterKeyHydrated(db)
   const compressed = decryptBuffer(encrypted)
   return decompressDump(compressed)
 }

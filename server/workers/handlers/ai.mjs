@@ -1,5 +1,5 @@
 // AI worker — service log extraction + invoice description (SPEC §10, P2-13/P2-14).
-import { decryptBuffer } from '../lib/encryption.mjs'
+import { decryptBuffer, hydrateMasterKeyFromDb } from '../lib/encryption.mjs'
 import {
   buildLineAuditSystemPrompt,
   buildLineAuditUserPrompt,
@@ -44,7 +44,11 @@ async function loadAiSettings(pool) {
   if (!row?.encrypted_api_key || !row.enabled) {
     throw new Error('AI is not configured or disabled')
   }
-  const apiKey = decryptBuffer(row.encrypted_api_key).toString('utf8')
+  await hydrateMasterKeyFromDb(pool)
+  const apiKey = decryptBuffer(row.encrypted_api_key).toString('utf8').trim()
+  if (!apiKey) {
+    throw new Error('Stored OpenRouter API key is empty — re-save AI settings in Control Panel')
+  }
   return {
     apiKey,
     defaultModel: row.default_model,
