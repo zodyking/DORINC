@@ -10,6 +10,7 @@ import type {
 } from '../../shared/validators/billing-integrations'
 import { getAiProviderSettings } from './ai-provider.service'
 import { normalizeDomainRenewals } from './domain-renewals.service'
+import { normalizeOpenRouterApiKey } from '../../shared/openrouter-auth'
 
 export class BillingIntegrationsServiceError extends Error {
   constructor(public readonly code: 'NOT_CONFIGURED' | 'KEY_MISSING', message?: string) {
@@ -70,7 +71,10 @@ export async function getBillingIntegrations(db: Db): Promise<BillingIntegration
 
 function encryptOptionalSecret(value: string | undefined): Buffer | undefined {
   if (value === undefined) return undefined
-  return encryptBuffer(Buffer.from(value, 'utf8'))
+  const trimmed = value.trim()
+  // Never overwrite a stored secret with an empty paste from the settings form.
+  if (!trimmed) return undefined
+  return encryptBuffer(Buffer.from(trimmed, 'utf8'))
 }
 
 export async function updateBillingIntegrations(
@@ -130,26 +134,41 @@ export async function updateBillingIntegrations(
     await ensureEncryptionReadyForSettings(db)
   }
 
-  if (vultrApiKey !== undefined) update.encryptedVultrApiKey = encryptOptionalSecret(vultrApiKey)
+  if (vultrApiKey !== undefined) {
+    const encrypted = encryptOptionalSecret(vultrApiKey)
+    if (encrypted) update.encryptedVultrApiKey = encrypted
+  }
   if (openrouterManagementKey !== undefined) {
-    update.encryptedOpenrouterManagementKey = encryptOptionalSecret(openrouterManagementKey)
+    const encrypted = encryptOptionalSecret(normalizeOpenRouterApiKey(openrouterManagementKey) || openrouterManagementKey)
+    if (encrypted) update.encryptedOpenrouterManagementKey = encrypted
   }
   if (cloudflareApiToken !== undefined) {
-    update.encryptedCloudflareApiToken = encryptOptionalSecret(cloudflareApiToken)
+    const encrypted = encryptOptionalSecret(cloudflareApiToken)
+    if (encrypted) update.encryptedCloudflareApiToken = encrypted
   }
-  if (vultrUsername !== undefined) update.encryptedVultrUsername = encryptOptionalSecret(vultrUsername)
-  if (vultrPassword !== undefined) update.encryptedVultrPassword = encryptOptionalSecret(vultrPassword)
+  if (vultrUsername !== undefined) {
+    const encrypted = encryptOptionalSecret(vultrUsername)
+    if (encrypted) update.encryptedVultrUsername = encrypted
+  }
+  if (vultrPassword !== undefined) {
+    const encrypted = encryptOptionalSecret(vultrPassword)
+    if (encrypted) update.encryptedVultrPassword = encrypted
+  }
   if (cloudflareUsername !== undefined) {
-    update.encryptedCloudflareUsername = encryptOptionalSecret(cloudflareUsername)
+    const encrypted = encryptOptionalSecret(cloudflareUsername)
+    if (encrypted) update.encryptedCloudflareUsername = encrypted
   }
   if (cloudflarePassword !== undefined) {
-    update.encryptedCloudflarePassword = encryptOptionalSecret(cloudflarePassword)
+    const encrypted = encryptOptionalSecret(cloudflarePassword)
+    if (encrypted) update.encryptedCloudflarePassword = encrypted
   }
   if (openrouterUsername !== undefined) {
-    update.encryptedOpenrouterUsername = encryptOptionalSecret(openrouterUsername)
+    const encrypted = encryptOptionalSecret(openrouterUsername)
+    if (encrypted) update.encryptedOpenrouterUsername = encrypted
   }
   if (openrouterPassword !== undefined) {
-    update.encryptedOpenrouterPassword = encryptOptionalSecret(openrouterPassword)
+    const encrypted = encryptOptionalSecret(openrouterPassword)
+    if (encrypted) update.encryptedOpenrouterPassword = encrypted
   }
 
   const [updated] = await db.update(billingIntegrations)
@@ -193,7 +212,8 @@ export async function getVultrApiKey(db: Db): Promise<string | null> {
 export async function getOpenRouterManagementKey(db: Db): Promise<string | null> {
   const [row] = await db.select({ key: billingIntegrations.encryptedOpenrouterManagementKey })
     .from(billingIntegrations).limit(1)
-  return readSecret(db, row?.key)
+  const raw = await readSecret(db, row?.key)
+  return normalizeOpenRouterApiKey(raw) || null
 }
 
 export async function getCloudflareApiToken(db: Db): Promise<string | null> {

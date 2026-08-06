@@ -1,4 +1,9 @@
 import type { Db } from '../db/client'
+import {
+  isOpenRouterAuthErrorMessage,
+  normalizeOpenRouterApiKey,
+  openRouterAuthRecoveryMessage,
+} from '../../shared/openrouter-auth'
 import { getAiProviderSettings, getDecryptedApiKey } from './ai-provider.service'
 import { getAiUsageSummary } from './ai-jobs.service'
 import { getOpenRouterManagementKey } from './billing-integrations.service'
@@ -21,11 +26,16 @@ export interface OpenRouterKeySummary {
 const OPENROUTER_FETCH_TIMEOUT_MS = 15_000
 
 async function openRouterFetch<T>(apiKey: string, path: string): Promise<T> {
+  const key = normalizeOpenRouterApiKey(apiKey)
+  if (!key) {
+    throw new Error(openRouterAuthRecoveryMessage())
+  }
+
   let res: Response
   try {
     res = await fetch(`https://openrouter.ai/api/v1${path}`, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
         Accept: 'application/json',
       },
       signal: AbortSignal.timeout(OPENROUTER_FETCH_TIMEOUT_MS),
@@ -40,6 +50,9 @@ async function openRouterFetch<T>(apiKey: string, path: string): Promise<T> {
   const payload = await res.json().catch(() => ({})) as T & { error?: { message?: string } }
   if (!res.ok) {
     const message = (payload as { error?: { message?: string } }).error?.message || `OpenRouter returned ${res.status}`
+    if (isOpenRouterAuthErrorMessage(message)) {
+      throw new Error(openRouterAuthRecoveryMessage())
+    }
     throw new Error(message)
   }
   return payload
@@ -122,6 +135,31 @@ async function loadOpenRouterCredits(
   return { credits: null, creditsNote }
 }
 
+async function fetchKeyUsageWithFallback(
+  aiKey: string,
+  managementKey: string | null,
+): Promise<{ keyUsage: OpenRouterKeySummary, usedKey: string }> {
+  const candidates = [...new Set([aiKey, managementKey].filter(Boolean))] as string[]
+  if (!candidates.length) {
+    throw new Error('OpenRouter API key not configured in Control Panel → AI')
+  }
+
+  let lastError: Error | null = null
+  for (const key of candidates) {
+    try {
+      return { keyUsage: await fetchOpenRouterKeyUsage(key), usedKey: key }
+    }
+    catch (e) {
+      lastError = e as Error
+      // Try the next key only for auth failures; surface other errors immediately.
+      if (!isOpenRouterAuthErrorMessage(lastError.message)) {
+        throw lastError
+      }
+    }
+  }
+  throw lastError ?? new Error(openRouterAuthRecoveryMessage())
+}
+
 export async function resolveOpenRouterBilling(db: Db): Promise<{
   credits: OpenRouterCreditsSummary | null
   keyUsage: OpenRouterKeySummary | null
@@ -145,31 +183,7 @@ export async function resolveOpenRouterBilling(db: Db): Promise<{
 
   let apiKey: string
   try {
-    apiKey = (await getDecryptedApiKey(db)) ?? ''
-  }
-  catch (e) {
-    return {
-      credits: null,
-      keyUsage: null,
-      internalMonthlyUsd,
-      creditsNote: null,
-      error: (e as Error).message,
-    }
-  }
-
-  if (!apiKey) {
-    return {
-      credits: null,
-      keyUsage: null,
-      internalMonthlyUsd,
-      creditsNote: null,
-      error: 'OpenRouter API key not configured in Control Panel → AI',
-    }
-  }
-
-  let keyUsage: OpenRouterKeySummary
-  try {
-    keyUsage = await fetchOpenRouterKeyUsage(apiKey)
+    apiKey = normalizeOpenRouterApiKey(await getDecryptedApiKey(db))
   }
   catch (e) {
     return {
@@ -183,19 +197,44 @@ export async function resolveOpenRouterBilling(db: Db): Promise<{
 
   let managementKey: string | null
   try {
-    managementKey = await getOpenRouterManagementKey(db)
+    managementKey = normalizeOpenRouterApiKey(await getOpenRouterManagementKey(db)) || null
   }
   catch (e) {
     return {
       credits: null,
-      keyUsage,
+      keyUsage: null,
       internalMonthlyUsd,
       creditsNote: null,
       error: (e as Error).message,
     }
   }
 
-  const { credits, creditsNote } = await loadOpenRouterCredits(managementKey, apiKey, keyUsage)
+  if (!apiKey && !managementKey) {
+    return {
+      credits: null,
+      keyUsage: null,
+      internalMonthlyUsd,
+      creditsNote: null,
+      error: 'OpenRouter API key not configured in Control Panel → AI',
+    }
+  }
+
+  let keyUsage: OpenRouterKeySummary
+  let usedKey: string
+  try {
+    ;({ keyUsage, usedKey } = await fetchKeyUsageWithFallback(apiKey, managementKey))
+  }
+  catch (e) {
+    return {
+      credits: null,
+      keyUsage: null,
+      internalMonthlyUsd,
+      creditsNote: null,
+      error: (e as Error).message,
+    }
+  }
+
+  const { credits, creditsNote } = await loadOpenRouterCredits(managementKey, usedKey, keyUsage)
 
   return {
     credits,

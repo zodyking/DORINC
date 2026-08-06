@@ -13,6 +13,7 @@ import {
   getAppUrl,
 } from './app-config.service'
 import { BRAND_NAME } from '../../shared/brand'
+import { normalizeOpenRouterApiKey } from '../../shared/openrouter-auth'
 import type { AiProviderSettingsPatch } from '../../shared/validators/ai'
 
 export type AiProviderServiceErrorCode = 'NOT_CONFIGURED' | 'KEY_MISSING' | 'CONNECTION_FAILED' | 'SPEND_CAP_EXCEEDED'
@@ -116,8 +117,12 @@ export async function updateAiProviderSettings(
   }
 
   if (apiKey !== undefined) {
-    await ensureEncryptionReadyForSettings(db)
-    update.encryptedApiKey = encryptBuffer(Buffer.from(apiKey, 'utf8'))
+    const trimmed = normalizeOpenRouterApiKey(apiKey)
+    // Never overwrite a stored key with an empty paste from the settings form.
+    if (trimmed) {
+      await ensureEncryptionReadyForSettings(db)
+      update.encryptedApiKey = encryptBuffer(Buffer.from(trimmed, 'utf8'))
+    }
   }
 
   if (dailySpendCapUsd !== undefined) {
@@ -146,7 +151,7 @@ export async function getDecryptedApiKey(db: Db): Promise<string | null> {
 
   try {
     await ensureMasterKeyHydrated(db)
-    return decryptBuffer(row.encryptedApiKey).toString('utf8').trim() || null
+    return normalizeOpenRouterApiKey(decryptBuffer(row.encryptedApiKey).toString('utf8')) || null
   }
   catch (err) {
     if ((err as Error).message?.includes('ENCRYPTION_MASTER_KEY')) {
@@ -155,7 +160,10 @@ export async function getDecryptedApiKey(db: Db): Promise<string | null> {
         'Encryption is not configured — open Control Panel → Security or set ENCRYPTION_MASTER_KEY',
       )
     }
-    throw new AiProviderServiceError('KEY_MISSING', 'Stored API key could not be decrypted')
+    throw new AiProviderServiceError(
+      'KEY_MISSING',
+      'Stored API key could not be decrypted — re-paste the OpenRouter key in Control Panel → AI after checking Security encryption settings',
+    )
   }
 }
 

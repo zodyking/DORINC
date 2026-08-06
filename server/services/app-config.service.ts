@@ -7,7 +7,6 @@ import {
   configureMasterKey,
   decryptBuffer,
   encryptBuffer,
-  getConfiguredMasterKeyOverride,
 } from './encryption.service'
 import { hasDatabaseConfig } from './runtime-config.service'
 
@@ -236,11 +235,11 @@ export async function resolveSessionSecret(db: Db): Promise<string | null> {
 
 /**
  * Ensure the DB/UI master key is loaded into the encryption override.
- * Safe to call before decrypting AI/billing secrets after a restart when boot
- * cache warm was skipped — never generates a new key.
+ * Always re-reads app_settings so a stale/wrong in-memory override cannot
+ * shadow the DB key (which previously broke AI/billing decrypt after redeploy).
+ * Never generates a new key.
  */
 export async function ensureMasterKeyHydrated(db: Db): Promise<void> {
-  if (getConfiguredMasterKeyOverride()) return
   await refreshAppConfigCache(db)
 }
 
