@@ -5,7 +5,7 @@ import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { messageLinkFetchQuery } from '~/utils/message-link-access'
 import type { ServiceLogInvoiceLinkStatus } from '~/utils/service-log-invoice-status'
-import { vehicleLine, vehicleTag } from '~/utils/vehicles-ui'
+import { vehicleTag, vehicleUnitLine } from '~/utils/vehicles-ui'
 import {
   CUSTOMER_REQUESTED_SERVICE_NOTE,
   formatAuditAction,
@@ -418,7 +418,7 @@ const pill = computed(() => log.value
         <div class="chead"><h3>Customer &amp; vehicle</h3></div>
         <dl class="kv cbody">
           <dt>Customer</dt><dd>{{ log.customerName }}</dd>
-          <dt>Vehicle</dt><dd>{{ vehicleLine(log.vehicle) }}</dd>
+          <dt>Vehicle</dt><dd>{{ vehicleUnitLine(log.vehicle) }}</dd>
           <dt>Submitted by</dt><dd>{{ log.submitterName }}</dd>
           <dt>Uploaded</dt><dd>{{ new Date(log.createdAt).toLocaleString() }}</dd>
           <dt>Status</dt><dd><span :class="pill.cls">{{ pill.label }}</span></dd>
