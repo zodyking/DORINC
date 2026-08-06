@@ -23,6 +23,7 @@ const linkUrl = ref('')
 const showLinkPrompt = ref(false)
 const uploadBusy = ref(false)
 const uploadError = ref('')
+const blockValue = ref('p')
 const toolbarState = ref({
   bold: false,
   italic: false,
@@ -79,7 +80,6 @@ function ensureEditableShell() {
   const text = (el.textContent || '').replace(/\u200B/g, '').trim()
   if (!text && !el.querySelector('img,ul,ol,blockquote,hr,h2,h3')) {
     el.innerHTML = '<p><br></p>'
-    // Place caret inside the paragraph
     const p = el.querySelector('p')
     if (p) {
       const range = document.createRange()
@@ -90,6 +90,20 @@ function ensureEditableShell() {
       sel?.addRange(range)
       savedRange = range.cloneRange()
     }
+  }
+}
+
+function detectBlockValue(): string {
+  if (!import.meta.client || !editorRef.value) return 'p'
+  try {
+    const raw = String(document.queryCommandValue('formatBlock') || '').toLowerCase()
+    if (raw.includes('h2')) return 'h2'
+    if (raw.includes('h3')) return 'h3'
+    if (raw.includes('blockquote')) return 'blockquote'
+    return 'p'
+  }
+  catch {
+    return 'p'
   }
 }
 
@@ -105,10 +119,21 @@ function refreshToolbarState() {
     }
   }
   toolbarState.value = next
+  blockValue.value = detectBlockValue()
+}
+
+function editorHasFocus() {
+  return import.meta.client && !!editorRef.value && (
+    document.activeElement === editorRef.value
+    || editorRef.value.contains(document.activeElement)
+  )
 }
 
 function exec(command: string, value?: string) {
   if (props.disabled) return
+  // Undo/redo must not run when focus just left another field — that would
+  // mutate title/subtitle history via the shared document undo stack.
+  if ((command === 'undo' || command === 'redo') && !editorHasFocus() && !savedRange) return
   restoreSelection()
   ensureEditableShell()
   document.execCommand(command, false, value)
@@ -124,6 +149,11 @@ function formatBlock(tag: 'h2' | 'h3' | 'p' | 'blockquote') {
   if (!ok) document.execCommand('formatBlock', false, tag)
   syncFromEditor()
   saveSelection()
+}
+
+function onBlockChange(e: Event) {
+  const value = (e.target as HTMLSelectElement).value as 'h2' | 'h3' | 'p' | 'blockquote'
+  formatBlock(value)
 }
 
 function askLink() {
@@ -276,56 +306,129 @@ function onKeydown(e: KeyboardEvent) {
     askLink()
   }
 }
+
+function onEditorFocus() {
+  ensureEditableShell()
+  refreshToolbarState()
+}
 </script>
 
 <template>
-  <div class="ann-editor" :class="{ disabled }">
-    <div class="ann-editor-toolbar" role="toolbar" aria-label="Formatting">
-      <button type="button" class="btn sm" title="Undo" :disabled="disabled" @mousedown.prevent @click="exec('undo')">Undo</button>
-      <button type="button" class="btn sm" title="Redo" :disabled="disabled" @mousedown.prevent @click="exec('redo')">Redo</button>
-      <span class="ann-editor-sep" aria-hidden="true" />
-      <button type="button" class="btn sm" title="Bold (Ctrl+B)" :class="{ on: toolbarState.bold }" :disabled="disabled" @mousedown.prevent @click="exec('bold')"><b>B</b></button>
-      <button type="button" class="btn sm" title="Italic (Ctrl+I)" :class="{ on: toolbarState.italic }" :disabled="disabled" @mousedown.prevent @click="exec('italic')"><i>I</i></button>
-      <button type="button" class="btn sm" title="Underline (Ctrl+U)" :class="{ on: toolbarState.underline }" :disabled="disabled" @mousedown.prevent @click="exec('underline')"><u>U</u></button>
-      <button type="button" class="btn sm" title="Strikethrough" :class="{ on: toolbarState.strikeThrough }" :disabled="disabled" @mousedown.prevent @click="exec('strikeThrough')"><s>S</s></button>
-      <span class="ann-editor-sep" aria-hidden="true" />
-      <button type="button" class="btn sm" title="Heading 2" :disabled="disabled" @mousedown.prevent @click="formatBlock('h2')">H2</button>
-      <button type="button" class="btn sm" title="Heading 3" :disabled="disabled" @mousedown.prevent @click="formatBlock('h3')">H3</button>
-      <button type="button" class="btn sm" title="Paragraph" :disabled="disabled" @mousedown.prevent @click="formatBlock('p')">P</button>
-      <button type="button" class="btn sm" title="Quote" :disabled="disabled" @mousedown.prevent @click="formatBlock('blockquote')">Quote</button>
-      <span class="ann-editor-sep" aria-hidden="true" />
-      <button type="button" class="btn sm" title="Bulleted list" :class="{ on: toolbarState.insertUnorderedList }" :disabled="disabled" @mousedown.prevent @click="exec('insertUnorderedList')">• List</button>
-      <button type="button" class="btn sm" title="Numbered list" :class="{ on: toolbarState.insertOrderedList }" :disabled="disabled" @mousedown.prevent @click="exec('insertOrderedList')">1. List</button>
-      <button type="button" class="btn sm" title="Indent" :disabled="disabled" @mousedown.prevent @click="exec('indent')">Indent</button>
-      <button type="button" class="btn sm" title="Outdent" :disabled="disabled" @mousedown.prevent @click="exec('outdent')">Outdent</button>
-      <span class="ann-editor-sep" aria-hidden="true" />
-      <button type="button" class="btn sm" title="Align left" :class="{ on: toolbarState.justifyLeft }" :disabled="disabled" @mousedown.prevent @click="exec('justifyLeft')">Left</button>
-      <button type="button" class="btn sm" title="Align center" :class="{ on: toolbarState.justifyCenter }" :disabled="disabled" @mousedown.prevent @click="exec('justifyCenter')">Center</button>
-      <button type="button" class="btn sm" title="Align right" :class="{ on: toolbarState.justifyRight }" :disabled="disabled" @mousedown.prevent @click="exec('justifyRight')">Right</button>
-      <span class="ann-editor-sep" aria-hidden="true" />
-      <button type="button" class="btn sm" title="Insert link (Ctrl+K)" :disabled="disabled" @mousedown.prevent @click="askLink">Link</button>
-      <button type="button" class="btn sm" title="Remove link" :disabled="disabled" @mousedown.prevent @click="removeLink">Unlink</button>
-      <button type="button" class="btn sm" title="Horizontal rule" :disabled="disabled" @mousedown.prevent @click="exec('insertHorizontalRule')">Line</button>
-      <button type="button" class="btn sm" title="Clear formatting" :disabled="disabled" @mousedown.prevent @click="exec('removeFormat')">Clear</button>
-      <label
-        class="btn sm ann-editor-upload"
-        :class="{ disabled: disabled || uploadBusy }"
-        title="Insert image"
-        @mousedown.prevent="saveSelection"
-      >
-        {{ uploadBusy ? 'Uploading…' : 'Image' }}
-        <input
-          type="file"
-          accept="image/*"
-          :disabled="disabled || uploadBusy"
-          @change="onPickImage"
+  <div class="rte" :class="{ disabled }">
+    <div class="rte-toolbar" role="toolbar" aria-label="Formatting">
+      <div class="rte-group">
+        <button type="button" class="rte-btn" title="Undo (Ctrl+Z)" aria-label="Undo" :disabled="disabled" @mousedown.prevent @click="exec('undo')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5v3c5.5 0 9.5 2.5 11 7-.8-2.7-3.3-5-7-5H9v3z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Redo (Ctrl+Y)" aria-label="Redo" :disabled="disabled" @mousedown.prevent @click="exec('redo')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5v3h-4c-3.7 0-6.2 2.3-7 5 1.5-4.5 5.5-7 11-7h0v3z" /></svg>
+        </button>
+      </div>
+
+      <span class="rte-sep" aria-hidden="true" />
+
+      <div class="rte-group">
+        <label class="rte-select-wrap" title="Text style">
+          <span class="sr-only">Text style</span>
+          <select
+            class="rte-select"
+            :value="blockValue"
+            :disabled="disabled"
+            @mousedown="saveSelection"
+            @change="onBlockChange"
+          >
+            <option value="p">Paragraph</option>
+            <option value="h2">Heading 2</option>
+            <option value="h3">Heading 3</option>
+            <option value="blockquote">Quote</option>
+          </select>
+        </label>
+      </div>
+
+      <span class="rte-sep" aria-hidden="true" />
+
+      <div class="rte-group">
+        <button type="button" class="rte-btn" title="Bold (Ctrl+B)" aria-label="Bold" :class="{ on: toolbarState.bold }" :disabled="disabled" @mousedown.prevent @click="exec('bold')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h6.5a3.5 3.5 0 0 1 0 7H7V5zm0 7h7.5a3.5 3.5 0 0 1 0 7H7v-7z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Italic (Ctrl+I)" aria-label="Italic" :class="{ on: toolbarState.italic }" :disabled="disabled" @mousedown.prevent @click="exec('italic')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5h9v2h-3.2l-3.6 10H16v2H7v-2h3.2l3.6-10H10V5z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Underline (Ctrl+U)" aria-label="Underline" :class="{ on: toolbarState.underline }" :disabled="disabled" @mousedown.prevent @click="exec('underline')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v8a5 5 0 0 0 10 0V3h-2v8a3 3 0 0 1-6 0V3H7zm-1 16h12v2H6v-2z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Strikethrough" aria-label="Strikethrough" :class="{ on: toolbarState.strikeThrough }" :disabled="disabled" @mousedown.prevent @click="exec('strikeThrough')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11h14v2H5v-2zm7.5-7c2.8 0 4.5 1.4 4.5 3.6 0 1.2-.5 2.1-1.5 2.8H9.4c.4-.4.6-.9.6-1.5 0-1.2.9-1.9 2.5-1.9 1.2 0 2.1.4 2.8.9l1-1.5C15.3 5.6 14 5 12.5 5zm-1.2 10h5.3c.3.5.4 1 .4 1.6 0 2.3-1.8 3.9-5 3.9-1.8 0-3.3-.6-4.3-1.5l1.1-1.5c.8.7 1.9 1.1 3.2 1.1 1.6 0 2.6-.7 2.6-1.8 0-.5-.2-1-.5-1.3h-2.8V14z" /></svg>
+        </button>
+      </div>
+
+      <span class="rte-sep" aria-hidden="true" />
+
+      <div class="rte-group">
+        <button type="button" class="rte-btn" title="Bulleted list" aria-label="Bulleted list" :class="{ on: toolbarState.insertUnorderedList }" :disabled="disabled" @mousedown.prevent @click="exec('insertUnorderedList')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13v2H8V6zm0 5h13v2H8v-2zm0 5h13v2H8v-2zM3.5 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Numbered list" aria-label="Numbered list" :class="{ on: toolbarState.insertOrderedList }" :disabled="disabled" @mousedown.prevent @click="exec('insertOrderedList')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13v2H8V6zm0 5h13v2H8v-2zm0 5h13v2H8v-2zM3 5h2.2v5H3.8V6.4H3V5zm0 7h3v1.1L4.2 15H6v1.2H3v-1.1L4.8 13H3V12z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Decrease indent" aria-label="Decrease indent" :disabled="disabled" @mousedown.prevent @click="exec('outdent')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm8 4h10v2H11V9zm0 4h10v2H11v-2zm-8 4h18v2H3v-2zm2.5-3.5L3 11l2.5-2.5V10.5z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Increase indent" aria-label="Increase indent" :disabled="disabled" @mousedown.prevent @click="exec('indent')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm8 4h10v2H11V9zm0 4h10v2H11v-2zm-8 4h18v2H3v-2zM3 8.5 5.5 11 3 13.5V8.5z" /></svg>
+        </button>
+      </div>
+
+      <span class="rte-sep" aria-hidden="true" />
+
+      <div class="rte-group">
+        <button type="button" class="rte-btn" title="Align left" aria-label="Align left" :class="{ on: toolbarState.justifyLeft }" :disabled="disabled" @mousedown.prevent @click="exec('justifyLeft')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Align center" aria-label="Align center" :class="{ on: toolbarState.justifyCenter }" :disabled="disabled" @mousedown.prevent @click="exec('justifyCenter')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm3 4h12v2H6V9zm-3 4h18v2H3v-2zm3 4h12v2H6v-2z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Align right" aria-label="Align right" :class="{ on: toolbarState.justifyRight }" :disabled="disabled" @mousedown.prevent @click="exec('justifyRight')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm6 4h12v2H9V9zm-6 4h18v2H3v-2zm6 4h12v2H9v-2z" /></svg>
+        </button>
+      </div>
+
+      <span class="rte-sep" aria-hidden="true" />
+
+      <div class="rte-group">
+        <button type="button" class="rte-btn" title="Insert link (Ctrl+K)" aria-label="Insert link" :disabled="disabled" @mousedown.prevent @click="askLink">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a3.5 3.5 0 0 1 0-5l2.1-2.1a3.5 3.5 0 1 1 5 5l-1 1-1.4-1.4 1-1a1.5 1.5 0 0 0-2.1-2.1l-2.1 2.1a1.5 1.5 0 0 0 0 2.1l.4.4-1.4 1.4-.4-.4zm2.8-2.8a3.5 3.5 0 0 1 0 5l-2.1 2.1a3.5 3.5 0 1 1-5-5l1-1 1.4 1.4-1 1a1.5 1.5 0 0 0 2.1 2.1l2.1-2.1a1.5 1.5 0 0 0 0-2.1l-.4-.4 1.4-1.4.4.4z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Remove link" aria-label="Remove link" :disabled="disabled" @mousedown.prevent @click="removeLink">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16.2 5.8 1.4 1.4-2.1 2.1 1.4 1.4 2.1-2.1 1.4 1.4-2.1 2.1 2 2-1.4 1.4-2-2-2.1 2.1-1.4-1.4 2.1-2.1-1.4-1.4-2.1 2.1-1.4-1.4 2.1-2.1-2-2 1.4-1.4 2 2 2.1-2.1zM8.5 11.1l2.1-2.1a3.5 3.5 0 0 1 5 0l.7.7-1.4 1.4-.7-.7a1.5 1.5 0 0 0-2.1 0L9.9 12.5l-1.4-1.4zm-.7 4.3-.7-.7a3.5 3.5 0 0 1 0-5l.4-.4 1.4 1.4-.4.4a1.5 1.5 0 0 0 0 2.1l.7.7-1.4 1.4z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Horizontal rule" aria-label="Horizontal rule" :disabled="disabled" @mousedown.prevent @click="exec('insertHorizontalRule')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v2H4v-2z" /></svg>
+        </button>
+        <button type="button" class="rte-btn" title="Clear formatting" aria-label="Clear formatting" :disabled="disabled" @mousedown.prevent @click="exec('removeFormat')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12.7 5 1.4 1.4-1.8 1.8 5.5 5.5-1.4 1.4-1.8-1.8-1.8 1.8L11.4 15l1.8-1.8-5.5-5.5L9.1 6.3 10.9 8.1 12.7 5zM5 18h14v2H5v-2z" /></svg>
+        </button>
+        <label
+          class="rte-btn rte-upload"
+          :class="{ disabled: disabled || uploadBusy, on: uploadBusy }"
+          :title="uploadBusy ? 'Uploading image…' : 'Insert image'"
+          @mousedown.prevent="saveSelection"
         >
-      </label>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v6.6l3.2-3.2a1 1 0 0 1 1.4 0L14 15l2.3-2.3a1 1 0 0 1 1.4 0L21 15.6V7H5zm3.5 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" /></svg>
+          <span class="sr-only">{{ uploadBusy ? 'Uploading image' : 'Insert image' }}</span>
+          <input
+            type="file"
+            accept="image/*"
+            :disabled="disabled || uploadBusy"
+            @change="onPickImage"
+          >
+        </label>
+      </div>
     </div>
 
     <div
       v-if="showLinkPrompt"
-      class="ann-editor-linkrow"
+      class="rte-linkrow"
     >
       <input
         v-model="linkUrl"
@@ -337,14 +440,15 @@ function onKeydown(e: KeyboardEvent) {
       <button type="button" class="btn sm" @mousedown.prevent @click="showLinkPrompt = false">Cancel</button>
     </div>
 
-    <p v-if="uploadError" class="help" style="color:#dc2626; margin:8px 0 0;">{{ uploadError }}</p>
+    <p v-if="uploadError" class="help rte-error">{{ uploadError }}</p>
 
     <div
       ref="editorRef"
-      class="ann-editor-surface"
+      class="rte-surface"
       role="textbox"
       aria-multiline="true"
       aria-label="Message body"
+      data-placeholder="Write the message body…"
       :contenteditable="disabled ? 'false' : 'true'"
       @input="syncFromEditor"
       @blur="syncFromEditor"
@@ -352,102 +456,247 @@ function onKeydown(e: KeyboardEvent) {
       @keyup="saveSelection"
       @keydown="onKeydown"
       @paste="onPaste"
-      @focus="refreshToolbarState"
+      @focus="onEditorFocus"
     />
   </div>
 </template>
 
 <style scoped>
-.ann-editor {
-  border: 1px solid #d1d5db;
+.rte {
+  border: 1px solid #d0d7de;
   border-radius: 10px;
   overflow: hidden;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.ann-editor.disabled {
+
+.rte.disabled {
   opacity: 0.7;
 }
-.ann-editor-toolbar {
+
+.rte-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
   align-items: center;
-  padding: 8px;
+  gap: 4px;
+  padding: 6px 8px;
   border-bottom: 1px solid #e5e7eb;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
-.ann-editor-toolbar .btn.on {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+
+.rte-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
-.ann-editor-sep {
+
+.rte-sep {
   width: 1px;
   height: 22px;
   background: #d1d5db;
-  margin: 0 2px;
+  margin: 0 4px;
 }
-.ann-editor-upload {
+
+.rte-btn {
+  appearance: none;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rte-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.rte-btn:hover:not(:disabled) {
+  background: #fff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.rte-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.rte-btn.on {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.rte-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rte-select-wrap {
+  display: inline-flex;
+  margin: 0;
+  font-weight: 500;
+}
+
+.rte-select {
+  height: 32px;
+  min-width: 118px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0 28px 0 10px;
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #64748b 50%),
+    linear-gradient(135deg, #64748b 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 13px,
+    calc(100% - 9px) 13px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.rte-select:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.rte-upload {
   position: relative;
   overflow: hidden;
-  cursor: pointer;
 }
-.ann-editor-upload.disabled {
+
+.rte-upload.disabled {
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.45;
 }
-.ann-editor-upload input {
+
+.rte-upload input {
   position: absolute;
   inset: 0;
   opacity: 0;
   cursor: pointer;
 }
-.ann-editor-linkrow {
+
+.rte-linkrow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px;
+  padding: 8px 10px;
   border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
 }
-.ann-editor-linkrow input {
+
+.rte-linkrow input {
   flex: 1;
   min-width: 180px;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 10px;
+  font: inherit;
 }
-.ann-editor-surface {
-  min-height: 220px;
-  max-height: 420px;
+
+.rte-error {
+  color: #dc2626;
+  margin: 8px 10px 0;
+}
+
+.rte-surface {
+  min-height: 240px;
+  max-height: 440px;
   overflow: auto;
-  padding: 12px 14px;
+  padding: 14px 16px;
   outline: none;
-  line-height: 1.55;
+  line-height: 1.6;
+  font-size: 15px;
+  color: #0f172a;
 }
-.ann-editor-surface:focus {
-  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.25);
+
+.rte-surface:focus {
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.18);
 }
-.ann-editor-surface :deep(img) {
+
+.rte-surface:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.rte-surface :deep(img) {
   max-width: 100%;
   height: auto;
+  border-radius: 6px;
 }
-.ann-editor-surface :deep(blockquote) {
-  margin: 0.6em 0;
-  padding: 0.35em 0.9em;
+
+.rte-surface :deep(blockquote) {
+  margin: 0.65em 0;
+  padding: 0.4em 0.95em;
   border-left: 3px solid #94a3b8;
   color: #334155;
   background: #f8fafc;
 }
-.ann-editor-surface :deep(hr) {
+
+.rte-surface :deep(hr) {
   border: 0;
   border-top: 1px solid #cbd5e1;
   margin: 1em 0;
 }
-.ann-editor-surface :deep(h2),
-.ann-editor-surface :deep(h3) {
-  margin: 0.7em 0 0.35em;
+
+.rte-surface :deep(h2),
+.rte-surface :deep(h3) {
+  margin: 0.75em 0 0.35em;
   line-height: 1.25;
 }
-.ann-editor-surface :deep(ul),
-.ann-editor-surface :deep(ol) {
+
+.rte-surface :deep(p) {
+  margin: 0.45em 0;
+}
+
+.rte-surface :deep(ul),
+.rte-surface :deep(ol) {
   margin: 0.5em 0;
   padding-left: 1.4em;
+}
+
+.rte-surface :deep(a) {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .rte-sep {
+    display: none;
+  }
+
+  .rte-toolbar {
+    gap: 2px;
+  }
 }
 </style>

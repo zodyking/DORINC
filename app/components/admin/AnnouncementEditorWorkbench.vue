@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
             <input v-model="form.subtitle" type="text" maxlength="300" placeholder="Optional supporting line">
           </label>
 
-          <div class="fld">
+          <div class="fld ann-fld">
             <span>Hero image</span>
             <div class="ann-hero-row">
               <div v-if="form.heroImageUrl" class="ann-hero-thumb">
@@ -158,7 +158,12 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <label class="fld">
+          <!--
+            Body must NOT be a <label>: wrapping the rich editor in a label makes
+            clicks activate the first toolbar button (Undo), which deletes the
+            last character typed in Title/Subtitle via the document undo stack.
+          -->
+          <div class="fld ann-fld">
             <span>Body</span>
             <AnnouncementRichEditor
               v-model="form.bodyHtml"
@@ -167,7 +172,7 @@ onBeforeUnmount(() => {
               @update:announcement-id="emit('update:announcementId', $event)"
               @error="emit('error', $event)"
             />
-          </label>
+          </div>
         </div>
       </section>
 
@@ -409,6 +414,19 @@ onBeforeUnmount(() => {
 .ann-fields {
   display: grid;
   gap: 12px;
+}
+
+.ann-fld {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0;
+}
+
+.ann-fld > span {
+  display: block;
+  margin-bottom: 6px;
 }
 
 .ann-fields-3 {
