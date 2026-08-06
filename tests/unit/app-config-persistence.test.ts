@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  clearMasterKeyOverride,
   configureMasterKey,
   encryptBuffer,
 } from '../../server/services/encryption.service'
@@ -13,10 +14,12 @@ describe('app-config deploy persistence', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv }
+    clearMasterKeyOverride()
   })
 
   afterEach(() => {
     process.env = { ...originalEnv }
+    clearMasterKeyOverride()
   })
 
   it('does not lock SMTP saves when env only has host and from without password', () => {

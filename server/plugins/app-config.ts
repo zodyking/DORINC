@@ -45,6 +45,7 @@ export default defineNitroPlugin(async () => {
     await refreshAppConfigCache(db)
     await refreshImapConfigCache(db)
     await refreshAccessGateCache(db)
+    console.log('[app-config] cache warmed (encryption/SMTP/IMAP/access-gate)')
   }
   catch (err) {
     console.warn(`[app-config] cache warm skipped: ${(err as Error).message}`)

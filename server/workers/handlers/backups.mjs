@@ -1,7 +1,7 @@
 // backup_run handler — scheduled encrypted backups + Google Drive upload (SPEC §13, P2-17).
 import { spawn } from 'node:child_process'
 import { zstdCompressSync } from 'node:zlib'
-import { decryptBuffer, encryptBuffer, sha256Hex } from '../lib/encryption.mjs'
+import { decryptBuffer, encryptBuffer, hydrateMasterKeyFromDb, sha256Hex } from '../lib/encryption.mjs'
 import { getDatabaseUrl } from '../../lib/runtime-config.mjs'
 import { buildBackupNotificationEmail } from '../../mail/templates/system.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
@@ -84,6 +84,7 @@ async function loadGoogleTokens(pool) {
   )
   const row = rows[0]
   if (!row?.connected || !row.encrypted_tokens) return null
+  await hydrateMasterKeyFromDb(pool)
   const tokens = JSON.parse(decryptBuffer(row.encrypted_tokens).toString('utf8'))
   return { row, tokens }
 }
@@ -195,6 +196,7 @@ async function executeBackup(pool, trigger) {
   if (!databaseUrl) throw new Error('Database is not configured')
 
   try {
+    await hydrateMasterKeyFromDb(pool)
     encryptBuffer(Buffer.from('probe'))
   }
   catch {

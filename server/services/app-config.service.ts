@@ -3,7 +3,12 @@ import { randomBytes } from 'node:crypto'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { aiProviderSettings } from '../db/schema/ai'
-import { configureMasterKey, decryptBuffer, encryptBuffer } from './encryption.service'
+import {
+  configureMasterKey,
+  decryptBuffer,
+  encryptBuffer,
+  getConfiguredMasterKeyOverride,
+} from './encryption.service'
 import { hasDatabaseConfig } from './runtime-config.service'
 
 /** Setting keys stored in `app_settings` (UI-first config; env vars are optional overrides). */
@@ -227,6 +232,16 @@ export async function resolveSessionSecret(db: Db): Promise<string | null> {
   if (existing) return existing
   await refreshAppConfigCache(db)
   return getSessionSecret()
+}
+
+/**
+ * Ensure the DB/UI master key is loaded into the encryption override.
+ * Safe to call before decrypting AI/billing secrets after a restart when boot
+ * cache warm was skipped — never generates a new key.
+ */
+export async function ensureMasterKeyHydrated(db: Db): Promise<void> {
+  if (getConfiguredMasterKeyOverride()) return
+  await refreshAppConfigCache(db)
 }
 
 export function getAppUrl(): string {

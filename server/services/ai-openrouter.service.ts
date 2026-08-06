@@ -75,7 +75,10 @@ export async function openRouterChat(
   feature: AiFeatureType,
 ): Promise<OpenRouterChatResult> {
   if (!apiKey.trim()) {
-    throw new OpenRouterServiceError('API_ERROR', 'Missing Authentication header')
+    throw new OpenRouterServiceError(
+      'API_ERROR',
+      'OpenRouter API key is missing — re-save AI settings in Control Panel after deploy',
+    )
   }
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {

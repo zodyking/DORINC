@@ -7,10 +7,13 @@ import {
   type AiProvider,
 } from '../db/schema/ai'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
-import { getAppUrl } from './app-config.service'
+import {
+  ensureEncryptionReadyForSettings,
+  ensureMasterKeyHydrated,
+  getAppUrl,
+} from './app-config.service'
 import { BRAND_NAME } from '../../shared/brand'
 import type { AiProviderSettingsPatch } from '../../shared/validators/ai'
-import { ensureEncryptionReadyForSettings } from './app-config.service'
 
 export type AiProviderServiceErrorCode = 'NOT_CONFIGURED' | 'KEY_MISSING' | 'CONNECTION_FAILED' | 'SPEND_CAP_EXCEEDED'
 
@@ -142,9 +145,16 @@ export async function getDecryptedApiKey(db: Db): Promise<string | null> {
   if (!row?.encryptedApiKey?.length) return null
 
   try {
+    await ensureMasterKeyHydrated(db)
     return decryptBuffer(row.encryptedApiKey).toString('utf8').trim() || null
   }
-  catch {
+  catch (err) {
+    if ((err as Error).message?.includes('ENCRYPTION_MASTER_KEY')) {
+      throw new AiProviderServiceError(
+        'KEY_MISSING',
+        'Encryption is not configured — open Control Panel → Security or set ENCRYPTION_MASTER_KEY',
+      )
+    }
     throw new AiProviderServiceError('KEY_MISSING', 'Stored API key could not be decrypted')
   }
 }

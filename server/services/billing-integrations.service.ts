@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { billingIntegrations } from '../db/schema/billing-integrations'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
-import { ensureEncryptionReadyForSettings } from './app-config.service'
+import { ensureEncryptionReadyForSettings, ensureMasterKeyHydrated } from './app-config.service'
 import type {
   BillingIntegrationsPatch,
   BillingIntegrationsView,
@@ -164,12 +164,22 @@ export async function updateBillingIntegrations(
   return composeBillingIntegrationsView(db, updated)
 }
 
-async function readSecret(buffer: Buffer | null | undefined): Promise<string | null> {
+async function readSecret(
+  db: Db,
+  buffer: Buffer | null | undefined,
+): Promise<string | null> {
   if (!buffer?.length) return null
   try {
+    await ensureMasterKeyHydrated(db)
     return decryptBuffer(buffer).toString('utf8').trim() || null
   }
-  catch {
+  catch (err) {
+    if ((err as Error).message?.includes('ENCRYPTION_MASTER_KEY')) {
+      throw new BillingIntegrationsServiceError(
+        'KEY_MISSING',
+        'Encryption is not configured — open Control Panel → Security or set ENCRYPTION_MASTER_KEY',
+      )
+    }
     throw new BillingIntegrationsServiceError('KEY_MISSING', 'Stored credential could not be decrypted')
   }
 }
@@ -177,19 +187,19 @@ async function readSecret(buffer: Buffer | null | undefined): Promise<string | n
 export async function getVultrApiKey(db: Db): Promise<string | null> {
   const [row] = await db.select({ key: billingIntegrations.encryptedVultrApiKey })
     .from(billingIntegrations).limit(1)
-  return readSecret(row?.key)
+  return readSecret(db, row?.key)
 }
 
 export async function getOpenRouterManagementKey(db: Db): Promise<string | null> {
   const [row] = await db.select({ key: billingIntegrations.encryptedOpenrouterManagementKey })
     .from(billingIntegrations).limit(1)
-  return readSecret(row?.key)
+  return readSecret(db, row?.key)
 }
 
 export async function getCloudflareApiToken(db: Db): Promise<string | null> {
   const [row] = await db.select({ key: billingIntegrations.encryptedCloudflareApiToken })
     .from(billingIntegrations).limit(1)
-  return readSecret(row?.key)
+  return readSecret(db, row?.key)
 }
 
 export async function getCloudflareAccountId(db: Db): Promise<string | null> {
@@ -208,18 +218,18 @@ export async function revealBillingPortalCredentials(
 
   if (provider === 'vultr') {
     return {
-      username: await readSecret(row.encryptedVultrUsername),
-      password: await readSecret(row.encryptedVultrPassword),
+      username: await readSecret(db, row.encryptedVultrUsername),
+      password: await readSecret(db, row.encryptedVultrPassword),
     }
   }
   if (provider === 'cloudflare') {
     return {
-      username: await readSecret(row.encryptedCloudflareUsername),
-      password: await readSecret(row.encryptedCloudflarePassword),
+      username: await readSecret(db, row.encryptedCloudflareUsername),
+      password: await readSecret(db, row.encryptedCloudflarePassword),
     }
   }
   return {
-    username: await readSecret(row.encryptedOpenrouterUsername),
-    password: await readSecret(row.encryptedOpenrouterPassword),
+    username: await readSecret(db, row.encryptedOpenrouterUsername),
+    password: await readSecret(db, row.encryptedOpenrouterPassword),
   }
 }

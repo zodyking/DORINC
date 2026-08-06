@@ -5,7 +5,7 @@ import type { Db } from '../db/client'
 import { backupIntegrations } from '../db/schema/backups'
 import { decryptBuffer, encryptBuffer } from './encryption.service'
 import { writeAudit } from './audit.service'
-import { getAppUrl, getSessionSecret } from './app-config.service'
+import { ensureMasterKeyHydrated, getAppUrl, getSessionSecret } from './app-config.service'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -289,6 +289,7 @@ async function getConnectedIntegrationRow(db: Db) {
 
 export async function getValidGoogleAccessToken(db: Db): Promise<string> {
   const row = await getConnectedIntegrationRow(db)
+  await ensureMasterKeyHydrated(db)
   const tokens = decryptTokens(row.encryptedTokens!)
   const expiresAt = row.tokenExpiresAt?.getTime() ?? 0
   if (expiresAt > Date.now() + 60_000) return tokens.accessToken
