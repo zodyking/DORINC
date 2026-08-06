@@ -59,6 +59,39 @@ export function sheetColumnRows(sections: ServiceLogSheetSection[]): SheetColumn
   return rows
 }
 
+/**
+ * How many single-line catalog rows the front page fits below the header,
+ * customer fields and complaint box. Measured from the rendered Letter PDF:
+ * the 39-row default column leaves ~3.6 rows of slack at 14.5pt per row.
+ */
+export const SHEET_FRONT_PAGE_ROW_CAPACITY = 43
+
+/** A line with a note prints two lines, so it eats ~1.45 rows of height. */
+function rowWeight(row: SheetColumnRow): number {
+  return row.kind === 'item' && row.item.subtext.trim() ? 1.45 : 1
+}
+
+/**
+ * Estimate how full the front page is, so the editor can warn before the
+ * catalog spills onto a continuation page.
+ */
+export function sheetFrontPageFill(document: ServiceLogSheetDocument): {
+  rows: number
+  capacity: number
+  overflows: boolean
+} {
+  const { left, right } = sectionsByColumn(document)
+  const weigh = (sections: ServiceLogSheetSection[]) =>
+    sheetColumnRows(sections).reduce((total, row) => total + rowWeight(row), 0)
+  const rows = Math.max(weigh(left), weigh(right))
+
+  return {
+    rows: Math.round(rows * 10) / 10,
+    capacity: SHEET_FRONT_PAGE_ROW_CAPACITY,
+    overflows: rows > SHEET_FRONT_PAGE_ROW_CAPACITY,
+  }
+}
+
 /** Zip both columns into the printed table rows. */
 export function sheetGridRows(document: ServiceLogSheetDocument): SheetGridRow[] {
   const { left, right } = sectionsByColumn(document)

@@ -12,8 +12,9 @@ import {
   type SheetColumnRow,
 } from '../../shared/service-log-sheet-layout'
 import {
-  SERVICE_LOG_SHEET_DOCUMENT_CSS,
   SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
+  SERVICE_LOG_SHEET_PDF_CSS,
+  SERVICE_LOG_SHEET_SCOPE_CLASS,
 } from '../../shared/service-log-sheet-styles'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
 import {
@@ -255,9 +256,9 @@ export function renderServiceLogSheetHtml(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title} Service Log Sheet</title>
-  <style>${SERVICE_LOG_SHEET_DOCUMENT_CSS}</style>
+  <style>${SERVICE_LOG_SHEET_PDF_CSS}</style>
 </head>
-<body>
+<body class="${SERVICE_LOG_SHEET_SCOPE_CLASS}">
   <div class="page page-front">
     ${header}
 

@@ -12,15 +12,19 @@
  *   layout and puts percentage widths on the real cells (the invoice pattern).
  * - Absolute cell widths (pt/px) are downgraded to the cell's min content
  *   width, so percentages are the only reliable column sizing lever.
- * - A nested table set to `width: 100%` ignores the padding of the cell that
- *   contains it, so the two catalog columns are separated by a spacer column
- *   instead of padding (padding overflowed the right margin).
  * - `@page` margins are applied to the root `html` frame, so a `html { margin: 0 }`
  *   reset silently deletes every page margin and the sheet bleeds off the paper.
- *   Reset `body` only — exactly what the invoice Blade templates do.
+ *   Reset the sheet root only — exactly what the invoice Blade templates do.
  * - default_media_type is "screen": never ship screen paper chrome in PDF HTML.
+ *
+ * Every rule is scoped under `.sheet-doc` (the PDF sets it on <body>, the editor
+ * on the paper wrapper) so the exact same CSS can be injected into the app
+ * without leaking 7pt type and collapsed tables into the rest of the UI.
  */
 export const SERVICE_LOG_SHEET_PAGE_MARGIN_IN = 0.4
+
+/** Class that marks the sheet root in both the PDF body and the editor paper. */
+export const SERVICE_LOG_SHEET_SCOPE_CLASS = 'sheet-doc'
 
 /**
  * Catalog column widths as percentages of the whole 9-column catalog table
@@ -40,52 +44,54 @@ export const SERVICE_LOG_SHEET_COLUMN_WIDTHS = {
   gap: '3%',
 } as const
 
-/** Shared document CSS for PDF + editor content (no @media screen). */
+/**
+ * Shared document CSS for the PDF and the editor paper.
+ * No @media screen, no @page, no rules outside `.sheet-doc`.
+ */
 export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
-* { box-sizing: border-box; }
-/* Never set a margin on html: DomPDF stores @page margins on the root frame. */
-body {
+.sheet-doc, .sheet-doc * { box-sizing: border-box; }
+.sheet-doc {
   margin: 0;
   padding: 0;
   background: #ffffff;
   color: #111111;
   font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
-  font-size: 7.5pt;
+  font-size: 7.4pt;
   line-height: 1.2;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-table { border-collapse: collapse; width: 100%; }
-.page {
+.sheet-doc table { border-collapse: collapse; width: 100%; }
+.sheet-doc .page {
   width: 100%;
   margin: 0;
   padding: 0;
   background: #ffffff;
 }
-.page-back { page-break-before: always; }
+.sheet-doc .page-back { page-break-before: always; }
 
 /* ---------- header ---------- */
-.header {
+.sheet-doc .header {
   border-bottom: 1.2pt solid #111111;
   margin: 0 0 4pt 0;
 }
-.header td { vertical-align: top; padding: 0 0 4pt 0; }
-.header td.head-company { width: 58%; }
-.header td.head-doc { width: 42%; }
-.company-name {
+.sheet-doc .header td { vertical-align: top; padding: 0 0 4pt 0; }
+.sheet-doc .header td.head-company { width: 58%; }
+.sheet-doc .header td.head-doc { width: 42%; }
+.sheet-doc .company-name {
   margin: 0;
   font-size: 11.5pt;
   line-height: 1.1;
   font-weight: 700;
 }
-.company-details {
+.sheet-doc .company-details {
   margin: 1.5pt 0 0;
   color: #4b5563;
   font-size: 7pt;
   line-height: 1.3;
 }
-.document-title { text-align: right; }
-.document-title .doc-title {
+.sheet-doc .document-title { text-align: right; }
+.sheet-doc .document-title .doc-title {
   margin: 0;
   font-size: 12.5pt;
   line-height: 1.1;
@@ -94,7 +100,7 @@ table { border-collapse: collapse; width: 100%; }
   text-transform: uppercase;
   white-space: nowrap;
 }
-.document-title .doc-sub {
+.sheet-doc .document-title .doc-sub {
   margin: 1.5pt 0 0;
   color: #4b5563;
   font-size: 6.5pt;
@@ -102,13 +108,13 @@ table { border-collapse: collapse; width: 100%; }
 }
 
 /* ---------- customer fields ---------- */
-.top-fields { margin-top: 4pt; }
-.top-fields td { vertical-align: top; padding: 0 5pt 0 0; }
-.top-fields td.f-customer { width: 40%; }
-.top-fields td.f-invoice-date { width: 17%; }
-.top-fields td.f-due-date { width: 17%; }
-.top-fields td.f-unit { width: 26%; padding-right: 0; }
-.field-label {
+.sheet-doc .top-fields { margin-top: 4pt; }
+.sheet-doc .top-fields td { vertical-align: top; padding: 0 5pt 0 0; }
+.sheet-doc .top-fields td.f-customer { width: 40%; }
+.sheet-doc .top-fields td.f-invoice-date { width: 17%; }
+.sheet-doc .top-fields td.f-due-date { width: 17%; }
+.sheet-doc .top-fields td.f-unit { width: 26%; padding-right: 0; }
+.sheet-doc .field-label {
   display: block;
   margin: 0 0 1.5pt;
   color: #4b5563;
@@ -118,23 +124,23 @@ table { border-collapse: collapse; width: 100%; }
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.field-box {
+.sheet-doc .field-box {
   height: 14pt;
   border: 0.6pt solid #6b7280;
   background: #ffffff;
 }
-.complaint-field { margin-top: 4pt; }
-.complaint-box {
+.sheet-doc .complaint-field { margin-top: 4pt; }
+.sheet-doc .complaint-box {
   height: 18pt;
   border: 0.6pt solid #6b7280;
   background: #ffffff;
 }
 
 /* ---------- catalog grid (one flat table, two column groups) ---------- */
-.catalog-grid { margin-top: 6pt; }
-.catalog-grid thead { display: table-header-group; }
-.catalog-grid td,
-.catalog-grid th {
+.sheet-doc .catalog-grid { margin-top: 6pt; }
+.sheet-doc .catalog-grid thead { display: table-header-group; }
+.sheet-doc .catalog-grid td,
+.sheet-doc .catalog-grid th {
   padding: 0.8pt 3pt;
   vertical-align: middle;
   font-size: 7.4pt;
@@ -143,13 +149,13 @@ table { border-collapse: collapse; width: 100%; }
 
 /* Column widths live on the cells: DomPDF ignores <col> and only records a
    width when colspan is 1. */
-.check-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.check}; }
-.service-name { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.name}; }
-.price-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.price}; }
-.new-price-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.newPrice}; }
-.grid-gap { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.gap}; }
+.sheet-doc .check-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.check}; }
+.sheet-doc .service-name { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.name}; }
+.sheet-doc .price-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.price}; }
+.sheet-doc .new-price-cell { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.newPrice}; }
+.sheet-doc .grid-gap { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.gap}; }
 
-.catalog-grid th {
+.sheet-doc .catalog-grid th {
   border-bottom: 0.8pt solid #111111;
   padding-top: 0;
   padding-bottom: 1.5pt;
@@ -160,23 +166,23 @@ table { border-collapse: collapse; width: 100%; }
   text-transform: uppercase;
   text-align: left;
 }
-.catalog-grid th.price-cell,
-.catalog-grid th.new-price-cell { text-align: center; }
-.catalog-grid th.grid-gap { border-bottom: 0; }
+.sheet-doc .catalog-grid th.price-cell,
+.sheet-doc .catalog-grid th.new-price-cell { text-align: center; }
+.sheet-doc .catalog-grid th.grid-gap { border-bottom: 0; }
 
 /* Group box: side rails on the outer cells, hairlines between lines. */
-.catalog-grid td.check-cell { border-left: 0.6pt solid #9ca3af; }
-.catalog-grid td.price-cell,
-.catalog-grid td.new-price-cell { border-left: 0.6pt solid #9ca3af; }
-.catalog-grid td.new-price-cell { border-right: 0.6pt solid #9ca3af; }
-.catalog-grid tbody td { border-bottom: 0.4pt solid #d7dbe0; }
-.catalog-grid td.group-end { border-bottom: 0.6pt solid #9ca3af; }
-.catalog-grid td.grid-gap,
-.catalog-grid td.void-cell {
+.sheet-doc .catalog-grid td.check-cell { border-left: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid td.price-cell,
+.sheet-doc .catalog-grid td.new-price-cell { border-left: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid td.new-price-cell { border-right: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid tbody td { border-bottom: 0.4pt solid #d7dbe0; }
+.sheet-doc .catalog-grid td.group-end { border-bottom: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid td.grid-gap,
+.sheet-doc .catalog-grid td.void-cell {
   border: 0;
   background: #ffffff;
 }
-.category-title {
+.sheet-doc .category-title {
   border-top: 0.6pt solid #9ca3af;
   border-bottom: 0.6pt solid #9ca3af;
   border-left: 0.6pt solid #9ca3af;
@@ -187,32 +193,32 @@ table { border-collapse: collapse; width: 100%; }
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.check-cell {
+.sheet-doc .check-cell {
   text-align: center;
   padding-left: 1.5pt;
   padding-right: 1.5pt;
 }
-.checkbox {
+.sheet-doc .checkbox {
   display: inline-block;
   width: 6.5pt;
   height: 6.5pt;
   border: 0.7pt solid #374151;
   vertical-align: middle;
 }
-.service-name { color: #111111; }
-.service-subtext {
+.sheet-doc .service-name { color: #111111; }
+.sheet-doc .service-subtext {
   display: block;
   margin: 0;
   color: #6b7280;
   font-size: 5.8pt;
   line-height: 1.05;
 }
-.price-cell {
+.sheet-doc .price-cell {
   text-align: right;
   font-weight: 700;
   white-space: nowrap;
 }
-.empty-sheet {
+.sheet-doc .empty-sheet {
   margin-top: 10pt;
   padding: 8pt;
   border: 0.6pt dashed #9ca3af;
@@ -222,7 +228,7 @@ table { border-collapse: collapse; width: 100%; }
 }
 
 /* ---------- back page ---------- */
-.back-title {
+.sheet-doc .back-title {
   margin: 6pt 0 2pt;
   font-size: 9pt;
   line-height: 1.2;
@@ -230,19 +236,19 @@ table { border-collapse: collapse; width: 100%; }
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.back-help {
+.sheet-doc .back-help {
   margin: 0 0 5pt;
   color: #4b5563;
   font-size: 7pt;
   line-height: 1.3;
 }
-.blank-work-table th,
-.blank-work-table td {
+.sheet-doc .blank-work-table th,
+.sheet-doc .blank-work-table td {
   border: 0.6pt solid #9ca3af;
   padding: 0;
   vertical-align: middle;
 }
-.blank-work-table th {
+.sheet-doc .blank-work-table th {
   background: #f3f4f6;
   color: #374151;
   font-size: 7pt;
@@ -253,21 +259,21 @@ table { border-collapse: collapse; width: 100%; }
   padding: 3pt 4pt;
   text-align: left;
 }
-.blank-work-table th.w-desc,
-.blank-work-table td.w-desc { width: 60%; }
-.blank-work-table th.w-qty,
-.blank-work-table td.w-qty { width: 18%; text-align: center; }
-.blank-work-table th.w-total,
-.blank-work-table td.w-total { width: 22%; text-align: center; }
-.blank-work-table td { height: 20pt; }
-.sign-row { margin-top: 8pt; }
-.sign-row td {
+.sheet-doc .blank-work-table th.w-desc,
+.sheet-doc .blank-work-table td.w-desc { width: 60%; }
+.sheet-doc .blank-work-table th.w-qty,
+.sheet-doc .blank-work-table td.w-qty { width: 18%; text-align: center; }
+.sheet-doc .blank-work-table th.w-total,
+.sheet-doc .blank-work-table td.w-total { width: 22%; text-align: center; }
+.sheet-doc .blank-work-table td { height: 20pt; }
+.sheet-doc .sign-row { margin-top: 8pt; }
+.sheet-doc .sign-row td {
   vertical-align: bottom;
   padding: 14pt 0 0;
 }
-.sign-row td.sign-left { width: 55%; padding-right: 24pt; }
-.sign-row td.sign-right { width: 45%; }
-.sign-line {
+.sheet-doc .sign-row td.sign-left { width: 55%; padding-right: 24pt; }
+.sheet-doc .sign-row td.sign-right { width: 45%; }
+.sheet-doc .sign-line {
   border-top: 0.8pt solid #111111;
   padding-top: 3pt;
   color: #4b5563;
@@ -276,29 +282,35 @@ table { border-collapse: collapse; width: 100%; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+`
+
+/** Letter page box for DomPDF. Never include @page in browser-injected CSS. */
+export const SERVICE_LOG_SHEET_PAGE_CSS = `
 @page {
   size: Letter portrait;
   margin: ${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in;
 }
 `
 
+/** Full stylesheet shipped inside the PDF HTML. */
+export const SERVICE_LOG_SHEET_PDF_CSS =
+  `${SERVICE_LOG_SHEET_PAGE_CSS}${SERVICE_LOG_SHEET_DOCUMENT_CSS}`
+
 /**
- * Browser-only paper chrome for the WYSIWYG editor.
- * Never include this in DomPDF HTML.
+ * Browser-only paper chrome for the WYSIWYG editor: turns the two page divs into
+ * real 8.5x11in sheets. Never include this in DomPDF HTML.
  */
 export const SERVICE_LOG_SHEET_EDITOR_CHROME_CSS = `
-.page {
+.sheet-doc .page {
   width: 8.5in;
   height: 11in;
-  margin: 0 auto;
   padding: ${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in;
-  box-sizing: border-box;
   background: #ffffff;
   box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
 }
 /* Form controls must not add intrinsic width, or the browser's auto table
    layout stops honouring the percentage column widths DomPDF uses. */
-.page input {
+.sheet-doc .page input {
   min-width: 0;
   max-width: 100%;
 }
