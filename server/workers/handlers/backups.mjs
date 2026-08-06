@@ -4,6 +4,7 @@ import { zstdCompressSync } from 'node:zlib'
 import { decryptBuffer, encryptBuffer, sha256Hex } from '../lib/encryption.mjs'
 import { getDatabaseUrl } from '../../lib/runtime-config.mjs'
 import { buildBackupNotificationEmail } from '../../mail/templates/system.mjs'
+import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 
 function workerAppUrl() {
   return process.env.APP_URL?.trim() || ''
@@ -171,6 +172,7 @@ async function queueNotification(pool, opts) {
   const to = defaultNotifyEmail(rows[0]?.notify_email)
   if (!to) return
 
+  const templateOverride = await loadActiveEmailTemplateContent(pool, 'backup_notification')
   const mail = buildBackupNotificationEmail({
     success: opts.success,
     filename: opts.filename,
@@ -178,6 +180,7 @@ async function queueNotification(pool, opts) {
     driveFileId: opts.driveFileId,
     error: opts.error,
     appUrl: workerAppUrl(),
+    templateOverride,
   })
 
   await pool.query(

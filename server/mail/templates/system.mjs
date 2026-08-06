@@ -7,6 +7,12 @@ import {
   emailQuotedMessage,
   escapeHtml,
 } from '../email-layout.mjs'
+import { applyEmailTemplateOverride } from '../email-template-override.mjs'
+
+function styledEmail(opts) {
+  const { templateOverride = null, templateVars = {}, ...rest } = opts || {}
+  return buildStyledEmail(applyEmailTemplateOverride(rest, templateOverride, templateVars))
+}
 
 function brandNameFrom(opts) {
   return opts?.brand?.brandName || opts?.brandName || EMAIL_BRAND_NAME
@@ -38,7 +44,9 @@ function senderFirstName(fullName) {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
 }
 
-export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUrl, brand }) {
+export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUrl, brand,
+  templateOverride,
+}) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const subject = 'Verify Your Email'
   const text = [
@@ -50,7 +58,7 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
     'The link expires in 24 hours. After verification an administrator must approve your account.',
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Account verification',
@@ -67,10 +75,14 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
     primaryAction: { href: verifyUrl, label: 'Verify email address' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, verifyUrl },
+})
 }
 
-export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, brand }) {
+export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, brand,
+  templateOverride,
+}) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const subject = 'Reset Your Password'
   const text = [
@@ -82,7 +94,7 @@ export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, bra
     'The link expires in 1 hour. If you did not request this, you can ignore this email.',
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Password reset',
@@ -99,7 +111,9 @@ export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, bra
     primaryAction: { href: resetUrl, label: 'Reset password' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, resetUrl },
+})
 }
 
 export function buildOutsideGeofenceVerificationEmail({
@@ -110,6 +124,7 @@ export function buildOutsideGeofenceVerificationEmail({
   brandName,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const subject = 'Verify Suspicious Location Access'
@@ -128,7 +143,7 @@ export function buildOutsideGeofenceVerificationEmail({
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
   const verifyUrl = base ? `${base}/auth/verify-location` : undefined
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Security verification',
@@ -155,7 +170,9 @@ export function buildOutsideGeofenceVerificationEmail({
       : undefined,
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, code, locationLabel, ipAddress },
+})
 }
 
 export function buildSmtpTestEmail({
@@ -165,6 +182,7 @@ export function buildSmtpTestEmail({
   sentAt,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const subject = 'SMTP Test Successful'
@@ -175,7 +193,7 @@ export function buildSmtpTestEmail({
     'If you received this, SMTP is configured correctly.',
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'System test',
@@ -192,10 +210,14 @@ export function buildSmtpTestEmail({
     },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { brandName: resolvedBrand, source, actorName, sentAt },
+})
 }
 
-export function buildPortalCredentialEmail({ name, username, tempPassword, appUrl, brand }) {
+export function buildPortalCredentialEmail({ name, username, tempPassword, appUrl, brand,
+  templateOverride,
+}) {
   const resolvedBrand = brandNameFrom({ brand })
   const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login`
   const subject = 'Your Portal Access'
@@ -211,7 +233,7 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
     'This temporary password expires in 7 days. You will be required to choose a new password on first login.',
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Portal access',
@@ -230,10 +252,14 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
     primaryAction: { href: loginUrl, label: 'Sign in to the portal' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, username, tempPassword },
+})
 }
 
-export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand }) {
+export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand,
+  templateOverride,
+}) {
   const resolvedBrand = brandNameFrom({ brand })
   const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login?card=staff`
   const subject = `You're invited to ${resolvedBrand}`
@@ -250,7 +276,7 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
     'This temporary password expires in 7 days.',
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Staff invite',
@@ -268,7 +294,9 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
     primaryAction: { href: loginUrl, label: 'Sign in to staff workspace' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, email, tempPassword },
+})
 }
 
 export function buildBackupNotificationEmail({
@@ -279,6 +307,7 @@ export function buildBackupNotificationEmail({
   error,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = success
     ? `Backup Completed — ${filename}`
@@ -294,7 +323,7 @@ export function buildBackupNotificationEmail({
   if (error) lines.push(`Error: ${error}`)
   lines.push('', `Time: ${when}`)
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text: lines.join('\n'),
     eyebrow: 'Backup',
@@ -322,7 +351,9 @@ export function buildBackupNotificationEmail({
       : undefined,
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { filename, trigger, statusWord: success ? 'Completed' : 'Failed', statusWordLower: success ? 'completed' : 'failed', leadMessage: success ? 'An encrypted database backup completed successfully.' : 'An encrypted database backup failed. Review the control panel for details.', noteBody: error || '' },
+})
 }
 
 export function buildInvoiceAttachedEmail({
@@ -332,6 +363,7 @@ export function buildInvoiceAttachedEmail({
   total,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const dueLine = dueDate || null
   const totalLine = formatMoneyForDisplay(total)
@@ -344,7 +376,7 @@ export function buildInvoiceAttachedEmail({
     totalLine ? `Total: ${totalLine}` : '',
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Invoice',
@@ -370,7 +402,9 @@ export function buildInvoiceAttachedEmail({
     },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, invoiceNumber, dueDate: dueLine || '', total: totalLine || '' },
+})
 }
 
 export function buildLoginNotificationEmail({
@@ -387,6 +421,7 @@ export function buildLoginNotificationEmail({
   appUrl,
   brandName,
   brand,
+  templateOverride,
 }) {
   const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
   const when = signedInAt
@@ -416,7 +451,7 @@ export function buildLoginNotificationEmail({
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
   const loginUrl = `${base}${portal === 'customer' ? '/auth/login?portal=customer' : '/auth/login'}`
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Sign-in alert',
@@ -442,7 +477,9 @@ export function buildLoginNotificationEmail({
     },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, email, when, ipAddress, device: deviceLabel },
+})
 }
 
 export function buildCustomerAutoResponderEmail({
@@ -451,6 +488,7 @@ export function buildCustomerAutoResponderEmail({
   message,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const resolvedBrand = brandNameFrom({ brand })
   const greeting = recipientName?.trim() ? `Hi ${recipientName.trim()},` : 'Hello,'
@@ -463,7 +501,7 @@ export function buildCustomerAutoResponderEmail({
     .join('')
   const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Message received',
@@ -478,7 +516,9 @@ export function buildCustomerAutoResponderEmail({
     footerLinks: false,
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, brandName: resolvedBrand, subject },
+})
 }
 
 export function buildDeletionRequestSubmittedEmail({
@@ -490,6 +530,7 @@ export function buildDeletionRequestSubmittedEmail({
   reviewUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = `Deletion Request Pending — ${entityLabel}`
   const text = [
@@ -502,7 +543,7 @@ export function buildDeletionRequestSubmittedEmail({
     `Review: ${reviewUrl}`,
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Deletion request',
@@ -518,7 +559,9 @@ export function buildDeletionRequestSubmittedEmail({
     primaryAction: { href: reviewUrl, label: 'Review request' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { reviewerName, submitterName, entityTypeLabel, entityTypeLabelLower: entityTypeLabel.toLowerCase(), entityLabel, reason },
+})
 }
 
 export function buildDeletionRequestResultEmail({
@@ -530,6 +573,7 @@ export function buildDeletionRequestResultEmail({
   reviewedByName,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const approved = status === 'approved'
   const statusLabel = approved ? 'approved' : 'denied'
@@ -544,7 +588,7 @@ export function buildDeletionRequestResultEmail({
 
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Deletion request',
@@ -570,7 +614,9 @@ export function buildDeletionRequestResultEmail({
       : undefined,
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { requestorName, statusLabel, statusLabelTitle: titleCaseStatus(statusLabel), entityTypeLabel, entityTypeLabelLower: entityTypeLabel.toLowerCase(), entityLabel, reviewReason, reviewedByName },
+})
 }
 
 export function buildUserSignupPendingEmail({
@@ -580,6 +626,7 @@ export function buildUserSignupPendingEmail({
   usersUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = `New User Awaiting Approval — ${userName}`
   const text = [
@@ -590,7 +637,7 @@ export function buildUserSignupPendingEmail({
     `Review users: ${usersUrl}`,
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'User approval',
@@ -605,7 +652,9 @@ export function buildUserSignupPendingEmail({
     primaryAction: { href: usersUrl, label: 'Review users' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { adminName, userName, userEmail },
+})
 }
 
 export function buildInvoicePendingApprovalEmail({
@@ -616,6 +665,7 @@ export function buildInvoicePendingApprovalEmail({
   invoiceUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = `Invoice Pending Approval — ${invoiceNumber}`
   const totalLine = formatMoneyForDisplay(total)
@@ -628,7 +678,7 @@ export function buildInvoicePendingApprovalEmail({
     `Review: ${invoiceUrl}`,
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Invoice approval',
@@ -650,7 +700,9 @@ export function buildInvoicePendingApprovalEmail({
     primaryAction: { href: invoiceUrl, label: 'Review invoice' },
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { approverName, invoiceNumber, customerName, total: totalLine || '' },
+})
 }
 
 function truncateEmailNote(text, max = 1200) {
@@ -670,6 +722,7 @@ export function buildCustomerServiceRequestStaffEmail({
   detailUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = `Customer Service Request — ${customerName}`
   const text = [
@@ -688,7 +741,7 @@ export function buildCustomerServiceRequestStaffEmail({
     `Open in DORINC: ${detailUrl}`,
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Portal request',
@@ -707,7 +760,9 @@ export function buildCustomerServiceRequestStaffEmail({
     footerNote: 'You received this because a customer submitted a service request in the portal.',
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, customerName, vehicleUnit, serviceCategory, urgency, message },
+})
 }
 
 export function buildCustomerChangeRequestStaffEmail({
@@ -721,6 +776,7 @@ export function buildCustomerChangeRequestStaffEmail({
   detailUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = `Customer Change Request — ${customerName}`
   const text = [
@@ -738,7 +794,7 @@ export function buildCustomerChangeRequestStaffEmail({
     `Review in DORINC: ${detailUrl}`,
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Portal request',
@@ -757,7 +813,9 @@ export function buildCustomerChangeRequestStaffEmail({
     footerNote: 'You received this because a customer submitted a change request in the portal.',
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, customerName, requestKindLabel, requestKindLabelLower: requestKindLabel.toLowerCase(), topic, message },
+})
 }
 
 export function buildCustomerEmailReceivedStaffEmail({
@@ -769,6 +827,7 @@ export function buildCustomerEmailReceivedStaffEmail({
   messagesUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const headline = `${customerName} Sent A Message`
   const mailSubject = subject?.trim()
@@ -788,7 +847,7 @@ export function buildCustomerEmailReceivedStaffEmail({
     `Open Messages to reply: ${messagesUrl}`,
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject: mailSubject,
     text,
     eyebrow: 'Customer email',
@@ -804,7 +863,9 @@ export function buildCustomerEmailReceivedStaffEmail({
     footerNote: 'You received this because a customer email was synced into Messages. Sign in to reply.',
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, customerName, customerEmail, subject },
+})
 }
 
 export function buildChatMessageReceivedEmail({
@@ -816,6 +877,7 @@ export function buildChatMessageReceivedEmail({
   appUrl,
   brand,
   isTeamChat = false,
+  templateOverride,
 }) {
   const subject = isTeamChat
     ? `${senderFirstName(senderName)} Sent A Team Message`
@@ -830,7 +892,7 @@ export function buildChatMessageReceivedEmail({
     `Open Messages: ${messagesUrl}`,
   ].join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Team chat',
@@ -847,7 +909,9 @@ export function buildChatMessageReceivedEmail({
     footerNote: 'You received this because chat email notifications are enabled on your account.',
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, senderName, channelLabel, messagePreview },
+})
 }
 
 export function buildServiceLogSentToInvoiceStaffEmail({
@@ -862,6 +926,7 @@ export function buildServiceLogSentToInvoiceStaffEmail({
   serviceLogUrl,
   appUrl,
   brand,
+  templateOverride,
 }) {
   const subject = invoiceNumber
     ? `Invoice needs to be completed — ${invoiceNumber} (${serviceLogLabel})`
@@ -881,7 +946,7 @@ export function buildServiceLogSentToInvoiceStaffEmail({
     `Service log: ${serviceLogUrl}`,
   ].filter(Boolean).join('\n')
 
-  return buildStyledEmail({
+  return styledEmail({
     subject,
     text,
     eyebrow: 'Draft invoice',
@@ -908,5 +973,7 @@ export function buildServiceLogSentToInvoiceStaffEmail({
     footerNote: 'You received this because a service log was sent to invoice and needs billing completed.',
     appUrl,
     brand,
-  })
+    templateOverride,
+    templateVars: { recipientName, senderName, serviceLogLabel, customerName, vehicleUnit, invoiceNumber },
+})
 }

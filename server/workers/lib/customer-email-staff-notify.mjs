@@ -1,5 +1,6 @@
 // Notify all team members when a customer email is synced into Messages (worker path).
 import { buildCustomerEmailReceivedStaffEmail } from '../../mail/templates/system.mjs'
+import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 
 const NOTIFICATION_SETTINGS_KEY = 'workspace.notification_settings'
 
@@ -93,6 +94,7 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
     return { queued: 0, reason: 'no_recipients' }
   }
 
+  const templateOverride = await loadActiveEmailTemplateContent(pool, 'customer_email_received_staff')
   let queued = 0
   for (const recipient of recipients) {
     const mail = buildCustomerEmailReceivedStaffEmail({
@@ -104,6 +106,7 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
       messagesUrl,
       appUrl: brand.appUrl,
       brand,
+      templateOverride,
     })
 
     await pool.query(

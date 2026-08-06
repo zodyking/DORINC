@@ -18,6 +18,7 @@ export function helpPageKeyFromRoute(path: string, query?: Record<string, unknow
   if (path.startsWith('/admin') && query?.tab === 'designer') return 'designer'
   if (path.startsWith('/admin')) return 'admin'
   if (path.startsWith('/system-logs')) return 'audit'
+  if (path.startsWith('/templates/email')) return 'admin'
   if (path.startsWith('/templates/designer')) return 'designer'
   if (path.startsWith('/account')) return 'account'
   return 'default'
