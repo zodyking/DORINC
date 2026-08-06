@@ -11,7 +11,6 @@ interface PendingAnnouncement {
   bodyHtml: string
   heroImageFileId: string | null
   heroImageUrl: string | null
-  ctaButtons: Array<{ label: string, href: string, variant?: 'primary' | 'secondary' | 'ghost' }>
   index: number
   total: number
 }
@@ -100,7 +99,6 @@ onMounted(() => {
       :subtitle="current.subtitle"
       :body-html="current.bodyHtml"
       :hero-image-url="current.heroImageUrl"
-      :cta-buttons="current.ctaButtons"
       :index="current.index"
       :total="current.total"
       :continue-label="continueLabel"

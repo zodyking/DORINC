@@ -55,6 +55,12 @@ describe('announcement gate matching', () => {
     expect(isAnnouncementInWindow({
       endsAt: '2026-08-06T11:00:00.000Z',
     }, now)).toBe(false)
+
+    // Open-ended active windows stay eligible across the schedule.
+    expect(isAnnouncementInWindow({
+      startsAt: '2026-08-01T00:00:00.000Z',
+      endsAt: null,
+    }, now)).toBe(true)
   })
 })
 
