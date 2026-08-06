@@ -7,7 +7,10 @@ import {
   type ServiceLogSheetDocument,
   type ServiceLogSheetSection,
 } from '../../shared/service-log-sheet-default'
-import { SERVICE_LOG_SHEET_CSS } from '../../shared/service-log-sheet-styles'
+import {
+  SERVICE_LOG_SHEET_CSS,
+  SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
+} from '../../shared/service-log-sheet-styles'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
 import {
   getBusinessProfile,
@@ -201,6 +204,31 @@ function renderColumnHtml(sections: ServiceLogSheetSection[], showHeaderOnFirst:
   ).join('\n')
 }
 
+const BLANK_WORK_ROWS = 24
+
+function renderBlankWorkRows(count: number): string {
+  return Array.from({ length: count }, () => `<tr>
+      <td class="desc">&nbsp;</td>
+      <td class="qty">&nbsp;</td>
+      <td class="total">&nbsp;</td>
+    </tr>`).join('\n')
+}
+
+function renderSheetHeaderHtml(businessName: string, companyDetails: string): string {
+  return `<table class="header">
+      <tr>
+        <td>
+          <h2 class="company-name">${businessName}</h2>
+          <div class="company-details">${companyDetails}</div>
+        </td>
+        <td class="document-title">
+          <h1>Service Log Sheet</h1>
+          <p>Blank field log and work authorization</p>
+        </td>
+      </tr>
+    </table>`
+}
+
 export function renderServiceLogSheetHtml(
   payload: ServiceLogSheetPayload,
   _options: { forPdf?: boolean } = {},
@@ -225,28 +253,19 @@ export function renderServiceLogSheetHtml(
     </table>`
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Service Log Sheet to add categories and services.</div>`
 
+  const header = renderSheetHeaderHtml(title, companyDetails)
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${title} Service Catalog</title>
+  <title>${title} Service Log Sheet</title>
   <style>${SERVICE_LOG_SHEET_CSS}</style>
 </head>
 <body>
-  <main class="page">
-    <table class="header">
-      <tr>
-        <td>
-          <h2 class="company-name">${title}</h2>
-          <div class="company-details">${companyDetails}</div>
-        </td>
-        <td class="document-title">
-          <h1>Service Catalog</h1>
-          <p>Repair service pricing and work authorization</p>
-        </td>
-      </tr>
-    </table>
+  <main class="page page-front">
+    ${header}
 
     <table class="top-fields">
       <tr>
@@ -276,6 +295,29 @@ export function renderServiceLogSheetHtml(
 
     ${catalogBody}
   </main>
+
+  <main class="page page-back">
+    ${header}
+    <h2 class="back-title">Additional / Custom Work</h2>
+    <p class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</p>
+    <table class="blank-work-table">
+      <colgroup>
+        <col class="desc">
+        <col class="qty">
+        <col class="total">
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="desc">Service Description</th>
+          <th class="qty">Quantity</th>
+          <th class="total">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${renderBlankWorkRows(BLANK_WORK_ROWS)}
+      </tbody>
+    </table>
+  </main>
 </body>
 </html>`
 }
@@ -283,9 +325,10 @@ export function renderServiceLogSheetHtml(
 export async function renderServiceLogSheetPdf(db: Db): Promise<Buffer> {
   const payload = await getServiceLogSheetPayload(db)
   const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+  const m = SERVICE_LOG_SHEET_PAGE_MARGIN_IN
   return renderHtmlPdfBuffer(html, {
     paper: 'letter',
-    margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    margins: { top: m, right: m, bottom: m, left: m },
   })
 }
 

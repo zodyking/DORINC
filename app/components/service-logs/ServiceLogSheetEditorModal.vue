@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
-import { SERVICE_LOG_SHEET_CSS } from '#shared/service-log-sheet-styles'
+import {
+  SERVICE_LOG_SHEET_CSS,
+  SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
+} from '#shared/service-log-sheet-styles'
 import type {
   ServiceLogSheetDocument,
   ServiceLogSheetLine,
@@ -48,6 +51,22 @@ const stageRef = ref<HTMLElement | null>(null)
 const scale = ref(1)
 const STYLE_ID = 'sl-sheet-wysiwyg-css'
 const EDIT_CSS = `
+.sl-wysiwyg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+}
+.sl-paper-edit.page {
+  width: 8.5in !important;
+  height: 11in !important;
+  max-height: 11in !important;
+  padding: ${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  background: #fff !important;
+  box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
+}
 .sl-paper-edit .category { position: relative; }
 .sl-paper-edit .category.is-selected { outline: 2px solid #6366f1; outline-offset: 1px; }
 .sl-paper-edit .service-table tr.is-selected td { background: #eef2ff; }
@@ -57,11 +76,11 @@ const EDIT_CSS = `
 }
 .sl-paper-edit .sheet-input:focus { outline: 1px solid #6366f1; background: #fff; }
 .sl-paper-edit .category-title .sheet-input {
-  font-size: 7px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 9px;
+  font-size: 6.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; line-height: 8px;
 }
-.sl-paper-edit .service-name .sheet-input { font-size: 6.8px; font-weight: 600; line-height: 8.5px; }
-.sl-paper-edit .service-subtext .sheet-input { font-size: 6px; font-weight: 400; color: #6b7280; line-height: 7.5px; }
-.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 6.2px; font-weight: 700; }
+.sl-paper-edit .service-name .sheet-input { font-size: 6.4px; font-weight: 600; line-height: 8px; }
+.sl-paper-edit .service-subtext .sheet-input { font-size: 5.5px; font-weight: 400; color: #6b7280; line-height: 7px; }
+.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 5.8px; font-weight: 700; }
 .sl-paper-edit .sec-tools, .sl-paper-edit .row-tools { display: none; gap: 2px; position: absolute; z-index: 2; }
 .sl-paper-edit .category.is-selected .sec-tools,
 .sl-paper-edit .category:hover .sec-tools { display: flex; top: -18px; right: 0; }
@@ -73,10 +92,6 @@ const EDIT_CSS = `
   border-radius: 4px; font-size: 9px; line-height: 1; padding: 2px 4px; cursor: pointer;
 }
 .sl-paper-edit .mini.danger { color: #dc2626; border-color: #fecaca; }
-.sl-paper-edit .col-add {
-  margin-top: 2px; width: 100%; border: 1px dashed #94a3b8; background: #f8fafc;
-  color: #475569; font-size: 8px; font-weight: 700; padding: 4px; cursor: pointer;
-}
 `
 
 function mountSheetStyles() {
@@ -125,15 +140,16 @@ function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}`
 }
 
+const blankWorkRows = Array.from({ length: 24 }, (_, i) => i)
+
 function updateScale() {
   const stage = stageRef.value
   if (!stage) return
   const pad = 32
   const availW = Math.max(280, stage.clientWidth - pad)
-  const availH = Math.max(320, stage.clientHeight - pad)
+  // Scale to fit width primarily; user can scroll for the second page.
   const pageW = 8.5 * 96
-  const pageH = 11 * 96
-  scale.value = Math.min(1, availW / pageW, availH / pageH)
+  scale.value = Math.min(1, availW / pageW)
 }
 
 async function load() {
@@ -411,7 +427,8 @@ function onScrimClick(e: MouseEvent) {
       <div v-else-if="sheetDoc && business" class="sl-wysiwyg-body">
         <div ref="stageRef" class="sl-wysiwyg-stage">
           <div class="sl-wysiwyg-scale" :style="{ transform: `scale(${scale})` }">
-            <main class="page sl-paper-edit" aria-label="Letter service log sheet">
+            <div class="sl-wysiwyg-stack">
+            <main class="page page-front sl-paper-edit" aria-label="Service log sheet front">
               <table class="header">
                 <tr>
                   <td>
@@ -419,8 +436,8 @@ function onScrimClick(e: MouseEvent) {
                     <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
                   </td>
                   <td class="document-title">
-                    <h1>Service Catalog</h1>
-                    <p>Repair service pricing and work authorization</p>
+                    <h1>Service Log Sheet</h1>
+                    <p>Blank field log and work authorization</p>
                   </td>
                 </tr>
               </table>
@@ -581,6 +598,45 @@ function onScrimClick(e: MouseEvent) {
                 </tr>
               </table>
             </main>
+
+            <main class="page page-back sl-paper-edit" aria-label="Service log sheet back">
+              <table class="header">
+                <tr>
+                  <td>
+                    <h2 class="company-name">{{ business.businessName }}</h2>
+                    <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
+                  </td>
+                  <td class="document-title">
+                    <h1>Service Log Sheet</h1>
+                    <p>Blank field log and work authorization</p>
+                  </td>
+                </tr>
+              </table>
+              <h2 class="back-title">Additional / Custom Work</h2>
+              <p class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</p>
+              <table class="blank-work-table">
+                <colgroup>
+                  <col class="desc">
+                  <col class="qty">
+                  <col class="total">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="desc">Service Description</th>
+                    <th class="qty">Quantity</th>
+                    <th class="total">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in blankWorkRows" :key="row">
+                    <td class="desc">&nbsp;</td>
+                    <td class="qty">&nbsp;</td>
+                    <td class="total">&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </main>
+            </div>
           </div>
         </div>
 
@@ -676,9 +732,7 @@ function onScrimClick(e: MouseEvent) {
 }
 .sl-wysiwyg-scale {
   width: 8.5in;
-  height: 11in;
   transform-origin: top center;
-  box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
 }
 .sl-wysiwyg-catalog {
   border-left: 1px solid #cbd5e1;
