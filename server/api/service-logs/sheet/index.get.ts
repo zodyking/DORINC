@@ -4,10 +4,7 @@ import { apiError } from '../../../utils/api-error'
 import { hasPermission } from '../../../utils/require-permission'
 import type { AuthContext } from '../../../utils/require-permission'
 
-/**
- * Sheet editor payload: catalog items + inclusion flags + business header.
- * Readable by catalog managers (edit) and anyone who can print service logs.
- */
+/** Sheet document + catalog picks for the rich editor / print payload. */
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as AuthContext | undefined
   if (!auth?.user) throw apiError(event, 'UNAUTHENTICATED', 'Authentication required')

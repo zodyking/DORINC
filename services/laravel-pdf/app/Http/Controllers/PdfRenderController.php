@@ -30,6 +30,50 @@ class PdfRenderController extends Controller
         return $this->renderDocument($request, 'estimate', 'html');
     }
 
+    /** Render a pre-built HTML document to PDF (service log sheet, etc.). */
+    public function rawHtml(Request $request): Response
+    {
+        try {
+            $validated = $request->validate([
+                'html' => 'required|string|max:2000000',
+                'options' => 'sometimes|array',
+                'options.paper' => 'sometimes|string',
+                'options.margins' => 'sometimes|array',
+                'options.margins.top' => 'sometimes|numeric',
+                'options.margins.right' => 'sometimes|numeric',
+                'options.margins.bottom' => 'sometimes|numeric',
+                'options.margins.left' => 'sometimes|numeric',
+            ]);
+
+            $options = $validated['options'] ?? [];
+            $paper = $this->normalizePaper(is_string($options['paper'] ?? null) ? $options['paper'] : 'letter');
+            $margins = $this->resolveMargins(is_array($options['margins'] ?? null) ? $options['margins'] : [
+                'top' => 0,
+                'right' => 0,
+                'bottom' => 0,
+                'left' => 0,
+            ]);
+
+            $html = $this->injectMarginSafetyNet($validated['html'], $margins);
+            $pdf = Pdf::loadHTML($html);
+            $pdf->setPaper($paper, 'portrait');
+
+            return response($pdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="document.pdf"',
+                'X-Powered-By' => 'DORINC-Laravel-DomPDF',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $options
      */

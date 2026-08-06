@@ -1,30 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { serviceLogSheetSettingsSchema } from '../../shared/validators/workspace-settings'
-import { DEFAULT_SERVICE_LOG_SHEET_SETTINGS } from '../../shared/workspace-settings-defaults'
+import {
+  DEFAULT_SERVICE_LOG_SHEET_DOCUMENT,
+  defaultServiceLogSheetDocument,
+} from '../../shared/service-log-sheet-default'
 import {
   formatSheetPrice,
   renderServiceLogSheetHtml,
-  splitCategoriesIntoColumns,
   type ServiceLogSheetPayload,
   __testOnly,
 } from '../../server/services/service-log-sheet.service'
 import { formatSheetPriceDisplay } from '../../app/utils/service-log-sheet-display'
 
-describe('service log sheet settings', () => {
-  it('defaults to all catalog items', () => {
-    const parsed = serviceLogSheetSettingsSchema.parse({})
-    expect(parsed).toEqual(DEFAULT_SERVICE_LOG_SHEET_SETTINGS)
-    expect(parsed.mode).toBe('all')
+describe('service log sheet default template', () => {
+  it('includes the Letter template sections in left and right columns', () => {
+    const doc = defaultServiceLogSheetDocument()
+    expect(doc.version).toBe(2)
+    expect(doc.sections.some(s => s.title === 'Cleaning' && s.column === 'left')).toBe(true)
+    expect(doc.sections.some(s => s.title === 'Battery' && s.column === 'right')).toBe(true)
+    expect(doc.sections.some(s => s.title === 'Inspection' && s.column === 'right')).toBe(true)
+    const steam = doc.sections.flatMap(s => s.items).find(i => i.name === 'Steam Clean Engine')
+    expect(steam?.price).toBe('$35')
+    const turbo = doc.sections.flatMap(s => s.items).find(i => i.subtext === '2004 to 2011')
+    expect(turbo?.price).toBe('$2,950')
   })
 
-  it('accepts selected item ids', () => {
-    const id = '11111111-1111-4111-8111-111111111111'
-    const parsed = serviceLogSheetSettingsSchema.parse({
-      mode: 'selected',
-      itemIds: [id],
-    })
-    expect(parsed.mode).toBe('selected')
-    expect(parsed.itemIds).toEqual([id])
+  it('parses document settings schema', () => {
+    const parsed = serviceLogSheetSettingsSchema.parse(DEFAULT_SERVICE_LOG_SHEET_DOCUMENT)
+    expect(parsed.version).toBe(2)
+    expect(parsed.sections.length).toBeGreaterThan(10)
   })
 })
 
@@ -40,28 +44,9 @@ describe('formatSheetPrice', () => {
   })
 })
 
-describe('splitCategoriesIntoColumns', () => {
-  it('balances categories by item count', () => {
-    const categories = [
-      { id: 'a', name: 'A', sortOrder: 0, items: [{ id: '1', name: 'One', description: null, priceLabel: '$1', itemType: 'labor' }] },
-      { id: 'b', name: 'B', sortOrder: 1, items: [
-        { id: '2', name: 'Two', description: null, priceLabel: '$2', itemType: 'labor' },
-        { id: '3', name: 'Three', description: null, priceLabel: '$3', itemType: 'labor' },
-        { id: '4', name: 'Four', description: null, priceLabel: '$4', itemType: 'labor' },
-      ] },
-      { id: 'c', name: 'C', sortOrder: 2, items: [{ id: '5', name: 'Five', description: null, priceLabel: '$5', itemType: 'labor' }] },
-    ]
-    const [left, right] = splitCategoriesIntoColumns(categories)
-    expect(left.length + right.length).toBe(3)
-    const leftCount = left.reduce((n, c) => n + c.items.length, 0)
-    const rightCount = right.reduce((n, c) => n + c.items.length, 0)
-    expect(Math.abs(leftCount - rightCount)).toBeLessThanOrEqual(2)
-  })
-})
-
 describe('renderServiceLogSheetHtml', () => {
-  const basePayload: ServiceLogSheetPayload = {
-    settings: { mode: 'selected', itemIds: ['1'] },
+  const payload: ServiceLogSheetPayload = {
+    document: defaultServiceLogSheetDocument(),
     business: {
       businessName: 'Devon Onsite Repairs INC',
       phone: '(646) 731-7021',
@@ -69,66 +54,56 @@ describe('renderServiceLogSheetHtml', () => {
       addressLine: '387 Van Siclen Ave, Brooklyn, NY 11207',
     },
     catalogItems: [],
-    categories: [
-      {
-        id: 'cat-1',
-        name: 'Cleaning',
-        sortOrder: 0,
-        items: [
-          {
-            id: '1',
-            name: 'Steam Clean Engine',
-            description: null,
-            priceLabel: '$35',
-            itemType: 'labor',
-          },
-        ],
-      },
-    ],
-    includedCount: 1,
-    totalCatalogCount: 1,
   }
 
-  it('renders company header and service rows', () => {
-    const html = renderServiceLogSheetHtml(basePayload)
+  it('renders Letter two-column template content', () => {
+    const html = renderServiceLogSheetHtml(payload)
     expect(html).toContain('Devon Onsite Repairs INC')
     expect(html).toContain('Steam Clean Engine')
-    expect(html).toContain('$35')
+    expect(html).toContain('Replace Heavy Duty Battery')
+    expect(html).toContain('1000 cranking amps')
+    expect(html).toContain('Inspection Service')
+    expect(html).toContain('$3,750')
+    expect(html).toContain('catalog-grid')
     expect(html).toContain('Customer Complaint or Vehicle Symptoms')
-    expect(html).toContain('autoprint')
+    // DomPDF-friendly table layout (not CSS grid columns)
+    expect(html).toContain('<table class="catalog-grid">')
+  })
+
+  it('places Cleaning on the left and Battery on the right', () => {
+    const html = renderServiceLogSheetHtml(payload)
+    const leftIdx = html.indexOf('Cleaning')
+    const batteryIdx = html.indexOf('Battery')
+    const gridIdx = html.indexOf('catalog-grid')
+    expect(leftIdx).toBeGreaterThan(gridIdx)
+    expect(batteryIdx).toBeGreaterThan(leftIdx)
   })
 
   it('escapes HTML in names', () => {
     const html = renderServiceLogSheetHtml({
-      ...basePayload,
-      business: { ...basePayload.business, businessName: 'A <B> & "C"' },
-      categories: [{
-        id: 'x',
-        name: 'Cat <script>',
-        sortOrder: 0,
-        items: [{
-          id: '1',
-          name: 'Oil & Filter',
-          description: 'Use <OEM>',
-          priceLabel: '$10',
-          itemType: 'part',
+      ...payload,
+      business: { ...payload.business, businessName: 'A <B> & "C"' },
+      document: {
+        version: 2,
+        sections: [{
+          id: 'x',
+          title: 'Cat <script>',
+          column: 'left',
+          items: [{
+            id: '1',
+            name: 'Oil & Filter',
+            subtext: 'Use <OEM>',
+            price: '$10',
+            catalogItemId: null,
+          }],
         }],
-      }],
+      },
     })
     expect(html).toContain('A &lt;B&gt; &amp; &quot;C&quot;')
     expect(html).toContain('Cat &lt;script&gt;')
     expect(html).toContain('Oil &amp; Filter')
     expect(html).toContain('Use &lt;OEM&gt;')
     expect(html).not.toContain('Cat <script>')
-  })
-
-  it('shows empty state when no items included', () => {
-    const html = renderServiceLogSheetHtml({
-      ...basePayload,
-      categories: [],
-      includedCount: 0,
-    })
-    expect(html).toContain('No catalog items are included')
   })
 })
 
@@ -137,5 +112,15 @@ describe('escapeHtml', () => {
     expect(__testOnly.escapeHtml(`<a href="x">O'Brien & Co</a>`)).toBe(
       '&lt;a href=&quot;x&quot;&gt;O&#39;Brien &amp; Co&lt;/a&gt;',
     )
+  })
+})
+
+describe('sectionsByColumn', () => {
+  it('splits left and right sections', () => {
+    const { left, right } = __testOnly.sectionsByColumn(defaultServiceLogSheetDocument())
+    expect(left.every(s => s.column === 'left')).toBe(true)
+    expect(right.every(s => s.column === 'right')).toBe(true)
+    expect(left.length).toBeGreaterThan(0)
+    expect(right.length).toBeGreaterThan(0)
   })
 })

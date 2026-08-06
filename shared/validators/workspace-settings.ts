@@ -37,9 +37,24 @@ export const chatWorkspaceSettingsSchema = z.object({
   directMessagingEnabled: z.boolean().default(false),
 })
 
+export const serviceLogSheetLineSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().min(1).max(200),
+  subtext: z.string().max(200).default(''),
+  price: z.string().max(40).default(''),
+  catalogItemId: z.string().uuid().nullable().optional().default(null),
+})
+
+export const serviceLogSheetSectionSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().min(1).max(120),
+  column: z.enum(['left', 'right']),
+  items: z.array(serviceLogSheetLineSchema).max(200),
+})
+
 export const serviceLogSheetSettingsSchema = z.object({
-  mode: z.enum(['all', 'selected']).default('all'),
-  itemIds: z.array(z.string().uuid()).max(2000).default([]),
+  version: z.literal(2).default(2),
+  sections: z.array(serviceLogSheetSectionSchema).max(80),
 })
 
 export const notificationSettingsSchema = z.object({
