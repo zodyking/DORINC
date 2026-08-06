@@ -240,7 +240,8 @@ describe('system email templates', () => {
     expect(inbound.text).toContain('Sign in to DORINC')
     expect(inbound.text).toContain('Can you confirm the total on the latest invoice?')
     expect(inbound.html).toContain('Fleet Co Sent A Message')
-    expect(inbound.html).toContain('&ldquo;Can you confirm the total on the latest invoice?&rdquo;')
+    expect(inbound.html).toContain('Can you confirm the total on the latest invoice?')
+    expect(inbound.html).toContain('border-left:3px solid #2563eb')
     expect(inbound.html).not.toContain('Notified')
     expect(inbound.html).not.toContain('Customer message')
   })
@@ -257,8 +258,13 @@ describe('system email templates', () => {
       isTeamChat: true,
     })
     expect(mail.subject).toBe('Brandon Sent A Team Message')
-    expect(mail.html).toContain('Team')
-    expect(mail.html).toContain('Open Messages')
+    expect(mail.html).toContain('Team notification')
+    expect(mail.html).toContain('Team message')
+    expect(mail.html).toContain('Open message')
+    expect(mail.html).toContain('Sent to')
+    expect(mail.html).toContain('Brandon K.')
+    expect(mail.html).toContain('display:block;width:100%')
+    expect(mail.html).not.toContain('Accounting workspace')
   })
 
   it('builds direct message chat email with channel subject', () => {
@@ -272,5 +278,51 @@ describe('system email templates', () => {
       brand,
     })
     expect(mail.subject).toBe('Brandon K. — Direct message')
+  })
+
+  it('uses the flat white layout tokens across system templates', () => {
+    const samples = [
+      buildSignupVerificationEmail({ name: 'Alex', verifyUrl: `${appUrl}/v`, appUrl, brand }),
+      buildPortalCredentialEmail({ name: 'Pat', username: 'pat', tempPassword: 'x', appUrl, brand }),
+      buildSmtpTestEmail({ source: 'test', appUrl, brand }),
+      buildBackupNotificationEmail({ success: true, filename: 'b.enc', trigger: 'manual', appUrl, brand }),
+      buildInvoiceAttachedEmail({ recipientName: 'Pat', invoiceNumber: 'INV-1', appUrl, brand }),
+      buildLoginNotificationEmail({
+        name: 'Alex',
+        email: 'a@example.com',
+        portal: 'staff',
+        signedInAt: '2026-07-10T20:00:00.000Z',
+        appUrl,
+        brand,
+      }),
+      buildCustomerServiceRequestStaffEmail({
+        recipientName: 'Alex',
+        customerName: 'Fleet',
+        vehicleUnit: '1',
+        serviceCategory: 'PM',
+        urgency: 'soon',
+        message: 'Check brakes',
+        detailUrl: `${appUrl}/service-logs/1`,
+        appUrl,
+        brand,
+      }),
+      buildChatMessageReceivedEmail({
+        recipientName: 'Pat',
+        senderName: 'Sam',
+        channelLabel: 'Team',
+        messagePreview: 'Hello',
+        messagesUrl: `${appUrl}/messages`,
+        appUrl,
+        brand,
+        isTeamChat: true,
+      }),
+    ]
+    for (const mail of samples) {
+      expect(mail.html).toContain('background:#ffffff')
+      expect(mail.html).toContain('#111827')
+      expect(mail.html).not.toContain('Accounting workspace')
+      expect(mail.html).not.toContain('<img')
+      expect(mail.html).not.toContain('#334155')
+    }
   })
 })

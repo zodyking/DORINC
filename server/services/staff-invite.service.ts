@@ -57,13 +57,16 @@ async function sendInviteEmail(db: Db, input: {
   tempPassword: string
 }) {
   const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'staff_invite')
   const mail = buildStaffInviteEmail({
     name: input.name,
     email: input.email,
     tempPassword: input.tempPassword,
     appUrl: brand?.appUrl || getAppUrl(),
     brand,
+    templateOverride,
   })
 
   await enqueueJob(db, 'email_send', {

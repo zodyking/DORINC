@@ -9,12 +9,12 @@ $muted: #6b7280;
 $faint: #9ca3af;
 $accent: #2563eb;
 $accent-strong: #1d4ed8;
-$accent-soft: #dbe3ee;
-$line: #eef0f3;
+$accent-soft: #eff6ff;
+$line: #e5e7eb;
 $border: #e5e7eb;
-$button-bg: #2563eb;
-$radius: 8px;
-$radius-btn: 7px;
+$button-bg: #111827;
+$radius: 6px;
+$radius-btn: 6px;
 $font: Arial, Helvetica, sans-serif;
 
 .email-body {
@@ -37,27 +37,26 @@ $font: Arial, Helvetica, sans-serif;
   width: 100%;
 }
 
-.mobile-padding {
-  padding-left: 28px;
-  padding-right: 28px;
-}
-
 .button {
-  display: inline-block;
-  padding: 13px 20px;
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
   background: $button-bg;
   color: #ffffff !important;
   border-radius: $radius-btn;
   font-size: 14px;
   font-weight: 700;
   line-height: 18px;
+  text-align: center;
   text-decoration: none;
+  box-sizing: border-box;
 }
 
 .secondary-link {
   font-size: 13px;
   font-weight: 600;
-  color: #4b5563;
+  color: #6b7280;
+  text-decoration: underline;
 }
 
 .data-label {
@@ -68,22 +67,8 @@ $font: Arial, Helvetica, sans-serif;
 
 .data-value {
   color: $ink;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 20px;
-  word-break: break-word;
-}
-
-.detail-label {
-  color: $muted;
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.detail-value {
-  color: $ink;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  line-height: 18px;
   word-break: break-word;
 }

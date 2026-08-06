@@ -75,6 +75,8 @@ export async function notifyChatMessageReceived(
   if (!recipients.length) return { queued: 0 as const }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'chat_message_received')
   const appUrl = brand.appUrl || getAppUrl()
   const base = appUrl.replace(/\/$/, '')
   const messagesUrl = `${base}/messages?conversation=${opts.conversationId}`
@@ -94,6 +96,7 @@ export async function notifyChatMessageReceived(
       appUrl,
       brand,
       isTeamChat: opts.isTeamChat || conversation.type === 'team',
+      templateOverride,
     })
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'chat_message_received',

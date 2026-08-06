@@ -1,7 +1,7 @@
 /**
  * Shared transactional email layout.
- * Flat white shell matching the app notification template.
- * Branding comes from business settings + invoice logo when provided.
+ * Flat white shell: company name header, blue eyebrow, full-width dark CTA.
+ * Branding comes from business settings when provided.
  * Usable from Nuxt (TS) and Node workers (.mjs).
  */
 
@@ -10,20 +10,20 @@ export const EMAIL_BRAND_LEGAL = 'Devon On Site Repairs Inc.'
 
 /** Design tokens — keep in sync with email-styles.scss */
 export const EMAIL_TOKENS = {
-  bg: '#f4f7fb',
+  bg: '#ffffff',
   surface: '#ffffff',
   ink: '#111827',
   muted: '#6b7280',
   faint: '#9ca3af',
-  accent: '#4f46e5',
-  accentStrong: '#4338ca',
-  accentSoft: '#eef2ff',
-  accentLine: '#e5e7eb',
-  line: '#eef0f3',
+  accent: '#2563eb',
+  accentStrong: '#1d4ed8',
+  accentSoft: '#eff6ff',
+  accentLine: '#2563eb',
+  line: '#e5e7eb',
   border: '#e5e7eb',
-  buttonBg: '#2563eb',
-  radius: '8px',
-  radiusBtn: '7px',
+  buttonBg: '#111827',
+  radius: '6px',
+  radiusBtn: '6px',
   font: 'Arial, Helvetica, sans-serif',
 }
 
@@ -105,12 +105,22 @@ export function normalizeEmailBrand(brand, appUrl = '') {
 }
 
 /**
+ * Full-width primary CTA (dark fill).
  * @param {string} href
  * @param {string} label
  * @returns {string}
  */
 export function emailButton(href, label) {
-  return `<a href="${escapeHtml(href)}" class="button" style="display:inline-block;padding:13px 20px;background:${EMAIL_TOKENS.buttonBg};color:#ffffff !important;border-radius:${EMAIL_TOKENS.radiusBtn};font-size:14px;font-weight:700;line-height:18px;text-decoration:none;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</a>`
+  const t = EMAIL_TOKENS
+  return [
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">`,
+    `<tr>`,
+    `<td align="center" bgcolor="${t.buttonBg}" style="background:${t.buttonBg};border-radius:${t.radiusBtn};">`,
+    `<a href="${escapeHtml(href)}" class="button" style="display:block;width:100%;padding:14px 20px;color:#ffffff!important;border-radius:${t.radiusBtn};font-size:14px;line-height:18px;font-weight:700;text-align:center;text-decoration:none;box-sizing:border-box;font-family:${t.font};">${escapeHtml(label)}</a>`,
+    `</td>`,
+    `</tr>`,
+    `</table>`,
+  ].join('')
 }
 
 /**
@@ -119,7 +129,7 @@ export function emailButton(href, label) {
  * @returns {string}
  */
 export function emailSecondaryLink(href, label) {
-  return `<a href="${escapeHtml(href)}" class="secondary-link" style="font-size:13px;font-weight:600;color:#4b5563;text-decoration:none;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</a>`
+  return `<a href="${escapeHtml(href)}" class="secondary-link" style="font-size:13px;font-weight:600;color:#6b7280;text-decoration:underline;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</a>`
 }
 
 /**
@@ -128,11 +138,12 @@ export function emailSecondaryLink(href, label) {
  * @returns {string}
  */
 export function emailPanel(label, innerHtml) {
+  const t = EMAIL_TOKENS
   return [
-    `<table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:${EMAIL_TOKENS.radius};margin:0 0 14px;">`,
-    `<tr><td style="padding:18px 20px;">`,
-    `<div style="color:#374151;font-size:13px;font-weight:700;padding-bottom:5px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(label)}</div>`,
-    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${innerHtml}</div>`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">`,
+    `<tr><td style="padding:20px 22px;background:${t.surface};border:1px solid ${t.border};border-left:3px solid ${t.accent};">`,
+    `<div style="font-size:13px;line-height:20px;font-weight:700;color:${t.ink};font-family:${t.font};">${escapeHtml(label)}</div>`,
+    `<div style="padding-top:14px;font-size:15px;line-height:24px;color:#374151;font-family:${t.font};">${innerHtml}</div>`,
     `</td></tr></table>`,
   ].join('')
 }
@@ -170,11 +181,13 @@ export function emailBadge(label, tone = 'neutral') {
 }
 
 /**
+ * Blue uppercase eyebrow label (not a pill).
  * @param {string} label
  * @returns {string}
  */
 export function emailEyebrow(label) {
-  return emailBadge(label, 'neutral')
+  const t = EMAIL_TOKENS
+  return `<div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${t.accent};font-family:${t.font};">${escapeHtml(label)}</div>`
 }
 
 /**
@@ -182,6 +195,7 @@ export function emailEyebrow(label) {
  * @returns {string}
  */
 export function emailHighlight(highlight) {
+  const t = EMAIL_TOKENS
   const statusHtml = highlight.status
     ? (() => {
         const tone = highlight.statusTone ?? 'ok'
@@ -192,18 +206,18 @@ export function emailHighlight(highlight) {
           neutral: { fg: '#475569', border: '#dbe3ee' },
         }
         const c = colors[tone] ?? colors.ok
-        return `<div style="display:inline-block;padding:7px 10px;border:1px solid ${c.border};border-radius:6px;color:${c.fg};font-size:12px;font-weight:700;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.status)}</div>`
+        return `<div style="display:inline-block;padding:7px 10px;border:1px solid ${c.border};border-radius:6px;color:${c.fg};font-size:12px;font-weight:700;font-family:${t.font};">${escapeHtml(highlight.status)}</div>`
       })()
     : ''
 
   return [
-    `<table role="presentation" width="100%" style="border-top:1px solid ${EMAIL_TOKENS.border};border-bottom:1px solid ${EMAIL_TOKENS.border};">`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};border-left:3px solid ${t.accent};">`,
     `<tr>`,
-    `<td style="padding:24px 0;">`,
-    `<div style="font-size:12px;color:${EMAIL_TOKENS.muted};padding-bottom:7px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.label)}</div>`,
-    `<div style="color:${EMAIL_TOKENS.ink};font-size:34px;line-height:40px;font-weight:750;letter-spacing:-0.6px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(highlight.value)}</div>`,
+    `<td style="padding:20px 22px;">`,
+    `<div style="font-size:12px;line-height:18px;color:${t.muted};padding-bottom:6px;font-family:${t.font};">${escapeHtml(highlight.label)}</div>`,
+    `<div style="color:${t.ink};font-size:28px;line-height:34px;font-weight:700;letter-spacing:-0.4px;font-family:${t.font};">${escapeHtml(highlight.value)}</div>`,
+    statusHtml ? `<div style="padding-top:12px;">${statusHtml}</div>` : '',
     `</td>`,
-    statusHtml ? `<td align="right" valign="middle" style="padding-top:0;text-align:right;">${statusHtml}</td>` : '',
     `</tr></table>`,
   ].join('')
 }
@@ -214,54 +228,50 @@ export function emailHighlight(highlight) {
  */
 export function emailDetails(rows) {
   if (!rows?.length) return ''
-  const valueStyle = [
-    `color:${EMAIL_TOKENS.ink}`,
-    'font-size:14px',
-    'font-weight:600',
-    'line-height:20px',
-    `font-family:${EMAIL_TOKENS.font}`,
-    'word-break:break-word',
-    '-webkit-hyphens:none',
-    'hyphens:none',
-  ].join(';')
-  const labelStyle = [
-    `color:${EMAIL_TOKENS.muted}`,
-    'font-size:12px',
-    'line-height:20px',
-    `font-family:${EMAIL_TOKENS.font}`,
-    'padding-right:12px',
-    'white-space:nowrap',
-  ].join(';')
-
+  const t = EMAIL_TOKENS
   const items = rows.map((row, index) => {
-    const isLast = index === rows.length - 1
+    const padTop = index === 0 ? '0' : '10'
     return [
       `<tr>`,
-      `<td style="padding:0 0 ${isLast ? '0' : '14px'} 0;">`,
-      `<table role="presentation" width="100%"><tr>`,
-      `<td width="34%" valign="top" style="${labelStyle}">${escapeHtml(row.label)}</td>`,
-      `<td valign="top" style="${valueStyle}">${escapeHtml(row.value)}</td>`,
-      `</tr></table>`,
-      `</td>`,
+      `<td style="padding:${padTop}px 14px 0 0;font-size:12px;line-height:18px;color:${t.muted};white-space:nowrap;font-family:${t.font};">${escapeHtml(row.label)}</td>`,
+      `<td style="padding:${padTop}px 0 0 0;font-size:13px;line-height:18px;font-weight:600;color:${t.ink};font-family:${t.font};">${escapeHtml(row.value)}</td>`,
       `</tr>`,
     ].join('')
   })
 
   return [
-    `<div style="color:${EMAIL_TOKENS.ink};font-size:14px;font-weight:700;padding-bottom:16px;font-family:${EMAIL_TOKENS.font};">Details</div>`,
-    `<table role="presentation" width="100%">${items.join('')}</table>`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">`,
+    items.join(''),
+    `</table>`,
   ].join('')
 }
 
 /**
- * Prominent quoted message block (no panel border).
+ * Message / quote card with left accent border.
  * @param {string} text
+ * @param {{ title?: string, subtitle?: string }} [meta]
  * @returns {string}
  */
-export function emailQuotedMessage(text) {
+export function emailQuotedMessage(text, meta = {}) {
+  const t = EMAIL_TOKENS
   const body = escapeHtml(String(text ?? '').trim())
-  if (!body) return ''
-  return `<p style="margin:0;color:${EMAIL_TOKENS.ink};font-size:19px;line-height:30px;font-weight:700;font-style:italic;font-family:${EMAIL_TOKENS.font};">&ldquo;${body}&rdquo;</p>`
+  if (!body && !meta.title) return ''
+  const title = meta.title ? escapeHtml(meta.title) : ''
+  const subtitle = meta.subtitle ? escapeHtml(meta.subtitle) : ''
+
+  return [
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">`,
+    `<tr>`,
+    `<td style="padding:20px 22px;background:${t.surface};border:1px solid ${t.border};border-left:3px solid ${t.accent};">`,
+    title ? `<div style="font-size:13px;line-height:20px;font-weight:700;color:${t.ink};font-family:${t.font};">${title}</div>` : '',
+    subtitle ? `<div style="padding-top:2px;font-size:12px;line-height:18px;color:${t.muted};font-family:${t.font};">${subtitle}</div>` : '',
+    body
+      ? `<div style="padding-top:${title || subtitle ? '14' : '0'}px;font-size:15px;line-height:24px;color:#374151;font-family:${t.font};">${body}</div>`
+      : '',
+    `</td>`,
+    `</tr>`,
+    `</table>`,
+  ].join('')
 }
 
 /**
@@ -269,13 +279,7 @@ export function emailQuotedMessage(text) {
  * @returns {string}
  */
 export function emailNote(note) {
-  return [
-    `<table role="presentation" width="100%" style="border:1px solid ${EMAIL_TOKENS.border};border-radius:${EMAIL_TOKENS.radius};">`,
-    `<tr><td style="padding:18px 20px;">`,
-    `<div style="color:#374151;font-size:13px;font-weight:700;padding-bottom:5px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.title)}</div>`,
-    `<div style="color:${EMAIL_TOKENS.muted};font-size:13px;line-height:20px;font-family:${EMAIL_TOKENS.font};">${escapeHtml(note.body)}</div>`,
-    `</td></tr></table>`,
-  ].join('')
+  return emailQuotedMessage(note.body, { title: note.title })
 }
 
 /**
@@ -284,18 +288,16 @@ export function emailNote(note) {
  */
 export function emailActions(actions) {
   if (!actions?.primary && !actions?.secondary) return ''
-  return [
-    `<table role="presentation" width="100%"><tr><td align="center">`,
-    `<table role="presentation"><tr>`,
-    actions.primary
-      ? `<td>${emailButton(actions.primary.href, actions.primary.label)}</td>`
-      : '',
-    actions.secondary
-      ? `<td style="padding-left:18px;">${emailSecondaryLink(actions.secondary.href, actions.secondary.label)}</td>`
-      : '',
-    `</tr></table>`,
-    `</td></tr></table>`,
-  ].join('')
+  const parts = []
+  if (actions.primary) {
+    parts.push(emailButton(actions.primary.href, actions.primary.label))
+  }
+  if (actions.secondary) {
+    parts.push(
+      `<div style="padding-top:14px;text-align:center;">${emailSecondaryLink(actions.secondary.href, actions.secondary.label)}</div>`,
+    )
+  }
+  return parts.join('')
 }
 
 /**
@@ -332,7 +334,7 @@ export function wrapEmailHtml(opts) {
   const lead = opts.lead ? escapeHtml(opts.lead) : ''
 
   const addressBlock = [
-    brand.brandLegal,
+    brand.brandLegal || brandName,
     ...brand.addressLines,
     brand.phone,
     brand.email,
@@ -342,19 +344,21 @@ export function wrapEmailHtml(opts) {
     ? ''
     : (opts.footerNote !== undefined
         ? escapeHtml(opts.footerNote)
-        : `This notification was sent because activity occurred in your ${brandName} accounting workspace.`)
-  const headerBadge = opts.headerBadge !== undefined ? escapeHtml(opts.headerBadge) : 'Notification'
+        : `This email was sent because activity occurred in your ${brandName} accounting workspace.`)
+  const headerBadge = opts.headerBadge !== undefined
+    ? escapeHtml(opts.headerBadge)
+    : 'Notification'
   const showFooterLinks = opts.footerLinks !== false
   const showFooterAddress = opts.footerAddress !== false
   const showFooter = Boolean(footerNote || showFooterLinks || (showFooterAddress && addressBlock))
 
   const mainIntro = [
-    opts.eyebrow ? `<div style="margin-bottom:0;">${emailEyebrow(opts.eyebrow)}</div>` : '',
+    opts.eyebrow ? emailEyebrow(opts.eyebrow) : '',
     headline
-      ? `<h1 style="margin:18px 0 0;color:${t.ink};font-size:28px;line-height:36px;letter-spacing:-0.5px;font-weight:750;font-family:${t.font};">${headline}</h1>`
+      ? `<h1 style="margin:12px 0 0 0;font-size:28px;line-height:36px;font-weight:700;letter-spacing:-0.5px;color:${t.ink};font-family:${t.font};">${headline}</h1>`
       : '',
     lead
-      ? `<p style="margin:14px 0 0;color:${t.muted};font-size:15px;line-height:24px;font-family:${t.font};">${lead}</p>`
+      ? `<p style="margin:12px 0 0 0;font-size:15px;line-height:24px;color:${t.muted};font-family:${t.font};">${lead}</p>`
       : '',
   ].filter(Boolean).join('')
 
@@ -368,20 +372,6 @@ export function wrapEmailHtml(opts) {
     '-webkit-font-smoothing:antialiased',
     '-webkit-text-size-adjust:100%',
   ].join(';')
-  const shellStyle = `width:100%;background:${t.bg};border-spacing:0;border-collapse:collapse;`
-  const outerStyle = 'padding:28px 12px;'
-  const containerStyle = [
-    `background:${t.surface}`,
-    `border:1px solid ${t.border}`,
-    'border-radius:18px',
-    'box-shadow:0 12px 36px rgba(15,23,42,.07)',
-    'width:100%',
-    'max-width:620px',
-    'margin:0 auto',
-    'border-spacing:0',
-    'border-collapse:collapse',
-  ].join(';')
-  const sidePad = 'padding-left:28px;padding-right:28px;'
 
   return `<!doctype html>
 <html lang="en">
@@ -393,25 +383,25 @@ export function wrapEmailHtml(opts) {
   <title>${title}</title>
 </head>
 <body style="${bodyStyle}">
-  ${preheader ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0;">${preheader}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${preheader}</div>` : ''}
 
-  <table role="presentation" width="100%" style="${shellStyle}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${t.bg}" style="width:100%;background:${t.bg};border-collapse:collapse;border-spacing:0;">
     <tr>
-      <td align="center" style="${outerStyle}">
-        <table role="presentation" width="100%" style="${containerStyle}">
+      <td align="center" bgcolor="${t.bg}" style="padding:0 20px;background:${t.bg};">
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${t.surface}" style="width:100%;max-width:620px;margin:0 auto;background:${t.surface};border-collapse:collapse;border-spacing:0;">
 
           <!-- Header -->
           <tr>
-            <td style="${sidePad}padding-top:32px;padding-bottom:24px;">
-              <table role="presentation" width="100%">
+            <td bgcolor="${t.surface}" style="padding:34px 0 24px 0;background:${t.surface};border-bottom:1px solid ${t.border};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
                 <tr>
                   <td valign="middle">
-                    <div style="font-size:21px;line-height:28px;font-weight:800;letter-spacing:-0.4px;color:${t.ink};font-family:${t.font};">${escapeHtml(brandName)}</div>
-                    ${brand.brandTagline
-                      ? `<div style="font-size:12px;line-height:18px;color:${t.muted};padding-top:4px;font-family:${t.font};">${escapeHtml(brand.brandTagline)}</div>`
-                      : ''}
+                    <div style="font-size:20px;line-height:27px;font-weight:700;letter-spacing:-0.3px;color:${t.ink};font-family:${t.font};">
+                      ${escapeHtml(brandName)}
+                    </div>
                   </td>
-                  <td align="right" valign="middle" style="font-size:12px;color:${t.faint};font-family:${t.font};white-space:nowrap;">
+                  <td align="right" valign="middle" style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${t.faint};white-space:nowrap;font-family:${t.font};">
                     ${headerBadge}
                   </td>
                 </tr>
@@ -419,17 +409,10 @@ export function wrapEmailHtml(opts) {
             </td>
           </tr>
 
-          <!-- Divider -->
-          <tr>
-            <td style="${sidePad}">
-              <div style="height:1px; background:${t.line};"></div>
-            </td>
-          </tr>
-
           ${mainIntro
             ? `<!-- Main content -->
           <tr>
-            <td style="${sidePad}padding-top:42px;padding-bottom:10px;">
+            <td bgcolor="${t.surface}" style="padding:42px 0 0 0;background:${t.surface};">
               ${mainIntro}
             </td>
           </tr>`
@@ -438,17 +421,8 @@ export function wrapEmailHtml(opts) {
           ${opts.highlightHtml
             ? `<!-- Highlight -->
           <tr>
-            <td style="${sidePad}padding-top:28px;">
+            <td bgcolor="${t.surface}" style="padding:30px 0 0 0;background:${t.surface};">
               ${opts.highlightHtml}
-            </td>
-          </tr>`
-            : ''}
-
-          ${opts.detailsHtml
-            ? `<!-- Details -->
-          <tr>
-            <td style="${sidePad}padding-top:30px;">
-              ${opts.detailsHtml}
             </td>
           </tr>`
             : ''}
@@ -456,7 +430,7 @@ export function wrapEmailHtml(opts) {
           ${opts.bodyHtml
             ? `<!-- Body -->
           <tr>
-            <td style="${sidePad}padding-top:24px;">
+            <td bgcolor="${t.surface}" style="padding:30px 0 0 0;background:${t.surface};">
               ${opts.bodyHtml}
             </td>
           </tr>`
@@ -465,44 +439,47 @@ export function wrapEmailHtml(opts) {
           ${opts.noteHtml
             ? `<!-- Note -->
           <tr>
-            <td style="${sidePad}padding-top:30px;">
+            <td bgcolor="${t.surface}" style="padding:30px 0 0 0;background:${t.surface};">
               ${opts.noteHtml}
             </td>
           </tr>`
             : ''}
 
-          ${opts.actionsHtml
-            ? `<!-- Actions -->
+          ${opts.detailsHtml
+            ? `<!-- Details -->
           <tr>
-            <td style="${sidePad}padding-top:30px;padding-bottom:38px;" align="center">
+            <td bgcolor="${t.surface}" style="padding:24px 0 0 0;background:${t.surface};">
+              ${opts.detailsHtml}
+            </td>
+          </tr>`
+            : ''}
+
+          ${opts.actionsHtml
+            ? `<!-- Action -->
+          <tr>
+            <td bgcolor="${t.surface}" style="padding:32px 0 42px 0;background:${t.surface};">
               ${opts.actionsHtml}
             </td>
           </tr>`
-            : `<tr><td style="padding-bottom:38px;"></td></tr>`}
+            : `<tr><td style="padding-bottom:42px;"></td></tr>`}
 
           ${showFooter
-            ? `<!-- Footer divider -->
+            ? `<!-- Footer -->
           <tr>
-            <td style="${sidePad}">
-              <div style="height:1px; background:${t.line};"></div>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="${sidePad}padding-top:24px;padding-bottom:36px;color:${t.faint};font-size:11px;line-height:18px;font-family:${t.font};">
+            <td bgcolor="${t.surface}" style="padding:24px 0 36px 0;background:${t.surface};border-top:1px solid ${t.border};color:${t.faint};font-size:11px;line-height:18px;font-family:${t.font};">
               ${footerNote ? `<p style="margin:0;">${footerNote}</p>` : ''}
-              ${showFooterLinks ? `<p style="margin:10px 0 0;">
-                <a href="${escapeHtml(brand.settingsUrl)}" style="color:#6b7280;">Notification settings</a>
-                &nbsp;&nbsp;·&nbsp;&nbsp;
-                <a href="${escapeHtml(brand.helpUrl)}" style="color:#6b7280;">Help center</a>
-                &nbsp;&nbsp;·&nbsp;&nbsp;
-                <a href="${escapeHtml(brand.signInUrl)}" style="color:#6b7280;">Sign in</a>
-              </p>` : ''}
-              ${showFooterAddress && addressBlock ? `<p style="margin:16px 0 0;">${addressBlock}</p>` : ''}
+              ${showFooterLinks
+                ? `<p style="margin:12px 0 0 0;">
+                <a href="${escapeHtml(brand.settingsUrl)}" style="color:#6b7280;text-decoration:underline;">Notification settings</a>
+                <span style="padding:0 7px;color:#d1d5db;">·</span>
+                <a href="${escapeHtml(brand.helpUrl)}" style="color:#6b7280;text-decoration:underline;">Help center</a>
+                <span style="padding:0 7px;color:#d1d5db;">·</span>
+                <a href="${escapeHtml(brand.signInUrl)}" style="color:#6b7280;text-decoration:underline;">Sign in</a>
+              </p>`
+                : ''}
+              ${showFooterAddress && addressBlock ? `<p style="margin:18px 0 0 0;">${addressBlock}</p>` : ''}
             </td>
-          </tr>
-          `
+          </tr>`
             : ''}
 
         </table>
@@ -533,6 +510,7 @@ export function wrapEmailHtml(opts) {
  *   footerNote?: string,
  *   footerLinks?: boolean,
  *   footerAddress?: boolean,
+ *   headerBadge?: string,
  *   appUrl?: string,
  *   brand?: EmailBrandOpts,
  * }} opts
@@ -560,6 +538,7 @@ export function buildStyledEmail(opts) {
       footerNote: opts.footerNote,
       footerLinks: opts.footerLinks,
       footerAddress: opts.footerAddress,
+      headerBadge: opts.headerBadge,
       appUrl: brand.appUrl,
       brand,
     }),

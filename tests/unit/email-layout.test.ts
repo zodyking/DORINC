@@ -23,6 +23,7 @@ describe('email layout', () => {
       headline: 'Portal access',
       lead: 'Your temporary password is ready.',
       bodyHtml: '<p>Hello</p>',
+      headerBadge: 'Portal notification',
       appUrl: 'https://app.example.com',
       brand: {
         brandName: 'Acme Shop',
@@ -45,9 +46,12 @@ describe('email layout', () => {
     expect(html).not.toContain('.email-container {')
     expect(html).toContain('background:#ffffff')
     expect(html).toContain(EMAIL_TOKENS.ink)
+    expect(html).toContain(EMAIL_TOKENS.buttonBg)
     expect(html).toContain('Portal access')
     expect(html).toContain('Your password is ready')
     expect(html).toContain('Acme Shop')
+    expect(html).toContain('Portal notification')
+    expect(html).not.toContain('Accounting workspace')
     expect(html).toContain('123 Main St')
     expect(html).toContain('(555) 555 0100')
     expect(html).toContain('Notification settings')

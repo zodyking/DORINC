@@ -71,6 +71,8 @@ export async function notifyDeletionRequestSubmitted(
   }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'deletion_request_submitted')
   const appUrl = brand.appUrl || getAppUrl()
   const reviewUrl = `${appUrl.replace(/\/$/, '')}/deletion-requests`
   const reviewers = await listPermissionRecipients(
@@ -90,6 +92,7 @@ export async function notifyDeletionRequestSubmitted(
       reviewUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, reviewer.email, mail, {
       notificationKind: 'deletion_request_submitted',
@@ -124,6 +127,8 @@ export async function notifyDeletionRequestResult(
   if (!to) return { queued: false as const, reason: 'no_recipient' as const }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'deletion_request_result')
   const mail = buildDeletionRequestResultEmail({
     requestorName: opts.requestorName || 'there',
     status: opts.status,
@@ -133,6 +138,7 @@ export async function notifyDeletionRequestResult(
     reviewedByName: opts.reviewedByName,
     appUrl: brand.appUrl || getAppUrl(),
     brand,
+    templateOverride,
   })
 
   await enqueueHtmlMail(db, to, mail, {
@@ -154,6 +160,8 @@ export async function notifyUserSignupPendingApproval(
   }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'user_signup_pending')
   const appUrl = brand.appUrl || getAppUrl()
   const usersUrl = `${appUrl.replace(/\/$/, '')}/users`
   const admins = await listPermissionRecipients(db, 'users.manage.all', opts.userId)
@@ -167,6 +175,7 @@ export async function notifyUserSignupPendingApproval(
       usersUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, admin.email, mail, {
       notificationKind: 'user_signup_pending',
@@ -191,6 +200,8 @@ export async function notifyInvoicePendingApproval(db: Db, invoiceId: string, ac
   const invoice = await getInvoice(db, invoiceId)
   const customer = await getCustomer(db, invoice.customerId)
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'invoice_pending_approval')
   const appUrl = brand.appUrl || getAppUrl()
   const invoiceUrl = `${appUrl.replace(/\/$/, '')}/invoices/${invoice.id}`
   const invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
@@ -206,6 +217,7 @@ export async function notifyInvoicePendingApproval(db: Db, invoiceId: string, ac
       invoiceUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, approver.email, mail, {
       notificationKind: 'invoice_pending_approval',
@@ -235,6 +247,8 @@ export async function notifyCustomerServiceRequestSubmitted(
   }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'customer_service_request_staff')
   const appUrl = brand.appUrl || getAppUrl()
   const detailUrl = `${appUrl.replace(/\/$/, '')}/service-logs/${opts.logId}`
   const vehicleUnit = opts.vehicleSnapshot
@@ -258,6 +272,7 @@ export async function notifyCustomerServiceRequestSubmitted(
       detailUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'customer_service_request_submitted',
@@ -289,6 +304,8 @@ export async function notifyCustomerChangeRequestSubmitted(
   }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'customer_change_request_staff')
   const appUrl = brand.appUrl || getAppUrl()
   const detailUrl = `${appUrl.replace(/\/$/, '')}/portal-requests`
   const requestKindLabel = opts.requestKind === 'invoice_change'
@@ -309,6 +326,7 @@ export async function notifyCustomerChangeRequestSubmitted(
       detailUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'customer_change_request_submitted',
@@ -344,6 +362,8 @@ export async function notifyCustomerEmailReceived(
   }
 
   const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'customer_email_received_staff')
   const appUrl = brand.appUrl || getAppUrl()
   const messagesUrl = `${appUrl.replace(/\/$/, '')}/messages?conversation=${opts.conversationId}`
   const messagePreview = customerEmailStaffMessageBody(opts.messageBody, opts.htmlBody)
@@ -360,6 +380,7 @@ export async function notifyCustomerEmailReceived(
       messagesUrl,
       appUrl,
       brand,
+      templateOverride,
     })
     await enqueueHtmlMail(db, recipient.email, mail, {
       notificationKind: 'customer_email_received',
