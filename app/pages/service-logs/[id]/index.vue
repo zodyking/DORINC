@@ -1,10 +1,21 @@
 <script setup lang="ts">
-// Service log detail — photo gallery + status actions.
+// Simple mobile-first service log detail — photos, dates, symptoms, actions.
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { messageLinkFetchQuery } from '~/utils/message-link-access'
 import type { ServiceLogInvoiceLinkStatus } from '~/utils/service-log-invoice-status'
+import { vehicleLine, vehicleTag } from '~/utils/vehicles-ui'
+import {
+  CUSTOMER_REQUESTED_SERVICE_NOTE,
+  formatAuditAction,
+  logNumberDisplay,
+  revertInvoiceBlockLabel,
+  serviceLogInvoiceLinkReleased,
+  serviceLogStatusPill,
+  type ServiceLogStatus,
+} from '~/utils/service-logs-ui'
+import { lineTypeLabel, type InvoiceLineType } from '~/utils/invoices-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -34,6 +45,7 @@ interface ServiceLog {
   status: ServiceLogStatus
   workType: string
   serviceDate: string
+  dueDate: string | null
   odometerReading: string | null
   location: string | null
   complaint: string | null
@@ -112,26 +124,24 @@ const editError = ref('')
 const editSaved = ref(false)
 const editForm = reactive({
   serviceDate: '',
-  odometerReading: '',
-  location: '',
-  workType: 'repair',
+  dueDate: '',
   complaint: '',
-  internalNotes: '',
 })
 
 watch(log, (row) => {
   if (!row) return
   editForm.serviceDate = row.serviceDate
-  editForm.odometerReading = row.odometerReading ?? ''
-  editForm.location = row.location ?? ''
-  editForm.workType = row.workType
+  editForm.dueDate = row.dueDate ?? ''
   editForm.complaint = row.complaint ?? ''
-  editForm.internalNotes = row.internalNotes ?? ''
   editSaved.value = false
 }, { immediate: true })
 
 async function saveLogEdits() {
   if (!canEditLog.value) return
+  if (editForm.dueDate && editForm.serviceDate && editForm.dueDate < editForm.serviceDate) {
+    editError.value = 'Due date must be on or after the invoice date.'
+    return
+  }
   editBusy.value = true
   editError.value = ''
   editSaved.value = false
@@ -140,11 +150,8 @@ async function saveLogEdits() {
       method: 'PATCH',
       body: {
         serviceDate: editForm.serviceDate,
-        odometerReading: editForm.odometerReading || null,
-        location: editForm.location || null,
-        workType: editForm.workType,
+        dueDate: editForm.dueDate || null,
         complaint: editForm.complaint || null,
-        internalNotes: editForm.internalNotes || null,
       },
     })
     await refresh()
@@ -159,9 +166,7 @@ async function saveLogEdits() {
 }
 
 const imageFiles = computed(() => files.value.filter(f => f.mimeType.startsWith('image/')))
-const otherFiles = computed(() => files.value.filter(f => !f.mimeType.startsWith('image/')))
 const showPhotoSection = computed(() => canEditLog.value || imageFiles.value.length > 0)
-
 const selectedFileId = computed(() => imageFiles.value[0]?.id ?? null)
 const aiModalOpen = ref(false)
 
@@ -208,9 +213,15 @@ async function convertToInvoice() {
   actionError.value = ''
   convertFlash.value = ''
   try {
-    const { invoice } = await $fetch<{ invoice: { id: string, invoiceNumberFormatted?: string } }>(
+    const { invoice } = await $fetch<{ invoice: { id: string } }>(
       `/api/service-logs/${id}/convert-to-invoice`,
-      { method: 'POST', body: {} },
+      {
+        method: 'POST',
+        body: {
+          invoiceDate: log.value.serviceDate,
+          dueDate: log.value.dueDate,
+        },
+      },
     )
     await refresh()
     convertFlash.value = invoice.id
@@ -221,10 +232,6 @@ async function convertToInvoice() {
   finally {
     busy.value = false
   }
-}
-
-function previewUrl(fileId: string) {
-  return `/api/files/${fileId}/preview`
 }
 
 function openAiExtraction() {
@@ -255,11 +262,11 @@ const pill = computed(() => log.value
 </script>
 
 <template>
-  <section v-if="error" class="page active">
+  <section v-if="error" class="page active sl-detail-page">
     <div class="empty">Service log not found or you do not have access.</div>
   </section>
 
-  <section v-else-if="log" class="page active">
+  <section v-else-if="log" class="page active sl-detail-page">
     <StaffPageHead>
       <template #title>
         {{ logNumberDisplay(log.logNumber) }}
@@ -286,7 +293,7 @@ const pill = computed(() => log.value
           :disabled="busy"
           @click="revertInvoice"
         >
-          Undo send to invoice
+          Undo send
         </button>
         <button
           v-if="canExtract && imageFiles.length"
@@ -295,25 +302,7 @@ const pill = computed(() => log.value
           :disabled="busy"
           @click="openAiExtraction"
         >
-          ✦ Extract from image
-        </button>
-        <button
-          v-if="canReview && log.status === 'in_review'"
-          class="btn"
-          type="button"
-          :disabled="busy"
-          @click="changeStatus('needs_info', 'Please add missing details')"
-        >
-          Request more info
-        </button>
-        <button
-          v-if="isOwner && log.status === 'needs_info'"
-          class="btn primary"
-          type="button"
-          :disabled="busy"
-          @click="changeStatus('ready_for_review')"
-        >
-          Resubmit for review
+          Extract from image
         </button>
         <button
           v-if="(canReview || (isOwner && canUpload)) && ['draft', 'uploaded'].includes(log.status)"
@@ -322,52 +311,24 @@ const pill = computed(() => log.value
           :disabled="busy"
           @click="changeStatus('ready_for_review')"
         >
-          Mark ready to invoice
+          Mark ready
         </button>
         <button
-          v-if="canReview && log.status === 'in_review'"
-          class="btn"
+          v-if="isOwner && log.status === 'needs_info'"
+          class="btn primary"
           type="button"
           :disabled="busy"
-          @click="changeStatus('rejected', 'Rejected during review')"
+          @click="changeStatus('ready_for_review')"
         >
-          Reject
+          Resubmit
         </button>
         <NuxtLink
-          v-if="log.status === 'converted_to_invoice' && log.invoiceId && !actions.canRevertInvoice"
+          v-if="log.status === 'converted_to_invoice' && log.invoiceId"
           :to="`/invoices/${log.invoiceId}`"
           class="btn"
         >
           View invoice
         </NuxtLink>
-        <NuxtLink
-          v-if="log.status === 'converted_to_invoice' && log.invoiceId && canReview"
-          :to="`/invoices/${log.invoiceId}/edit`"
-          class="btn primary"
-        >
-          Edit invoice
-        </NuxtLink>
-        <ChangeVehicleButton
-          v-if="log.status !== 'converted_to_invoice' && log.status !== 'archived' && log.customerId"
-          entity-type="service_log"
-          :entity-id="log.id"
-          :customer-id="log.customerId"
-          :current-vehicle-id="log.vehicleId"
-          :allow-edit="canEditLog"
-          :disabled="busy"
-          @changed="refresh()"
-        />
-        <ReassignEntityButton
-          v-if="log.status !== 'converted_to_invoice' && log.status !== 'archived'"
-          entity-type="service_log"
-          :entity-id="log.id"
-          :entity-label="logNumberDisplay(log.logNumber)"
-          :current-customer-id="log.customerId"
-          :current-customer-name="log.customerName"
-          :current-vehicle-id="log.vehicleId"
-          :disabled="busy"
-          @reassigned="refresh()"
-        />
         <DeleteEntityButton
           v-if="log.status !== 'archived' && !log.invoiceId"
           entity-type="service_log"
@@ -378,218 +339,164 @@ const pill = computed(() => log.value
       </template>
     </StaffPageHead>
 
-    <p v-if="actionError" class="help" style="color:#dc2626; margin:-8px 0 16px;">{{ actionError }}</p>
-    <p
-      v-if="log.customerRequested"
-      class="flash info"
-      style="margin:-8px 0 16px;"
-    >
+    <p v-if="actionError" class="help sl-flash-err">{{ actionError }}</p>
+    <p v-if="log.customerRequested" class="flash info sl-flash">
       {{ CUSTOMER_REQUESTED_SERVICE_NOTE }}
-      <template v-if="['draft', 'uploaded'].includes(log.status) && canReview">
-        — save your review to enable send to invoice (the row stays highlighted until invoiced).
-      </template>
-      <template v-else-if="isServiceLogSendable(log.status)">
-        — complete the log and use send to invoice when ready.
-      </template>
-      <template v-else>
-        — review the customer complaint and complete the log before invoicing.
-      </template>
     </p>
-    <p
-      v-if="log && serviceLogInvoiceLinkReleased(log.statusReason)"
-      class="flash warn"
-      style="margin:-8px 0 16px;"
-    >
+    <p v-if="log && serviceLogInvoiceLinkReleased(log.statusReason)" class="flash warn sl-flash">
       The linked invoice was deleted. This log is ready to send to invoice again.
     </p>
-    <p v-if="convertFlash" class="flash ok" style="margin:-8px 0 16px;">
-      Sent to invoice — draft created and linked to this service log.
+    <p v-if="convertFlash" class="flash ok sl-flash">
+      Sent to invoice.
       <NuxtLink :to="`/invoices/${convertFlash}`">View invoice</NuxtLink>
-      ·
-      <NuxtLink :to="`/invoices/${convertFlash}/edit`">Edit invoice</NuxtLink>
     </p>
-    <p
-      v-else-if="log.status === 'converted_to_invoice' && log.invoiceId"
-      class="flash ok"
-      style="margin:-8px 0 16px;"
-    >
-      This service log was sent to invoice and remains on file.
+    <p v-else-if="log.status === 'converted_to_invoice' && log.invoiceId" class="flash ok sl-flash">
+      Linked to an invoice.
       <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
-      <template v-if="actions.canRevertInvoice"> · You can undo send to make this log editable again.</template>
+      <template v-if="actions.canRevertInvoice"> · You can undo send to edit again.</template>
     </p>
     <p
       v-if="log.status === 'converted_to_invoice' && !actions.canRevertInvoice && actions.revertBlockReason"
-      class="help"
-      style="margin:-8px 0 16px;"
+      class="help sl-flash"
     >
       {{ revertInvoiceBlockLabel(actions.revertBlockReason) }}
     </p>
-    <p v-if="log.statusReason" class="help" style="margin:-8px 0 16px;">
+    <p v-if="log.statusReason && !serviceLogInvoiceLinkReleased(log.statusReason)" class="help sl-flash">
       Review note: {{ log.statusReason }}
     </p>
 
-    <div class="cols sl-detail-cols">
-      <div class="stack">
-        <div v-if="showPhotoSection" class="card">
-          <div class="chead">
-            <h3>Photos · {{ imageFiles.length }}</h3>
-          </div>
-          <div class="cbody">
-            <ServiceLogPhotoManager
-              :service-log-id="id"
-              :files="imageFiles"
-              :editable="canEditLog"
-              @refreshed="refresh()"
-            />
-          </div>
+    <div class="sl-detail-stack">
+      <div v-if="showPhotoSection" class="card">
+        <div class="chead">
+          <h3>Photos · {{ imageFiles.length }}</h3>
         </div>
-
-        <div v-if="otherFiles.length" class="card">
-          <div class="chead"><h3>Other files · {{ otherFiles.length }}</h3></div>
-          <div class="cbody">
-            <div class="photos">
-              <a
-                v-for="f in otherFiles"
-                :key="f.id"
-                :href="previewUrl(f.id)"
-                target="_blank"
-                rel="noopener"
-                class="photo"
-              >
-                <span>{{ fileThumbEmoji(f.mimeType, f.fileKind) }}</span>
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="canEditLog" class="card">
-          <div class="chead">
-            <h3>Edit log</h3>
-            <button type="button" class="btn sm primary" :disabled="editBusy" @click="saveLogEdits">
-              {{ editBusy ? 'Saving…' : 'Save changes' }}
-            </button>
-          </div>
-          <div class="cbody stack" style="gap:12px;">
-            <p v-if="editError" class="help" style="color:#dc2626; margin:0;">{{ editError }}</p>
-            <p v-else-if="editSaved" class="help" style="color:#059669; margin:0;">Changes saved.</p>
-            <label class="fld"><span>Service date</span>
-              <input v-model="editForm.serviceDate" type="date">
-            </label>
-            <label class="fld"><span>Odometer or hours</span>
-              <input v-model="editForm.odometerReading" type="text">
-            </label>
-            <label class="fld"><span>Job location</span>
-              <input v-model="editForm.location" type="text">
-            </label>
-            <label class="fld"><span>Work type</span>
-              <select v-model="editForm.workType">
-                <option value="preventive_maintenance">Preventive maintenance</option>
-                <option value="repair">Repair / breakdown</option>
-                <option value="diagnostic">Diagnostic</option>
-                <option value="inspection">Inspection</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label class="fld"><span>Customer complaint / symptoms</span>
-              <textarea v-model="editForm.complaint" rows="3" />
-            </label>
-            <label v-if="canReview" class="fld"><span>Internal notes <span class="fld-badge">Staff only</span></span>
-              <textarea v-model="editForm.internalNotes" rows="3" />
-            </label>
-          </div>
-        </div>
-
-        <div v-else class="card">
-          <div class="chead"><h3>Customer complaint / symptoms</h3></div>
-          <div class="cbody" style="font-size:13.5px; color:#475569; line-height:1.6;">
-            {{ log.complaint || '—' }}
-          </div>
-        </div>
-
-        <div v-if="!canEditLog && canReview" class="card">
-          <div class="chead"><h3>Internal notes <span class="fld-badge">Staff only</span></h3></div>
-          <div class="cbody" style="font-size:13.5px; color:#475569; line-height:1.6;">
-            {{ log.internalNotes || '—' }}
-          </div>
-        </div>
-
-        <div v-if="draftLines.length" class="card">
-          <div class="chead"><h3>Draft line items · {{ draftLines.length }}</h3></div>
-          <div class="tscroll">
-            <table class="tbl">
-              <thead>
-                <tr><th>Type</th><th>Description</th><th>Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="(line, i) in draftLines" :key="i">
-                  <td>{{ line.lineType ? lineTypeLabel(line.lineType as InvoiceLineType) : '—' }}</td>
-                  <td>{{ line.description }}</td>
-                  <td>{{ line.qty ?? '—' }}</td>
-                  <td class="num">{{ line.rate ?? '—' }}</td>
-                  <td class="num">{{ line.amount ?? '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="cbody">
+          <ServiceLogPhotoManager
+            :service-log-id="id"
+            :files="imageFiles"
+            :editable="canEditLog"
+            @refreshed="refresh()"
+          />
         </div>
       </div>
 
-      <div class="stack">
-        <div class="card">
-          <div class="chead"><h3>Log metadata</h3></div>
-          <dl class="kv">
-            <dt>Submitted by</dt><dd>{{ log.submitterName }}</dd>
-            <dt>Uploaded</dt><dd>{{ new Date(log.createdAt).toLocaleString() }}</dd>
-            <dt>Service date</dt><dd>{{ log.serviceDate }}</dd>
-            <dt>Customer</dt><dd>{{ log.customerName }}</dd>
-            <dt>Vehicle</dt><dd>{{ vehicleLine(log.vehicle) }}</dd>
-            <dt>VIN</dt><dd class="mono" style="font-size:12px">{{ log.vehicle.vin ?? '—' }}</dd>
-            <dt>Odometer / hours</dt><dd>{{ log.odometerReading ?? '—' }}</dd>
-            <dt>Location</dt><dd>{{ log.location ?? '—' }}</dd>
-            <dt>Work type</dt><dd>{{ workTypeLabel(log.workType) }}</dd>
-            <dt>Status</dt><dd><span :class="pill.cls">{{ pill.label }}</span></dd>
-            <template v-if="log.invoiceId">
-              <dt>Linked invoice</dt>
-              <dd>
-                <NuxtLink :to="`/invoices/${log.invoiceId}`">View invoice</NuxtLink>
-                ·
-                <button
-                  type="button"
-                  class="link-btn"
-                  :disabled="pdfOpenBusy"
-                  @click="openLinkedInvoicePdf"
-                >
-                  Open PDF
-                </button>
-              </dd>
-            </template>
-          </dl>
+      <div class="card">
+        <div class="chead">
+          <h3>{{ canEditLog ? 'Details' : 'Summary' }}</h3>
+          <button
+            v-if="canEditLog"
+            type="button"
+            class="btn sm primary"
+            :disabled="editBusy"
+            @click="saveLogEdits"
+          >
+            {{ editBusy ? 'Saving…' : 'Save' }}
+          </button>
         </div>
+        <div v-if="canEditLog" class="cbody stack sl-edit-fields">
+          <p v-if="editError" class="help" style="color:#dc2626; margin:0;">{{ editError }}</p>
+          <p v-else-if="editSaved" class="help" style="color:#059669; margin:0;">Saved.</p>
+          <label class="fld"><span>Invoice date</span>
+            <input v-model="editForm.serviceDate" type="date">
+          </label>
+          <label class="fld"><span>Due date</span>
+            <input v-model="editForm.dueDate" type="date" :min="editForm.serviceDate || undefined">
+          </label>
+          <label class="fld"><span>Vehicle symptoms / customer complaint</span>
+            <textarea v-model="editForm.complaint" rows="4" />
+          </label>
+        </div>
+        <dl v-else class="kv cbody">
+          <dt>Invoice date</dt><dd>{{ log.serviceDate }}</dd>
+          <dt>Due date</dt><dd>{{ log.dueDate || '—' }}</dd>
+          <dt>Symptoms / complaint</dt>
+          <dd class="sl-complaint">{{ log.complaint || '—' }}</dd>
+        </dl>
+      </div>
 
-        <div class="card">
-          <div class="chead"><h3>Activity</h3></div>
-          <div class="timeline">
-            <div
-              v-for="row in history"
-              :key="row.id"
-              class="tl"
-              :class="{ hot: row.action.includes('ready_for_review') }"
-            >
-              <b>{{ formatAuditAction(row.action) }}</b>
-              <span>
-                {{ new Date(row.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }}
-                · {{ row.actorName ?? 'System' }}
-              </span>
-            </div>
-            <div v-if="!history.length" class="tl"><b>Log created</b><span>No activity recorded yet</span></div>
+      <div class="card">
+        <div class="chead"><h3>Customer &amp; vehicle</h3></div>
+        <dl class="kv cbody">
+          <dt>Customer</dt><dd>{{ log.customerName }}</dd>
+          <dt>Vehicle</dt><dd>{{ vehicleLine(log.vehicle) }}</dd>
+          <dt>Submitted by</dt><dd>{{ log.submitterName }}</dd>
+          <dt>Uploaded</dt><dd>{{ new Date(log.createdAt).toLocaleString() }}</dd>
+          <dt>Status</dt><dd><span :class="pill.cls">{{ pill.label }}</span></dd>
+          <template v-if="log.invoiceId">
+            <dt>Invoice</dt>
+            <dd>
+              <NuxtLink :to="`/invoices/${log.invoiceId}`">View</NuxtLink>
+              ·
+              <button type="button" class="link-btn" :disabled="pdfOpenBusy" @click="openLinkedInvoicePdf">
+                Open PDF
+              </button>
+            </dd>
+          </template>
+        </dl>
+        <div v-if="canEditLog && log.customerId" class="cbody sl-entity-actions">
+          <ChangeVehicleButton
+            entity-type="service_log"
+            :entity-id="log.id"
+            :customer-id="log.customerId"
+            :current-vehicle-id="log.vehicleId"
+            :allow-edit="canEditLog"
+            :disabled="busy"
+            @changed="refresh()"
+          />
+          <ReassignEntityButton
+            entity-type="service_log"
+            :entity-id="log.id"
+            :entity-label="logNumberDisplay(log.logNumber)"
+            :current-customer-id="log.customerId"
+            :current-customer-name="log.customerName"
+            :current-vehicle-id="log.vehicleId"
+            :disabled="busy"
+            @reassigned="refresh()"
+          />
+        </div>
+      </div>
+
+      <div v-if="draftLines.length && canReview" class="card">
+        <div class="chead"><h3>Draft lines · {{ draftLines.length }}</h3></div>
+        <div class="tscroll">
+          <table class="tbl">
+            <thead>
+              <tr><th>Type</th><th>Description</th><th>Qty</th><th class="num">Amount</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(line, i) in draftLines" :key="i">
+                <td>{{ line.lineType ? lineTypeLabel(line.lineType as InvoiceLineType) : '—' }}</td>
+                <td>{{ line.description }}</td>
+                <td>{{ line.qty ?? '—' }}</td>
+                <td class="num">{{ line.amount ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="chead"><h3>Activity</h3></div>
+        <div class="timeline">
+          <div
+            v-for="row in history"
+            :key="row.id"
+            class="tl"
+            :class="{ hot: row.action.includes('ready_for_review') }"
+          >
+            <b>{{ formatAuditAction(row.action) }}</b>
+            <span>
+              {{ new Date(row.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }}
+              · {{ row.actorName ?? 'System' }}
+            </span>
           </div>
+          <div v-if="!history.length" class="tl"><b>Log created</b><span>No activity yet</span></div>
         </div>
       </div>
     </div>
 
     <div v-if="log && log.status !== 'archived'" class="savebar">
-      <NuxtLink to="/service-logs" class="btn">Back to service logs</NuxtLink>
-      <span v-if="log.invoiceId" class="help" style="margin-left:auto;">Linked to an invoice — delete the invoice first or unlink before removing this log.</span>
+      <NuxtLink to="/service-logs" class="btn">Back</NuxtLink>
     </div>
 
     <ServiceLogAiExtractModal
@@ -604,6 +511,43 @@ const pill = computed(() => log.value
 </template>
 
 <style scoped>
+.sl-detail-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-bottom: 88px;
+}
+
+.sl-detail-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.sl-flash,
+.sl-flash-err {
+  margin: -4px 0 12px;
+}
+
+.sl-flash-err {
+  color: #dc2626;
+}
+
+.sl-edit-fields {
+  gap: 12px;
+}
+
+.sl-complaint {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.sl-entity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 0;
+}
+
 .link-btn {
   background: none;
   border: none;

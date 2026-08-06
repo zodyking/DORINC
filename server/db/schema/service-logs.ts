@@ -43,7 +43,10 @@ export const serviceLogs = pgTable('service_logs', {
   vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
   submittedBy: uuid('submitted_by').notNull().references(() => users.id),
 
+  /** Used as the invoice date when converting this log. */
   serviceDate: date('service_date', { mode: 'string' }).notNull(),
+  /** Suggested invoice due date collected in the create wizard. */
+  dueDate: date('due_date', { mode: 'string' }),
   // Free-text meter reading as captured in the field (e.g. "412,806 mi")
   odometerReading: text('odometer_reading'),
   location: text('location'),

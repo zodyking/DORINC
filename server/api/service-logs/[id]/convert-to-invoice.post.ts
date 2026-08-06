@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
 
     const { invoice, log, before } = await convertServiceLogToInvoice(db, id, auth.user.id, {
       invoiceDate: body.invoiceDate,
+      dueDate: body.dueDate,
     })
 
     const permissionKey = auth.user.id === existing.submittedBy

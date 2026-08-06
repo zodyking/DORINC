@@ -100,6 +100,7 @@ export interface ServiceLogInput {
   customerId: string
   vehicleId: string
   serviceDate: string
+  dueDate?: string | null
   odometerReading?: string | null
   location?: string | null
   workType?: ServiceLogWorkType
@@ -126,6 +127,7 @@ export async function createServiceLog(db: Db, input: ServiceLogInput, submitted
     vehicleId: input.vehicleId,
     submittedBy,
     serviceDate: input.serviceDate,
+    dueDate: input.dueDate ?? null,
     odometerReading: input.odometerReading ?? null,
     location: input.location ?? null,
     workType: input.workType ?? 'repair',
@@ -325,7 +327,7 @@ export async function convertServiceLogToInvoice(
   db: Db,
   id: string,
   actorId: string,
-  opts: { invoiceDate?: string } = {},
+  opts: { invoiceDate?: string, dueDate?: string | null } = {},
 ) {
   return db.transaction(async (tx) => {
     const before = await getServiceLog(tx, id)
@@ -342,6 +344,7 @@ export async function convertServiceLogToInvoice(
       creationSource: 'service_log',
       serviceLogId: before.id,
       invoiceDate: opts.invoiceDate ?? before.serviceDate,
+      dueDate: opts.dueDate ?? before.dueDate ?? null,
     }, actorId)
 
     const { log } = await transitionServiceLog(tx, id, 'converted_to_invoice', { invoiceId: invoice.id })

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-// Mobile-first service log upload wizard (mockup: PAGE: NEW SERVICE LOG / P1-17).
+import { vehicleSub, vehicleTag } from '~/utils/vehicles-ui'
+
+// Mobile-first photo service log wizard — customer, vehicle, dates, symptoms + photos.
 definePageMeta({ layout: 'staff' })
 
 interface CustomerPick {
@@ -25,31 +27,35 @@ if (import.meta.client && auth.loaded && !auth.can('service_logs.upload.own')) {
   navigateTo('/service-logs')
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`)
+  if (!Number.isFinite(d.getTime())) return iso
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 const step = ref(1)
 const busy = ref(false)
 const submitError = ref('')
 
 const customerId = ref('')
 const vehicleId = ref('')
-const serviceDate = ref(new Date().toISOString().slice(0, 10))
-const odometerReading = ref('')
-const location = ref('')
-const workType = ref('repair')
+const invoiceDate = ref(todayIso())
+const dueDate = ref(addDaysIso(todayIso(), 30))
 const complaint = ref('')
-const internalNotes = ref('')
-import {
-  toApiDraftLine,
-  wizardLinesSummary,
-  type WizardLineDraft,
-} from '~/utils/line-item-wizard-ui'
-import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
-
 const photos = ref<{ file: File, preview: string }[]>([])
-type LogRecordMode = 'upload' | 'digital' | 'manual' | null
-const logRecordMode = ref<LogRecordMode>(null)
-const digitalLineItems = ref<WizardLineDraft[]>([])
-const lineWizardRef = ref<{ openWizard: () => void } | null>(null)
-const voiceEntryAvailable = ref(false)
+
+watch(invoiceDate, (value) => {
+  if (!value) return
+  // Keep due date at least the invoice date when the invoice date moves forward.
+  if (!dueDate.value || dueDate.value < value) {
+    dueDate.value = addDaysIso(value, 30)
+  }
+})
 
 const { data: customersData } = useClientFetch<{ items: CustomerPick[] }>(
   '/api/customers',
@@ -60,11 +66,13 @@ const customerOptions = computed(() => customersData.value?.items ?? [])
 
 const { data: vehiclesData, refresh: refreshVehicles } = useClientFetch<{ items: VehiclePick[] }>(
   '/api/vehicles',
-  { query: computed(() => ({
-    customerId: customerId.value || undefined,
-    pageSize: 100,
-    sort: 'tag-asc',
-  })) },
+  {
+    query: computed(() => ({
+      customerId: customerId.value || undefined,
+      pageSize: 100,
+      sort: 'tag-asc',
+    })),
+  },
 )
 
 watch(customerId, () => {
@@ -73,23 +81,23 @@ watch(customerId, () => {
 })
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
+const selectedCustomer = computed(() => customerOptions.value.find(c => c.id === customerId.value))
+const selectedVehicle = computed(() => vehicleOptions.value.find(v => v.id === vehicleId.value))
 
 const steps = [
   { n: 1, label: 'Customer' },
   { n: 2, label: 'Vehicle' },
-  { n: 3, label: 'When' },
-  { n: 4, label: 'Work' },
-  { n: 5, label: 'Log' },
-  { n: 6, label: 'Submit' },
+  { n: 3, label: 'Dates' },
+  { n: 4, label: 'Log' },
+  { n: 5, label: 'Submit' },
 ]
 
 const SERVICE_LOG_NARRATIONS: Record<number, string> = {
   1: 'Pick customer.',
   2: 'Pick vehicle.',
-  3: 'Enter when and where.',
-  4: 'Describe the work.',
-  5: 'Photo or voice for lines.',
-  6: 'Review and submit.',
+  3: 'Enter invoice and due dates.',
+  4: 'Add symptoms and photos.',
+  5: 'Review and submit.',
 }
 
 useWizardStepNarration(step, SERVICE_LOG_NARRATIONS)
@@ -112,79 +120,17 @@ function removePhoto(index: number) {
   photos.value.splice(index, 1)
 }
 
-async function openLineWizardFromGesture() {
-  unlockSpeechFromUserGesture({ silent: true })
-  await nextTick()
-  await nextTick()
-  lineWizardRef.value?.openWizard()
-}
-
-function selectLogMode(mode: Exclude<LogRecordMode, null>) {
-  logRecordMode.value = mode
-  if (mode === 'digital') void openLineWizardFromGesture()
-}
-
-function ensureManualLogEntry() {
-  if (voiceEntryAvailable.value || logRecordMode.value) return
-  selectLogMode('manual')
-}
-
-watch(step, (current) => {
-  if (current === 5) ensureManualLogEntry()
-})
-
-onMounted(() => {
-  voiceEntryAvailable.value = isVoiceEntryDevice()
-  if (step.value === 5) ensureManualLogEntry()
-})
-
-function clearLogMode() {
-  if (!voiceEntryAvailable.value) return
-  logRecordMode.value = null
-}
-
-function prevFromLogStep() {
-  if (logRecordMode.value) {
-    if (!voiceEntryAvailable.value) {
-      prevStep()
-      return
-    }
-    clearLogMode()
-    return
-  }
-  prevStep()
-}
-
-function continueFromLogStep() {
-  if (!logRecordMode.value) return
-  nextStep()
-}
-
-const logRecordSummary = computed(() => {
-  if (logRecordMode.value === 'upload') {
-    return photos.value.length
-      ? `Paper sheet · ${photos.value.length} photo${photos.value.length === 1 ? '' : 's'}`
-      : 'Paper sheet · no photos yet'
-  }
-  if (logRecordMode.value === 'digital') {
-    return wizardLinesSummary(digitalLineItems.value, 'Voice lines')
-  }
-  if (logRecordMode.value === 'manual') {
-    return wizardLinesSummary(digitalLineItems.value, 'Typed lines')
-  }
-  return '—'
-})
-
 function nextStep() {
-  if (step.value < 6) step.value += 1
+  if (step.value < 5) step.value += 1
 }
 
 function prevStep() {
   if (step.value > 1) step.value -= 1
 }
 
-const selectedCustomer = computed(() => customerOptions.value.find(c => c.id === customerId.value))
-const selectedVehicle = computed(() => vehicleOptions.value.find(v => v.id === vehicleId.value))
+const canContinueDates = computed(() =>
+  !!invoiceDate.value && !!dueDate.value && dueDate.value >= invoiceDate.value,
+)
 
 async function uploadPhotos(logId: string) {
   for (const p of photos.value) {
@@ -198,7 +144,7 @@ async function uploadPhotos(logId: string) {
 }
 
 async function submitLog() {
-  if (!customerId.value || !vehicleId.value) return
+  if (!customerId.value || !vehicleId.value || !canContinueDates.value) return
   busy.value = true
   submitError.value = ''
   try {
@@ -207,22 +153,15 @@ async function submitLog() {
       body: {
         customerId: customerId.value,
         vehicleId: vehicleId.value,
-        serviceDate: serviceDate.value,
-        odometerReading: odometerReading.value || null,
-        location: location.value || null,
-        workType: workType.value,
-        complaint: complaint.value || null,
-        internalNotes: internalNotes.value || null,
-        draftLineItems: (logRecordMode.value === 'digital' || logRecordMode.value === 'manual') && digitalLineItems.value.length
-          ? digitalLineItems.value.map(toApiDraftLine)
-          : undefined,
+        serviceDate: invoiceDate.value,
+        dueDate: dueDate.value,
+        complaint: complaint.value.trim() || null,
         finalize: true,
       },
     })
 
     if (photos.value.length) await uploadPhotos(log.id)
-
-    await navigateTo('/service-logs')
+    await navigateTo(`/service-logs/${log.id}`)
   }
   catch (e: unknown) {
     submitError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Submit failed'
@@ -239,7 +178,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page active sl-page">
-    <StaffPageHead subtitle="Step-by-step field upload · saved when submitted">
+    <StaffPageHead subtitle="Photo service log · customer, vehicle, dates, symptoms">
       <template #title>New service log</template>
       <template #actions>
         <NuxtLink to="/service-logs" class="btn">Cancel</NuxtLink>
@@ -257,7 +196,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Step 1 -->
     <div v-show="step === 1" class="sl-panel active">
       <h3>Which customer?</h3>
       <p class="sl-hint">Select the account this service was performed for.</p>
@@ -284,10 +222,9 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Step 2 -->
     <div v-show="step === 2" class="sl-panel active">
       <h3>Which vehicle?</h3>
-      <p class="sl-hint">Pick the fleet unit that was serviced.</p>
+      <p class="sl-hint">Pick the unit that was serviced.</p>
       <div v-if="vehicleOptions.length" class="sl-picks">
         <button
           v-for="v in vehicleOptions"
@@ -312,134 +249,71 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Step 3 -->
     <div v-show="step === 3" class="sl-panel active">
-      <h3>When &amp; where?</h3>
-      <p class="sl-hint">Service date, meter reading, and job location.</p>
-      <label class="fld"><span>Service date</span><input v-model="serviceDate" type="date" required></label>
-      <label class="fld"><span>Odometer or hours</span><input v-model="odometerReading" type="text" placeholder="e.g. 412,806 mi or 2,148 hrs"></label>
-      <label class="fld"><span>Job location</span><input v-model="location" type="text" placeholder="Shop bay, customer yard, roadside…"></label>
+      <h3>Invoice dates</h3>
+      <p class="sl-hint">These dates carry onto the invoice when this log is sent.</p>
+      <label class="fld">
+        <span>Invoice date</span>
+        <input v-model="invoiceDate" type="date" required>
+      </label>
+      <label class="fld">
+        <span>Due date</span>
+        <input v-model="dueDate" type="date" required :min="invoiceDate || undefined">
+      </label>
+      <p v-if="invoiceDate && dueDate && dueDate < invoiceDate" class="help" style="color:#dc2626;">
+        Due date must be on or after the invoice date.
+      </p>
       <div class="sl-foot">
         <button type="button" class="btn" @click="prevStep">Back</button>
-        <button type="button" class="btn primary" @click="nextStep">Continue</button>
+        <button type="button" class="btn primary" :disabled="!canContinueDates" @click="nextStep">Continue</button>
       </div>
     </div>
 
-    <!-- Step 4 -->
     <div v-show="step === 4" class="sl-panel active">
-      <h3>What was done?</h3>
-      <p class="sl-hint">Capture the customer complaint and your internal shop notes separately.</p>
-      <label class="fld"><span>Work type</span>
-        <select v-model="workType">
-          <option value="preventive_maintenance">Preventive maintenance</option>
-          <option value="repair">Repair / breakdown</option>
-          <option value="diagnostic">Diagnostic</option>
-          <option value="inspection">Inspection</option>
-          <option value="other">Other</option>
-        </select>
+      <h3>Symptoms &amp; photos</h3>
+      <p class="sl-hint">Capture the customer complaint, then photograph the paper service log.</p>
+      <label class="fld">
+        <span>Vehicle symptoms / customer complaint</span>
+        <textarea
+          v-model="complaint"
+          rows="4"
+          placeholder="What the customer or driver reported…"
+        />
       </label>
-      <label class="fld"><span>Customer complaint / symptoms</span>
-        <textarea v-model="complaint" rows="4" placeholder="What the customer or driver reported…" />
-        <span class="help">Flows to the invoice PDF under Symptoms / Complaints</span>
+
+      <label class="sl-photo-zone">
+        <input type="file" accept="image/*" capture="environment" multiple @change="onPhotoPick">
+        <div class="sl-photo-inner">
+          <span class="ico" aria-hidden="true">📷</span>
+          <b>Tap to add photos</b>
+          <span>JPG, PNG · multiple pages OK</span>
+        </div>
       </label>
-      <label class="fld"><span>Internal notes <span class="fld-badge">Staff only</span></span>
-        <textarea v-model="internalNotes" rows="4" placeholder="Parts replaced, fault codes…" />
-      </label>
+      <div v-if="photos.length" class="sl-photo-grid">
+        <div v-for="(p, i) in photos" :key="i" class="sl-photo-item">
+          <img :src="p.preview" alt="Service log photo">
+          <button type="button" class="rm" aria-label="Remove photo" @click="removePhoto(i)">×</button>
+        </div>
+      </div>
+
       <div class="sl-foot">
         <button type="button" class="btn" @click="prevStep">Back</button>
         <button type="button" class="btn primary" @click="nextStep">Continue</button>
       </div>
     </div>
 
-    <!-- Step 5 -->
     <div v-show="step === 5" class="sl-panel active">
-      <h3>Service log</h3>
-      <p v-if="logRecordMode === 'manual' && !voiceEntryAvailable" class="sl-hint">
-        Type each line item below.
-      </p>
-      <p v-if="!logRecordMode && voiceEntryAvailable" class="sl-hint">
-        How did you record the work?
-      </p>
-
-      <div v-if="!logRecordMode && voiceEntryAvailable" class="sl-picks sl-log-modes">
-        <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('upload')">
-          <span class="av indigo" aria-hidden="true">📷</span>
-          <span class="nm">
-            <b>{{ PHOTO_UPLOAD_PICK.title }}</b>
-            <small>{{ PHOTO_UPLOAD_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </button>
-        <button type="button" class="sl-pick sl-log-mode" @click="selectLogMode('digital')">
-          <span class="av teal" aria-hidden="true">🎙️</span>
-          <span class="nm">
-            <b>{{ VOICE_ENTRY_PICK.title }}</b>
-            <small>{{ VOICE_ENTRY_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </button>
-      </div>
-
-      <div v-else-if="logRecordMode === 'upload'" class="sl-log-upload">
-        <p class="sl-hint">
-          Photograph the paper service log sheet only — the form where the mechanic wrote down the work.
-        </p>
-        <label class="sl-photo-zone">
-          <input type="file" accept="image/*" capture="environment" multiple @change="onPhotoPick">
-          <div class="sl-photo-inner">
-            <span class="ico" aria-hidden="true">📄</span>
-            <b>Tap to photograph the sheet</b>
-            <span>JPG, PNG · multiple pages OK</span>
-          </div>
-        </label>
-        <div v-if="photos.length" class="sl-photo-grid">
-          <div v-for="(p, i) in photos" :key="i" class="sl-photo-item">
-            <img :src="p.preview" alt="Service log sheet">
-            <button type="button" class="rm" aria-label="Remove photo" @click="removePhoto(i)">×</button>
-          </div>
-        </div>
-        <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
-      </div>
-
-      <div v-else class="sl-log-digital">
-        <CommonLineItemWizard
-          ref="lineWizardRef"
-          v-model:lines="digitalLineItems"
-          :voice-enabled="logRecordMode === 'digital'"
-        />
-        <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLogMode">Change method</button>
-      </div>
-
-      <div class="sl-foot">
-        <button type="button" class="btn" @click="prevFromLogStep">Back</button>
-        <button
-          type="button"
-          class="btn primary"
-          :disabled="!logRecordMode"
-          @click="continueFromLogStep"
-        >
-          Continue
-        </button>
-      </div>
-    </div>
-
-    <!-- Step 6 -->
-    <div v-show="step === 6" class="sl-panel active">
       <h3>Review &amp; submit</h3>
       <p class="sl-hint">Confirm details before sending to the review queue.</p>
       <div class="sl-review">
-        <div class="r"><span class="k">Log number</span><span class="v">Assigned on submit</span></div>
         <div class="r"><span class="k">Customer</span><span class="v">{{ selectedCustomer?.displayName ?? '—' }}</span></div>
         <div class="r"><span class="k">Vehicle</span><span class="v">{{ selectedVehicle ? vehicleTag(selectedVehicle) : '—' }}</span></div>
-        <div class="r"><span class="k">Service date</span><span class="v">{{ serviceDate }}</span></div>
-        <div class="r"><span class="k">Odometer / hours</span><span class="v">{{ odometerReading || '—' }}</span></div>
-        <div class="r"><span class="k">Location</span><span class="v">{{ location || '—' }}</span></div>
-        <div class="r"><span class="k">Work type</span><span class="v">{{ workTypeLabel(workType) }}</span></div>
-        <div class="r stack"><span class="k">Customer complaint</span><span class="v">{{ complaint || '—' }}</span></div>
-        <div class="r stack"><span class="k">Internal notes</span><span class="v">{{ internalNotes || '—' }}</span></div>
-        <div class="r"><span class="k">Service log</span><span class="v">{{ logRecordSummary }}</span></div>
-        <div v-if="(logRecordMode === 'digital' || logRecordMode === 'manual') && digitalLineItems.length" class="sl-review-lines">
-          <CommonLineItemsTable :lines="digitalLineItems" title="Line items" />
+        <div class="r"><span class="k">Invoice date</span><span class="v">{{ invoiceDate }}</span></div>
+        <div class="r"><span class="k">Due date</span><span class="v">{{ dueDate }}</span></div>
+        <div class="r stack"><span class="k">Symptoms / complaint</span><span class="v">{{ complaint.trim() || '—' }}</span></div>
+        <div class="r">
+          <span class="k">Photos</span>
+          <span class="v">{{ photos.length ? `${photos.length} photo${photos.length === 1 ? '' : 's'}` : 'None yet' }}</span>
         </div>
       </div>
       <p v-if="submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>

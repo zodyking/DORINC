@@ -257,8 +257,7 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
               <th class="col-log">Log</th>
               <th class="col-customer">Customer</th>
               <th class="col-vehicle">Vehicle</th>
-              <th class="col-date">Service date</th>
-              <th class="col-work">Work</th>
+              <th class="col-date">Invoice date</th>
               <th class="col-status">Status</th>
               <th class="col-invoice">Invoice</th>
               <th class="col-actions" aria-label="Actions" />
@@ -284,11 +283,8 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
                 <span class="lead">{{ vehicleLabel(log.vehicle) }}</span>
                 <span v-if="log.vehicle" class="sub">{{ vehicleSub(log.vehicle) }}</span>
               </td>
-              <td class="col-date" data-label="Service date">
+              <td class="col-date" data-label="Invoice date">
                 {{ serviceLogServiceDateDisplay(log.serviceDate) }}
-              </td>
-              <td class="col-work" data-label="Work">
-                {{ workTypeLabel(log.workType) }}
               </td>
               <td class="col-status" data-label="Status">
                 <div class="sl-list-badges">
