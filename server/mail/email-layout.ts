@@ -16,6 +16,7 @@ export {
   emailHighlight,
   emailDetails,
   emailNote,
+  emailQuotedMessage,
   emailActions,
   emailSecondaryLink,
   normalizeEmailBrand,

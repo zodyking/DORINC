@@ -862,9 +862,15 @@ export function buildCustomerEmailReceivedStaffEmail({
       { label: 'Email', value: customerEmail },
       subject?.trim() ? { label: 'Subject', value: subject.trim() } : null,
     ].filter(Boolean),
-    bodyHtml: quotedMessage ? emailQuotedMessage(quotedMessage) : undefined,
+    bodyHtml: quotedMessage
+      ? emailQuotedMessage(quotedMessage, {
+          title: customerName,
+          subtitle: customerEmail,
+        })
+      : undefined,
     primaryAction: { href: messagesUrl, label: 'Sign in & reply' },
-    footerNote: 'You received this because a customer email was synced into Messages. Sign in to reply.',
+    headerBadge: 'Customer email',
+    footerNote: `This email was sent because activity occurred in your ${brandNameFrom({ brand })} accounting workspace.`,
     appUrl,
     brand,
     templateOverride,
@@ -893,29 +899,34 @@ export function buildChatMessageReceivedEmail({
     '',
     messagePreview,
     '',
-    `Open Messages: ${messagesUrl}`,
+    `Open message: ${messagesUrl}`,
   ].join('\n')
 
   return styledEmail({
     subject,
     text,
-    eyebrow: 'Team chat',
+    headerBadge: isTeamChat ? 'Team notification' : 'Direct message',
+    eyebrow: isTeamChat ? 'Team message' : 'Direct message',
     headline: `${senderName} sent a message`,
-    lead: `You have a new message in ${channelLabel}.`,
-    details: [
-      { label: 'From', value: senderName },
-      { label: 'Channel', value: channelLabel },
-    ],
+    lead: isTeamChat
+      ? `You received a new message in the ${channelLabel} channel.`
+      : `You received a new message from ${senderName}.`,
     bodyHtml: messagePreview
-      ? `<p style="margin:0;color:#111827;font-size:17px;line-height:28px;font-weight:700;font-style:italic;font-family:Arial,Helvetica,sans-serif;">&ldquo;${escapeHtml(String(messagePreview))}&rdquo;</p>`
+      ? emailQuotedMessage(String(messagePreview), {
+          title: senderName,
+          subtitle: channelLabel,
+        })
       : undefined,
-    primaryAction: { href: messagesUrl, label: 'Open Messages' },
-    footerNote: 'You received this because chat email notifications are enabled on your account.',
+    details: [
+      { label: 'Sent to', value: recipientName },
+    ],
+    primaryAction: { href: messagesUrl, label: 'Open message' },
+    footerNote: `This email was sent because activity occurred in your ${brandNameFrom({ brand })} accounting workspace.`,
     appUrl,
     brand,
     templateOverride,
     templateVars: { recipientName, senderName, channelLabel, messagePreview },
-})
+  })
 }
 
 export function buildServiceLogSentToInvoiceStaffEmail({

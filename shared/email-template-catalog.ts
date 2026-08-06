@@ -703,13 +703,13 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     audience: 'staff',
     group: 'workflow',
     defaults: {
-      subject: '{{senderName}} — {{channelLabel}}',
-      eyebrow: 'Team chat',
+      subject: '{{senderName}} sent a message',
+      eyebrow: 'Team message',
       headline: '{{senderName}} sent a message',
-      lead: 'You have a new message in {{channelLabel}}.',
+      lead: 'You received a new message in the {{channelLabel}} channel.',
       noteTitle: '',
       noteBody: '',
-      primaryActionLabel: 'Open Messages',
+      primaryActionLabel: 'Open message',
       htmlSource: '',
     },
     variables: [

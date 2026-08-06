@@ -127,7 +127,7 @@ describe('email-thread helpers', () => {
     expect(html).not.toContain('border-radius:12px')
   })
 
-  it('builds outbound HTML with the subject as the header subheading', async () => {
+  it('builds outbound HTML with the subject as the header badge', async () => {
     const { html, text, brand } = await buildOutboundEmailBodies(
       {} as never,
       {
@@ -137,7 +137,6 @@ describe('email-thread helpers', () => {
         subject: 'Invoice question',
       },
     )
-    expect(brand.brandTagline).toBe('Invoice question')
     expect(html).toContain('Invoice question')
     expect(html).not.toContain('Accounting workspace')
     expect(html).not.toContain('>Message<')
@@ -146,17 +145,21 @@ describe('email-thread helpers', () => {
     expect(html).toContain('Thanks for confirming.')
     expect(html).toContain('— Brandon K.')
     expect(html).toContain('Administrator')
+    expect(html).toContain('background:#ffffff')
+    expect(brand.brandName).toBeTruthy()
     expect(text).toContain('great')
     expect(text).toContain('— Brandon K.')
     expect(text).toContain('Administrator')
   })
 
-  it('falls back to a customer-facing tagline when no subject is given', async () => {
-    const { brand } = await buildOutboundEmailBodies(
+  it('keeps customer-facing brand tagline when no subject is given', async () => {
+    const { brand, html } = await buildOutboundEmailBodies(
       {} as never,
       { staffName: 'Brandon King', accountTypeKey: 'manager', bodyText: 'hello' },
     )
     expect(brand.brandTagline).toBe(CUSTOMER_EMAIL_TAGLINE)
+    // Tagline is no longer rendered under the company name.
+    expect(html).not.toContain(CUSTOMER_EMAIL_TAGLINE)
   })
 })
 

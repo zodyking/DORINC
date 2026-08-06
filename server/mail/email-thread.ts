@@ -66,7 +66,7 @@ export interface OutboundEmailInput {
   /** Internal account-type key of the sender (admin, manager, …). */
   accountTypeKey?: string | null
   bodyText: string
-  /** Email subject — shown as the header subheading (more relevant than a tagline). */
+  /** Email subject — shown as the header badge (right side), not a subheading. */
   subject?: string
 }
 
@@ -74,11 +74,8 @@ export async function buildOutboundEmailBodies(
   db: Db,
   input: OutboundEmailInput,
 ): Promise<{ text: string, html: string, brand: EmailBrandContext }> {
-  const resolved = toCustomerEmailBrand(await resolveEmailBrand(db))
-  const subheading = input.subject?.trim()
-  const brand: EmailBrandContext = subheading
-    ? { ...resolved, brandTagline: subheading }
-    : resolved
+  const brand = toCustomerEmailBrand(await resolveEmailBrand(db))
+  const subjectBadge = input.subject?.trim() || ''
 
   const trimmed = input.bodyText.trim()
   const accountTypeLabel = signatureAccountTypeLabel(input.accountTypeKey)
@@ -92,7 +89,7 @@ export async function buildOutboundEmailBodies(
     // Omit title/headline so the message body is the focus (not a repeated brand H1).
     preheader: trimmed.slice(0, 120),
     bodyHtml: `${messageHtml}${signatureHtml}`,
-    headerBadge: '',
+    headerBadge: subjectBadge,
     footerNote: null,
     footerLinks: false,
   })

@@ -240,7 +240,8 @@ describe('system email templates', () => {
     expect(inbound.text).toContain('Sign in to DORINC')
     expect(inbound.text).toContain('Can you confirm the total on the latest invoice?')
     expect(inbound.html).toContain('Fleet Co Sent A Message')
-    expect(inbound.html).toContain('&ldquo;Can you confirm the total on the latest invoice?&rdquo;')
+    expect(inbound.html).toContain('Can you confirm the total on the latest invoice?')
+    expect(inbound.html).toContain('border-left:3px solid #2563eb')
     expect(inbound.html).not.toContain('Notified')
     expect(inbound.html).not.toContain('Customer message')
   })
@@ -257,8 +258,13 @@ describe('system email templates', () => {
       isTeamChat: true,
     })
     expect(mail.subject).toBe('Brandon Sent A Team Message')
-    expect(mail.html).toContain('Team')
-    expect(mail.html).toContain('Open Messages')
+    expect(mail.html).toContain('Team notification')
+    expect(mail.html).toContain('Team message')
+    expect(mail.html).toContain('Open message')
+    expect(mail.html).toContain('Sent to')
+    expect(mail.html).toContain('Brandon K.')
+    expect(mail.html).toContain('display:block;width:100%')
+    expect(mail.html).not.toContain('Accounting workspace')
   })
 
   it('builds direct message chat email with channel subject', () => {
