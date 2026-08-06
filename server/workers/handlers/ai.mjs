@@ -50,8 +50,10 @@ async function loadAiSettings(pool) {
     defaultModel: row.default_model,
     serviceLogExtractionModel: row.service_log_extraction_model,
     invoiceDescriptionModel: row.invoice_description_model,
+    platformHelpModel: row.platform_help_model,
     serviceLogExtractionEnabled: row.service_log_extraction_enabled,
     invoiceDescriptionEnabled: row.invoice_description_enabled,
+    platformHelpEnabled: row.platform_help_enabled,
   }
 }
 
@@ -61,6 +63,9 @@ function modelFor(settings, feature) {
   }
   if (feature === 'invoice_description') {
     return settings.invoiceDescriptionModel ?? settings.defaultModel
+  }
+  if (feature === 'platform_help') {
+    return settings.platformHelpModel ?? settings.defaultModel
   }
   return settings.defaultModel
 }
