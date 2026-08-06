@@ -61,6 +61,7 @@ describe.sequential('P2-15 platform help assistant', () => {
     const status = await getPlatformHelpStatus(db)
     expect(status.enabled).toBe(true)
     expect(typeof status.imageUploadEnabled).toBe('boolean')
+    expect(status.model == null || typeof status.model === 'string').toBe(true)
 
     const result = await askPlatformHelp(db, {
       question: 'How do I create a new invoice?',
