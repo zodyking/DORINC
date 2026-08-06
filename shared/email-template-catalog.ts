@@ -11,6 +11,11 @@ export interface EmailTemplateContent {
   noteTitle: string
   noteBody: string
   primaryActionLabel: string
+  /**
+   * Raw HTML email document. When non-empty on an active template, replaces the
+   * generated layout HTML ({{variables}} are interpolated at send/preview time).
+   */
+  htmlSource: string
 }
 
 export type EmailTemplateAudience = 'customer' | 'staff' | 'system'
@@ -42,6 +47,7 @@ export function emptyEmailTemplateContent(): EmailTemplateContent {
     noteTitle: '',
     noteBody: '',
     primaryActionLabel: '',
+    htmlSource: '',
   }
 }
 
@@ -58,6 +64,7 @@ export function normalizeEmailTemplateContent(
     noteBody: String(input?.noteBody ?? fallback.noteBody ?? '').trim(),
     primaryActionLabel: String(input?.primaryActionLabel ?? fallback.primaryActionLabel).trim()
       || fallback.primaryActionLabel,
+    htmlSource: String(input?.htmlSource ?? fallback.htmlSource ?? '').trim(),
   }
 }
 
@@ -81,7 +88,15 @@ export function applyEmailTemplateContent(
     noteTitle: interpolateEmailTemplate(content.noteTitle, vars),
     noteBody: interpolateEmailTemplate(content.noteBody, vars),
     primaryActionLabel: interpolateEmailTemplate(content.primaryActionLabel, vars),
+    htmlSource: interpolateEmailTemplate(content.htmlSource ?? '', vars),
   }
+}
+
+/** True when a saved template uses a custom raw HTML document. */
+export function hasEmailTemplateHtmlSource(
+  content: Partial<EmailTemplateContent> | null | undefined,
+): boolean {
+  return Boolean(content?.htmlSource && String(content.htmlSource).trim())
 }
 
 const v = (key: string, label: string): EmailTemplateVariable => ({ key, label })
@@ -101,6 +116,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'What happens next',
       noteBody: 'After verification, an administrator must approve your account before you can sign in.',
       primaryActionLabel: 'Verify email address',
+
+      htmlSource: '',
     },
     variables: [v('name', 'Recipient name'), v('brandName', 'Business name'), v('verifyUrl', 'Verification link')],
     sampleVars: {
@@ -123,6 +140,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Did not request this?',
       noteBody: 'You can safely ignore this email — your password will not change unless you use the link above.',
       primaryActionLabel: 'Reset password',
+
+      htmlSource: '',
     },
     variables: [v('name', 'Recipient name'), v('brandName', 'Business name'), v('resetUrl', 'Reset link')],
     sampleVars: {
@@ -145,6 +164,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Was this not you?',
       noteBody: 'If you did not attempt to sign in, contact your administrator immediately and change your password.',
       primaryActionLabel: 'Enter verification code',
+
+      htmlSource: '',
     },
     variables: [
       v('name', 'Recipient name'),
@@ -175,6 +196,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Result',
       noteBody: 'If you received this email, outbound SMTP is working correctly.',
       primaryActionLabel: '',
+
+      htmlSource: '',
     },
     variables: [
       v('brandName', 'Business name'),
@@ -203,6 +226,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Security note',
       noteBody: 'You will choose a new password on first login. If you did not expect this email, contact the shop that issued it.',
       primaryActionLabel: 'Sign in to the portal',
+
+      htmlSource: '',
     },
     variables: [
       v('name', 'Customer name'),
@@ -231,6 +256,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'First sign-in',
       noteBody: 'Use the temporary password once, then you will be prompted to create your own password. If you did not expect this invite, contact your administrator.',
       primaryActionLabel: 'Sign in to staff workspace',
+
+      htmlSource: '',
     },
     variables: [
       v('name', 'Invitee name'),
@@ -259,6 +286,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Details',
       noteBody: '{{noteBody}}',
       primaryActionLabel: 'Open backup settings',
+
+      htmlSource: '',
     },
     variables: [
       v('filename', 'Backup filename'),
@@ -291,6 +320,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Need help?',
       noteBody: 'If you have questions, reply to this email or submit a request through your customer portal.',
       primaryActionLabel: '',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Customer name'),
@@ -319,6 +350,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Need help?',
       noteBody: 'If you have questions, reply to this email or submit a request through the portal.',
       primaryActionLabel: 'View invoice in the portal',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Customer name'),
@@ -347,6 +380,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'View estimate in the portal',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Customer name'),
@@ -371,6 +406,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Staff note',
       noteBody: '{{reviewReason}}',
       primaryActionLabel: 'View your requests',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Customer name'),
@@ -403,6 +440,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Was this you?',
       noteBody: 'If this was not you, contact your administrator immediately and change your password.',
       primaryActionLabel: 'Open {{brandName}}',
+
+      htmlSource: '',
     },
     variables: [
       v('name', 'User name'),
@@ -435,6 +474,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'What happens next',
       noteBody: 'A member of the {{brandName}} team will review your message and reply as soon as possible.',
       primaryActionLabel: '',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Customer name'),
@@ -461,6 +502,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Request reason',
       noteBody: '{{reason}}',
       primaryActionLabel: 'Review request',
+
+      htmlSource: '',
     },
     variables: [
       v('reviewerName', 'Reviewer name'),
@@ -493,6 +536,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Reviewer note',
       noteBody: '{{reviewReason}}',
       primaryActionLabel: 'View deletion requests',
+
+      htmlSource: '',
     },
     variables: [
       v('requestorName', 'Requestor name'),
@@ -529,6 +574,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'Review users',
+
+      htmlSource: '',
     },
     variables: [
       v('adminName', 'Admin name'),
@@ -555,6 +602,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'Review invoice',
+
+      htmlSource: '',
     },
     variables: [
       v('approverName', 'Approver name'),
@@ -583,6 +632,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Customer message',
       noteBody: '{{message}}',
       primaryActionLabel: 'View in portal',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Staff recipient'),
@@ -615,6 +666,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: 'Customer message',
       noteBody: '{{message}}',
       primaryActionLabel: 'Review in portal',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Staff recipient'),
@@ -647,6 +700,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'Sign in & reply',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Staff recipient'),
@@ -675,6 +730,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'Open Messages',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Recipient name'),
@@ -703,6 +760,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
       noteTitle: '',
       noteBody: '',
       primaryActionLabel: 'Complete invoice',
+
+      htmlSource: '',
     },
     variables: [
       v('recipientName', 'Recipient name'),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyEmailTemplateOverride,
+  finalizeMailWithTemplateOverride,
   interpolateEmailTemplate,
 } from '../../server/mail/email-template-override.mjs'
 
@@ -29,5 +30,19 @@ describe('email template override merge', () => {
     expect(merged.note).toEqual({ title: 'Custom note', body: 'Body Alex' })
     expect(merged.primaryAction.label).toBe('Open now')
     expect(interpolateEmailTemplate('{{missing}}', {})).toBe('')
+  })
+
+  it('replaces mail HTML when htmlSource is present', () => {
+    const mail = finalizeMailWithTemplateOverride({
+      subject: 'Default',
+      text: 'text',
+      html: '<p>generated</p>',
+    }, {
+      subject: 'Hi {{name}}',
+      htmlSource: '<html><body>Hello {{name}}</body></html>',
+    }, { name: 'Alex' })
+
+    expect(mail.subject).toBe('Hi Alex')
+    expect(mail.html).toBe('<html><body>Hello Alex</body></html>')
   })
 })

@@ -19,6 +19,7 @@ const bodySchema = z.object({
     noteTitle: z.string().max(200).optional().default(''),
     noteBody: z.string().max(4000).optional().default(''),
     primaryActionLabel: z.string().max(120).optional().default(''),
+    htmlSource: z.string().max(250_000).optional().default(''),
   }),
   activate: z.boolean().optional(),
 })

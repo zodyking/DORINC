@@ -6,7 +6,10 @@ import type { EmailBrandContext } from '../services/email-branding.service'
 import {
   buildStyledEmail,
 } from './email-layout'
-import { applyEmailTemplateOverride } from './email-template-override.mjs'
+import {
+  applyEmailTemplateOverride,
+  finalizeMailWithTemplateOverride,
+} from './email-template-override.mjs'
 
 function portalUrl(path = '', appUrl?: string): string {
   const base = (appUrl || getAppUrl()).replace(/\/$/, '')
@@ -77,7 +80,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
   ].filter(Boolean).join('\n')
 
   return {
-    ...buildStyledEmail(applyEmailTemplateOverride({
+    ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Invoice',
@@ -109,7 +112,12 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
       invoiceNumber: input.invoiceNumber,
       dueDate: dueLine || '',
       total: totalLine || '',
-    })),
+    })), input.templateOverride, {
+      recipientName: input.recipientName,
+      invoiceNumber: input.invoiceNumber,
+      dueDate: dueLine || '',
+      total: totalLine || '',
+    }),
     notificationKind: 'invoice_sent' as const,
   }
 }
@@ -142,7 +150,7 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
   ].filter(Boolean).join('\n')
 
   return {
-    ...buildStyledEmail(applyEmailTemplateOverride({
+    ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Portal request',
@@ -173,7 +181,14 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
       requestTitle: input.requestTitle,
       statusLabel,
       reviewReason: reasonLine || '',
-    })),
+    })), input.templateOverride, {
+      recipientName: input.recipientName,
+      kindLabel,
+      kindLabelLower: kindLabel.toLowerCase(),
+      requestTitle: input.requestTitle,
+      statusLabel,
+      reviewReason: reasonLine || '',
+    }),
     notificationKind: 'request_status' as const,
   }
 }
@@ -200,7 +215,7 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
   ].join('\n')
 
   return {
-    ...buildStyledEmail(applyEmailTemplateOverride({
+    ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Estimate',
@@ -217,7 +232,10 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
     }, input.templateOverride, {
       recipientName: input.recipientName,
       estimateNumber: input.estimateNumber,
-    })),
+    })), input.templateOverride, {
+      recipientName: input.recipientName,
+      estimateNumber: input.estimateNumber,
+    }),
     notificationKind: 'estimate_sent' as const,
   }
 }

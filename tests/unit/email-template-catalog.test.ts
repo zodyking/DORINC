@@ -25,6 +25,18 @@ describe('email template catalog', () => {
     })
     expect(resolved.lead).toContain('Acme Shop')
     expect(interpolateEmailTemplate('Hi {{name}}', { name: 'Pat' })).toBe('Hi Pat')
-    expect(normalizeEmailTemplateContent({ subject: '  Custom  ' }, def!.defaults).subject).toBe('Custom')
+    const normalized = normalizeEmailTemplateContent({ subject: '  Custom  ' }, def!.defaults)
+    expect(normalized.subject).toBe('Custom')
+    expect(normalized.htmlSource).toBe('')
+  })
+
+  it('preserves raw htmlSource through normalize and interpolate', () => {
+    const def = getEmailTemplateDefinition('invoice_sent')!
+    const normalized = normalizeEmailTemplateContent({
+      htmlSource: '<p>Invoice {{invoiceNumber}}</p>',
+    }, def.defaults)
+    expect(normalized.htmlSource).toContain('{{invoiceNumber}}')
+    const resolved = applyEmailTemplateContent(normalized, { invoiceNumber: 'INV-1' })
+    expect(resolved.htmlSource).toBe('<p>Invoice INV-1</p>')
   })
 })

@@ -1,6 +1,6 @@
 /**
- * Merge Control Panel email template overrides into buildStyledEmail options.
- * Shared by Nuxt API and workers (plain ESM).
+ * Merge Control Panel email template overrides into buildStyledEmail options /
+ * final mail payloads. Shared by Nuxt API and workers (plain ESM).
  */
 
 /**
@@ -12,6 +12,14 @@ export function interpolateEmailTemplate(template, vars = {}) {
     const value = vars[key]
     return value == null ? '' : String(value)
   })
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} override
+ */
+export function emailTemplateHtmlSource(override) {
+  if (!override || typeof override !== 'object') return ''
+  return String(override.htmlSource ?? '').trim()
 }
 
 /**
@@ -29,6 +37,7 @@ export function resolveEmailTemplateOverride(override, vars = {}) {
   const primaryActionLabel = override.primaryActionLabel != null
     ? interpolateEmailTemplate(String(override.primaryActionLabel), vars)
     : null
+  const htmlSource = emailTemplateHtmlSource(override)
   return {
     subject: subject?.trim() || null,
     eyebrow: eyebrow?.trim() || null,
@@ -37,11 +46,12 @@ export function resolveEmailTemplateOverride(override, vars = {}) {
     noteTitle: noteTitle?.trim() || null,
     noteBody: noteBody?.trim() || null,
     primaryActionLabel: primaryActionLabel?.trim() || null,
+    htmlSource: htmlSource || null,
   }
 }
 
 /**
- * Apply override fields onto a buildStyledEmail options object (mutates a shallow copy).
+ * Apply structured override fields onto a buildStyledEmail options object.
  *
  * @param {Record<string, any>} opts
  * @param {Record<string, unknown> | null | undefined} override
@@ -74,6 +84,24 @@ export function applyEmailTemplateOverride(opts, override, vars = {}) {
   }
 
   return next
+}
+
+/**
+ * After building a mail payload, replace HTML when a raw htmlSource override exists.
+ *
+ * @param {{ subject: string, text: string, html: string }} mail
+ * @param {Record<string, unknown> | null | undefined} override
+ * @param {Record<string, string | null | undefined>} vars
+ */
+export function finalizeMailWithTemplateOverride(mail, override, vars = {}) {
+  if (!mail) return mail
+  const resolved = resolveEmailTemplateOverride(override, vars)
+  if (!resolved?.htmlSource) return mail
+  return {
+    ...mail,
+    subject: resolved.subject || mail.subject,
+    html: interpolateEmailTemplate(resolved.htmlSource, vars),
+  }
 }
 
 /**
