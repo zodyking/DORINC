@@ -1,8 +1,31 @@
 import type { AiSuggestionRow } from './ai-ui'
 import type { InvoiceLineAuditContent } from '../../shared/validators/ai'
 
+/** Client-only suggestion id when audit passed with zero issues (no server suggestion row). */
+export const LOCAL_LINE_AUDIT_PASS_ID = 'local-line-audit-pass'
+
 export function isLineAuditSuggestion(suggestion: AiSuggestionRow): boolean {
   return (suggestion.suggestedContent as { kind?: string }).kind === 'invoice_line_audit'
+}
+
+/** Build a pending suggestion so the review modal can open after a clean audit. */
+export function buildLineAuditPassSuggestion(
+  auditContent: InvoiceLineAuditContent,
+): AiSuggestionRow {
+  return {
+    id: LOCAL_LINE_AUDIT_PASS_ID,
+    aiJobId: '',
+    featureType: 'invoice_description',
+    status: 'pending',
+    originalContent: null,
+    suggestedContent: auditContent as unknown as Record<string, unknown>,
+    reviewedAt: null,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+export function isLocalLineAuditPass(suggestion: AiSuggestionRow | null | undefined): boolean {
+  return suggestion?.id === LOCAL_LINE_AUDIT_PASS_ID
 }
 
 export function parseLineAuditContent(suggestion: AiSuggestionRow): InvoiceLineAuditContent | null {

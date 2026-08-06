@@ -44,10 +44,12 @@ import {
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
+import type { InvoiceLineAuditContent } from '#shared/validators/ai'
 import {
+  buildLineAuditPassSuggestion,
+  isLocalLineAuditPass,
   latestLineAuditSuggestion,
   shouldRunLineAuditBeforeSave,
-  shouldSkipLineAuditError,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
@@ -731,6 +733,11 @@ async function refreshAuditReport() {
   activeAuditSuggestion.value = latestAuditSuggestion.value
 }
 
+/**
+ * Stage draft is already synced. Run AI line audit and ALWAYS open the review
+ * modal before finalize — even when every line passes.
+ * Returns false while waiting on the modal (or on hard failure).
+ */
 async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
   auditError.value = ''
 
@@ -742,24 +749,22 @@ async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
     const res = await $fetch<{
       issuesFound: number
       suggestion: AiSuggestionRow | null
+      auditContent: InvoiceLineAuditContent
     }>(`/api/invoices/${id}/line-audit`, {
       method: 'POST',
     })
 
-    if (res.suggestion && res.issuesFound > 0) {
-      activeAuditSuggestion.value = res.suggestion
-      auditRequireReview.value = true
-      auditModalOpen.value = true
-      return false
-    }
-
-    return true
+    activeAuditSuggestion.value = res.suggestion
+      ?? buildLineAuditPassSuggestion(res.auditContent)
+    auditRequireReview.value = true
+    auditModalOpen.value = true
+    // Block finalize until the user confirms in the modal.
+    return false
   }
   catch (e: unknown) {
-    if (shouldSkipLineAuditError(e)) {
-      return true
-    }
+    // Do not silently skip — AI describe is on, so surface the failure.
     saveError.value = syncFetchErrorMessage(e, 'Line audit failed')
+    savePendingAfterAudit.value = false
     return false
   }
   finally {
@@ -782,16 +787,19 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
   auditBusy.value = true
   auditError.value = ''
   try {
-    await $fetch(`/api/invoices/${id}/line-audit/review`, {
-      method: 'POST',
-      body: {
-        suggestionId: activeAuditSuggestion.value.id,
-        decisions,
-      },
-    })
+    if (!isLocalLineAuditPass(activeAuditSuggestion.value)) {
+      await $fetch(`/api/invoices/${id}/line-audit/review`, {
+        method: 'POST',
+        body: {
+          suggestionId: activeAuditSuggestion.value.id,
+          decisions,
+        },
+      })
+      await Promise.all([refreshInvoice(), refreshAuditReport()])
+    }
+
     auditModalOpen.value = false
     auditRequireReview.value = false
-    await Promise.all([refreshInvoice(), refreshAuditReport()])
 
     if (savePendingAfterAudit.value) {
       savePendingAfterAudit.value = false
