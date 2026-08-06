@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
           <label class="fld">
             <span>Priority</span>
             <input v-model.number="form.priority" type="number" min="-1000" max="1000">
-            <span class="help">Higher shows first when multiple messages are pending.</span>
+            <span class="help">Lower number shows first (1 before 2) when multiple messages are pending.</span>
           </label>
           <label class="fld">
             <span>Starts</span>

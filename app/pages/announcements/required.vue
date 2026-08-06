@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AnnouncementGateCard from '~/components/announcements/AnnouncementGateCard.vue'
+import { advanceAnnouncementQueue } from '~/utils/announcement-gate-queue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 // Full-screen gate only — never mount the staff shell / dashboard chrome.
@@ -25,7 +26,7 @@ const current = computed(() => items.value[0] ?? null)
 
 const continueLabel = computed(() => {
   if (!current.value) return 'Continue'
-  return current.value.total > 1 ? 'Continue' : 'Continue to dashboard'
+  return current.value.index < current.value.total ? 'Continue' : 'Continue to dashboard'
 })
 
 async function loadPending() {
@@ -53,11 +54,7 @@ async function continueMessage() {
       { method: 'POST' },
     )
     auth.announcementGate = res.gate
-    items.value = items.value.slice(1).map((item, index, list) => ({
-      ...item,
-      index: index + 1,
-      total: list.length,
-    }))
+    items.value = advanceAnnouncementQueue(items.value)
     if (!items.value.length) {
       await auth.fetchMe()
       if (auth.trainingGate?.locked) {

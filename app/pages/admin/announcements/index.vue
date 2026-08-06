@@ -100,7 +100,7 @@ function audienceDetail(row: AnnouncementRow) {
           <p v-if="row.subtitle" class="ann-card-sub">{{ row.subtitle }}</p>
           <div class="ann-card-meta">
             <span>{{ audienceModeLabel(row.audienceMode) }} · {{ audienceDetail(row) }}</span>
-            <span>Priority {{ row.priority }}</span>
+            <span>Priority {{ row.priority }} (lower first)</span>
             <span>{{ row.acknowledgementCount }} seen</span>
           </div>
         </div>
