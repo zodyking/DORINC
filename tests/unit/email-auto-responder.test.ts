@@ -25,7 +25,7 @@ describe('customer auto-responder', () => {
     })
     expect(mail.subject).toBe('Re: Service question')
     expect(mail.html).toContain('We got your email')
-    expect(mail.html).toContain('Auto reply')
+    expect(mail.html).not.toContain('Auto reply') // former header badge — removed from layout
     expect(mail.html).toContain('Message received')
     expect(mail.html).toContain('Thanks for reaching out.')
     expect(mail.html).toContain('background:#ffffff')

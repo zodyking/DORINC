@@ -50,13 +50,35 @@ describe('email layout', () => {
     expect(html).toContain('Portal access')
     expect(html).toContain('Your password is ready')
     expect(html).toContain('Acme Shop')
-    expect(html).toContain('Portal notification')
+    // Header is brand-only; type labels belong in the body eyebrow, not beside the name.
+    expect(html).not.toContain('Portal notification')
+    expect(html).not.toContain('Acme ShopPortal')
     expect(html).not.toContain('Accounting workspace')
     expect(html).toContain('123 Main St')
     expect(html).toContain('(555) 555 0100')
     expect(html).toContain('Notification settings')
     expect(html).toContain('https://app.example.com')
     expect(html).not.toContain('<img')
+  })
+
+  it('never puts a type badge next to the company name in the header', () => {
+    const html = wrapEmailHtml({
+      eyebrow: 'Deletion request',
+      headline: 'Deletion approved',
+      headerBadge: 'DELETION REQUEST',
+      brand: { brandName: 'Devon Onsite Repairs INC' },
+    })
+    expect(html).toContain('Devon Onsite Repairs INC')
+    expect(html).not.toContain('INCDELETION')
+    expect(html).not.toContain('INC DELETION')
+    // Badge text must not appear in the header cell; eyebrow in the body is fine.
+    const headerChunk = html.slice(
+      html.indexOf('<!-- Header'),
+      html.indexOf('<!-- Main content'),
+    )
+    expect(headerChunk).toContain('Devon Onsite Repairs INC')
+    expect(headerChunk).not.toMatch(/deletion request/i)
+    expect(html).toMatch(/Deletion request/) // body eyebrow only
   })
 
   it('builds styled email payloads with subject/text/html', () => {

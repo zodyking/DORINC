@@ -127,7 +127,7 @@ describe('email-thread helpers', () => {
     expect(html).not.toContain('border-radius:12px')
   })
 
-  it('builds outbound HTML with the subject as the header badge', async () => {
+  it('builds outbound HTML with brand header and message body (no subject badge)', async () => {
     const { html, text, brand } = await buildOutboundEmailBodies(
       {} as never,
       {
@@ -137,7 +137,8 @@ describe('email-thread helpers', () => {
         subject: 'Invoice question',
       },
     )
-    expect(html).toContain('Invoice question')
+    // Subject stays on the SMTP subject line — not painted beside the company name.
+    expect(html).not.toContain('Invoice question')
     expect(html).not.toContain('Accounting workspace')
     expect(html).not.toContain('>Message<')
     expect(html).not.toContain('<h1')
