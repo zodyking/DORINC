@@ -18,6 +18,9 @@ const emit = defineEmits<{
   'clear-hero': []
 }>()
 
+type WorkbenchTab = 'editor' | 'preview'
+
+const workbenchTab = ref<WorkbenchTab>('editor')
 const userFilter = ref('')
 const previewFullscreen = ref(false)
 
@@ -34,6 +37,10 @@ const previewCtas = computed(() =>
 )
 
 const continueLabel = computed(() => 'Continue to dashboard')
+
+function setTab(tab: WorkbenchTab) {
+  workbenchTab.value = tab
+}
 
 function addCta() {
   form.value.ctaButtons.push({ label: 'Learn more', href: '/', variant: 'secondary' })
@@ -82,7 +89,35 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="ann-workbench">
-    <div class="ann-workbench-form">
+    <div class="ann-workbench-tabs" role="tablist" aria-label="Login message editor">
+      <button
+        type="button"
+        role="tab"
+        class="ann-tab"
+        :class="{ on: workbenchTab === 'editor' }"
+        :aria-selected="workbenchTab === 'editor'"
+        @click="setTab('editor')"
+      >
+        Editor
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="ann-tab"
+        :class="{ on: workbenchTab === 'preview' }"
+        :aria-selected="workbenchTab === 'preview'"
+        @click="setTab('preview')"
+      >
+        Preview
+      </button>
+    </div>
+
+    <div
+      v-show="workbenchTab === 'editor'"
+      class="ann-workbench-form"
+      role="tabpanel"
+      aria-label="Message editor"
+    >
       <section class="ann-panel">
         <header class="ann-panel-head">
           <div>
@@ -255,18 +290,23 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <aside class="ann-workbench-preview">
+    <div
+      v-show="workbenchTab === 'preview'"
+      class="ann-workbench-preview"
+      role="tabpanel"
+      aria-label="Login message preview"
+    >
       <div class="ann-preview-bar">
         <div>
-          <h2>Live preview</h2>
-          <p>Exact login-gate layout staff will see.</p>
+          <h2>Preview</h2>
+          <p>Exact login-gate layout staff will see after sign-in.</p>
         </div>
         <button type="button" class="btn sm" @click="previewFullscreen = true">
           Full screen
         </button>
       </div>
 
-      <div class="ann-preview-stage" aria-label="Login message preview">
+      <div class="ann-preview-stage ann-login-bg" aria-label="Login message preview">
         <AnnouncementGateCard
           compact
           :title="form.title"
@@ -279,12 +319,12 @@ onBeforeUnmount(() => {
           :continue-disabled="true"
         />
       </div>
-    </aside>
+    </div>
 
     <Teleport to="body">
       <div
         v-if="previewFullscreen"
-        class="ann-preview-fs"
+        class="ann-preview-fs ann-login-bg"
         role="dialog"
         aria-label="Full screen login message preview"
         @click.self="previewFullscreen = false"
@@ -310,9 +350,43 @@ onBeforeUnmount(() => {
 <style scoped>
 .ann-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  gap: 18px;
-  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ann-workbench-tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.ann-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ann-tab:hover {
+  color: #0f172a;
+  background: #fff;
+}
+
+.ann-tab.on {
+  color: #0f172a;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .ann-workbench-form {
@@ -514,12 +588,10 @@ onBeforeUnmount(() => {
 }
 
 .ann-workbench-preview {
-  position: sticky;
-  top: 16px;
-  border: 1px solid #1e293b;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
   overflow: hidden;
-  background: #0f172a;
+  background: #fff;
   min-width: 0;
 }
 
@@ -529,29 +601,27 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
-  color: #e2e8f0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
 }
 
 .ann-preview-bar h2 {
   margin: 0;
   font-size: 1rem;
-  color: #f8fafc;
+  color: #0f172a;
 }
 
 .ann-preview-bar p {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .ann-preview-stage {
-  padding: 16px;
-  min-height: 520px;
-  background:
-    radial-gradient(700px 320px at 10% -10%, rgba(37, 99, 235, 0.22), transparent 55%),
-    radial-gradient(520px 280px at 100% 0%, rgba(14, 116, 144, 0.18), transparent 50%),
-    linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #0b1220 100%);
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  min-height: 560px;
 }
 
 .ann-preview-fs {
@@ -561,10 +631,6 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px 16px;
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.18), transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, rgba(14, 116, 144, 0.16), transparent 50%),
-    linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #0b1220 100%);
 }
 
 .ann-preview-fs-close {
@@ -572,20 +638,13 @@ onBeforeUnmount(() => {
   top: 16px;
   right: 16px;
   z-index: 1;
-  background: rgba(15, 23, 42, 0.85);
-  color: #f8fafc;
-  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
-@media (max-width: 1100px) {
-  .ann-workbench {
-    grid-template-columns: 1fr;
-  }
-
-  .ann-workbench-preview {
-    position: static;
-  }
-
+@media (max-width: 900px) {
   .ann-fields-3,
   .ann-audience-modes,
   .ann-cta-row {

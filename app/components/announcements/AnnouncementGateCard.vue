@@ -105,18 +105,19 @@ const visibleCtas = computed(() =>
   max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
-  background: rgba(248, 250, 252, 0.98);
+  background: #fff;
   color: #0f172a;
+  border: 1px solid #e2e8f0;
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.18);
 }
 
 .ann-gate-card.compact {
-  width: 100%;
+  width: min(520px, 100%);
   max-height: none;
-  border-radius: 14px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.15);
 }
 
 .ann-gate-meta {
