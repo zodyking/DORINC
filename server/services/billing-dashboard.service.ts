@@ -70,13 +70,18 @@ function toDashboardDomain(row: {
   }
 }
 
+/** Preserve sub-cent AI costs (DB scale is 4+; do not round to cents). */
+function roundAiUsageMoney(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000
+}
+
 async function loadOpenRouterUsageHistory(db: Db) {
   const { items } = await listAiUsageLogs(db, { limit: 12, offset: 0 })
   return items.map(row => ({
     id: row.id,
     date: row.createdAt.toISOString(),
     description: formatAiUsageDescription(row.featureType, row.model),
-    amount: roundMoney(Number(row.estimatedCostUsd ?? 0)),
+    amount: roundAiUsageMoney(Number(row.estimatedCostUsd ?? 0)),
     model: row.model,
     tokens: row.totalTokens,
   }))

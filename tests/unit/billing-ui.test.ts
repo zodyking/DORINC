@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
+  billingAiMoney,
   billingProviderManageLabel,
+  billingTokens,
   buildBillingChartGeometry,
   formatCloudflarePrivacy,
   formatVultrCount,
@@ -43,6 +45,19 @@ describe('billing-ui helpers', () => {
     expect(formatCloudflarePrivacy('redaction')).toBe('WHOIS redaction')
     expect(formatYesNo(true)).toBe('Yes')
     expect(formatYesNo(false)).toBe('No')
+  })
+
+  it('formats sub-cent AI usage amounts instead of collapsing to $0.00', () => {
+    expect(billingAiMoney(0.001234)).toBe('$0.001234')
+    expect(billingAiMoney(0.000012)).toBe('$0.000012')
+    expect(billingAiMoney(1.5)).toBe('$1.50')
+    expect(billingAiMoney(0)).toBe('$0.00')
+  })
+
+  it('formats token counts for the usage table', () => {
+    expect(billingTokens(1842)).toBe('1,842')
+    expect(billingTokens(0)).toBe('0')
+    expect(billingTokens(null)).toBe('—')
   })
 
   it('builds chart geometry for outlook points', () => {

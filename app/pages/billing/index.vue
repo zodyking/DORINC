@@ -4,12 +4,14 @@ import type { BillingProviderKey } from '~/utils/billing-ui'
 import {
   BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
+  billingAiMoney,
   billingDate,
   billingDateTime,
   billingDaysBadgeClass,
   billingMoney,
   billingProviderManageLabel,
   billingProviderStatus,
+  billingTokens,
   buildBillingChartGeometry,
   formatCloudflarePrivacy,
   formatVultrBandwidth,
@@ -726,6 +728,7 @@ function selectProvider(provider: BillingProviderKey) {
                         <tr>
                           <th>Date</th>
                           <th>Description</th>
+                          <th class="num">Tokens</th>
                           <th class="num">Amount</th>
                         </tr>
                       </thead>
@@ -733,7 +736,8 @@ function selectProvider(provider: BillingProviderKey) {
                         <tr v-for="row in previewUsage" :key="row.id">
                           <td>{{ billingDateTime(row.date) }}</td>
                           <td>{{ row.description }}</td>
-                          <td class="num">{{ billingMoney(row.amount) }}</td>
+                          <td class="num">{{ billingTokens(row.tokens) }}</td>
+                          <td class="num">{{ billingAiMoney(row.amount) }}</td>
                         </tr>
                       </tbody>
                     </table>

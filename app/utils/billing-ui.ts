@@ -30,6 +30,27 @@ export function billingMoney(value: number | null | undefined, currency = 'USD')
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
 }
 
+/**
+ * Format tiny AI usage costs without collapsing sub-cent values to $0.00.
+ * Keeps at least 2 decimals; expands up to 6 when needed.
+ */
+export function billingAiMoney(value: number | null | undefined, currency = 'USD'): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  const abs = Math.abs(value)
+  const fractionDigits = abs > 0 && abs < 0.01 ? 6 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: fractionDigits,
+  }).format(value)
+}
+
+export function billingTokens(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return new Intl.NumberFormat('en-US').format(value)
+}
+
 export function billingDate(value: string | null): string {
   if (!value) return '—'
   const d = new Date(value)
