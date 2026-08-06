@@ -178,8 +178,10 @@ function onPickImage(e: Event) {
   min-width: 180px;
 }
 .ann-editor-surface {
-  min-height: 220px;
-  padding: 14px 16px;
+  min-height: 160px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px 14px;
   outline: none;
   line-height: 1.55;
 }
