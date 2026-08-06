@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveOpenRouterMonthlySpend } from '../../shared/billing-openrouter-spend'
 
 describe('billing permissions', () => {
   it('grants billing.read.all to admin and manager bundles', async () => {
@@ -22,5 +23,12 @@ describe('billing dashboard totals', () => {
 
     expect(estimatedMonthlyUsd).toBe(35.97)
     expect(estimatedYearlyUsd).toBe(272.84)
+  })
+
+  it('uses internal AI usage when OpenRouter reports usage_monthly as 0', () => {
+    expect(resolveOpenRouterMonthlySpend(0, 0.012345)).toBe(0.012345)
+    expect(resolveOpenRouterMonthlySpend(null, 0.02)).toBe(0.02)
+    expect(resolveOpenRouterMonthlySpend(1.5, 0.02)).toBe(1.5)
+    expect(resolveOpenRouterMonthlySpend(0, 0)).toBe(0)
   })
 })

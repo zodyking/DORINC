@@ -24,6 +24,7 @@ import {
   sumCloudflareRenewalsInWindow,
 } from './cloudflare-billing.service'
 import { buildBillingOutlook } from './billing-outlook.service'
+import { resolveOpenRouterMonthlySpend } from '../../shared/billing-openrouter-spend'
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
@@ -198,7 +199,12 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   }
 
   const vultrUsd = vultrBlock.planCostMonthly ?? 0
-  const openrouterUsd = openrouterBlock.usageMonthly ?? openrouterBlock.internalMonthlyUsd ?? 0
+  // Do not use ?? alone — OpenRouter often reports usage_monthly: 0 while
+  // internal logs still have spend (would freeze AI yearly at $0).
+  const openrouterUsd = resolveOpenRouterMonthlySpend(
+    openrouterBlock.usageMonthly,
+    openrouterBlock.internalMonthlyUsd,
+  )
   const cloudflareMonthlyUsd = sumCloudflareRenewalsInWindow(
     cloudflareBlock.domains.map(d => ({
       daysUntilRenewal: d.daysUntilRenewal,

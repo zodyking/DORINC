@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BillingDashboardPayload } from '#shared/validators/billing-integrations'
+import { resolveOpenRouterMonthlySpend } from '#shared/billing-openrouter-spend'
 import type { BillingProviderKey } from '~/utils/billing-ui'
 import {
   BILLING_PROVIDER_ACCOUNT_URLS,
@@ -38,6 +39,12 @@ const labels = BILLING_PROVIDER_LABELS
 const { data, pending, error, refresh } = useClientFetch<DashboardResponse>('/api/billing/dashboard')
 
 const dashboard = computed(() => data.value?.dashboard)
+
+const openRouterUsedThisMonth = computed(() => {
+  const row = dashboard.value?.openrouter
+  if (!row) return null
+  return resolveOpenRouterMonthlySpend(row.usageMonthly, row.internalMonthlyUsd)
+})
 
 const chart = computed(() => {
   const points = dashboard.value?.outlook?.points ?? []
@@ -238,7 +245,7 @@ function selectProvider(provider: BillingProviderKey) {
           </div>
           <div class="kpi">
             <div class="l">AI usage</div>
-            <div class="v">{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</div>
+            <div class="v">{{ billingAiMoney(dashboard.totals.breakdown.openrouterUsd) }}</div>
             <div class="s">{{ breakdownShare(dashboard.totals.breakdown.openrouterUsd) }}% of this month</div>
           </div>
         </div>
@@ -336,7 +343,7 @@ function selectProvider(provider: BillingProviderKey) {
                 <li>
                   <div class="billing-share-row">
                     <span>{{ labels.openrouter.category }}</span>
-                    <strong>{{ billingMoney(dashboard.totals.breakdownYearly.openrouterUsd) }}</strong>
+                    <strong>{{ billingAiMoney(dashboard.totals.breakdownYearly.openrouterUsd) }}</strong>
                   </div>
                   <div class="billing-share-track" aria-hidden="true">
                     <span class="billing-share-fill ai" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.openrouterUsd)}%` }" />
@@ -494,11 +501,11 @@ function selectProvider(provider: BillingProviderKey) {
                   </div>
                   <div>
                     <dt>Used this month</dt>
-                    <dd>{{ billingMoney(dashboard.openrouter.usageMonthly) }}</dd>
+                    <dd>{{ billingAiMoney(openRouterUsedThisMonth) }}</dd>
                   </div>
                   <div>
                     <dt>Used today</dt>
-                    <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
+                    <dd>{{ billingAiMoney(dashboard.openrouter.usageDaily) }}</dd>
                   </div>
                   <div>
                     <dt>Recent calls</dt>
