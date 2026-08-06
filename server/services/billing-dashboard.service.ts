@@ -1,11 +1,12 @@
 import type { Db } from '../db/client'
-import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
+import type { BillingDashboardDomain, BillingDashboardPayload } from '../../shared/validators/billing-integrations'
 import {
   getBillingIntegrations,
+  getCloudflareAccountId,
+  getCloudflareApiToken,
   getVultrApiKey,
 } from './billing-integrations.service'
 import { getAiProviderSettings } from './ai-provider.service'
-import { mapDomainRenewalsForDashboard } from './domain-renewals.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
 import { listAiUsageLogs } from './ai-jobs.service'
 import {
@@ -16,6 +17,12 @@ import {
   fetchVultrPlanPriceMap,
   sumVultrMonthlyPlanCost,
 } from './vultr-billing.service'
+import {
+  daysUntilIso,
+  fetchCloudflareRegistrations,
+  sumCloudflareRenewalsInWindow,
+} from './cloudflare-billing.service'
+import { buildBillingOutlook } from './billing-outlook.service'
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
@@ -31,6 +38,35 @@ const AI_USAGE_FEATURE_LABELS: Record<string, string> = {
 function formatAiUsageDescription(featureType: string, model: string): string {
   const label = AI_USAGE_FEATURE_LABELS[featureType] ?? featureType.replace(/_/g, ' ')
   return `${label} · ${model}`
+}
+
+function toDashboardDomain(row: {
+  domainName: string
+  expiresAt: string | null
+  registeredAt: string | null
+  autoRenew: boolean
+  locked: boolean
+  status: string
+  privacyMode: string | null
+  renewalCost: number | null
+  currency: string
+}): BillingDashboardDomain {
+  const days = daysUntilIso(row.expiresAt) ?? 0
+  const renewalDate = row.expiresAt
+    ? row.expiresAt.slice(0, 10)
+    : '—'
+  return {
+    name: row.domainName,
+    renewalDate,
+    daysUntilRenewal: days,
+    renewalCost: row.renewalCost ?? 0,
+    currency: row.currency || 'USD',
+    registeredAt: row.registeredAt,
+    autoRenew: row.autoRenew,
+    locked: row.locked,
+    status: row.status,
+    privacyMode: row.privacyMode,
+  }
 }
 
 async function loadOpenRouterUsageHistory(db: Db) {
@@ -58,13 +94,15 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     planCostMonthly: null,
     monitoredInstances: [],
     invoices: [],
+    hasPortalCredentials: settings.hasVultrUsername || settings.hasVultrPassword,
     error: null,
     lastUpdated: nowIso,
   }
 
-  const namecheapBlock: BillingDashboardPayload['namecheap'] = {
-    configured: settings.domainRenewals.length > 0,
-    domains: mapDomainRenewalsForDashboard(settings.domainRenewals),
+  const cloudflareBlock: BillingDashboardPayload['cloudflare'] = {
+    configured: settings.cloudflareEnabled && settings.hasCloudflareApiToken && !!settings.cloudflareAccountId,
+    domains: [],
+    hasPortalCredentials: settings.hasCloudflareUsername || settings.hasCloudflarePassword,
     error: null,
     lastUpdated: nowIso,
   }
@@ -82,6 +120,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     creditsNote: null,
     usageHistory: [],
     currency: 'USD',
+    hasPortalCredentials: settings.hasOpenrouterUsername || settings.hasOpenrouterPassword,
     error: null,
     lastUpdated: nowIso,
   }
@@ -112,6 +151,23 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     }
   }
 
+  if (cloudflareBlock.configured) {
+    try {
+      const [apiToken, accountId] = await Promise.all([
+        getCloudflareApiToken(db),
+        getCloudflareAccountId(db),
+      ])
+      if (!apiToken || !accountId) throw new Error('Cloudflare credentials missing')
+      const registrations = await fetchCloudflareRegistrations(apiToken, accountId)
+      cloudflareBlock.domains = registrations
+        .map(toDashboardDomain)
+        .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal)
+    }
+    catch (e) {
+      cloudflareBlock.error = (e as Error).message
+    }
+  }
+
   if (settings.openrouterBillingEnabled) {
     try {
       const [resolved, usageHistory] = await Promise.all([
@@ -137,24 +193,43 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
 
   const vultrUsd = vultrBlock.planCostMonthly ?? 0
   const openrouterUsd = openrouterBlock.usageMonthly ?? openrouterBlock.internalMonthlyUsd ?? 0
-  const namecheapMonthlyUsd = namecheapBlock.domains
-    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30)
-    .reduce((sum, d) => sum + d.renewalCost, 0)
-  const namecheapYearlyUsd = namecheapBlock.domains
-    .filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 365)
-    .reduce((sum, d) => sum + d.renewalCost, 0)
+  const cloudflareMonthlyUsd = sumCloudflareRenewalsInWindow(
+    cloudflareBlock.domains.map(d => ({
+      daysUntilRenewal: d.daysUntilRenewal,
+      renewalCost: d.renewalCost,
+    })),
+    30,
+  )
+  const cloudflareYearlyUsd = sumCloudflareRenewalsInWindow(
+    cloudflareBlock.domains.map(d => ({
+      daysUntilRenewal: d.daysUntilRenewal,
+      renewalCost: d.renewalCost,
+    })),
+    365,
+  )
 
-  const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + namecheapMonthlyUsd)
-  const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + namecheapYearlyUsd)
+  const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd)
+  const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd)
+
+  const outlook = buildBillingOutlook({
+    vultrPlanMonthly: vultrUsd,
+    openrouterMonthly: openrouterUsd,
+    vultrInvoices: vultrBlock.invoices,
+    openrouterUsage: openrouterBlock.usageHistory,
+    domainRenewals: cloudflareBlock.domains.map(d => ({
+      expiresAt: d.renewalDate !== '—' ? `${d.renewalDate}T00:00:00.000Z` : null,
+      renewalCost: d.renewalCost,
+    })),
+  })
 
   return {
     configured: {
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
-      namecheap: settings.domainRenewals.length > 0,
+      cloudflare: cloudflareBlock.configured,
       openrouter: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
     },
     vultr: vultrBlock,
-    namecheap: namecheapBlock,
+    cloudflare: cloudflareBlock,
     openrouter: openrouterBlock,
     totals: {
       currency: 'USD',
@@ -162,9 +237,13 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
       estimatedYearlyUsd,
       breakdown: {
         vultrUsd: roundMoney(vultrUsd),
-        namecheapUsd: roundMoney(namecheapMonthlyUsd),
+        cloudflareUsd: roundMoney(cloudflareMonthlyUsd),
         openrouterUsd: roundMoney(openrouterUsd),
       },
+    },
+    outlook: {
+      currency: 'USD',
+      points: outlook,
     },
     lastRefreshed: nowIso,
   }

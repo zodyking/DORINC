@@ -259,7 +259,7 @@ export const PERMISSION_AREAS: PermissionArea[] = [
   {
     id: 'billing',
     label: 'Infrastructure Billing',
-    description: 'Vultr, Namecheap, and OpenRouter cost monitoring',
+    description: 'Vultr, Cloudflare, and OpenRouter cost monitoring',
     navKeys: ['billing.read.all'],
     cells: [
       cell('billing.read.all', 'View page', 'view'),

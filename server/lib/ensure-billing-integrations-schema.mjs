@@ -7,9 +7,18 @@ CREATE TABLE IF NOT EXISTS "billing_integrations" (
   "vultr_enabled" boolean DEFAULT false NOT NULL,
   "encrypted_vultr_api_key" bytea,
   "vultr_monitored_instance_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+  "encrypted_vultr_username" bytea,
+  "encrypted_vultr_password" bytea,
   "domain_renewals" jsonb DEFAULT '[]'::jsonb NOT NULL,
+  "cloudflare_enabled" boolean DEFAULT false NOT NULL,
+  "cloudflare_account_id" text,
+  "encrypted_cloudflare_api_token" bytea,
+  "encrypted_cloudflare_username" bytea,
+  "encrypted_cloudflare_password" bytea,
   "openrouter_billing_enabled" boolean DEFAULT true NOT NULL,
   "encrypted_openrouter_management_key" bytea,
+  "encrypted_openrouter_username" bytea,
+  "encrypted_openrouter_password" bytea,
   "updated_by" uuid REFERENCES "users"("id"),
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -19,6 +28,18 @@ CREATE TABLE IF NOT EXISTS "billing_integrations" (
 const DOMAIN_RENEWALS_COLUMN_SQL = `
 ALTER TABLE "billing_integrations"
 ADD COLUMN IF NOT EXISTS "domain_renewals" jsonb DEFAULT '[]'::jsonb NOT NULL;
+`.trim()
+
+const CLOUDFLARE_COLUMNS_SQL = `
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "cloudflare_enabled" boolean DEFAULT false NOT NULL;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "cloudflare_account_id" text;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_cloudflare_api_token" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_vultr_username" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_vultr_password" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_cloudflare_username" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_cloudflare_password" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_openrouter_username" bytea;
+ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_openrouter_password" bytea;
 `.trim()
 
 const MIGRATE_LEGACY_MANUAL_DOMAINS_SQL = `
@@ -63,5 +84,6 @@ export async function ensureBillingIntegrationsSchema(pool) {
   await pool.query(DOMAIN_RENEWALS_COLUMN_SQL)
   await pool.query(MIGRATE_LEGACY_MANUAL_DOMAINS_SQL)
   await pool.query(DROP_LEGACY_NAMECHEAP_COLUMNS_SQL)
+  await pool.query(CLOUDFLARE_COLUMNS_SQL)
   return false
 }
