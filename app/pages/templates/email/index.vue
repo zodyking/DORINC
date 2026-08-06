@@ -12,7 +12,7 @@ if (import.meta.client && auth.loaded && !auth.can('templates.read.all')) {
 
 <template>
   <section class="page active">
-    <StaffPageHead subtitle="Browse email types, edit content, preview, and set the active template for outbound mail">
+    <StaffPageHead subtitle="Edit raw HTML email templates, tune content fields, preview, and set the active template">
       <template #title>Email Template Editor</template>
       <template #actions>
         <NuxtLink to="/admin?tab=notifications" class="btn">Back to notifications</NuxtLink>

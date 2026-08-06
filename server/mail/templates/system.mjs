@@ -7,11 +7,15 @@ import {
   emailQuotedMessage,
   escapeHtml,
 } from '../email-layout.mjs'
-import { applyEmailTemplateOverride } from '../email-template-override.mjs'
+import {
+  applyEmailTemplateOverride,
+  finalizeMailWithTemplateOverride,
+} from '../email-template-override.mjs'
 
 function styledEmail(opts) {
   const { templateOverride = null, templateVars = {}, ...rest } = opts || {}
-  return buildStyledEmail(applyEmailTemplateOverride(rest, templateOverride, templateVars))
+  const mail = buildStyledEmail(applyEmailTemplateOverride(rest, templateOverride, templateVars))
+  return finalizeMailWithTemplateOverride(mail, templateOverride, templateVars)
 }
 
 function brandNameFrom(opts) {
