@@ -48,8 +48,30 @@ const scale = computed(() => (zoom.value === 'fit' ? fitScale.value : zoom.value
 const zoomLabel = computed(() => `${Math.round(scale.value * 100)}%`)
 
 const PAGE_WIDTH_PX = 8.5 * 96
+const PAGE_HEIGHT_PX = 11 * 96
+const PAPER_STACK_GAP_PX = 24
 const CATALOG_PANEL_PX = 320
 const STYLE_ID = 'sl-sheet-paper-css'
+
+/** Two Letter pages stacked with the paper gap — used to reserve layout space. */
+const paperContentHeightPx = PAGE_HEIGHT_PX * 2 + PAPER_STACK_GAP_PX
+
+const paperFrameStyle = computed(() => {
+  const s = scale.value
+  return {
+    width: `${Math.round(PAGE_WIDTH_PX * s)}px`,
+    height: `${Math.round(paperContentHeightPx * s)}px`,
+    margin: '0 auto',
+    position: 'relative' as const,
+    overflow: 'hidden' as const,
+  }
+})
+
+const paperScaleStyle = computed(() => ({
+  width: `${PAGE_WIDTH_PX}px`,
+  transform: `scale(${scale.value})`,
+  transformOrigin: 'top left',
+}))
 
 /**
  * Editor-only chrome on top of the shared document CSS. The document CSS is the
@@ -396,17 +418,22 @@ function onScrimClick(event: MouseEvent) {
 
       <div v-else-if="api.doc && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
         <div v-if="view === 'paper'" ref="stageRef" class="sl-stage">
-          <!-- zoom (not transform) keeps layout, scrollbars and hit testing correct -->
-          <div
-            class="sl-paper"
-            :class="SERVICE_LOG_SHEET_SCOPE_CLASS"
-            :style="{ zoom: String(scale) }"
-          >
-            <ServiceLogSheetPaper
-              :api="api"
-              :business="business"
-              @catalog="openCatalogPicker"
-            />
+          <!--
+            CSS zoom collapses to an empty stage on mobile WebKit. Reserve the
+            scaled frame size, then transform-scale the real Letter paper inside.
+          -->
+          <div class="sl-paper-frame" :style="paperFrameStyle">
+            <div
+              class="sl-paper"
+              :class="SERVICE_LOG_SHEET_SCOPE_CLASS"
+              :style="paperScaleStyle"
+            >
+              <ServiceLogSheetPaper
+                :api="api"
+                :business="business"
+                @catalog="openCatalogPicker"
+              />
+            </div>
           </div>
         </div>
 
@@ -564,12 +591,11 @@ function onScrimClick(event: MouseEvent) {
   display: flex;
   align-items: flex-start;
 }
-/* margin auto, not justify-content: centred flex items clip their overflow. */
-.sl-stage > .sl-paper { margin: 0 auto; }
 .sl-stage-lines {
   padding: 0;
   background: #eef2f7;
 }
+.sl-paper-frame { flex: none; }
 .sl-paper { flex: none; }
 .sl-catalog {
   border-left: 1px solid #dbe2ea;
