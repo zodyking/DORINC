@@ -136,6 +136,20 @@ export const DEFAULT_CHAT_SETTINGS: ChatWorkspaceSettings = {
   directMessagingEnabled: false,
 }
 
+/**
+ * Which catalog items appear on the printable blank service log sheet.
+ * mode `all` = every active catalog item; `selected` = only `itemIds` (order preserved).
+ */
+export interface ServiceLogSheetSettings {
+  mode: 'all' | 'selected'
+  itemIds: string[]
+}
+
+export const DEFAULT_SERVICE_LOG_SHEET_SETTINGS: ServiceLogSheetSettings = {
+  mode: 'all',
+  itemIds: [],
+}
+
 export const NOTIFICATION_SETTING_META: Array<{
   key: keyof NotificationSettings
   label: string

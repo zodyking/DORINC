@@ -37,6 +37,11 @@ export const chatWorkspaceSettingsSchema = z.object({
   directMessagingEnabled: z.boolean().default(false),
 })
 
+export const serviceLogSheetSettingsSchema = z.object({
+  mode: z.enum(['all', 'selected']).default('all'),
+  itemIds: z.array(z.string().uuid()).max(2000).default([]),
+})
+
 export const notificationSettingsSchema = z.object({
   staffLoginAlert: z.boolean().default(true),
   customerLoginAlert: z.boolean().default(true),
