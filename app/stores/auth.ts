@@ -22,6 +22,12 @@ export interface TrainingGateState {
   moduleTitle: string | null
 }
 
+export interface AnnouncementGateState {
+  locked: boolean
+  pendingCount: number
+  currentId: string | null
+}
+
 export type StaffLoginPending = { needsLocation: true, loginToken: string }
 export type StaffLoginResult = AuthUser | StaffLoginPending
 
@@ -30,6 +36,7 @@ export const useAuthStore = defineStore('auth', {
     user: null as AuthUser | null,
     permissions: [] as string[],
     trainingGate: null as TrainingGateState | null,
+    announcementGate: null as AnnouncementGateState | null,
     loaded: false,
     sessionExpiring: false,
   }),
@@ -49,6 +56,18 @@ export const useAuthStore = defineStore('auth', {
       return '/auth/login?card=staff'
     },
 
+    applyMePayload(me: {
+      user: AuthUser
+      permissions: string[]
+      trainingGate?: TrainingGateState | null
+      announcementGate?: AnnouncementGateState | null
+    }) {
+      this.user = me.user
+      this.permissions = me.permissions
+      this.trainingGate = me.trainingGate ?? null
+      this.announcementGate = me.announcementGate ?? null
+    },
+
     async fetchMe() {
       // On SSR, plain $fetch does not forward the incoming request's cookies
       const fetcher = import.meta.server ? useRequestFetch() : $fetch
@@ -57,16 +76,16 @@ export const useAuthStore = defineStore('auth', {
           user: AuthUser
           permissions: string[]
           trainingGate?: TrainingGateState
+          announcementGate?: AnnouncementGateState
         }>('/api/auth/me')
-        this.user = res.user
-        this.permissions = res.permissions
-        this.trainingGate = res.trainingGate ?? null
+        this.applyMePayload(res)
         return true
       }
       catch {
         this.user = null
         this.permissions = []
         this.trainingGate = null
+        this.announcementGate = null
         return false
       }
       finally {
@@ -107,9 +126,13 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
       try {
         const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
-        this.user = me.user
-        this.permissions = me.permissions
+        const me = await fetcher<{
+          user: AuthUser
+          permissions: string[]
+          trainingGate?: TrainingGateState
+          announcementGate?: AnnouncementGateState
+        }>('/api/auth/me')
+        this.applyMePayload(me)
       }
       catch {
         // Cookie is set — keep the login response even if /me hiccups on first request.
@@ -143,9 +166,13 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
       try {
         const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{ user: AuthUser, permissions: string[] }>('/api/auth/me')
-        this.user = me.user
-        this.permissions = me.permissions
+        const me = await fetcher<{
+          user: AuthUser
+          permissions: string[]
+          trainingGate?: TrainingGateState
+          announcementGate?: AnnouncementGateState
+        }>('/api/auth/me')
+        this.applyMePayload(me)
       }
       catch {
         this.permissions = []
@@ -171,6 +198,8 @@ export const useAuthStore = defineStore('auth', {
       }
       this.user = null
       this.permissions = []
+      this.trainingGate = null
+      this.announcementGate = null
       this.loaded = true
       if (import.meta.client) clearPwaBannerDismissed()
       if (redirect) {

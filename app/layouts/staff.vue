@@ -61,9 +61,17 @@ const avInitials = computed(() => initials(displayName.value))
 const isSuperAdmin = computed(() => auth.can('system.admin.all'))
 const canViewBilling = computed(() => auth.can('billing.read.all'))
 const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
+const announcementLocked = computed(() => auth.announcementGate?.locked ?? false)
 
 // Counts become live once list APIs land (Phase 1)
 const nav = computed<NavSection[]>(() => {
+  if (announcementLocked.value) {
+    return [{
+      label: 'Messages',
+      items: [{ label: 'Required message', to: '/announcements/required', icon: 'dashboard' }],
+    }]
+  }
+
   if (trainingLocked.value) {
     return [{
       label: 'Training',
@@ -100,6 +108,7 @@ const nav = computed<NavSection[]>(() => {
       label: 'Administration',
       items: [
         { label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' },
+        { label: 'Login messages', to: '/admin/announcements', icon: 'control-panel', permission: 'system.admin.all' },
         { label: 'Roles & Permissions', to: '/admin/roles', icon: 'users', permission: 'roles.manage.all' },
       ],
     })
@@ -115,6 +124,8 @@ async function signOut() {
 
 const crumb = computed(() => {
   if (route.path === '/messages' || route.path.startsWith('/messages/')) return 'Messages'
+  if (route.path.startsWith('/announcements/required')) return 'Required message'
+  if (route.path.startsWith('/admin/announcements')) return 'Login messages'
   if (route.path === '/billing' || route.path.startsWith('/billing/')) return 'Billing'
   if (route.path.startsWith('/templates/email')) return 'Email Templates'
   if (route.path.startsWith('/templates/designer')) return 'Template Editor'

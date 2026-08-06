@@ -1,6 +1,7 @@
 import type { AuthContext } from '../../utils/require-permission'
 import { apiError } from '../../utils/api-error'
 import { useDb } from '../../db/client'
+import { getAnnouncementGate } from '../../services/announcements.service'
 import { getTrainingGate } from '../../services/training.service'
 
 export default defineEventHandler(async (event) => {
@@ -15,9 +16,13 @@ export default defineEventHandler(async (event) => {
   for (const denied of auth.overrides.deny) effective.delete(denied)
 
   const db = useDb()
-  const trainingGate = auth.user.accountType === 'customer'
+  const isCustomer = auth.user.accountType === 'customer'
+  const trainingGate = isCustomer
     ? { locked: false, assignmentId: null, moduleId: null, moduleSlug: null, moduleTitle: null }
     : await getTrainingGate(db, auth.user.id)
+  const announcementGate = isCustomer
+    ? { locked: false, pendingCount: 0, currentId: null }
+    : await getAnnouncementGate(db, auth.user.id, auth.user.accountType)
 
   return {
     user: {
@@ -31,5 +36,6 @@ export default defineEventHandler(async (event) => {
     },
     permissions: [...effective].sort(),
     trainingGate,
+    announcementGate,
   }
 })
