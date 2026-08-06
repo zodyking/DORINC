@@ -2182,6 +2182,8 @@ section.page.active.dm-page{
   background:#f1f5f9; border-radius:12px; padding:10px 12px; font-size:13.5px; line-height:1.5;
   color:#0f172a; word-break:break-word;
 }
+/* Preserve intentional newlines in chat (e.g. bulk invoice reconciliation lists). */
+.dm-msg-text{ white-space:pre-wrap; word-break:break-word; }
 .dm-msg-bubble--photo{
   padding:4px; overflow:hidden;
 }
