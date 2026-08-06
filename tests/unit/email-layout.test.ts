@@ -5,6 +5,7 @@ import {
   emailButton,
   emailPanel,
   escapeHtml,
+  sanitizeTransactionalEmailHtml,
   wrapEmailHtml,
 } from '../../server/mail/email-layout.mjs'
 
@@ -47,10 +48,9 @@ describe('email layout', () => {
     expect(html).toContain('background:#ffffff')
     expect(html).toContain(EMAIL_TOKENS.ink)
     expect(html).toContain(EMAIL_TOKENS.buttonBg)
-    expect(html).toContain('Portal access')
+    expect(html).toContain('Portal access') // headline / title — not a type badge
     expect(html).toContain('Your password is ready')
     expect(html).toContain('Acme Shop')
-    // Header is brand-only; type labels belong in the body eyebrow, not beside the name.
     expect(html).not.toContain('Portal notification')
     expect(html).not.toContain('Acme ShopPortal')
     expect(html).not.toContain('Accounting workspace')
@@ -61,7 +61,7 @@ describe('email layout', () => {
     expect(html).not.toContain('<img')
   })
 
-  it('never puts a type badge next to the company name in the header', () => {
+  it('never renders type badges or eyebrows on any transactional email', () => {
     const html = wrapEmailHtml({
       eyebrow: 'Deletion request',
       headline: 'Deletion approved',
@@ -69,16 +69,24 @@ describe('email layout', () => {
       brand: { brandName: 'Devon Onsite Repairs INC' },
     })
     expect(html).toContain('Devon Onsite Repairs INC')
+    expect(html).toContain('Deletion approved')
     expect(html).not.toContain('INCDELETION')
-    expect(html).not.toContain('INC DELETION')
-    // Badge text must not appear in the header cell; eyebrow in the body is fine.
-    const headerChunk = html.slice(
-      html.indexOf('<!-- Header'),
-      html.indexOf('<!-- Main content'),
-    )
-    expect(headerChunk).toContain('Devon Onsite Repairs INC')
-    expect(headerChunk).not.toMatch(/deletion request/i)
-    expect(html).toMatch(/Deletion request/) // body eyebrow only
+    expect(html).not.toMatch(/deletion request/i)
+    expect(html).not.toContain('DELETION REQUEST')
+  })
+
+  it('strips legacy header badges and blue eyebrows from stored HTML', () => {
+    const dirty = `
+      <td align="right" valign="middle" style="font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#9ca3af;white-space:nowrap;font-family:Arial, Helvetica, sans-serif;">
+        DELETION REQUEST
+      </td>
+      <div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2563eb;font-family:Arial, Helvetica, sans-serif;">Deletion request</div>
+      <h1>Deletion approved</h1>
+    `
+    const clean = sanitizeTransactionalEmailHtml(dirty)
+    expect(clean).toContain('Deletion approved')
+    expect(clean).not.toContain('DELETION REQUEST')
+    expect(clean).not.toMatch(/Deletion request/)
   })
 
   it('builds styled email payloads with subject/text/html', () => {

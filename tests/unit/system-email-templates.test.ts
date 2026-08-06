@@ -134,7 +134,7 @@ describe('system email templates', () => {
       brand,
     })
     expect(mail.subject).toBe('New Sign-In Detected')
-    expect(mail.html).toContain('Sign-in alert')
+    expect(mail.html).not.toContain('Sign-in alert')
     expect(mail.html).toContain('Alex')
     expect(mail.html).toContain('alex@example.com')
     expect(mail.html).toContain('Brooklyn, NY')
@@ -259,7 +259,7 @@ describe('system email templates', () => {
     })
     expect(mail.subject).toBe('Brandon Sent A Team Message')
     expect(mail.html).not.toContain('Team notification') // former header badge — removed from layout
-    expect(mail.html).toContain('Team message')
+    expect(mail.html).not.toContain('Team message') // former blue eyebrow — removed from layout
     expect(mail.html).toContain('Open message')
     expect(mail.html).toContain('Sent To')
     expect(mail.html).toContain('Brandon K.')

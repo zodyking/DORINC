@@ -83,8 +83,8 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
     ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
-      headerBadge: 'Invoice',
-      eyebrow: 'Invoice',
+      headerBadge: '',
+      eyebrow: '',
       headline: `Invoice ${input.invoiceNumber}`,
       lead: message,
       highlight: totalLine
@@ -154,8 +154,8 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
     ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
-      headerBadge: 'Portal request',
-      eyebrow: 'Portal request',
+      headerBadge: '',
+      eyebrow: '',
       headline: `Request ${statusLabel}`,
       lead: `Your ${kindLabel.toLowerCase()} "${input.requestTitle}" has been ${statusLabel}.`,
       highlight: {
@@ -220,8 +220,8 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
     ...finalizeMailWithTemplateOverride(buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
-      headerBadge: 'Estimate',
-      eyebrow: 'Estimate',
+      headerBadge: '',
+      eyebrow: '',
       headline: `Estimate ${input.estimateNumber}`,
       lead: `Estimate ${input.estimateNumber} is ready for your review in the customer portal.`,
       details: [

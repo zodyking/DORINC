@@ -1,9 +1,42 @@
 /**
  * Shared transactional email layout.
- * Flat white shell: company name only in the header (no type badge), blue eyebrow
- * in the body, full-width dark CTA. Branding comes from business settings when
+ * Flat white shell: company name only at the top (no type badge / eyebrow label),
+ * then headline + body + dark CTA. Branding comes from business settings when
  * provided. Usable from Nuxt (TS) and Node workers (.mjs).
  */
+
+/**
+ * Strip legacy type labels from transactional HTML:
+ * - right-aligned uppercase header badge beside the company name
+ * - blue uppercase eyebrow under the header
+ * Applied to generated mail and to stored htmlSource overrides so every template
+ * path stays brand-clean.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function sanitizeTransactionalEmailHtml(html) {
+  let out = String(html ?? '')
+  // Legacy header badge cell (faint uppercase label aligned right of the brand).
+  out = out.replace(
+    /<td\b[^>]*\balign=["']right["'][^>]*style=["'][^"']*letter-spacing:\s*0\.06em[^"']*text-transform:\s*uppercase[^"']*["'][^>]*>[\s\S]*?<\/td>/gi,
+    '',
+  )
+  out = out.replace(
+    /<td\b[^>]*style=["'][^"']*letter-spacing:\s*0\.06em[^"']*text-transform:\s*uppercase[^"']*(?:color:\s*#9ca3af|color:\s*\$\{?t\.faint\}?)[^"']*["'][^>]*>[\s\S]*?<\/td>/gi,
+    '',
+  )
+  out = out.replace(
+    /<td\b[^>]*style=["'][^"']*letter-spacing:\s*0\.06em[^"']*text-transform:\s*uppercase[^"']*color:\s*#9ca3af[^"']*["'][^>]*>[\s\S]*?<\/td>/gi,
+    '',
+  )
+  // Blue body eyebrow label under the header.
+  out = out.replace(
+    /<div\b[^>]*style=["'][^"']*letter-spacing:\s*0\.06em[^"']*text-transform:\s*uppercase[^"']*color:\s*#2563eb[^"']*["'][^>]*>[\s\S]*?<\/div>\s*/gi,
+    '',
+  )
+  return out
+}
 
 export const EMAIL_BRAND_NAME = 'DORINC'
 export const EMAIL_BRAND_LEGAL = 'Devon On Site Repairs Inc.'
@@ -349,10 +382,11 @@ export function wrapEmailHtml(opts) {
   const showFooterAddress = opts.footerAddress !== false
   const showFooter = Boolean(footerNote || showFooterLinks || (showFooterAddress && addressBlock))
 
+  // Type labels (eyebrow / headerBadge) are intentionally not rendered — they sat
+  // flush against the company name on mobile and duplicated the headline.
   const mainIntro = [
-    opts.eyebrow ? emailEyebrow(opts.eyebrow) : '',
     headline
-      ? `<h1 style="margin:12px 0 0 0;font-size:28px;line-height:36px;font-weight:700;letter-spacing:-0.5px;color:${t.ink};font-family:${t.font};">${headline}</h1>`
+      ? `<h1 style="margin:0;font-size:28px;line-height:36px;font-weight:700;letter-spacing:-0.5px;color:${t.ink};font-family:${t.font};">${headline}</h1>`
       : '',
     lead
       ? `<p style="margin:12px 0 0 0;font-size:15px;line-height:24px;color:${t.muted};font-family:${t.font};">${lead}</p>`
@@ -370,7 +404,7 @@ export function wrapEmailHtml(opts) {
     '-webkit-text-size-adjust:100%',
   ].join(';')
 
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -388,7 +422,7 @@ export function wrapEmailHtml(opts) {
 
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${t.surface}" style="width:100%;max-width:620px;margin:0 auto;background:${t.surface};border-collapse:collapse;border-spacing:0;">
 
-          <!-- Header: company name only (no type badge — badges sat flush against the brand) -->
+          <!-- Header: company name only -->
           <tr>
             <td bgcolor="${t.surface}" style="padding:34px 0 24px 0;background:${t.surface};border-bottom:1px solid ${t.border};">
               <div style="font-size:20px;line-height:27px;font-weight:700;letter-spacing:-0.3px;color:${t.ink};font-family:${t.font};">
@@ -476,6 +510,8 @@ export function wrapEmailHtml(opts) {
   </table>
 </body>
 </html>`
+
+  return sanitizeTransactionalEmailHtml(html)
 }
 
 /**

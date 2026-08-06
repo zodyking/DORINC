@@ -64,10 +64,10 @@ export function buildSignupVerificationEmail({ name, verifyUrl, brandName, appUr
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'Account verification',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Account verification',
+    eyebrow: '',
     headline: 'Verify your email',
     lead: `Confirm your email to continue your ${resolvedBrand} account request.`,
     details: [
@@ -101,10 +101,10 @@ export function buildPasswordResetEmail({ name, resetUrl, brandName, appUrl, bra
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'Password reset',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Password reset',
+    eyebrow: '',
     headline: 'Reset your password',
     lead: `Use the button below to choose a new password for your ${resolvedBrand} staff account.`,
     details: [
@@ -151,10 +151,10 @@ export function buildOutsideGeofenceVerificationEmail({
   const verifyUrl = base ? `${base}/auth/verify-location` : undefined
 
   return styledEmail({
-    headerBadge: 'Security verification',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Security verification',
+    eyebrow: '',
     headline: 'Suspicious location detected',
     lead: `You're accessing ${resolvedBrand} from a suspicious location. Enter this verification code to confirm your identity.`,
     highlight: {
@@ -202,10 +202,10 @@ export function buildSmtpTestEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'System test',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'System test',
+    eyebrow: '',
     headline: 'SMTP test successful',
     lead: `This is a test message from the ${resolvedBrand} ${source}.`,
     details: [
@@ -243,10 +243,10 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'Portal access',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Portal access',
+    eyebrow: '',
     headline: 'Customer Portal access',
     lead: `A staff member has sent you access to the ${resolvedBrand} Customer Portal. Use the button below to sign in.`,
     details: [
@@ -287,10 +287,10 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'Staff invite',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Staff invite',
+    eyebrow: '',
     headline: 'Welcome to the team',
     lead: `You've been invited to join the ${resolvedBrand} staff workspace. Sign in with the credentials below, then choose your own password.`,
     details: [
@@ -335,10 +335,10 @@ export function buildBackupNotificationEmail({
   lines.push('', `Time: ${when}`)
 
   return styledEmail({
-    headerBadge: 'Backup',
+    headerBadge: '',
     subject,
     text: lines.join('\n'),
-    eyebrow: 'Backup',
+    eyebrow: '',
     headline: success ? 'Backup completed' : 'Backup failed',
     lead: success
       ? 'An encrypted database backup completed successfully.'
@@ -389,10 +389,10 @@ export function buildInvoiceAttachedEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'Invoice',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Invoice',
+    eyebrow: '',
     headline: `Invoice ${invoiceNumber}`,
     lead: `Hello ${recipientName}, invoice ${invoiceNumber} is attached to this email as a PDF.`,
     highlight: totalLine
@@ -465,10 +465,10 @@ export function buildLoginNotificationEmail({
   const loginUrl = `${base}${portal === 'customer' ? '/auth/login?portal=customer' : '/auth/login'}`
 
   return styledEmail({
-    headerBadge: 'Sign-in alert',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Sign-in alert',
+    eyebrow: '',
     headline: 'New sign-in',
     lead: `Your staff account was used to sign in to ${resolvedBrand}.`,
     details: [
@@ -517,10 +517,10 @@ export function buildCustomerAutoResponderEmail({
   const text = [greeting, '', ...bodyParagraphs, '', resolvedBrand].join('\n')
 
   return styledEmail({
-    headerBadge: 'Auto reply',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Message received',
+    eyebrow: '',
     headline: 'We got your email',
     lead: greeting,
     bodyHtml,
@@ -560,10 +560,10 @@ export function buildDeletionRequestSubmittedEmail({
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'Deletion request',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Deletion request',
+    eyebrow: '',
     headline: 'New deletion request',
     lead: `${submitterName} requested deletion of a ${entityTypeLabel.toLowerCase()}. Review the details and approve or deny the request.`,
     details: [
@@ -606,10 +606,10 @@ export function buildDeletionRequestResultEmail({
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
 
   return styledEmail({
-    headerBadge: 'Deletion request',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Deletion request',
+    eyebrow: '',
     headline: approved ? 'Deletion approved' : 'Deletion denied',
     lead: `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" was ${statusLabel}.`,
     highlight: {
@@ -656,10 +656,10 @@ export function buildUserSignupPendingEmail({
   ].join('\n')
 
   return styledEmail({
-    headerBadge: 'User approval',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'User approval',
+    eyebrow: '',
     headline: 'New user awaiting approval',
     lead: 'A staff signup finished email verification and needs an administrator to approve the account.',
     details: [
@@ -698,10 +698,10 @@ export function buildInvoicePendingApprovalEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'Invoice approval',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Invoice approval',
+    eyebrow: '',
     headline: 'Invoice needs approval',
     lead: `Invoice ${invoiceNumber} for ${customerName} is waiting for manager approval.`,
     highlight: totalLine
@@ -762,10 +762,10 @@ export function buildCustomerServiceRequestStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'Portal request',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Portal request',
+    eyebrow: '',
     headline: 'New customer service request',
     lead: `${customerName} submitted a service request. Check the portal for full details and next steps.`,
     details: [
@@ -816,10 +816,10 @@ export function buildCustomerChangeRequestStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'Portal request',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Portal request',
+    eyebrow: '',
     headline: 'New customer change request',
     lead: `${customerName} submitted a ${requestKindLabel.toLowerCase()}. Review the request in the portal.`,
     details: [
@@ -872,7 +872,7 @@ export function buildCustomerEmailReceivedStaffEmail({
   return styledEmail({
     subject: mailSubject,
     text,
-    eyebrow: 'Customer email',
+    eyebrow: '',
     headline,
     lead: `${customerName} emailed your company inbox. Sign in to DORINC, open Messages, and reply to the customer.`,
     details: [
@@ -887,7 +887,7 @@ export function buildCustomerEmailReceivedStaffEmail({
         })
       : undefined,
     primaryAction: { href: messagesUrl, label: 'Sign in & reply' },
-    headerBadge: 'Customer email',
+    headerBadge: '',
     footerNote: `This email was sent because activity occurred in your ${brandNameFrom({ brand })} accounting workspace.`,
     appUrl,
     brand,
@@ -923,8 +923,8 @@ export function buildChatMessageReceivedEmail({
   return styledEmail({
     subject,
     text,
-    headerBadge: isTeamChat ? 'Team notification' : 'Direct message',
-    eyebrow: isTeamChat ? 'Team message' : 'Direct message',
+    headerBadge: '',
+    eyebrow: '',
     headline: `${senderName} sent a message`,
     lead: isTeamChat
       ? `You received a new message in the ${channelLabel} channel.`
@@ -980,10 +980,10 @@ export function buildServiceLogSentToInvoiceStaffEmail({
   ].filter(Boolean).join('\n')
 
   return styledEmail({
-    headerBadge: 'Draft invoice',
+    headerBadge: '',
     subject,
     text,
-    eyebrow: 'Draft invoice',
+    eyebrow: '',
     headline: 'Invoice needs to be completed',
     lead: senderName
       ? `${senderName} sent ${serviceLogLabel} to invoice. Open the draft and finish billing when you are ready.`

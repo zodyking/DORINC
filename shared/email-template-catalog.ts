@@ -207,7 +207,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'Verify Your Email',
-      eyebrow: 'Account verification',
+      eyebrow: '',
       headline: 'Verify your email',
       lead: 'Confirm your email to continue your {{brandName}} account request.',
       noteTitle: 'What happens next',
@@ -230,7 +230,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'Reset Your Password',
-      eyebrow: 'Password reset',
+      eyebrow: '',
       headline: 'Reset your password',
       lead: 'Use the button below to choose a new password for your {{brandName}} staff account.',
       noteTitle: 'Did not request this?',
@@ -253,7 +253,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'Verify Suspicious Location Access',
-      eyebrow: 'Security verification',
+      eyebrow: '',
       headline: 'Suspicious location detected',
       lead: 'You\'re accessing {{brandName}} from a suspicious location. Enter this verification code to confirm your identity.',
       noteTitle: 'Was this not you?',
@@ -284,7 +284,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'system',
     defaults: {
       subject: 'SMTP Test Successful',
-      eyebrow: 'System test',
+      eyebrow: '',
       headline: 'SMTP test successful',
       lead: 'This is a test message from the {{brandName}} {{source}}.',
       noteTitle: 'Result',
@@ -313,7 +313,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: 'Your Portal Access',
-      eyebrow: 'Portal access',
+      eyebrow: '',
       headline: 'Customer Portal access',
       lead: 'A staff member has sent you access to the {{brandName}} Customer Portal. Use the button below to sign in.',
       noteTitle: 'Security note',
@@ -342,7 +342,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'You\'re invited to {{brandName}}',
-      eyebrow: 'Staff invite',
+      eyebrow: '',
       headline: 'Welcome to the team',
       lead: 'You\'ve been invited to join the {{brandName}} staff workspace. Sign in with the credentials below, then choose your own password.',
       noteTitle: 'First sign-in',
@@ -371,7 +371,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'system',
     defaults: {
       subject: 'Backup {{statusWord}} — {{filename}}',
-      eyebrow: 'Backup',
+      eyebrow: '',
       headline: 'Backup {{statusWordLower}}',
       lead: '{{leadMessage}}',
       noteTitle: 'Details',
@@ -404,7 +404,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: 'Invoice {{invoiceNumber}} Is Ready',
-      eyebrow: 'Invoice',
+      eyebrow: '',
       headline: 'Invoice {{invoiceNumber}}',
       lead: 'Hello {{recipientName}}, invoice {{invoiceNumber}} is attached to this email as a PDF.',
       noteTitle: 'Need help?',
@@ -433,7 +433,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: 'Invoice {{invoiceNumber}} Is Ready',
-      eyebrow: 'Invoice',
+      eyebrow: '',
       headline: 'Invoice {{invoiceNumber}}',
       lead: 'Invoice {{invoiceNumber}} has been sent and is available in your customer portal.',
       noteTitle: 'Need help?',
@@ -462,7 +462,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: 'Estimate {{estimateNumber}} Ready For Review',
-      eyebrow: 'Estimate',
+      eyebrow: '',
       headline: 'Estimate {{estimateNumber}}',
       lead: 'Estimate {{estimateNumber}} is ready for your review in the customer portal.',
       noteTitle: '',
@@ -487,7 +487,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: '{{kindLabel}} {{statusLabel}}',
-      eyebrow: 'Portal request',
+      eyebrow: '',
       headline: 'Request {{statusLabel}}',
       lead: 'Your {{kindLabelLower}} "{{requestTitle}}" has been {{statusLabel}}.',
       noteTitle: 'Staff note',
@@ -520,7 +520,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'New Sign-In Detected',
-      eyebrow: 'Sign-in alert',
+      eyebrow: '',
       headline: 'New sign-in',
       lead: 'Your staff account was used to sign in to {{brandName}}.',
       noteTitle: 'Was this you?',
@@ -553,7 +553,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'customer',
     defaults: {
       subject: 'We received your message',
-      eyebrow: 'Message received',
+      eyebrow: '',
       headline: 'We got your email',
       lead: 'Hi {{recipientName}},',
       noteTitle: 'What happens next',
@@ -580,7 +580,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Deletion Request Pending — {{entityLabel}}',
-      eyebrow: 'Deletion request',
+      eyebrow: '',
       headline: 'New deletion request',
       lead: '{{submitterName}} requested deletion of a {{entityTypeLabelLower}}. Review the details and approve or deny the request.',
       noteTitle: 'Request reason',
@@ -613,7 +613,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Deletion Request {{statusLabelTitle}} — {{entityLabel}}',
-      eyebrow: 'Deletion request',
+      eyebrow: '',
       headline: 'Deletion {{statusLabel}}',
       lead: 'Your deletion request for {{entityTypeLabelLower}} "{{entityLabel}}" was {{statusLabel}}.',
       noteTitle: 'Reviewer note',
@@ -650,7 +650,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'security',
     defaults: {
       subject: 'New User Awaiting Approval — {{userName}}',
-      eyebrow: 'User approval',
+      eyebrow: '',
       headline: 'New user awaiting approval',
       lead: 'A staff signup finished email verification and needs an administrator to approve the account.',
       noteTitle: '',
@@ -677,7 +677,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Invoice Pending Approval — {{invoiceNumber}}',
-      eyebrow: 'Invoice approval',
+      eyebrow: '',
       headline: 'Invoice needs approval',
       lead: 'Invoice {{invoiceNumber}} for {{customerName}} is waiting for manager approval.',
       noteTitle: '',
@@ -706,7 +706,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Customer Service Request — {{customerName}}',
-      eyebrow: 'Portal request',
+      eyebrow: '',
       headline: 'New customer service request',
       lead: '{{customerName}} submitted a service request. Check the portal for full details and next steps.',
       noteTitle: 'Customer message',
@@ -739,7 +739,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Customer Change Request — {{customerName}}',
-      eyebrow: 'Portal request',
+      eyebrow: '',
       headline: 'New customer change request',
       lead: '{{customerName}} submitted a {{requestKindLabelLower}}. Review the request in the portal.',
       noteTitle: 'Customer message',
@@ -772,7 +772,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: '{{customerName}} Sent A Message',
-      eyebrow: 'Customer email',
+      eyebrow: '',
       headline: '{{customerName}} Sent A Message',
       lead: '{{customerName}} emailed your company inbox. Sign in to DORINC, open Messages, and reply to the customer.',
       noteTitle: '',
@@ -801,7 +801,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: '{{senderName}} sent a message',
-      eyebrow: 'Team message',
+      eyebrow: '',
       headline: '{{senderName}} sent a message',
       lead: 'You received a new message in the {{channelLabel}} channel.',
       noteTitle: '',
@@ -830,7 +830,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       subject: 'Invoice needs to be completed — {{serviceLogLabel}}',
-      eyebrow: 'Draft invoice',
+      eyebrow: '',
       headline: 'Invoice needs to be completed',
       lead: '{{senderName}} sent {{serviceLogLabel}} to invoice. Open the draft and finish billing when you are ready.',
       noteTitle: '',

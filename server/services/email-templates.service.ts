@@ -10,7 +10,7 @@ import {
   normalizeEmailTemplateContent,
   type EmailTemplateContent,
 } from '../../shared/email-template-catalog'
-import { buildStyledEmail } from '../mail/email-layout'
+import { buildStyledEmail, sanitizeTransactionalEmailHtml } from '../mail/email-layout'
 import { interpolateEmailTemplate } from '../mail/email-template-override.mjs'
 import { getAppUrl } from './app-config.service'
 import { resolveEmailBrand } from './email-branding.service'
@@ -106,8 +106,6 @@ async function renderFromFields(
       note ? `${note.title}: ${note.body}` : '',
       resolved.primaryActionLabel ? `${resolved.primaryActionLabel}: ${sampleActionHref}` : '',
     ].filter(Boolean).join('\n'),
-    headerBadge: resolved.eyebrow || def.name || 'Notification',
-    eyebrow: resolved.eyebrow || undefined,
     headline: resolved.headline,
     lead: resolved.lead,
     note,
@@ -268,7 +266,7 @@ export async function previewEmailTemplate(
     return {
       subject: resolved.subject || fromFields.subject,
       text: fromFields.text,
-      html: interpolateEmailTemplate(content.htmlSource, vars),
+      html: sanitizeTransactionalEmailHtml(interpolateEmailTemplate(content.htmlSource, vars)),
       resolved,
       usedHtmlSource: true,
     }
@@ -277,7 +275,7 @@ export async function previewEmailTemplate(
   return {
     subject: fromFields.subject,
     text: fromFields.text,
-    html: fromFields.html,
+    html: sanitizeTransactionalEmailHtml(fromFields.html),
     resolved,
     usedHtmlSource: false,
   }

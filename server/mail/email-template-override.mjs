@@ -3,6 +3,8 @@
  * final mail payloads. Shared by Nuxt API and workers (plain ESM).
  */
 
+import { sanitizeTransactionalEmailHtml } from './email-layout.mjs'
+
 /**
  * @param {string} template
  * @param {Record<string, string | null | undefined>} vars
@@ -63,7 +65,7 @@ export function applyEmailTemplateOverride(opts, override, vars = {}) {
 
   const next = { ...opts }
   if (resolved.subject) next.subject = resolved.subject
-  if (resolved.eyebrow) next.eyebrow = resolved.eyebrow
+  // Eyebrow / type labels are no longer rendered in the shared layout.
   if (resolved.headline) next.headline = resolved.headline
   if (resolved.lead) next.lead = resolved.lead
 
@@ -96,11 +98,16 @@ export function applyEmailTemplateOverride(opts, override, vars = {}) {
 export function finalizeMailWithTemplateOverride(mail, override, vars = {}) {
   if (!mail) return mail
   const resolved = resolveEmailTemplateOverride(override, vars)
-  if (!resolved?.htmlSource) return mail
+  if (!resolved?.htmlSource) {
+    return {
+      ...mail,
+      html: sanitizeTransactionalEmailHtml(mail.html),
+    }
+  }
   return {
     ...mail,
     subject: resolved.subject || mail.subject,
-    html: interpolateEmailTemplate(resolved.htmlSource, vars),
+    html: sanitizeTransactionalEmailHtml(interpolateEmailTemplate(resolved.htmlSource, vars)),
   }
 }
 
