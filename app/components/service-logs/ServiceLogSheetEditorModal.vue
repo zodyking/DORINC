@@ -4,6 +4,7 @@ import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import {
   SERVICE_LOG_SHEET_DOCUMENT_CSS,
   SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
+  SERVICE_LOG_SHEET_SCOPE_CLASS,
 } from '#shared/service-log-sheet-styles'
 import type { ServiceLogSheetDocument } from '#shared/service-log-sheet-default'
 import type { SheetCatalogPick } from '~/composables/useServiceLogSheetEditor'
@@ -223,7 +224,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureViewport)
-  stageObserver?.disconnect()
   unmountSheetStyles()
 })
 
@@ -234,9 +234,9 @@ function close() {
 
 function openCatalogPicker(sectionId?: string | null) {
   catalogTargetSectionId.value = sectionId
-    || api.selectedSectionId.value
-    || api.leftSections.value[0]?.id
-    || api.rightSections.value[0]?.id
+    || api.selectedSectionId
+    || api.leftSections[0]?.id
+    || api.rightSections[0]?.id
     || null
   catalogQ.value = ''
   showCatalogPicker.value = true
@@ -359,7 +359,7 @@ function onScrimClick(event: MouseEvent) {
           <button
             type="button"
             class="btn sm sl-hide-compact"
-            :disabled="saving || pending || !api.sections.value.length"
+            :disabled="saving || pending || !api.sections.length"
             @click="openCatalogPicker()"
           >
             + From catalog
@@ -371,7 +371,7 @@ function onScrimClick(event: MouseEvent) {
           <button
             type="button"
             class="btn primary sm sl-hide-compact"
-            :disabled="saving || pending || !api.doc.value"
+            :disabled="saving || pending || !api.doc"
             @click="save"
           >
             {{ saving ? 'Saving…' : 'Save sheet' }}
@@ -383,21 +383,21 @@ function onScrimClick(event: MouseEvent) {
       <p v-if="error" class="sl-error" role="alert">{{ error }}</p>
 
       <p
-        v-else-if="api.pageFill.value.overflows"
+        v-if="!error && api.pageFill.overflows"
         class="sl-warn"
         role="status"
       >
-        This catalog is taller than the front page ({{ api.pageFill.value.rows }} of
-        {{ api.pageFill.value.capacity }} lines in the longest column). It still prints — the
+        This catalog is taller than the front page ({{ api.pageFill.rows }} of
+        {{ api.pageFill.capacity }} lines in the longest column). It still prints — the
         extra lines continue on a second page with the column headers repeated.
       </p>
 
       <p v-if="pending" class="sl-status">Loading Letter sheet…</p>
 
-      <div v-else-if="api.doc.value && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
+      <div v-else-if="api.doc && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
         <div v-if="view === 'paper'" ref="stageRef" class="sl-stage">
           <!-- zoom (not transform) keeps layout, scrollbars and hit testing correct -->
-          <div class="sl-paper sheet-doc" :style="{ zoom: scale }">
+          <div class="sl-paper" :class="SERVICE_LOG_SHEET_SCOPE_CLASS" :style="{ zoom: scale }">
             <ServiceLogSheetPaper
               :api="api"
               :business="business"
@@ -435,12 +435,12 @@ function onScrimClick(event: MouseEvent) {
       </div>
 
       <footer v-if="compact" class="sl-foot">
-        <span class="sl-foot-count">{{ api.lineCount.value }} lines</span>
+        <span class="sl-foot-count">{{ api.lineCount }} lines</span>
         <button type="button" class="btn" :disabled="saving" @click="close">Cancel</button>
         <button
           type="button"
           class="btn primary"
-          :disabled="saving || pending || !api.doc.value"
+          :disabled="saving || pending || !api.doc"
           @click="save"
         >
           {{ saving ? 'Saving…' : 'Save sheet' }}

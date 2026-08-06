@@ -76,6 +76,8 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('Service Description')
     expect(html).toContain('Quantity')
     expect(html).toContain('blank-work-table')
+    expect(html).not.toContain('Customer Signature')
+    expect(html).not.toContain('sign-row')
     // DomPDF uses default_media_type=screen — screen chrome must never ship in PDF HTML.
     expect(html).not.toMatch(/@media\s+screen/)
     expect(html).not.toContain('width: 8.5in')

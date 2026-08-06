@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '#shared': path.resolve(rootDir, 'shared'),
+      '~': path.resolve(rootDir, 'app'),
+      '~/': path.resolve(rootDir, 'app') + '/',
     },
   },
   test: {
