@@ -8,6 +8,7 @@ const form = defineModel<AnnouncementEditorForm>({ required: true })
 
 const props = defineProps<{
   announcementId?: string | null
+  ensureAnnouncementId?: () => Promise<string>
   accountTypes: Array<{ key: string, name: string }>
   users: Array<{ id: string, name: string, email: string, accountType: string }>
   uploadBusy?: boolean
@@ -16,6 +17,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'hero-upload': [file: File]
   'clear-hero': []
+  'update:announcementId': [id: string]
+  error: [message: string]
 }>()
 
 type WorkbenchTab = 'editor' | 'preview'
@@ -62,11 +65,21 @@ function toggleUser(id: string) {
   else form.value.userIds.push(id)
 }
 
-function onHeroInput(e: Event) {
+async function onHeroInput(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (file) emit('hero-upload', file)
+  if (!file) return
+  try {
+    if (!props.announcementId && props.ensureAnnouncementId) {
+      const id = await props.ensureAnnouncementId()
+      emit('update:announcementId', id)
+    }
+    emit('hero-upload', file)
+  }
+  catch {
+    emit('error', 'Could not prepare this message for image upload.')
+  }
 }
 
 function onPreviewKeydown(e: KeyboardEvent) {
@@ -148,14 +161,12 @@ onBeforeUnmount(() => {
                 <button type="button" class="btn sm" @click="emit('clear-hero')">Remove</button>
               </div>
               <label
-                v-if="announcementId"
                 class="btn sm ann-upload"
                 :class="{ disabled: uploadBusy }"
               >
                 {{ uploadBusy ? 'Uploading…' : form.heroImageUrl ? 'Replace image' : 'Upload image' }}
                 <input type="file" accept="image/*" :disabled="uploadBusy" @change="onHeroInput">
               </label>
-              <p v-else class="help">Save the message once to attach a hero image.</p>
             </div>
           </div>
 
@@ -164,6 +175,9 @@ onBeforeUnmount(() => {
             <AnnouncementRichEditor
               v-model="form.bodyHtml"
               :announcement-id="announcementId"
+              :ensure-announcement-id="ensureAnnouncementId"
+              @update:announcement-id="emit('update:announcementId', $event)"
+              @error="emit('error', $event)"
             />
           </label>
         </div>

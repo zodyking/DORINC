@@ -2,10 +2,13 @@
 import AnnouncementEditorWorkbench from '~/components/admin/AnnouncementEditorWorkbench.vue'
 import type { AnnouncementEditorForm } from '~/utils/announcements-ui'
 import {
-  announcementBodyHasInlineDataImages,
   announcementSaveErrorMessage,
   localDateTimeToIso,
 } from '~/utils/announcements-ui'
+import {
+  materializeAnnouncementDataImages,
+  uploadAnnouncementImage,
+} from '~/utils/announcement-inline-images'
 
 definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
@@ -118,10 +121,6 @@ async function saveMessage() {
     error.value = 'Select at least one user'
     return
   }
-  if (announcementBodyHasInlineDataImages(form.value.bodyHtml)) {
-    error.value = 'Pasted inline images cannot be saved. Remove them and use the Image button to upload.'
-    return
-  }
   if (!Number.isFinite(form.value.priority)) {
     error.value = 'Priority must be a whole number'
     return
@@ -142,12 +141,14 @@ async function saveMessage() {
   error.value = ''
   savedNote.value = ''
   try {
+    const bodyHtml = await materializeAnnouncementDataImages(form.value.bodyHtml, id.value)
+    form.value.bodyHtml = bodyHtml
     await $fetch(`/api/admin/announcements/${id.value}`, {
       method: 'PATCH',
       body: {
         title: form.value.title,
         subtitle: form.value.subtitle || null,
-        bodyHtml: form.value.bodyHtml,
+        bodyHtml,
         heroImageFileId: form.value.heroImageFileId,
         isActive: form.value.isActive,
         priority: form.value.priority,
@@ -168,21 +169,17 @@ async function saveMessage() {
   }
 }
 
+async function ensureAnnouncementId(): Promise<string> {
+  return id.value
+}
+
 async function onHeroUpload(file: File) {
   uploadBusy.value = true
   error.value = ''
   try {
-    const body = new FormData()
-    body.append('file', file)
-    body.append('ownerEntityType', 'announcement')
-    body.append('ownerEntityId', id.value)
-    body.append('fileKind', 'attachment')
-    const res = await $fetch<{ file: { id: string } }>('/api/files', {
-      method: 'POST',
-      body,
-    })
-    form.value.heroImageFileId = res.file.id
-    form.value.heroImageUrl = `/api/files/${res.file.id}/preview`
+    const uploaded = await uploadAnnouncementImage(id.value, file)
+    form.value.heroImageFileId = uploaded.id
+    form.value.heroImageUrl = uploaded.url
     await saveMessage()
   }
   catch (err: unknown) {
@@ -220,11 +217,13 @@ function clearHero() {
       v-else
       v-model="form"
       :announcement-id="id"
+      :ensure-announcement-id="ensureAnnouncementId"
       :account-types="options?.accountTypes ?? []"
       :users="options?.users ?? []"
       :upload-busy="uploadBusy"
       @hero-upload="onHeroUpload"
       @clear-hero="clearHero"
+      @error="error = $event"
     />
 
     <div
