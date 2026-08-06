@@ -1,5 +1,6 @@
 /** Queue chat message email notifications from worker/automation paths. */
 import { buildChatMessageReceivedEmail } from '../../mail/templates/system.mjs'
+import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 import { TEAM_CHAT_TITLE } from './team-chat.mjs'
 
 const ENTITY_REF_TOKEN_RE = /\[\[ref:([a-z_]+):([0-9a-f-]{36}):([^\]]+)\]\]/gi
@@ -84,6 +85,7 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
     ? (conversation.title?.trim() || TEAM_CHAT_TITLE)
     : 'Direct message'
 
+  const templateOverride = await loadActiveEmailTemplateContent(pool, 'chat_message_received')
   let queued = 0
   for (const recipient of recipients) {
     const mail = buildChatMessageReceivedEmail({
@@ -95,6 +97,7 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
       appUrl: brand.appUrl,
       brand,
       isTeamChat,
+      templateOverride,
     })
 
     await pool.query(

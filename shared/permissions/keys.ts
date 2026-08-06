@@ -51,8 +51,8 @@ export const PERMISSIONS = {
   'estimates.generate_pdf.all': 'Generate estimate PDFs',
 
   // Templates
-  'templates.read.all': 'View invoice templates',
-  'templates.manage.all': 'Manage invoice templates',
+  'templates.read.all': 'View invoice and email templates',
+  'templates.manage.all': 'Manage invoice and email templates',
 
   // Reports (Phase 3)
   'reports.read.all': 'View financial and productivity reports',

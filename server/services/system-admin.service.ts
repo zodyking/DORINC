@@ -100,7 +100,9 @@ export async function getSystemStatus(db: Db): Promise<SystemStatus> {
 
 export async function sendSmtpTest(db: Db, to: string, actorName: string): Promise<{ delivered: boolean }> {
   const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'smtp_test')
   const mail = buildSmtpTestEmail({
     brandName: brand.brandName || BRAND_NAME,
     source: 'Super Admin control panel',
@@ -108,6 +110,7 @@ export async function sendSmtpTest(db: Db, to: string, actorName: string): Promi
     sentAt: new Date().toISOString(),
     appUrl: brand.appUrl,
     brand,
+    templateOverride,
   })
   return sendBrandedMail(db, { to, ...mail }, brand)
 }

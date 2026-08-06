@@ -2,6 +2,7 @@ import type { Db } from '../db/client'
 import { sendBrandedMail } from '../mail/branded-mail'
 import { buildSignupVerificationEmail } from '../mail/templates/system'
 import { resolveEmailBrand } from './email-branding.service'
+import { getActiveEmailTemplateContent } from './email-templates.service'
 import { getAppUrl } from './app-config.service'
 import { enqueueJob } from './jobs.service'
 
@@ -15,12 +16,14 @@ async function buildVerificationEmail(db: Db, input: VerificationEmailInput) {
   const brand = await resolveEmailBrand(db)
   const appUrl = brand.appUrl || getAppUrl()
   const verifyUrl = `${appUrl}/auth/verify-email?token=${encodeURIComponent(input.verificationToken)}`
+  const templateOverride = await getActiveEmailTemplateContent(db, 'signup_verification')
   const mail = buildSignupVerificationEmail({
     name: input.name,
     verifyUrl,
     brandName: brand.brandName,
     appUrl,
     brand,
+    templateOverride,
   })
   return { brand, mail }
 }

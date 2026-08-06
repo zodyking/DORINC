@@ -373,7 +373,9 @@ export async function buildInvoiceSendMail(
   custom?: { subject?: string | null, message?: string | null },
 ) {
   const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'invoice_sent')
   const base = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
@@ -383,6 +385,7 @@ export async function buildInvoiceSendMail(
     brand,
     customSubject: custom?.subject ?? null,
     customMessage: custom?.message ?? null,
+    templateOverride,
   })
   return {
     ...base,

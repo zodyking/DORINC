@@ -82,6 +82,18 @@ function disableAll() {
       </p>
     </header>
 
+    <div class="card" style="margin-bottom:16px;">
+      <div class="chead"><h3>Email templates</h3></div>
+      <div class="cbody settings-form">
+        <p class="help" style="margin:0 0 12px;">
+          Edit subject lines, headlines, and body copy for every transactional email type, then set the active template.
+        </p>
+        <div class="settings-actions">
+          <NuxtLink class="btn primary" to="/templates/email">Open email template editor</NuxtLink>
+        </div>
+      </div>
+    </div>
+
     <div v-if="pending" class="card"><div class="cbody">Loading…</div></div>
 
     <form v-else class="card" @submit.prevent="save">

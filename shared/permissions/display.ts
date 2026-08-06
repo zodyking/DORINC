@@ -119,8 +119,8 @@ export const PERMISSION_AREAS: PermissionArea[] = [
   },
   {
     id: 'templates',
-    label: 'Invoice Templates',
-    description: 'PDF and email templates',
+    label: 'Templates',
+    description: 'Invoice PDF and email templates',
     navKeys: ['templates.read.all'],
     cells: [
       cell('templates.read.all', 'View page', 'view'),

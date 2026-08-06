@@ -15,6 +15,7 @@ import { getEstimate } from './estimates.service'
 import { getInvoice } from './invoices.service'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
+import { getActiveEmailTemplateContent } from './email-templates.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { documentChangeRequestTitle } from './document-change-requests.service'
 
@@ -110,6 +111,7 @@ export async function notifyInvoiceSent(db: Db, invoiceId: string) {
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'invoice_sent')
   const mail = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
@@ -117,6 +119,7 @@ export async function notifyInvoiceSent(db: Db, invoiceId: string) {
     dueDate: invoice.dueDate,
     total: invoice.total,
     brand,
+    templateOverride,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {
@@ -176,6 +179,7 @@ export async function notifyPortalRequestStatus(
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'request_status')
   const mail = buildRequestStatusEmail({
     recipientName: recipient.name,
     requestKind: requestKindLabel(kind),
@@ -183,6 +187,7 @@ export async function notifyPortalRequestStatus(
     status,
     reviewReason: request.reviewReason,
     brand,
+    templateOverride,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {
@@ -210,11 +215,13 @@ export async function notifyEstimateSent(db: Db, estimateId: string) {
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
   const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'estimate_sent')
   const mail = buildEstimateSentEmail({
     recipientName: recipient.name,
     estimateNumber: formatEstimateNumber(estimate.estimateNumber),
     estimateId: estimate.id,
     brand,
+    templateOverride,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {

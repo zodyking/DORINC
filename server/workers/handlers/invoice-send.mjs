@@ -6,6 +6,7 @@ import {
   tryFinalizeBulkInvoiceSendNotify,
 } from '../../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
+import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { sendNotificationMail } from '../../mail/outbound-notification-mail.mjs'
 
@@ -278,6 +279,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         const invNum = `INV-${String(invoice.invoice_number).padStart(6, '0')}`
         const recipientName = payload.recipientName ?? 'there'
         const brand = await loadEmailBrand(pool)
+        const templateOverride = await loadActiveEmailTemplateContent(pool, 'invoice_attached')
         const mail = buildInvoiceAttachedEmail({
           recipientName,
           invoiceNumber: invNum,
@@ -285,6 +287,7 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
           total: invoice.total ?? null,
           appUrl: brand.appUrl,
           brand,
+          templateOverride,
         })
         payload.subject = mail.subject
         payload.text = mail.text

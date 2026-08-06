@@ -95,11 +95,12 @@ const nav = computed<NavSection[]>(() => {
     },
   ]
 
-  if (isSuperAdmin.value || auth.can('roles.manage.all')) {
+  if (isSuperAdmin.value || auth.can('roles.manage.all') || auth.can('templates.read.all')) {
     sections.push({
       label: 'Administration',
       items: [
         { label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' },
+        { label: 'Email Templates', to: '/templates/email', icon: 'email-templates', permission: 'templates.read.all' },
         { label: 'Roles & Permissions', to: '/admin/roles', icon: 'users', permission: 'roles.manage.all' },
       ],
     })
@@ -116,6 +117,8 @@ async function signOut() {
 const crumb = computed(() => {
   if (route.path === '/messages' || route.path.startsWith('/messages/')) return 'Messages'
   if (route.path === '/billing' || route.path.startsWith('/billing/')) return 'Billing'
+  if (route.path.startsWith('/templates/email')) return 'Email Templates'
+  if (route.path.startsWith('/templates/designer')) return 'Template Editor'
   if (route.path === '/invoices/new') return 'New invoice'
   if (/^\/invoices\/[^/]+/.test(route.path) && route.path !== '/invoices/new') {
     return 'Invoice'

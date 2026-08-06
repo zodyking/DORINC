@@ -13,6 +13,7 @@ import {
   normalizeEmailAddress,
 } from './email-thread.mjs'
 import { buildCustomerAutoResponderEmail } from '../../mail/templates/system.mjs'
+import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { persistInboundAttachments, repairInboundEmailMedia } from './imap-attachments.mjs'
 import { normalizeInboundBody } from '../../../shared/email-css-artifact.mjs'
@@ -226,12 +227,14 @@ async function sendAutoResponder(pool, input) {
     parentMessageId: input.inboundMessageId,
     existingReferences: input.inboundReferences,
   })
+  const templateOverride = await loadActiveEmailTemplateContent(pool, 'customer_auto_responder')
   const mail = buildCustomerAutoResponderEmail({
     recipientName: input.recipientName,
     subject: replySubject,
     message: auto.message.trim(),
     appUrl: brand.appUrl,
     brand,
+    templateOverride,
   })
 
   const { transport, from, config } = await getSmtpTransport(pool)

@@ -1,10 +1,12 @@
 /** Customer-facing SMTP templates — unified notification layout. */
 import { formatMoneyForDisplay } from '../../shared/money'
+import type { EmailTemplateContent } from '../../shared/email-template-catalog'
 import { getAppUrl } from '../services/app-config.service'
 import type { EmailBrandContext } from '../services/email-branding.service'
 import {
   buildStyledEmail,
 } from './email-layout'
+import { applyEmailTemplateOverride } from './email-template-override.mjs'
 
 function portalUrl(path = '', appUrl?: string): string {
   const base = (appUrl || getAppUrl()).replace(/\/$/, '')
@@ -42,6 +44,8 @@ export interface InvoiceSentTemplateInput {
   customSubject?: string | null
   /** Optional staff-edited message body; falls back to the default when blank. */
   customMessage?: string | null
+  /** Active Control Panel email template override, when set. */
+  templateOverride?: EmailTemplateContent | null
 }
 
 /** Editable defaults surfaced to the send-compose UI (subject + message body). */
@@ -73,7 +77,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
   ].filter(Boolean).join('\n')
 
   return {
-    ...buildStyledEmail({
+    ...buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Invoice',
@@ -100,7 +104,12 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
       primaryAction: { href: detailUrl, label: 'View invoice in the portal' },
       appUrl,
       brand: input.brand,
-    }),
+    }, input.templateOverride, {
+      recipientName: input.recipientName,
+      invoiceNumber: input.invoiceNumber,
+      dueDate: dueLine || '',
+      total: totalLine || '',
+    })),
     notificationKind: 'invoice_sent' as const,
   }
 }
@@ -113,6 +122,7 @@ export interface RequestStatusTemplateInput {
   reviewReason?: string | null
   brand?: EmailBrandContext
   appUrl?: string
+  templateOverride?: EmailTemplateContent | null
 }
 
 export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
@@ -132,7 +142,7 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
   ].filter(Boolean).join('\n')
 
   return {
-    ...buildStyledEmail({
+    ...buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Portal request',
@@ -156,7 +166,14 @@ export function buildRequestStatusEmail(input: RequestStatusTemplateInput) {
       primaryAction: { href: requestsUrl, label: 'View your requests' },
       appUrl,
       brand: input.brand,
-    }),
+    }, input.templateOverride, {
+      recipientName: input.recipientName,
+      kindLabel,
+      kindLabelLower: kindLabel.toLowerCase(),
+      requestTitle: input.requestTitle,
+      statusLabel,
+      reviewReason: reasonLine || '',
+    })),
     notificationKind: 'request_status' as const,
   }
 }
@@ -167,6 +184,7 @@ export interface EstimateSentTemplateInput {
   estimateId: string
   brand?: EmailBrandContext
   appUrl?: string
+  templateOverride?: EmailTemplateContent | null
 }
 
 export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
@@ -182,7 +200,7 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
   ].join('\n')
 
   return {
-    ...buildStyledEmail({
+    ...buildStyledEmail(applyEmailTemplateOverride({
       subject,
       text,
       eyebrow: 'Estimate',
@@ -196,7 +214,10 @@ export function buildEstimateSentEmail(input: EstimateSentTemplateInput) {
       primaryAction: { href: detailUrl, label: 'View estimate in the portal' },
       appUrl,
       brand: input.brand,
-    }),
+    }, input.templateOverride, {
+      recipientName: input.recipientName,
+      estimateNumber: input.estimateNumber,
+    })),
     notificationKind: 'estimate_sent' as const,
   }
 }

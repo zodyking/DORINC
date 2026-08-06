@@ -12,6 +12,7 @@ export type StaffNavIconName =
   | 'users'
   | 'system-logs'
   | 'control-panel'
+  | 'email-templates'
   | 'training'
 
 defineProps<{
@@ -178,6 +179,12 @@ defineProps<{
         stroke-width="1.75"
         stroke-linecap="round"
       />
+    </template>
+
+    <!-- Email Templates -->
+    <template v-else-if="name === 'email-templates'">
+      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />
+      <path d="M3 7l9 6 9-6" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
     </template>
 
     <!-- Training -->

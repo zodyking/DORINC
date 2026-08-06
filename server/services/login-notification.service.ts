@@ -4,6 +4,7 @@ import type { Db } from '../db/client'
 import { buildLoginNotificationEmail } from '../mail/templates/system'
 import { sendBrandedMail } from '../mail/branded-mail'
 import { resolveEmailBrand } from './email-branding.service'
+import { getActiveEmailTemplateContent } from './email-templates.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { resolveIpLocation, normalizeClientIp } from './ip-geolocation.service'
@@ -54,6 +55,7 @@ export async function sendLoginNotificationEmail(
   const ipLocation = await resolveIpLocation(ipAddress)
   const location = opts.deviceLocation || ipLocation
 
+  const templateOverride = await getActiveEmailTemplateContent(db, 'login_notification')
   const mail = buildLoginNotificationEmail({
     name: opts.name,
     email: to,
@@ -67,6 +69,7 @@ export async function sendLoginNotificationEmail(
     userAgent: opts.userAgent ?? null,
     appUrl: brand.appUrl || getAppUrl(),
     brand,
+    templateOverride,
   })
 
   return sendBrandedMail(db, { to, ...mail }, brand)
