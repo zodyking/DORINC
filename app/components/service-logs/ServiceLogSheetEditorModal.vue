@@ -72,33 +72,34 @@ const EDIT_CSS = `
 .sl-paper-edit .catalog-grid > tr > td {
   vertical-align: top !important;
 }
-.sl-paper-edit .category { position: relative; }
-.sl-paper-edit .category.is-selected { outline: 1.5px solid #6366f1; outline-offset: 1px; }
-.sl-paper-edit .service-table tr.is-selected td { background: #eef2ff; }
+.sl-paper-edit .category-wrap { position: relative; margin: 0 0 2pt; }
+.sl-paper-edit .category-wrap .category { margin: 0; }
+.sl-paper-edit .category-wrap.is-selected .category { outline: 1.5px solid #6366f1; outline-offset: 1px; }
+.sl-paper-edit .category tr.is-selected td { background: #eef2ff; }
 .sl-paper-edit .sheet-input {
   width: 100%; border: 0; background: transparent; font: inherit; color: inherit;
   padding: 0; margin: 0; box-shadow: none; border-radius: 0;
 }
 .sl-paper-edit .sheet-input:focus { outline: 1px solid #6366f1; background: #fff; }
 .sl-paper-edit .category-title .sheet-input {
-  font-size: 7.5pt; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.15;
+  font-size: 6.5pt; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; line-height: 1.15;
 }
-.sl-paper-edit .service-name > .sheet-input { font-size: 8pt; font-weight: 600; line-height: 1.12; }
-.sl-paper-edit .service-subtext .sheet-input { font-size: 6.5pt; font-weight: 400; color: #6b7280; line-height: 1.1; }
-.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 6.5pt; font-weight: 700; }
+.sl-paper-edit .service-name > .sheet-input { font-size: 7pt; font-weight: 600; line-height: 1.12; }
+.sl-paper-edit .service-subtext .sheet-input { font-size: 5.5pt; font-weight: 400; color: #6b7280; line-height: 1.05; }
+.sl-paper-edit .price-cell .sheet-input { width: 100%; text-align: center; font-size: 6.5pt; font-weight: 700; }
 .sl-paper-edit .sec-tools {
   display: none; gap: 2px; position: absolute; z-index: 3;
   top: 1px; right: 1px; margin: 0; padding: 0;
 }
-.sl-paper-edit .category.is-selected .sec-tools,
-.sl-paper-edit .category:hover .sec-tools { display: flex; }
+.sl-paper-edit .category-wrap.is-selected .sec-tools,
+.sl-paper-edit .category-wrap:hover .sec-tools { display: flex; }
 .sl-paper-edit .row-tools {
   display: none; gap: 2px; position: absolute; z-index: 2;
   right: 0; top: 0; white-space: nowrap;
 }
 .sl-paper-edit .service-name { position: relative; }
-.sl-paper-edit .service-table tr.is-selected .row-tools,
-.sl-paper-edit .service-table tr:hover .row-tools { display: flex; }
+.sl-paper-edit .category tr.is-selected .row-tools,
+.sl-paper-edit .category tr:hover .row-tools { display: flex; }
 .sl-paper-edit .mini {
   appearance: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
   border-radius: 3px; font-size: 8px; line-height: 1; padding: 1px 3px; cursor: pointer;
@@ -440,16 +441,16 @@ function onScrimClick(e: MouseEvent) {
         <div ref="stageRef" class="sl-wysiwyg-stage">
           <div class="sl-wysiwyg-scale" :style="{ transform: `scale(${scale})` }">
             <div class="sl-wysiwyg-stack">
-            <main class="page page-front sl-paper-edit" aria-label="Service log sheet front">
+            <div class="page page-front sl-paper-edit" aria-label="Service log sheet front">
               <table class="header">
                 <tr>
                   <td>
-                    <h2 class="company-name">{{ business.businessName }}</h2>
+                    <div class="company-name">{{ business.businessName }}</div>
                     <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
                   </td>
                   <td class="document-title">
-                    <h1>Service Log Sheet</h1>
-                    <p>Blank field log and work authorization</p>
+                    <div class="doc-title">Service Log Sheet</div>
+                    <div class="doc-sub">Blank field log and work authorization</div>
                   </td>
                 </tr>
               </table>
@@ -475,34 +476,22 @@ function onScrimClick(e: MouseEvent) {
                 </tr>
               </table>
 
-              <section class="complaint-field">
+              <div class="complaint-field">
                 <span class="field-label">Customer Complaint or Vehicle Symptoms</span>
                 <div class="complaint-box" />
-              </section>
+              </div>
 
-              <table class="col-heads">
-                <tr>
-                  <td valign="bottom">
-                    <table class="col-head-inner"><tr>
-                      <td class="h-service">Service</td>
-                      <td class="h-price">Price / New</td>
-                    </tr></table>
-                  </td>
-                  <td valign="bottom">
-                    <table class="col-head-inner"><tr>
-                      <td class="h-service">Service</td>
-                      <td class="h-price">Price / New</td>
-                    </tr></table>
-                  </td>
-                </tr>
-              </table>
               <table class="catalog-grid">
+                <tr class="col-label-row">
+                  <td valign="bottom">Service <span class="h-price">Price / New</span></td>
+                  <td valign="bottom">Service <span class="h-price">Price / New</span></td>
+                </tr>
                 <tr>
                   <td valign="top">
-                    <section
+                    <div
                       v-for="section in leftSections"
                       :key="section.id"
-                      class="category"
+                      class="category-wrap"
                       :class="{ 'is-selected': selectedSectionId === section.id }"
                       @click="selectSection(section.id)"
                     >
@@ -514,16 +503,19 @@ function onScrimClick(e: MouseEvent) {
                         <button type="button" class="mini" title="From catalog" @click.stop="openCatalogPicker(section.id)">☰</button>
                         <button type="button" class="mini danger" title="Remove section" @click.stop="removeSection(section.id)">✕</button>
                       </div>
-                      <div class="category-title">
-                        <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
-                      </div>
-                      <table class="service-table">
+                      <table class="category">
                         <colgroup>
                           <col class="check-column">
                           <col>
                           <col class="price-column">
+                          <col class="new-column">
                         </colgroup>
                         <tbody>
+                          <tr>
+                            <td colspan="4" class="category-title">
+                              <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
+                            </td>
+                          </tr>
                           <tr
                             v-for="item in section.items"
                             :key="item.id"
@@ -546,25 +538,19 @@ function onScrimClick(e: MouseEvent) {
                               </span>
                             </td>
                             <td class="price-cell">
-                              <table class="price-entry">
-                                <tr>
-                                  <td class="printed-price">
-                                    <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
-                                  </td>
-                                  <td class="new-price">&nbsp;</td>
-                                </tr>
-                              </table>
+                              <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
                             </td>
+                            <td class="new-price-cell">&nbsp;</td>
                           </tr>
                         </tbody>
                       </table>
-                    </section>
+                    </div>
                   </td>
                   <td valign="top">
-                    <section
+                    <div
                       v-for="section in rightSections"
                       :key="section.id"
-                      class="category"
+                      class="category-wrap"
                       :class="{ 'is-selected': selectedSectionId === section.id }"
                       @click="selectSection(section.id)"
                     >
@@ -576,16 +562,19 @@ function onScrimClick(e: MouseEvent) {
                         <button type="button" class="mini" title="From catalog" @click.stop="openCatalogPicker(section.id)">☰</button>
                         <button type="button" class="mini danger" title="Remove section" @click.stop="removeSection(section.id)">✕</button>
                       </div>
-                      <div class="category-title">
-                        <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
-                      </div>
-                      <table class="service-table">
+                      <table class="category">
                         <colgroup>
                           <col class="check-column">
                           <col>
                           <col class="price-column">
+                          <col class="new-column">
                         </colgroup>
                         <tbody>
+                          <tr>
+                            <td colspan="4" class="category-title">
+                              <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
+                            </td>
+                          </tr>
                           <tr
                             v-for="item in section.items"
                             :key="item.id"
@@ -608,39 +597,33 @@ function onScrimClick(e: MouseEvent) {
                               </span>
                             </td>
                             <td class="price-cell">
-                              <table class="price-entry">
-                                <tr>
-                                  <td class="printed-price">
-                                    <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
-                                  </td>
-                                  <td class="new-price">&nbsp;</td>
-                                </tr>
-                              </table>
+                              <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
                             </td>
+                            <td class="new-price-cell">&nbsp;</td>
                           </tr>
                         </tbody>
                       </table>
-                    </section>
+                    </div>
                   </td>
                 </tr>
               </table>
-            </main>
+            </div>
 
-            <main class="page page-back sl-paper-edit" aria-label="Service log sheet back">
+            <div class="page page-back sl-paper-edit" aria-label="Service log sheet back">
               <table class="header">
                 <tr>
                   <td>
-                    <h2 class="company-name">{{ business.businessName }}</h2>
+                    <div class="company-name">{{ business.businessName }}</div>
                     <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
                   </td>
                   <td class="document-title">
-                    <h1>Service Log Sheet</h1>
-                    <p>Blank field log and work authorization</p>
+                    <div class="doc-title">Service Log Sheet</div>
+                    <div class="doc-sub">Blank field log and work authorization</div>
                   </td>
                 </tr>
               </table>
-              <h2 class="back-title">Additional / Custom Work</h2>
-              <p class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</p>
+              <div class="back-title">Additional / Custom Work</div>
+              <div class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</div>
               <table class="blank-work-table">
                 <colgroup>
                   <col class="desc">
@@ -662,7 +645,7 @@ function onScrimClick(e: MouseEvent) {
                   </tr>
                 </tbody>
               </table>
-            </main>
+            </div>
             </div>
           </div>
         </div>
