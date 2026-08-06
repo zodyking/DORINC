@@ -11,3 +11,14 @@ export const backupSettingsPatchSchema = z.object({
 })
 
 export type BackupSettingsPatch = z.infer<typeof backupSettingsPatchSchema>
+
+/** Google Cloud OAuth client credentials for Drive backup (UI-first; env optional override). */
+export const googleOAuthCredentialsSchema = z.object({
+  clientId: z.string().trim().max(256).optional().nullable(),
+  clientSecret: z.string().trim().max(256).optional().nullable(),
+}).refine(
+  data => !!(data.clientId?.trim() || data.clientSecret?.trim()),
+  { message: 'Provide a Client ID and/or Client Secret' },
+)
+
+export type GoogleOAuthCredentialsInput = z.infer<typeof googleOAuthCredentialsSchema>

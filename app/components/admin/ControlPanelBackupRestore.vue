@@ -50,6 +50,10 @@ interface BackupIntegrationView {
   provider: 'google_drive'
   connected: boolean
   configured: boolean
+  envLocked: boolean
+  hasClientSecret: boolean
+  clientIdMasked: string | null
+  redirectUri: string
   accountEmail: string | null
   folderId: string | null
   lastTestedAt: string | null
@@ -84,8 +88,13 @@ const backupMessage = ref('')
 const backupError = ref('')
 const driveTestBusy = ref(false)
 const driveDisconnectBusy = ref(false)
+const driveCredBusy = ref(false)
 const recoveryTestBusy = ref<string | null>(null)
 const showRecoveryTests = ref(false)
+const driveOAuthForm = reactive({
+  clientId: '',
+  clientSecret: '',
+})
 
 const restoreModalOpen = ref(false)
 const restoreMode = ref<'run' | 'upload'>('run')
@@ -205,6 +214,30 @@ async function saveBackupSettings() {
   }
 }
 
+async function saveGoogleOAuthCredentials() {
+  driveCredBusy.value = true
+  backupMessage.value = ''
+  backupError.value = ''
+  try {
+    await $fetch('/api/admin/backups/google/credentials', {
+      method: 'POST',
+      body: {
+        clientId: driveOAuthForm.clientId.trim() || null,
+        clientSecret: driveOAuthForm.clientSecret.trim() || null,
+      },
+    })
+    driveOAuthForm.clientSecret = ''
+    backupMessage.value = 'Google OAuth credentials saved — you can Connect Drive now'
+    await refreshAll()
+  }
+  catch (e: unknown) {
+    backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not save Google credentials'
+  }
+  finally {
+    driveCredBusy.value = false
+  }
+}
+
 async function connectGoogleDrive() {
   backupMessage.value = ''
   backupError.value = ''
@@ -214,6 +247,18 @@ async function connectGoogleDrive() {
   }
   catch (e: unknown) {
     backupError.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not start Google OAuth'
+  }
+}
+
+async function copyRedirectUri() {
+  const uri = backupData.value?.integration.redirectUri
+  if (!uri || !import.meta.client) return
+  try {
+    await navigator.clipboard.writeText(uri)
+    backupMessage.value = 'Redirect URI copied'
+  }
+  catch {
+    backupError.value = 'Could not copy redirect URI'
   }
 }
 
@@ -515,14 +560,62 @@ const restoreReady = computed(() => {
             {{ driveConnectionLabel(props.backupStatus.driveConnected, props.backupStatus.driveAccountEmail) }}.
             Offsite copy after each successful local backup.
           </p>
-          <p v-if="!backupData?.integration.configured" class="br-hint br-hint--warn">
-            Set <span class="mono">GOOGLE_CLIENT_ID</span> / <span class="mono">GOOGLE_CLIENT_SECRET</span> to enable OAuth.
+
+          <p v-if="backupData?.integration.envLocked" class="br-hint br-hint--warn">
+            OAuth is locked by <span class="mono">GOOGLE_CLIENT_ID</span> / <span class="mono">GOOGLE_CLIENT_SECRET</span> on this host.
           </p>
+
+          <template v-else>
+            <label class="fld">
+              Google Client ID
+              <input
+                v-model="driveOAuthForm.clientId"
+                type="text"
+                autocomplete="off"
+                :placeholder="backupData?.integration.clientIdMasked
+                  ? `Saved (${backupData.integration.clientIdMasked}) — paste to replace`
+                  : 'xxxx.apps.googleusercontent.com'"
+              >
+            </label>
+            <label class="fld">
+              Google Client Secret
+              <input
+                v-model="driveOAuthForm.clientSecret"
+                type="password"
+                autocomplete="off"
+                :placeholder="backupData?.integration.hasClientSecret
+                  ? 'Saved — leave blank to keep'
+                  : 'Client secret from Google Cloud Console'"
+              >
+            </label>
+            <label class="fld">
+              Authorized redirect URI
+              <span class="br-copy-row">
+                <input
+                  class="mono"
+                  type="text"
+                  readonly
+                  :value="backupData?.integration.redirectUri || ''"
+                >
+                <button type="button" class="btn" @click="copyRedirectUri">Copy</button>
+              </span>
+              <span class="br-hint">Add this exact URI under Google Cloud → APIs &amp; Services → Credentials → OAuth client.</span>
+            </label>
+            <button
+              type="button"
+              class="btn"
+              :disabled="driveCredBusy || (!driveOAuthForm.clientId.trim() && !driveOAuthForm.clientSecret.trim())"
+              @click="saveGoogleOAuthCredentials"
+            >
+              {{ driveCredBusy ? 'Saving…' : 'Save Google credentials' }}
+            </button>
+          </template>
+
           <div class="br-row-actions">
             <button
               v-if="!props.backupStatus.driveConnected"
               type="button"
-              class="btn"
+              class="btn primary"
               :disabled="!backupData?.integration.configured"
               @click="connectGoogleDrive"
             >
@@ -795,6 +888,15 @@ const restoreReady = computed(() => {
 }
 .br-hint--ok { color: #047857; }
 .br-hint--warn { color: #b45309; }
+.br-copy-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.br-copy-row input {
+  flex: 1;
+  min-width: 0;
+}
 
 .br-disclosure {
   width: 100%;

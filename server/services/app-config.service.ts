@@ -18,6 +18,8 @@ export const APP_CONFIG_KEYS = {
   maxUploadMb: 'app.max_upload_mb',
   smtp: 'smtp.config',
   notifyEmail: 'app.notify_email',
+  /** Google OAuth client for Drive backup offsite copies. */
+  googleOAuth: 'google.oauth',
 } as const
 
 export interface SmtpConfig {
@@ -26,6 +28,11 @@ export interface SmtpConfig {
   user: string
   pass: string
   from: string
+}
+
+export interface GoogleOAuthClientConfig {
+  clientId: string
+  clientSecret: string
 }
 
 export interface SetupProgress {
@@ -42,6 +49,7 @@ interface CachedConfig {
   maxUploadMb: number | null
   smtp: SmtpConfig | null
   notifyEmail: string | null
+  googleOAuth: GoogleOAuthClientConfig | null
 }
 
 let cache: CachedConfig = {
@@ -51,6 +59,7 @@ let cache: CachedConfig = {
   maxUploadMb: null,
   smtp: null,
   notifyEmail: null,
+  googleOAuth: null,
 }
 
 function hexKey(bytes = 32): string {
@@ -92,6 +101,24 @@ function envSmtpConfig(): SmtpConfig | null {
   }
 }
 
+function envGoogleOAuthConfig(): GoogleOAuthClientConfig | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim()
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
+  if (!clientId || !clientSecret) return null
+  return { clientId, clientSecret }
+}
+
+function parseGoogleOAuthPayload(payload: Buffer): GoogleOAuthClientConfig {
+  const parsed = JSON.parse(payload.toString('utf8')) as GoogleOAuthClientConfig
+  if (!parsed.clientId?.trim() || !parsed.clientSecret?.trim()) {
+    throw new Error('Invalid Google OAuth config payload')
+  }
+  return {
+    clientId: parsed.clientId.trim(),
+    clientSecret: parsed.clientSecret.trim(),
+  }
+}
+
 function decryptWithMasterKeys(
   encryptedB64: string,
   dbMasterHex: string | null,
@@ -118,6 +145,12 @@ export function isSmtpEnvLocked(): boolean {
   if (process.env.SMTP_FORCE_ENV === 'true') return true
   const env = envSmtpConfig()
   return !!(env?.host && env.from && env.pass)
+}
+
+/** True when env supplies Google OAuth client credentials (UI save is ignored). */
+export function isGoogleOAuthEnvLocked(): boolean {
+  if (process.env.GOOGLE_OAUTH_FORCE_ENV === 'true') return true
+  return !!envGoogleOAuthConfig()
 }
 
 export function decryptEncryptedAppSetting(
@@ -211,7 +244,30 @@ export async function refreshAppConfigCache(db: Db): Promise<void> {
     }
   }
 
-  cache = { masterKeyHex: masterHex, sessionSecretHex: sessionHex, appUrl, maxUploadMb, smtp, notifyEmail }
+  let googleOAuth: GoogleOAuthClientConfig | null = null
+  const googleRow = byKey.get(APP_CONFIG_KEYS.googleOAuth)
+  if (googleRow?.encryptedValue) {
+    const decrypted = decryptWithMasterKeys(googleRow.encryptedValue, masterHex, envMasterKey())
+    if (decrypted) {
+      try {
+        googleOAuth = parseGoogleOAuthPayload(decrypted)
+      }
+      catch {
+        console.warn('[app-config] Google OAuth config payload in database is invalid')
+        googleOAuth = null
+      }
+    }
+  }
+
+  cache = {
+    masterKeyHex: masterHex,
+    sessionSecretHex: sessionHex,
+    appUrl,
+    maxUploadMb,
+    smtp,
+    notifyEmail,
+    googleOAuth,
+  }
 
   const effectiveMaster = masterHex ?? envMasterKey()
   if (effectiveMaster) configureMasterKey(effectiveMaster)
@@ -253,6 +309,15 @@ export function getMaxUploadMb(): number {
 
 export function getSmtpConfig(): SmtpConfig | null {
   return cache.smtp ?? envSmtpConfig()
+}
+
+/** Google OAuth client credentials — env overrides UI-stored values when both are set. */
+export function getGoogleOAuthClientConfig(): GoogleOAuthClientConfig | null {
+  return envGoogleOAuthConfig() ?? cache.googleOAuth
+}
+
+export function getGoogleOAuthRedirectUri(): string {
+  return `${getAppUrl().replace(/\/$/, '')}/api/admin/backups/google/callback`
 }
 
 export function getNotifyEmail(): string | null {
@@ -403,6 +468,35 @@ export async function saveSmtpConfig(db: Db, input: SmtpConfig, updatedBy?: stri
   const encrypted = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
   await upsertSetting(db, APP_CONFIG_KEYS.smtp, { encryptedValue: encrypted, updatedBy: updatedBy ?? null })
   await refreshAppConfigCache(db)
+}
+
+export async function saveGoogleOAuthConfig(
+  db: Db,
+  input: { clientId: string, clientSecret?: string | null },
+  updatedBy?: string,
+): Promise<GoogleOAuthClientConfig> {
+  if (isGoogleOAuthEnvLocked()) {
+    throw new Error('Google OAuth settings are locked by environment variables')
+  }
+
+  await ensureEncryptionReadyForSettings(db)
+  await refreshAppConfigCache(db)
+
+  const existing = getGoogleOAuthClientConfig()
+  const clientId = input.clientId.trim() || existing?.clientId || ''
+  const clientSecret = input.clientSecret?.trim() || existing?.clientSecret || ''
+
+  if (!clientId) throw new Error('Google Client ID is required')
+  if (!clientSecret) throw new Error('Google Client Secret is required')
+
+  const config: GoogleOAuthClientConfig = { clientId, clientSecret }
+  const encrypted = encryptBuffer(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64')
+  await upsertSetting(db, APP_CONFIG_KEYS.googleOAuth, {
+    encryptedValue: encrypted,
+    updatedBy: updatedBy ?? null,
+  })
+  await refreshAppConfigCache(db)
+  return config
 }
 
 export function generateMasterKeyHex(): string {
