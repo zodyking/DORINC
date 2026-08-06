@@ -3,6 +3,7 @@ import {
   daysUntilIso,
   extractDomainExtension,
   mapCloudflareRegistration,
+  sumCloudflareAnnualRenewals,
   sumCloudflareRenewalsInWindow,
 } from '../../server/services/cloudflare-billing.service'
 
@@ -48,5 +49,15 @@ describe('cloudflare billing helpers', () => {
       { daysUntilRenewal: 5, renewalCost: 5.555 },
     ], 30)
     expect(total).toBe(15.56)
+  })
+
+  it('sums all domain renewal prices for the yearly budget', () => {
+    const total = sumCloudflareAnnualRenewals([
+      { renewalCost: 15.88 },
+      { renewalCost: 0 },
+      { renewalCost: null },
+      { renewalCost: 12.12 },
+    ])
+    expect(total).toBe(28)
   })
 })

@@ -26,8 +26,10 @@ export interface BillingOutlookInput {
 }
 
 /**
- * Builds a 12-month spend outlook: 6 past months of observed charges +
- * current/future months projected from recurring plan/AI spend and domain renewals.
+ * Builds a 12-month spend outlook:
+ * - projectedUsd is the expected monthly total for every month (hosting + AI run-rate
+ *   plus any domain renewals falling in that month)
+ * - actualUsd is observed charges for past/current months when invoice/usage data exists
  */
 export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoint[] {
   const now = input.now ?? new Date()
@@ -44,11 +46,10 @@ export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoi
 
   const renewalByMonth = new Map<string, number>()
   for (const domain of input.domainRenewals) {
-    if (!domain.expiresAt || domain.renewalCost == null) continue
+    if (!domain.expiresAt || domain.renewalCost == null || domain.renewalCost <= 0) continue
     const expires = new Date(domain.expiresAt)
     if (Number.isNaN(expires.getTime())) continue
-    // Attribute renewal to the month it falls due (current year window).
-    for (let offset = 0; offset < 6; offset += 1) {
+    for (let offset = -5; offset <= 6; offset += 1) {
       const month = addUtcMonths(current, offset)
       if (
         expires.getUTCFullYear() === month.getUTCFullYear()
@@ -65,15 +66,15 @@ export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoi
     const month = addUtcMonths(current, offset)
     const key = monthKey(month)
     const isFuture = offset > 0
-    const isCurrent = offset === 0
+    const projectedBase = roundMoney(recurring + (renewalByMonth.get(key) ?? 0))
     const actual = actualByMonth.has(key) ? actualByMonth.get(key)! : null
-    const projectedBase = recurring + (renewalByMonth.get(key) ?? 0)
 
     points.push({
       key,
       label: monthLabel(month),
       actualUsd: isFuture ? null : actual,
-      projectedUsd: isFuture || isCurrent ? projectedBase : null,
+      // Expected spend for every month so the year chart stays useful end-to-end.
+      projectedUsd: projectedBase,
     })
   }
 

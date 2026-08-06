@@ -59,8 +59,20 @@ const breakdownTotal = computed(() => {
   return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd
 })
 
+const yearlyBreakdownTotal = computed(() => {
+  const b = dashboard.value?.totals.breakdownYearly
+  if (!b) return 0
+  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd
+})
+
 function breakdownShare(amount: number): number {
   const total = breakdownTotal.value
+  if (total <= 0) return 0
+  return Math.round((amount / total) * 100)
+}
+
+function yearlyBreakdownShare(amount: number): number {
+  const total = yearlyBreakdownTotal.value
   if (total <= 0) return 0
   return Math.round((amount / total) * 100)
 }
@@ -210,22 +222,22 @@ function selectProvider(provider: BillingProviderKey) {
           <div class="kpi">
             <div class="l">Est. monthly</div>
             <div class="v">{{ billingMoney(dashboard.totals.estimatedMonthlyUsd, dashboard.totals.currency) }}</div>
-            <div class="s">Run-rate + domains due ≤30d</div>
+            <div class="s">Likely spend this month</div>
           </div>
           <div class="kpi">
             <div class="l">Est. yearly</div>
             <div class="v">{{ billingMoney(dashboard.totals.estimatedYearlyUsd, dashboard.totals.currency) }}</div>
-            <div class="s">12× recurring + renewals ≤365d</div>
+            <div class="s">Likely spend this year</div>
           </div>
           <div class="kpi">
             <div class="l">Hosting</div>
             <div class="v">{{ billingMoney(dashboard.totals.breakdown.vultrUsd) }}</div>
-            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.vultrUsd) }}% of monthly</div>
+            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.vultrUsd) }}% of this month</div>
           </div>
           <div class="kpi">
             <div class="l">AI usage</div>
             <div class="v">{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</div>
-            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.openrouterUsd) }}% of monthly</div>
+            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.openrouterUsd) }}% of this month</div>
           </div>
         </div>
 
@@ -234,7 +246,7 @@ function selectProvider(provider: BillingProviderKey) {
           <div class="chead">
             <div>
               <h3>Spend outlook</h3>
-              <p class="billing-outlook-sub">Observed charges vs projected run-rate</p>
+              <p class="billing-outlook-sub">12-month view — billed charges vs expected yearly spend</p>
             </div>
             <span class="pill muted billing-updated">Updated {{ new Date(dashboard.lastRefreshed).toLocaleString() }}</span>
           </div>
@@ -244,7 +256,7 @@ function selectProvider(provider: BillingProviderKey) {
                 class="billing-chart"
                 :viewBox="`0 0 ${chart.width} ${chart.height}`"
                 role="img"
-                aria-label="Billing spend chart"
+                aria-label="Yearly billing spend chart"
               >
                 <defs>
                   <linearGradient id="billingProjectedFill" x1="0" y1="0" x2="0" y2="1">
@@ -252,26 +264,27 @@ function selectProvider(provider: BillingProviderKey) {
                     <stop offset="100%" stop-color="#0f766e" stop-opacity="0.02" />
                   </linearGradient>
                 </defs>
-                <line
-                  v-for="tick in 4"
-                  :key="tick"
-                  class="billing-chart-grid"
-                  :x1="chart.padX"
-                  :x2="chart.width - chart.padX"
-                  :y1="chart.padY + ((chart.height - chart.padY * 2) * (tick - 1)) / 3"
-                  :y2="chart.padY + ((chart.height - chart.padY * 2) * (tick - 1)) / 3"
-                />
-                <path v-if="chart.areaPath" :d="chart.areaPath" fill="url(#billingProjectedFill)" />
-                <path v-if="chart.actualPath" :d="chart.actualPath" class="billing-chart-actual" fill="none" />
-                <path v-if="chart.projectedPath" :d="chart.projectedPath" class="billing-chart-projected" fill="none" />
-                <g v-for="point in chart.points" :key="point.label">
-                  <circle
-                    v-if="point.yActual != null"
-                    :cx="point.x"
-                    :cy="point.yActual"
-                    r="3.5"
-                    class="billing-chart-dot actual"
+                <g v-for="tick in chart.yTicks" :key="`yt-${tick.value}`">
+                  <line
+                    class="billing-chart-grid"
+                    :x1="chart.padX"
+                    :x2="chart.width - chart.padX"
+                    :y1="tick.y"
+                    :y2="tick.y"
                   />
+                  <text
+                    class="billing-chart-ylabel"
+                    :x="chart.padX - 8"
+                    :y="tick.y + 3"
+                    text-anchor="end"
+                  >
+                    {{ tick.label }}
+                  </text>
+                </g>
+                <path v-if="chart.areaPath" :d="chart.areaPath" fill="url(#billingProjectedFill)" />
+                <path v-if="chart.projectedPath" :d="chart.projectedPath" class="billing-chart-projected" fill="none" />
+                <path v-if="chart.actualPath" :d="chart.actualPath" class="billing-chart-actual" fill="none" />
+                <g v-for="point in chart.points" :key="point.label">
                   <circle
                     v-if="point.yProjected != null"
                     :cx="point.x"
@@ -279,45 +292,52 @@ function selectProvider(provider: BillingProviderKey) {
                     r="3.5"
                     class="billing-chart-dot projected"
                   />
+                  <circle
+                    v-if="point.yActual != null"
+                    :cx="point.x"
+                    :cy="point.yActual"
+                    r="3.5"
+                    class="billing-chart-dot actual"
+                  />
                   <text :x="point.x" :y="chart.height - 6" class="billing-chart-label" text-anchor="middle">
                     {{ point.label }}
                   </text>
                 </g>
               </svg>
               <div class="billing-chart-legend">
-                <span><i class="swatch actual" /> Observed</span>
-                <span><i class="swatch projected" /> Projected</span>
+                <span><i class="swatch actual" /> Billed</span>
+                <span><i class="swatch projected" /> Expected</span>
               </div>
             </div>
 
-            <aside class="billing-breakdown-aside" aria-label="Monthly breakdown">
-              <h4 class="billing-sub">This month</h4>
+            <aside class="billing-breakdown-aside" aria-label="Yearly breakdown">
+              <h4 class="billing-sub">This year</h4>
               <ul class="billing-share-list">
                 <li>
                   <div class="billing-share-row">
                     <span>{{ labels.vultr.category }}</span>
-                    <strong>{{ billingMoney(dashboard.totals.breakdown.vultrUsd) }}</strong>
+                    <strong>{{ billingMoney(dashboard.totals.breakdownYearly.vultrUsd) }}</strong>
                   </div>
                   <div class="billing-share-track" aria-hidden="true">
-                    <span class="billing-share-fill hosting" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.vultrUsd)}%` }" />
+                    <span class="billing-share-fill hosting" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.vultrUsd)}%` }" />
                   </div>
                 </li>
                 <li>
                   <div class="billing-share-row">
                     <span>{{ labels.cloudflare.category }}</span>
-                    <strong>{{ billingMoney(dashboard.totals.breakdown.cloudflareUsd) }}</strong>
+                    <strong>{{ billingMoney(dashboard.totals.breakdownYearly.cloudflareUsd) }}</strong>
                   </div>
                   <div class="billing-share-track" aria-hidden="true">
-                    <span class="billing-share-fill domains" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.cloudflareUsd)}%` }" />
+                    <span class="billing-share-fill domains" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.cloudflareUsd)}%` }" />
                   </div>
                 </li>
                 <li>
                   <div class="billing-share-row">
                     <span>{{ labels.openrouter.category }}</span>
-                    <strong>{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</strong>
+                    <strong>{{ billingMoney(dashboard.totals.breakdownYearly.openrouterUsd) }}</strong>
                   </div>
                   <div class="billing-share-track" aria-hidden="true">
-                    <span class="billing-share-fill ai" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.openrouterUsd)}%` }" />
+                    <span class="billing-share-fill ai" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.openrouterUsd)}%` }" />
                   </div>
                 </li>
               </ul>
@@ -817,10 +837,13 @@ section.page.active.billing-page {
 }
 
 .billing-kpis {
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 0;
 }
 
+/* Keep a 2×2 card grid on tablet/phone — never stack to a single column. */
 @media (max-width: 960px) {
   .billing-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -829,7 +852,21 @@ section.page.active.billing-page {
 
 @media (max-width: 520px) {
   .billing-kpis {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .billing-kpis .kpi {
+    padding: 14px 12px;
+  }
+
+  .billing-kpis .kpi .v {
+    font-size: 18px;
+  }
+
+  .billing-kpis .kpi .s {
+    font-size: 11px;
+    line-height: 1.35;
   }
 }
 
@@ -900,6 +937,11 @@ section.page.active.billing-page {
 
 .billing-chart-label {
   fill: #64748b;
+  font-size: 10px;
+}
+
+.billing-chart-ylabel {
+  fill: #94a3b8;
   font-size: 10px;
 }
 

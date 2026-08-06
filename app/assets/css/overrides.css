@@ -619,7 +619,15 @@ section.page.active.billing-page {
 }
 
 section.page.active.billing-page .kpis.billing-kpis {
+  display: grid;
   margin-bottom: 0;
+}
+
+/* Billing KPIs stay 2×2 on the smallest phones (override global .kpis collapse). */
+@media (max-width: 960px) {
+  section.page.active.billing-page .kpis.billing-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .portal-pwa-wrap {

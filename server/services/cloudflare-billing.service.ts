@@ -218,3 +218,16 @@ export function sumCloudflareRenewalsInWindow(
   }
   return Math.round(total * 100) / 100
 }
+
+/** Sum every domain's renewal price — each domain renews about once per year. */
+export function sumCloudflareAnnualRenewals(
+  domains: Array<{ renewalCost: number | null | undefined }>,
+): number {
+  let total = 0
+  for (const domain of domains) {
+    if (domain.renewalCost == null || !Number.isFinite(domain.renewalCost)) continue
+    if (domain.renewalCost <= 0) continue
+    total += domain.renewalCost
+  }
+  return Math.round(total * 100) / 100
+}

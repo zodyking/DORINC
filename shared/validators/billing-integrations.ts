@@ -178,7 +178,14 @@ export interface BillingDashboardPayload {
     currency: string
     estimatedMonthlyUsd: number
     estimatedYearlyUsd: number
+    /** Monthly run-rate shares (hosting/AI) plus domains due within ~30 days. */
     breakdown: {
+      vultrUsd: number
+      cloudflareUsd: number
+      openrouterUsd: number
+    }
+    /** Full-year outlook shares — hosting/AI annualized + all domain renewals. */
+    breakdownYearly: {
       vultrUsd: number
       cloudflareUsd: number
       openrouterUsd: number
