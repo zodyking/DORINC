@@ -29,6 +29,8 @@ interface DashboardResponse {
   dashboard: BillingDashboardPayload
 }
 
+const PREVIEW_LIMIT = 5
+
 const labels = BILLING_PROVIDER_LABELS
 
 const { data, pending, error, refresh } = useClientFetch<DashboardResponse>('/api/billing/dashboard')
@@ -37,8 +39,31 @@ const dashboard = computed(() => data.value?.dashboard)
 
 const chart = computed(() => {
   const points = dashboard.value?.outlook?.points ?? []
-  return buildBillingChartGeometry(points)
+  return buildBillingChartGeometry(points, 720, 200)
 })
+
+const detailTab = ref<BillingProviderKey>('vultr')
+const expandedServers = ref<Record<string, boolean>>({})
+const expandedDomains = ref<Record<string, boolean>>({})
+
+watch(dashboard, (d) => {
+  if (!d) return
+  if (d.vultr.configured) detailTab.value = 'vultr'
+  else if (d.cloudflare.configured) detailTab.value = 'cloudflare'
+  else if (d.openrouter.configured) detailTab.value = 'openrouter'
+}, { immediate: true })
+
+const breakdownTotal = computed(() => {
+  const b = dashboard.value?.totals.breakdown
+  if (!b) return 0
+  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd
+})
+
+function breakdownShare(amount: number): number {
+  const total = breakdownTotal.value
+  if (total <= 0) return 0
+  return Math.round((amount / total) * 100)
+}
 
 function openRouterAvailableCredit(d: BillingDashboardPayload['openrouter']): string {
   if (d.remainingCredits != null) return billingMoney(d.remainingCredits)
@@ -61,6 +86,24 @@ async function reload() {
     refreshBusy.value = false
   }
 }
+
+function toggleServer(id: string) {
+  expandedServers.value = {
+    ...expandedServers.value,
+    [id]: !expandedServers.value[id],
+  }
+}
+
+function toggleDomain(name: string) {
+  expandedDomains.value = {
+    ...expandedDomains.value,
+    [name]: !expandedDomains.value[name],
+  }
+}
+
+const previewInvoices = computed(() => (dashboard.value?.vultr.invoices ?? []).slice(0, PREVIEW_LIMIT))
+const previewUsage = computed(() => (dashboard.value?.openrouter.usageHistory ?? []).slice(0, PREVIEW_LIMIT))
+const previewDomains = computed(() => (dashboard.value?.cloudflare.domains ?? []).slice(0, PREVIEW_LIMIT))
 
 const revealOpen = ref(false)
 const revealProvider = ref<BillingProviderKey | null>(null)
@@ -135,6 +178,10 @@ async function copyText(value: string | null | undefined) {
     // ignore clipboard failures
   }
 }
+
+function selectProvider(provider: BillingProviderKey) {
+  detailTab.value = provider
+}
 </script>
 
 <template>
@@ -158,29 +205,41 @@ async function copyText(value: string | null | undefined) {
 
     <template v-else-if="dashboard">
       <div class="billing-stack">
-        <div class="billing-summary">
-          <div class="kpis billing-kpis">
-            <div class="kpi">
-              <div class="t">Est. monthly</div>
-              <div class="v">{{ billingMoney(dashboard.totals.estimatedMonthlyUsd, dashboard.totals.currency) }}</div>
-              <div class="kpi-note">Recurring hosting + AI + domains due in 30 days</div>
-            </div>
-            <div class="kpi">
-              <div class="t">Est. yearly</div>
-              <div class="v">{{ billingMoney(dashboard.totals.estimatedYearlyUsd, dashboard.totals.currency) }}</div>
-              <div class="kpi-note">12× recurring + domain renewals in the next year</div>
-            </div>
+        <!-- Compact metric strip -->
+        <div class="kpis billing-kpis">
+          <div class="kpi">
+            <div class="l">Est. monthly</div>
+            <div class="v">{{ billingMoney(dashboard.totals.estimatedMonthlyUsd, dashboard.totals.currency) }}</div>
+            <div class="s">Run-rate + domains due ≤30d</div>
           </div>
+          <div class="kpi">
+            <div class="l">Est. yearly</div>
+            <div class="v">{{ billingMoney(dashboard.totals.estimatedYearlyUsd, dashboard.totals.currency) }}</div>
+            <div class="s">12× recurring + renewals ≤365d</div>
+          </div>
+          <div class="kpi">
+            <div class="l">Hosting</div>
+            <div class="v">{{ billingMoney(dashboard.totals.breakdown.vultrUsd) }}</div>
+            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.vultrUsd) }}% of monthly</div>
+          </div>
+          <div class="kpi">
+            <div class="l">AI usage</div>
+            <div class="v">{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</div>
+            <div class="s">{{ breakdownShare(dashboard.totals.breakdown.openrouterUsd) }}% of monthly</div>
+          </div>
+        </div>
 
-          <div class="card billing-outlook-card">
-            <div class="chead">
-              <div>
-                <h3>Spend outlook</h3>
-                <p class="billing-outlook-sub">Observed charges vs projected run-rate</p>
-              </div>
-              <span class="pill muted billing-updated">{{ new Date(dashboard.lastRefreshed).toLocaleString() }}</span>
+        <!-- Full-width outlook -->
+        <div class="card billing-outlook-card">
+          <div class="chead">
+            <div>
+              <h3>Spend outlook</h3>
+              <p class="billing-outlook-sub">Observed charges vs projected run-rate</p>
             </div>
-            <div class="cbody billing-outlook-body">
+            <span class="pill muted billing-updated">Updated {{ new Date(dashboard.lastRefreshed).toLocaleString() }}</span>
+          </div>
+          <div class="cbody billing-outlook-body">
+            <div class="billing-outlook-main">
               <svg
                 class="billing-chart"
                 :viewBox="`0 0 ${chart.width} ${chart.height}`"
@@ -203,18 +262,8 @@ async function copyText(value: string | null | undefined) {
                   :y2="chart.padY + ((chart.height - chart.padY * 2) * (tick - 1)) / 3"
                 />
                 <path v-if="chart.areaPath" :d="chart.areaPath" fill="url(#billingProjectedFill)" />
-                <path
-                  v-if="chart.actualPath"
-                  :d="chart.actualPath"
-                  class="billing-chart-actual"
-                  fill="none"
-                />
-                <path
-                  v-if="chart.projectedPath"
-                  :d="chart.projectedPath"
-                  class="billing-chart-projected"
-                  fill="none"
-                />
+                <path v-if="chart.actualPath" :d="chart.actualPath" class="billing-chart-actual" fill="none" />
+                <path v-if="chart.projectedPath" :d="chart.projectedPath" class="billing-chart-projected" fill="none" />
                 <g v-for="point in chart.points" :key="point.label">
                   <circle
                     v-if="point.yActual != null"
@@ -239,20 +288,53 @@ async function copyText(value: string | null | undefined) {
                 <span><i class="swatch actual" /> Observed</span>
                 <span><i class="swatch projected" /> Projected</span>
               </div>
-              <dl class="kv billing-breakdown-kv">
-                <dt>{{ labels.vultr.category }}</dt>
-                <dd>{{ billingMoney(dashboard.totals.breakdown.vultrUsd) }}</dd>
-                <dt>{{ labels.cloudflare.category }}</dt>
-                <dd>{{ billingMoney(dashboard.totals.breakdown.cloudflareUsd) }}</dd>
-                <dt>{{ labels.openrouter.category }}</dt>
-                <dd>{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</dd>
-              </dl>
             </div>
+
+            <aside class="billing-breakdown-aside" aria-label="Monthly breakdown">
+              <h4 class="billing-sub">This month</h4>
+              <ul class="billing-share-list">
+                <li>
+                  <div class="billing-share-row">
+                    <span>{{ labels.vultr.category }}</span>
+                    <strong>{{ billingMoney(dashboard.totals.breakdown.vultrUsd) }}</strong>
+                  </div>
+                  <div class="billing-share-track" aria-hidden="true">
+                    <span class="billing-share-fill hosting" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.vultrUsd)}%` }" />
+                  </div>
+                </li>
+                <li>
+                  <div class="billing-share-row">
+                    <span>{{ labels.cloudflare.category }}</span>
+                    <strong>{{ billingMoney(dashboard.totals.breakdown.cloudflareUsd) }}</strong>
+                  </div>
+                  <div class="billing-share-track" aria-hidden="true">
+                    <span class="billing-share-fill domains" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.cloudflareUsd)}%` }" />
+                  </div>
+                </li>
+                <li>
+                  <div class="billing-share-row">
+                    <span>{{ labels.openrouter.category }}</span>
+                    <strong>{{ billingMoney(dashboard.totals.breakdown.openrouterUsd) }}</strong>
+                  </div>
+                  <div class="billing-share-track" aria-hidden="true">
+                    <span class="billing-share-fill ai" :style="{ width: `${breakdownShare(dashboard.totals.breakdown.openrouterUsd)}%` }" />
+                  </div>
+                </li>
+              </ul>
+            </aside>
           </div>
         </div>
 
-        <div class="billing-grid">
-          <article class="card billing-provider-card">
+        <!-- Equal summary cards -->
+        <div class="billing-provider-grid">
+          <article
+            class="card billing-summary-card"
+            :class="{ active: detailTab === 'vultr' }"
+            role="button"
+            tabindex="0"
+            @click="selectProvider('vultr')"
+            @keyup.enter="selectProvider('vultr')"
+          >
             <div class="chead">
               <div>
                 <h3>{{ labels.vultr.name }}</h3>
@@ -262,100 +344,247 @@ async function copyText(value: string | null | undefined) {
                 {{ billingProviderStatus(dashboard.vultr.configured, !!dashboard.vultr.error).label }}
               </span>
             </div>
-            <div class="cbody billing-card-body">
+            <div class="cbody billing-summary-body">
               <p v-if="dashboard.vultr.error" class="billing-err">{{ dashboard.vultr.error }}</p>
               <template v-else-if="dashboard.vultr.configured">
-                <dl class="kv">
-                  <dt>Est. monthly</dt>
-                  <dd>{{ formatVultrMonthlyCost(dashboard.vultr.planCostMonthly) }}</dd>
-                  <dt>Balance</dt>
-                  <dd>{{ billingMoney(dashboard.vultr.accountBalance) }}</dd>
+                <dl class="billing-metric-grid">
+                  <div>
+                    <dt>Est. monthly</dt>
+                    <dd>{{ formatVultrMonthlyCost(dashboard.vultr.planCostMonthly) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Balance</dt>
+                    <dd>{{ billingMoney(dashboard.vultr.accountBalance) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Servers</dt>
+                    <dd>{{ dashboard.vultr.monitoredInstances.length }}</dd>
+                  </div>
+                  <div>
+                    <dt>Invoices</dt>
+                    <dd>{{ dashboard.vultr.invoices.length }}</dd>
+                  </div>
                 </dl>
+              </template>
+              <p v-else class="billing-muted">Connect in Control Panel → Billing to monitor hosting spend.</p>
+            </div>
+            <footer class="billing-card-footer" @click.stop>
+              <button
+                v-if="dashboard.vultr.hasPortalCredentials"
+                type="button"
+                class="btn sm"
+                @click="openReveal('vultr')"
+              >
+                Credentials
+              </button>
+              <button type="button" class="btn sm" @click="openProviderAccount('vultr')">
+                {{ billingProviderManageLabel('vultr') }}
+              </button>
+            </footer>
+          </article>
 
+          <article
+            class="card billing-summary-card"
+            :class="{ active: detailTab === 'cloudflare' }"
+            role="button"
+            tabindex="0"
+            @click="selectProvider('cloudflare')"
+            @keyup.enter="selectProvider('cloudflare')"
+          >
+            <div class="chead">
+              <div>
+                <h3>{{ labels.cloudflare.name }}</h3>
+                <span class="billing-cat">{{ labels.cloudflare.category }}</span>
+              </div>
+              <span class="pill" :class="billingProviderStatus(dashboard.cloudflare.configured, !!dashboard.cloudflare.error).class">
+                {{ billingProviderStatus(dashboard.cloudflare.configured, !!dashboard.cloudflare.error).label }}
+              </span>
+            </div>
+            <div class="cbody billing-summary-body">
+              <p v-if="dashboard.cloudflare.error" class="billing-err">{{ dashboard.cloudflare.error }}</p>
+              <template v-else-if="dashboard.cloudflare.configured">
+                <dl class="billing-metric-grid">
+                  <div>
+                    <dt>Domains</dt>
+                    <dd>{{ dashboard.cloudflare.domains.length }}</dd>
+                  </div>
+                  <div>
+                    <dt>Due ≤30d</dt>
+                    <dd>{{ billingMoney(dashboard.totals.breakdown.cloudflareUsd) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Next expiry</dt>
+                    <dd>{{ dashboard.cloudflare.domains[0] ? billingDate(dashboard.cloudflare.domains[0].renewalDate) : '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Auto-renew</dt>
+                    <dd>
+                      {{
+                        dashboard.cloudflare.domains.length
+                          ? `${dashboard.cloudflare.domains.filter(d => d.autoRenew).length}/${dashboard.cloudflare.domains.length}`
+                          : '—'
+                      }}
+                    </dd>
+                  </div>
+                </dl>
+              </template>
+              <p v-else class="billing-muted">Connect Cloudflare Registrar in Control Panel → Billing.</p>
+            </div>
+            <footer class="billing-card-footer" @click.stop>
+              <button
+                v-if="dashboard.cloudflare.hasPortalCredentials"
+                type="button"
+                class="btn sm"
+                @click="openReveal('cloudflare')"
+              >
+                Credentials
+              </button>
+              <button type="button" class="btn sm" @click="openProviderAccount('cloudflare')">
+                {{ billingProviderManageLabel('cloudflare') }}
+              </button>
+            </footer>
+          </article>
+
+          <article
+            class="card billing-summary-card"
+            :class="{ active: detailTab === 'openrouter' }"
+            role="button"
+            tabindex="0"
+            @click="selectProvider('openrouter')"
+            @keyup.enter="selectProvider('openrouter')"
+          >
+            <div class="chead">
+              <div>
+                <h3>{{ labels.openrouter.name }}</h3>
+                <span class="billing-cat">{{ labels.openrouter.category }}</span>
+              </div>
+              <span class="pill" :class="billingProviderStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).class">
+                {{ billingProviderStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).label }}
+              </span>
+            </div>
+            <div class="cbody billing-summary-body">
+              <p v-if="dashboard.openrouter.error" class="billing-err">{{ dashboard.openrouter.error }}</p>
+              <template v-else-if="dashboard.openrouter.configured">
+                <dl class="billing-metric-grid">
+                  <div>
+                    <dt>Available credit</dt>
+                    <dd>{{ openRouterAvailableCredit(dashboard.openrouter) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Used this month</dt>
+                    <dd>{{ billingMoney(dashboard.openrouter.usageMonthly) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Used today</dt>
+                    <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Recent calls</dt>
+                    <dd>{{ dashboard.openrouter.usageHistory.length }}</dd>
+                  </div>
+                </dl>
+              </template>
+              <p v-else class="billing-muted">Enable OpenRouter monitoring in Control Panel → Billing.</p>
+            </div>
+            <footer class="billing-card-footer" @click.stop>
+              <button
+                v-if="dashboard.openrouter.hasPortalCredentials"
+                type="button"
+                class="btn sm"
+                @click="openReveal('openrouter')"
+              >
+                Credentials
+              </button>
+              <button type="button" class="btn sm" @click="openProviderAccount('openrouter')">
+                {{ billingProviderManageLabel('openrouter') }}
+              </button>
+            </footer>
+          </article>
+        </div>
+
+        <!-- Tabbed detail panel -->
+        <div class="card billing-detail-card">
+          <div class="chead billing-detail-tabs" role="tablist" aria-label="Provider details">
+            <button
+              type="button"
+              class="billing-tab"
+              role="tab"
+              :aria-selected="detailTab === 'vultr'"
+              :class="{ active: detailTab === 'vultr' }"
+              @click="detailTab = 'vultr'"
+            >
+              {{ labels.vultr.name }}
+            </button>
+            <button
+              type="button"
+              class="billing-tab"
+              role="tab"
+              :aria-selected="detailTab === 'cloudflare'"
+              :class="{ active: detailTab === 'cloudflare' }"
+              @click="detailTab = 'cloudflare'"
+            >
+              {{ labels.cloudflare.name }}
+            </button>
+            <button
+              type="button"
+              class="billing-tab"
+              role="tab"
+              :aria-selected="detailTab === 'openrouter'"
+              :class="{ active: detailTab === 'openrouter' }"
+              @click="detailTab = 'openrouter'"
+            >
+              {{ labels.openrouter.name }}
+            </button>
+          </div>
+
+          <div class="cbody billing-detail-body">
+            <template v-if="detailTab === 'vultr'">
+              <p v-if="dashboard.vultr.error" class="billing-err">{{ dashboard.vultr.error }}</p>
+              <template v-else-if="dashboard.vultr.configured">
                 <div v-if="dashboard.vultr.monitoredInstances.length" class="billing-section">
-                  <h4 class="billing-sub">Servers</h4>
-                  <ul class="billing-list">
-                    <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id" class="billing-server">
-                      <div class="billing-server__head">
-                        <div class="billing-server__name">{{ inst.label }}</div>
-                        <p v-if="inst.hostname && inst.hostname !== inst.label" class="billing-server__hostname mono">
-                          {{ inst.hostname }}
-                        </p>
-                      </div>
-
-                      <div class="billing-server__group">
-                        <div class="billing-server__group-title">Compute</div>
+                  <div class="billing-section-head">
+                    <h4 class="billing-sub">Monitored servers</h4>
+                    <span class="billing-count">{{ dashboard.vultr.monitoredInstances.length }}</span>
+                  </div>
+                  <ul class="billing-compact-list">
+                    <li v-for="inst in dashboard.vultr.monitoredInstances" :key="inst.id">
+                      <button type="button" class="billing-compact-row" @click="toggleServer(inst.id)">
+                        <div>
+                          <strong>{{ inst.label }}</strong>
+                          <span class="billing-compact-meta">
+                            {{ inst.plan || '—' }} · {{ formatVultrMonthlyCost(inst.monthlyPlanCost) }} · {{ formatVultrInstanceStatus(inst.status) }}
+                          </span>
+                        </div>
+                        <span class="billing-expand">{{ expandedServers[inst.id] ? 'Hide' : 'Details' }}</span>
+                      </button>
+                      <div v-if="expandedServers[inst.id]" class="billing-expand-panel">
                         <dl class="billing-server__details">
                           <div>
-                            <dt>Plan</dt>
-                            <dd>{{ inst.plan || '—' }}</dd>
-                          </div>
-                          <div>
-                            <dt>Plan cost</dt>
-                            <dd>{{ formatVultrMonthlyCost(inst.monthlyPlanCost) }}</dd>
-                          </div>
-                          <div>
-                            <dt>Operating system</dt>
+                            <dt>OS</dt>
                             <dd>{{ inst.os || '—' }}</dd>
                           </div>
                           <div>
-                            <dt>vCPUs</dt>
-                            <dd>{{ formatVultrCount(inst.vcpuCount, 'vCPU') }}</dd>
-                          </div>
-                          <div>
-                            <dt>Memory</dt>
-                            <dd>{{ formatVultrRam(inst.ramMb) }}</dd>
-                          </div>
-                          <div>
-                            <dt>Storage</dt>
-                            <dd>{{ formatVultrDisk(inst.diskGb) }}</dd>
+                            <dt>Compute</dt>
+                            <dd>{{ formatVultrCount(inst.vcpuCount, 'vCPU') }} · {{ formatVultrRam(inst.ramMb) }} · {{ formatVultrDisk(inst.diskGb) }}</dd>
                           </div>
                           <div>
                             <dt>Bandwidth</dt>
                             <dd>{{ formatVultrBandwidth(inst.allowedBandwidthGb) }}</dd>
                           </div>
-                        </dl>
-                      </div>
-
-                      <div class="billing-server__group">
-                        <div class="billing-server__group-title">Location & network</div>
-                        <dl class="billing-server__details">
                           <div>
                             <dt>Region</dt>
                             <dd>{{ inst.region || '—' }}</dd>
                           </div>
                           <div v-if="inst.mainIp">
-                            <dt>IPv4 address</dt>
+                            <dt>IPv4</dt>
                             <dd class="mono">{{ inst.mainIp }}</dd>
-                          </div>
-                          <div v-if="inst.gatewayV4">
-                            <dt>Gateway</dt>
-                            <dd class="mono">{{ inst.gatewayV4 }}</dd>
-                          </div>
-                          <div v-if="inst.v6MainIp">
-                            <dt>IPv6 address</dt>
-                            <dd class="mono">{{ inst.v6MainIp }}</dd>
-                          </div>
-                          <div v-if="inst.internalIp">
-                            <dt>Internal IP</dt>
-                            <dd class="mono">{{ inst.internalIp }}</dd>
-                          </div>
-                        </dl>
-                      </div>
-
-                      <div class="billing-server__group">
-                        <div class="billing-server__group-title">Status</div>
-                        <dl class="billing-server__details">
-                          <div>
-                            <dt>Deployment</dt>
-                            <dd>{{ formatVultrInstanceStatus(inst.status) }}</dd>
                           </div>
                           <div v-if="inst.powerStatus">
                             <dt>Power</dt>
                             <dd>{{ formatVultrInstanceStatus(inst.powerStatus) }}</dd>
                           </div>
                           <div v-if="inst.serverStatus">
-                            <dt>Server health</dt>
+                            <dt>Health</dt>
                             <dd>{{ formatVultrInstanceStatus(inst.serverStatus) }}</dd>
                           </div>
                           <div v-if="inst.dateCreated">
@@ -366,18 +595,18 @@ async function copyText(value: string | null | undefined) {
                             <dt>Features</dt>
                             <dd>{{ formatVultrFeatureList(inst.features) }}</dd>
                           </div>
-                          <div v-if="inst.tags.length">
-                            <dt>Tags</dt>
-                            <dd>{{ inst.tags.join(', ') }}</dd>
-                          </div>
                         </dl>
                       </div>
                     </li>
                   </ul>
                 </div>
+                <div v-else class="billing-muted">No monitored servers selected.</div>
 
-                <div v-if="dashboard.vultr.invoices.length" class="billing-section">
-                  <h4 class="billing-sub">Recent invoices</h4>
+                <div v-if="previewInvoices.length" class="billing-section">
+                  <div class="billing-section-head">
+                    <h4 class="billing-sub">Recent invoices</h4>
+                    <span class="billing-count">Showing {{ previewInvoices.length }} of {{ dashboard.vultr.invoices.length }}</span>
+                  </div>
                   <div class="tscroll">
                     <table class="tbl compact">
                       <thead>
@@ -388,7 +617,7 @@ async function copyText(value: string | null | undefined) {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="row in dashboard.vultr.invoices" :key="row.id">
+                        <tr v-for="row in previewInvoices" :key="row.id">
                           <td>{{ billingDate(row.date) }}</td>
                           <td>{{ row.description }}</td>
                           <td class="num">{{ billingMoney(row.amount) }}</td>
@@ -398,129 +627,79 @@ async function copyText(value: string | null | undefined) {
                   </div>
                 </div>
               </template>
-              <p v-else class="billing-muted">Set up in Control Panel → Billing.</p>
-            </div>
-            <footer class="billing-card-footer">
-              <button
-                v-if="dashboard.vultr.hasPortalCredentials"
-                type="button"
-                class="btn billing-cred-btn"
-                @click="openReveal('vultr')"
-              >
-                View credentials
-              </button>
-              <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('vultr')">
-                {{ billingProviderManageLabel('vultr') }}
-              </button>
-            </footer>
-          </article>
+              <p v-else class="billing-muted">Set up Vultr in Control Panel → Billing.</p>
+            </template>
 
-          <article class="card billing-provider-card">
-            <div class="chead">
-              <div>
-                <h3>{{ labels.cloudflare.name }}</h3>
-                <span class="billing-cat">{{ labels.cloudflare.category }}</span>
-              </div>
-              <span class="pill" :class="billingProviderStatus(dashboard.cloudflare.configured, !!dashboard.cloudflare.error).class">
-                {{ billingProviderStatus(dashboard.cloudflare.configured, !!dashboard.cloudflare.error).label }}
-              </span>
-            </div>
-            <div class="cbody billing-card-body">
+            <template v-else-if="detailTab === 'cloudflare'">
               <p v-if="dashboard.cloudflare.error" class="billing-err">{{ dashboard.cloudflare.error }}</p>
               <template v-else-if="dashboard.cloudflare.configured && dashboard.cloudflare.domains.length">
-                <ul class="billing-list">
-                  <li v-for="domain in dashboard.cloudflare.domains" :key="domain.name" class="billing-server">
-                    <div class="billing-server__head">
-                      <div class="billing-server__name">{{ domain.name }}</div>
-                      <span class="pill sm" :class="billingDaysBadgeClass(domain.daysUntilRenewal)">
-                        {{ domain.daysUntilRenewal }}d
-                      </span>
-                    </div>
-                    <div class="billing-server__group">
-                      <div class="billing-server__group-title">Registration</div>
-                      <dl class="billing-server__details">
+                <div class="billing-section">
+                  <div class="billing-section-head">
+                    <h4 class="billing-sub">Registrar domains</h4>
+                    <span class="billing-count">Showing {{ previewDomains.length }} of {{ dashboard.cloudflare.domains.length }}</span>
+                  </div>
+                  <ul class="billing-compact-list">
+                    <li v-for="domain in previewDomains" :key="domain.name">
+                      <button type="button" class="billing-compact-row" @click="toggleDomain(domain.name)">
                         <div>
-                          <dt>Domain name</dt>
-                          <dd>{{ domain.name }}</dd>
+                          <strong>{{ domain.name }}</strong>
+                          <span class="billing-compact-meta">
+                            Expires {{ billingDate(domain.renewalDate) }}
+                            ·
+                            <span class="pill sm" :class="billingDaysBadgeClass(domain.daysUntilRenewal)">{{ domain.daysUntilRenewal }}d</span>
+                            ·
+                            {{ domain.renewalCost > 0 ? billingMoney(domain.renewalCost, domain.currency) : '—' }}
+                          </span>
                         </div>
-                        <div>
-                          <dt>Expiration date</dt>
-                          <dd>{{ billingDate(domain.renewalDate) }}</dd>
-                        </div>
-                        <div>
-                          <dt>Registration date</dt>
-                          <dd>{{ billingDate(domain.registeredAt) }}</dd>
-                        </div>
-                        <div>
-                          <dt>Auto renew enabled</dt>
-                          <dd>{{ formatYesNo(domain.autoRenew) }}</dd>
-                        </div>
-                        <div>
-                          <dt>Registrar lock</dt>
-                          <dd>{{ formatYesNo(domain.locked) }}</dd>
-                        </div>
-                        <div>
-                          <dt>Domain status</dt>
-                          <dd>{{ formatVultrInstanceStatus(domain.status || '') }}</dd>
-                        </div>
-                        <div>
-                          <dt>Privacy status</dt>
-                          <dd>{{ formatCloudflarePrivacy(domain.privacyMode) }}</dd>
-                        </div>
-                        <div>
-                          <dt>Renewal cost</dt>
-                          <dd>{{ domain.renewalCost > 0 ? billingMoney(domain.renewalCost, domain.currency) : '—' }}</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </li>
-                </ul>
+                        <span class="billing-expand">{{ expandedDomains[domain.name] ? 'Hide' : 'Details' }}</span>
+                      </button>
+                      <div v-if="expandedDomains[domain.name]" class="billing-expand-panel">
+                        <dl class="billing-server__details">
+                          <div>
+                            <dt>Registration date</dt>
+                            <dd>{{ billingDate(domain.registeredAt) }}</dd>
+                          </div>
+                          <div>
+                            <dt>Auto renew</dt>
+                            <dd>{{ formatYesNo(domain.autoRenew) }}</dd>
+                          </div>
+                          <div>
+                            <dt>Registrar lock</dt>
+                            <dd>{{ formatYesNo(domain.locked) }}</dd>
+                          </div>
+                          <div>
+                            <dt>Domain status</dt>
+                            <dd>{{ formatVultrInstanceStatus(domain.status || '') }}</dd>
+                          </div>
+                          <div>
+                            <dt>Privacy status</dt>
+                            <dd>{{ formatCloudflarePrivacy(domain.privacyMode) }}</dd>
+                          </div>
+                          <div>
+                            <dt>Renewal cost</dt>
+                            <dd>{{ domain.renewalCost > 0 ? billingMoney(domain.renewalCost, domain.currency) : '—' }}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
               </template>
               <p v-else-if="dashboard.cloudflare.configured" class="billing-muted">
                 No registrar domains found for this Cloudflare account.
               </p>
               <p v-else class="billing-muted">Connect Cloudflare in Control Panel → Billing.</p>
-            </div>
-            <footer class="billing-card-footer">
-              <button
-                v-if="dashboard.cloudflare.hasPortalCredentials"
-                type="button"
-                class="btn billing-cred-btn"
-                @click="openReveal('cloudflare')"
-              >
-                View credentials
-              </button>
-              <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('cloudflare')">
-                {{ billingProviderManageLabel('cloudflare') }}
-              </button>
-            </footer>
-          </article>
+            </template>
 
-          <article class="card billing-provider-card">
-            <div class="chead">
-              <div>
-                <h3>{{ labels.openrouter.name }}</h3>
-                <span class="billing-cat">{{ labels.openrouter.category }}</span>
-              </div>
-              <span class="pill" :class="billingProviderStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).class">
-                {{ billingProviderStatus(dashboard.openrouter.configured, !!dashboard.openrouter.error).label }}
-              </span>
-            </div>
-            <div class="cbody billing-card-body">
+            <template v-else>
               <p v-if="dashboard.openrouter.error" class="billing-err">{{ dashboard.openrouter.error }}</p>
               <template v-else-if="dashboard.openrouter.configured">
                 <p v-if="dashboard.openrouter.creditsNote" class="billing-note">{{ dashboard.openrouter.creditsNote }}</p>
-                <dl class="kv">
-                  <dt>Available credit</dt>
-                  <dd>{{ openRouterAvailableCredit(dashboard.openrouter) }}</dd>
-                  <dt>Used this month</dt>
-                  <dd>{{ billingMoney(dashboard.openrouter.usageMonthly) }}</dd>
-                  <dt>Used today</dt>
-                  <dd>{{ billingMoney(dashboard.openrouter.usageDaily) }}</dd>
-                </dl>
-
-                <div v-if="dashboard.openrouter.usageHistory.length" class="billing-section">
-                  <h4 class="billing-sub">Recent API usage</h4>
+                <div v-if="previewUsage.length" class="billing-section">
+                  <div class="billing-section-head">
+                    <h4 class="billing-sub">Recent API usage</h4>
+                    <span class="billing-count">Showing {{ previewUsage.length }} of {{ dashboard.openrouter.usageHistory.length }}</span>
+                  </div>
                   <div class="tscroll">
                     <table class="tbl compact">
                       <thead>
@@ -531,7 +710,7 @@ async function copyText(value: string | null | undefined) {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="row in dashboard.openrouter.usageHistory" :key="row.id">
+                        <tr v-for="row in previewUsage" :key="row.id">
                           <td>{{ billingDateTime(row.date) }}</td>
                           <td>{{ row.description }}</td>
                           <td class="num">{{ billingMoney(row.amount) }}</td>
@@ -540,23 +719,11 @@ async function copyText(value: string | null | undefined) {
                     </table>
                   </div>
                 </div>
+                <p v-else class="billing-muted">No recent API usage recorded.</p>
               </template>
-              <p v-else class="billing-muted">Enable in Control Panel → Billing.</p>
-            </div>
-            <footer class="billing-card-footer">
-              <button
-                v-if="dashboard.openrouter.hasPortalCredentials"
-                type="button"
-                class="btn billing-cred-btn"
-                @click="openReveal('openrouter')"
-              >
-                View credentials
-              </button>
-              <button type="button" class="btn billing-manage-btn" @click="openProviderAccount('openrouter')">
-                {{ billingProviderManageLabel('openrouter') }}
-              </button>
-            </footer>
-          </article>
+              <p v-else class="billing-muted">Enable OpenRouter in Control Panel → Billing.</p>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -646,33 +813,24 @@ section.page.active.billing-page {
 .billing-stack {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.billing-summary {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr);
-  gap: 24px;
-  align-items: stretch;
-}
-
-@media (max-width: 980px) {
-  .billing-summary {
-    grid-template-columns: 1fr;
-  }
+  gap: 20px;
 }
 
 .billing-kpis {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 0;
-  gap: 16px;
 }
 
-.kpi-note {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.4;
+@media (max-width: 960px) {
+  .billing-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .billing-kpis {
+    grid-template-columns: 1fr;
+  }
 }
 
 .billing-outlook-card {
@@ -686,15 +844,29 @@ section.page.active.billing-page {
 }
 
 .billing-outlook-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(220px, 0.8fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .billing-outlook-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.billing-outlook-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  min-width: 0;
 }
 
 .billing-chart {
   width: 100%;
   height: auto;
-  min-height: 200px;
+  min-height: 180px;
   background:
     linear-gradient(180deg, rgba(15, 118, 110, 0.04), transparent 48%),
     #f8fafc;
@@ -755,10 +927,60 @@ section.page.active.billing-page {
   background: #0f766e;
 }
 
-.billing-breakdown-kv {
+.billing-breakdown-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+.billing-share-list {
+  list-style: none;
   margin: 0;
-  padding-top: 4px;
-  border-top: 1px solid #e2e8f0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.billing-share-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.billing-share-row strong {
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.billing-share-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.billing-share-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  min-width: 0;
+}
+
+.billing-share-fill.hosting {
+  background: #0f766e;
+}
+
+.billing-share-fill.domains {
+  background: #0369a1;
+}
+
+.billing-share-fill.ai {
+  background: #4338ca;
 }
 
 .billing-updated {
@@ -766,67 +988,78 @@ section.page.active.billing-page {
   font-weight: 600;
 }
 
-.billing-grid {
+.billing-provider-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
   align-items: stretch;
-  margin: 0;
 }
 
 @media (max-width: 1100px) {
-  .billing-grid {
+  .billing-provider-grid {
     grid-template-columns: 1fr;
-    gap: 24px;
   }
 }
 
-.billing-provider-card {
+.billing-summary-card {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.billing-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding-top: 18px;
-  padding-bottom: 18px;
-  flex: 1;
+.billing-summary-card:hover,
+.billing-summary-card:focus-visible {
+  border-color: #99f6e4;
+  outline: none;
 }
 
-.billing-card-body .kv {
-  margin: 0;
+.billing-summary-card.active {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.18);
 }
 
-.billing-section {
+.billing-summary-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-top: 4px;
+  padding-top: 16px;
+  padding-bottom: 16px;
+  flex: 1;
 }
 
-.billing-section + .billing-section {
-  margin-top: 4px;
-  padding-top: 20px;
-  border-top: 1px solid #e2e8f0;
+.billing-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.billing-metric-grid dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 3px;
+}
+
+.billing-metric-grid dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
 .billing-card-footer {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px 18px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px 16px;
   margin-top: auto;
   border-top: 1px solid #e2e8f0;
-}
-
-.billing-manage-btn,
-.billing-cred-btn {
-  width: 100%;
-  justify-content: center;
-  font-weight: 600;
 }
 
 .billing-cat {
@@ -839,6 +1072,64 @@ section.page.active.billing-page {
   color: #0f766e;
 }
 
+.billing-detail-card {
+  margin: 0;
+}
+
+.billing-detail-tabs {
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.billing-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.billing-tab:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.billing-tab.active {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #0f766e;
+}
+
+.billing-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.billing-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billing-section + .billing-section {
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.billing-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .billing-sub {
   margin: 0;
   font-size: 13px;
@@ -846,7 +1137,13 @@ section.page.active.billing-page {
   color: #334155;
 }
 
-.billing-list {
+.billing-count {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.billing-compact-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -855,54 +1152,50 @@ section.page.active.billing-page {
   gap: 8px;
 }
 
-.billing-list li {
-  padding: 16px;
+.billing-compact-list > li {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  overflow: hidden;
 }
 
-.billing-server__head {
+.billing-compact-row {
+  width: 100%;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
-.billing-server__name {
-  font-size: 14px;
-  font-weight: 700;
+.billing-compact-row strong {
+  display: block;
+  font-size: 13.5px;
   color: #0f172a;
 }
 
-.billing-server__hostname {
-  margin: 0;
+.billing-compact-meta {
+  display: block;
+  margin-top: 3px;
   font-size: 12px;
   color: #64748b;
 }
 
-.billing-server__group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
-}
-
-.billing-server__head + .billing-server__group {
-  padding-top: 0;
-  border-top: none;
-}
-
-.billing-server__group-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.billing-expand {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
   color: #0f766e;
+}
+
+.billing-expand-panel {
+  padding: 0 14px 14px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
 }
 
 .billing-server__details {
@@ -916,10 +1209,6 @@ section.page.active.billing-page {
   .billing-server__details {
     grid-template-columns: 1fr;
   }
-}
-
-.billing-server__details div {
-  min-width: 0;
 }
 
 .billing-server__details dt {
