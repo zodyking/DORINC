@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AiSuggestionRow } from '../../app/utils/ai-ui'
 import {
+  invoiceNeedsInitialLineAudit,
   invoiceNeedsInitialServiceLogReview,
   isLineAuditSuggestion,
   latestLineAuditSuggestion,
@@ -8,6 +9,7 @@ import {
   lineAuditIssueLines,
   parseLineAuditContent,
   shouldRunLineAuditBeforeSave,
+  shouldSkipLineAuditError,
 } from '../../app/utils/invoice-line-audit-ui'
 
 const auditSuggestion: AiSuggestionRow = {
@@ -59,6 +61,20 @@ describe('invoice line audit ui', () => {
     expect(lineAuditIssueLines(content!)[0]?.suggested?.quantity).toBe('2')
   })
 
+  it('needs initial line audit until completed or reviewed', () => {
+    expect(invoiceNeedsInitialLineAudit({
+      historyActions: ['invoices.create'],
+    })).toBe(true)
+
+    expect(invoiceNeedsInitialLineAudit({
+      historyActions: ['invoices.create', 'ai.line_audit.completed'],
+    })).toBe(false)
+
+    expect(invoiceNeedsInitialLineAudit({
+      historyActions: ['invoices.create', 'ai.line_audit.reviewed'],
+    })).toBe(false)
+  })
+
   it('requires initial review for unreviewed service-log drafts', () => {
     expect(invoiceNeedsInitialServiceLogReview({
       creationSource: 'service_log',
@@ -79,19 +95,26 @@ describe('invoice line audit ui', () => {
     })).toBe(false)
   })
 
-  it('runs line audit only when dirty or service log still needs first review', () => {
+  it('runs line audit when dirty or never audited yet', () => {
     expect(shouldRunLineAuditBeforeSave({
       isDirty: true,
       creationSource: 'blank',
       status: 'draft',
-      historyActions: [],
+      historyActions: ['invoices.create', 'ai.line_audit.completed'],
     })).toBe(true)
 
     expect(shouldRunLineAuditBeforeSave({
       isDirty: false,
       creationSource: 'blank',
       status: 'draft',
-      historyActions: [],
+      historyActions: ['invoices.create'],
+    })).toBe(true)
+
+    expect(shouldRunLineAuditBeforeSave({
+      isDirty: false,
+      creationSource: 'blank',
+      status: 'draft',
+      historyActions: ['invoices.create', 'ai.line_audit.completed'],
     })).toBe(false)
 
     expect(shouldRunLineAuditBeforeSave({
@@ -100,12 +123,27 @@ describe('invoice line audit ui', () => {
       status: 'draft',
       historyActions: ['invoices.create'],
     })).toBe(true)
+  })
 
-    expect(shouldRunLineAuditBeforeSave({
-      isDirty: false,
-      creationSource: 'service_log',
-      status: 'draft',
-      historyActions: ['invoices.create', 'ai.line_audit.completed'],
+  it('soft-skips only configuration / feature-disabled errors', () => {
+    expect(shouldSkipLineAuditError({
+      statusCode: 409,
+      data: { message: 'AI is not configured', code: 'CONFLICT' },
+    })).toBe(true)
+
+    expect(shouldSkipLineAuditError({
+      statusCode: 409,
+      data: { message: 'This AI feature is disabled', code: 'CONFLICT' },
+    })).toBe(true)
+
+    expect(shouldSkipLineAuditError({
+      statusCode: 409,
+      data: { message: 'Edit session conflict', code: 'CONFLICT' },
+    })).toBe(false)
+
+    expect(shouldSkipLineAuditError({
+      statusCode: 500,
+      data: { message: 'OpenRouter blew up' },
     })).toBe(false)
   })
 })
