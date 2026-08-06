@@ -1,5 +1,45 @@
+import { syncFetchErrorMessage } from './fetch-blob-error'
+
 export function isAnnouncementPath(path: string): boolean {
   return path === '/announcements/required' || path.startsWith('/announcements/required/')
+}
+
+/** Prefer Zod issue messages over the generic "Request validation failed". */
+export function announcementSaveErrorMessage(err: unknown, fallback: string): string {
+  const e = err as {
+    data?: {
+      message?: string
+      details?: { issues?: Array<{ path?: string, message?: string }> }
+      data?: { message?: string, details?: { issues?: Array<{ path?: string, message?: string }> } }
+    }
+  }
+  const details = e.data?.details ?? e.data?.data?.details
+  const issues = details?.issues
+  if (Array.isArray(issues) && issues.length) {
+    const parts = issues
+      .map((issue) => {
+        const msg = String(issue.message || '').trim()
+        if (!msg) return ''
+        const path = String(issue.path || '').trim()
+        if (!path || path === 'bodyHtml') return msg
+        return `${path}: ${msg}`
+      })
+      .filter(Boolean)
+    if (parts.length) return parts.join(' ')
+  }
+  return syncFetchErrorMessage(err, fallback)
+}
+
+export function localDateTimeToIso(value: string): string | null {
+  const raw = value.trim()
+  if (!raw) return null
+  const d = new Date(raw)
+  if (!Number.isFinite(d.getTime())) return null
+  return d.toISOString()
+}
+
+export function announcementBodyHasInlineDataImages(html: string): boolean {
+  return /src\s*=\s*["']\s*data:/i.test(html || '')
 }
 
 export function audienceModeLabel(mode: string): string {

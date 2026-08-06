@@ -82,6 +82,22 @@ function onPickImage(e: Event) {
   input.value = ''
   if (file) void uploadInlineImage(file)
 }
+
+function onPaste(e: ClipboardEvent) {
+  const items = Array.from(e.clipboardData?.items ?? [])
+  const imageItem = items.find(item => item.type.startsWith('image/'))
+  if (!imageItem) return
+
+  e.preventDefault()
+  const file = imageItem.getAsFile()
+  if (!file) return
+
+  if (!props.announcementId) {
+    uploadError.value = 'Save the message first, then paste or upload images.'
+    return
+  }
+  void uploadInlineImage(file)
+}
 </script>
 
 <template>
@@ -129,6 +145,7 @@ function onPickImage(e: Event) {
       :contenteditable="disabled ? 'false' : 'true'"
       @input="syncFromEditor"
       @blur="syncFromEditor"
+      @paste="onPaste"
     />
   </div>
 </template>

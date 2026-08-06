@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import AnnouncementEditorWorkbench from '~/components/admin/AnnouncementEditorWorkbench.vue'
 import type { AnnouncementEditorForm } from '~/utils/announcements-ui'
-import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import {
+  announcementBodyHasInlineDataImages,
+  announcementSaveErrorMessage,
+  localDateTimeToIso,
+} from '~/utils/announcements-ui'
 
 definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
@@ -114,6 +118,25 @@ async function saveMessage() {
     error.value = 'Select at least one user'
     return
   }
+  if (announcementBodyHasInlineDataImages(form.value.bodyHtml)) {
+    error.value = 'Pasted inline images cannot be saved. Remove them and use the Image button to upload.'
+    return
+  }
+  if (!Number.isFinite(form.value.priority)) {
+    error.value = 'Priority must be a whole number'
+    return
+  }
+
+  const startsAt = form.value.startsAt ? localDateTimeToIso(form.value.startsAt) : null
+  const endsAt = form.value.endsAt ? localDateTimeToIso(form.value.endsAt) : null
+  if (form.value.startsAt && !startsAt) {
+    error.value = 'Starts date/time is invalid'
+    return
+  }
+  if (form.value.endsAt && !endsAt) {
+    error.value = 'Ends date/time is invalid'
+    return
+  }
 
   busy.value = true
   error.value = ''
@@ -128,8 +151,8 @@ async function saveMessage() {
         heroImageFileId: form.value.heroImageFileId,
         isActive: form.value.isActive,
         priority: form.value.priority,
-        startsAt: form.value.startsAt ? new Date(form.value.startsAt).toISOString() : null,
-        endsAt: form.value.endsAt ? new Date(form.value.endsAt).toISOString() : null,
+        startsAt,
+        endsAt,
         ctaButtons: form.value.ctaButtons.filter(b => b.label.trim() && b.href.trim()),
         audience: buildAudience(),
       },
@@ -138,7 +161,7 @@ async function saveMessage() {
     await refresh()
   }
   catch (e: unknown) {
-    error.value = syncFetchErrorMessage(e, 'Could not save message')
+    error.value = announcementSaveErrorMessage(e, 'Could not save message')
   }
   finally {
     busy.value = false
@@ -163,7 +186,7 @@ async function onHeroUpload(file: File) {
     await saveMessage()
   }
   catch (err: unknown) {
-    error.value = syncFetchErrorMessage(err, 'Hero image upload failed')
+    error.value = announcementSaveErrorMessage(err, 'Hero image upload failed')
   }
   finally {
     uploadBusy.value = false
@@ -188,9 +211,9 @@ function clearHero() {
       </template>
     </StaffPageHead>
 
-    <p v-if="loadError" class="help ann-error">Could not load message.</p>
-    <p v-else-if="error" class="help ann-error">{{ error }}</p>
-    <p v-else-if="savedNote" class="help ann-ok">{{ savedNote }}</p>
+    <p v-if="loadError" class="help ann-error" role="alert">Could not load message.</p>
+    <p v-else-if="error" class="help ann-error" role="alert">{{ error }}</p>
+    <p v-else-if="savedNote" class="help ann-ok" role="status">{{ savedNote }}</p>
     <div v-if="pending && !hydrated" class="cp-state">Loading…</div>
 
     <AnnouncementEditorWorkbench
@@ -203,19 +226,48 @@ function clearHero() {
       @hero-upload="onHeroUpload"
       @clear-hero="clearHero"
     />
+
+    <div
+      v-if="hydrated"
+      class="ann-sticky-actions"
+      role="region"
+      aria-label="Save actions"
+    >
+      <NuxtLink to="/admin/announcements" class="btn">Back</NuxtLink>
+      <button type="button" class="btn primary" :disabled="busy" @click="saveMessage">
+        {{ busy ? 'Saving…' : 'Save message' }}
+      </button>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .ann-page {
-  max-width: 1400px;
+  max-width: 1100px;
+  padding-bottom: 88px;
 }
 .ann-error {
   color: #dc2626;
   margin: 0 0 12px;
+  white-space: pre-wrap;
 }
 .ann-ok {
   color: #15803d;
   margin: 0 0 12px;
+}
+.ann-sticky-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(8px);
 }
 </style>

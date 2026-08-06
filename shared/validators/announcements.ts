@@ -19,16 +19,23 @@ export const announcementTargetInputSchema = z.discriminatedUnion('targetType', 
   }),
 ])
 
+const announcementBodyHtmlSchema = z.string()
+  .max(250_000, 'Message body is too large. Remove pasted images and use the Image button after saving.')
+  .refine(
+    value => !/src\s*=\s*["']\s*data:/i.test(value || ''),
+    'Pasted inline images cannot be saved. Save the message first, then use the Image button to upload.',
+  )
+
 export const announcementUpsertSchema = z.object({
   title: z.string().trim().min(1).max(200),
   subtitle: z.string().trim().max(300).nullable().optional(),
-  bodyHtml: z.string().max(100_000).optional().default(''),
+  bodyHtml: announcementBodyHtmlSchema.optional().default(''),
   heroImageFileId: uuidSchema.nullable().optional(),
   ctaButtons: z.array(announcementCtaButtonSchema).max(6).optional().default([]),
   isActive: z.boolean().optional().default(false),
-  priority: z.number().int().min(-1000).max(1000).optional().default(0),
-  startsAt: z.string().datetime().nullable().optional(),
-  endsAt: z.string().datetime().nullable().optional(),
+  priority: z.coerce.number().int().min(-1000).max(1000).optional().default(0),
+  startsAt: z.string().datetime({ offset: true }).nullable().optional(),
+  endsAt: z.string().datetime({ offset: true }).nullable().optional(),
   audience: announcementTargetInputSchema,
 })
 
