@@ -7,6 +7,7 @@ import {
   type ServiceLogSheetDocument,
   type ServiceLogSheetSection,
 } from '../../shared/service-log-sheet-default'
+import { SERVICE_LOG_SHEET_CSS } from '../../shared/service-log-sheet-styles'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
 import {
   getBusinessProfile,
@@ -200,190 +201,6 @@ function renderColumnHtml(sections: ServiceLogSheetSection[], showHeaderOnFirst:
   ).join('\n')
 }
 
-/** DomPDF-friendly Letter styles (tables instead of CSS grid). */
-const SHEET_STYLES = `
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #ffffff;
-      color: #111827;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-    body { padding: 0; }
-    .page {
-      width: 8.5in;
-      min-height: 11in;
-      margin: 0 auto;
-      padding: 0.28in 0.32in;
-      background: #ffffff;
-    }
-    .header {
-      width: 100%;
-      border-collapse: collapse;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #111827;
-      margin-bottom: 0;
-    }
-    .header td { vertical-align: top; padding-bottom: 10px; }
-    .company-name {
-      margin: 0;
-      font-size: 21px;
-      line-height: 25px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-    .company-details {
-      margin-top: 4px;
-      color: #4b5563;
-      font-size: 9px;
-      line-height: 13px;
-    }
-    .document-title { text-align: right; }
-    .document-title h1 {
-      margin: 0;
-      font-size: 16px;
-      line-height: 20px;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-    .document-title p {
-      margin: 4px 0 0;
-      color: #4b5563;
-      font-size: 9px;
-      line-height: 13px;
-    }
-    .top-fields {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 8px 0;
-      margin-top: 10px;
-    }
-    .top-fields td { vertical-align: top; }
-    .field-label {
-      display: block;
-      margin-bottom: 3px;
-      color: #374151;
-      font-size: 8px;
-      line-height: 11px;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .field-box {
-      height: 28px;
-      border: 1px solid #6b7280;
-      background: #ffffff;
-    }
-    .complaint-field { margin-top: 8px; }
-    .complaint-box {
-      height: 54px;
-      border: 1px solid #6b7280;
-      background: repeating-linear-gradient(to bottom, #ffffff 0, #ffffff 17px, #d1d5db 18px);
-    }
-    .catalog-grid {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 10px 0;
-      margin-top: 10px;
-    }
-    .catalog-grid > tbody > tr > td {
-      width: 50%;
-      vertical-align: top;
-    }
-    .catalog-column-inner > .category { margin-bottom: 7px; }
-    .category {
-      border: 1px solid #9ca3af;
-      page-break-inside: avoid;
-    }
-    .category-title {
-      padding: 4px 6px;
-      border-bottom: 1px solid #9ca3af;
-      background: #f3f4f6;
-      font-size: 8px;
-      line-height: 11px;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .service-table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-    }
-    .service-table col.check-column { width: 20px; }
-    .service-table col.price-column { width: 102px; }
-    .service-table th {
-      padding: 3px 4px;
-      border-bottom: 1px solid #c7ccd3;
-      color: #4b5563;
-      font-size: 7px;
-      line-height: 9px;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
-    .service-table th:nth-child(2) { text-align: left; }
-    .service-table th:last-child { text-align: center; }
-    .service-table td {
-      padding: 3px 4px;
-      border-bottom: 1px solid #d7dbe0;
-      vertical-align: middle;
-      font-size: 7.6px;
-      line-height: 10px;
-    }
-    .service-table tr:last-child td { border-bottom: 0; }
-    .check-cell { text-align: center; }
-    .checkbox {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border: 1px solid #374151;
-      vertical-align: middle;
-    }
-    .service-name { color: #111827; font-weight: 600; }
-    .service-subtext {
-      display: block;
-      margin-top: 1px;
-      color: #6b7280;
-      font-size: 6.8px;
-      line-height: 9px;
-      font-weight: 400;
-    }
-    .price-cell { padding: 2px 3px !important; }
-    .price-entry {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid #9ca3af;
-      background: #ffffff;
-    }
-    .price-entry td {
-      border: 0 !important;
-      padding: 2px !important;
-      font-size: 7px;
-      line-height: 9px;
-      min-height: 17px;
-    }
-    .printed-price {
-      display: block;
-      width: 38px;
-      text-align: center;
-      border-right: 1px solid #9ca3af;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .new-price { display: block; min-width: 40px; min-height: 13px; }
-    .empty-sheet {
-      margin-top: 24px;
-      padding: 16px;
-      border: 1px dashed #9ca3af;
-      color: #4b5563;
-      font-size: 12px;
-      text-align: center;
-    }
-    @page { size: Letter portrait; margin: 0; }
-`
-
 export function renderServiceLogSheetHtml(
   payload: ServiceLogSheetPayload,
   _options: { forPdf?: boolean } = {},
@@ -402,16 +219,8 @@ export function renderServiceLogSheetHtml(
   const catalogBody = hasSections
     ? `<table class="catalog-grid">
       <tr>
-        <td>
-          <div class="catalog-column-inner">
-            ${renderColumnHtml(left, true)}
-          </div>
-        </td>
-        <td>
-          <div class="catalog-column-inner">
-            ${renderColumnHtml(right, false)}
-          </div>
-        </td>
+        <td>${renderColumnHtml(left, true)}</td>
+        <td>${renderColumnHtml(right, false)}</td>
       </tr>
     </table>`
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Service Log Sheet to add categories and services.</div>`
@@ -422,7 +231,7 @@ export function renderServiceLogSheetHtml(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title} Service Catalog</title>
-  <style>${SHEET_STYLES}</style>
+  <style>${SERVICE_LOG_SHEET_CSS}</style>
 </head>
 <body>
   <main class="page">
