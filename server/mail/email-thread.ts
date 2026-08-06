@@ -75,7 +75,6 @@ export async function buildOutboundEmailBodies(
   input: OutboundEmailInput,
 ): Promise<{ text: string, html: string, brand: EmailBrandContext }> {
   const brand = toCustomerEmailBrand(await resolveEmailBrand(db))
-  const subjectBadge = input.subject?.trim() || ''
 
   const trimmed = input.bodyText.trim()
   const accountTypeLabel = signatureAccountTypeLabel(input.accountTypeKey)
@@ -89,7 +88,6 @@ export async function buildOutboundEmailBodies(
     // Omit title/headline so the message body is the focus (not a repeated brand H1).
     preheader: trimmed.slice(0, 120),
     bodyHtml: `${messageHtml}${signatureHtml}`,
-    headerBadge: subjectBadge,
     footerNote: null,
     footerLinks: false,
   })

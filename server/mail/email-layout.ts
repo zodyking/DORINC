@@ -20,6 +20,7 @@ export {
   emailActions,
   emailSecondaryLink,
   normalizeEmailBrand,
+  sanitizeTransactionalEmailHtml,
   wrapEmailHtml,
   buildStyledEmail,
 } from './email-layout.mjs'

@@ -587,16 +587,10 @@ function resetHtmlToSaved() {
                 Subject
                 <input v-model="form.subject" type="text" maxlength="300" :disabled="!canManage">
               </label>
-              <div class="ete-form__row">
-                <label class="fld">
-                  Eyebrow
-                  <input v-model="form.eyebrow" type="text" maxlength="120" :disabled="!canManage">
-                </label>
-                <label class="fld">
-                  Button label
-                  <input v-model="form.primaryActionLabel" type="text" maxlength="120" :disabled="!canManage">
-                </label>
-              </div>
+              <label class="fld">
+                Button label
+                <input v-model="form.primaryActionLabel" type="text" maxlength="120" :disabled="!canManage">
+              </label>
               <label class="fld">
                 Headline
                 <input v-model="form.headline" type="text" maxlength="200" :disabled="!canManage">
