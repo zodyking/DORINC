@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       status: run.status,
       encryptedBytes: run.encryptedBytes,
       sha256Checksum: run.sha256Checksum,
+      errorMessage: run.errorMessage,
       finishedAt: run.finishedAt,
     }
   }
@@ -39,8 +40,13 @@ export default defineEventHandler(async (event) => {
       const code = err.code === 'KEY_MISSING' ? 'VALIDATION_ERROR' : 'INTERNAL_ERROR'
       throw apiError(event, code, err.code === 'KEY_MISSING'
         ? 'ENCRYPTION_MASTER_KEY must be configured before running backups'
-        : 'Backup failed', { reason: err.code })
+        : err.code === 'ALREADY_RUNNING'
+          ? 'A backup is already running'
+          : 'Backup failed', { reason: err.code })
     }
-    throw err
+    const message = err instanceof Error && err.message.trim()
+      ? err.message.trim().slice(0, 500)
+      : 'Backup failed'
+    throw apiError(event, 'INTERNAL_ERROR', message)
   }
 })
