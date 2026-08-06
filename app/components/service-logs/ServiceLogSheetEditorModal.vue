@@ -4,22 +4,9 @@ import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import {
   SERVICE_LOG_SHEET_DOCUMENT_CSS,
   SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
-  SERVICE_LOG_SHEET_PAGE_MARGIN_IN,
 } from '#shared/service-log-sheet-styles'
-import type {
-  ServiceLogSheetDocument,
-  ServiceLogSheetLine,
-  ServiceLogSheetSection,
-} from '#shared/service-log-sheet-default'
-
-interface CatalogPick {
-  id: string
-  name: string
-  description: string | null
-  defaultPrice: string | null
-  itemType: string
-  categoryName: string | null
-}
+import type { ServiceLogSheetDocument } from '#shared/service-log-sheet-default'
+import type { SheetCatalogPick } from '~/composables/useServiceLogSheetEditor'
 
 interface SheetBusiness {
   businessName: string
@@ -31,80 +18,107 @@ interface SheetBusiness {
 interface SheetPayload {
   document: ServiceLogSheetDocument
   business: SheetBusiness
-  catalogItems: CatalogPick[]
+  catalogItems: SheetCatalogPick[]
 }
 
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ saved: [] }>()
 
+const api = useServiceLogSheetEditor()
+
 const pending = ref(false)
 const saving = ref(false)
 const error = ref('')
-const sheetDoc = ref<ServiceLogSheetDocument | null>(null)
 const business = ref<SheetBusiness | null>(null)
-const catalogItems = ref<CatalogPick[]>([])
+const catalogItems = ref<SheetCatalogPick[]>([])
 const catalogQ = ref('')
 const catalogTargetSectionId = ref<string | null>(null)
 const showCatalogPicker = ref(false)
-const selectedSectionId = ref<string | null>(null)
-const selectedItemId = ref<string | null>(null)
+
+type ViewMode = 'paper' | 'lines'
+const view = ref<ViewMode>('paper')
+const viewTouched = ref(false)
+const compact = ref(false)
+
 const stageRef = ref<HTMLElement | null>(null)
-const scale = ref(1)
-const STYLE_ID = 'sl-sheet-wysiwyg-css'
-const EDIT_CSS = `
-.sl-wysiwyg-stack {
+const zoom = ref<number | 'fit'>('fit')
+const fitScale = ref(1)
+const scale = computed(() => (zoom.value === 'fit' ? fitScale.value : zoom.value))
+const zoomLabel = computed(() => `${Math.round(scale.value * 100)}%`)
+
+const PAGE_WIDTH_PX = 8.5 * 96
+const CATALOG_PANEL_PX = 320
+const STYLE_ID = 'sl-sheet-paper-css'
+
+/**
+ * Editor-only chrome on top of the shared document CSS. The document CSS is the
+ * byte-identical stylesheet DomPDF gets, so the paper stays a faithful replica;
+ * everything here is limited to editing affordances (inputs, tools, selection).
+ */
+const EDITOR_CSS = `
+.sl-paper .sheet-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border-radius: 2px;
+  box-shadow: none;
+}
+.sl-paper .sheet-input:focus {
+  outline: 1.5px solid #6366f1;
+  background: #fff;
+}
+.sl-paper .sl-title-line {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
   align-items: center;
+  gap: 4px;
 }
-.sl-paper-edit.page {
-  width: 8.5in !important;
-  height: 11in !important;
-  max-height: 11in !important;
-  padding: ${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
-  background: #fff !important;
-  box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
+.sl-paper .sl-title-input {
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
-.sl-paper-edit .catalog-grid > tbody > tr > td,
-.sl-paper-edit .catalog-grid > tr > td {
-  vertical-align: top !important;
+.sl-paper .sl-price-input { text-align: right; }
+.sl-paper .service-name { position: relative; }
+.sl-paper .service-name.is-selected,
+.sl-paper .price-cell.is-selected { background: #eef2ff; }
+.sl-paper .category-title.is-selected { background: #e0e7ff; }
+.sl-paper .sl-tools {
+  display: none;
+  gap: 2px;
+  white-space: nowrap;
 }
-.sl-paper-edit .category-wrap { position: relative; margin: 0 0 2pt; }
-.sl-paper-edit .category-wrap .category { margin: 0; }
-.sl-paper-edit .category-wrap.is-selected .category { outline: 1.5px solid #6366f1; outline-offset: 1px; }
-.sl-paper-edit .category tr.is-selected td { background: #eef2ff; }
-.sl-paper-edit .sheet-input {
-  width: 100%; border: 0; background: transparent; font: inherit; color: inherit;
-  padding: 0; margin: 0; box-shadow: none; border-radius: 0;
+.sl-paper .sl-tools-row {
+  position: absolute;
+  z-index: 2;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
 }
-.sl-paper-edit .sheet-input:focus { outline: 1px solid #6366f1; background: #fff; }
-.sl-paper-edit .category-title .sheet-input {
-  font-size: 6.5pt; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; line-height: 1.15;
+.sl-paper .category-title:hover .sl-tools,
+.sl-paper .category-title.is-selected .sl-tools,
+.sl-paper tr:hover .sl-tools-row,
+.sl-paper .service-name.is-selected .sl-tools-row { display: inline-flex; }
+.sl-paper .sl-tool {
+  appearance: none;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #fff;
+  color: #334155;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
 }
-.sl-paper-edit .service-name > .sheet-input { font-size: 7pt; font-weight: 600; line-height: 1.12; }
-.sl-paper-edit .service-subtext .sheet-input { font-size: 5.5pt; font-weight: 400; color: #6b7280; line-height: 1.05; }
-.sl-paper-edit .price-cell .sheet-input { width: 100%; text-align: center; font-size: 6.5pt; font-weight: 700; }
-.sl-paper-edit .sec-tools {
-  display: none; gap: 2px; position: absolute; z-index: 3;
-  top: 1px; right: 1px; margin: 0; padding: 0;
-}
-.sl-paper-edit .category-wrap.is-selected .sec-tools,
-.sl-paper-edit .category-wrap:hover .sec-tools { display: flex; }
-.sl-paper-edit .row-tools {
-  display: none; gap: 2px; position: absolute; z-index: 2;
-  right: 0; top: 0; white-space: nowrap;
-}
-.sl-paper-edit .service-name { position: relative; }
-.sl-paper-edit .category tr.is-selected .row-tools,
-.sl-paper-edit .category tr:hover .row-tools { display: flex; }
-.sl-paper-edit .mini {
-  appearance: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
-  border-radius: 3px; font-size: 8px; line-height: 1; padding: 1px 3px; cursor: pointer;
-}
-.sl-paper-edit .mini.danger { color: #dc2626; border-color: #fecaca; }
+.sl-paper .sl-tool:hover { background: #eef2ff; border-color: #a5b4fc; }
+.sl-paper .sl-tool.is-danger { color: #dc2626; border-color: #fecaca; }
 `
 
 function mountSheetStyles() {
@@ -115,7 +129,11 @@ function mountSheetStyles() {
     el.id = STYLE_ID
     document.head.appendChild(el)
   }
-  el.textContent = `${SERVICE_LOG_SHEET_DOCUMENT_CSS}\n${SERVICE_LOG_SHEET_EDITOR_CHROME_CSS}\n${EDIT_CSS}`
+  el.textContent = [
+    SERVICE_LOG_SHEET_DOCUMENT_CSS,
+    SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
+    EDITOR_CSS,
+  ].join('\n')
 }
 
 function unmountSheetStyles() {
@@ -123,46 +141,44 @@ function unmountSheetStyles() {
   document.getElementById(STYLE_ID)?.remove()
 }
 
-const leftSections = computed(() =>
-  (sheetDoc.value?.sections ?? []).filter(s => s.column === 'left'),
-)
-const rightSections = computed(() =>
-  (sheetDoc.value?.sections ?? []).filter(s => s.column === 'right'),
-)
-
-const companyDetailsHtml = computed(() => {
-  if (!business.value) return ''
-  const line2 = [business.value.phone, business.value.email].filter(Boolean).join(' · ')
-  return [business.value.addressLine, line2].filter(Boolean).join('\n')
-})
-
 const filteredCatalog = computed(() => {
   const term = catalogQ.value.trim().toLowerCase()
   const list = catalogItems.value
   if (!term) return list.slice(0, 100)
   return list.filter((item) => {
-    const hay = [item.name, item.description ?? '', item.categoryName ?? '', item.itemType].join(' ').toLowerCase()
+    const hay = [item.name, item.description ?? '', item.categoryName ?? '', item.itemType]
+      .join(' ')
+      .toLowerCase()
     return hay.includes(term)
   }).slice(0, 100)
 })
 
-function newId(prefix: string): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
-  }
-  return `${prefix}-${Date.now().toString(36)}`
+function measureViewport() {
+  if (typeof window === 'undefined') return
+  const nowCompact = window.innerWidth < 1024
+  compact.value = nowCompact
+  // Follow the viewport until the user picks a view themselves.
+  if (!viewTouched.value) view.value = nowCompact ? 'lines' : 'paper'
+
+  // Measured from the viewport rather than the stage: the paper is wider than
+  // the stage at high zoom, which would keep a stage measurement pinned.
+  const panel = showCatalogPicker.value && !nowCompact ? CATALOG_PANEL_PX : 0
+  const available = Math.max(280, window.innerWidth - panel - 48)
+  // Cap the upscale: 7.4pt print type is only readable a little above 100%.
+  fitScale.value = Math.min(1.3, available / PAGE_WIDTH_PX)
 }
 
-const blankWorkRows = Array.from({ length: 24 }, (_, i) => i)
+watch(showCatalogPicker, () => void nextTick(measureViewport))
 
-function updateScale() {
-  const stage = stageRef.value
-  if (!stage) return
-  const pad = 32
-  const availW = Math.max(280, stage.clientWidth - pad)
-  // Scale to fit width primarily; user can scroll for the second page.
-  const pageW = 8.5 * 96
-  scale.value = Math.min(1, availW / pageW)
+function setView(next: ViewMode) {
+  view.value = next
+  viewTouched.value = true
+  void nextTick(measureViewport)
+}
+
+function zoomBy(step: number) {
+  const next = Math.min(2, Math.max(0.4, Math.round((scale.value + step) * 20) / 20))
+  zoom.value = next
 }
 
 async function load() {
@@ -170,11 +186,11 @@ async function load() {
   error.value = ''
   try {
     const data = await $fetch<SheetPayload>('/api/service-logs/sheet')
-    sheetDoc.value = structuredClone(data.document)
+    api.setDocument(data.document)
     business.value = data.business
     catalogItems.value = data.catalogItems
     await nextTick()
-    updateScale()
+    measureViewport()
   }
   catch (err) {
     error.value = syncFetchErrorMessage(err, 'Could not load service log sheet')
@@ -184,26 +200,30 @@ async function load() {
   }
 }
 
+// immediate so the sheet also loads when the modal mounts already open.
 watch(open, (isOpen) => {
   if (isOpen) {
     mountSheetStyles()
     catalogQ.value = ''
     showCatalogPicker.value = false
     catalogTargetSectionId.value = null
-    selectedSectionId.value = null
-    selectedItemId.value = null
+    viewTouched.value = false
+    zoom.value = 'fit'
     void load()
   }
   else {
     unmountSheetStyles()
   }
-})
+}, { immediate: true })
 
 onMounted(() => {
-  window.addEventListener('resize', updateScale)
+  window.addEventListener('resize', measureViewport)
+  measureViewport()
 })
+
 onUnmounted(() => {
-  window.removeEventListener('resize', updateScale)
+  window.removeEventListener('resize', measureViewport)
+  stageObserver?.disconnect()
   unmountSheetStyles()
 })
 
@@ -212,146 +232,31 @@ function close() {
   error.value = ''
 }
 
-function findSection(sectionId: string): ServiceLogSheetSection | undefined {
-  return sheetDoc.value?.sections.find(s => s.id === sectionId)
-}
-
-function selectSection(sectionId: string) {
-  selectedSectionId.value = sectionId
-  selectedItemId.value = null
-}
-
-function selectItem(sectionId: string, itemId: string) {
-  selectedSectionId.value = sectionId
-  selectedItemId.value = itemId
-}
-
-function addSection(column: 'left' | 'right') {
-  if (!sheetDoc.value) return
-  const section: ServiceLogSheetSection = {
-    id: newId('sec'),
-    title: 'New section',
-    column,
-    items: [{
-      id: newId('item'),
-      name: 'New service',
-      subtext: '',
-      price: '$0',
-      catalogItemId: null,
-    }],
-  }
-  sheetDoc.value.sections.push(section)
-  selectedSectionId.value = section.id
-}
-
-function removeSection(sectionId: string) {
-  if (!sheetDoc.value) return
-  const section = findSection(sectionId)
-  if (!section) return
-  if (!window.confirm(`Remove section "${section.title}"?`)) return
-  sheetDoc.value.sections = sheetDoc.value.sections.filter(s => s.id !== sectionId)
-  if (selectedSectionId.value === sectionId) selectedSectionId.value = null
-}
-
-function moveSection(sectionId: string, direction: -1 | 1) {
-  if (!sheetDoc.value) return
-  const section = findSection(sectionId)
-  if (!section) return
-  const same = sheetDoc.value.sections.filter(s => s.column === section.column)
-  const idx = same.findIndex(s => s.id === sectionId)
-  const swapWith = same[idx + direction]
-  if (!swapWith) return
-  const all = sheetDoc.value.sections
-  const a = all.findIndex(s => s.id === sectionId)
-  const b = all.findIndex(s => s.id === swapWith.id)
-  const tmp = all[a]!
-  all[a] = all[b]!
-  all[b] = tmp
-}
-
-function moveSectionColumn(sectionId: string) {
-  const section = findSection(sectionId)
-  if (!section) return
-  section.column = section.column === 'left' ? 'right' : 'left'
-}
-
-function addBlankItem(sectionId: string) {
-  const section = findSection(sectionId)
-  if (!section) return
-  const item: ServiceLogSheetLine = {
-    id: newId('item'),
-    name: 'New service',
-    subtext: '',
-    price: '$0',
-    catalogItemId: null,
-  }
-  section.items.push(item)
-  selectedItemId.value = item.id
-}
-
-function removeItem(sectionId: string, itemId: string) {
-  const section = findSection(sectionId)
-  if (!section) return
-  section.items = section.items.filter(i => i.id !== itemId)
-  if (selectedItemId.value === itemId) selectedItemId.value = null
-}
-
-function moveItem(sectionId: string, itemId: string, direction: -1 | 1) {
-  const section = findSection(sectionId)
-  if (!section) return
-  const idx = section.items.findIndex(i => i.id === itemId)
-  const next = idx + direction
-  if (idx < 0 || next < 0 || next >= section.items.length) return
-  const tmp = section.items[idx]!
-  section.items[idx] = section.items[next]!
-  section.items[next] = tmp
-}
-
 function openCatalogPicker(sectionId?: string | null) {
   catalogTargetSectionId.value = sectionId
-    || selectedSectionId.value
-    || leftSections.value[0]?.id
-    || rightSections.value[0]?.id
+    || api.selectedSectionId.value
+    || api.leftSections.value[0]?.id
+    || api.rightSections.value[0]?.id
     || null
   catalogQ.value = ''
   showCatalogPicker.value = true
 }
 
-function addCatalogItem(pick: CatalogPick) {
-  let sectionId = catalogTargetSectionId.value
-  if (!sectionId || !findSection(sectionId)) {
-    addSection('left')
-    sectionId = selectedSectionId.value
+function addCatalogItem(pick: SheetCatalogPick) {
+  if (api.addCatalogItem(pick, catalogTargetSectionId.value)) {
+    showCatalogPicker.value = false
   }
-  if (!sectionId) return
-  const section = findSection(sectionId)
-  if (!section) return
-  const line: ServiceLogSheetLine = {
-    id: newId('item'),
-    name: pick.name,
-    subtext: pick.description?.trim() || '',
-    price: formatSheetPriceDisplay(pick.defaultPrice) === '—'
-      ? '$0'
-      : (formatSheetPriceDisplay(pick.defaultPrice) || '$0'),
-    catalogItemId: pick.id,
-  }
-  section.items.push(line)
-  selectedSectionId.value = sectionId
-  selectedItemId.value = line.id
-  showCatalogPicker.value = false
 }
 
 async function resetDefault() {
-  if (!window.confirm('Reset to the default Letter service catalog template?')) return
+  if (!window.confirm('Reset to the default Letter service log sheet template?')) return
   saving.value = true
   error.value = ''
   try {
     const res = await $fetch<{ document: ServiceLogSheetDocument }>('/api/service-logs/sheet/reset', {
       method: 'POST',
     })
-    sheetDoc.value = structuredClone(res.document)
-    selectedSectionId.value = null
-    selectedItemId.value = null
+    api.setDocument(res.document)
   }
   catch (err) {
     error.value = syncFetchErrorMessage(err, 'Could not reset sheet')
@@ -362,26 +267,11 @@ async function resetDefault() {
 }
 
 async function save() {
-  if (!sheetDoc.value) return
+  const cleaned = api.cleanDocument()
+  if (!cleaned) return
   saving.value = true
   error.value = ''
   try {
-    const cleaned: ServiceLogSheetDocument = {
-      version: 2,
-      sections: sheetDoc.value.sections.map(section => ({
-        ...section,
-        title: section.title.trim() || 'Untitled',
-        items: section.items
-          .filter(item => item.name.trim())
-          .map(item => ({
-            ...item,
-            name: item.name.trim(),
-            subtext: item.subtext?.trim() || '',
-            price: item.price?.trim() || '',
-            catalogItemId: item.catalogItemId ?? null,
-          })),
-      })),
-    }
     await $fetch('/api/service-logs/sheet', { method: 'PUT', body: cleaned })
     emit('saved')
     close()
@@ -394,274 +284,144 @@ async function save() {
   }
 }
 
-function onScrimClick(e: MouseEvent) {
-  if ((e.target as HTMLElement).id === 'sl-sheet-scrim') close()
+function onScrimClick(event: MouseEvent) {
+  if ((event.target as HTMLElement).id === 'sl-sheet-scrim') close()
 }
 </script>
 
 <template>
   <div
     id="sl-sheet-scrim"
-    class="modal-scrim sl-wysiwyg-scrim"
+    class="modal-scrim sl-editor-scrim"
     :class="{ open }"
     :aria-hidden="!open"
     @click="onScrimClick"
   >
     <div
-      class="sl-wysiwyg"
+      class="sl-editor"
       role="dialog"
       aria-labelledby="sl-sheet-title"
       aria-modal="true"
       @click.stop
     >
-      <header class="sl-wysiwyg-bar">
-        <div class="sl-wysiwyg-bar-text">
+      <header class="sl-bar">
+        <div class="sl-bar-text">
           <h3 id="sl-sheet-title">Edit Service Log Sheet</h3>
-          <p>What you see is the Letter print layout — click a section or line to edit</p>
+          <p>
+            {{ view === 'paper'
+              ? 'Exactly the Letter print layout — click any title, line or price to edit'
+              : 'Edit every printed line, then check the layout in Paper view' }}
+          </p>
         </div>
-        <div class="sl-wysiwyg-bar-actions">
-          <button type="button" class="btn sm" :disabled="saving || pending" @click="addSection('left')">+ Left section</button>
-          <button type="button" class="btn sm" :disabled="saving || pending" @click="addSection('right')">+ Right section</button>
-          <button type="button" class="btn sm" :disabled="saving || pending || !sheetDoc?.sections.length" @click="openCatalogPicker()">
+
+        <div class="sl-bar-actions">
+          <div class="sl-seg" role="group" aria-label="Editor view">
+            <button
+              type="button"
+              class="sl-seg-btn"
+              :class="{ active: view === 'paper' }"
+              :aria-pressed="view === 'paper'"
+              @click="setView('paper')"
+            >Paper</button>
+            <button
+              type="button"
+              class="sl-seg-btn"
+              :class="{ active: view === 'lines' }"
+              :aria-pressed="view === 'lines'"
+              @click="setView('lines')"
+            >Lines</button>
+          </div>
+
+          <div v-if="view === 'paper'" class="sl-seg sl-zoom" role="group" aria-label="Zoom">
+            <button type="button" class="sl-seg-btn" aria-label="Zoom out" @click="zoomBy(-0.1)">−</button>
+            <button type="button" class="sl-seg-btn" :class="{ active: zoom === 'fit' }" @click="zoom = 'fit'">
+              {{ zoom === 'fit' ? `Fit ${zoomLabel}` : zoomLabel }}
+            </button>
+            <button type="button" class="sl-seg-btn" aria-label="Zoom in" @click="zoomBy(0.1)">+</button>
+          </div>
+
+          <button
+            type="button"
+            class="btn sm sl-hide-compact"
+            :disabled="saving || pending"
+            @click="api.addSection('left')"
+          >
+            + Left section
+          </button>
+          <button
+            type="button"
+            class="btn sm sl-hide-compact"
+            :disabled="saving || pending"
+            @click="api.addSection('right')"
+          >
+            + Right section
+          </button>
+          <button
+            type="button"
+            class="btn sm sl-hide-compact"
+            :disabled="saving || pending || !api.sections.value.length"
+            @click="openCatalogPicker()"
+          >
             + From catalog
           </button>
-          <button type="button" class="btn sm" :disabled="saving || pending" @click="resetDefault">Reset template</button>
-          <button type="button" class="btn" :disabled="saving" @click="close">Cancel</button>
-          <button type="button" class="btn primary" :disabled="saving || pending || !sheetDoc" @click="save">
+          <button type="button" class="btn sm" :disabled="saving || pending" @click="resetDefault">
+            Reset template
+          </button>
+          <button type="button" class="btn sm sl-hide-compact" :disabled="saving" @click="close">Cancel</button>
+          <button
+            type="button"
+            class="btn primary sm sl-hide-compact"
+            :disabled="saving || pending || !api.doc.value"
+            @click="save"
+          >
             {{ saving ? 'Saving…' : 'Save sheet' }}
           </button>
-          <button type="button" class="close" aria-label="Close" @click="close">✕</button>
+          <button type="button" class="sl-close" aria-label="Close editor" @click="close">✕</button>
         </div>
       </header>
 
-      <p v-if="error" class="err">{{ error }}</p>
-      <p v-else-if="pending" class="help sl-wysiwyg-status">Loading Letter sheet…</p>
+      <p v-if="error" class="sl-error" role="alert">{{ error }}</p>
 
-      <div v-else-if="sheetDoc && business" class="sl-wysiwyg-body">
-        <div ref="stageRef" class="sl-wysiwyg-stage">
-          <div class="sl-wysiwyg-scale" :style="{ transform: `scale(${scale})` }">
-            <div class="sl-wysiwyg-stack">
-            <div class="page page-front sl-paper-edit" aria-label="Service log sheet front">
-              <table class="header">
-                <tr>
-                  <td>
-                    <div class="company-name">{{ business.businessName }}</div>
-                    <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
-                  </td>
-                  <td class="document-title">
-                    <div class="doc-title">Service Log Sheet</div>
-                    <div class="doc-sub">Blank field log and work authorization</div>
-                  </td>
-                </tr>
-              </table>
+      <p
+        v-else-if="api.pageFill.value.overflows"
+        class="sl-warn"
+        role="status"
+      >
+        This catalog is taller than the front page ({{ api.pageFill.value.rows }} of
+        {{ api.pageFill.value.capacity }} lines in the longest column). It still prints — the
+        extra lines continue on a second page with the column headers repeated.
+      </p>
 
-              <table class="top-fields">
-                <tr>
-                  <td style="width:38%">
-                    <span class="field-label">Customer Name</span>
-                    <div class="field-box" />
-                  </td>
-                  <td style="width:18%">
-                    <span class="field-label">Invoice Date</span>
-                    <div class="field-box" />
-                  </td>
-                  <td style="width:18%">
-                    <span class="field-label">Due Date</span>
-                    <div class="field-box" />
-                  </td>
-                  <td style="width:26%">
-                    <span class="field-label">Bus or Unit Number</span>
-                    <div class="field-box" />
-                  </td>
-                </tr>
-              </table>
+      <p v-if="pending" class="sl-status">Loading Letter sheet…</p>
 
-              <div class="complaint-field">
-                <span class="field-label">Customer Complaint or Vehicle Symptoms</span>
-                <div class="complaint-box" />
-              </div>
-
-              <table class="catalog-grid">
-                <tr class="col-label-row">
-                  <td valign="bottom">Service <span class="h-price">Price / New</span></td>
-                  <td valign="bottom">Service <span class="h-price">Price / New</span></td>
-                </tr>
-                <tr>
-                  <td valign="top">
-                    <div
-                      v-for="section in leftSections"
-                      :key="section.id"
-                      class="category-wrap"
-                      :class="{ 'is-selected': selectedSectionId === section.id }"
-                      @click="selectSection(section.id)"
-                    >
-                      <div class="sec-tools">
-                        <button type="button" class="mini" title="Move up" @click.stop="moveSection(section.id, -1)">↑</button>
-                        <button type="button" class="mini" title="Move down" @click.stop="moveSection(section.id, 1)">↓</button>
-                        <button type="button" class="mini" title="Move to right" @click.stop="moveSectionColumn(section.id)">→</button>
-                        <button type="button" class="mini" title="Add line" @click.stop="addBlankItem(section.id)">+</button>
-                        <button type="button" class="mini" title="From catalog" @click.stop="openCatalogPicker(section.id)">☰</button>
-                        <button type="button" class="mini danger" title="Remove section" @click.stop="removeSection(section.id)">✕</button>
-                      </div>
-                      <table class="category">
-                        <colgroup>
-                          <col class="check-column">
-                          <col>
-                          <col class="price-column">
-                          <col class="new-column">
-                        </colgroup>
-                        <tbody>
-                          <tr>
-                            <td colspan="4" class="category-title">
-                              <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
-                            </td>
-                          </tr>
-                          <tr
-                            v-for="item in section.items"
-                            :key="item.id"
-                            :class="{ 'is-selected': selectedItemId === item.id }"
-                            @click.stop="selectItem(section.id, item.id)"
-                          >
-                            <td class="check-cell"><span class="checkbox" /></td>
-                            <td class="service-name">
-                              <input v-model="item.name" class="sheet-input" type="text" maxlength="200" aria-label="Service name">
-                              <span
-                                v-if="item.subtext || selectedItemId === item.id"
-                                class="service-subtext"
-                              >
-                                <input v-model="item.subtext" class="sheet-input" type="text" maxlength="200" placeholder="Note" aria-label="Service note">
-                              </span>
-                              <span class="row-tools">
-                                <button type="button" class="mini" @click.stop="moveItem(section.id, item.id, -1)">↑</button>
-                                <button type="button" class="mini" @click.stop="moveItem(section.id, item.id, 1)">↓</button>
-                                <button type="button" class="mini danger" @click.stop="removeItem(section.id, item.id)">✕</button>
-                              </span>
-                            </td>
-                            <td class="price-cell">
-                              <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
-                            </td>
-                            <td class="new-price-cell">&nbsp;</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </td>
-                  <td valign="top">
-                    <div
-                      v-for="section in rightSections"
-                      :key="section.id"
-                      class="category-wrap"
-                      :class="{ 'is-selected': selectedSectionId === section.id }"
-                      @click="selectSection(section.id)"
-                    >
-                      <div class="sec-tools">
-                        <button type="button" class="mini" title="Move up" @click.stop="moveSection(section.id, -1)">↑</button>
-                        <button type="button" class="mini" title="Move down" @click.stop="moveSection(section.id, 1)">↓</button>
-                        <button type="button" class="mini" title="Move to left" @click.stop="moveSectionColumn(section.id)">←</button>
-                        <button type="button" class="mini" title="Add line" @click.stop="addBlankItem(section.id)">+</button>
-                        <button type="button" class="mini" title="From catalog" @click.stop="openCatalogPicker(section.id)">☰</button>
-                        <button type="button" class="mini danger" title="Remove section" @click.stop="removeSection(section.id)">✕</button>
-                      </div>
-                      <table class="category">
-                        <colgroup>
-                          <col class="check-column">
-                          <col>
-                          <col class="price-column">
-                          <col class="new-column">
-                        </colgroup>
-                        <tbody>
-                          <tr>
-                            <td colspan="4" class="category-title">
-                              <input v-model="section.title" class="sheet-input" type="text" maxlength="120" aria-label="Section title">
-                            </td>
-                          </tr>
-                          <tr
-                            v-for="item in section.items"
-                            :key="item.id"
-                            :class="{ 'is-selected': selectedItemId === item.id }"
-                            @click.stop="selectItem(section.id, item.id)"
-                          >
-                            <td class="check-cell"><span class="checkbox" /></td>
-                            <td class="service-name">
-                              <input v-model="item.name" class="sheet-input" type="text" maxlength="200" aria-label="Service name">
-                              <span
-                                v-if="item.subtext || selectedItemId === item.id"
-                                class="service-subtext"
-                              >
-                                <input v-model="item.subtext" class="sheet-input" type="text" maxlength="200" placeholder="Note" aria-label="Service note">
-                              </span>
-                              <span class="row-tools">
-                                <button type="button" class="mini" @click.stop="moveItem(section.id, item.id, -1)">↑</button>
-                                <button type="button" class="mini" @click.stop="moveItem(section.id, item.id, 1)">↓</button>
-                                <button type="button" class="mini danger" @click.stop="removeItem(section.id, item.id)">✕</button>
-                              </span>
-                            </td>
-                            <td class="price-cell">
-                              <input v-model="item.price" class="sheet-input" type="text" maxlength="40" aria-label="Printed price">
-                            </td>
-                            <td class="new-price-cell">&nbsp;</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              </table>
-            </div>
-
-            <div class="page page-back sl-paper-edit" aria-label="Service log sheet back">
-              <table class="header">
-                <tr>
-                  <td>
-                    <div class="company-name">{{ business.businessName }}</div>
-                    <div class="company-details" style="white-space: pre-line;">{{ companyDetailsHtml }}</div>
-                  </td>
-                  <td class="document-title">
-                    <div class="doc-title">Service Log Sheet</div>
-                    <div class="doc-sub">Blank field log and work authorization</div>
-                  </td>
-                </tr>
-              </table>
-              <div class="back-title">Additional / Custom Work</div>
-              <div class="back-help">Use these lines for work not listed on the front — write service description, quantity, and total.</div>
-              <table class="blank-work-table">
-                <colgroup>
-                  <col class="desc">
-                  <col class="qty">
-                  <col class="total">
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th class="desc">Service Description</th>
-                    <th class="qty">Quantity</th>
-                    <th class="total">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in blankWorkRows" :key="row">
-                    <td class="desc">&nbsp;</td>
-                    <td class="qty">&nbsp;</td>
-                    <td class="total">&nbsp;</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            </div>
+      <div v-else-if="api.doc.value && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
+        <div v-if="view === 'paper'" ref="stageRef" class="sl-stage">
+          <!-- zoom (not transform) keeps layout, scrollbars and hit testing correct -->
+          <div class="sl-paper sheet-doc" :style="{ zoom: scale }">
+            <ServiceLogSheetPaper
+              :api="api"
+              :business="business"
+              @catalog="openCatalogPicker"
+            />
           </div>
         </div>
 
-        <aside v-if="showCatalogPicker" class="sl-wysiwyg-catalog">
-          <div class="sl-wysiwyg-catalog-head">
+        <div v-else class="sl-stage sl-stage-lines">
+          <ServiceLogSheetLines :api="api" @catalog="openCatalogPicker" />
+        </div>
+
+        <aside v-if="showCatalogPicker" class="sl-catalog" aria-label="Add from catalog">
+          <div class="sl-catalog-head">
             <h4>Add from catalog</h4>
             <button type="button" class="btn sm" @click="showCatalogPicker = false">Close</button>
           </div>
-          <label class="fld" style="margin:0 0 8px;">
-            <span class="sr-only">Search catalog</span>
+          <label class="fld sl-catalog-search">
+            <span class="sl-sr">Search catalog</span>
             <input v-model="catalogQ" type="search" placeholder="Search catalog…">
           </label>
-          <ul v-if="filteredCatalog.length" class="sl-wysiwyg-catalog-list">
+          <ul v-if="filteredCatalog.length" class="sl-catalog-list">
             <li v-for="pick in filteredCatalog" :key="pick.id">
-              <button type="button" class="sl-wysiwyg-catalog-row" @click="addCatalogItem(pick)">
+              <button type="button" class="sl-catalog-row" @click="addCatalogItem(pick)">
                 <span>
                   <strong>{{ pick.name }}</strong>
                   <small v-if="pick.categoryName">{{ pick.categoryName }}</small>
@@ -673,94 +433,160 @@ function onScrimClick(e: MouseEvent) {
           <p v-else class="help">No catalog matches.</p>
         </aside>
       </div>
+
+      <footer v-if="compact" class="sl-foot">
+        <span class="sl-foot-count">{{ api.lineCount.value }} lines</span>
+        <button type="button" class="btn" :disabled="saving" @click="close">Cancel</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="saving || pending || !api.doc.value"
+          @click="save"
+        >
+          {{ saving ? 'Saving…' : 'Save sheet' }}
+        </button>
+      </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
-.sl-wysiwyg-scrim {
+.sl-editor-scrim {
   align-items: stretch;
   padding: 0;
   background: rgba(15, 23, 42, 0.55);
 }
-.sl-wysiwyg {
+.sl-editor {
   display: flex;
   flex-direction: column;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   max-width: none;
   max-height: none;
   border-radius: 0;
-  background: #e2e8f0;
+  background: #eef2f7;
   overflow: hidden;
 }
-.sl-wysiwyg-bar {
+.sl-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: #fff;
-  border-bottom: 1px solid #cbd5e1;
+  border-bottom: 1px solid #dbe2ea;
 }
-.sl-wysiwyg-bar-text h3 {
+.sl-bar-text h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
 }
-.sl-wysiwyg-bar-text p {
-  margin: 1px 0 0;
+.sl-bar-text p {
+  margin: 2px 0 0;
   color: #64748b;
-  font-size: 11px;
+  font-size: 11.5px;
+  max-width: 60ch;
 }
-.sl-wysiwyg-bar-actions {
+.sl-bar-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
-.sl-wysiwyg-status {
-  margin: 12px 16px;
+.sl-seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #d7dee7;
+  border-radius: 9px;
+  background: #f7f9fc;
 }
-.sl-wysiwyg-body {
+.sl-seg-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sl-seg-btn.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+.sl-zoom .sl-seg-btn { min-width: 34px; }
+.sl-close {
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+}
+.sl-close:hover { background: #e2e8f0; color: #0f172a; }
+.sl-error,
+.sl-warn,
+.sl-status {
+  margin: 10px 12px 0;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.sl-error { background: #fef2f2; color: #dc2626; }
+.sl-warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.sl-status { color: #64748b; }
+.sl-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr;
   position: relative;
 }
-.sl-wysiwyg-body:has(.sl-wysiwyg-catalog) {
-  grid-template-columns: 1fr 300px;
-}
-.sl-wysiwyg-stage {
+.sl-body.has-catalog { grid-template-columns: 1fr 320px; }
+.sl-stage {
   min-height: 0;
+  /* 1fr grid columns default to a content-based minimum: without this the paper
+     keeps the stage wide when the catalog panel opens, so fit never recomputes. */
+  min-width: 0;
   overflow: auto;
-  display: grid;
-  place-items: center;
   padding: 16px;
+  display: flex;
+  align-items: flex-start;
 }
-.sl-wysiwyg-scale {
-  width: 8.5in;
-  transform-origin: top center;
+/* margin auto, not justify-content: centred flex items clip their overflow. */
+.sl-stage > .sl-paper { margin: 0 auto; }
+.sl-stage-lines {
+  padding: 0;
+  background: #eef2f7;
 }
-.sl-wysiwyg-catalog {
-  border-left: 1px solid #cbd5e1;
+.sl-paper { flex: none; }
+.sl-catalog {
+  border-left: 1px solid #dbe2ea;
   background: #fff;
   padding: 12px;
   overflow: auto;
 }
-.sl-wysiwyg-catalog-head {
+.sl-catalog-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
-.sl-wysiwyg-catalog-head h4 {
+.sl-catalog-head h4 {
   margin: 0;
   font-size: 13px;
 }
-.sl-wysiwyg-catalog-list {
+.sl-catalog-search { margin: 0 0 8px; }
+.sl-catalog-search input { min-height: 40px; }
+.sl-catalog-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -768,8 +594,9 @@ function onScrimClick(e: MouseEvent) {
   border-radius: 10px;
   overflow: hidden;
 }
-.sl-wysiwyg-catalog-row {
+.sl-catalog-row {
   width: 100%;
+  min-height: 46px;
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -779,24 +606,28 @@ function onScrimClick(e: MouseEvent) {
   background: #fff;
   text-align: left;
   cursor: pointer;
+  font: inherit;
   font-size: 12.5px;
 }
-.sl-wysiwyg-catalog-row:hover { background: #f8fafc; }
-.sl-wysiwyg-catalog-row strong { display: block; }
-.sl-wysiwyg-catalog-row small { color: #94a3b8; }
-.err {
-  margin: 10px 14px 0;
+.sl-catalog-row:hover { background: #f8fafc; }
+.sl-catalog-row strong { display: block; }
+.sl-catalog-row small { color: #94a3b8; }
+.sl-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #dc2626;
-  font-size: 13px;
+  background: #fff;
+  border-top: 1px solid #dbe2ea;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
-.btn.sm {
-  padding: 4px 8px;
-  font-size: 11px;
+.sl-foot-count {
+  flex: 1;
+  color: #64748b;
+  font-size: 12px;
 }
-.sr-only {
+.sl-foot .btn { min-height: 44px; flex: none; }
+.sl-sr {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -806,16 +637,18 @@ function onScrimClick(e: MouseEvent) {
   clip: rect(0, 0, 0, 0);
   border: 0;
 }
-@media (max-width: 900px) {
-  .sl-wysiwyg-body:has(.sl-wysiwyg-catalog) {
-    grid-template-columns: 1fr;
-  }
-  .sl-wysiwyg-catalog {
+@media (max-width: 1023px) {
+  .sl-hide-compact { display: none; }
+  .sl-bar { padding: 8px 10px; }
+  .sl-bar-text p { display: none; }
+  .sl-body.has-catalog { grid-template-columns: 1fr; }
+  .sl-catalog {
     position: absolute;
     inset: auto 0 0 0;
-    max-height: 40%;
+    max-height: 60%;
     border-left: 0;
-    border-top: 1px solid #cbd5e1;
+    border-top: 1px solid #dbe2ea;
+    box-shadow: 0 -12px 30px -20px rgba(15, 23, 42, 0.5);
   }
 }
 </style>

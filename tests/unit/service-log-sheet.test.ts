@@ -69,8 +69,6 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('catalog-grid')
     expect(html).toContain('Customer Complaint or Vehicle Symptoms')
     expect(html).toContain('<table class="catalog-grid">')
-    expect(html).toContain('valign="top"')
-    expect(html).toContain('col-label-row')
     expect(html).toContain('price-cell')
     expect(html).toContain('new-price-cell')
     expect(html).not.toContain('price-entry')
@@ -83,6 +81,39 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).not.toContain('width: 8.5in')
     expect(html).not.toContain('<main')
     expect(html).not.toContain('<section')
+  })
+
+  it('keeps the catalog on DomPDF-safe foundations', () => {
+    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+    // DomPDF never reads <col> widths, and it only records a width from a cell
+    // whose colspan is 1 — widths therefore live on the cells.
+    expect(html).not.toContain('<colgroup')
+    expect(html).not.toContain('<col ')
+    expect(html).not.toMatch(/table-layout:\s*fixed/)
+    // @page margins are stored on the root html frame, so any html margin reset
+    // deletes every page margin and the sheet bleeds off the paper.
+    expect(html).not.toMatch(/html\s*,?\s*(body)?\s*\{[^}]*margin/)
+    // One flat table with a repeating head: DomPDF cannot split a table that
+    // contains nested tables, so a nested grid blanks page 1 when it overflows.
+    const gridStart = html.indexOf('<table class="catalog-grid">')
+    const gridOpenEnd = gridStart + '<table class="catalog-grid">'.length
+    const grid = html.slice(gridOpenEnd, html.indexOf('</table>', gridOpenEnd))
+    expect(grid).not.toContain('<table')
+    expect(html).toContain('<thead>')
+  })
+
+  it('zips both columns into one row per printed line', () => {
+    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+    const rows = html.match(/<tr>/g)?.length ?? 0
+    const doc = defaultServiceLogSheetDocument()
+    const rowsFor = (column: 'left' | 'right') => doc.sections
+      .filter(section => section.column === column)
+      .reduce((total, section) => total + section.items.length + 1, 0)
+    // Front grid rows (max of both columns) + head row + back page rows.
+    expect(rows).toBeGreaterThanOrEqual(Math.max(rowsFor('left'), rowsFor('right')))
+    expect(html).toContain('grid-gap')
+    expect(html).toContain('void-cell')
+    expect(html).toContain('group-end')
   })
 
   it('places Cleaning on the left and Battery on the right', () => {
