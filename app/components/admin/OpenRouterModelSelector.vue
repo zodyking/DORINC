@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string
   apiKey?: string
   disabled?: boolean
-}>()
+  /** Field label above the combobox. */
+  label?: string
+  /** Help text under the selected model id. */
+  hint?: string
+  /** Show refresh/sort toolbar (disable when sharing one catalog toolbar). */
+  showToolbar?: boolean
+  /** Load models on mount. Set false when a parent owns catalog refresh. */
+  autoLoad?: boolean
+}>(), {
+  label: 'Model',
+  hint: '',
+  showToolbar: true,
+  autoLoad: true,
+})
 
 const emit = defineEmits<{
   'update:modelValue': [string]
@@ -264,7 +277,7 @@ function onWindowReposition() {
 defineExpose({ reload: loadModels })
 
 onMounted(() => {
-  void loadModels()
+  if (props.autoLoad) void loadModels()
   window.addEventListener('resize', onWindowReposition)
   window.addEventListener('scroll', onWindowReposition, true)
 })
@@ -278,7 +291,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="or-model-picker">
-    <div class="or-model-picker__toolbar">
+    <div v-if="showToolbar" class="or-model-picker__toolbar">
       <button type="button" class="btn sm" :disabled="disabled || loadStatus === 'loading'" @click="loadModels">
         {{ loadStatus === 'loading' ? 'Loading…' : models.length ? 'Refresh models' : 'Load models from OpenRouter' }}
       </button>
@@ -293,7 +306,7 @@ onBeforeUnmount(() => {
     </div>
 
     <label class="fld or-model-picker__field">
-      Default model
+      {{ label }}
       <div class="or-combo" :class="{ open, disabled: disabled || !models.length }">
         <input
           ref="inputEl"
@@ -323,7 +336,8 @@ onBeforeUnmount(() => {
           ▾
         </button>
       </div>
-      <span v-if="selectedModel" class="help">{{ selectedModel.id }}</span>
+      <span v-if="hint" class="help">{{ hint }}</span>
+      <span v-else-if="selectedModel" class="help">{{ selectedModel.id }}</span>
       <span v-else-if="modelValue" class="help">{{ modelValue }}</span>
       <span v-else class="help">Live catalog from OpenRouter with input/output cost per 1M tokens.</span>
     </label>

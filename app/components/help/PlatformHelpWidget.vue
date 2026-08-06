@@ -4,6 +4,7 @@ import {
   helpContextLabel,
   helpPageKeyFromRoute,
   isPlatformHelpWidgetVisible,
+  platformHelpPoweredByLabel,
 } from '~/utils/platform-help-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
@@ -48,10 +49,13 @@ const { data: helpStatus, refresh: refreshHelpStatus } = useClientFetch<{
   aiAvailable: boolean
   capped: boolean
   imageUploadEnabled: boolean
+  model: string | null
 }>(
   '/api/ai/help-status',
   { immediate: false },
 )
+
+const poweredByLabel = computed(() => platformHelpPoweredByLabel(helpStatus.value?.model))
 
 watch([() => auth.loaded, canUseHelp], ([loaded, can]) => {
   if (loaded && can) refreshHelpStatus()
@@ -540,7 +544,7 @@ onUnmounted(() => {
             </div>
           </form>
           <p class="help-composer-note">
-            Platform help only · attach up to {{ MAX_ATTACHMENTS }} screenshots
+            {{ poweredByLabel }}
           </p>
         </footer>
       </div>

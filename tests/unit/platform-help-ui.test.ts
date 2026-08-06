@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { matchPlatformHelpAnswer } from '../../shared/platform-help'
-import { helpPageKeyFromRoute, isPlatformHelpWidgetVisible } from '../../app/utils/platform-help-ui'
+import {
+  helpPageKeyFromRoute,
+  isPlatformHelpWidgetVisible,
+  platformHelpModelLabel,
+  platformHelpPoweredByLabel,
+} from '../../app/utils/platform-help-ui'
 
 describe('platform-help (P2-15)', () => {
   it('matches keyword answers for invoice questions', () => {
@@ -28,5 +33,11 @@ describe('platform-help (P2-15)', () => {
     expect(isPlatformHelpWidgetVisible(true, null)).toBe(false)
     expect(isPlatformHelpWidgetVisible(true, undefined)).toBe(false)
     expect(isPlatformHelpWidgetVisible(false, { enabled: true })).toBe(false)
+  })
+
+  it('formats OpenRouter model ids for the powered-by footer', () => {
+    expect(platformHelpModelLabel('openai/gpt-4o-mini')).toBe('gpt-4o-mini')
+    expect(platformHelpPoweredByLabel('anthropic/claude-3.5-sonnet')).toBe('Powered by claude-3.5-sonnet')
+    expect(platformHelpPoweredByLabel(null)).toBe('Powered by AI')
   })
 })

@@ -6,7 +6,6 @@ import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseCh
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelSection from '~/components/admin/ControlPanelSection.vue'
 import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMonitor.vue'
-import OpenRouterModelSelector from '~/components/admin/OpenRouterModelSelector.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
 import SettingsImapPanel from '~/components/admin/settings/SettingsImapPanel.vue'
@@ -15,12 +14,12 @@ import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePan
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
 import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
 import SettingsBillingPanel from '~/components/admin/settings/SettingsBillingPanel.vue'
+import SettingsAiPanel from '~/components/admin/settings/SettingsAiPanel.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
   aiHealthTone,
   backupHealthTone,
-  formatCapUsage,
   securitySectionTone,
   smtpHealthTone,
   suspiciousAlertRuleLabel,
@@ -28,9 +27,7 @@ import {
   formatSuspiciousAlertUser,
   formatSuspiciousAlertIps,
   workerQueueStatusLabel,
-  parseOptionalSpendCap,
 } from '~/utils/admin-panel-ui'
-import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
@@ -81,53 +78,6 @@ interface SystemStatus {
     byType: Record<string, { queued: number, processing: number, failed: number }>
     lastActivityAt: string | null
   }
-}
-
-interface AiSettingsView {
-  id: string
-  provider: 'openrouter'
-  enabled: boolean
-  hasApiKey: boolean
-  defaultModel: string
-  serviceLogExtractionModel: string | null
-  invoiceDescriptionModel: string | null
-  platformHelpModel: string | null
-  serviceLogExtractionEnabled: boolean
-  invoiceDescriptionEnabled: boolean
-  platformHelpEnabled: boolean
-  dailySpendCapUsd: string | null
-  monthlySpendCapUsd: string | null
-  updatedAt: string
-}
-
-interface AiUsageSummary {
-  monthStart: string
-  totalRuns: number
-  byFeature: Record<string, number>
-  approvedSuggestions: number
-  estimatedCostUsd: number
-  dailyCostUsd: number
-}
-
-interface AiSpendCaps {
-  dailyUsd: number
-  monthlyUsd: number
-  dailyCapUsd: number | null
-  monthlyCapUsd: number | null
-  dailyExceeded: boolean
-  monthlyExceeded: boolean
-  anyExceeded: boolean
-}
-
-interface AiUsageLogItem {
-  id: string
-  featureType: string
-  model: string
-  promptTokens: number
-  completionTokens: number
-  totalTokens: number
-  estimatedCostUsd: number
-  createdAt: string
 }
 
 interface SuspiciousAlertItem {
@@ -252,108 +202,6 @@ const securityTone = computed(() => {
 })
 
 const canManageAi = computed(() => auth.can('ai.admin.all'))
-const { data: aiData, refresh: refreshAi } = useClientFetch<{
-  settings: AiSettingsView
-  usage: AiUsageSummary
-  spendCaps: AiSpendCaps
-}>(
-  () => (canManageAi.value ? '/api/admin/ai/settings' : null),
-)
-
-const { data: usageLogs, refresh: refreshUsageLogs } = useClientFetch<{
-  items: AiUsageLogItem[]
-  total: number
-}>(() => (canManageAi.value ? '/api/admin/ai/usage' : null))
-
-const aiModelSelectorRef = ref<{ reload: () => Promise<void> } | null>(null)
-
-const aiForm = reactive({
-  enabled: false,
-  defaultModel: '',
-  apiKey: '',
-  serviceLogExtractionEnabled: true,
-  invoiceDescriptionEnabled: true,
-  platformHelpEnabled: true,
-  dailySpendCapUsd: '' as string | number,
-  monthlySpendCapUsd: '' as string | number,
-})
-
-function applyAiSettings(s: AiSettingsView) {
-  aiForm.enabled = s.enabled
-  aiForm.defaultModel = s.defaultModel
-  aiForm.serviceLogExtractionEnabled = s.serviceLogExtractionEnabled
-  aiForm.invoiceDescriptionEnabled = s.invoiceDescriptionEnabled
-  aiForm.platformHelpEnabled = s.platformHelpEnabled
-  aiForm.dailySpendCapUsd = s.dailySpendCapUsd ?? ''
-  aiForm.monthlySpendCapUsd = s.monthlySpendCapUsd ?? ''
-  aiForm.apiKey = ''
-}
-
-watch(() => aiData.value?.settings, (s) => {
-  if (!s) return
-  applyAiSettings(s)
-}, { immediate: true })
-
-const aiSaveBusy = ref(false)
-const aiTestBusy = ref(false)
-const aiMessage = ref('')
-const aiError = ref('')
-
-async function saveAiSettings() {
-  aiSaveBusy.value = true
-  aiMessage.value = ''
-  aiError.value = ''
-  try {
-    const body: Record<string, unknown> = {
-      enabled: aiForm.enabled,
-      defaultModel: aiForm.defaultModel.trim(),
-      serviceLogExtractionEnabled: aiForm.serviceLogExtractionEnabled,
-      invoiceDescriptionEnabled: aiForm.invoiceDescriptionEnabled,
-      platformHelpEnabled: aiForm.platformHelpEnabled,
-      dailySpendCapUsd: parseOptionalSpendCap(aiForm.dailySpendCapUsd),
-      monthlySpendCapUsd: parseOptionalSpendCap(aiForm.monthlySpendCapUsd),
-    }
-    if (aiForm.apiKey.trim()) body.apiKey = aiForm.apiKey.trim()
-
-    const { settings } = await $fetch<{ settings: AiSettingsView }>('/api/admin/ai/settings', { method: 'PATCH', body })
-    applyAiSettings(settings)
-    aiMessage.value = 'AI settings saved'
-    try {
-      await aiModelSelectorRef.value?.reload()
-      await Promise.all([refresh(), refreshAi(), refreshUsageLogs()])
-    }
-    catch (refreshErr: unknown) {
-      aiMessage.value = 'AI settings saved (status refresh failed — reload the page if totals look stale)'
-      console.warn('[ai-settings] refresh after save failed', refreshErr)
-    }
-  }
-  catch (e: unknown) {
-    aiError.value = syncFetchErrorMessage(e, 'Save failed — check encryption setup and try again')
-  }
-  finally {
-    aiSaveBusy.value = false
-  }
-}
-
-async function testAiConnection() {
-  aiTestBusy.value = true
-  aiMessage.value = ''
-  aiError.value = ''
-  try {
-    const res = await $fetch<{ message: string }>('/api/admin/ai/test-connection', {
-      method: 'POST',
-      body: aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {},
-    })
-    aiMessage.value = res.message
-    await aiModelSelectorRef.value?.reload()
-  }
-  catch (e: unknown) {
-    aiError.value = syncFetchErrorMessage(e, 'Connection test failed')
-  }
-  finally {
-    aiTestBusy.value = false
-  }
-}
 
 </script>
 
@@ -508,126 +356,18 @@ async function testAiConnection() {
           id="ai"
           title="AI"
           icon="✦"
-          subtitle="OpenRouter models, caps, and usage"
+          subtitle="Per-task models, caps, and usage"
           :status-tone="status.ai ? aiHealthTone(status.ai.status) : undefined"
           :open="openSections.ai"
           @update:open="setSectionOpen('ai', $event)"
         >
-          <div class="stack">
-            <div v-if="canManageAi && aiData" class="card">
-              <div class="chead">
-                <h3>AI settings</h3>
-                <div class="right"><span class="pill indigo">Human approval required</span></div>
-              </div>
-              <div class="cbody">
-                <p class="help" style="margin:0 0 14px;">
-                  OpenRouter is the sole AI provider. Models and pricing are loaded live from OpenRouter.
-                </p>
-                <OpenRouterModelSelector
-                  ref="aiModelSelectorRef"
-                  v-model="aiForm.defaultModel"
-                  :api-key="aiForm.apiKey"
-                />
-                <label class="fld secret-fld">
-                  OpenRouter API key
-                  <input
-                    v-model="aiForm.apiKey"
-                    type="password"
-                    :placeholder="aiData.settings.hasApiKey ? '•••••••• (leave blank to keep)' : 'sk-or-…'"
-                    autocomplete="off"
-                  >
-                </label>
-                <div class="tglrow">
-                  AI enabled
-                  <span class="tgl"><input v-model="aiForm.enabled" type="checkbox"><span class="tr" /></span>
-                </div>
-                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
-                  Service log extraction
-                  <span class="tgl"><input v-model="aiForm.serviceLogExtractionEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
-                </div>
-                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
-                  Invoice description writer
-                  <span class="tgl"><input v-model="aiForm.invoiceDescriptionEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
-                </div>
-                <div class="tglrow" :class="{ 'ai-toggle-off': !aiForm.enabled }">
-                  Platform help assistant
-                  <span class="tgl"><input v-model="aiForm.platformHelpEnabled" type="checkbox" :disabled="!aiForm.enabled"><span class="tr" /></span>
-                </div>
-                <p class="help" style="margin:8px 0 0;">
-                  Turn off a feature toggle to block that AI workflow for all staff. Changes apply after you save.
-                </p>
-                <label class="fld">
-                  Daily spend cap (USD)
-                  <input v-model="aiForm.dailySpendCapUsd" type="number" min="0" step="0.01" placeholder="No cap">
-                </label>
-                <label class="fld">
-                  Monthly spend cap (USD)
-                  <input v-model="aiForm.monthlySpendCapUsd" type="number" min="0" step="0.01" placeholder="No cap">
-                </label>
-                <p v-if="aiMessage" style="color:#059669; font-size:13px; margin:12px 0 0;">{{ aiMessage }}</p>
-                <p v-if="aiError" style="color:#dc2626; font-size:13px; margin:12px 0 0;">{{ aiError }}</p>
-                <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-                  <button class="btn primary" :disabled="aiSaveBusy" @click="saveAiSettings">
-                    {{ aiSaveBusy ? 'Saving…' : 'Save AI settings' }}
-                  </button>
-                  <button class="btn" :disabled="aiTestBusy" @click="testAiConnection">
-                    {{ aiTestBusy ? 'Testing…' : 'Test connection' }}
-                  </button>
-                </div>
-                <span class="help" style="display:block; margin-top:8px;">
-                  API keys are encrypted in PostgreSQL and never returned to the browser.
-                </span>
-              </div>
-            </div>
-
-            <div v-if="canManageAi && aiData" class="card">
-              <div class="chead"><h3>Usage This Month</h3></div>
-              <dl class="kv">
-                <dt>{{ aiFeatureLabel('service_log_extraction') }}</dt>
-                <dd>{{ aiData.usage.byFeature.service_log_extraction ?? 0 }} runs</dd>
-                <dt>{{ aiFeatureLabel('invoice_description') }}</dt>
-                <dd>{{ aiData.usage.byFeature.invoice_description ?? 0 }} drafts</dd>
-                <dt>{{ aiFeatureLabel('platform_help') }}</dt>
-                <dd>{{ aiData.usage.byFeature.platform_help ?? 0 }} queries</dd>
-                <dt>Approved</dt>
-                <dd>{{ aiData.usage.approvedSuggestions }}</dd>
-                <dt>Est. cost (month)</dt>
-                <dd>${{ aiData.usage.estimatedCostUsd.toFixed(2) }}</dd>
-                <dt>Daily spend</dt>
-                <dd>{{ formatCapUsage(aiData.spendCaps.dailyUsd, aiData.spendCaps.dailyCapUsd) }}</dd>
-                <dt>Monthly spend</dt>
-                <dd>{{ formatCapUsage(aiData.spendCaps.monthlyUsd, aiData.spendCaps.monthlyCapUsd) }}</dd>
-              </dl>
-            </div>
-
-            <div v-if="canManageAi && usageLogs?.items?.length" class="card">
-              <div class="chead">
-                <h3>AI Usage Log</h3>
-                <div class="right"><span class="pill indigo">{{ usageLogs.total }} entries</span></div>
-              </div>
-              <div class="tscroll">
-                <table class="tbl">
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Feature</th>
-                      <th>Model</th>
-                      <th class="num">Tokens</th>
-                      <th class="num">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in usageLogs.items" :key="row.id">
-                      <td><span class="mono" style="font-size:12px">{{ new Date(row.createdAt).toLocaleString() }}</span></td>
-                      <td>{{ aiFeatureLabel(row.featureType) }}</td>
-                      <td><span class="mono" style="font-size:11px">{{ row.model }}</span></td>
-                      <td class="num">{{ row.totalTokens }}</td>
-                      <td class="num">${{ row.estimatedCostUsd.toFixed(4) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <SettingsAiPanel
+            v-if="canManageAi"
+            :active="openSections.ai"
+            @saved="refresh()"
+          />
+          <div v-else class="card">
+            <div class="cbody">You need AI admin permission to manage these settings.</div>
           </div>
         </ControlPanelSection>
 
@@ -738,9 +478,3 @@ async function testAiConnection() {
 
   </section>
 </template>
-
-<style scoped>
-.ai-toggle-off {
-  opacity: 0.55;
-}
-</style>

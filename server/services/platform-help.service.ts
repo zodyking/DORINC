@@ -45,6 +45,8 @@ export interface PlatformHelpStatus {
   aiAvailable: boolean
   capped: boolean
   imageUploadEnabled: boolean
+  /** Effective OpenRouter model id for platform help (override or default). */
+  model: string | null
 }
 
 export async function getPlatformHelpStatus(db: Db): Promise<PlatformHelpStatus> {
@@ -53,11 +55,11 @@ export async function getPlatformHelpStatus(db: Db): Promise<PlatformHelpStatus>
   let aiAvailable = settings.enabled && settings.hasApiKey
   let capped = false
   let imageUploadEnabled = false
+  const model = enabled ? modelForFeature(settings, 'platform_help') : null
 
-  if (aiAvailable) {
+  if (aiAvailable && model) {
     try {
       await assertSpendCapAllowsRequest(db)
-      const model = modelForFeature(settings, 'platform_help')
       imageUploadEnabled = await modelSupportsVision(db, model)
     }
     catch (e) {
@@ -68,7 +70,7 @@ export async function getPlatformHelpStatus(db: Db): Promise<PlatformHelpStatus>
     }
   }
 
-  return { enabled, aiAvailable, capped, imageUploadEnabled }
+  return { enabled, aiAvailable, capped, imageUploadEnabled, model }
 }
 
 interface OpenRouterChatResponse {

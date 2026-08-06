@@ -31,3 +31,17 @@ export function isPlatformHelpWidgetVisible(
 ): boolean {
   return canUseHelp && helpStatus?.enabled === true
 }
+
+/** Short OpenRouter model label for “Powered by …” footers (id after maker/). */
+export function platformHelpModelLabel(modelId: string | null | undefined): string | null {
+  const raw = modelId?.trim()
+  if (!raw) return null
+  const slash = raw.lastIndexOf('/')
+  const name = slash >= 0 ? raw.slice(slash + 1) : raw
+  return name || raw
+}
+
+export function platformHelpPoweredByLabel(modelId: string | null | undefined): string {
+  const label = platformHelpModelLabel(modelId)
+  return label ? `Powered by ${label}` : 'Powered by AI'
+}
