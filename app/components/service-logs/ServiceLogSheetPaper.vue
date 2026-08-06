@@ -140,17 +140,6 @@ const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
           </tr>
         </tbody>
       </table>
-
-      <table class="sign-row">
-        <tr>
-          <td class="sign-left">
-            <div class="sign-line">Customer Signature / Authorization</div>
-          </td>
-          <td class="sign-right">
-            <div class="sign-line">Date</div>
-          </td>
-        </tr>
-      </table>
     </div>
   </div>
 </template>

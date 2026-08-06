@@ -266,22 +266,6 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 .sheet-doc .blank-work-table th.w-total,
 .sheet-doc .blank-work-table td.w-total { width: 22%; text-align: center; }
 .sheet-doc .blank-work-table td { height: 20pt; }
-.sheet-doc .sign-row { margin-top: 8pt; }
-.sheet-doc .sign-row td {
-  vertical-align: bottom;
-  padding: 14pt 0 0;
-}
-.sheet-doc .sign-row td.sign-left { width: 55%; padding-right: 24pt; }
-.sheet-doc .sign-row td.sign-right { width: 45%; }
-.sheet-doc .sign-line {
-  border-top: 0.8pt solid #111111;
-  padding-top: 3pt;
-  color: #4b5563;
-  font-size: 6pt;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 `
 
 /** Letter page box for DomPDF. Never include @page in browser-injected CSS. */
