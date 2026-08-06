@@ -3,21 +3,25 @@ import type { ServiceLogSheetSection } from '#shared/service-log-sheet-default'
 import type { ServiceLogSheetEditor } from '~/composables/useServiceLogSheetEditor'
 
 /**
- * Touch-first editor for the same document the paper view edits.
- * Used on phones and tablets, where a scaled 8.5in page is unreadable.
+ * Line editor for the service log sheet template.
+ * Reads sections from the live document so the list cannot go blank when
+ * derived column helpers are stale.
  */
 const props = defineProps<{ api: ServiceLogSheetEditor }>()
 const emit = defineEmits<{ catalog: [sectionId: string] }>()
 
 const activeColumn = ref<'left' | 'right'>('left')
 
-const columnSections = computed<ServiceLogSheetSection[]>(() =>
-  activeColumn.value === 'left' ? props.api.leftSections : props.api.rightSections,
-)
+const columnSections = computed<ServiceLogSheetSection[]>(() => {
+  const sections = props.api.doc?.sections ?? []
+  return sections.filter(section => section.column === activeColumn.value)
+})
 
 function columnLines(column: 'left' | 'right'): number {
-  const sections = column === 'left' ? props.api.leftSections : props.api.rightSections
-  return sections.reduce((total, section) => total + section.items.length, 0)
+  const sections = props.api.doc?.sections ?? []
+  return sections
+    .filter(section => section.column === column)
+    .reduce((total, section) => total + section.items.length, 0)
 }
 </script>
 

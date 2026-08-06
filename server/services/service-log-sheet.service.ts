@@ -312,8 +312,12 @@ export function renderServiceLogSheetHtml(
 </html>`
 }
 
-export async function renderServiceLogSheetPdf(db: Db): Promise<Buffer> {
+export async function renderServiceLogSheetPdf(
+  db: Db,
+  documentOverride?: ServiceLogSheetDocument | null,
+): Promise<Buffer> {
   const payload = await getServiceLogSheetPayload(db)
+  if (documentOverride) payload.document = documentOverride
   const html = renderServiceLogSheetHtml(payload, { forPdf: true })
   const m = SERVICE_LOG_SHEET_PAGE_MARGIN_IN
   return renderHtmlPdfBuffer(html, {

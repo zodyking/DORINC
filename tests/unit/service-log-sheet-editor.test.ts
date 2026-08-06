@@ -10,15 +10,17 @@ describe('useServiceLogSheetEditor', () => {
 
     api.setDocument(defaultServiceLogSheetDocument())
 
+    expect(api.doc?.version).toBe(2)
+    expect(api.doc?.sections.length).toBeGreaterThan(0)
     expect(Array.isArray(api.gridRows)).toBe(true)
     expect(api.gridRows.length).toBeGreaterThan(0)
-    expect(api.doc?.version).toBe(2)
     expect(api.lineCount).toBeGreaterThan(0)
     expect(api.leftSections.some(section => section.title === 'Cleaning')).toBe(true)
     expect(api.pageFill.capacity).toBeGreaterThan(0)
 
-    api.selectSection(api.leftSections[0]!.id)
-    expect(api.selectedSectionId).toBe(api.leftSections[0]!.id)
-    expect(api.findSection(api.leftSections[0]!.id)?.title).toBe('Cleaning')
+    const firstLeft = api.leftSections[0]!
+    api.selectSection(firstLeft.id)
+    expect(api.selectedSectionId).toBe(firstLeft.id)
+    expect(api.findSection(firstLeft.id)?.title).toBe('Cleaning')
   })
 })
