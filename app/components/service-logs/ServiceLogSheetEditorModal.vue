@@ -85,7 +85,7 @@ const EDIT_CSS = `
 }
 .sl-paper-edit .service-name > .sheet-input { font-size: 8pt; font-weight: 600; line-height: 1.12; }
 .sl-paper-edit .service-subtext .sheet-input { font-size: 6.5pt; font-weight: 400; color: #6b7280; line-height: 1.1; }
-.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 7pt; font-weight: 700; }
+.sl-paper-edit .printed-price .sheet-input { width: 100%; text-align: center; font-size: 6.5pt; font-weight: 700; }
 .sl-paper-edit .sec-tools {
   display: none; gap: 2px; position: absolute; z-index: 3;
   top: 1px; right: 1px; margin: 0; padding: 0;

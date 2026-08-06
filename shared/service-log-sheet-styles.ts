@@ -142,7 +142,7 @@ table { border-collapse: collapse; width: 100%; }
 }
 .col-head-inner .h-service { text-align: left; }
 .col-head-inner .h-price {
-  width: 56pt;
+  width: 64pt;
   text-align: center;
 }
 .catalog-grid {
@@ -185,7 +185,7 @@ table { border-collapse: collapse; width: 100%; }
   table-layout: fixed;
 }
 .service-table col.check-column { width: 11pt; }
-.service-table col.price-column { width: 56pt; }
+.service-table col.price-column { width: 64pt; }
 .service-table td {
   padding: 1.25pt 2pt;
   border-bottom: 0.5pt solid #d7dbe0;
@@ -216,7 +216,7 @@ table { border-collapse: collapse; width: 100%; }
   line-height: 1.1;
   font-weight: 400;
 }
-.price-cell { padding: 1pt !important; width: 56pt; }
+.price-cell { padding: 1pt !important; width: 64pt; }
 .price-entry {
   width: 100%;
   border-collapse: collapse;
@@ -225,12 +225,12 @@ table { border-collapse: collapse; width: 100%; }
 }
 .price-entry td {
   border: 0 !important;
-  padding: 1pt 1pt !important;
-  font-size: 7pt !important;
+  padding: 1pt 0.5pt !important;
+  font-size: 6.5pt !important;
   line-height: 1.1 !important;
   vertical-align: middle !important;
   height: 10.5pt;
-  overflow: hidden;
+  overflow: visible;
 }
 .price-entry .printed-price {
   width: 50%;
