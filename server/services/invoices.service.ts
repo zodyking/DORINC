@@ -378,6 +378,7 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       resolved.vehicleId = log.vehicleId
       resolved.serviceLogId = log.id
       resolved.invoiceDate = input.invoiceDate ?? log.serviceDate
+      resolved.dueDate = input.dueDate ?? log.dueDate ?? null
       resolved.complaint = input.complaint ?? log.complaint
       resolved.internalNotes = input.internalNotes ?? log.internalNotes
       resolved.serviceLocation = input.serviceLocation ?? log.location

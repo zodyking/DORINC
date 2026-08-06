@@ -30,10 +30,10 @@ describe('training catalog', () => {
     expect(trainingCategoryLabel('service_logs')).toContain('Service')
   })
 
-  it('includes voice and photo service log modules', () => {
+  it('includes photo service log and navigation modules', () => {
     const slugs = TRAINING_CATALOG.map(m => m.slug)
-    expect(slugs).toContain('service-log-voice')
     expect(slugs).toContain('service-log-photos')
+    expect(slugs).not.toContain('service-log-voice')
     expect(slugs).toContain('platform-navigation')
   })
 

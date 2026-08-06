@@ -38,6 +38,7 @@ export const serviceLogCreateSchema = z.object({
   customerId: uuidSchema,
   vehicleId: uuidSchema,
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullish(),
   odometerReading: z.string().max(60).nullish(),
   location: z.string().max(200).nullish(),
   workType: serviceLogWorkTypeSchema.optional(),
@@ -60,6 +61,7 @@ export const serviceLogStatusChangeSchema = z.object({
 
 export const serviceLogConvertToInvoiceSchema = z.object({
   invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullish(),
 }).default({})
 
 export const serviceLogListQuerySchema = z.object({

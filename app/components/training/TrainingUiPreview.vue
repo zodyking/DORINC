@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import StaffNavIcon from '~/components/staff/StaffNavIcon.vue'
 import type { StaffNavIconName } from '~/components/staff/StaffNavIcon.vue'
-import CommonLineItemsTable from '~/components/common/LineItemsTable.vue'
-import { PHOTO_UPLOAD_PICK, VOICE_ENTRY_PICK } from '~/utils/entry-mode-labels'
 import { INVOICE_WIZARD_STEPS } from '~/utils/invoice-creator-ui'
 import { invoiceStatusPill, moneyDisplay } from '~/utils/invoices-ui'
 import { serviceLogStatusPill, type ServiceLogStatus } from '~/utils/service-logs-ui'
@@ -19,17 +17,16 @@ const workspaceNav: Array<{ id: string, label: string, icon: StaffNavIconName, h
   { id: 'invoices', label: 'Invoices', icon: 'invoices', hint: 'Create, edit, and send invoices. Use New invoice from the list page.' },
   { id: 'customers', label: 'Customers', icon: 'customers', hint: 'Fleet accounts, contacts, billing preferences, and portal access.' },
   { id: 'vehicles', label: 'Vehicles', icon: 'vehicles', hint: 'Unit tags, bus numbers, VIN, and service history per vehicle.' },
-  { id: 'service-logs', label: 'Service Logs', icon: 'service-logs', hint: 'New service log wizard — photo sheet or voice line items.' },
+  { id: 'service-logs', label: 'Service Logs', icon: 'service-logs', hint: 'New service log wizard — customer, vehicle, dates, symptoms, and photos.' },
   { id: 'training', label: 'Training', icon: 'training', hint: 'Assigned tutorials and module library (admins).' },
 ]
 
 const serviceLogSteps = [
   { n: 1, label: 'Customer' },
   { n: 2, label: 'Vehicle' },
-  { n: 3, label: 'When' },
-  { n: 4, label: 'Work' },
-  { n: 5, label: 'Log' },
-  { n: 6, label: 'Submit' },
+  { n: 3, label: 'Dates' },
+  { n: 4, label: 'Log' },
+  { n: 5, label: 'Submit' },
 ]
 
 const logStatuses: ServiceLogStatus[] = [
@@ -38,11 +35,6 @@ const logStatuses: ServiceLogStatus[] = [
   'ready_for_review',
   'in_review',
   'converted_to_invoice',
-]
-
-const sampleVoiceLines = [
-  { lineType: 'labor' as const, description: 'Replaced DPF sensor', qty: '2', rate: '145.00', amount: '290.00' },
-  { lineType: 'part' as const, description: 'DPF sensor kit', qty: '1', rate: '312.50', amount: '312.50' },
 ]
 
 const sampleCustomers = [
@@ -115,77 +107,28 @@ const searchQuery = ref('606')
       </p>
     </div>
 
-    <!-- Service log wizard — step bar + log mode picker -->
-    <div v-else-if="preview === 'service-log-wizard'" class="training-ui-sl">
+    <!-- Service log wizard — simplified photo flow -->
+    <div v-else-if="preview === 'service-log-wizard' || preview === 'service-log-photos' || preview === 'service-log-voice'" class="training-ui-sl">
       <div class="sl-progress" aria-label="Service log steps">
         <div
           v-for="s in serviceLogSteps"
           :key="s.n"
           class="sl-step"
-          :class="{ on: s.n === 5, done: s.n < 5 }"
+          :class="{ on: s.n === 4, done: s.n < 4 }"
         >
           <div class="dot">{{ s.n }}</div>{{ s.label }}
         </div>
       </div>
-      <h3 style="margin:14px 0 6px;font-size:1rem;">Service log</h3>
-      <p class="sl-hint">How did you record the work?</p>
-      <div class="sl-picks sl-log-modes">
-        <div class="sl-pick sl-log-mode on">
-          <span class="av indigo" aria-hidden="true">📷</span>
-          <span class="nm">
-            <b>{{ PHOTO_UPLOAD_PICK.title }}</b>
-            <small>{{ PHOTO_UPLOAD_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </div>
-        <div class="sl-pick sl-log-mode">
-          <span class="av teal" aria-hidden="true">🎙️</span>
-          <span class="nm">
-            <b>{{ VOICE_ENTRY_PICK.title }}</b>
-            <small>{{ VOICE_ENTRY_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Voice line wizard result -->
-    <div v-else-if="preview === 'service-log-voice'" class="training-ui-sl">
-      <div class="sl-progress" aria-label="Service log steps">
-        <div
-          v-for="s in serviceLogSteps"
-          :key="s.n"
-          class="sl-step"
-          :class="{ on: s.n === 5, done: s.n < 5 }"
-        >
-          <div class="dot">{{ s.n }}</div>{{ s.label }}
-        </div>
-      </div>
-      <p class="sl-hint" style="margin-top:12px;">
-        After choosing <strong>Use your voice</strong>, tap the microphone on each line. The wizard asks for type, description, quantity, and rate.
-      </p>
-      <CommonLineItemsTable :lines="sampleVoiceLines" title="Line items (example)" />
-    </div>
-
-    <!-- Photo upload zone -->
-    <div v-else-if="preview === 'service-log-photos'" class="training-ui-sl">
-      <div class="sl-progress" aria-label="Service log steps">
-        <div
-          v-for="s in serviceLogSteps"
-          :key="s.n"
-          class="sl-step"
-          :class="{ on: s.n === 5, done: s.n < 5 }"
-        >
-          <div class="dot">{{ s.n }}</div>{{ s.label }}
-        </div>
-      </div>
-      <p class="sl-hint" style="margin-top:12px;">
-        Photograph the paper service log sheet only — the form where the mechanic wrote down the work.
-      </p>
+      <h3 style="margin:14px 0 6px;font-size:1rem;">Symptoms &amp; photos</h3>
+      <p class="sl-hint">Capture the customer complaint, then photograph the paper service log.</p>
+      <label class="fld">
+        <span>Vehicle symptoms / customer complaint</span>
+        <textarea rows="3" readonly placeholder="What the customer or driver reported…" />
+      </label>
       <div class="sl-photo-zone training-ui-readonly">
         <div class="sl-photo-inner">
-          <span class="ico" aria-hidden="true">📄</span>
-          <b>Tap to photograph the sheet</b>
+          <span class="ico" aria-hidden="true">📷</span>
+          <b>Tap to add photos</b>
           <span>JPG, PNG · multiple pages OK</span>
         </div>
       </div>

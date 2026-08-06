@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { TRAINING_CUSTOMERS, TRAINING_VEHICLES } from '#shared/training-fixtures'
-import { PHOTO_UPLOAD_PICK, VOICE_ENTRY_PICK } from '~/utils/entry-mode-labels'
 import { useTrainingPracticeSession } from '~/composables/useTrainingPracticeSession'
 import { vehicleSub, vehicleTag } from '~/utils/vehicles-ui'
-import { workTypeLabel, logNumberDisplay } from '~/utils/service-logs-ui'
-import CommonLineItemsTable from '~/components/common/LineItemsTable.vue'
+import { logNumberDisplay } from '~/utils/service-logs-ui'
 
 const props = defineProps<{
   practiceId: string
@@ -27,10 +25,9 @@ const selectedVehicle = computed(() => TRAINING_VEHICLES.find(v => v.id === serv
 const wizardSteps = [
   { n: 1, label: 'Customer' },
   { n: 2, label: 'Vehicle' },
-  { n: 3, label: 'When' },
-  { n: 4, label: 'Work' },
-  { n: 5, label: 'Log' },
-  { n: 6, label: 'Submit' },
+  { n: 3, label: 'Dates' },
+  { n: 4, label: 'Log' },
+  { n: 5, label: 'Submit' },
 ]
 
 const activeWizardStep = computed(() => {
@@ -38,13 +35,14 @@ const activeWizardStep = computed(() => {
     'sl-customer': 1,
     'sl-vehicle': 2,
     'sl-when': 3,
+    'sl-dates': 3,
     'sl-work': 4,
-    'sl-log-photo': 5,
-    'sl-log-voice': 5,
-    'sl-review-photo': 6,
-    'sl-review-voice': 6,
-    'sl-submit-photo': 6,
-    'sl-submit-voice': 6,
+    'sl-log-photo': 4,
+    'sl-log-voice': 4,
+    'sl-review-photo': 5,
+    'sl-review-voice': 5,
+    'sl-submit-photo': 5,
+    'sl-submit-voice': 5,
   }
   return map[props.practiceId] ?? 1
 })
@@ -58,22 +56,6 @@ function addPracticePhoto() {
   serviceLog.logMode = 'upload'
 }
 
-function addPracticeLine() {
-  if (serviceLog.digitalLines.length >= 1) return
-  serviceLog.digitalLines.push({
-    lineType: 'labor',
-    description: 'Replaced DPF sensor',
-    qty: '2',
-    rate: '145.00',
-    amount: '290.00',
-  })
-  serviceLog.logMode = 'digital'
-}
-
-function removePracticeLine() {
-  serviceLog.digitalLines = []
-}
-
 const ready = computed(() => {
   switch (props.practiceId) {
     case 'sl-customer':
@@ -81,13 +63,13 @@ const ready = computed(() => {
     case 'sl-vehicle':
       return !!serviceLog.vehicleId
     case 'sl-when':
-      return !!serviceLog.serviceDate && !!serviceLog.odometerReading.trim() && !!serviceLog.location.trim()
+    case 'sl-dates':
+      return !!serviceLog.serviceDate && !!serviceLog.dueDate && serviceLog.dueDate >= serviceLog.serviceDate
     case 'sl-work':
       return !!serviceLog.complaint.trim()
     case 'sl-log-photo':
-      return serviceLog.logMode === 'upload' && serviceLog.photoAdded
     case 'sl-log-voice':
-      return serviceLog.logMode === 'digital' && serviceLog.digitalLines.length >= 1
+      return !!serviceLog.complaint.trim() && serviceLog.photoAdded
     case 'sl-review-photo':
     case 'sl-review-voice':
       return true
@@ -121,10 +103,9 @@ function mockSubmit() {
       </div>
     </div>
 
-    <!-- Step 1: Customer -->
     <div v-if="practiceId === 'sl-customer'" class="sl-panel active">
       <h3>Which customer?</h3>
-      <p class="sl-hint">Select the account this service was performed for. These are sample fleet accounts for practice.</p>
+      <p class="sl-hint">Select the account this service was performed for.</p>
       <div class="sl-picks">
         <button
           v-for="c in customers"
@@ -144,7 +125,6 @@ function mockSubmit() {
       </div>
     </div>
 
-    <!-- Step 2: Vehicle -->
     <div v-else-if="practiceId === 'sl-vehicle'" class="sl-panel active">
       <h3>Which vehicle?</h3>
       <p class="sl-hint">
@@ -170,117 +150,45 @@ function mockSubmit() {
       <div v-else class="sl-empty-veh">Select a customer on the previous step first.</div>
     </div>
 
-    <!-- Step 3: When -->
-    <div v-else-if="practiceId === 'sl-when'" class="sl-panel active">
-      <h3>When &amp; where?</h3>
-      <p class="sl-hint">Service date, meter reading, and job location.</p>
-      <label class="fld"><span>Service date</span><input v-model="serviceLog.serviceDate" type="date" required></label>
-      <label class="fld"><span>Odometer or hours</span>
-        <input v-model="serviceLog.odometerReading" type="text" placeholder="e.g. 412,806 mi or 2,148 hrs">
-      </label>
-      <label class="fld"><span>Job location</span>
-        <input v-model="serviceLog.location" type="text" placeholder="Shop bay, customer yard, roadside…">
-      </label>
+    <div v-else-if="practiceId === 'sl-when' || practiceId === 'sl-dates'" class="sl-panel active">
+      <h3>Invoice dates</h3>
+      <p class="sl-hint">These dates carry onto the invoice when this log is sent.</p>
+      <label class="fld"><span>Invoice date</span><input v-model="serviceLog.serviceDate" type="date" required></label>
+      <label class="fld"><span>Due date</span><input v-model="serviceLog.dueDate" type="date" required></label>
     </div>
 
-    <!-- Step 4: Work -->
-    <div v-else-if="practiceId === 'sl-work'" class="sl-panel active">
-      <h3>What was done?</h3>
-      <p class="sl-hint">Capture the customer complaint and optional internal shop notes.</p>
-      <label class="fld"><span>Work type</span>
-        <select v-model="serviceLog.workType">
-          <option value="preventive_maintenance">Preventive maintenance</option>
-          <option value="repair">Repair / breakdown</option>
-          <option value="diagnostic">Diagnostic</option>
-          <option value="inspection">Inspection</option>
-          <option value="other">Other</option>
-        </select>
-      </label>
-      <label class="fld"><span>Customer complaint / symptoms</span>
+    <div
+      v-else-if="practiceId === 'sl-work' || practiceId === 'sl-log-photo' || practiceId === 'sl-log-voice'"
+      class="sl-panel active"
+    >
+      <h3>Symptoms &amp; photos</h3>
+      <p class="sl-hint">Capture the customer complaint, then attach a practice photo of the paperwork.</p>
+      <label class="fld"><span>Vehicle symptoms / customer complaint</span>
         <textarea v-model="serviceLog.complaint" rows="3" placeholder="What the customer or driver reported…" />
       </label>
-      <label class="fld"><span>Internal notes <span class="fld-badge">Staff only</span></span>
-        <textarea v-model="serviceLog.internalNotes" rows="2" placeholder="Parts replaced, fault codes…" />
-      </label>
-    </div>
-
-    <!-- Step 5: Log photo -->
-    <div v-else-if="practiceId === 'sl-log-photo'" class="sl-panel active">
-      <h3>Service log — photo</h3>
-      <p class="sl-hint">Choose <strong>{{ PHOTO_UPLOAD_PICK.title }}</strong>, then add a practice photo (no camera needed in training).</p>
-      <div v-if="!serviceLog.logMode" class="sl-picks sl-log-modes">
-        <button type="button" class="sl-pick sl-log-mode" @click="serviceLog.logMode = 'upload'">
-          <span class="av indigo" aria-hidden="true">📷</span>
-          <span class="nm">
-            <b>{{ PHOTO_UPLOAD_PICK.title }}</b>
-            <small>{{ PHOTO_UPLOAD_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </button>
-      </div>
-      <div v-else class="sl-log-upload">
-        <p class="sl-hint">Photograph the paper service log sheet only.</p>
-        <button v-if="!serviceLog.photoAdded" type="button" class="btn primary" @click="addPracticePhoto">
-          Add practice photo
-        </button>
-        <div v-else class="sl-photo-grid">
-          <div class="sl-photo-item">
-            <div class="training-practice-photo-placeholder">Practice sheet</div>
-          </div>
+      <button v-if="!serviceLog.photoAdded" type="button" class="btn primary" @click="addPracticePhoto">
+        Add practice photo
+      </button>
+      <div v-else class="sl-photo-grid">
+        <div class="sl-photo-item">
+          <div class="training-practice-photo-placeholder">Practice sheet</div>
         </div>
-        <button type="button" class="btn ghost sm sl-change-mode" @click="serviceLog.logMode = null; serviceLog.photoAdded = false">
-          Change method
-        </button>
       </div>
     </div>
 
-    <!-- Step 5: Log voice -->
-    <div v-else-if="practiceId === 'sl-log-voice'" class="sl-panel active">
-      <h3>Service log — voice</h3>
-      <p class="sl-hint">
-        Choose <strong>{{ VOICE_ENTRY_PICK.title }}</strong>. In the real app the microphone guides each field — here, add a practice line manually.
-      </p>
-      <div v-if="!serviceLog.logMode" class="sl-picks sl-log-modes">
-        <button type="button" class="sl-pick sl-log-mode" @click="serviceLog.logMode = 'digital'">
-          <span class="av teal" aria-hidden="true">🎙️</span>
-          <span class="nm">
-            <b>{{ VOICE_ENTRY_PICK.title }}</b>
-            <small>{{ VOICE_ENTRY_PICK.serviceLogDescription }}</small>
-          </span>
-          <span class="chk" />
-        </button>
-      </div>
-      <div v-else class="sl-log-digital">
-        <button v-if="!serviceLog.digitalLines.length" type="button" class="btn primary" @click="addPracticeLine">
-          Add practice line item
-        </button>
-        <CommonLineItemsTable v-else :lines="serviceLog.digitalLines" title="Your lines" />
-        <button v-if="serviceLog.digitalLines.length" type="button" class="btn ghost sm" @click="removePracticeLine">Clear lines</button>
-        <button type="button" class="btn ghost sm sl-change-mode" @click="serviceLog.logMode = null; serviceLog.digitalLines = []">
-          Change method
-        </button>
-      </div>
-    </div>
-
-    <!-- Review -->
     <div v-else-if="practiceId === 'sl-review-photo' || practiceId === 'sl-review-voice'" class="sl-panel active">
       <h3>Review your practice log</h3>
       <p class="sl-hint">Confirm everything looks right before the final submit step.</p>
       <div class="sl-review">
         <div class="r"><span class="k">Customer</span><span class="v">{{ selectedCustomer?.displayName ?? '—' }}</span></div>
         <div class="r"><span class="k">Vehicle</span><span class="v">{{ selectedVehicle ? vehicleTag(selectedVehicle) : '—' }}</span></div>
-        <div class="r"><span class="k">Service date</span><span class="v">{{ serviceLog.serviceDate }}</span></div>
-        <div class="r"><span class="k">Odometer / hours</span><span class="v">{{ serviceLog.odometerReading || '—' }}</span></div>
-        <div class="r"><span class="k">Location</span><span class="v">{{ serviceLog.location || '—' }}</span></div>
-        <div class="r"><span class="k">Work type</span><span class="v">{{ workTypeLabel(serviceLog.workType) }}</span></div>
-        <div class="r stack"><span class="k">Complaint</span><span class="v">{{ serviceLog.complaint || '—' }}</span></div>
-        <div class="r"><span class="k">Log method</span>
-          <span class="v">{{ practiceId === 'sl-review-photo' ? 'Photo upload' : 'Voice / digital lines' }}</span>
-        </div>
+        <div class="r"><span class="k">Invoice date</span><span class="v">{{ serviceLog.serviceDate }}</span></div>
+        <div class="r"><span class="k">Due date</span><span class="v">{{ serviceLog.dueDate }}</span></div>
+        <div class="r stack"><span class="k">Symptoms / complaint</span><span class="v">{{ serviceLog.complaint || '—' }}</span></div>
+        <div class="r"><span class="k">Photos</span><span class="v">{{ serviceLog.photoAdded ? '1 photo' : 'None' }}</span></div>
       </div>
     </div>
 
-    <!-- Submit -->
     <div v-else-if="practiceId === 'sl-submit-photo' || practiceId === 'sl-submit-voice'" class="sl-panel active">
       <h3>Submit practice log</h3>
       <p class="sl-hint">Tap submit to finish the practice run. No real log is created.</p>

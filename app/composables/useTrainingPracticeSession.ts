@@ -5,12 +5,9 @@ export interface ServiceLogPracticeState {
   customerId: string
   vehicleId: string
   serviceDate: string
-  odometerReading: string
-  location: string
-  workType: string
+  dueDate: string
   complaint: string
-  internalNotes: string
-  logMode: 'upload' | 'digital' | null
+  logMode: 'upload' | null
   photoAdded: boolean
   digitalLines: WizardLineDraft[]
   mockSubmitted: boolean
@@ -38,15 +35,15 @@ export interface TrainingPracticeSession {
 const TRAINING_PRACTICE_KEY: InjectionKey<TrainingPracticeSession> = Symbol('training-practice')
 
 function defaultServiceLogState(): ServiceLogPracticeState {
+  const today = new Date().toISOString().slice(0, 10)
+  const due = new Date()
+  due.setDate(due.getDate() + 30)
   return {
     customerId: '',
     vehicleId: '',
-    serviceDate: new Date().toISOString().slice(0, 10),
-    odometerReading: '',
-    location: '',
-    workType: 'repair',
+    serviceDate: today,
+    dueDate: due.toISOString().slice(0, 10),
     complaint: '',
-    internalNotes: '',
     logMode: null,
     photoAdded: false,
     digitalLines: [],
@@ -90,6 +87,6 @@ export function provideTrainingPracticeSession(): TrainingPracticeSession {
 
 export function useTrainingPracticeSession(): TrainingPracticeSession {
   const session = inject(TRAINING_PRACTICE_KEY)
-  if (!session) throw new Error('Training practice session not provided')
+  if (!session) throw new Error('Training practice session missing')
   return session
 }
