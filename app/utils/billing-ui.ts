@@ -3,8 +3,8 @@ export const BILLING_PROVIDER_LABELS = {
     name: 'Vultr',
     category: 'Web hosting',
   },
-  namecheap: {
-    name: 'Namecheap',
+  cloudflare: {
+    name: 'Cloudflare',
     category: 'Domain provider',
   },
   openrouter: {
@@ -17,7 +17,7 @@ export type BillingProviderKey = keyof typeof BILLING_PROVIDER_LABELS
 
 export const BILLING_PROVIDER_ACCOUNT_URLS: Record<BillingProviderKey, string> = {
   vultr: 'https://my.vultr.com/',
-  namecheap: 'https://www.namecheap.com/myaccount/login/',
+  cloudflare: 'https://dash.cloudflare.com/',
   openrouter: 'https://openrouter.ai/settings/credits',
 }
 
@@ -100,4 +100,94 @@ export function formatVultrFeatureList(values: string[]): string {
 export function formatVultrMonthlyCost(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—'
   return `${billingMoney(value)}/month`
+}
+
+export function formatCloudflarePrivacy(mode: string | null | undefined): string {
+  if (!mode) return '—'
+  if (mode === 'redaction') return 'WHOIS redaction'
+  return formatVultrInstanceStatus(mode)
+}
+
+export function formatYesNo(value: boolean | null | undefined): string {
+  if (value == null) return '—'
+  return value ? 'Yes' : 'No'
+}
+
+export interface BillingChartGeometry {
+  width: number
+  height: number
+  padX: number
+  padY: number
+  maxValue: number
+  actualPath: string
+  projectedPath: string
+  areaPath: string
+  points: Array<{
+    x: number
+    yActual: number | null
+    yProjected: number | null
+    label: string
+    actualUsd: number | null
+    projectedUsd: number | null
+  }>
+}
+
+export function buildBillingChartGeometry(
+  points: Array<{ label: string, actualUsd: number | null, projectedUsd: number | null }>,
+  width = 640,
+  height = 220,
+): BillingChartGeometry {
+  const padX = 28
+  const padY = 24
+  const values = points.flatMap(p => [p.actualUsd, p.projectedUsd]).filter((v): v is number => v != null)
+  const maxValue = Math.max(1, ...values) * 1.15
+  const innerW = width - padX * 2
+  const innerH = height - padY * 2
+  const step = points.length > 1 ? innerW / (points.length - 1) : 0
+
+  const mapped = points.map((point, index) => {
+    const x = padX + index * step
+    const yActual = point.actualUsd == null
+      ? null
+      : padY + innerH - (point.actualUsd / maxValue) * innerH
+    const yProjected = point.projectedUsd == null
+      ? null
+      : padY + innerH - (point.projectedUsd / maxValue) * innerH
+    return {
+      x,
+      yActual,
+      yProjected,
+      label: point.label,
+      actualUsd: point.actualUsd,
+      projectedUsd: point.projectedUsd,
+    }
+  })
+
+  const toPath = (key: 'yActual' | 'yProjected') => {
+    const coords = mapped
+      .filter(p => p[key] != null)
+      .map(p => `${p.x},${p[key]}`)
+    if (!coords.length) return ''
+    return `M ${coords.join(' L ')}`
+  }
+
+  const projectedCoords = mapped.filter(p => p.yProjected != null)
+  let areaPath = ''
+  if (projectedCoords.length) {
+    const first = projectedCoords[0]!
+    const last = projectedCoords[projectedCoords.length - 1]!
+    areaPath = `M ${first.x},${padY + innerH} L ${projectedCoords.map(p => `${p.x},${p.yProjected}`).join(' L ')} L ${last.x},${padY + innerH} Z`
+  }
+
+  return {
+    width,
+    height,
+    padX,
+    padY,
+    maxValue,
+    actualPath: toPath('yActual'),
+    projectedPath: toPath('yProjected'),
+    areaPath,
+    points: mapped,
+  }
 }

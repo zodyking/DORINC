@@ -31,6 +31,11 @@ export function mapDomainRenewalsForDashboard(rows: DomainRenewal[]): BillingDas
         daysUntilRenewal: days,
         renewalCost: row.renewalCost,
         currency: 'USD',
+        registeredAt: null,
+        autoRenew: null,
+        locked: null,
+        status: null,
+        privacyMode: null,
       }
     })
     .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal)
