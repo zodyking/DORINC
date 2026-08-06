@@ -65,7 +65,7 @@ function audienceDetail(row: AnnouncementRow) {
 </script>
 
 <template>
-  <section class="page active">
+  <section class="page active ann-list-page">
     <StaffPageHead subtitle="Mandatory full-screen messages shown after login before the dashboard">
       <template #title>Login messages</template>
       <template #actions>
@@ -73,79 +73,135 @@ function audienceDetail(row: AnnouncementRow) {
       </template>
     </StaffPageHead>
 
-    <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
+    <p v-if="error" class="help ann-error">{{ error }}</p>
     <div v-if="pending && !items.length" class="cp-state">Loading…</div>
 
-    <div v-else class="card">
-      <div class="tscroll">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Audience</th>
-              <th>Status</th>
-              <th>Priority</th>
-              <th>Seen</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in items" :key="row.id">
-              <td>
-                <NuxtLink :to="`/admin/announcements/${row.id}`" class="ann-title-link">{{ row.title }}</NuxtLink>
-                <div v-if="row.subtitle" class="help">{{ row.subtitle }}</div>
-              </td>
-              <td>
-                <div>{{ audienceModeLabel(row.audienceMode) }}</div>
-                <div class="help">{{ audienceDetail(row) }}</div>
-              </td>
-              <td>
-                <span :class="row.isActive ? 'pill ok' : 'pill gray'">
-                  {{ row.isActive ? 'Active' : 'Inactive' }}
-                </span>
-              </td>
-              <td>{{ row.priority }}</td>
-              <td>{{ row.acknowledgementCount }}</td>
-              <td class="ann-actions">
-                <button type="button" class="btn sm" @click="toggleActive(row)">
-                  {{ row.isActive ? 'Deactivate' : 'Activate' }}
-                </button>
-                <NuxtLink :to="`/admin/announcements/${row.id}`" class="btn sm">Edit</NuxtLink>
-                <button
-                  type="button"
-                  class="btn sm"
-                  :disabled="deleteBusy === row.id"
-                  @click="removeRow(row)"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!items.length">
-              <td colspan="6" class="empty" style="display:table-cell;">
-                No login messages yet. Create one to require staff to read it after sign-in.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div v-else-if="!items.length" class="ann-empty">
+      <h2>No login messages yet</h2>
+      <p>Create an active message to force staff through a full-screen notice after sign-in.</p>
+      <NuxtLink to="/admin/announcements/new" class="btn primary">Create message</NuxtLink>
+    </div>
+
+    <div v-else class="ann-cards">
+      <article
+        v-for="row in items"
+        :key="row.id"
+        class="ann-card"
+      >
+        <div class="ann-card-main">
+          <div class="ann-card-title-row">
+            <NuxtLink :to="`/admin/announcements/${row.id}`" class="ann-title-link">
+              {{ row.title }}
+            </NuxtLink>
+            <span :class="row.isActive ? 'pill ok' : 'pill gray'">
+              {{ row.isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </div>
+          <p v-if="row.subtitle" class="ann-card-sub">{{ row.subtitle }}</p>
+          <div class="ann-card-meta">
+            <span>{{ audienceModeLabel(row.audienceMode) }} · {{ audienceDetail(row) }}</span>
+            <span>Priority {{ row.priority }}</span>
+            <span>{{ row.acknowledgementCount }} seen</span>
+          </div>
+        </div>
+        <div class="ann-card-actions">
+          <button type="button" class="btn sm" @click="toggleActive(row)">
+            {{ row.isActive ? 'Deactivate' : 'Activate' }}
+          </button>
+          <NuxtLink :to="`/admin/announcements/${row.id}`" class="btn sm">Edit</NuxtLink>
+          <button
+            type="button"
+            class="btn sm"
+            :disabled="deleteBusy === row.id"
+            @click="removeRow(row)"
+          >
+            Delete
+          </button>
+        </div>
+      </article>
     </div>
   </section>
 </template>
 
 <style scoped>
+.ann-list-page {
+  max-width: 1100px;
+}
+.ann-error {
+  color: #dc2626;
+}
+.ann-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 36px 24px;
+  text-align: center;
+  background: #f8fafc;
+}
+.ann-empty h2 {
+  margin: 0 0 8px;
+}
+.ann-empty p {
+  margin: 0 0 16px;
+  color: #64748b;
+}
+.ann-cards {
+  display: grid;
+  gap: 10px;
+}
+.ann-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+.ann-card-main {
+  min-width: 0;
+}
+.ann-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .ann-title-link {
-  font-weight: 650;
+  font-weight: 700;
   color: inherit;
   text-decoration: none;
+  font-size: 1.05rem;
 }
 .ann-title-link:hover {
   text-decoration: underline;
 }
-.ann-actions {
+.ann-card-sub {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+.ann-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+.ann-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
+  flex-shrink: 0;
+}
+@media (max-width: 720px) {
+  .ann-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ann-card-actions {
+    justify-content: flex-start;
+  }
 }
 </style>
