@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import type {
   ServiceLogSheetDocument,
@@ -10,11 +10,6 @@ import {
   sheetFrontPageFill,
   sheetGridRows,
 } from '#shared/service-log-sheet-layout'
-
-/**
- * Single reactive editor object. Child templates read `api.gridRows` / `api.doc`
- * directly — nested ref bags left the Paper view blank on mobile WebKit.
- */
 
 export interface SheetCatalogPick {
   id: string
@@ -37,78 +32,86 @@ function blankLine(): ServiceLogSheetLine {
 }
 
 /**
- * Editing state for the service log sheet, shared by the WYSIWYG paper editor
- * and the mobile line editor so both views mutate one document.
+ * Sheet editor state. Keep `doc` as a reactive object field (not a nested Ref)
+ * so parent and child templates can read `api.doc.sections` without `.value`.
  */
 export function useServiceLogSheetEditor() {
-  const api = reactive({
-    doc: null as ServiceLogSheetDocument | null,
-    selectedSectionId: null as string | null,
-    selectedItemId: null as string | null,
+  const doc = ref<ServiceLogSheetDocument | null>(null)
+  const selectedSectionId = ref<string | null>(null)
+  const selectedItemId = ref<string | null>(null)
 
-    get sections(): ServiceLogSheetSection[] {
-      return api.doc?.sections ?? []
+  const api = reactive({
+    get doc() {
+      return doc.value
     },
-    get leftSections(): ServiceLogSheetSection[] {
-      return sectionsByColumn(api.doc ?? { version: 2, sections: [] }).left
+    set doc(value: ServiceLogSheetDocument | null) {
+      doc.value = value
     },
-    get rightSections(): ServiceLogSheetSection[] {
-      return sectionsByColumn(api.doc ?? { version: 2, sections: [] }).right
+    get selectedSectionId() {
+      return selectedSectionId.value
     },
-    get gridRows() {
-      return sheetGridRows(api.doc ?? { version: 2, sections: [] })
+    set selectedSectionId(value: string | null) {
+      selectedSectionId.value = value
     },
-    get pageFill() {
-      return sheetFrontPageFill(api.doc ?? { version: 2, sections: [] })
+    get selectedItemId() {
+      return selectedItemId.value
     },
-    get lineCount(): number {
-      return api.sections.reduce((total, section) => total + section.items.length, 0)
+    set selectedItemId(value: string | null) {
+      selectedItemId.value = value
     },
+    sections: computed(() => doc.value?.sections ?? []),
+    leftSections: computed(() => sectionsByColumn(doc.value ?? { version: 2, sections: [] }).left),
+    rightSections: computed(() => sectionsByColumn(doc.value ?? { version: 2, sections: [] }).right),
+    gridRows: computed(() => sheetGridRows(doc.value ?? { version: 2, sections: [] })),
+    pageFill: computed(() => sheetFrontPageFill(doc.value ?? { version: 2, sections: [] })),
+    lineCount: computed(() =>
+      (doc.value?.sections ?? []).reduce((total, section) => total + section.items.length, 0),
+    ),
 
     setDocument(next: ServiceLogSheetDocument | null) {
-      api.doc = next ? structuredClone(next) : null
-      api.selectedSectionId = null
-      api.selectedItemId = null
+      doc.value = next ? structuredClone(next) : null
+      selectedSectionId.value = null
+      selectedItemId.value = null
     },
 
     findSection(sectionId: string): ServiceLogSheetSection | undefined {
-      return api.doc?.sections.find(section => section.id === sectionId)
+      return doc.value?.sections.find(section => section.id === sectionId)
     },
 
     selectSection(sectionId: string) {
-      api.selectedSectionId = sectionId
-      api.selectedItemId = null
+      selectedSectionId.value = sectionId
+      selectedItemId.value = null
     },
 
     selectItem(sectionId: string, itemId: string) {
-      api.selectedSectionId = sectionId
-      api.selectedItemId = itemId
+      selectedSectionId.value = sectionId
+      selectedItemId.value = itemId
     },
 
     addSection(column: 'left' | 'right'): ServiceLogSheetSection | null {
-      if (!api.doc) return null
+      if (!doc.value) return null
       const section: ServiceLogSheetSection = {
         id: newId('sec'),
         title: 'New section',
         column,
         items: [blankLine()],
       }
-      api.doc.sections.push(section)
+      doc.value.sections.push(section)
       api.selectSection(section.id)
       return section
     },
 
     removeSection(sectionId: string) {
-      if (!api.doc) return
-      api.doc.sections = api.doc.sections.filter(section => section.id !== sectionId)
-      if (api.selectedSectionId === sectionId) {
-        api.selectedSectionId = null
-        api.selectedItemId = null
+      if (!doc.value) return
+      doc.value.sections = doc.value.sections.filter(section => section.id !== sectionId)
+      if (selectedSectionId.value === sectionId) {
+        selectedSectionId.value = null
+        selectedItemId.value = null
       }
     },
 
     moveSection(sectionId: string, direction: -1 | 1) {
-      const all = api.doc?.sections
+      const all = doc.value?.sections
       const section = api.findSection(sectionId)
       if (!all || !section) return
       const sameColumn = all.filter(candidate => candidate.column === section.column)
@@ -141,7 +144,7 @@ export function useServiceLogSheetEditor() {
       const section = api.findSection(sectionId)
       if (!section) return
       section.items = section.items.filter(item => item.id !== itemId)
-      if (api.selectedItemId === itemId) api.selectedItemId = null
+      if (selectedItemId.value === itemId) selectedItemId.value = null
     },
 
     moveItem(sectionId: string, itemId: string, direction: -1 | 1) {
@@ -174,10 +177,10 @@ export function useServiceLogSheetEditor() {
     },
 
     cleanDocument(): ServiceLogSheetDocument | null {
-      if (!api.doc) return null
+      if (!doc.value) return null
       return {
         version: 2,
-        sections: api.doc.sections.map(section => ({
+        sections: doc.value.sections.map(section => ({
           ...section,
           title: section.title.trim() || 'Untitled',
           items: section.items

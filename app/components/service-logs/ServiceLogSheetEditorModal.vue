@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
-import {
-  SERVICE_LOG_SHEET_DOCUMENT_CSS,
-  SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
-  SERVICE_LOG_SHEET_SCOPE_CLASS,
-} from '#shared/service-log-sheet-styles'
 import type { ServiceLogSheetDocument } from '#shared/service-log-sheet-default'
 import type { SheetCatalogPick } from '~/composables/useServiceLogSheetEditor'
+import ServiceLogSheetLines from '~/components/service-logs/ServiceLogSheetLines.vue'
 
 interface SheetBusiness {
   businessName: string
@@ -37,132 +33,12 @@ const catalogTargetSectionId = ref<string | null>(null)
 const showCatalogPicker = ref(false)
 
 type ViewMode = 'paper' | 'lines'
-const view = ref<ViewMode>('paper')
+/** Lines is the editor; Paper is the real Letter PDF preview. */
+const view = ref<ViewMode>('lines')
 const viewTouched = ref(false)
 const compact = ref(false)
-
-const stageRef = ref<HTMLElement | null>(null)
-const zoom = ref<number | 'fit'>('fit')
-const fitScale = ref(1)
-const scale = computed(() => (zoom.value === 'fit' ? fitScale.value : zoom.value))
-const zoomLabel = computed(() => `${Math.round(scale.value * 100)}%`)
-
-const PAGE_WIDTH_PX = 8.5 * 96
-const PAGE_HEIGHT_PX = 11 * 96
-const PAPER_STACK_GAP_PX = 24
-const CATALOG_PANEL_PX = 320
-const STYLE_ID = 'sl-sheet-paper-css'
-
-/** Two Letter pages stacked with the paper gap — used to reserve layout space. */
-const paperContentHeightPx = PAGE_HEIGHT_PX * 2 + PAPER_STACK_GAP_PX
-
-const paperFrameStyle = computed(() => {
-  const s = scale.value
-  return {
-    width: `${Math.round(PAGE_WIDTH_PX * s)}px`,
-    height: `${Math.round(paperContentHeightPx * s)}px`,
-    margin: '0 auto',
-    position: 'relative' as const,
-    overflow: 'hidden' as const,
-  }
-})
-
-const paperScaleStyle = computed(() => ({
-  width: `${PAGE_WIDTH_PX}px`,
-  transform: `scale(${scale.value})`,
-  transformOrigin: 'top left',
-}))
-
-/**
- * Editor-only chrome on top of the shared document CSS. The document CSS is the
- * byte-identical stylesheet DomPDF gets, so the paper stays a faithful replica;
- * everything here is limited to editing affordances (inputs, tools, selection).
- */
-const EDITOR_CSS = `
-.sl-paper .sheet-input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  border-radius: 2px;
-  box-shadow: none;
-}
-.sl-paper .sheet-input:focus {
-  outline: 1.5px solid #6366f1;
-  background: #fff;
-}
-.sl-paper .sl-title-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.sl-paper .sl-title-input {
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.sl-paper .sl-price-input { text-align: right; }
-.sl-paper .service-name { position: relative; }
-.sl-paper .service-name.is-selected,
-.sl-paper .price-cell.is-selected { background: #eef2ff; }
-.sl-paper .category-title.is-selected { background: #e0e7ff; }
-.sl-paper .sl-tools {
-  display: none;
-  gap: 2px;
-  white-space: nowrap;
-}
-.sl-paper .sl-tools-row {
-  position: absolute;
-  z-index: 2;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-.sl-paper .category-title:hover .sl-tools,
-.sl-paper .category-title.is-selected .sl-tools,
-.sl-paper tr:hover .sl-tools-row,
-.sl-paper .service-name.is-selected .sl-tools-row { display: inline-flex; }
-.sl-paper .sl-tool {
-  appearance: none;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
-  border: 1px solid #cbd5e1;
-  border-radius: 3px;
-  background: #fff;
-  color: #334155;
-  font-size: 9px;
-  line-height: 1;
-  cursor: pointer;
-}
-.sl-paper .sl-tool:hover { background: #eef2ff; border-color: #a5b4fc; }
-.sl-paper .sl-tool.is-danger { color: #dc2626; border-color: #fecaca; }
-`
-
-function mountSheetStyles() {
-  if (typeof document === 'undefined') return
-  let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null
-  if (!el) {
-    el = document.createElement('style')
-    el.id = STYLE_ID
-    document.head.appendChild(el)
-  }
-  el.textContent = [
-    SERVICE_LOG_SHEET_DOCUMENT_CSS,
-    SERVICE_LOG_SHEET_EDITOR_CHROME_CSS,
-    EDITOR_CSS,
-  ].join('\n')
-}
-
-function unmountSheetStyles() {
-  if (typeof document === 'undefined') return
-  document.getElementById(STYLE_ID)?.remove()
-}
+const paperPreviewUrl = ref('')
+const paperPreviewBusy = ref(false)
 
 const filteredCatalog = computed(() => {
   const term = catalogQ.value.trim().toLowerCase()
@@ -176,32 +52,49 @@ const filteredCatalog = computed(() => {
   }).slice(0, 100)
 })
 
-function measureViewport() {
-  if (typeof window === 'undefined') return
-  const nowCompact = window.innerWidth < 1024
-  compact.value = nowCompact
-  // Follow the viewport until the user picks a view themselves.
-  if (!viewTouched.value) view.value = nowCompact ? 'lines' : 'paper'
+const sections = computed(() => api.doc?.sections ?? [])
+const lineCount = computed(() => api.lineCount)
+const pageFill = computed(() => api.pageFill)
 
-  // Measured from the viewport rather than the stage: the paper is wider than
-  // the stage at high zoom, which would keep a stage measurement pinned.
-  const panel = showCatalogPicker.value && !nowCompact ? CATALOG_PANEL_PX : 0
-  const available = Math.max(280, window.innerWidth - panel - 48)
-  // Cap the upscale: 7.4pt print type is only readable a little above 100%.
-  fitScale.value = Math.min(1.3, available / PAGE_WIDTH_PX)
+function revokePaperPreview() {
+  if (paperPreviewUrl.value) {
+    URL.revokeObjectURL(paperPreviewUrl.value)
+    paperPreviewUrl.value = ''
+  }
 }
 
-watch(showCatalogPicker, () => void nextTick(measureViewport))
+async function refreshPaperPreview() {
+  const document = api.cleanDocument() ?? api.doc
+  if (!document) return
+  paperPreviewBusy.value = true
+  error.value = ''
+  try {
+    const blob = await $fetch<Blob>('/api/service-logs/sheet/preview-pdf', {
+      method: 'POST',
+      body: document,
+      responseType: 'blob',
+    })
+    revokePaperPreview()
+    paperPreviewUrl.value = URL.createObjectURL(blob)
+  }
+  catch (err) {
+    error.value = syncFetchErrorMessage(err, 'Could not render Letter preview')
+  }
+  finally {
+    paperPreviewBusy.value = false
+  }
+}
+
+function measureViewport() {
+  if (typeof window === 'undefined') return
+  compact.value = window.innerWidth < 1024
+  if (!viewTouched.value) view.value = 'lines'
+}
 
 function setView(next: ViewMode) {
   view.value = next
   viewTouched.value = true
-  void nextTick(measureViewport)
-}
-
-function zoomBy(step: number) {
-  const next = Math.min(2, Math.max(0.4, Math.round((scale.value + step) * 20) / 20))
-  zoom.value = next
+  if (next === 'paper') void refreshPaperPreview()
 }
 
 async function load() {
@@ -212,8 +105,6 @@ async function load() {
     api.setDocument(data.document)
     business.value = data.business
     catalogItems.value = data.catalogItems
-    await nextTick()
-    measureViewport()
   }
   catch (err) {
     error.value = syncFetchErrorMessage(err, 'Could not load service log sheet')
@@ -223,19 +114,18 @@ async function load() {
   }
 }
 
-// immediate so the sheet also loads when the modal mounts already open.
 watch(open, (isOpen) => {
   if (isOpen) {
-    mountSheetStyles()
     catalogQ.value = ''
     showCatalogPicker.value = false
     catalogTargetSectionId.value = null
     viewTouched.value = false
-    zoom.value = 'fit'
+    view.value = 'lines'
+    measureViewport()
     void load()
   }
   else {
-    unmountSheetStyles()
+    revokePaperPreview()
   }
 }, { immediate: true })
 
@@ -246,12 +136,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', measureViewport)
-  unmountSheetStyles()
+  revokePaperPreview()
 })
 
 function close() {
   open.value = false
   error.value = ''
+  revokePaperPreview()
 }
 
 function openCatalogPicker(sectionId?: string | null) {
@@ -279,6 +170,7 @@ async function resetDefault() {
       method: 'POST',
     })
     api.setDocument(res.document)
+    if (view.value === 'paper') void refreshPaperPreview()
   }
   catch (err) {
     error.value = syncFetchErrorMessage(err, 'Could not reset sheet')
@@ -331,7 +223,7 @@ function onScrimClick(event: MouseEvent) {
           <h3 id="sl-sheet-title">Edit Template</h3>
           <p>
             {{ view === 'paper'
-              ? 'Exactly the Letter print layout — click any title, line or price to edit'
+              ? 'Exact Letter PDF preview of the current template'
               : 'Edit every printed line, then check the layout in Paper view' }}
           </p>
         </div>
@@ -341,25 +233,17 @@ function onScrimClick(event: MouseEvent) {
             <button
               type="button"
               class="sl-seg-btn"
-              :class="{ active: view === 'paper' }"
-              :aria-pressed="view === 'paper'"
-              @click="setView('paper')"
-            >Paper</button>
-            <button
-              type="button"
-              class="sl-seg-btn"
               :class="{ active: view === 'lines' }"
               :aria-pressed="view === 'lines'"
               @click="setView('lines')"
             >Lines</button>
-          </div>
-
-          <div v-if="view === 'paper'" class="sl-seg sl-zoom" role="group" aria-label="Zoom">
-            <button type="button" class="sl-seg-btn" aria-label="Zoom out" @click="zoomBy(-0.1)">−</button>
-            <button type="button" class="sl-seg-btn" :class="{ active: zoom === 'fit' }" @click="zoom = 'fit'">
-              {{ zoom === 'fit' ? `Fit ${zoomLabel}` : zoomLabel }}
-            </button>
-            <button type="button" class="sl-seg-btn" aria-label="Zoom in" @click="zoomBy(0.1)">+</button>
+            <button
+              type="button"
+              class="sl-seg-btn"
+              :class="{ active: view === 'paper' }"
+              :aria-pressed="view === 'paper'"
+              @click="setView('paper')"
+            >Paper</button>
           </div>
 
           <button
@@ -381,7 +265,7 @@ function onScrimClick(event: MouseEvent) {
           <button
             type="button"
             class="btn sm sl-hide-compact"
-            :disabled="saving || pending || !api.sections.length"
+            :disabled="saving || pending || !sections.length"
             @click="openCatalogPicker()"
           >
             + From catalog
@@ -405,43 +289,40 @@ function onScrimClick(event: MouseEvent) {
       <p v-if="error" class="sl-error" role="alert">{{ error }}</p>
 
       <p
-        v-if="!error && api.pageFill.overflows"
+        v-if="!error && pageFill.overflows"
         class="sl-warn"
         role="status"
       >
-        This catalog is taller than the front page ({{ api.pageFill.rows }} of
-        {{ api.pageFill.capacity }} lines in the longest column). It still prints — the
+        This catalog is taller than the front page ({{ pageFill.rows }} of
+        {{ pageFill.capacity }} lines in the longest column). It still prints — the
         extra lines continue on a second page with the column headers repeated.
       </p>
 
       <p v-if="pending" class="sl-status">Loading Letter sheet…</p>
 
-      <div v-else-if="api.doc && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
-        <div v-if="view === 'paper'" ref="stageRef" class="sl-stage">
-          <!--
-            CSS zoom collapses to an empty stage on mobile WebKit. Reserve the
-            scaled frame size, then transform-scale the real Letter paper inside.
-          -->
-          <div class="sl-paper-frame" :style="paperFrameStyle">
-            <div
-              class="sl-paper"
-              :class="SERVICE_LOG_SHEET_SCOPE_CLASS"
-              :style="paperScaleStyle"
-            >
-              <ServiceLogSheetPaper
-                :api="api"
-                :business="business"
-                @catalog="openCatalogPicker"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="sl-stage sl-stage-lines">
+      <div
+        v-else-if="api.doc"
+        class="sl-body"
+        :class="{ 'has-catalog': showCatalogPicker && view === 'lines' }"
+      >
+        <!-- Lines: editable sections (explicit import — do not rely on auto-import here) -->
+        <div v-show="view === 'lines'" class="sl-stage sl-stage-lines">
           <ServiceLogSheetLines :api="api" @catalog="openCatalogPicker" />
         </div>
 
-        <aside v-if="showCatalogPicker" class="sl-catalog" aria-label="Add from catalog">
+        <!-- Paper: real DomPDF Letter output so preview always matches print -->
+        <div v-show="view === 'paper'" class="sl-stage sl-stage-paper">
+          <p v-if="paperPreviewBusy" class="sl-status sl-status-on-paper">Rendering Letter preview…</p>
+          <iframe
+            v-else-if="paperPreviewUrl"
+            class="sl-pdf"
+            title="Service log sheet Letter preview"
+            :src="paperPreviewUrl"
+          />
+          <p v-else class="sl-status sl-status-on-paper">Switch to Paper again to refresh the preview.</p>
+        </div>
+
+        <aside v-if="showCatalogPicker && view === 'lines'" class="sl-catalog" aria-label="Add from catalog">
           <div class="sl-catalog-head">
             <h4>Add from catalog</h4>
             <button type="button" class="btn sm" @click="showCatalogPicker = false">Close</button>
@@ -465,8 +346,12 @@ function onScrimClick(event: MouseEvent) {
         </aside>
       </div>
 
+      <p v-else-if="!pending" class="sl-status">
+        No sheet loaded yet.
+      </p>
+
       <footer v-if="compact" class="sl-foot">
-        <span class="sl-foot-count">{{ api.lineCount }} lines</span>
+        <span class="sl-foot-count">{{ lineCount }} lines</span>
         <button type="button" class="btn" :disabled="saving" @click="close">Cancel</button>
         <button
           type="button"
@@ -507,6 +392,7 @@ function onScrimClick(event: MouseEvent) {
   padding: 8px 12px;
   background: #fff;
   border-bottom: 1px solid #dbe2ea;
+  flex: none;
 }
 .sl-bar-text h3 {
   margin: 0;
@@ -549,7 +435,6 @@ function onScrimClick(event: MouseEvent) {
   color: #0f172a;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
-.sl-zoom .sl-seg-btn { min-width: 34px; }
 .sl-close {
   appearance: none;
   width: 34px;
@@ -569,34 +454,50 @@ function onScrimClick(event: MouseEvent) {
   padding: 9px 12px;
   border-radius: 9px;
   font-size: 12.5px;
+  flex: none;
 }
 .sl-error { background: #fef2f2; color: #dc2626; }
 .sl-warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
 .sl-status { color: #64748b; }
+.sl-status-on-paper {
+  margin: 24px auto;
+  max-width: 36ch;
+  text-align: center;
+  color: #e5e7eb;
+  background: transparent;
+}
 .sl-body {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 50vh;
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
   position: relative;
+  overflow: hidden;
 }
 .sl-body.has-catalog { grid-template-columns: 1fr 320px; }
 .sl-stage {
   min-height: 0;
-  /* 1fr grid columns default to a content-based minimum: without this the paper
-     keeps the stage wide when the catalog panel opens, so fit never recomputes. */
   min-width: 0;
+  height: 100%;
   overflow: auto;
-  padding: 16px;
-  display: flex;
-  align-items: flex-start;
+  background: #eef2f7;
 }
 .sl-stage-lines {
   padding: 0;
-  background: #eef2f7;
 }
-.sl-paper-frame { flex: none; }
-.sl-paper { flex: none; }
+.sl-stage-paper {
+  padding: 0;
+  background: #525659;
+}
+.sl-pdf {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 70vh;
+  border: 0;
+  background: #525659;
+}
 .sl-catalog {
   border-left: 1px solid #dbe2ea;
   background: #fff;
@@ -650,6 +551,7 @@ function onScrimClick(event: MouseEvent) {
   background: #fff;
   border-top: 1px solid #dbe2ea;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
+  flex: none;
 }
 .sl-foot-count {
   flex: 1;
