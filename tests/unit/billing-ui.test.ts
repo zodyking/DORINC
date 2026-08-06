@@ -47,13 +47,16 @@ describe('billing-ui helpers', () => {
 
   it('builds chart geometry for outlook points', () => {
     const chart = buildBillingChartGeometry([
-      { label: 'Jul', actualUsd: 20, projectedUsd: null },
+      { label: 'Jul', actualUsd: 20, projectedUsd: 21 },
       { label: 'Aug', actualUsd: 18, projectedUsd: 21 },
-      { label: 'Sep', actualUsd: null, projectedUsd: 21 },
+      { label: 'Sep', actualUsd: null, projectedUsd: 36 },
     ])
     expect(chart.actualPath).toContain('M')
     expect(chart.projectedPath).toContain('M')
     expect(chart.points).toHaveLength(3)
+    expect(chart.yTicks.length).toBeGreaterThanOrEqual(2)
+    expect(chart.yTicks[0]?.label).toMatch(/^\$/)
     expect(formatVultrRam(4096)).toBe('4 GB RAM')
   })
 })
+

@@ -20,6 +20,7 @@ import {
 import {
   daysUntilIso,
   fetchCloudflareRegistrations,
+  sumCloudflareAnnualRenewals,
   sumCloudflareRenewalsInWindow,
 } from './cloudflare-billing.service'
 import { buildBillingOutlook } from './billing-outlook.service'
@@ -200,16 +201,16 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     })),
     30,
   )
-  const cloudflareYearlyUsd = sumCloudflareRenewalsInWindow(
-    cloudflareBlock.domains.map(d => ({
-      daysUntilRenewal: d.daysUntilRenewal,
-      renewalCost: d.renewalCost,
-    })),
-    365,
+  // Annual domain budget = sum of every domain renewal (each renews ~once/year),
+  // not only those due inside a rolling 365-day window.
+  const cloudflareYearlyUsd = sumCloudflareAnnualRenewals(
+    cloudflareBlock.domains.map(d => ({ renewalCost: d.renewalCost })),
   )
 
   const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd)
   const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd)
+  const yearlyVultrUsd = roundMoney(vultrUsd * 12)
+  const yearlyOpenrouterUsd = roundMoney(openrouterUsd * 12)
 
   const outlook = buildBillingOutlook({
     vultrPlanMonthly: vultrUsd,
@@ -239,6 +240,11 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
         vultrUsd: roundMoney(vultrUsd),
         cloudflareUsd: roundMoney(cloudflareMonthlyUsd),
         openrouterUsd: roundMoney(openrouterUsd),
+      },
+      breakdownYearly: {
+        vultrUsd: yearlyVultrUsd,
+        cloudflareUsd: roundMoney(cloudflareYearlyUsd),
+        openrouterUsd: yearlyOpenrouterUsd,
       },
     },
     outlook: {

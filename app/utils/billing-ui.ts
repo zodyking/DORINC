@@ -122,6 +122,7 @@ export interface BillingChartGeometry {
   actualPath: string
   projectedPath: string
   areaPath: string
+  yTicks: Array<{ y: number, label: string, value: number }>
   points: Array<{
     x: number
     yActual: number | null
@@ -132,27 +133,33 @@ export interface BillingChartGeometry {
   }>
 }
 
+function niceChartMax(rawMax: number): number {
+  if (!Number.isFinite(rawMax) || rawMax <= 0) return 1
+  const padded = rawMax * 1.12
+  const magnitude = 10 ** Math.floor(Math.log10(padded))
+  const step = magnitude >= 10 ? magnitude / 2 : magnitude
+  return Math.ceil(padded / step) * step
+}
+
 export function buildBillingChartGeometry(
   points: Array<{ label: string, actualUsd: number | null, projectedUsd: number | null }>,
   width = 640,
   height = 220,
 ): BillingChartGeometry {
-  const padX = 28
+  const padX = 44
   const padY = 24
   const values = points.flatMap(p => [p.actualUsd, p.projectedUsd]).filter((v): v is number => v != null)
-  const maxValue = Math.max(1, ...values) * 1.15
+  const maxValue = niceChartMax(Math.max(1, ...values))
   const innerW = width - padX * 2
   const innerH = height - padY * 2
   const step = points.length > 1 ? innerW / (points.length - 1) : 0
 
+  const yFor = (value: number) => padY + innerH - (value / maxValue) * innerH
+
   const mapped = points.map((point, index) => {
     const x = padX + index * step
-    const yActual = point.actualUsd == null
-      ? null
-      : padY + innerH - (point.actualUsd / maxValue) * innerH
-    const yProjected = point.projectedUsd == null
-      ? null
-      : padY + innerH - (point.projectedUsd / maxValue) * innerH
+    const yActual = point.actualUsd == null ? null : yFor(point.actualUsd)
+    const yProjected = point.projectedUsd == null ? null : yFor(point.projectedUsd)
     return {
       x,
       yActual,
@@ -179,6 +186,18 @@ export function buildBillingChartGeometry(
     areaPath = `M ${first.x},${padY + innerH} L ${projectedCoords.map(p => `${p.x},${p.yProjected}`).join(' L ')} L ${last.x},${padY + innerH} Z`
   }
 
+  const tickCount = 4
+  const yTicks = Array.from({ length: tickCount }, (_, index) => {
+    const value = (maxValue * index) / (tickCount - 1)
+    return {
+      value,
+      y: yFor(value),
+      label: value >= 100
+        ? `$${Math.round(value)}`
+        : `$${value.toFixed(value >= 10 ? 0 : 2)}`,
+    }
+  })
+
   return {
     width,
     height,
@@ -188,6 +207,7 @@ export function buildBillingChartGeometry(
     actualPath: toPath('yActual'),
     projectedPath: toPath('yProjected'),
     areaPath,
+    yTicks,
     points: mapped,
   }
 }
