@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { uuidSchema } from './common'
 
-export const fileOwnerEntityTypeSchema = z.enum(['service_log', 'invoice', 'estimate', 'customer', 'vehicle', 'request', 'template', 'company'])
-export const fileKindSchema = z.enum(['original', 'preview', 'thumbnail', 'pdf', 'attachment'])
+export const fileOwnerEntityTypeSchema = z.enum(['service_log', 'invoice', 'estimate', 'customer', 'vehicle', 'request', 'template', 'company', 'message', 'announcement'])
+export const fileKindSchema = z.enum(['original', 'preview', 'thumbnail', 'pdf', 'attachment', 'inline'])
 
 /** Multipart text fields accompanying an upload. */
 export const fileUploadFieldsSchema = z.object({

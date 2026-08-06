@@ -8,7 +8,7 @@ export const bytea = customType<{ data: Buffer, driverData: Buffer }>({
   },
 })
 
-export const FILE_OWNER_ENTITY_TYPES = ['service_log', 'invoice', 'estimate', 'customer', 'vehicle', 'request', 'template', 'company', 'message'] as const
+export const FILE_OWNER_ENTITY_TYPES = ['service_log', 'invoice', 'estimate', 'customer', 'vehicle', 'request', 'template', 'company', 'message', 'announcement'] as const
 export type FileOwnerEntityType = (typeof FILE_OWNER_ENTITY_TYPES)[number]
 
 export const FILE_KINDS = ['original', 'preview', 'thumbnail', 'pdf', 'attachment', 'inline'] as const
