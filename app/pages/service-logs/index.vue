@@ -2,6 +2,7 @@
 // Service logs list + review queue (mockup: PAGE: SERVICE LOGS).
 import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
 import ServiceLogSheetEditorModal from '~/components/service-logs/ServiceLogSheetEditorModal.vue'
+import ServiceLogSheetPrintModal from '~/components/service-logs/ServiceLogSheetPrintModal.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { fetchServiceLogSheetPdf } from '~/utils/service-log-sheet'
@@ -58,6 +59,7 @@ const canPrintSheet = computed(() =>
 const showPageActions = computed(() => canUpload.value || canPrintSheet.value || canEditSheet.value)
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
 const editSheetOpen = ref(false)
+const printSheetChooserOpen = ref(false)
 const sheetBusy = ref(false)
 const sheetPdfDialogOpen = ref(false)
 const sheetPdfBlob = ref<Blob | null>(null)
@@ -193,7 +195,11 @@ async function openInvoicePdf(log: ServiceLogRow, event: MouseEvent) {
   }
 }
 
-async function printServiceLogSheet() {
+function openPrintSheetChooser() {
+  printSheetChooserOpen.value = true
+}
+
+async function printServiceLogSheetFromDevice() {
   if (sheetBusy.value) return
   sheetBusy.value = true
   actionError.value = ''
@@ -230,7 +236,7 @@ function closeSheetPdfDialog() {
           type="button"
           class="btn"
           :disabled="sheetBusy"
-          @click="printServiceLogSheet"
+          @click="openPrintSheetChooser"
         >
           {{ sheetBusy ? 'Rendering…' : 'Print Service Log Sheet' }}
         </button>
@@ -254,6 +260,11 @@ function closeSheetPdfDialog() {
     </StaffPageHead>
 
     <ServiceLogSheetEditorModal v-model:open="editSheetOpen" />
+
+    <ServiceLogSheetPrintModal
+      v-model:open="printSheetChooserOpen"
+      @print-device="printServiceLogSheetFromDevice"
+    />
 
     <PdfViewerDialog
       v-model:open="sheetPdfDialogOpen"
