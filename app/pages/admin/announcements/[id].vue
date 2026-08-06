@@ -154,7 +154,7 @@ async function saveMessage() {
         priority: form.value.priority,
         startsAt,
         endsAt,
-        ctaButtons: form.value.ctaButtons.filter(b => b.label.trim() && b.href.trim()),
+        ctaButtons: [],
         audience: buildAudience(),
       },
     })

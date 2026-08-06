@@ -35,22 +35,10 @@ const filteredUsers = computed(() => {
   )
 })
 
-const previewCtas = computed(() =>
-  form.value.ctaButtons.filter(b => b.label.trim() && b.href.trim()),
-)
-
 const continueLabel = computed(() => 'Continue to dashboard')
 
 function setTab(tab: WorkbenchTab) {
   workbenchTab.value = tab
-}
-
-function addCta() {
-  form.value.ctaButtons.push({ label: 'Learn more', href: '/', variant: 'secondary' })
-}
-
-function removeCta(index: number) {
-  form.value.ctaButtons.splice(index, 1)
 }
 
 function toggleType(key: string) {
@@ -187,7 +175,7 @@ onBeforeUnmount(() => {
         <header class="ann-panel-head">
           <div>
             <h2>Delivery</h2>
-            <p>Order and schedule for this message.</p>
+            <p>Active messages show on every staff login while within the schedule window.</p>
           </div>
         </header>
         <div class="ann-fields ann-fields-3">
@@ -275,33 +263,6 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="ann-panel">
-        <header class="ann-panel-head">
-          <div>
-            <h2>Action buttons</h2>
-            <p>Optional links shown above Continue.</p>
-          </div>
-          <button type="button" class="btn sm" @click="addCta">+ Add button</button>
-        </header>
-
-        <div v-if="!form.ctaButtons.length" class="ann-empty-cta">
-          No buttons yet — add one for docs, training, or an external page.
-        </div>
-        <div
-          v-for="(btn, index) in form.ctaButtons"
-          :key="index"
-          class="ann-cta-row"
-        >
-          <input v-model="btn.label" type="text" placeholder="Label">
-          <input v-model="btn.href" type="text" placeholder="/training or https://…">
-          <select v-model="btn.variant">
-            <option value="primary">Primary</option>
-            <option value="secondary">Secondary</option>
-            <option value="ghost">Ghost</option>
-          </select>
-          <button type="button" class="btn sm" @click="removeCta(index)">Remove</button>
-        </div>
-      </section>
     </div>
 
     <div
@@ -327,9 +288,7 @@ onBeforeUnmount(() => {
           :subtitle="form.subtitle"
           :body-html="form.bodyHtml"
           :hero-image-url="form.heroImageUrl"
-          :cta-buttons="previewCtas"
           :continue-label="continueLabel"
-          :interactive-ctas="false"
           :continue-disabled="true"
         />
       </div>
@@ -351,9 +310,7 @@ onBeforeUnmount(() => {
           :subtitle="form.subtitle"
           :body-html="form.bodyHtml"
           :hero-image-url="form.heroImageUrl"
-          :cta-buttons="previewCtas"
           :continue-label="continueLabel"
-          :interactive-ctas="false"
           :continue-disabled="true"
         />
       </div>
@@ -585,22 +542,6 @@ onBeforeUnmount(() => {
   padding: 12px;
 }
 
-.ann-empty-cta {
-  color: #64748b;
-  font-size: 13px;
-  padding: 10px 12px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.ann-cta-row {
-  display: grid;
-  grid-template-columns: 1fr 1.3fr 120px auto;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .ann-workbench-preview {
   border: 1px solid #e2e8f0;
   border-radius: 16px;
@@ -660,8 +601,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 900px) {
   .ann-fields-3,
-  .ann-audience-modes,
-  .ann-cta-row {
+  .ann-audience-modes {
     grid-template-columns: 1fr;
   }
 }

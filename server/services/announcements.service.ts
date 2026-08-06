@@ -129,6 +129,11 @@ async function loadTargetsForAnnouncements(db: Db, announcementIds: string[]) {
   return map
 }
 
+/**
+ * Pending login messages for a staff user.
+ * Acknowledgements only suppress a message for the current session — login clears
+ * them so active, in-window messages show again on every sign-in.
+ */
 export async function listPendingAnnouncementsForUser(
   db: Db,
   userId: string,

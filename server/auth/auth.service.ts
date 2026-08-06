@@ -10,6 +10,7 @@ import {
   userPermissionOverrides,
   users,
 } from '../db/schema/auth'
+import { announcementAcknowledgements } from '../db/schema/announcements'
 import { customers } from '../db/schema/customers'
 import { hashPassword, verifyPassword } from './password'
 import { generateToken, hashToken } from './tokens'
@@ -326,6 +327,11 @@ export async function login(
   await db.update(sessions)
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, row.user.id), isNull(sessions.revokedAt)))
+
+  // Active login messages should reappear on every sign-in while scheduled.
+  // Acknowledgements only dismiss them for the current session.
+  await db.delete(announcementAcknowledgements)
+    .where(eq(announcementAcknowledgements.userId, row.user.id))
 
   const { token, tokenHash } = generateToken()
   const expiresAt = new Date(Date.now() + SESSION_ABSOLUTE_TTL_MS)

@@ -1,38 +1,28 @@
 <script setup lang="ts">
 import { sanitizeAnnouncementHtml } from '#shared/announcement-html'
 
-export interface GateCardButton {
-  label: string
-  href: string
-  variant?: 'primary' | 'secondary' | 'ghost'
-}
-
 const props = withDefaults(defineProps<{
   title: string
   subtitle?: string | null
   bodyHtml?: string
   heroImageUrl?: string | null
-  ctaButtons?: GateCardButton[]
   index?: number
   total?: number
   continueLabel?: string
   continueBusy?: boolean
   continueDisabled?: boolean
   error?: string
-  interactiveCtas?: boolean
   compact?: boolean
 }>(), {
   subtitle: null,
   bodyHtml: '',
   heroImageUrl: null,
-  ctaButtons: () => [],
   index: 1,
   total: 1,
   continueLabel: 'Continue to dashboard',
   continueBusy: false,
   continueDisabled: false,
   error: '',
-  interactiveCtas: true,
   compact: false,
 })
 
@@ -41,9 +31,6 @@ const emit = defineEmits<{
 }>()
 
 const safeBody = computed(() => sanitizeAnnouncementHtml(props.bodyHtml || ''))
-const visibleCtas = computed(() =>
-  (props.ctaButtons ?? []).filter(b => b.label.trim() && b.href.trim()),
-)
 </script>
 
 <template>
@@ -65,20 +52,6 @@ const visibleCtas = computed(() =>
       <div v-if="safeBody" class="ann-gate-body" v-html="safeBody" />
       <p v-else class="ann-gate-empty">Message body goes here…</p>
 
-      <div v-if="visibleCtas.length" class="ann-gate-ctas">
-        <component
-          :is="interactiveCtas ? 'a' : 'span'"
-          v-for="(btn, i) in visibleCtas"
-          :key="`${btn.href}-${i}`"
-          class="btn"
-          :class="btn.variant === 'primary' ? 'primary' : btn.variant === 'ghost' ? 'ghost' : ''"
-          :href="interactiveCtas ? btn.href : undefined"
-          :target="interactiveCtas && btn.href.startsWith('http') ? '_blank' : undefined"
-          :rel="interactiveCtas && btn.href.startsWith('http') ? 'noopener noreferrer' : undefined"
-        >
-          {{ btn.label }}
-        </component>
-      </div>
     </div>
 
     <footer class="ann-gate-foot">
@@ -93,7 +66,7 @@ const visibleCtas = computed(() =>
         {{ continueBusy ? 'Continuing…' : continueLabel }}
       </button>
       <p class="ann-gate-hint">
-        You must continue through {{ total === 1 ? 'this message' : 'all messages' }} before using the workspace.
+        Continue through {{ total === 1 ? 'this message' : 'all messages' }} to use the workspace. Active messages return on each login while scheduled.
       </p>
     </footer>
   </article>
@@ -208,13 +181,6 @@ const visibleCtas = computed(() =>
 
 .ann-gate-body :deep(a) {
   color: #1d4ed8;
-}
-
-.ann-gate-ctas {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
 }
 
 .ann-gate-foot {

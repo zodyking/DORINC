@@ -121,7 +121,7 @@ async function ensureAnnouncementId(): Promise<string> {
         priority: Number.isFinite(form.value.priority) ? form.value.priority : 0,
         startsAt: dates.startsAt,
         endsAt: dates.endsAt,
-        ctaButtons: form.value.ctaButtons.filter(b => b.label.trim() && b.href.trim()),
+        ctaButtons: [],
         audience: draftAudience(),
       },
     })
@@ -168,7 +168,7 @@ async function createMessage() {
       priority: form.value.priority,
       startsAt: dates.startsAt,
       endsAt: dates.endsAt,
-      ctaButtons: form.value.ctaButtons.filter(b => b.label.trim() && b.href.trim()),
+      ctaButtons: [],
       audience: buildAudience(),
     }
 
