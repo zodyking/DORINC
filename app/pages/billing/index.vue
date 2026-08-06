@@ -768,7 +768,9 @@ function selectProvider(provider: BillingProviderKey) {
           </div>
           <div class="cbody">
             <template v-if="!revealed">
-              <p class="billing-muted">Enter your DORINC account password to view the saved portal login.</p>
+              <p class="billing-muted">
+                Enter your account password to see the login credentials for {{ revealProvider ? labels[revealProvider].name : 'this service' }}.
+              </p>
               <label class="fld">
                 Account password
                 <input
