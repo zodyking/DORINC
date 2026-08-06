@@ -300,7 +300,7 @@ async function maybeUploadToGoogleDrive(
     const message = err instanceof GoogleDriveBackupError
       ? err.message
       : err instanceof Error ? err.message : 'Google Drive upload failed'
-    throw new Error(`Backup saved locally but Google Drive upload failed: ${message}`, { cause: err })
+    throw new Error(`Google Drive upload failed: ${message}`, { cause: err })
   }
 }
 
@@ -322,36 +322,15 @@ async function executeBackupRun(
     const encrypted = encryptBuffer(compressed)
     const checksum = sha256Hex(encrypted)
 
+    // Local archive first. Drive is best-effort — a Drive outage must not fail
+    // a successful encrypted dump (that used to mark intact local backups failed).
     let driveFileId: string | null = null
+    let driveWarning: string | null = null
     try {
       driveFileId = await maybeUploadToGoogleDrive(db, runId, filename, encrypted)
     }
     catch (driveErr) {
-      const message = driveErr instanceof Error ? driveErr.message : 'Google Drive upload failed'
-      await db.update(backupRuns)
-        .set({
-          status: 'failed',
-          dumpBytes: dump.length,
-          compressedBytes: compressed.length,
-          encryptedBytes: encrypted.length,
-          sha256Checksum: checksum,
-          encryptedPayload: encrypted,
-          errorMessage: message,
-          finishedAt: new Date(),
-        })
-        .where(eq(backupRuns.id, runId))
-
-      await writeAudit(event, {
-        entityType: 'backup',
-        entityId: runId,
-        action: 'backup.failed',
-        afterData: { filename, error: message, trigger },
-        actor: actor ?? undefined,
-        permissionKey: 'backups.manage.all',
-        riskLevel: 'high',
-      })
-      await queueBackupNotification(db, { success: false, filename, trigger, error: message })
-      throw driveErr
+      driveWarning = driveErr instanceof Error ? driveErr.message : 'Google Drive upload failed'
     }
 
     const [completed] = await db.update(backupRuns)
@@ -364,6 +343,7 @@ async function executeBackupRun(
         encryptedPayload: encrypted,
         driveFileId,
         driveUploadedAt: driveFileId ? new Date() : null,
+        errorMessage: driveWarning,
         finishedAt: new Date(),
       })
       .where(eq(backupRuns.id, runId))
@@ -372,20 +352,27 @@ async function executeBackupRun(
     await writeAudit(event, {
       entityType: 'backup',
       entityId: runId,
-      action: 'backup.completed',
+      action: driveWarning ? 'backup.completed_drive_warning' : 'backup.completed',
       afterData: {
         filename,
         encryptedBytes: encrypted.length,
         sha256Checksum: checksum,
         trigger,
         driveFileId,
+        driveWarning,
       },
       actor: actor ?? undefined,
       permissionKey: 'backups.manage.all',
       riskLevel: 'sensitive',
     })
 
-    await queueBackupNotification(db, { success: true, filename, trigger, driveFileId })
+    await queueBackupNotification(db, {
+      success: true,
+      filename,
+      trigger,
+      driveFileId,
+      error: driveWarning ?? undefined,
+    })
     return completed as BackupRunSummary
   }
   catch (err) {

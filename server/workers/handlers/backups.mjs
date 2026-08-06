@@ -218,12 +218,21 @@ async function executeBackup(pool, trigger) {
     const compressed = zstdCompressSync(dump)
     const encrypted = encryptBuffer(compressed)
     const checksum = sha256Hex(encrypted)
-    const driveFileId = await uploadToDrive(pool, filename, encrypted)
+
+    // Local archive is the source of truth. Drive upload is best-effort.
+    let driveFileId = null
+    let driveWarning = null
+    try {
+      driveFileId = await uploadToDrive(pool, filename, encrypted)
+    }
+    catch (driveErr) {
+      driveWarning = driveErr instanceof Error ? driveErr.message : 'Google Drive upload failed'
+    }
 
     await pool.query(
       `UPDATE backup_runs SET status = 'completed', dump_bytes = $2, compressed_bytes = $3,
        encrypted_bytes = $4, sha256_checksum = $5, encrypted_payload = $6,
-       drive_file_id = $7, drive_uploaded_at = $8, finished_at = now()
+       drive_file_id = $7, drive_uploaded_at = $8, error_message = $9, finished_at = now()
        WHERE id = $1`,
       [
         runId,
@@ -234,11 +243,18 @@ async function executeBackup(pool, trigger) {
         encrypted,
         driveFileId,
         driveFileId ? new Date() : null,
+        driveWarning,
       ],
     )
 
-    await queueNotification(pool, { success: true, filename, trigger, driveFileId })
-    return { runId, filename, status: 'completed' }
+    await queueNotification(pool, {
+      success: true,
+      filename,
+      trigger,
+      driveFileId,
+      error: driveWarning || undefined,
+    })
+    return { runId, filename, status: 'completed', driveWarning }
   }
   catch (err) {
     const message = err instanceof Error ? err.message : 'Backup failed'

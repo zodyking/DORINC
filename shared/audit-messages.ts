@@ -112,6 +112,7 @@ const ACTION_LABELS: Record<string, string> = {
   'catalog.update': 'Catalog item updated',
   'catalog.archive': 'Catalog item archived',
   'backup.completed': 'Backup completed',
+  'backup.completed_drive_warning': 'Backup completed (Drive upload warning)',
   'setup.completed': 'Setup completed',
   'flags.updated': 'Settings updated',
   'editing_sessions.acquire': 'Opened for editing',

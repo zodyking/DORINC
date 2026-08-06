@@ -341,7 +341,7 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
           id="backup"
           title="Backup & Restore"
           icon="☁️"
-          subtitle="Encrypted archives and Google Drive"
+          subtitle="Encrypted archives · optional Google Drive"
           :status-tone="backupHealthTone(status.backup.status)"
           :open="openSections.backup"
           @update:open="setSectionOpen('backup', $event)"

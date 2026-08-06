@@ -258,7 +258,11 @@ function activityTitle(action: string, data: Record<string, unknown> | null): st
   if (action.includes('pdf')) return `PDF generated — ${data?.invoiceNumberFormatted ?? 'invoice'}`
   if (action.includes('service_log')) return `Service log uploaded`
   if (action.includes('vehicle')) return `Vehicle updated`
-  if (action.includes('backup.completed')) return 'Encrypted backup completed'
+  if (action.includes('backup.completed')) {
+    return action.includes('drive_warning')
+      ? 'Backup saved locally (Drive upload warning)'
+      : 'Encrypted backup completed'
+  }
   return action.replace(/\./g, ' ')
 }
 
