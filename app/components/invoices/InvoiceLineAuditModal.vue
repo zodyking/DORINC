@@ -56,8 +56,13 @@ function setDecision(lineItemId: string, action: 'accept' | 'reject') {
 }
 
 function onSubmit() {
-  if (!props.suggestion || !issueLines.value.length) {
+  if (!props.suggestion) {
     emit('close')
+    return
+  }
+  // Zero-issue pass still confirms via submit so the parent can finalize save/continue.
+  if (!issueLines.value.length) {
+    emit('submit', [])
     return
   }
   emit('submit', issueLines.value.map(line => ({
@@ -186,10 +191,18 @@ function formatCheckedAt(value: string | undefined) {
         <footer class="audit-foot">
           <template v-if="isPending && requireReview && issueLines.length">
             <button type="button" class="btn" :disabled="busy" @click="emit('close')">
-              Cancel save
+              Cancel
             </button>
             <button type="button" class="btn primary" :disabled="busy" @click="onSubmit">
-              {{ busy ? 'Applying…' : 'Apply & continue save' }}
+              {{ busy ? 'Applying…' : 'Apply & continue' }}
+            </button>
+          </template>
+          <template v-else-if="isPending && requireReview">
+            <button type="button" class="btn" :disabled="busy" @click="emit('close')">
+              Cancel
+            </button>
+            <button type="button" class="btn primary" :disabled="busy" @click="onSubmit">
+              {{ busy ? 'Continuing…' : 'Continue' }}
             </button>
           </template>
           <template v-else>

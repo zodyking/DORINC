@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AiSuggestionRow } from '../../app/utils/ai-ui'
 import {
+  buildLineAuditPassSuggestion,
   invoiceNeedsInitialLineAudit,
   invoiceNeedsInitialServiceLogReview,
   isLineAuditSuggestion,
+  isLocalLineAuditPass,
   latestLineAuditSuggestion,
   lineAuditHasIssues,
   lineAuditIssueLines,
@@ -123,6 +125,26 @@ describe('invoice line audit ui', () => {
       status: 'draft',
       historyActions: ['invoices.create'],
     })).toBe(true)
+  })
+
+  it('builds a local pass suggestion so the review modal can open with zero issues', () => {
+    const pass = buildLineAuditPassSuggestion({
+      kind: 'invoice_line_audit',
+      checkedAt: '2026-08-06T12:00:00.000Z',
+      summary: { totalLines: 1, issuesFound: 0 },
+      lines: [{
+        lineItemId: 'line-1',
+        sortOrder: 0,
+        lineType: 'labor',
+        status: 'ok',
+        issues: [],
+        original: { description: 'Oil change', quantity: '1', unitPrice: '85.00' },
+        suggested: null,
+      }],
+    })
+    expect(isLocalLineAuditPass(pass)).toBe(true)
+    expect(isLineAuditSuggestion(pass)).toBe(true)
+    expect(lineAuditHasIssues(parseLineAuditContent(pass)!)).toBe(false)
   })
 
   it('soft-skips only configuration / feature-disabled errors', () => {

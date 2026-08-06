@@ -45,7 +45,11 @@ import {
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
-import { shouldSkipLineAuditError } from '~/utils/invoice-line-audit-ui'
+import type { InvoiceLineAuditContent } from '#shared/validators/ai'
+import {
+  buildLineAuditPassSuggestion,
+  isLocalLineAuditPass,
+} from '~/utils/invoice-line-audit-ui'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
@@ -461,6 +465,7 @@ async function continueToReview() {
   try {
     const auditOk = await runLineAuditBeforeSave(needsAudit)
     if (!auditOk) return
+    // AI describe off / no lines — advance without modal.
     pendingAfterAudit.value = null
     if (needsAudit) lineAuditCompletedForDraft.value = true
     nextStep()
@@ -658,13 +663,17 @@ async function saveDraft(): Promise<boolean> {
   }
 }
 
-async function finishToInvoiceView() {
+async function finishToInvoiceEdit() {
   const id = invoiceId.value
   if (!id) return
   stopEditingSession()
-  await navigateTo(`/invoices/${id}`)
+  await navigateTo(`/invoices/${id}/edit`)
 }
 
+/**
+ * Draft is already staged. Run AI check and ALWAYS open the review modal
+ * before advancing — even when every line passes. Returns false while waiting.
+ */
 async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
   const id = invoiceId.value
   if (!forceRun || !id || !canDescribe.value || !lines.value.length) return true
@@ -675,27 +684,21 @@ async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
     const res = await $fetch<{
       issuesFound: number
       suggestion: AiSuggestionRow | null
+      auditContent: InvoiceLineAuditContent
     }>(`/api/invoices/${id}/line-audit`, {
       method: 'POST',
     })
 
-    if (res.suggestion && res.issuesFound > 0) {
-      activeAuditSuggestion.value = res.suggestion
-      auditRequireReview.value = true
-      auditModalOpen.value = true
-      return false
-    }
-
-    lineAuditCompletedForDraft.value = true
-    return true
+    activeAuditSuggestion.value = res.suggestion
+      ?? buildLineAuditPassSuggestion(res.auditContent)
+    auditRequireReview.value = true
+    auditModalOpen.value = true
+    return false
   }
   catch (e: unknown) {
-    if (shouldSkipLineAuditError(e)) {
-      // Soft-skip still counts as "done" so we don't block the wizard.
-      lineAuditCompletedForDraft.value = true
-      return true
-    }
+    // Do not silently skip — surface the failure so Continue cannot proceed without AI.
     submitError.value = syncFetchErrorMessage(e, 'Line audit failed')
+    pendingAfterAudit.value = null
     return false
   }
   finally {
@@ -708,7 +711,7 @@ async function completePendingAfterAudit() {
   pendingAfterAudit.value = null
   lineAuditCompletedForDraft.value = true
   if (pending === 'finish') {
-    await finishToInvoiceView()
+    await finishToInvoiceEdit()
     return
   }
   if (pending === 'review') {
@@ -723,13 +726,17 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
   auditBusy.value = true
   auditError.value = ''
   try {
-    await $fetch(`/api/invoices/${id}/line-audit/review`, {
-      method: 'POST',
-      body: {
-        suggestionId: activeAuditSuggestion.value.id,
-        decisions,
-      },
-    })
+    if (!isLocalLineAuditPass(activeAuditSuggestion.value)) {
+      await $fetch(`/api/invoices/${id}/line-audit/review`, {
+        method: 'POST',
+        body: {
+          suggestionId: activeAuditSuggestion.value.id,
+          decisions,
+        },
+      })
+      await refreshSavedInvoice()
+    }
+
     auditModalOpen.value = false
     auditRequireReview.value = false
     await completePendingAfterAudit()
@@ -761,8 +768,9 @@ async function saveDraftAndFinish() {
   try {
     const auditOk = await runLineAuditBeforeSave(needsAudit)
     if (!auditOk) return
+    // If AI describe is off, finalize immediately (no modal).
     pendingAfterAudit.value = null
-    await finishToInvoiceView()
+    await finishToInvoiceEdit()
   }
   finally {
     busy.value = false
