@@ -42,22 +42,6 @@ ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_openroute
 ALTER TABLE "billing_integrations" ADD COLUMN IF NOT EXISTS "encrypted_openrouter_password" bytea;
 `.trim()
 
-const MIGRATE_LEGACY_MANUAL_DOMAINS_SQL = `
-UPDATE "billing_integrations"
-SET "domain_renewals" = "namecheap_manual_domains"
-WHERE to_regclass('public.billing_integrations') IS NOT NULL
-  AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'billing_integrations'
-      AND column_name = 'namecheap_manual_domains'
-  )
-  AND ("domain_renewals" IS NULL OR "domain_renewals" = '[]'::jsonb)
-  AND "namecheap_manual_domains" IS NOT NULL
-  AND "namecheap_manual_domains" <> '[]'::jsonb;
-`.trim()
-
 const DROP_LEGACY_NAMECHEAP_COLUMNS_SQL = `
 ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_enabled";
 ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_api_user";
@@ -68,6 +52,33 @@ ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_use_sandbox"
 ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_monitored_domains";
 ALTER TABLE "billing_integrations" DROP COLUMN IF EXISTS "namecheap_manual_domains";
 `.trim()
+
+/**
+ * Postgres still resolves column names at plan time, so an UPDATE that references
+ * `namecheap_manual_domains` throws when the column is already gone — even if the
+ * WHERE clause guards with EXISTS. Check first, then migrate only when present.
+ *
+ * @param {import('pg').Pool} pool
+ */
+async function migrateLegacyManualDomains(pool) {
+  const { rows } = await pool.query(`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'billing_integrations'
+      AND column_name = 'namecheap_manual_domains'
+    LIMIT 1
+  `)
+  if (!rows[0]) return
+
+  await pool.query(`
+    UPDATE "billing_integrations"
+    SET "domain_renewals" = "namecheap_manual_domains"
+    WHERE ("domain_renewals" IS NULL OR "domain_renewals" = '[]'::jsonb)
+      AND "namecheap_manual_domains" IS NOT NULL
+      AND "namecheap_manual_domains" <> '[]'::jsonb
+  `)
+}
 
 /**
  * @param {import('pg').Pool} pool
@@ -82,7 +93,7 @@ export async function ensureBillingIntegrationsSchema(pool) {
   }
 
   await pool.query(DOMAIN_RENEWALS_COLUMN_SQL)
-  await pool.query(MIGRATE_LEGACY_MANUAL_DOMAINS_SQL)
+  await migrateLegacyManualDomains(pool)
   await pool.query(DROP_LEGACY_NAMECHEAP_COLUMNS_SQL)
   await pool.query(CLOUDFLARE_COLUMNS_SQL)
   return false

@@ -306,7 +306,7 @@ function onScrimClick(event: MouseEvent) {
     >
       <header class="sl-bar">
         <div class="sl-bar-text">
-          <h3 id="sl-sheet-title">Edit Service Log Sheet</h3>
+          <h3 id="sl-sheet-title">Edit Template</h3>
           <p>
             {{ view === 'paper'
               ? 'Exactly the Letter print layout — click any title, line or price to edit'
@@ -397,7 +397,11 @@ function onScrimClick(event: MouseEvent) {
       <div v-else-if="api.doc && business" class="sl-body" :class="{ 'has-catalog': showCatalogPicker }">
         <div v-if="view === 'paper'" ref="stageRef" class="sl-stage">
           <!-- zoom (not transform) keeps layout, scrollbars and hit testing correct -->
-          <div class="sl-paper" :class="SERVICE_LOG_SHEET_SCOPE_CLASS" :style="{ zoom: scale }">
+          <div
+            class="sl-paper"
+            :class="SERVICE_LOG_SHEET_SCOPE_CLASS"
+            :style="{ zoom: String(scale) }"
+          >
             <ServiceLogSheetPaper
               :api="api"
               :business="business"
