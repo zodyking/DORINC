@@ -43,6 +43,9 @@ import {
   unregisterSessionSaveHandler,
 } from '~/composables/useSessionLogoutHandlers'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
+import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
+import type { AiSuggestionRow } from '~/utils/ai-ui'
+import { shouldSkipLineAuditError } from '~/utils/invoice-line-audit-ui'
 
 definePageMeta({ layout: 'staff', permission: 'invoices.create.all' })
 
@@ -97,6 +100,14 @@ const busy = ref(false)
 const pdfPreviewRef = ref<{ refresh: () => Promise<void>, refit: () => void } | null>(null)
 
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
+const canDescribe = computed(() => auth.can('ai.describe.all'))
+
+const auditModalOpen = ref(false)
+const auditRequireReview = ref(false)
+const auditBusy = ref(false)
+const auditError = ref('')
+const activeAuditSuggestion = ref<AiSuggestionRow | null>(null)
+const savePendingAfterAudit = ref(false)
 
 const INVOICE_NARRATIONS: Record<number, string> = {
   1: 'Pick customer.',
@@ -624,9 +635,99 @@ async function saveDraft(): Promise<boolean> {
   }
 }
 
+async function finishToInvoiceView() {
+  const id = invoiceId.value
+  if (!id) return
+  stopEditingSession()
+  await navigateTo(`/invoices/${id}`)
+}
+
+/** First finish always audits when AI describe is available (new invoice first save). */
+async function runLineAuditBeforeFinish(): Promise<boolean> {
+  const id = invoiceId.value
+  if (!id || !canDescribe.value || !lines.value.length) return true
+
+  auditBusy.value = true
+  auditError.value = ''
+  try {
+    const res = await $fetch<{
+      issuesFound: number
+      suggestion: AiSuggestionRow | null
+    }>(`/api/invoices/${id}/line-audit`, {
+      method: 'POST',
+    })
+
+    if (res.suggestion && res.issuesFound > 0) {
+      activeAuditSuggestion.value = res.suggestion
+      auditRequireReview.value = true
+      auditModalOpen.value = true
+      return false
+    }
+
+    return true
+  }
+  catch (e: unknown) {
+    if (shouldSkipLineAuditError(e)) return true
+    submitError.value = syncFetchErrorMessage(e, 'Line audit failed')
+    return false
+  }
+  finally {
+    auditBusy.value = false
+  }
+}
+
+async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 'accept' | 'reject' }>) {
+  const id = invoiceId.value
+  if (!id || !activeAuditSuggestion.value) return
+  auditBusy.value = true
+  auditError.value = ''
+  try {
+    await $fetch(`/api/invoices/${id}/line-audit/review`, {
+      method: 'POST',
+      body: {
+        suggestionId: activeAuditSuggestion.value.id,
+        decisions,
+      },
+    })
+    auditModalOpen.value = false
+    auditRequireReview.value = false
+    if (savePendingAfterAudit.value) {
+      savePendingAfterAudit.value = false
+      await finishToInvoiceView()
+    }
+  }
+  catch (e: unknown) {
+    auditError.value = syncFetchErrorMessage(e, 'Could not apply audit changes')
+  }
+  finally {
+    auditBusy.value = false
+  }
+}
+
+function closeAuditModal() {
+  auditModalOpen.value = false
+  auditRequireReview.value = false
+  savePendingAfterAudit.value = false
+}
+
 async function saveDraftAndFinish() {
+  savePendingAfterAudit.value = true
   const ok = await saveDraft()
-  if (ok) await navigateTo('/invoices')
+  if (!ok) {
+    savePendingAfterAudit.value = false
+    return
+  }
+
+  busy.value = true
+  try {
+    const auditOk = await runLineAuditBeforeFinish()
+    if (!auditOk) return
+    savePendingAfterAudit.value = false
+    await finishToInvoiceView()
+  }
+  finally {
+    busy.value = false
+  }
 }
 
 async function saveOpenWorkForSessionTimeout() {
@@ -1026,13 +1127,23 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <button
           type="button"
           class="btn primary"
-          :disabled="busy || !invoiceId"
+          :disabled="busy || auditBusy || !invoiceId"
           @click="saveDraftAndFinish"
         >
-          {{ busy ? 'Saving…' : 'Save draft' }}
+          {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Save draft' }}
         </button>
       </div>
+      <p v-if="auditError" class="help" style="color:#dc2626;">{{ auditError }}</p>
     </div>
+
+    <InvoiceLineAuditModal
+      :open="auditModalOpen"
+      :suggestion="activeAuditSuggestion"
+      :busy="auditBusy"
+      :require-review="auditRequireReview"
+      @close="closeAuditModal"
+      @submit="submitAuditReview"
+    />
   </section>
 </template>
 

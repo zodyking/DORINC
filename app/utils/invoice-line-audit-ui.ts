@@ -32,7 +32,17 @@ const LINE_AUDIT_REVIEW_ACTIONS = new Set([
   'ai.line_audit.reviewed',
 ])
 
-/** Service-log invoices stay on Save until the first line audit completes. */
+/** True until the invoice has completed or reviewed a line audit at least once. */
+export function invoiceNeedsInitialLineAudit(opts: {
+  historyActions: string[]
+}): boolean {
+  return !opts.historyActions.some(action => LINE_AUDIT_REVIEW_ACTIONS.has(action))
+}
+
+/**
+ * @deprecated Prefer invoiceNeedsInitialLineAudit — kept for older call sites/tests.
+ * Service-log drafts that have never been audited still need first review.
+ */
 export function invoiceNeedsInitialServiceLogReview(opts: {
   creationSource?: string | null
   status: string
@@ -42,19 +52,47 @@ export function invoiceNeedsInitialServiceLogReview(opts: {
   if (opts.locallyCleared) return false
   if (opts.creationSource !== 'service_log') return false
   if (opts.status !== 'draft') return false
-  return !opts.historyActions.some(action => LINE_AUDIT_REVIEW_ACTIONS.has(action))
+  return invoiceNeedsInitialLineAudit(opts)
 }
 
-/** Run line audit on save only when the editor changed or a converted service log still needs first review. */
+/**
+ * Run invoice description / line audit on save when:
+ * - the editor has any change (even one character), or
+ * - this invoice has never completed a line audit yet (first save / first review).
+ */
 export function shouldRunLineAuditBeforeSave(opts: {
   isDirty: boolean
-  creationSource?: string | null
-  status: string
   historyActions: string[]
+  /** @deprecated Ignored — first audit applies to all creation sources. */
+  creationSource?: string | null
+  /** @deprecated Ignored — first audit is history-based. */
+  status?: string
   locallyCleared?: boolean
 }): boolean {
+  if (opts.locallyCleared) return false
   if (opts.isDirty) return true
-  return invoiceNeedsInitialServiceLogReview(opts)
+  return invoiceNeedsInitialLineAudit(opts)
+}
+
+/** Soft-skip only when AI genuinely cannot run; do not swallow real audit failures. */
+export function shouldSkipLineAuditError(e: unknown): boolean {
+  const err = e as { data?: { message?: string, code?: string }, statusCode?: number }
+  const message = (err.data?.message ?? '').toLowerCase()
+  const code = err.data?.code
+
+  if (code === 'CONFLICT' || err.statusCode === 409) {
+    return message.includes('not configured')
+      || message.includes('this ai feature is disabled')
+      || message.includes('spend cap')
+      || message.includes('api key')
+      || message.includes('authentication')
+  }
+
+  return message.includes('not configured')
+    || message.includes('this ai feature is disabled')
+    || message.includes('spend cap')
+    || message.includes('api key')
+    || message.includes('authentication')
 }
 
 export async function pollAiJobUntilDone(

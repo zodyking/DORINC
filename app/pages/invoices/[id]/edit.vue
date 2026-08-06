@@ -47,6 +47,7 @@ import type { AiSuggestionRow } from '~/utils/ai-ui'
 import {
   latestLineAuditSuggestion,
   shouldRunLineAuditBeforeSave,
+  shouldSkipLineAuditError,
 } from '~/utils/invoice-line-audit-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
 
@@ -427,15 +428,13 @@ const isDirty = computed(() => {
 
 const historyActions = computed(() => history.value.map(row => row.action))
 
-const runLineAuditOnSave = computed(() => {
+function shouldAuditOnThisSave(dirtyOverride?: boolean): boolean {
   if (!invoice.value) return false
   return shouldRunLineAuditBeforeSave({
-    isDirty: isDirty.value,
-    creationSource: invoice.value.creationSource,
-    status: invoice.value.status,
+    isDirty: dirtyOverride ?? isDirty.value,
     historyActions: historyActions.value,
   })
-})
+}
 
 function syncFormFromInvoice(inv: InvoicePayload) {
   customerId.value = inv.customerId
@@ -524,16 +523,21 @@ async function syncInvoiceDraftToServer() {
 async function completeSave() {
   await refreshInvoice()
   markFormClean()
+  await releaseEditSession()
+  await navigateTo(`/invoices/${id}`)
 }
 
 async function saveInvoice() {
   if (!editable.value || !invoice.value) return
+  // Capture before sync — sync can normalize line fields and confuse dirty checks.
+  const dirtyAtSave = isDirty.value
+  const needsAudit = shouldAuditOnThisSave(dirtyAtSave)
   busy.value = true
   saveError.value = ''
   savePendingAfterAudit.value = true
   try {
     await syncInvoiceDraftToServer()
-    const auditOk = await runLineAuditBeforeSave()
+    const auditOk = await runLineAuditBeforeSave(needsAudit)
     if (!auditOk) return
     savePendingAfterAudit.value = false
     await completeSave()
@@ -727,22 +731,11 @@ async function refreshAuditReport() {
   activeAuditSuggestion.value = latestAuditSuggestion.value
 }
 
-function shouldSkipLineAuditError(e: unknown): boolean {
-  const err = e as { data?: { message?: string }, statusCode?: number }
-  const message = err.data?.message?.toLowerCase() ?? ''
-  return message.includes('not configured')
-    || message.includes('disabled')
-    || message.includes('spend cap')
-    || message.includes('authentication')
-    || message.includes('api key')
-    || err.statusCode === 409
-}
-
-async function runLineAuditBeforeSave(): Promise<boolean> {
+async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
   auditError.value = ''
 
   if (!canDescribe.value || !lines.value.length) return true
-  if (!runLineAuditOnSave.value) return true
+  if (!forceRun) return true
 
   auditBusy.value = true
   try {
