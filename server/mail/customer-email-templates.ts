@@ -89,7 +89,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
       lead: message,
       highlight: totalLine
         ? {
-            label: 'Invoice total',
+            label: 'Invoice Total',
             value: totalLine,
             status: 'Ready',
             statusTone: 'ok',
@@ -98,7 +98,7 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
       details: [
         { label: 'Customer', value: input.recipientName },
         { label: 'Invoice', value: input.invoiceNumber },
-        dueLine ? { label: 'Due date', value: dueLine } : null,
+        dueLine ? { label: 'Due Date', value: dueLine } : null,
         { label: 'Portal', value: 'Available now' },
       ].filter(Boolean) as Array<{ label: string, value: string }>,
       note: {

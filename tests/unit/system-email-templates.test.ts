@@ -101,7 +101,7 @@ describe('system email templates', () => {
       brand,
     })
     expect(mail.html).toContain('INV-000001')
-    expect(mail.html).toContain('Due date')
+    expect(mail.html).toContain('Due Date')
     expect(mail.text).toContain('attached')
   })
 
@@ -261,7 +261,7 @@ describe('system email templates', () => {
     expect(mail.html).toContain('Team notification')
     expect(mail.html).toContain('Team message')
     expect(mail.html).toContain('Open message')
-    expect(mail.html).toContain('Sent to')
+    expect(mail.html).toContain('Sent To')
     expect(mail.html).toContain('Brandon K.')
     expect(mail.html).toContain('display:block;width:100%')
     expect(mail.html).not.toContain('Accounting workspace')

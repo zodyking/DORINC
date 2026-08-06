@@ -158,7 +158,7 @@ export function buildOutsideGeofenceVerificationEmail({
     headline: 'Suspicious location detected',
     lead: `You're accessing ${resolvedBrand} from a suspicious location. Enter this verification code to confirm your identity.`,
     highlight: {
-      label: 'Verification code',
+      label: 'Verification Code',
       value: String(code),
       status: 'Expires in 15 minutes',
       statusTone: 'warn',
@@ -166,7 +166,7 @@ export function buildOutsideGeofenceVerificationEmail({
     details: [
       { label: 'Recipient', value: name },
       locationLabel ? { label: 'Location', value: locationLabel } : null,
-      ipAddress ? { label: 'IP address', value: ipAddress } : null,
+      ipAddress ? { label: 'IP Address', value: ipAddress } : null,
       { label: 'Expires', value: '15 minutes' },
     ].filter(Boolean),
     note: {
@@ -209,8 +209,8 @@ export function buildSmtpTestEmail({
     headline: 'SMTP test successful',
     lead: `This is a test message from the ${resolvedBrand} ${source}.`,
     details: [
-      actorName ? { label: 'Sent by', value: actorName } : null,
-      sentAt ? { label: 'Sent at', value: sentAt } : null,
+      actorName ? { label: 'Sent By', value: actorName } : null,
+      sentAt ? { label: 'Sent At', value: sentAt } : null,
       { label: 'Status', value: 'Delivered' },
     ].filter(Boolean),
     note: {
@@ -251,7 +251,7 @@ export function buildPortalCredentialEmail({ name, username, tempPassword, appUr
     lead: `A staff member has sent you access to the ${resolvedBrand} Customer Portal. Use the button below to sign in.`,
     details: [
       { label: 'Username', value: username },
-      { label: 'Temporary password', value: tempPassword },
+      { label: 'Temporary Password', value: tempPassword },
       { label: 'Expires', value: '7 days' },
       { label: 'Recipient', value: name },
     ],
@@ -295,7 +295,7 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
     lead: `You've been invited to join the ${resolvedBrand} staff workspace. Sign in with the credentials below, then choose your own password.`,
     details: [
       { label: 'Email', value: email },
-      { label: 'Temporary password', value: tempPassword },
+      { label: 'Temporary Password', value: tempPassword },
       { label: 'Expires', value: '7 days' },
     ],
     note: {
@@ -397,7 +397,7 @@ export function buildInvoiceAttachedEmail({
     lead: `Hello ${recipientName}, invoice ${invoiceNumber} is attached to this email as a PDF.`,
     highlight: totalLine
       ? {
-          label: 'Invoice total',
+          label: 'Invoice Total',
           value: totalLine,
           status: 'Ready',
           statusTone: 'ok',
@@ -405,7 +405,7 @@ export function buildInvoiceAttachedEmail({
       : undefined,
     details: [
       { label: 'Invoice', value: invoiceNumber },
-      dueLine ? { label: 'Due date', value: dueLine } : null,
+      dueLine ? { label: 'Due Date', value: dueLine } : null,
       { label: 'Recipient', value: recipientName },
       { label: 'Attachment', value: 'PDF included' },
     ].filter(Boolean),
@@ -475,10 +475,10 @@ export function buildLoginNotificationEmail({
       { label: 'When', value: when },
       { label: 'User', value: name },
       email ? { label: 'Email', value: email } : null,
-      location ? { label: 'Device location', value: location } : null,
-      ipLocation ? { label: 'Network location', value: ipLocation } : null,
-      accuracyLabel ? { label: 'Location accuracy', value: accuracyLabel } : null,
-      ipAddress ? { label: 'IP address', value: ipAddress } : null,
+      location ? { label: 'Device Location', value: location } : null,
+      ipLocation ? { label: 'Network Location', value: ipLocation } : null,
+      accuracyLabel ? { label: 'Location Accuracy', value: accuracyLabel } : null,
+      ipAddress ? { label: 'IP Address', value: ipAddress } : null,
       deviceLabel ? { label: 'Device', value: deviceLabel } : null,
     ].filter(Boolean),
     note: {
@@ -569,7 +569,7 @@ export function buildDeletionRequestSubmittedEmail({
     details: [
       { label: 'Record', value: entityLabel },
       { label: 'Type', value: entityTypeLabel },
-      { label: 'Requested by', value: submitterName },
+      { label: 'Requested By', value: submitterName },
       { label: 'Reviewer', value: reviewerName },
     ],
     note: { title: 'Request reason', body: reason },
@@ -621,7 +621,7 @@ export function buildDeletionRequestResultEmail({
     details: [
       { label: 'Record', value: entityLabel },
       { label: 'Type', value: entityTypeLabel },
-      reviewedByName ? { label: 'Reviewed by', value: reviewedByName } : null,
+      reviewedByName ? { label: 'Reviewed By', value: reviewedByName } : null,
       { label: 'Requestor', value: requestorName },
     ].filter(Boolean),
     note: reviewReason
@@ -706,7 +706,7 @@ export function buildInvoicePendingApprovalEmail({
     lead: `Invoice ${invoiceNumber} for ${customerName} is waiting for manager approval.`,
     highlight: totalLine
       ? {
-          label: 'Invoice total',
+          label: 'Invoice Total',
           value: totalLine,
           status: 'Pending',
           statusTone: 'warn',
@@ -771,7 +771,7 @@ export function buildCustomerServiceRequestStaffEmail({
     details: [
       { label: 'Customer', value: customerName },
       { label: 'Vehicle', value: vehicleUnit },
-      vehicleDetails ? { label: 'Vehicle details', value: vehicleDetails } : null,
+      vehicleDetails ? { label: 'Vehicle Details', value: vehicleDetails } : null,
       { label: 'Category', value: serviceCategory },
       { label: 'Urgency', value: urgency },
       { label: 'Notified', value: recipientName },
@@ -824,7 +824,7 @@ export function buildCustomerChangeRequestStaffEmail({
     lead: `${customerName} submitted a ${requestKindLabel.toLowerCase()}. Review the request in the portal.`,
     details: [
       { label: 'Customer', value: customerName },
-      { label: 'Request type', value: requestKindLabel },
+      { label: 'Request Type', value: requestKindLabel },
       { label: 'Topic', value: topic },
       invoiceNumber ? { label: 'Invoice', value: invoiceNumber } : null,
       vehicleLabel ? { label: 'Vehicle', value: vehicleLabel } : null,
@@ -936,7 +936,7 @@ export function buildChatMessageReceivedEmail({
         })
       : undefined,
     details: [
-      { label: 'Sent to', value: recipientName },
+      { label: 'Sent To', value: recipientName },
     ],
     primaryAction: { href: messagesUrl, label: 'Open message' },
     footerNote: `This email was sent because activity occurred in your ${brandNameFrom({ brand })} accounting workspace.`,
@@ -989,17 +989,17 @@ export function buildServiceLogSentToInvoiceStaffEmail({
       ? `${senderName} sent ${serviceLogLabel} to invoice. Open the draft and finish billing when you are ready.`
       : `${serviceLogLabel} was sent to invoice. Open the draft and finish billing when you are ready.`,
     highlight: {
-      label: 'Service log',
+      label: 'Service Log',
       value: serviceLogLabel,
       status: 'Needs completion',
       statusTone: 'warn',
     },
     details: [
-      senderName ? { label: 'Sent by', value: senderName } : null,
+      senderName ? { label: 'Sent By', value: senderName } : null,
       { label: 'Customer', value: customerName },
       { label: 'Vehicle', value: vehicleUnit },
-      vehicleDetails ? { label: 'Vehicle details', value: vehicleDetails } : null,
-      invoiceNumber ? { label: 'Draft invoice', value: invoiceNumber } : null,
+      vehicleDetails ? { label: 'Vehicle Details', value: vehicleDetails } : null,
+      invoiceNumber ? { label: 'Draft Invoice', value: invoiceNumber } : null,
       { label: 'Notified', value: recipientName },
     ].filter(Boolean),
     primaryAction: { href: invoiceUrl, label: 'Complete invoice' },
