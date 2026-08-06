@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { isBuiltInBladeMarker } from '../../shared/invoice-template-blade'
+import {
+  isBuiltInBladeMarker,
+  isLegacyAccentBladeSource,
+  isPresetBladeMarker,
+  parsePresetSlugFromMarker,
+} from '../../shared/invoice-template-blade'
 import { BLADE_INVOICE_TEMPLATE_VIEW } from '../../shared/invoice-template-design'
+import { readPresetBladeBySlug } from '../lib/invoice-preset-blade'
 
 let cachedBaseline: string | null = null
 
@@ -30,9 +36,26 @@ export async function readBuiltInInvoiceBladeSource(): Promise<string> {
   throw lastError ?? new Error('Invoice Blade baseline template not found')
 }
 
+/**
+ * Expand a stored layout marker (built-in / preset) to Blade source for the template editor.
+ * Inline Blade is returned unchanged.
+ */
+export async function resolveBladeSourceForEditor(layoutMarker: string): Promise<string> {
+  const marker = layoutMarker.trim()
+  if (isPresetBladeMarker(marker)) {
+    const slug = parsePresetSlugFromMarker(marker)
+    if (!slug) throw new Error('Invalid invoice template preset marker')
+    return readPresetBladeBySlug(slug)
+  }
+  if (!marker || isBuiltInBladeMarker(marker) || isLegacyAccentBladeSource(marker)) {
+    return readBuiltInInvoiceBladeSource()
+  }
+  return marker
+}
+
 export function resolveTemplateBladeSource(layoutMarker: string, baseline: string): string {
-  if (!isBuiltInBladeMarker(layoutMarker)) return layoutMarker
-  return baseline
+  if (isBuiltInBladeMarker(layoutMarker)) return baseline
+  return layoutMarker
 }
 
 export { BLADE_INVOICE_TEMPLATE_VIEW }

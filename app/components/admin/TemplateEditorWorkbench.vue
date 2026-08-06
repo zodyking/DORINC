@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { isBuiltInBladeMarker, isLegacyAccentBladeSource } from '#shared/invoice-template-blade'
+import {
+  isBladeLayoutMarker,
+  isBuiltInBladeMarker,
+  isLegacyAccentBladeSource,
+  isPresetBladeMarker,
+} from '#shared/invoice-template-blade'
 import { DEFAULT_INVOICE_TEMPLATE_DESIGN, type InvoiceTemplateDesignSettings } from '#shared/invoice-template-design'
 import { fetchErrorMessage } from '~/utils/fetch-blob-error'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
@@ -147,8 +152,10 @@ const activeVersion = computed(() => data.value?.publishedVersion ?? data.value?
 const usageCount = computed(() => data.value?.usageCount ?? 0)
 
 async function resolveBladeFromMarker(marker: string): Promise<string> {
-  if (isBuiltInBladeMarker(marker) || isLegacyAccentBladeSource(marker)) {
-    const baseline = await $fetch<{ source: string }>('/api/invoice-templates/blade-baseline')
+  if (isBuiltInBladeMarker(marker) || isLegacyAccentBladeSource(marker) || isPresetBladeMarker(marker)) {
+    const baseline = await $fetch<{ source: string }>('/api/invoice-templates/blade-baseline', {
+      query: { marker },
+    })
     return baseline.source
   }
   return marker
@@ -203,7 +210,8 @@ async function refreshPreview(opts?: { switchToPreview?: boolean }) {
   try {
     const source = bladeSource.value.trim()
     const body: { bladeSource?: string, designSettings?: Partial<InvoiceTemplateDesignSettings> } = {}
-    if (source.length >= 20) body.bladeSource = bladeSource.value
+    // Omit storage markers (preset:/laravel-blade:) so the server expands them from disk.
+    if (source.length >= 20 && !isBladeLayoutMarker(source)) body.bladeSource = bladeSource.value
     if (designDirty.value) body.designSettings = currentDesignSettings()
 
     const blob = await $fetch<Blob>(`/api/invoice-templates/${template.value.id}/preview-pdf`, {
@@ -359,9 +367,13 @@ async function testRenderPdf() {
   testPdfBusy.value = true
   actionError.value = ''
   try {
+    const source = bladeSource.value.trim()
+    const body: { bladeSource?: string, designSettings?: Partial<InvoiceTemplateDesignSettings> } = {}
+    if (source.length >= 20 && !isBladeLayoutMarker(source)) body.bladeSource = bladeSource.value
+    if (designDirty.value) body.designSettings = currentDesignSettings()
     await $fetch(`/api/invoice-templates/${template.value.id}/test-pdf`, {
       method: 'POST',
-      body: { bladeSource: bladeSource.value },
+      body,
     })
     actionMessage.value = 'Test PDF queued — check downloads shortly.'
   }

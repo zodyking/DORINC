@@ -5,12 +5,35 @@ import {
   type InvoiceTemplateDesignSettings,
 } from './invoice-template-design'
 
+/** Storage marker for shipped preset Blade files under server/assets/invoice-template-presets. */
+export const PRESET_BLADE_MARKER_PREFIX = 'preset:'
+
+export function presetBladeMarkerForSlug(slug: string): string {
+  return `${PRESET_BLADE_MARKER_PREFIX}${slug}`
+}
+
+export function isPresetBladeMarker(marker: string): boolean {
+  return marker.trim().startsWith(PRESET_BLADE_MARKER_PREFIX)
+}
+
+export function parsePresetSlugFromMarker(marker: string): string | null {
+  const trimmed = marker.trim()
+  if (!trimmed.startsWith(PRESET_BLADE_MARKER_PREFIX)) return null
+  const slug = trimmed.slice(PRESET_BLADE_MARKER_PREFIX.length).trim()
+  return slug || null
+}
+
 export function isBuiltInBladeMarker(marker: string): boolean {
   return marker === BLADE_INVOICE_TEMPLATE_MARKER || marker.startsWith('laravel-blade:')
 }
 
+/** True when the value is a storage marker (built-in or preset), not inline Blade HTML. */
+export function isBladeLayoutMarker(marker: string): boolean {
+  return isBuiltInBladeMarker(marker) || isPresetBladeMarker(marker)
+}
+
 export function isInlineBladeSource(marker: string): boolean {
-  return marker.length > 0 && !isBuiltInBladeMarker(marker)
+  return marker.length > 0 && !isBladeLayoutMarker(marker)
 }
 
 /** Legacy designer blades that pulled yellow/accent colors from design settings. */
@@ -44,9 +67,11 @@ export function normalizeInvoiceTemplateDesign(
 /**
  * Resolve layout marker / inline blade for PDF rendering.
  * Returns null to use the shipped Laravel view (current baseline).
+ * Preset markers are not expanded here — use resolveBladeSourceForPdf / readPresetBladeBySlug.
  */
 export function resolveEffectiveBladeSource(layoutMarker: string): string | null {
   if (isBuiltInBladeMarker(layoutMarker)) return null
+  if (isPresetBladeMarker(layoutMarker)) return null
   if (isLegacyAccentBladeSource(layoutMarker)) return null
   return layoutMarker
 }
@@ -55,6 +80,7 @@ export function resolveEffectiveBladeSource(layoutMarker: string): string | null
 export function coerceLayoutMarkerForStorage(layoutMarker: string): string {
   const trimmed = layoutMarker.trim()
   if (!trimmed || isBuiltInBladeMarker(trimmed)) return trimmed || BLADE_INVOICE_TEMPLATE_MARKER
+  if (isPresetBladeMarker(trimmed)) return trimmed
   if (isLegacyAccentBladeSource(trimmed)) return BLADE_INVOICE_TEMPLATE_MARKER
   return trimmed
 }

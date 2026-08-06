@@ -1,5 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import {
+  isPresetBladeMarker,
+  parsePresetSlugFromMarker,
+  presetBladeMarkerForSlug,
+  PRESET_BLADE_MARKER_PREFIX,
+} from '../../shared/invoice-template-blade'
 
 const PRESET_DIR_CANDIDATES = [
   join(process.cwd(), 'server/assets/invoice-template-presets'),
@@ -15,21 +21,11 @@ export const INVOICE_TEMPLATE_PRESET_FILES: ReadonlyArray<{ slug: string, name: 
   { slug: 'blueprint-trade', name: 'Blueprint Trade', file: 'blueprint-trade.blade.php' },
 ]
 
-export const PRESET_BLADE_MARKER_PREFIX = 'preset:'
-
-export function presetBladeMarkerForSlug(slug: string): string {
-  return `${PRESET_BLADE_MARKER_PREFIX}${slug}`
-}
-
-export function isPresetBladeMarker(marker: string): boolean {
-  return marker.trim().startsWith(PRESET_BLADE_MARKER_PREFIX)
-}
-
-export function parsePresetSlugFromMarker(marker: string): string | null {
-  const trimmed = marker.trim()
-  if (!trimmed.startsWith(PRESET_BLADE_MARKER_PREFIX)) return null
-  const slug = trimmed.slice(PRESET_BLADE_MARKER_PREFIX.length).trim()
-  return slug || null
+export {
+  isPresetBladeMarker,
+  parsePresetSlugFromMarker,
+  presetBladeMarkerForSlug,
+  PRESET_BLADE_MARKER_PREFIX,
 }
 
 export function presetFileForSlug(slug: string): string | null {
