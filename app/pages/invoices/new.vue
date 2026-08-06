@@ -107,7 +107,10 @@ const auditRequireReview = ref(false)
 const auditBusy = ref(false)
 const auditError = ref('')
 const activeAuditSuggestion = ref<AiSuggestionRow | null>(null)
-const savePendingAfterAudit = ref(false)
+/** After a successful line audit, continue to review step or finish to invoice view. */
+const pendingAfterAudit = ref<'review' | 'finish' | null>(null)
+/** True once this draft has completed a line audit (so clean re-continues can skip). */
+const lineAuditCompletedForDraft = ref(false)
 
 const INVOICE_NARRATIONS: Record<number, string> = {
   1: 'Pick customer.',
@@ -443,8 +446,28 @@ async function continueToReview() {
     return
   }
   submitError.value = ''
+  auditError.value = ''
+
+  // Capture before save — saveDraft clears dirty.
+  const needsAudit = dirty.value || !lineAuditCompletedForDraft.value
+  pendingAfterAudit.value = 'review'
   const ok = await saveDraft()
-  if (ok) nextStep()
+  if (!ok) {
+    pendingAfterAudit.value = null
+    return
+  }
+
+  busy.value = true
+  try {
+    const auditOk = await runLineAuditBeforeSave(needsAudit)
+    if (!auditOk) return
+    pendingAfterAudit.value = null
+    if (needsAudit) lineAuditCompletedForDraft.value = true
+    nextStep()
+  }
+  finally {
+    busy.value = false
+  }
 }
 
 function removeLine(localId: string) {
@@ -642,10 +665,9 @@ async function finishToInvoiceView() {
   await navigateTo(`/invoices/${id}`)
 }
 
-/** First finish always audits when AI describe is available (new invoice first save). */
-async function runLineAuditBeforeFinish(): Promise<boolean> {
+async function runLineAuditBeforeSave(forceRun: boolean): Promise<boolean> {
   const id = invoiceId.value
-  if (!id || !canDescribe.value || !lines.value.length) return true
+  if (!forceRun || !id || !canDescribe.value || !lines.value.length) return true
 
   auditBusy.value = true
   auditError.value = ''
@@ -664,15 +686,34 @@ async function runLineAuditBeforeFinish(): Promise<boolean> {
       return false
     }
 
+    lineAuditCompletedForDraft.value = true
     return true
   }
   catch (e: unknown) {
-    if (shouldSkipLineAuditError(e)) return true
+    if (shouldSkipLineAuditError(e)) {
+      // Soft-skip still counts as "done" so we don't block the wizard.
+      lineAuditCompletedForDraft.value = true
+      return true
+    }
     submitError.value = syncFetchErrorMessage(e, 'Line audit failed')
     return false
   }
   finally {
     auditBusy.value = false
+  }
+}
+
+async function completePendingAfterAudit() {
+  const pending = pendingAfterAudit.value
+  pendingAfterAudit.value = null
+  lineAuditCompletedForDraft.value = true
+  if (pending === 'finish') {
+    await finishToInvoiceView()
+    return
+  }
+  if (pending === 'review') {
+    await refreshSavedInvoice()
+    nextStep()
   }
 }
 
@@ -691,10 +732,7 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
     })
     auditModalOpen.value = false
     auditRequireReview.value = false
-    if (savePendingAfterAudit.value) {
-      savePendingAfterAudit.value = false
-      await finishToInvoiceView()
-    }
+    await completePendingAfterAudit()
   }
   catch (e: unknown) {
     auditError.value = syncFetchErrorMessage(e, 'Could not apply audit changes')
@@ -707,22 +745,23 @@ async function submitAuditReview(decisions: Array<{ lineItemId: string, action: 
 function closeAuditModal() {
   auditModalOpen.value = false
   auditRequireReview.value = false
-  savePendingAfterAudit.value = false
+  pendingAfterAudit.value = null
 }
 
 async function saveDraftAndFinish() {
-  savePendingAfterAudit.value = true
+  const needsAudit = dirty.value || !lineAuditCompletedForDraft.value
+  pendingAfterAudit.value = 'finish'
   const ok = await saveDraft()
   if (!ok) {
-    savePendingAfterAudit.value = false
+    pendingAfterAudit.value = null
     return
   }
 
   busy.value = true
   try {
-    const auditOk = await runLineAuditBeforeFinish()
+    const auditOk = await runLineAuditBeforeSave(needsAudit)
     if (!auditOk) return
-    savePendingAfterAudit.value = false
+    pendingAfterAudit.value = null
     await finishToInvoiceView()
   }
   finally {
@@ -1100,12 +1139,13 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <button
           type="button"
           class="btn primary"
-          :disabled="busy || !lineEntryMode || !canProceedWizardStep(4, { customerId, vehicleId, lines })"
+          :disabled="busy || auditBusy || !lineEntryMode || !canProceedWizardStep(4, { customerId, vehicleId, lines })"
           @click="continueToReview"
         >
-          Continue
+          {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Continue' }}
         </button>
       </div>
+      <p v-if="step === 4 && (submitError || auditError)" class="help" style="color:#dc2626;">{{ submitError || auditError }}</p>
     </div>
 
     <!-- Step 5: Review -->
