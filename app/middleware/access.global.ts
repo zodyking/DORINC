@@ -1,7 +1,11 @@
 /**
  * Global route middleware for page-level access control.
- * Enforces permissions based on route meta, handles auth redirects.
+ * Enforces permissions based on route meta, handles auth redirects,
+ * and blocks the workspace until required login messages are acknowledged.
  */
+import { guardStaffRoute } from '~/utils/staff-route-guard'
+import { isAnnouncementPath } from '~/utils/announcements-ui'
+
 export default defineNuxtRouteMiddleware(async (to) => {
   // Skip auth pages
   if (to.path.startsWith('/auth/') || to.path === '/setup') return
@@ -32,6 +36,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/portal')
   }
 
+  // Required login message / training / password gates (staff-auth was never attached).
+  const gateRedirect = await guardStaffRoute(to.path)
+  if (gateRedirect) return gateRedirect
+
   // Check permission requirement from route meta
   const requiredPermission = to.meta.permission as string | string[] | undefined
 
@@ -40,7 +48,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
     const hasAccess = keys.some(key => auth.can(key))
 
     if (!hasAccess) {
-      // Redirect to dashboard if user doesn't have permission
+      // Never bounce locked users to the dashboard.
+      if (auth.announcementGate?.locked && !isAnnouncementPath(to.path)) {
+        return navigateTo('/announcements/required')
+      }
       return navigateTo('/dashboard')
     }
   }

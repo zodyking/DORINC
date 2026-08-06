@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
+import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
 
 // Root router: first-run setup → wizard; signed in → workspace/portal; else login.
 const { data: setupStatus } = useClientFetch<{ needsBootstrap: boolean }>('/api/setup/status')
@@ -13,8 +14,11 @@ else {
   if (!auth.isSignedIn) {
     await navigateTo('/auth/login', { replace: true })
   }
+  else if (auth.isCustomer) {
+    await navigateTo('/portal', { replace: true })
+  }
   else {
-    await navigateTo(auth.isCustomer ? '/portal' : '/dashboard', { replace: true })
+    await navigateTo(resolveStaffLandingPath(auth), { replace: true })
   }
 }
 </script>

@@ -2,7 +2,8 @@
 import AnnouncementGateCard from '~/components/announcements/AnnouncementGateCard.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
-definePageMeta({ layout: 'staff' })
+// Full-screen gate only — never mount the staff shell / dashboard chrome.
+definePageMeta({ layout: false })
 
 interface PendingAnnouncement {
   id: string
