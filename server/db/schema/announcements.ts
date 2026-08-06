@@ -20,7 +20,7 @@ export const announcements = pgTable('announcements', {
   heroImageFileId: uuid('hero_image_file_id').references(() => appFiles.id, { onDelete: 'set null' }),
   ctaButtons: jsonb('cta_buttons').$type<AnnouncementCtaButton[]>().notNull().default([]),
   isActive: boolean('is_active').notNull().default(false),
-  /** Higher priority shows first when a user has multiple pending messages. */
+  /** Lower number shows first when a user has multiple pending messages (1 before 2). */
   priority: integer('priority').notNull().default(0),
   startsAt: timestamp('starts_at', { withTimezone: true }),
   endsAt: timestamp('ends_at', { withTimezone: true }),

@@ -143,7 +143,8 @@ export async function listPendingAnnouncementsForUser(
 
   const active = await db.select().from(announcements)
     .where(eq(announcements.isActive, true))
-    .orderBy(desc(announcements.priority), asc(announcements.createdAt))
+    // Lower priority number shows first (1 before 2), then oldest first.
+    .orderBy(asc(announcements.priority), asc(announcements.createdAt))
 
   if (!active.length) return []
 
@@ -245,7 +246,7 @@ function audienceSummary(targets: Array<typeof announcementTargets.$inferSelect>
 
 export async function listAnnouncementsAdmin(db: Db) {
   const rows = await db.select().from(announcements)
-    .orderBy(desc(announcements.isActive), desc(announcements.priority), desc(announcements.updatedAt))
+    .orderBy(desc(announcements.isActive), asc(announcements.priority), asc(announcements.createdAt))
 
   const ids = rows.map(r => r.id)
   const targetsById = await loadTargetsForAnnouncements(db, ids)
