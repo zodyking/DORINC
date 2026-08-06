@@ -234,19 +234,19 @@ export function renderServiceLogSheetHtml(
           <th class="check-cell"></th>
           <th class="service-name">Service</th>
           <th class="price-cell">Price</th>
-          <th class="new-price-cell">New</th>
+          <th class="new-price-cell">Price</th>
           <th class="grid-gap"></th>
           <th class="check-cell"></th>
           <th class="service-name">Service</th>
           <th class="price-cell">Price</th>
-          <th class="new-price-cell">New</th>
+          <th class="new-price-cell">Price</th>
         </tr>
       </thead>
       <tbody>
         ${renderCatalogRowsHtml(document)}
       </tbody>
     </table>`
-    : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Service Log Sheet to add categories and services.</div>`
+    : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Template to add categories and services.</div>`
 
   const header = renderSheetHeaderHtml(title, companyDetails)
 

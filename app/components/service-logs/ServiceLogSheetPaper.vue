@@ -70,12 +70,12 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
             <th class="check-cell" />
             <th class="service-name">Service</th>
             <th class="price-cell">Price</th>
-            <th class="new-price-cell">New</th>
+            <th class="new-price-cell">Price</th>
             <th class="grid-gap" />
             <th class="check-cell" />
             <th class="service-name">Service</th>
             <th class="price-cell">Price</th>
-            <th class="new-price-cell">New</th>
+            <th class="new-price-cell">Price</th>
           </tr>
         </thead>
         <tbody>
@@ -151,5 +151,17 @@ const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* Fallback Letter chrome so the paper never collapses to an empty gray stage
+     if the shared injected stylesheet fails to mount. */
+  color: #111111;
+  background: transparent;
+}
+.sl-pages :deep(.page) {
+  width: 8.5in;
+  min-height: 11in;
+  height: 11in;
+  padding: 0.4in;
+  background: #ffffff;
+  box-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.45);
 }
 </style>

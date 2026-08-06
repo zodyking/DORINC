@@ -4,7 +4,9 @@ import { ensureBillingIntegrationsSchema } from '../../server/lib/ensure-billing
 describe('ensureBillingIntegrationsSchema', () => {
   it('skips table creation when billing_integrations exists', async () => {
     const query = vi.fn()
-      .mockResolvedValueOnce({ rows: [{ reg: 'billing_integrations' }] })
+      .mockResolvedValueOnce({ rows: [{ reg: 'billing_integrations' }] }) // table exists
+      .mockResolvedValueOnce(undefined) // domain_renewals column
+      .mockResolvedValueOnce({ rows: [] }) // legacy column missing
       .mockResolvedValue(undefined)
     const pool = { query }
 
@@ -27,13 +29,31 @@ describe('ensureBillingIntegrationsSchema', () => {
   it('ensures cloudflare and credential columns when table already exists', async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [{ reg: 'billing_integrations' }] })
+      .mockResolvedValueOnce(undefined) // domain_renewals
+      .mockResolvedValueOnce({ rows: [] }) // no namecheap_manual_domains
       .mockResolvedValue(undefined)
     const pool = { query }
 
     await expect(ensureBillingIntegrationsSchema(pool)).resolves.toBe(false)
     expect(String(query.mock.calls[1]?.[0])).toContain('domain_renewals')
+    expect(String(query.mock.calls[2]?.[0])).toContain('namecheap_manual_domains')
+    expect(String(query.mock.calls[2]?.[0])).toContain('information_schema.columns')
     expect(String(query.mock.calls[3]?.[0])).toContain('DROP COLUMN IF EXISTS "namecheap_manual_domains"')
     expect(String(query.mock.calls[4]?.[0])).toContain('cloudflare_enabled')
     expect(String(query.mock.calls[4]?.[0])).toContain('encrypted_vultr_username')
+  })
+
+  it('copies legacy namecheap_manual_domains when the column still exists', async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ reg: 'billing_integrations' }] })
+      .mockResolvedValueOnce(undefined) // domain_renewals
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] }) // legacy column present
+      .mockResolvedValueOnce(undefined) // UPDATE migrate
+      .mockResolvedValue(undefined)
+    const pool = { query }
+
+    await expect(ensureBillingIntegrationsSchema(pool)).resolves.toBe(false)
+    expect(String(query.mock.calls[3]?.[0])).toContain('SET "domain_renewals" = "namecheap_manual_domains"')
+    expect(String(query.mock.calls[4]?.[0])).toContain('DROP COLUMN IF EXISTS "namecheap_manual_domains"')
   })
 })

@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive } from 'vue'
 import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import type {
   ServiceLogSheetDocument,
@@ -12,10 +12,8 @@ import {
 } from '#shared/service-log-sheet-layout'
 
 /**
- * Editor API is a reactive object (same pattern as useDirectMessages) so child
- * templates can read `api.gridRows` / `api.doc` without `.value`. Passing a plain
- * bag of refs as a prop made paper/lines views resolve nested refs inconsistently
- * and the catalog rendered blank.
+ * Flat reactive editor state (no nested refs). Nested ref bags passed as props
+ * unwrap inconsistently in child templates and left the Letter paper blank.
  */
 
 export interface SheetCatalogPick {
@@ -43,65 +41,67 @@ function blankLine(): ServiceLogSheetLine {
  * and the mobile line editor so both views mutate one document.
  */
 export function useServiceLogSheetEditor() {
-  const doc = ref<ServiceLogSheetDocument | null>(null)
-  const selectedSectionId = ref<string | null>(null)
-  const selectedItemId = ref<string | null>(null)
+  const state = reactive({
+    doc: null as ServiceLogSheetDocument | null,
+    selectedSectionId: null as string | null,
+    selectedItemId: null as string | null,
+  })
 
-  const sections = computed(() => doc.value?.sections ?? [])
-  const columns = computed(() => sectionsByColumn(doc.value ?? { version: 2, sections: [] }))
+  const sections = computed(() => state.doc?.sections ?? [])
+  const columns = computed(() => sectionsByColumn(state.doc ?? { version: 2, sections: [] }))
   const leftSections = computed(() => columns.value.left)
   const rightSections = computed(() => columns.value.right)
-  const gridRows = computed(() => sheetGridRows(doc.value ?? { version: 2, sections: [] }))
-  const pageFill = computed(() => sheetFrontPageFill(doc.value ?? { version: 2, sections: [] }))
+  const gridRows = computed(() => sheetGridRows(state.doc ?? { version: 2, sections: [] }))
+  const pageFill = computed(() => sheetFrontPageFill(state.doc ?? { version: 2, sections: [] }))
   const lineCount = computed(() =>
     sections.value.reduce((total, section) => total + section.items.length, 0),
   )
 
   function setDocument(next: ServiceLogSheetDocument | null) {
-    doc.value = next ? structuredClone(next) : null
-    selectedSectionId.value = null
-    selectedItemId.value = null
+    state.doc = next ? structuredClone(next) : null
+    state.selectedSectionId = null
+    state.selectedItemId = null
   }
 
   function findSection(sectionId: string): ServiceLogSheetSection | undefined {
-    return doc.value?.sections.find(section => section.id === sectionId)
+    return state.doc?.sections.find(section => section.id === sectionId)
   }
 
   function selectSection(sectionId: string) {
-    selectedSectionId.value = sectionId
-    selectedItemId.value = null
+    state.selectedSectionId = sectionId
+    state.selectedItemId = null
   }
 
   function selectItem(sectionId: string, itemId: string) {
-    selectedSectionId.value = sectionId
-    selectedItemId.value = itemId
+    state.selectedSectionId = sectionId
+    state.selectedItemId = itemId
   }
 
   function addSection(column: 'left' | 'right'): ServiceLogSheetSection | null {
-    if (!doc.value) return null
+    if (!state.doc) return null
     const section: ServiceLogSheetSection = {
       id: newId('sec'),
       title: 'New section',
       column,
       items: [blankLine()],
     }
-    doc.value.sections.push(section)
+    state.doc.sections.push(section)
     selectSection(section.id)
     return section
   }
 
   function removeSection(sectionId: string) {
-    if (!doc.value) return
-    doc.value.sections = doc.value.sections.filter(section => section.id !== sectionId)
-    if (selectedSectionId.value === sectionId) {
-      selectedSectionId.value = null
-      selectedItemId.value = null
+    if (!state.doc) return
+    state.doc.sections = state.doc.sections.filter(section => section.id !== sectionId)
+    if (state.selectedSectionId === sectionId) {
+      state.selectedSectionId = null
+      state.selectedItemId = null
     }
   }
 
   /** Reorder within the section's own column. */
   function moveSection(sectionId: string, direction: -1 | 1) {
-    const all = doc.value?.sections
+    const all = state.doc?.sections
     const section = findSection(sectionId)
     if (!all || !section) return
     const sameColumn = all.filter(candidate => candidate.column === section.column)
@@ -134,7 +134,7 @@ export function useServiceLogSheetEditor() {
     const section = findSection(sectionId)
     if (!section) return
     section.items = section.items.filter(item => item.id !== itemId)
-    if (selectedItemId.value === itemId) selectedItemId.value = null
+    if (state.selectedItemId === itemId) state.selectedItemId = null
   }
 
   function moveItem(sectionId: string, itemId: string, direction: -1 | 1) {
@@ -168,10 +168,10 @@ export function useServiceLogSheetEditor() {
 
   /** Trim blanks before saving; empty names would print as empty rows. */
   function cleanDocument(): ServiceLogSheetDocument | null {
-    if (!doc.value) return null
+    if (!state.doc) return null
     return {
       version: 2,
-      sections: doc.value.sections.map(section => ({
+      sections: state.doc.sections.map(section => ({
         ...section,
         title: section.title.trim() || 'Untitled',
         items: section.items
@@ -188,15 +188,15 @@ export function useServiceLogSheetEditor() {
   }
 
   return reactive({
-    doc,
+    get doc() { return state.doc },
+    get selectedSectionId() { return state.selectedSectionId },
+    get selectedItemId() { return state.selectedItemId },
     sections,
     leftSections,
     rightSections,
     gridRows,
     pageFill,
     lineCount,
-    selectedSectionId,
-    selectedItemId,
     setDocument,
     findSection,
     selectSection,

@@ -17,5 +17,9 @@ describe('useServiceLogSheetEditor', () => {
     expect(api.doc?.version).toBe(2)
     expect(api.leftSections.some(section => section.title === 'Cleaning')).toBe(true)
     expect(api.pageFill.capacity).toBeGreaterThan(0)
+
+    api.selectSection(api.leftSections[0]!.id)
+    expect(api.selectedSectionId).toBe(api.leftSections[0]!.id)
+    expect(api.findSection(api.leftSections[0]!.id)?.title).toBe('Cleaning')
   })
 })

@@ -238,7 +238,7 @@ function closeSheetPdfDialog() {
           :disabled="sheetBusy"
           @click="openPrintSheetChooser"
         >
-          {{ sheetBusy ? 'Rendering…' : 'Print Service Log Sheet' }}
+          {{ sheetBusy ? 'Rendering…' : 'Print Template' }}
         </button>
         <button
           v-if="canEditSheet"
@@ -246,7 +246,7 @@ function closeSheetPdfDialog() {
           class="btn"
           @click="editSheetOpen = true"
         >
-          Edit Service Log Sheet
+          Edit Template
         </button>
         <NuxtLink
           v-if="canUpload"

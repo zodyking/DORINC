@@ -46,7 +46,7 @@ async function chooseDevice() {
     >
       <div class="mhead">
         <div>
-          <h3 id="sl-print-title">Print Service Log Sheet</h3>
+          <h3 id="sl-print-title">Print Template</h3>
           <p>Choose how to print the blank Letter service catalog</p>
         </div>
         <button type="button" class="close" aria-label="Close" :disabled="deviceBusy" @click="close">✕</button>
