@@ -1,0 +1,7 @@
+/* Login-message gate — match /auth/login backdrop */
+.ann-login-bg {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.78) 0%, rgba(241, 245, 249, 0.88) 100%),
+    url('/images/auth-login-bg.png') center / cover no-repeat fixed;
+  color: #0f172a;
+}

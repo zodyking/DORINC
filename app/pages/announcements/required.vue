@@ -84,7 +84,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="ann-gate">
+  <div class="ann-gate ann-login-bg">
     <div v-if="!current && !error" class="ann-gate-loading">
       Loading required message…
     </div>
@@ -121,25 +121,21 @@ onMounted(() => {
   display: grid;
   place-items: center;
   padding: 24px 16px;
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.18), transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, rgba(14, 116, 144, 0.16), transparent 50%),
-    linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #0b1220 100%);
-  color: #f8fafc;
   overflow: auto;
 }
 
 .ann-gate-loading,
 .ann-gate-error {
   text-align: center;
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
 .ann-gate-error {
   padding: 24px;
   max-width: 420px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.18);
 }
 
 @media (max-width: 640px) {
