@@ -27,7 +27,7 @@ describe('control-panel-nav', () => {
       }
     }
     expect(controlPanelSectionById('catalog')?.title).toBe('Catalog Detection')
-    expect(controlPanelSectionById('ai')?.title).toBe('Artificial Intelligence')
+    expect(controlPanelSectionById('ai')?.title).toBe('Susan')
   })
 
   it('builds a closed open-state map for every section', () => {

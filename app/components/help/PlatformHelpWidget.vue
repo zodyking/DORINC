@@ -93,7 +93,7 @@ function formatFileSize(bytes: number): string {
 
 function welcomeMessage(): ChatMessage {
   const first = displayName.value.split(' ')[0]
-  const html = `<p>Hi ${first}! I'm your <b>Platform Assistant</b>. Ask how to use DORINC, or attach a screenshot and I'll walk you through what I see.</p>`
+  const html = `<p>Hi ${first}! I'm <b>Susan</b>. Ask how to use DORINC, or attach a screenshot and I'll walk you through what I see.</p>`
   return {
     id: 'welcome',
     role: 'assistant',
@@ -411,13 +411,13 @@ onUnmounted(() => {
         class="help-panel help-panel--chat"
         :class="{ open: panelOpen, 'help-panel--fullscreen': fullscreen }"
         role="dialog"
-        aria-label="Platform Assistant"
+        aria-label="Susan"
       >
         <header class="help-head">
           <div class="help-head-brand">
             <span class="help-head-av" aria-hidden="true">✦</span>
             <div class="help-head-title">
-              <b>Platform Assistant</b>
+              <b>Susan</b>
               <small>{{ contextLabel }}</small>
             </div>
           </div>
@@ -460,7 +460,7 @@ onUnmounted(() => {
               </div>
               <div class="help-row-body">
                 <div v-if="msg.role === 'user'" class="help-row-label">You</div>
-                <div v-else-if="msg.role === 'assistant'" class="help-row-label">Assistant</div>
+                <div v-else-if="msg.role === 'assistant'" class="help-row-label">Susan</div>
                 <div v-if="msg.role === 'typing'" class="help-typing">
                   <span /><span /><span />
                 </div>
@@ -515,8 +515,8 @@ onUnmounted(() => {
               ref="inputEl"
               v-model="input"
               rows="1"
-              placeholder="Message Platform Assistant…"
-              aria-label="Message"
+              placeholder="Message Susan…"
+              aria-label="Message Susan"
               :disabled="busy"
               @keydown="onKeydown"
               @input="resizeInput"

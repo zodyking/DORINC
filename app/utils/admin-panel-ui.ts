@@ -299,7 +299,7 @@ export function buildSystemMonitorItems(status: SystemMonitorStatusInput): Syste
   if (status.ai) {
     items.push({
       id: 'ai',
-      label: 'OpenRouter AI',
+      label: 'Susan',
       tone: aiHealthTone(status.ai.status),
       summary: `${status.ai.defaultModel ?? 'No model'} · ${status.ai.hasApiKey ? 'key set' : 'no key'} · ${formatAiCost(status.ai.monthlyCostUsd)}`,
       statusText: aiStatusLabel(status.ai.status),

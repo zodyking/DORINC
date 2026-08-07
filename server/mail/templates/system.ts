@@ -7,6 +7,7 @@ export {
   buildPortalCredentialEmail,
   buildStaffInviteEmail,
   buildBackupNotificationEmail,
+  buildDailySummaryEmail,
   buildInvoiceAttachedEmail,
   buildLoginNotificationEmail,
   buildCustomerAutoResponderEmail,

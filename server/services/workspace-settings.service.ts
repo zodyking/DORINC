@@ -15,6 +15,7 @@ import {
   type InvoiceWorkspaceSettings,
   type LineTypeVerbSettings,
   type NotificationSettings,
+  type NotificationToggleKey,
   type ServiceLogSheetSettings,
 } from '../../shared/workspace-settings-defaults'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
@@ -197,7 +198,7 @@ export async function saveNotificationSettings(
 
 export async function isNotificationEnabled(
   db: Db,
-  key: keyof NotificationSettings,
+  key: NotificationToggleKey,
 ): Promise<boolean> {
   const settings = await getNotificationSettings(db)
   return settings[key] !== false

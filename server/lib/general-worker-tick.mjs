@@ -5,6 +5,7 @@ import { processInvoiceSendJobs } from '../workers/handlers/invoice-send.mjs'
 import { processAiJobs } from '../workers/handlers/ai.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from '../workers/handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from '../workers/handlers/retention.mjs'
+import { maybeEnqueueDailySummary } from '../workers/handlers/daily-summary.mjs'
 import { maybeRunImapInboxSync, processImapSyncJobs } from '../workers/handlers/imap-sync.mjs'
 import { touchWorkerHeartbeat } from './worker-heartbeat.mjs'
 import { reclaimStaleWorkerJobs } from './reclaim-stale-jobs.mjs'
@@ -62,6 +63,16 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   const retention = await processRetentionPruneJobs(pool)
   if (retention.processed || retention.failed) {
     console.log(`${logPrefix} backup_retention_prune processed=${retention.processed} failed=${retention.failed}`)
+  }
+
+  try {
+    const dailySummary = await maybeEnqueueDailySummary(pool)
+    if (dailySummary) {
+      console.log(`${logPrefix} daily_summary_report processed`)
+    }
+  }
+  catch (err) {
+    console.error(`${logPrefix} daily_summary_report failed`, err)
   }
 
   const imapInline = await maybeRunImapInboxSync(pool)

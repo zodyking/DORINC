@@ -33,7 +33,7 @@ function roundMoney(value: number): number {
 const AI_USAGE_FEATURE_LABELS: Record<string, string> = {
   service_log_extraction: 'Service log extraction',
   invoice_description: 'Invoice description',
-  platform_help: 'Platform help',
+  platform_help: 'Susan help',
   thumbnail_generate: 'Thumbnail generation',
 }
 

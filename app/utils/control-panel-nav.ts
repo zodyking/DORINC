@@ -94,11 +94,11 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         id: 'billing',
         title: 'Billing Integrations',
         icon: '💳',
-        subtitle: 'Vultr, Cloudflare, and OpenRouter credentials',
+        subtitle: 'Vultr, Cloudflare, and Susan (OpenRouter) credentials',
       },
       {
         id: 'ai',
-        title: 'Artificial Intelligence',
+        title: 'Susan',
         icon: '✦',
         subtitle: 'Per-task models, caps, and usage',
       },
