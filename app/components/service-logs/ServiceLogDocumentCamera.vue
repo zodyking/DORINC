@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * In-app service log camera (no gallery / system camera picker).
- * Front + back only; fake document frames removed — live preview only.
+ * In-app service log camera with live document quality checks:
+ * page border detection, blur, brightness, contrast, coverage.
+ * Accepted shots are perspective-cropped to the detected page.
  */
 import {
   SERVICE_LOG_MAX_PHOTOS,
@@ -9,6 +10,12 @@ import {
   serviceLogPhotoCountLabel,
   serviceLogPhotoSlotLabel,
 } from '#shared/service-log-photos'
+import {
+  analyzeDocumentImageData,
+  imageDataToJpegBlob,
+  warpDocumentToImageData,
+  type DocumentQualityResult,
+} from '#shared/document-scan-quality'
 
 const props = withDefaults(defineProps<{
   mode?: 'inline' | 'fullscreen'
@@ -37,6 +44,8 @@ const busy = ref(false)
 const torchSupported = ref(false)
 const torchOn = ref(false)
 const flashPulse = ref(false)
+const quality = ref<DocumentQualityResult | null>(null)
+const captureHint = ref('')
 
 const isFullscreen = computed(() => props.mode === 'fullscreen')
 const active = computed(() => props.open !== false)
@@ -45,9 +54,28 @@ const atMax = computed(() => photoCount.value >= props.maxPhotos)
 const prompt = computed(() => serviceLogNextPhotoPrompt(photoCount.value))
 const countLabel = computed(() => serviceLogPhotoCountLabel(photoCount.value))
 const canFinish = computed(() => photoCount.value >= 1)
+const qualityOk = computed(() => Boolean(quality.value?.ok))
+const qualityMessage = computed(() => {
+  if (atMax.value) return 'Front and back ready — remove one to retake'
+  if (captureHint.value) return captureHint.value
+  if (quality.value) return quality.value.message
+  return 'Point at the paper log — checking borders…'
+})
+
+const overlayPoints = computed(() => {
+  const quad = quality.value?.normalizedQuad
+  if (!quad) return ''
+  return quad.map(p => `${(p.x * 100).toFixed(2)},${(p.y * 100).toFixed(2)}`).join(' ')
+})
+
+let analyzeTimer: ReturnType<typeof setTimeout> | null = null
+let analyzeInFlight = false
+let stopped = true
 
 async function startCamera() {
   cameraError.value = ''
+  captureHint.value = ''
+  quality.value = null
   torchSupported.value = false
   torchOn.value = false
   if (!import.meta.client) return
@@ -57,6 +85,7 @@ async function startCamera() {
   }
   try {
     stopCamera()
+    stopped = false
     const media = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -65,6 +94,10 @@ async function startCamera() {
         height: { ideal: 1080 },
       },
     })
+    if (stopped) {
+      media.getTracks().forEach(t => t.stop())
+      return
+    }
     stream.value = media
     const track = media.getVideoTracks()[0]
     const caps = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean } | undefined
@@ -74,6 +107,7 @@ async function startCamera() {
       videoRef.value.srcObject = media
       await videoRef.value.play().catch(() => {})
     }
+    scheduleAnalyze(120)
   }
   catch {
     cameraError.value = 'Could not open the camera. Check permissions and try again.'
@@ -81,12 +115,59 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  stopped = true
+  if (analyzeTimer) {
+    clearTimeout(analyzeTimer)
+    analyzeTimer = null
+  }
   void setTorch(false)
   stream.value?.getTracks().forEach(t => t.stop())
   stream.value = null
   if (videoRef.value) videoRef.value.srcObject = null
   torchSupported.value = false
   torchOn.value = false
+  quality.value = null
+}
+
+function scheduleAnalyze(delayMs = 280) {
+  if (stopped) return
+  if (analyzeTimer) clearTimeout(analyzeTimer)
+  analyzeTimer = setTimeout(() => { void runAnalyzeLoop() }, delayMs)
+}
+
+async function runAnalyzeLoop() {
+  if (stopped || analyzeInFlight || busy.value || atMax.value) {
+    scheduleAnalyze(400)
+    return
+  }
+  const video = videoRef.value
+  const canvas = canvasRef.value
+  if (!video || !canvas || !video.videoWidth) {
+    scheduleAnalyze(200)
+    return
+  }
+
+  analyzeInFlight = true
+  try {
+    // Analyze a downscaled live frame for snappy feedback.
+    const targetW = 320
+    const targetH = Math.max(1, Math.round(video.videoHeight * (targetW / video.videoWidth)))
+    canvas.width = targetW
+    canvas.height = targetH
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, targetW, targetH)
+    const image = ctx.getImageData(0, 0, targetW, targetH)
+    quality.value = analyzeDocumentImageData(image)
+    if (captureHint.value && quality.value.ok) captureHint.value = ''
+  }
+  catch {
+    // Keep prior quality state
+  }
+  finally {
+    analyzeInFlight = false
+    scheduleAnalyze(quality.value?.ok ? 360 : 240)
+  }
 }
 
 async function setTorch(on: boolean) {
@@ -108,27 +189,47 @@ async function toggleTorch() {
 }
 
 async function capture() {
-  if (atMax.value) return
+  if (atMax.value || busy.value) return
   const video = videoRef.value
   const canvas = canvasRef.value
   if (!video || !canvas || !video.videoWidth) return
+
   busy.value = true
   flashPulse.value = true
+  captureHint.value = ''
   try {
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return
     ctx.drawImage(video, 0, 0)
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
-    if (!blob) return
+    const full = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const result = analyzeDocumentImageData(full)
+    quality.value = result
+
+    if (!result.ok || !result.quad) {
+      captureHint.value = result.issues[0] || 'Adjust the page and try again'
+      return
+    }
+
+    const warped = warpDocumentToImageData(full, result.quad)
+    const exportImage = warped || full
+    const blob = await imageDataToJpegBlob(exportImage, 0.92)
+      || await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
+    if (!blob) {
+      captureHint.value = 'Could not save that photo — try again'
+      return
+    }
+
     const slot = photoCount.value === 0 ? 'front' : 'back'
     const file = new File([blob], `service-log-${slot}-${Date.now()}.jpg`, { type: 'image/jpeg' })
     emit('captured', file)
+    captureHint.value = ''
   }
   finally {
     busy.value = false
     window.setTimeout(() => { flashPulse.value = false }, 180)
+    scheduleAnalyze(200)
   }
 }
 
@@ -148,6 +249,7 @@ onBeforeUnmount(() => stopCamera())
       :class="{
         'sl-doc-cam--fullscreen': isFullscreen,
         'sl-doc-cam--flash': flashPulse,
+        'sl-doc-cam--ready': qualityOk && !atMax,
       }"
       role="dialog"
       :aria-modal="isFullscreen ? 'true' : undefined"
@@ -195,7 +297,31 @@ onBeforeUnmount(() => stopCamera())
           muted
           autoplay
         />
-        <p class="sl-doc-cam__guide">{{ countLabel }}</p>
+
+        <svg
+          v-if="overlayPoints && !atMax"
+          class="sl-doc-cam__overlay"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <polygon
+            :points="overlayPoints"
+            class="sl-doc-cam__quad"
+            :class="{ ok: qualityOk }"
+          />
+        </svg>
+
+        <div
+          class="sl-doc-cam__status"
+          :class="{
+            ok: qualityOk && !atMax,
+            warn: !qualityOk && !atMax,
+          }"
+        >
+          <strong>{{ qualityMessage }}</strong>
+          <span>{{ countLabel }}</span>
+        </div>
       </div>
 
       <canvas ref="canvasRef" class="sl-doc-cam__canvas" />
@@ -233,6 +359,7 @@ onBeforeUnmount(() => stopCamera())
         <button
           type="button"
           class="sl-doc-cam__shutter"
+          :class="{ ready: qualityOk && !atMax }"
           :disabled="busy || !stream || atMax"
           :aria-label="atMax ? 'Maximum photos reached' : (photoCount === 0 ? 'Take front photo' : 'Take back photo')"
           @click="capture"
@@ -285,28 +412,63 @@ onBeforeUnmount(() => stopCamera())
 .sl-doc-cam__video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain keeps the analyzed frame aligned with the live border overlay */
+  object-fit: contain;
+  background: #020617;
   display: block;
 }
-.sl-doc-cam__guide {
+.sl-doc-cam__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.sl-doc-cam__quad {
+  fill: rgba(251, 191, 36, 0.12);
+  stroke: #fbbf24;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.2s ease, stroke 0.2s ease;
+}
+.sl-doc-cam__quad.ok {
+  fill: rgba(16, 185, 129, 0.14);
+  stroke: #34d399;
+}
+.sl-doc-cam__status {
   position: absolute;
   left: 12px;
   right: 12px;
   bottom: 14px;
-  margin: 0;
-  text-align: center;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.62);
   color: #f8fafc;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(2, 6, 23, 0.45);
-  width: fit-content;
-  max-width: calc(100% - 24px);
-  margin-inline: auto;
+  text-align: center;
+  backdrop-filter: blur(6px);
 }
+.sl-doc-cam__status strong {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.sl-doc-cam__status span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+.sl-doc-cam__status.ok {
+  background: rgba(6, 78, 59, 0.72);
+}
+.sl-doc-cam__status.ok strong { color: #d1fae5; }
+.sl-doc-cam__status.warn {
+  background: rgba(69, 26, 3, 0.72);
+}
+.sl-doc-cam__status.warn strong { color: #fde68a; }
 .sl-doc-cam__canvas {
   position: absolute;
   width: 1px;
@@ -498,6 +660,13 @@ onBeforeUnmount(() => stopCamera())
   border: 4px solid #fff;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.35) inset;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.sl-doc-cam__shutter.ready .sl-doc-cam__shutter-ring {
+  border-color: #34d399;
+  box-shadow:
+    0 0 0 3px rgba(15, 23, 42, 0.35) inset,
+    0 0 0 4px rgba(52, 211, 153, 0.35);
 }
 .sl-doc-cam__shutter:disabled {
   opacity: 0.4;
@@ -522,5 +691,6 @@ onBeforeUnmount(() => stopCamera())
 
 @media (prefers-reduced-motion: reduce) {
   .sl-doc-cam--flash::after { animation: none; opacity: 0; }
+  .sl-doc-cam__quad { transition: none; }
 }
 </style>
