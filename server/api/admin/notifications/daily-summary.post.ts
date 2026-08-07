@@ -7,6 +7,7 @@ import { ensureMasterKeyHydrated, refreshAppConfigCache } from '../../../service
 /** Manual trigger — delivers via SMTP immediately (same path as SMTP test). */
 export default defineEventHandler(async (event) => {
   const user = requirePermission(event, 'system.admin.all')
+  const auth = event.context.auth as { user: { id: string, name: string, email: string } }
   const db = useDb()
   await ensureMasterKeyHydrated(db)
   await refreshAppConfigCache(db)
@@ -16,9 +17,9 @@ export default defineEventHandler(async (event) => {
       force: true,
       delivery: 'direct',
       actor: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+        id: auth.user.id || user.id,
+        name: auth.user.name,
+        email: auth.user.email,
       },
     })
     return result
