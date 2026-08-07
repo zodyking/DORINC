@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
+import { AI_ASSISTANT_NAME, AI_ASSISTANT_TITLE } from '../../shared/ai-assistant'
 import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
 import {
   buildSusanDailyActions,
   formatSummaryVehicleLabel,
+  moneyLabel,
 } from '../../server/services/daily-summary.service'
+import { parseSusanInsightResponse } from '../../server/services/daily-summary-susan.service'
 import { buildDailySummaryEmail } from '../../server/mail/templates/system'
+import { modelForFeature } from '../../server/services/ai-provider.service'
+import type { AiProviderSettingsView } from '../../server/services/ai-provider.service'
 
 function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): BillingDashboardPayload {
   return {
@@ -60,8 +64,16 @@ function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): Billing
 }
 
 describe('daily summary + Susan', () => {
-  it('names the assistant Susan', () => {
+  it('names the assistant Susan / Susan AI Assistant', () => {
     expect(AI_ASSISTANT_NAME).toBe('Susan')
+    expect(AI_ASSISTANT_TITLE).toBe('Susan AI Assistant')
+  })
+
+  it('formats money with dollar sign and commas', () => {
+    expect(moneyLabel(228187)).toBe('$228,187.00')
+    expect(moneyLabel('1500.5')).toBe('$1,500.50')
+    expect(moneyLabel(0.0042)).toBe('$0.0042')
+    expect(moneyLabel('$12.00')).toBe('$12.00')
   })
 
   it('formats vehicle as (type) #unit, else year make model', () => {
@@ -84,6 +96,36 @@ describe('daily summary + Susan', () => {
       make: 'Ford',
       model: 'F-550',
     })).toBe('2020 Ford F-550')
+  })
+
+  it('parses Susan JSON insight responses and strips em dashes', () => {
+    expect(parseSusanInsightResponse(
+      '{"insight":"There are 2 overdue invoices totaling $900.00 — follow up today."}',
+      'fallback',
+    )).toBe('There are 2 overdue invoices totaling $900.00. follow up today.')
+
+    expect(parseSusanInsightResponse('not-json', 'fallback note')).toBe('fallback note')
+  })
+
+  it('uses the platform help model for daily_summary feature', () => {
+    const settings = {
+      id: '00000000-0000-0000-0000-000000000001',
+      provider: 'openrouter',
+      enabled: true,
+      hasApiKey: true,
+      defaultModel: 'openai/gpt-4o-mini',
+      serviceLogExtractionModel: null,
+      invoiceDescriptionModel: null,
+      platformHelpModel: 'google/gemini-2.0-flash',
+      serviceLogExtractionEnabled: true,
+      invoiceDescriptionEnabled: true,
+      platformHelpEnabled: true,
+      dailySpendCapUsd: null,
+      monthlySpendCapUsd: null,
+      updatedAt: new Date(),
+    } satisfies AiProviderSettingsView
+
+    expect(modelForFeature(settings, 'daily_summary')).toBe('google/gemini-2.0-flash')
   })
 
   it('builds Susan section insights without em dashes', () => {
@@ -138,10 +180,11 @@ describe('daily summary + Susan', () => {
     expect(actions.some(a => /overdue/i.test(a))).toBe(true)
     expect(actions.some(a => /Vultr/i.test(a))).toBe(true)
     expect(actions.some(a => /manager approval/i.test(a))).toBe(true)
+    expect(actions.some(a => a.includes(AI_ASSISTANT_TITLE) || a.includes(AI_ASSISTANT_NAME))).toBe(true)
     expect(actions.every(a => !a.includes('—'))).toBe(true)
   })
 
-  it('renders section stats, tables, and polished Susan note cards', () => {
+  it('renders inline stats and Susan AI Assistant note cards', () => {
     const mail = buildDailySummaryEmail({
       reportDateLabel: 'Aug 7, 2026',
       recipientName: 'Alex',
@@ -181,23 +224,23 @@ describe('daily summary + Susan', () => {
           title: 'Outstanding invoices',
           stats: [
             { label: 'Open', value: '1' },
-            { label: 'Balance', value: '$250.00' },
+            { label: 'Balance', value: '$228,187.00' },
           ],
           table: {
             headers: ['Invoice', 'Customer', 'Vehicle', 'Due', 'Balance'],
-            rows: [['INV-000042', 'City Transit', '(Bus) #12', '2026-07-20 (overdue)', '$250.00']],
+            rows: [['INV-000042', 'City Transit', '(Bus) #12', '2026-07-20 (overdue)', '$1,370.00']],
           },
-          insight: '1 overdue invoice totaling $250.00. Follow up or mark paid before end of day.',
+          insight: 'There are overdue invoices totaling $228,187.00. Worth a follow-up today.',
         },
         {
           id: 'susan',
-          title: 'Susan usage today',
+          title: 'Susan AI Assistant usage today',
           stats: [
             { label: 'Tokens', value: '12,400' },
             { label: 'Spend', value: '$1.25' },
           ],
           table: null,
-          insight: 'Susan handled 3 calls today using 12,400 tokens ($1.25).',
+          insight: 'Susan ran 3 calls today for 12,400 tokens ($1.25).',
         },
         {
           id: 'inquiries',
@@ -207,30 +250,25 @@ describe('daily summary + Susan', () => {
             headers: ['From', 'Subject', 'Status', 'Resolved by'],
             rows: [['Acme', 'Quote request', 'Resolved', 'Jordan']],
           },
-          insight: '2 customer emails came in. 1 resolved, 1 still open.',
+          insight: '2 customer emails came in today. 1 already handled, 1 still open.',
         },
       ],
       appUrl: 'https://app.example.com',
     })
 
     expect(mail.subject).toBe('Daily Summary: Aug 7, 2026')
-    expect(mail.subject).not.toContain('—')
     expect(mail.html).toContain('INV-000042')
-    expect(mail.html).toContain('City Transit')
-    expect(mail.html).toContain('(Bus) #12')
+    expect(mail.html).toContain('$228,187.00')
+    expect(mail.html).toContain('$1,370.00')
+    expect(mail.html).toContain('Susan AI Assistant')
     expect(mail.html).toContain('Outstanding invoices')
-    expect(mail.html).toContain('Susan usage today')
     expect(mail.html).toContain('Customer inquiries')
-    expect(mail.html).toContain('12,400')
-    expect(mail.html).toContain('$1.25')
-    expect(mail.html).toContain('Jordan')
-    expect(mail.html).toContain('From Susan')
+    expect(mail.html).toContain('·')
+    expect(mail.html).toContain('white-space:nowrap')
     expect(mail.html).toContain('border-left:3px solid')
     expect(mail.html).not.toContain('Georgia')
     expect(mail.html).not.toContain('font-style:italic')
-    expect(mail.html).not.toContain('&ldquo;')
-    expect(mail.text).toContain('From Susan:')
+    expect(mail.text).toContain('Susan AI Assistant:')
     expect(mail.text).toContain('INV-000042')
   })
-
 })

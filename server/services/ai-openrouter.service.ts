@@ -92,7 +92,11 @@ export async function openRouterChat(
     body: JSON.stringify({
       model,
       messages,
-      temperature: feature === 'invoice_description' ? 0.4 : 0.2,
+      temperature: feature === 'invoice_description'
+        ? 0.4
+        : feature === 'daily_summary'
+          ? 0.55
+          : 0.2,
       response_format: { type: 'json_object' },
     }),
   })

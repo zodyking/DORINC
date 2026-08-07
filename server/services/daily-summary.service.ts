@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, gte, isNull, lt, sql } from 'drizzle-orm'
 import type { Pool } from 'pg'
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
+import { AI_ASSISTANT_NAME, AI_ASSISTANT_TITLE } from '../../shared/ai-assistant'
 import { resolveOpenRouterMonthlySpend } from '../../shared/billing-openrouter-spend'
 import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
 import type { Db } from '../db/client'
@@ -18,6 +18,7 @@ import { buildDailySummaryEmail } from '../mail/templates/system'
 import { getAppUrl } from './app-config.service'
 import { getBackupHealth } from './backups.service'
 import { buildBillingDashboard } from './billing-dashboard.service'
+import { applySusanDailyInsights } from './daily-summary-susan.service'
 import { getDatabaseSizeMetrics } from './database-size.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getActiveEmailTemplateContent } from './email-templates.service'
@@ -151,11 +152,23 @@ export function formatSummaryVehicleLabel(opts: {
   return ymm || 'n/a'
 }
 
-function moneyLabel(value: number | string | null | undefined): string {
+/** USD with $ and thousands separators; keeps sub-cent AI costs readable. */
+export function moneyLabel(value: number | string | null | undefined): string {
   if (value == null || value === '') return 'n/a'
-  const n = typeof value === 'number' ? value : Number(value)
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('$')) return trimmed
+  }
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''))
   if (!Number.isFinite(n)) return String(value)
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  const abs = Math.abs(n)
+  const maxFraction = abs > 0 && abs < 0.01 ? 4 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxFraction,
+  }).format(n)
 }
 
 function formatBytes(bytes: number): string {
@@ -514,6 +527,50 @@ function estimateDaysUntilFull(opts: {
   }
 }
 
+function buildSusanUsageSection(
+  aiToday: { costUsd: number, tokens: number, calls: number },
+  billing: BillingDashboardPayload,
+): DailySummarySection {
+  const susanConfigured = billing.configured.openrouter
+  let aiInsight = susanConfigured
+    ? `${AI_ASSISTANT_NAME} has been quiet so far today.`
+    : `${AI_ASSISTANT_TITLE} is not connected yet. Add an OpenRouter key when you want usage tracked.`
+  if (susanConfigured && aiToday.calls > 0) {
+    aiInsight = `${AI_ASSISTANT_NAME} ran ${aiToday.calls} call${aiToday.calls === 1 ? '' : 's'} today for ${formatTokens(aiToday.tokens)} tokens (${moneyLabel(aiToday.costUsd)}).`
+    const remaining = billing.openrouter.remainingCredits ?? billing.openrouter.limitRemaining
+    if (remaining != null && remaining < 5) {
+      aiInsight += ` Credit is getting low at ${moneyLabel(remaining)}, so a top-up soon would help.`
+    }
+  }
+  else if (susanConfigured) {
+    const monthly = resolveOpenRouterMonthlySpend(
+      billing.openrouter.usageMonthly,
+      billing.openrouter.internalMonthlyUsd,
+    )
+    if (monthly != null && monthly > 0) {
+      aiInsight = `${AI_ASSISTANT_NAME} has not been used yet today. Month to date is ${moneyLabel(monthly)}.`
+    }
+  }
+
+  return {
+    id: 'susan',
+    title: `${AI_ASSISTANT_TITLE} usage today`,
+    stats: [
+      { label: 'Calls', value: String(aiToday.calls) },
+      { label: 'Tokens', value: formatTokens(aiToday.tokens) },
+      { label: 'Spend', value: moneyLabel(aiToday.costUsd) },
+      {
+        label: 'Credit left',
+        value: susanConfigured
+          ? moneyLabel(billing.openrouter.remainingCredits ?? billing.openrouter.limitRemaining)
+          : 'Not configured',
+      },
+    ],
+    table: null,
+    insight: aiInsight,
+  }
+}
+
 function buildSections(input: {
   invoiceStats: DailySummaryInvoiceStats
   outstandingInvoices: DailySummaryInvoiceRow[]
@@ -545,15 +602,15 @@ function buildSections(input: {
   const sections: DailySummarySection[] = []
 
   // 1. Outstanding invoices
-  let invoiceInsight = 'Receivables look clear today. No customer balances need follow up.'
+  let invoiceInsight = 'Receivables look clear today. Nothing outstanding needs a chase right now.'
   if (invoiceStats.overdueCount > 0) {
-    invoiceInsight = `${invoiceStats.overdueCount} overdue invoice${invoiceStats.overdueCount === 1 ? '' : 's'} totaling ${moneyLabel(invoiceStats.overdueTotal)}. Follow up or mark paid before end of day.`
+    invoiceInsight = `There are ${invoiceStats.overdueCount} overdue invoice${invoiceStats.overdueCount === 1 ? '' : 's'} totaling ${moneyLabel(invoiceStats.overdueTotal)}. Worth a follow-up or payment update before the day wraps.`
   }
   else if (invoiceStats.outstandingCount > 0) {
-    invoiceInsight = `${invoiceStats.outstandingCount} open invoice${invoiceStats.outstandingCount === 1 ? '' : 's'} still carry a balance of ${moneyLabel(invoiceStats.outstandingTotal)}. A quick reconciliation keeps cash flow tidy.`
+    invoiceInsight = `${invoiceStats.outstandingCount} open invoice${invoiceStats.outstandingCount === 1 ? '' : 's'} still show a balance of ${moneyLabel(invoiceStats.outstandingTotal)}. A quick reconcile pass will keep cash flow steady.`
   }
   if (invoiceStats.pendingManagerApprovalCount > 0) {
-    invoiceInsight += ` Also, ${invoiceStats.pendingManagerApprovalCount} await manager approval.`
+    invoiceInsight += ` ${invoiceStats.pendingManagerApprovalCount} still need manager approval.`
   }
 
   sections.push({
@@ -581,51 +638,14 @@ function buildSections(input: {
   })
 
   // 2. Susan AI usage today
-  const susanConfigured = billing.configured.openrouter
-  let aiInsight = susanConfigured
-    ? 'Quiet day for AI usage so far.'
-    : `${AI_ASSISTANT_NAME} is not connected for billing yet. Enable OpenRouter when you want usage tracked.`
-  if (susanConfigured && aiToday.calls > 0) {
-    aiInsight = `${AI_ASSISTANT_NAME} handled ${aiToday.calls} call${aiToday.calls === 1 ? '' : 's'} today using ${formatTokens(aiToday.tokens)} tokens (${moneyLabel(aiToday.costUsd)}).`
-    const remaining = billing.openrouter.remainingCredits ?? billing.openrouter.limitRemaining
-    if (remaining != null && remaining < 5) {
-      aiInsight += ` Credit is low at ${moneyLabel(remaining)}. Top up soon so help stays available.`
-    }
-  }
-  else if (susanConfigured) {
-    const monthly = resolveOpenRouterMonthlySpend(
-      billing.openrouter.usageMonthly,
-      billing.openrouter.internalMonthlyUsd,
-    )
-    if (monthly != null && monthly > 0) {
-      aiInsight = `No usage yet today. Month to date sits at ${moneyLabel(monthly)}.`
-    }
-  }
-
-  sections.push({
-    id: 'susan',
-    title: `${AI_ASSISTANT_NAME} usage today`,
-    stats: [
-      { label: 'Calls', value: String(aiToday.calls) },
-      { label: 'Tokens', value: formatTokens(aiToday.tokens) },
-      { label: 'Spend', value: moneyLabel(aiToday.costUsd) },
-      {
-        label: 'Credit left',
-        value: susanConfigured
-          ? moneyLabel(billing.openrouter.remainingCredits ?? billing.openrouter.limitRemaining)
-          : 'Not configured',
-      },
-    ],
-    table: null,
-    insight: aiInsight,
-  })
+  sections.push(buildSusanUsageSection(aiToday, billing))
 
   // 3. Customer inquiries
-  let inquiryInsight = 'No customer emails arrived today.'
+  let inquiryInsight = 'Inbox was quiet today. No new customer emails came in.'
   if (inquiries.received > 0) {
-    inquiryInsight = `${inquiries.received} customer email${inquiries.received === 1 ? '' : 's'} came in. ${inquiries.resolved} resolved, ${inquiries.open} still open.`
+    inquiryInsight = `${inquiries.received} customer email${inquiries.received === 1 ? '' : 's'} came in today. ${inquiries.resolved} already handled, ${inquiries.open} still open.`
     if (inquiries.open > 0) {
-      inquiryInsight += ' Assign a reply so nothing sits overnight.'
+      inquiryInsight += ' A reply before end of day keeps things from stacking up.'
     }
   }
 
@@ -647,15 +667,15 @@ function buildSections(input: {
   })
 
   // 4. Deletion requests
-  let deletionInsight = 'Deletion queue is clear.'
+  let deletionInsight = 'No deletion requests need attention right now.'
   if (deletions.pending > 0) {
-    deletionInsight = `${deletions.pending} deletion request${deletions.pending === 1 ? '' : 's'} waiting for review.`
+    deletionInsight = `${deletions.pending} deletion request${deletions.pending === 1 ? '' : 's'} still waiting on a review decision.`
   }
   else if (deletions.approvedToday || deletions.rejectedToday) {
-    deletionInsight = `Reviewed ${deletions.approvedToday + deletions.rejectedToday} request${deletions.approvedToday + deletions.rejectedToday === 1 ? '' : 's'} today (${deletions.approvedToday} approved, ${deletions.rejectedToday} denied).`
+    deletionInsight = `You cleared ${deletions.approvedToday + deletions.rejectedToday} request${deletions.approvedToday + deletions.rejectedToday === 1 ? '' : 's'} today (${deletions.approvedToday} approved, ${deletions.rejectedToday} denied).`
   }
   else if (deletions.submittedToday > 0) {
-    deletionInsight = `${deletions.submittedToday} new request${deletions.submittedToday === 1 ? '' : 's'} submitted today and already cleared.`
+    deletionInsight = `${deletions.submittedToday} new request${deletions.submittedToday === 1 ? '' : 's'} came in today and already got cleared.`
   }
 
   sections.push({
@@ -682,16 +702,16 @@ function buildSections(input: {
 
   // 5. Backup
   const backupSetup = backup.scheduleEnabled || backup.driveConnected || Boolean(backup.lastRun)
-  let backupInsight = 'Backups are not set up yet. Enable a nightly schedule or run a manual backup.'
+  let backupInsight = 'Online backup is not set up yet. Turn on a nightly schedule or run a manual backup when you can.'
   if (backup.status === 'healthy') {
-    backupInsight = `Backups look healthy. Last successful run was ${formatWhen(backup.lastRun?.finishedAt ?? backup.lastRun?.createdAt)}.`
-    if (backup.driveConnected) backupInsight += ' Offsite Google Drive copy is connected.'
+    backupInsight = `Backups look solid. Last successful run was ${formatWhen(backup.lastRun?.finishedAt ?? backup.lastRun?.createdAt)}.`
+    if (backup.driveConnected) backupInsight += ' Google Drive offsite copy is connected.'
   }
   else if (backup.status === 'error') {
-    backupInsight = `Last backup failed. ${backup.message.replace(/—/g, '.').replace(/\s+/g, ' ').trim()}`
+    backupInsight = `The latest backup failed. ${backup.message.replace(/—/g, '. ').replace(/\s+/g, ' ').trim()}`
   }
   else if (backupSetup) {
-    backupInsight = backup.message.replace(/—/g, '.').replace(/\s+/g, ' ').trim()
+    backupInsight = backup.message.replace(/—/g, '. ').replace(/\s+/g, ' ').trim()
   }
 
   sections.push({
@@ -708,18 +728,18 @@ function buildSections(input: {
   })
 
   // 6. Disk / database storage
-  let diskInsight = `Database is using ${formatBytes(disk.usedBytes)}.`
+  let diskInsight = `The database is using ${formatBytes(disk.usedBytes)} right now.`
   if (disk.dailyGrowthBytes != null) {
-    diskInsight += ` Growth averages about ${formatBytes(disk.dailyGrowthBytes)} per day.`
+    diskInsight += ` It has been growing about ${formatBytes(disk.dailyGrowthBytes)} per day.`
   }
   if (disk.freeBytes != null && disk.daysUntilFull != null) {
-    diskInsight += ` At that pace, roughly ${disk.daysUntilFull} day${disk.daysUntilFull === 1 ? '' : 's'} until the volume is full.`
+    diskInsight += ` At that pace you have roughly ${disk.daysUntilFull} day${disk.daysUntilFull === 1 ? '' : 's'} before the volume fills up.`
   }
   else if (disk.daysUntilFull != null && disk.freeBytes == null) {
-    diskInsight += ` At that pace, the database would double in about ${disk.daysUntilFull} day${disk.daysUntilFull === 1 ? '' : 's'}.`
+    diskInsight += ` At that pace the database would about double in ${disk.daysUntilFull} day${disk.daysUntilFull === 1 ? '' : 's'}.`
   }
   else if (disk.dailyGrowthBytes == null) {
-    diskInsight += ' Not enough history yet to project fill date.'
+    diskInsight += ' There is not enough history yet to estimate when it will fill.'
   }
 
   sections.push({
@@ -759,15 +779,15 @@ function buildSections(input: {
       )
     }
 
-    let billingInsight = `Year outlook sits near ${moneyLabel(billing.totals.estimatedYearlyUsd)} across enabled providers.`
+    let billingInsight = `Ops spend looks like about ${moneyLabel(billing.totals.estimatedYearlyUsd)} for the year across the connected providers.`
     if (billing.configured.vultr && billing.vultr.accountBalance != null && billing.vultr.accountBalance < 0) {
-      billingInsight = `Vultr balance is ${moneyLabel(billing.vultr.accountBalance)}. Pay hosting so servers stay online.`
+      billingInsight = `Vultr balance is ${moneyLabel(billing.vultr.accountBalance)}. Top that up soon so hosting stays online.`
     }
     else if (billing.configured.cloudflare) {
       const dueSoon = billing.cloudflare.domains.filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30)
       if (dueSoon.length) {
         const cost = dueSoon.reduce((sum, d) => sum + (d.renewalCost || 0), 0)
-        billingInsight = `${dueSoon.length} domain renewal${dueSoon.length === 1 ? '' : 's'} due within 30 days (${moneyLabel(cost)}). Confirm auto renew or pay manually.`
+        billingInsight = `${dueSoon.length} domain renewal${dueSoon.length === 1 ? '' : 's'} come due within 30 days (${moneyLabel(cost)}). Confirm auto-renew or pay those manually.`
       }
     }
 
@@ -821,7 +841,7 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     change7dBytes: dbSize.change7dBytes,
   })
 
-  const sections = buildSections({
+  let sections = buildSections({
     invoiceStats,
     outstandingInvoices,
     billing,
@@ -839,6 +859,30 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     },
   })
 
+  // Live Susan notes: one AI call per section. Usage stats refresh before the
+  // Susan usage note so calls/tokens/spend include this digest.
+  const enriched = await applySusanDailyInsights(db, sections, {
+    refreshSusanSection: async () => {
+      const aiAfter = await loadAiUsageToday(db, now)
+      return buildSusanUsageSection(aiAfter, billing)
+    },
+  }).catch((err) => {
+    console.warn('[daily-summary] Susan enrichment unavailable:', err instanceof Error ? err.message : err)
+    return { sections, generated: 0, failed: 0 }
+  })
+  sections = enriched.sections as DailySummarySection[]
+
+  if (enriched.generated > 0) {
+    const aiFinal = await loadAiUsageToday(db, now)
+    const susanIdx = sections.findIndex(s => s.id === 'susan')
+    if (susanIdx >= 0) {
+      sections[susanIdx] = {
+        ...buildSusanUsageSection(aiFinal, billing),
+        insight: sections[susanIdx]!.insight,
+      }
+    }
+  }
+
   return {
     reportDate,
     reportDateLabel: formatReportDateLabel(reportDate),
@@ -846,7 +890,7 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     outstandingInvoices,
     billing,
     sections,
-    susanEnabled: billing.configured.openrouter,
+    susanEnabled: billing.configured.openrouter || enriched.generated > 0,
   }
 }
 

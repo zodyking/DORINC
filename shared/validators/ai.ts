@@ -5,6 +5,7 @@ export const AI_FEATURE_TYPES = [
   'service_log_extraction',
   'invoice_description',
   'platform_help',
+  'daily_summary',
 ] as const
 
 export const aiProviderSettingsPatchSchema = z.object({

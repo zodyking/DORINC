@@ -4,6 +4,9 @@
  */
 export const AI_ASSISTANT_NAME = 'Susan' as const
 
+/** Full label for email sections, cards, and formal callouts. */
+export const AI_ASSISTANT_TITLE = 'Susan AI Assistant' as const
+
 export const AI_ASSISTANT_SHORT_LABEL = AI_ASSISTANT_NAME
 
 /** Greeting / intro copy for help chat and summaries. */

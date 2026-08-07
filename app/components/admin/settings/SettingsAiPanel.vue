@@ -411,6 +411,8 @@ function applyFallbackToEmptyTasks() {
           <dd>{{ data.usage.byFeature.invoice_description ?? 0 }} drafts</dd>
           <dt>{{ aiFeatureLabel('platform_help') }}</dt>
           <dd>{{ data.usage.byFeature.platform_help ?? 0 }} queries</dd>
+          <dt>{{ aiFeatureLabel('daily_summary') }}</dt>
+          <dd>{{ data.usage.byFeature.daily_summary ?? 0 }} notes</dd>
           <dt>Approved</dt>
           <dd>{{ data.usage.approvedSuggestions }}</dd>
           <dt>Est. cost (month)</dt>

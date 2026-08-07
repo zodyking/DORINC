@@ -111,6 +111,7 @@ export function aiFeatureLabel(feature: string): string {
     case 'service_log_extraction': return 'Extractions'
     case 'invoice_description': return 'Descriptions'
     case 'platform_help': return 'Help queries'
+    case 'daily_summary': return 'Daily summary'
     case 'thumbnail_generate': return 'Thumbnails'
     case 'email_send': return 'Email'
     case 'backup_run': return 'Backups'

@@ -68,7 +68,7 @@ function modelFor(settings, feature) {
   if (feature === 'invoice_description') {
     return settings.invoiceDescriptionModel ?? settings.defaultModel
   }
-  if (feature === 'platform_help') {
+  if (feature === 'platform_help' || feature === 'daily_summary') {
     return settings.platformHelpModel ?? settings.defaultModel
   }
   return settings.defaultModel
