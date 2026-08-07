@@ -27,9 +27,16 @@ export interface SusanInsightRunResult {
   generated: number
   failed: number
   skippedReason: string | null
+  lastError: string | null
 }
 
-const INSIGHT_TIMEOUT_MS = 20_000
+export interface SusanClientReady {
+  apiKey: string
+  model: string
+}
+
+const INSIGHT_TIMEOUT_MS = 25_000
+const BETWEEN_CALL_DELAY_MS = 1_200
 
 const SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the AI assistant for ${BRAND_NAME} (Devon On Site Repairs).`,
@@ -97,33 +104,81 @@ export function parseSusanInsightResponse(content: string, fallback: string): st
   return plain
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Susan insight timed out')), ms)
-    }),
-  ])
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function generateOneInsight(
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Susan insight timed out')), ms)
+      }),
+    ])
+  }
+  finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** Resolve OpenRouter credentials once so progressive UI steps reuse them. */
+export async function prepareSusanClient(db: Db): Promise<
+  | { ok: true, client: SusanClientReady }
+  | { ok: false, reason: string }
+> {
+  const settings = await ensureAiProviderSettings(db)
+  if (!settings.enabled) {
+    return { ok: false, reason: 'AI is disabled in Control Panel → Susan' }
+  }
+  if (!settings.hasApiKey) {
+    return { ok: false, reason: 'OpenRouter API key is not configured' }
+  }
+
+  try {
+    await assertSpendCapAllowsRequest(db)
+  }
+  catch {
+    return { ok: false, reason: 'AI spend cap reached' }
+  }
+
+  try {
+    const apiKey = await getDecryptedApiKey(db)
+    if (!apiKey) return { ok: false, reason: 'OpenRouter API key is missing' }
+    return {
+      ok: true,
+      client: {
+        apiKey,
+        model: modelForFeature(settings, 'daily_summary'),
+      },
+    }
+  }
+  catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : 'Could not decrypt OpenRouter API key',
+    }
+  }
+}
+
+export async function generateSusanSectionInsight(
   db: Db,
   opts: {
-    apiKey: string
-    model: string
+    client: SusanClientReady
     section: SusanInsightSection
     createdBy?: string | null
   },
-): Promise<string> {
+): Promise<{ insight: string, error: string | null }> {
   const fallback = opts.section.insight
-
-  // Prefer free-text (same path that works for help chat). Fall back to JSON mode once.
   let result
+  let lastError: string | null = null
+
   try {
     result = await withTimeout(
       openRouterChat(
-        opts.apiKey,
-        opts.model,
+        opts.client.apiKey,
+        opts.client.model,
         [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: buildUserPrompt(opts.section) },
@@ -135,26 +190,33 @@ async function generateOneInsight(
     )
   }
   catch (firstErr) {
-    result = await withTimeout(
-      openRouterChat(
-        opts.apiKey,
-        opts.model,
-        [
-          { role: 'system', content: `${SYSTEM_PROMPT}\nReturn JSON only: {"insight":"..."}` },
-          { role: 'user', content: buildUserPrompt(opts.section) },
-        ],
-        'daily_summary',
-        { responseFormat: 'json', temperature: 0.55 },
-      ),
-      INSIGHT_TIMEOUT_MS,
-    )
-    if (!result) throw firstErr
+    lastError = firstErr instanceof Error ? firstErr.message : 'Susan text call failed'
+    try {
+      result = await withTimeout(
+        openRouterChat(
+          opts.client.apiKey,
+          opts.client.model,
+          [
+            { role: 'system', content: `${SYSTEM_PROMPT}\nReturn JSON only: {"insight":"..."}` },
+            { role: 'user', content: buildUserPrompt(opts.section) },
+          ],
+          'daily_summary',
+          { responseFormat: 'json', temperature: 0.55 },
+        ),
+        INSIGHT_TIMEOUT_MS,
+      )
+      lastError = null
+    }
+    catch (secondErr) {
+      const message = secondErr instanceof Error ? secondErr.message : lastError
+      return { insight: fallback, error: message || 'Susan call failed' }
+    }
   }
 
   try {
     await logAiUsage(db, {
       featureType: 'daily_summary',
-      model: result.model || opts.model,
+      model: result.model || opts.client.model,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       totalTokens: result.totalTokens,
@@ -169,12 +231,15 @@ async function generateOneInsight(
     )
   }
 
-  return parseSusanInsightResponse(result.content, fallback)
+  return {
+    insight: parseSusanInsightResponse(result.content, fallback),
+    error: lastError,
+  }
 }
 
 /**
  * Replace templated section notes with live Susan AI insights.
- * One dedicated OpenRouter call per section, awaited before send.
+ * Strictly one OpenRouter call at a time, with a short pause between sections.
  */
 export async function applySusanDailyInsights(
   db: Db,
@@ -182,117 +247,110 @@ export async function applySusanDailyInsights(
   opts: {
     createdBy?: string | null
     refreshSusanSection?: (sections: SusanInsightSection[]) => Promise<SusanInsightSection | null> | SusanInsightSection | null
+    onProgress?: (event: {
+      sectionId: string
+      title: string
+      index: number
+      total: number
+      status: 'start' | 'done' | 'error'
+      error?: string | null
+    }) => void | Promise<void>
   } = {},
 ): Promise<SusanInsightRunResult> {
   if (!sections.length) {
-    return { sections, generated: 0, failed: 0, skippedReason: null }
+    return { sections, generated: 0, failed: 0, skippedReason: null, lastError: null }
   }
 
-  const settings = await ensureAiProviderSettings(db)
-  if (!settings.enabled) {
+  const prepared = await prepareSusanClient(db)
+  if (!prepared.ok) {
     return {
       sections,
       generated: 0,
       failed: 0,
-      skippedReason: 'AI is disabled in Control Panel → Susan',
-    }
-  }
-  if (!settings.hasApiKey) {
-    return {
-      sections,
-      generated: 0,
-      failed: 0,
-      skippedReason: 'OpenRouter API key is not configured',
+      skippedReason: prepared.reason,
+      lastError: prepared.reason,
     }
   }
 
-  try {
-    await assertSpendCapAllowsRequest(db)
-  }
-  catch {
-    return {
-      sections,
-      generated: 0,
-      failed: 0,
-      skippedReason: 'AI spend cap reached',
-    }
-  }
-
-  let apiKey: string
-  try {
-    const decrypted = await getDecryptedApiKey(db)
-    if (!decrypted) {
-      return {
-        sections,
-        generated: 0,
-        failed: 0,
-        skippedReason: 'OpenRouter API key is missing',
-      }
-    }
-    apiKey = decrypted
-  }
-  catch (err) {
-    return {
-      sections,
-      generated: 0,
-      failed: 0,
-      skippedReason: err instanceof Error ? err.message : 'Could not decrypt OpenRouter API key',
-    }
-  }
-
-  const model = modelForFeature(settings, 'daily_summary')
+  const { client } = prepared
   let generated = 0
   let failed = 0
+  let lastError: string | null = null
   let next = [...sections]
 
-  // Sequential calls so each section gets a dedicated response before send.
-  const firstPass = next.filter(s => s.id !== 'susan')
-  for (const section of firstPass) {
+  const queue = [
+    ...next.filter(s => s.id !== 'susan'),
+    ...next.filter(s => s.id === 'susan'),
+  ]
+  const total = queue.length
+
+  for (let index = 0; index < queue.length; index += 1) {
+    let section = queue[index]!
+    if (section.id === 'susan' && opts.refreshSusanSection) {
+      const refreshed = await opts.refreshSusanSection(next)
+      if (refreshed) {
+        next = next.map(s => (s.id === 'susan' ? refreshed : s))
+        section = refreshed
+      }
+    }
+
+    await opts.onProgress?.({
+      sectionId: section.id,
+      title: section.title,
+      index: index + 1,
+      total,
+      status: 'start',
+    })
+
     try {
-      const insight = await generateOneInsight(db, {
-        apiKey,
-        model,
+      const { insight, error } = await generateSusanSectionInsight(db, {
+        client,
         section,
         createdBy: opts.createdBy,
       })
-      generated += 1
-      next = next.map(s => (s.id === section.id ? { ...s, insight } : s))
+      if (error && insight === section.insight) {
+        failed += 1
+        lastError = error
+        await opts.onProgress?.({
+          sectionId: section.id,
+          title: section.title,
+          index: index + 1,
+          total,
+          status: 'error',
+          error,
+        })
+      }
+      else {
+        generated += 1
+        next = next.map(s => (s.id === section.id ? { ...s, insight } : s))
+        await opts.onProgress?.({
+          sectionId: section.id,
+          title: section.title,
+          index: index + 1,
+          total,
+          status: 'done',
+        })
+      }
     }
     catch (err) {
       failed += 1
       const message = err instanceof OpenRouterServiceError || err instanceof Error
         ? err.message
         : 'unknown error'
+      lastError = message
       console.warn(`[daily-summary] Susan insight failed for ${section.id}:`, message)
-    }
-  }
-
-  let susan = next.find(s => s.id === 'susan') ?? null
-  if (susan && opts.refreshSusanSection) {
-    const refreshed = await opts.refreshSusanSection(next)
-    if (refreshed) {
-      next = next.map(s => (s.id === 'susan' ? refreshed : s))
-      susan = refreshed
-    }
-  }
-
-  if (susan) {
-    try {
-      const insight = await generateOneInsight(db, {
-        apiKey,
-        model,
-        section: susan,
-        createdBy: opts.createdBy,
+      await opts.onProgress?.({
+        sectionId: section.id,
+        title: section.title,
+        index: index + 1,
+        total,
+        status: 'error',
+        error: message,
       })
-      generated += 1
-      next = next.map(s => (s.id === 'susan' ? { ...s, insight } : s))
     }
-    catch (err) {
-      failed += 1
-      console.warn(
-        '[daily-summary] Susan insight failed for susan:',
-        err instanceof Error ? err.message : err,
-      )
+
+    if (index < queue.length - 1) {
+      await sleep(BETWEEN_CALL_DELAY_MS)
     }
   }
 
@@ -300,8 +358,9 @@ export async function applySusanDailyInsights(
     sections: next,
     generated,
     failed,
+    lastError,
     skippedReason: generated === 0 && failed > 0
-      ? `Susan calls failed (${failed})`
+      ? `Susan calls failed (${failed})${lastError ? `: ${lastError}` : ''}`
       : null,
   }
 }

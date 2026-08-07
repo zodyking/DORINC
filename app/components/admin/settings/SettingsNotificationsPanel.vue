@@ -48,12 +48,113 @@ const busy = ref(false)
 const sendBusy = ref(false)
 const message = ref('')
 const error = ref('')
+const sendProgressLabel = ref('')
+const sendSteps = ref<Array<{
+  id: string
+  title: string
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped'
+  detail?: string
+}>>([])
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 async function sendDailySummaryNow() {
   sendBusy.value = true
   message.value = ''
   error.value = ''
+  sendProgressLabel.value = 'Preparing report…'
+  sendSteps.value = [{
+    id: 'prepare',
+    title: 'Prepare daily summary',
+    status: 'running',
+  }]
+
   try {
+    const prepared = await $fetch<{
+      sessionId: string
+      steps: Array<{ id: string, title: string }>
+      susanReady: boolean
+      susanSkipReason: string | null
+      totalSteps: number
+    }>('/api/admin/notifications/daily-summary/prepare', {
+      method: 'POST',
+    })
+
+    sendSteps.value = [
+      { id: 'prepare', title: 'Prepare daily summary', status: 'done' },
+      ...prepared.steps.map(step => ({
+        id: step.id,
+        title: `Susan: ${step.title}`,
+        status: 'pending' as const,
+      })),
+      { id: 'send', title: 'Send test email', status: 'pending' },
+    ]
+
+    let susanGenerated = 0
+    let susanFailed = 0
+    let lastSusanError: string | null = prepared.susanSkipReason
+
+    if (!prepared.susanReady) {
+      for (const step of sendSteps.value) {
+        if (step.id !== 'prepare' && step.id !== 'send') {
+          step.status = 'skipped'
+          step.detail = prepared.susanSkipReason || 'Susan unavailable'
+        }
+      }
+    }
+    else {
+      for (let i = 0; i < prepared.steps.length; i += 1) {
+        const step = prepared.steps[i]!
+        const row = sendSteps.value.find(s => s.id === step.id)
+        if (row) {
+          row.status = 'running'
+          row.detail = undefined
+        }
+        sendProgressLabel.value = `Susan note ${i + 1} of ${prepared.steps.length}: ${step.title}`
+
+        const result = await $fetch<{
+          sectionId: string
+          title: string
+          ok: boolean
+          usedDraft: boolean
+          error: string | null
+          susanGenerated: number
+          susanFailed: number
+        }>('/api/admin/notifications/daily-summary/susan-step', {
+          method: 'POST',
+          body: {
+            sessionId: prepared.sessionId,
+            sectionId: step.id,
+            stepIndex: i + 1,
+            totalSteps: prepared.totalSteps,
+          },
+        })
+
+        susanGenerated = result.susanGenerated
+        susanFailed = result.susanFailed
+        if (row) {
+          if (result.ok) {
+            row.status = 'done'
+            row.detail = 'Note written'
+          }
+          else {
+            row.status = 'error'
+            row.detail = result.error || 'Used draft'
+            lastSusanError = result.error || lastSusanError
+          }
+        }
+
+        // Keep OpenRouter from getting bursty even across separate HTTP calls.
+        if (i < prepared.steps.length - 1) await sleep(1200)
+      }
+    }
+
+    const sendRow = sendSteps.value.find(s => s.id === 'send')
+    if (sendRow) sendRow.status = 'running'
+    sendProgressLabel.value = 'Sending test email…'
+
     const res = await $fetch<{
       sent: number
       delivered: number
@@ -65,9 +166,13 @@ async function sendDailySummaryNow() {
       susanGenerated?: number
       susanFailed?: number
       susanSkippedReason?: string | null
-    }>('/api/admin/notifications/daily-summary', {
+    }>('/api/admin/notifications/daily-summary/send', {
       method: 'POST',
+      body: { sessionId: prepared.sessionId },
     })
+
+    if (sendRow) sendRow.status = res.delivered > 0 || res.sent > 0 ? 'done' : 'error'
+    sendProgressLabel.value = ''
 
     if (res.skipped) {
       error.value = res.errors[0]
@@ -77,21 +182,23 @@ async function sendDailySummaryNow() {
       return
     }
 
-    const susanNote = res.susanGenerated && res.susanGenerated > 0
-      ? ` Susan wrote ${res.susanGenerated} section note${res.susanGenerated === 1 ? '' : 's'}.`
-      : (res.susanSkippedReason
-          ? ` Susan notes used drafts (${res.susanSkippedReason}).`
+    const generated = res.susanGenerated ?? susanGenerated
+    const failedNotes = res.susanFailed ?? susanFailed
+    const susanNote = generated > 0
+      ? ` Susan wrote ${generated} section note${generated === 1 ? '' : 's'}.`
+      : (res.susanSkippedReason || lastSusanError
+          ? ` Susan notes used drafts (${res.susanSkippedReason || lastSusanError}).`
           : '')
 
     if (res.delivery === 'direct') {
       message.value = res.delivered > 0
         ? `Test summary emailed to you: ${res.recipients.join(', ')}.${susanNote}`
         : 'Test summary finished but SMTP reported no delivery'
-      if (res.failed > 0 && res.errors.length) {
-        error.value = res.errors.slice(0, 2).join(' · ')
+      if (failedNotes > 0 || (generated === 0 && (res.susanSkippedReason || lastSusanError))) {
+        error.value = res.susanSkippedReason || lastSusanError || res.errors[0] || `Susan calls failed (${failedNotes})`
       }
-      else if (!res.susanGenerated && res.susanSkippedReason) {
-        error.value = res.susanSkippedReason
+      else if (res.failed > 0 && res.errors.length) {
+        error.value = res.errors.slice(0, 2).join(' · ')
       }
       return
     }
@@ -99,7 +206,11 @@ async function sendDailySummaryNow() {
     message.value = `Test summary queued for you (${res.sent}).${susanNote}`
   }
   catch (e: unknown) {
+    sendProgressLabel.value = ''
     error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send test summary'
+    for (const step of sendSteps.value) {
+      if (step.status === 'running' || step.status === 'pending') step.status = 'error'
+    }
   }
   finally {
     sendBusy.value = false
@@ -211,8 +322,30 @@ function disableAll() {
               :disabled="sendBusy || !form.dailySummaryReport"
               @click="sendDailySummaryNow"
             >
-              {{ sendBusy ? 'Building Susan notes…' : 'Send test to me' }}
+              {{ sendBusy ? (sendProgressLabel || 'Working…') : 'Send test to me' }}
             </button>
+            <ol v-if="sendSteps.length" class="notif-progress">
+              <li
+                v-for="step in sendSteps"
+                :key="step.id"
+                class="notif-progress-item"
+                :data-status="step.status"
+              >
+                <span class="notif-progress-mark">
+                  {{
+                    step.status === 'done' ? '✓'
+                    : step.status === 'error' ? '!'
+                      : step.status === 'running' ? '…'
+                        : step.status === 'skipped' ? '–'
+                          : '○'
+                  }}
+                </span>
+                <span class="notif-progress-copy">
+                  <strong>{{ step.title }}</strong>
+                  <span v-if="step.detail" class="notif-progress-detail">{{ step.detail }}</span>
+                </span>
+              </li>
+            </ol>
           </div>
         </div>
 
@@ -273,5 +406,67 @@ function disableAll() {
 
 .notif-schedule .fld {
   margin: 0;
+}
+
+.notif-progress {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.75rem;
+  list-style: none;
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  background: #fff;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.notif-progress-item {
+  display: grid;
+  grid-template-columns: 1.15rem 1fr;
+  gap: 0.45rem;
+  align-items: start;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #475569;
+}
+
+.notif-progress-mark {
+  width: 1.15rem;
+  text-align: center;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.notif-progress-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.notif-progress-copy strong {
+  font-weight: 600;
+  color: #334155;
+}
+
+.notif-progress-detail {
+  color: #64748b;
+  word-break: break-word;
+}
+
+.notif-progress-item[data-status='running'] .notif-progress-mark,
+.notif-progress-item[data-status='running'] .notif-progress-copy strong {
+  color: #1d4ed8;
+}
+
+.notif-progress-item[data-status='done'] .notif-progress-mark {
+  color: #15803d;
+}
+
+.notif-progress-item[data-status='error'] .notif-progress-mark,
+.notif-progress-item[data-status='error'] .notif-progress-detail {
+  color: #b91c1c;
+}
+
+.notif-progress-item[data-status='skipped'] .notif-progress-mark,
+.notif-progress-item[data-status='skipped'] .notif-progress-detail {
+  color: #b45309;
 }
 </style>
