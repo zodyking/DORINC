@@ -20,6 +20,7 @@ const route = useRoute()
 interface AccountSession {
   id: string
   userAgent: string | null
+  deviceId: string | null
   ipAddress: string | null
   locationLabel: string | null
   lastActivityAt: string
@@ -29,6 +30,7 @@ interface AccountSession {
 
 interface AccountKnownDevice {
   key: string
+  deviceId: string | null
   userAgent: string | null
   ipAddress: string | null
   locationLabel: string | null

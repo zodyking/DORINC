@@ -1,5 +1,6 @@
 import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
+import { ensureDeviceId } from '../../utils/device-id'
 import { AuthError, login, logout } from '../../auth/auth.service'
 import { createPendingLoginToken } from '../../auth/pending-login'
 import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
@@ -28,6 +29,8 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, loginBodySchema)
   const identifier = body.portal === 'customer' ? body.username : body.email
   const ipAddress = getClientIp(event)
+  const deviceId = ensureDeviceId(event)
+  const userAgent = getHeader(event, 'user-agent')
 
   let locationLabel: string | null = null
   let locationSource: 'device' | 'ip' = 'ip'
@@ -54,7 +57,8 @@ export default defineEventHandler(async (event) => {
   try {
     const result = await login(useDb(), identifier, body.password, {
       ipAddress,
-      userAgent: getHeader(event, 'user-agent'),
+      userAgent,
+      deviceId,
       portal: body.portal,
       locationLabel,
       geo: body.portal === 'staff' && body.geo
@@ -83,7 +87,8 @@ export default defineEventHandler(async (event) => {
         const bypass = decision.reason === 'geo_outside'
           ? hasValidOutsideGeoBypass(event, {
               ipAddress,
-              userAgent: getHeader(event, 'user-agent'),
+              userAgent,
+              deviceId,
               userId: result.user.id,
             })
           : null
@@ -99,7 +104,8 @@ export default defineEventHandler(async (event) => {
             userId: result.user.id,
             userName: result.user.name,
             userEmail: result.user.email,
-            userAgent: getHeader(event, 'user-agent'),
+            userAgent,
+            deviceId,
             latitude: loginCoords?.lat ?? null,
             longitude: loginCoords?.lng ?? null,
             locationLabel,
@@ -110,13 +116,15 @@ export default defineEventHandler(async (event) => {
           if (decision.reason === 'geo_outside') {
             const known = await findKnownOutsideGeoIdentity(useDb(), {
               ipAddress,
-              userAgent: getHeader(event, 'user-agent'),
+              userAgent,
+              deviceId,
             }).catch(() => null)
             if (known) {
               redirectTo = '/auth/verify-location?sent=1'
               void quietlyIssueOutsideGeoChallenge(useDb(), {
                 ipAddress,
-                userAgent: getHeader(event, 'user-agent'),
+                userAgent,
+                deviceId,
                 locationLabel,
               }).catch(() => {})
             }
@@ -156,7 +164,8 @@ export default defineEventHandler(async (event) => {
       userId: result.user.id,
       userName: result.user.name,
       userEmail: result.user.email,
-      userAgent: getHeader(event, 'user-agent'),
+      userAgent,
+      deviceId,
       latitude: loginCoords?.lat ?? null,
       longitude: loginCoords?.lng ?? null,
       locationLabel,
@@ -194,7 +203,7 @@ export default defineEventHandler(async (event) => {
           name: result.user.name,
           portal: body.portal,
           ipAddress,
-          userAgent: getHeader(event, 'user-agent'),
+          userAgent,
           deviceLocation: locationLabel,
           deviceAccuracyM: body.geo.accuracyM ?? null,
         }))
@@ -233,7 +242,7 @@ export default defineEventHandler(async (event) => {
           name: result.user.name,
           portal: body.portal,
           ipAddress,
-          userAgent: getHeader(event, 'user-agent'),
+          userAgent,
           deviceLocation: null,
           deviceAccuracyM: null,
         }))
@@ -296,7 +305,8 @@ export default defineEventHandler(async (event) => {
           eventType: 'login',
           outcome: 'login_failed',
           ipAddress,
-          userAgent: getHeader(event, 'user-agent'),
+          userAgent,
+          deviceId,
           latitude: loginCoords?.lat ?? null,
           longitude: loginCoords?.lng ?? null,
           locationLabel,

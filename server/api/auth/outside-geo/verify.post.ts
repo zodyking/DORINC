@@ -1,5 +1,6 @@
 import { getHeader, readBody, sendRedirect } from 'h3'
 import { getClientIp } from '../../../utils/client-ip'
+import { ensureDeviceId } from '../../../utils/device-id'
 import { useDb } from '../../../db/client'
 import {
   createOutsideGeoBypassToken,
@@ -35,8 +36,9 @@ export default defineEventHandler(async (event) => {
   try {
     const ipAddress = getClientIp(event)
     const userAgent = getHeader(event, 'user-agent') ?? null
+    const deviceId = ensureDeviceId(event)
 
-    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
+    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent, deviceId })) {
       return sendRedirect(event, '/auth/login', 303)
     }
 
@@ -60,6 +62,7 @@ export default defineEventHandler(async (event) => {
       userId: identity.userId,
       ipAddress,
       userAgent,
+      deviceId,
     })
     setOutsideGeoBypassCookie(event, token)
 

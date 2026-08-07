@@ -18,6 +18,7 @@ export class AccountServiceError extends Error {
 export interface AccountSessionRow {
   id: string
   userAgent: string | null
+  deviceId: string | null
   ipAddress: string | null
   locationLabel: string | null
   lastActivityAt: string
@@ -26,8 +27,9 @@ export interface AccountSessionRow {
 }
 
 export interface AccountKnownDeviceRow {
-  /** Stable key for the device (normalized user-agent). */
+  /** Stable key: first-party device_id when present, else user-agent fallback. */
   key: string
+  deviceId: string | null
   userAgent: string | null
   ipAddress: string | null
   locationLabel: string | null
@@ -53,9 +55,11 @@ export interface AccountDetail {
   silentDeveloperMode: boolean
 }
 
-function deviceKey(userAgent: string | null | undefined): string {
+function deviceKey(deviceId: string | null | undefined, userAgent: string | null | undefined): string {
+  const id = deviceId?.trim().toLowerCase()
+  if (id) return `id:${id}`
   const ua = userAgent?.trim()
-  return ua ? ua : 'unknown'
+  return ua ? `ua:${ua}` : 'unknown'
 }
 
 export async function getAccountDetail(
@@ -80,6 +84,7 @@ export async function getAccountDetail(
   const mapped = sessionRows.map(s => ({
     id: s.id,
     userAgent: s.userAgent,
+    deviceId: s.deviceId,
     ipAddress: s.ipAddress,
     locationLabel: s.locationLabel,
     lastActivityAt: s.lastActivityAt.toISOString(),
@@ -92,6 +97,7 @@ export async function getAccountDetail(
     .select({
       id: sessions.id,
       userAgent: sessions.userAgent,
+      deviceId: sessions.deviceId,
       ipAddress: sessions.ipAddress,
       locationLabel: sessions.locationLabel,
       lastActivityAt: sessions.lastActivityAt,
@@ -106,7 +112,7 @@ export async function getAccountDetail(
 
   const deviceMap = new Map<string, AccountKnownDeviceRow>()
   for (const row of historyRows) {
-    const key = deviceKey(row.userAgent)
+    const key = deviceKey(row.deviceId, row.userAgent)
     const lastSeenAt = row.lastActivityAt.toISOString()
     const createdAt = row.createdAt.toISOString()
     const isLive = row.revokedAt == null && row.expiresAt > now
@@ -115,6 +121,7 @@ export async function getAccountDetail(
     if (!existing) {
       deviceMap.set(key, {
         key,
+        deviceId: row.deviceId,
         userAgent: row.userAgent,
         ipAddress: row.ipAddress,
         locationLabel: row.locationLabel,
@@ -129,6 +136,7 @@ export async function getAccountDetail(
     existing.sessionCount += 1
     if (isLive) existing.isActive = true
     if (isCurrent) existing.isCurrent = true
+    if (!existing.deviceId && row.deviceId) existing.deviceId = row.deviceId
     if (row.createdAt.getTime() < new Date(existing.firstSeenAt).getTime()) {
       existing.firstSeenAt = createdAt
     }

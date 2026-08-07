@@ -19,6 +19,7 @@ export const accessEvents = pgTable('access_events', {
   userEmail: text('user_email'),
   path: text('path'),
   userAgent: text('user_agent'),
+  deviceId: text('device_id'),
   latitude: doublePrecision('latitude'),
   longitude: doublePrecision('longitude'),
   locationLabel: text('location_label'),
@@ -28,4 +29,5 @@ export const accessEvents = pgTable('access_events', {
   index('access_events_created_idx').on(table.createdAt),
   index('access_events_type_idx').on(table.eventType),
   index('access_events_ip_idx').on(table.ipAddress),
+  index('access_events_device_id_idx').on(table.deviceId),
 ])

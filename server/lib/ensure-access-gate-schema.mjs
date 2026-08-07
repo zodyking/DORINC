@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS "access_events" (
   "user_email" text,
   "path" text,
   "user_agent" text,
+  "device_id" text,
   "latitude" double precision,
   "longitude" double precision,
   "location_label" text,
@@ -23,6 +24,12 @@ CREATE TABLE IF NOT EXISTS "access_events" (
 CREATE INDEX IF NOT EXISTS "access_events_created_idx" ON "access_events" USING btree ("created_at");
 CREATE INDEX IF NOT EXISTS "access_events_type_idx" ON "access_events" USING btree ("event_type");
 CREATE INDEX IF NOT EXISTS "access_events_ip_idx" ON "access_events" USING btree ("ip_address");
+CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
+`.trim()
+
+const ACCESS_EVENTS_DEVICE_ID_SQL = `
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "device_id" text;
+CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
 `.trim()
 
 /**
@@ -33,8 +40,11 @@ CREATE INDEX IF NOT EXISTS "access_events_ip_idx" ON "access_events" USING btree
  */
 export async function ensureAccessGateSchema(pool) {
   const { rows } = await pool.query(`SELECT to_regclass('public.access_events') AS reg`)
-  if (rows[0]?.reg) return false
-  await pool.query(ACCESS_EVENTS_SQL)
-  console.log('[migrate] ensured access-gate table (access_events)')
-  return true
+  if (!rows[0]?.reg) {
+    await pool.query(ACCESS_EVENTS_SQL)
+    console.log('[migrate] ensured access-gate table (access_events)')
+    return true
+  }
+  await pool.query(ACCESS_EVENTS_DEVICE_ID_SQL)
+  return false
 }

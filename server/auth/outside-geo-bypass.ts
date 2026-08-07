@@ -3,6 +3,7 @@ import type { H3Event } from 'h3'
 import { deleteCookie, getCookie, setCookie } from 'h3'
 import { getSessionSecret } from '../services/app-config.service'
 import { normalizeClientIp } from '../utils/client-ip'
+import { normalizeDeviceId } from '../utils/device-id'
 
 export const OUTSIDE_GEO_BYPASS_COOKIE = 'dorinc_outside_geo'
 /** Allow login outside the geofence for the rest of the travel day. */
@@ -13,6 +14,7 @@ export interface OutsideGeoBypass {
   userId: string
   ipAddress: string | null
   userAgentHash: string | null
+  deviceId: string | null
   exp: number
 }
 
@@ -30,13 +32,16 @@ export function createOutsideGeoBypassToken(input: {
   userId: string
   ipAddress?: string | null
   userAgent?: string | null
+  deviceId?: string | null
 }): string {
   const secret = getSessionSecret()
   if (!secret) throw new Error('SESSION_SECRET_NOT_CONFIGURED')
   const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress?.trim() ?? ''
   const uaHash = hashUserAgent(input.userAgent) ?? ''
+  const deviceId = normalizeDeviceId(input.deviceId) ?? ''
   const exp = Date.now() + BYPASS_TTL_MS
-  const payload = [input.userId, ip || '-', uaHash || '-', String(exp)].join(PART_SEP)
+  // v2 payload includes device_id; older tokens omit it (handled in verify).
+  const payload = [input.userId, ip || '-', uaHash || '-', deviceId || '-', String(exp)].join(PART_SEP)
   const sig = signPayload(payload, secret)
   return Buffer.from(`${payload}${PART_SEP}${sig}`).toString('base64url')
 }
@@ -54,7 +59,25 @@ export function verifyOutsideGeoBypassToken(token: string): OutsideGeoBypass | n
     if (sig.length !== expected.length) return null
     if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
 
-    const [userId, ipRaw, uaHashRaw, expRaw] = payload.split(PART_SEP)
+    const parts = payload.split(PART_SEP)
+    // v2: userId|ip|uaHash|deviceId|exp
+    // v1: userId|ip|uaHash|exp
+    let userId: string | undefined
+    let ipRaw: string | undefined
+    let uaHashRaw: string | undefined
+    let deviceRaw: string | undefined
+    let expRaw: string | undefined
+    if (parts.length === 5) {
+      ;[userId, ipRaw, uaHashRaw, deviceRaw, expRaw] = parts
+    }
+    else if (parts.length === 4) {
+      ;[userId, ipRaw, uaHashRaw, expRaw] = parts
+      deviceRaw = '-'
+    }
+    else {
+      return null
+    }
+
     if (!userId || !expRaw) return null
     const exp = Number(expRaw)
     if (!Number.isFinite(exp) || Date.now() > exp) return null
@@ -63,6 +86,7 @@ export function verifyOutsideGeoBypassToken(token: string): OutsideGeoBypass | n
       userId,
       ipAddress: !ipRaw || ipRaw === '-' ? null : ipRaw,
       userAgentHash: !uaHashRaw || uaHashRaw === '-' ? null : uaHashRaw,
+      deviceId: normalizeDeviceId(deviceRaw === '-' ? null : deviceRaw),
       exp,
     }
   }
@@ -95,7 +119,12 @@ export function clearOutsideGeoBypassCookie(event: H3Event) {
  */
 export function hasValidOutsideGeoBypass(
   event: H3Event,
-  input: { ipAddress?: string | null, userAgent?: string | null, userId?: string | null } = {},
+  input: {
+    ipAddress?: string | null
+    userAgent?: string | null
+    deviceId?: string | null
+    userId?: string | null
+  } = {},
 ): OutsideGeoBypass | null {
   const raw = getOutsideGeoBypassCookie(event)
   if (!raw) return null
@@ -106,6 +135,13 @@ export function hasValidOutsideGeoBypass(
 
   const requestIp = normalizeClientIp(input.ipAddress) ?? input.ipAddress ?? null
   if (bypass.ipAddress && requestIp && bypass.ipAddress !== requestIp) return null
+
+  const requestDeviceId = normalizeDeviceId(input.deviceId)
+  if (bypass.deviceId) {
+    // Prefer stable device_id when the bypass was issued with one.
+    if (!requestDeviceId || bypass.deviceId !== requestDeviceId) return null
+    return bypass
+  }
 
   const requestUaHash = hashUserAgent(input.userAgent)
   if (bypass.userAgentHash && requestUaHash && bypass.userAgentHash !== requestUaHash) return null
