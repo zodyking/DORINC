@@ -10,6 +10,7 @@ export interface InvoiceWizardStepHintInput {
   step: number
   customerName?: string | null
   vehicle?: VehicleDisplay | null
+  serviceLogLabel?: string | null
   invoiceDate?: string | null
   lines?: DraftLine[]
   taxExempt?: boolean
@@ -26,16 +27,18 @@ export function invoiceWizardStepHint(input: InvoiceWizardStepHintInput): string
     case 2:
       return input.vehicle ? vehicleTag(input.vehicle) : ''
     case 3:
+      return input.serviceLogLabel?.trim() ?? ''
+    case 4:
       if (!input.invoiceDate?.trim()) return ''
       return invoiceDateDisplay(input.invoiceDate)
-    case 4: {
+    case 5: {
       const hasLines = (input.lines ?? []).some(isDraftLineValid)
       if (!hasLines) return ''
       const total = input.savedTotal
         ?? previewDraftTotals(input.lines ?? [], { taxExempt: input.taxExempt }).total
       return moneyDisplay(total)
     }
-    case 5:
+    case 6:
       if (input.dirty || !input.invoiceId) return 'Unsaved'
       return input.savedAtLabel?.trim() || 'Saved'
     default:
@@ -44,7 +47,7 @@ export function invoiceWizardStepHint(input: InvoiceWizardStepHintInput): string
 }
 
 export function invoiceWizardStepHintClass(step: number, input: InvoiceWizardStepHintInput): string {
-  if (step !== 5) return ''
+  if (step !== 6) return ''
   if (input.dirty || !input.invoiceId) return 'pending'
   return 'saved'
 }

@@ -82,6 +82,64 @@ export async function postServiceLogSentToInvoiceTeamMessage(
   })
 }
 
+/** Technician uploaded a service log that is attached to an invoice draft. */
+export async function postServiceLogUploadedForInvoiceTeamMessage(
+  db: Db,
+  opts: {
+    senderUserId: string
+    serviceLogId: string
+    logNumber: number
+    customerId: string | null
+    customerName: string
+    vehicleId: string | null
+    vehicleLabel: string
+    invoiceId: string | null
+    invoiceNumber: number | null
+  },
+) {
+  const slLabel = `SL-${opts.logNumber}`
+  const refs = [
+    buildEntityRef('service_log', opts.serviceLogId, slLabel),
+  ]
+  const parts: string[] = [
+    'Uploaded',
+    entityRefToken('service_log', opts.serviceLogId, slLabel),
+    'for',
+  ]
+
+  if (opts.customerId) {
+    parts.push(entityRefToken('customer', opts.customerId, opts.customerName))
+    refs.push(buildEntityRef('customer', opts.customerId, opts.customerName))
+  }
+  else {
+    parts.push(opts.customerName)
+  }
+
+  parts.push('·')
+  if (opts.vehicleId) {
+    parts.push(entityRefToken('vehicle', opts.vehicleId, opts.vehicleLabel))
+    refs.push(buildEntityRef('vehicle', opts.vehicleId, opts.vehicleLabel))
+  }
+  else {
+    parts.push(opts.vehicleLabel)
+  }
+
+  if (opts.invoiceId && opts.invoiceNumber != null) {
+    const invoiceLabel = formatInvoiceNumber(opts.invoiceNumber)
+    parts.push('on')
+    parts.push(entityRefToken('invoice', opts.invoiceId, invoiceLabel))
+    refs.push(buildEntityRef('invoice', opts.invoiceId, invoiceLabel))
+  }
+
+  return postTeamChatMessage(db, {
+    senderUserId: opts.senderUserId,
+    body: parts.join(' '),
+    entityRefs: refs,
+    skipNormalize: true,
+    workflowNotification: true,
+  })
+}
+
 export async function postInvoiceCreatedTeamMessage(
   db: Db,
   opts: {

@@ -23,6 +23,7 @@ const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
 const GATE_PAGES = [
   '/auth/verify-location',
   '/auth/access-restricted',
+  '/upload/service-log',
 ]
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 

@@ -2817,9 +2817,94 @@ section.page.active.dm-page{
   .help-widget{ right:14px; bottom:var(--help-offset); }
   .help-panel{ width:calc(100vw - 28px); max-height:calc(100vh - var(--help-offset) - 68px); }
 }
+/* Invoice wizard — service log document camera + QR upload */
+.sl-doc-cam{ margin-top:8px; }
+.sl-doc-cam__stage{
+  position:relative; border-radius:18px; overflow:hidden;
+  background:#0f172a; aspect-ratio:3/4; max-height:62vh;
+}
+.sl-doc-cam__video{ width:100%; height:100%; object-fit:cover; display:block; }
+.sl-doc-cam__frame{
+  pointer-events:none; position:absolute; inset:10% 8%;
+  border:1.5px solid rgba(255,255,255,.55); border-radius:12px;
+  box-shadow:0 0 0 999px rgba(15,23,42,.35);
+}
+.sl-doc-cam__frame .c{
+  position:absolute; width:22px; height:22px; border:3px solid #38bdf8;
+}
+.sl-doc-cam__frame .tl{ top:-2px; left:-2px; border-right:0; border-bottom:0; border-radius:6px 0 0 0; }
+.sl-doc-cam__frame .tr{ top:-2px; right:-2px; border-left:0; border-bottom:0; border-radius:0 6px 0 0; }
+.sl-doc-cam__frame .bl{ bottom:-2px; left:-2px; border-right:0; border-top:0; border-radius:0 0 0 6px; }
+.sl-doc-cam__frame .br{ bottom:-2px; right:-2px; border-left:0; border-top:0; border-radius:0 0 6px 0; }
+.sl-doc-cam__guide{
+  position:absolute; left:0; right:0; bottom:12px; margin:0;
+  text-align:center; color:#e2e8f0; font-size:12px; font-weight:600;
+  text-shadow:0 1px 2px rgba(0,0,0,.55);
+}
+.sl-doc-cam__canvas{ display:none; }
+.sl-doc-cam__actions{ display:flex; gap:10px; margin-top:12px; }
+.sl-doc-cam__actions .btn{ flex:1; min-height:48px; }
+
+.inv-sl-choice{ display:grid; gap:10px; }
+.inv-sl-methods{ display:flex; gap:8px; margin:14px 0 10px; }
+.inv-sl-upload-zone{ margin-top:4px; }
+.inv-sl-drop{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:4px; min-height:140px; border:2px dashed #cbd5e1; border-radius:14px;
+  background:#f8fafc; cursor:pointer; color:#475569;
+}
+.inv-sl-drop input{ display:none; }
+.inv-sl-drop b{ color:#0f172a; }
+.inv-sl-thumbs{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr));
+  gap:8px; margin-top:12px;
+}
+.inv-sl-thumb{ position:relative; border-radius:10px; overflow:hidden; aspect-ratio:1; background:#e2e8f0; }
+.inv-sl-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.inv-sl-thumb__x{
+  position:absolute; top:4px; right:4px; width:28px; height:28px; border:0;
+  border-radius:999px; background:rgba(15,23,42,.72); color:#fff; cursor:pointer;
+}
+.inv-sl-attach-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.inv-sl-modal{
+  position:fixed; inset:0; z-index:80; display:grid; place-items:center;
+  background:rgba(15,23,42,.45); padding:18px;
+}
+.inv-sl-modal__card{
+  width:min(420px,100%); background:#fff; border-radius:18px; padding:22px 20px;
+  box-shadow:0 24px 60px rgba(15,23,42,.28); text-align:center;
+}
+.inv-sl-modal__card h4{ margin:0 0 8px; font-size:1.15rem; }
+.inv-sl-qr{ width:min(280px,70vw); height:auto; margin:12px auto; display:block; }
+.inv-sl-link{ font-size:11px; color:#64748b; word-break:break-all; margin:0 0 12px; }
+.inv-sl-modal__actions{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+.inv-sl-success__card{ position:relative; overflow:hidden; }
+.inv-sl-success__burst{
+  position:absolute; inset:-40% -20% auto; height:160px;
+  background:radial-gradient(circle at 50% 80%, rgba(56,189,248,.35), transparent 60%);
+  animation:invSlBurst .7s ease both;
+}
+.inv-sl-success__check{
+  width:64px; height:64px; margin:8px auto 12px; border-radius:999px;
+  display:grid; place-items:center; font-size:32px; font-weight:800; color:#fff;
+  background:linear-gradient(145deg,#059669,#10b981);
+  box-shadow:0 10px 24px rgba(16,185,129,.35);
+  animation:invSlPop .55s cubic-bezier(.2,1.4,.4,1) both;
+}
+@keyframes invSlPop{
+  0%{ transform:scale(.4); opacity:0; }
+  100%{ transform:scale(1); opacity:1; }
+}
+@keyframes invSlBurst{
+  0%{ opacity:0; transform:scale(.8); }
+  100%{ opacity:1; transform:scale(1); }
+}
+
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; }
   .topbar .help-topbar-btn:not(.open),
   .help-topbar-pulse,
   .help-typing span{ animation:none !important; }
+  .inv-sl-success__check,
+  .inv-sl-success__burst{ animation:none !important; }
 }

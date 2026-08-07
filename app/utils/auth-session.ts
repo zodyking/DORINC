@@ -1,4 +1,4 @@
-const PUBLIC_PATH_PREFIXES = ['/auth/', '/setup']
+const PUBLIC_PATH_PREFIXES = ['/auth/', '/setup', '/upload/']
 const PUBLIC_PATHS = new Set(['/', '/index'])
 
 export function isPublicAppPath(path: string): boolean {

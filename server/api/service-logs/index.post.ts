@@ -5,6 +5,7 @@ import {
   ServiceLogsServiceError,
   transitionServiceLog,
 } from '../../services/service-logs.service'
+import { assertActiveStaffUser } from '../../services/technicians.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -16,9 +17,20 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, serviceLogCreateSchema)
   const db = useDb()
 
+  let submittedBy = actor.id
+  if (body.submittedBy && body.submittedBy !== actor.id) {
+    try {
+      await assertActiveStaffUser(db, body.submittedBy)
+      submittedBy = body.submittedBy
+    }
+    catch {
+      throw apiError(event, 'VALIDATION_ERROR', 'Selected technician was not found')
+    }
+  }
+
   try {
     const log = await db.transaction(async (tx) => {
-      const created = await createServiceLog(tx, body, actor.id)
+      const created = await createServiceLog(tx, body, submittedBy)
       if (!body.finalize) return created
 
       const { log: finalized } = await transitionServiceLog(tx, created.id, 'ready_for_review')
@@ -37,6 +49,8 @@ export default defineEventHandler(async (event) => {
         workType: log.workType,
         status: log.status,
         finalized: !!body.finalize,
+        submittedBy,
+        uploadedOnBehalf: submittedBy !== actor.id,
       },
       permissionKey: 'service_logs.upload.own',
     })

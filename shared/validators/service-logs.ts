@@ -47,6 +47,8 @@ export const serviceLogCreateSchema = z.object({
   draftLineItems: z.array(serviceLogDraftLineSchema).nullish(),
   /** When true, moves the new log straight into ready_for_review after create. */
   finalize: z.boolean().optional(),
+  /** Attribute the log to another active staff user (invoice wizard upload-on-behalf). */
+  submittedBy: uuidSchema.optional(),
 })
 
 export const serviceLogUpdateSchema = serviceLogCreateSchema
