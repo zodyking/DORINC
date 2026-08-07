@@ -51,4 +51,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureBillingIntegrationsSchema } = await import('../lib/ensure-billing-integrations-schema.mjs')
   await ensureBillingIntegrationsSchema(usePool())
+
+  const { ensureServiceLogUploadSchema } = await import('../lib/ensure-service-log-upload-schema.mjs')
+  await ensureServiceLogUploadSchema(usePool())
 }

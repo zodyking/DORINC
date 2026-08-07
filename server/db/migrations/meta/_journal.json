@@ -449,6 +449,13 @@
       "when": 1786083000000,
       "tag": "0066_session_device_id",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1786092000000,
+      "tag": "0067_service_log_upload_sessions",
+      "breakpoints": true
     }
   ]
 }

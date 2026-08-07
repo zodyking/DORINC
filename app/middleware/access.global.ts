@@ -7,8 +7,8 @@ import { guardStaffRoute } from '~/utils/staff-route-guard'
 import { isAnnouncementPath } from '~/utils/announcements-ui'
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Skip auth pages
-  if (to.path.startsWith('/auth/') || to.path === '/setup') return
+  // Skip auth pages and tokenized public upload bridges
+  if (to.path.startsWith('/auth/') || to.path === '/setup' || to.path.startsWith('/upload/')) return
 
   const auth = useAuthStore()
 

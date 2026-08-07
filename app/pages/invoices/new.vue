@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Invoice creator wizard — customer → vehicle → lines → review (mockup: PAGE: INVOICE CREATOR / P1-23).
+// Invoice creator wizard — customer → vehicle → service log → dates → lines → review.
 import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
 import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
@@ -119,10 +119,16 @@ const lineAuditCompletedForDraft = ref(false)
 const INVOICE_NARRATIONS: Record<number, string> = {
   1: 'Pick customer.',
   2: 'Pick vehicle.',
-  3: 'Set dates and terms.',
-  4: 'Add line items.',
-  5: 'Preview PDF and save.',
+  3: 'Upload a service log if you have one.',
+  4: 'Set dates and terms.',
+  5: 'Add line items.',
+  6: 'Preview PDF and save.',
 }
+
+const serviceLogStepRef = ref<{
+  wantUpload: { value: boolean | null }
+} | null>(null)
+const serviceLogStepLabel = ref('')
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
 const submitError = ref('')
@@ -164,12 +170,51 @@ function ensureManualLineEntry() {
 }
 
 watch(step, (current) => {
-  if (current === 4) ensureManualLineEntry()
+  if (current === 5) {
+    ensureManualLineEntry()
+    void hydrateLinesFromServiceLog()
+  }
 })
+
+async function hydrateLinesFromServiceLog() {
+  if (!serviceLogId.value || lines.value.some(isDraftLineValid)) return
+  try {
+    const { log } = await $fetch<{
+      log: { draftLineItems?: Array<{
+        lineType?: string
+        description?: string
+        qty?: string | null
+        rate?: string | null
+        amount?: string | null
+      }> | null }
+    }>(`/api/service-logs/${serviceLogId.value}`)
+    const items = log.draftLineItems ?? []
+    if (!items.length) return
+    const seeded = items
+      .filter(i => (i.description ?? '').trim())
+      .map((i) => {
+        const line = createEmptyLine()
+        line.lineType = (i.lineType === 'part' || i.lineType === 'fee' ? i.lineType : 'labor')
+        line.description = (i.description ?? '').trim()
+        line.quantity = i.qty?.trim() || '1'
+        line.unitPrice = i.rate?.trim() || i.amount?.trim() || '0'
+        return line
+      })
+    if (seeded.length) {
+      lines.value = seeded
+      if (lineEntryMode.value === 'guided') {
+        wizardLines.value = seeded.map(draftLineToWizard)
+      }
+    }
+  }
+  catch {
+    // Optional hydrate — ignore failures
+  }
+}
 
 onMounted(() => {
   voiceEntryAvailable.value = isVoiceEntryDevice()
-  if (step.value === 4) ensureManualLineEntry()
+  if (step.value === 5) ensureManualLineEntry()
 })
 
 watch(wizardLines, (wl) => {
@@ -303,6 +348,7 @@ function wizardStepHint(stepNumber: number): string {
     step: stepNumber,
     customerName: selectedCustomer.value?.displayName,
     vehicle: selectedVehicle.value ?? null,
+    serviceLogLabel: serviceLogStepLabel.value || (serviceLogId.value ? 'Attached' : ''),
     invoiceDate: invoiceDate.value,
     lines: lines.value,
     taxExempt: selectedCustomer.value?.taxExempt,
@@ -341,7 +387,7 @@ const summaryRows = computed(() => {
 })
 
 watch(step, async (n) => {
-  if (n !== 5 || !invoiceId.value) return
+  if (n !== 6 || !invoiceId.value) return
   await nextTick()
   pdfPreviewRef.value?.refresh()
   pdfPreviewRef.value?.refit()
@@ -441,11 +487,37 @@ function prevFromLinesStep() {
   prevStep()
 }
 
+async function continueFromServiceLogStep() {
+  const choice = serviceLogStepRef.value?.wantUpload?.value
+  if (choice === null || choice === undefined) {
+    submitError.value = 'Choose whether to upload a service log'
+    return
+  }
+  if (choice === true && !serviceLogId.value) {
+    submitError.value = 'Attach the service log photos, or choose continue without'
+    return
+  }
+  submitError.value = ''
+  nextStep()
+}
+
+function onServiceLogAttached(payload: { serviceLogId: string, invoiceNumberFormatted: string | null }) {
+  if (payload.serviceLogId) serviceLogId.value = payload.serviceLogId
+  if (payload.invoiceNumberFormatted) {
+    invoiceNumberFormatted.value = payload.invoiceNumberFormatted
+    serviceLogStepLabel.value = payload.invoiceNumberFormatted
+  }
+  else {
+    serviceLogStepLabel.value = 'Attached'
+  }
+  dirty.value = true
+}
+
 async function continueToReview() {
   if (lineEntryMode.value === 'guided') {
     lines.value = wizardLinesToDraftLines(wizardLines.value)
   }
-  if (!canProceedWizardStep(4, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
+  if (!canProceedWizardStep(5, { customerId: customerId.value, vehicleId: vehicleId.value, lines: lines.value })) {
     submitError.value = 'Add at least one complete line item.'
     return
   }
@@ -931,8 +1003,36 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Step 3: Dates & terms -->
+    <!-- Step 3: Service log upload -->
     <div v-show="step === 3" class="sl-panel active">
+      <InvoiceWizardServiceLogStep
+        ref="serviceLogStepRef"
+        :customer-id="customerId"
+        :vehicle-id="vehicleId"
+        :invoice-id="invoiceId"
+        :invoice-number-formatted="invoiceNumberFormatted"
+        :service-log-id="serviceLogId"
+        :service-date="invoiceDate"
+        :ensure-draft="ensureDraft"
+        @update:service-log-id="serviceLogId = $event"
+        @attached="onServiceLogAttached"
+      />
+      <div class="sl-foot">
+        <button type="button" class="btn" @click="prevStep">Back</button>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="!canProceedWizardStep(3, { customerId, vehicleId, lines })"
+          @click="continueFromServiceLogStep"
+        >
+          Continue
+        </button>
+      </div>
+      <p v-if="step === 3 && submitError" class="help" style="color:#dc2626;">{{ submitError }}</p>
+    </div>
+
+    <!-- Step 4: Dates & terms -->
+    <div v-show="step === 4" class="sl-panel active">
       <h3>Dates &amp; terms</h3>
       <p class="sl-hint">Invoice date, due date, and payment terms.</p>
       <label class="fld"><span>Invoice Date</span><input v-model="invoiceDate" type="date" required></label>
@@ -956,7 +1056,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <button
           type="button"
           class="btn primary"
-          :disabled="!canProceedWizardStep(3, { customerId, vehicleId, lines })"
+          :disabled="!canProceedWizardStep(4, { customerId, vehicleId, lines })"
           @click="nextStep"
         >
           Continue
@@ -964,8 +1064,8 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Step 4: Line items -->
-    <div v-show="step === 4" class="sl-panel active">
+    <!-- Step 5: Line items -->
+    <div v-show="step === 5" class="sl-panel active">
       <h3>Line items</h3>
 
       <label class="fld inv-wizard-complaint">
@@ -1147,17 +1247,17 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <button
           type="button"
           class="btn primary"
-          :disabled="busy || auditBusy || !lineEntryMode || !canProceedWizardStep(4, { customerId, vehicleId, lines })"
+          :disabled="busy || auditBusy || !lineEntryMode || !canProceedWizardStep(5, { customerId, vehicleId, lines })"
           @click="continueToReview"
         >
           {{ auditBusy ? 'Checking lines…' : busy ? 'Saving…' : 'Continue' }}
         </button>
       </div>
-      <p v-if="step === 4 && (submitError || auditError)" class="help" style="color:#dc2626;">{{ submitError || auditError }}</p>
+      <p v-if="step === 5 && (submitError || auditError)" class="help" style="color:#dc2626;">{{ submitError || auditError }}</p>
     </div>
 
-    <!-- Step 5: Review -->
-    <div v-show="step === 5" class="sl-panel active inv-wizard-review">
+    <!-- Step 6: Review -->
+    <div v-show="step === 6" class="sl-panel active inv-wizard-review">
       <h3>Review &amp; finish</h3>
       <p class="sl-hint">Preview how this invoice will look as a PDF, then save your draft.</p>
       <div v-if="invoiceId && invoiceNumberFormatted" class="inv-wizard-pdf">
@@ -1202,7 +1302,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
 
 .inv-wizard-steps {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px 6px;
   overflow: visible;
   margin-bottom: 0;
