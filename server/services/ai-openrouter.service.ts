@@ -73,12 +73,31 @@ export async function openRouterChat(
   model: string,
   messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }>,
   feature: AiFeatureType,
+  opts: { responseFormat?: 'json' | 'text', temperature?: number } = {},
 ): Promise<OpenRouterChatResult> {
   if (!apiKey.trim()) {
     throw new OpenRouterServiceError(
       'API_ERROR',
       'OpenRouter API key is missing — re-save AI settings in Control Panel after deploy',
     )
+  }
+
+  const responseFormat = opts.responseFormat
+    ?? (feature === 'daily_summary' ? 'text' : 'json')
+  const temperature = opts.temperature
+    ?? (feature === 'invoice_description'
+      ? 0.4
+      : feature === 'daily_summary'
+        ? 0.55
+        : 0.2)
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature,
+  }
+  if (responseFormat === 'json') {
+    body.response_format = { type: 'json_object' }
   }
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -89,16 +108,7 @@ export async function openRouterChat(
       'HTTP-Referer': getAppUrl(),
       'X-Title': BRAND_NAME,
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: feature === 'invoice_description'
-        ? 0.4
-        : feature === 'daily_summary'
-          ? 0.55
-          : 0.2,
-      response_format: { type: 'json_object' },
-    }),
+    body: JSON.stringify(body),
   })
 
   const payload = await res.json() as OpenRouterResponse
@@ -115,7 +125,9 @@ export async function openRouterChat(
   const promptTokens = payload.usage?.prompt_tokens ?? 0
   const completionTokens = payload.usage?.completion_tokens ?? 0
   const totalTokens = payload.usage?.total_tokens ?? (promptTokens + completionTokens)
-  const estimatedCostUsd = payload.usage?.cost ?? estimateOpenRouterCost(model, promptTokens, completionTokens)
+  const estimatedCostUsd = Number(
+    (payload.usage?.cost ?? estimateOpenRouterCost(model, promptTokens, completionTokens)).toFixed(4),
+  )
 
   return {
     content,

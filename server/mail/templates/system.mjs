@@ -378,8 +378,7 @@ function moneyOrDash(value) {
 
 /**
  * Daily ops summary for admins/managers.
- * Keeps the established email system look (ink section titles, bordered tables,
- * soft Susan note cards) while rendering the newer multi-section report data.
+ * Mobile-first section cards, readable type, Susan AI Assistant notes per section.
  */
 export function buildDailySummaryEmail({
   reportDateLabel,
@@ -390,6 +389,8 @@ export function buildDailySummaryEmail({
   sections = [],
   susanActions = [],
   susanEnabled: susanEnabledOpt,
+  susanGenerated = 0,
+  susanSkippedReason = null,
   appUrl,
   brand,
   templateOverride,
@@ -421,7 +422,7 @@ export function buildDailySummaryEmail({
       textLines.push(`  ${stat.label}: ${stat.value}`)
     }
     if (section.table?.rows?.length) {
-      for (const row of section.table.rows) {
+      for (const row of section.table.rows.slice(0, 12)) {
         textLines.push(`  - ${row.filter(Boolean).join(' | ')}`)
       }
     }
@@ -440,29 +441,34 @@ export function buildDailySummaryEmail({
   }
 
   const t = EMAIL_TOKENS
-
-  const sectionTitleHtml = label => (
-    `<div style="font-size:13px;line-height:18px;font-weight:700;color:${t.ink};font-family:${t.font};padding:0 0 10px 0;">${escapeHtml(label)}</div>`
-  )
+  const MAX_TABLE_ROWS = 8
 
   const statsHtml = (stats = []) => {
     if (!stats.length) return ''
-    const parts = stats.map((stat, index) => {
-      const sep = index === 0
-        ? ''
-        : `<span style="color:${t.faint};padding:0 8px;">·</span>`
-      return [
-        sep,
-        `<span style="white-space:nowrap;">`,
-        `<span style="font-size:12px;line-height:18px;color:${t.muted};font-family:${t.font};">${escapeHtml(stat.label)} </span>`,
-        `<span style="font-size:13px;line-height:18px;font-weight:700;color:${t.ink};font-family:${t.font};">${escapeHtml(stat.value)}</span>`,
-        `</span>`,
-      ].join('')
-    }).join('')
-
+    const rows = []
+    for (let i = 0; i < stats.length; i += 2) {
+      const left = stats[i]
+      const right = stats[i + 1]
+      rows.push([
+        `<tr>`,
+        `<td width="50%" valign="top" style="padding:0 10px 14px 0;font-family:${t.font};">`,
+        `<div style="font-size:13px;line-height:18px;color:${t.muted};font-family:${t.font};padding-bottom:4px;">${escapeHtml(left.label)}</div>`,
+        `<div style="font-size:22px;line-height:28px;font-weight:700;color:${t.ink};font-family:${t.font};letter-spacing:-0.3px;">${escapeHtml(left.value)}</div>`,
+        `</td>`,
+        right
+          ? [
+              `<td width="50%" valign="top" style="padding:0 0 14px 10px;font-family:${t.font};">`,
+              `<div style="font-size:13px;line-height:18px;color:${t.muted};font-family:${t.font};padding-bottom:4px;">${escapeHtml(right.label)}</div>`,
+              `<div style="font-size:22px;line-height:28px;font-weight:700;color:${t.ink};font-family:${t.font};letter-spacing:-0.3px;">${escapeHtml(right.value)}</div>`,
+              `</td>`,
+            ].join('')
+          : `<td width="50%" style="padding:0;"></td>`,
+        `</tr>`,
+      ].join(''))
+    }
     return [
-      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};background:#f8fafc;">`,
-      `<tr><td style="padding:12px 14px;font-family:${t.font};">${parts}</td></tr>`,
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">`,
+      ...rows,
       `</table>`,
     ].join('')
   }
@@ -470,28 +476,35 @@ export function buildDailySummaryEmail({
   const tableHtml = (table) => {
     if (!table?.headers?.length) return ''
     const colCount = table.headers.length
+    const allRows = table.rows || []
+    const visible = allRows.slice(0, MAX_TABLE_ROWS)
+    const hidden = Math.max(0, allRows.length - visible.length)
     const head = table.headers.map((h, idx) => {
       const align = idx === colCount - 1 ? 'right' : 'left'
-      return `<th align="${align}" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(h)}</th>`
+      return `<th align="${align}" style="padding:12px 10px;font-size:12px;line-height:16px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(h)}</th>`
     }).join('')
-    const body = (table.rows || []).map((row, index) => {
+    const body = visible.map((row, index) => {
       const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc'
       const cells = row.map((cell, idx) => {
         const align = idx === colCount - 1 ? 'right' : 'left'
         const weight = idx === colCount - 1 ? '700' : '400'
         const overdue = typeof cell === 'string' && /\(overdue\)/i.test(cell)
         const color = overdue ? '#b91c1c' : t.ink
-        return `<td align="${align}" style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${color};font-weight:${weight};">${escapeHtml(cell ?? '')}</td>`
+        return `<td align="${align}" style="padding:12px 10px;border-top:1px solid ${t.border};font-size:15px;line-height:21px;font-family:${t.font};color:${color};font-weight:${weight};">${escapeHtml(cell ?? '')}</td>`
       }).join('')
       const pad = Math.max(0, colCount - row.length)
-      const pads = Array.from({ length: pad }, () => `<td style="padding:10px 8px;border-top:1px solid ${t.border};"></td>`).join('')
+      const pads = Array.from({ length: pad }, () => `<td style="padding:12px 10px;border-top:1px solid ${t.border};"></td>`).join('')
       return `<tr bgcolor="${bg}">${cells}${pads}</tr>`
     }).join('')
+    const moreRow = hidden > 0
+      ? `<tr><td colspan="${colCount}" style="padding:12px 10px;border-top:1px solid ${t.border};font-size:14px;line-height:20px;color:${t.muted};font-family:${t.font};">+ ${hidden} more in the app</td></tr>`
+      : ''
 
     return [
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};">`,
       `<tr bgcolor="#f8fafc">${head}</tr>`,
       body,
+      moreRow,
       `</table>`,
     ].join('')
   }
@@ -499,78 +512,76 @@ export function buildDailySummaryEmail({
   const susanInsightHtml = (insight) => {
     if (!insight) return ''
     return [
-      `<div style="padding-top:12px;">`,
-      emailQuotedMessage(insight, { title: 'Susan AI Assistant' }),
-      `</div>`,
-    ].join('')
-  }
-
-  const sectionsHtml = resolvedSections.map((section, index) => {
-    const parts = [
-      `<div style="padding:${index === 0 ? '0' : '22'}px 0 0 0;">`,
-      sectionTitleHtml(section.title || 'Section'),
-      statsHtml(section.stats || []),
-    ]
-    if (section.table) {
-      parts.push(`<div style="padding-top:12px;">${tableHtml(section.table)}</div>`)
-    }
-    parts.push(susanInsightHtml(section.insight))
-    parts.push(`</div>`)
-    return parts.join('')
-  }).join('')
-
-  let legacySusanHtml = ''
-  if (!resolvedSections.length && susanActions.length) {
-    legacySusanHtml = [
-      `<div style="padding-top:8px;">${sectionTitleHtml(susanEnabled ? 'Susan AI Assistant' : 'Keep things running smooth')}</div>`,
-      `<ul style="margin:0;padding:0 0 0 18px;color:${t.ink};font-size:13px;line-height:22px;font-family:${t.font};">`,
-      ...susanActions.map(action => `<li style="padding:0 0 4px 0;">${escapeHtml(action)}</li>`),
-      `</ul>`,
-    ].join('')
-  }
-
-  let fallbackHtml = ''
-  if (!resolvedSections.length) {
-    const rows = outstandingInvoices.length
-      ? outstandingInvoices.map((row, index) => {
-          const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc'
-          const dueColor = row.overdue ? '#b91c1c' : t.ink
-          return [
-            `<tr bgcolor="${bg}">`,
-            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};">${escapeHtml(row.invoiceNumber)}</td>`,
-            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};">${escapeHtml(row.customerName)}</td>`,
-            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.muted};">${escapeHtml(row.vehicleLabel)}</td>`,
-            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${dueColor};white-space:nowrap;">${escapeHtml(row.dueDate || 'n/a')}${row.overdue ? '<br><span style="font-size:11px;font-weight:700;">Overdue</span>' : ''}</td>`,
-            `<td align="right" style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};font-weight:700;white-space:nowrap;">${escapeHtml(moneyOrDash(row.balanceDue))}</td>`,
-            `</tr>`,
-          ].join('')
-        }).join('')
-      : `<tr><td colspan="5" style="padding:14px 8px;border-top:1px solid ${t.border};font-size:13px;color:${t.muted};font-family:${t.font};">No outstanding customer invoices.</td></tr>`
-
-    fallbackHtml = [
-      sectionTitleHtml('Outstanding invoices'),
-      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};">`,
-      `<tr bgcolor="#f8fafc">`,
-      `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Invoice</th>`,
-      `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Customer</th>`,
-      `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Vehicle</th>`,
-      `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Due</th>`,
-      `<th align="right" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Balance</th>`,
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-top:4px;">`,
+      `<tr>`,
+      `<td style="padding:16px 18px;background:${t.accentSoft};border:1px solid #dbeafe;border-left:4px solid ${t.accent};font-family:${t.font};">`,
+      `<div style="font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${t.accent};font-family:${t.font};padding-bottom:8px;">Susan AI Assistant</div>`,
+      `<div style="font-size:16px;line-height:24px;color:${t.ink};font-family:${t.font};">${escapeHtml(insight)}</div>`,
+      `</td>`,
       `</tr>`,
-      rows,
       `</table>`,
     ].join('')
   }
 
+  const sectionsHtml = resolvedSections.map((section, index) => {
+    return [
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;${index === 0 ? '' : 'margin-top:18px;'}">`,
+      `<tr>`,
+      `<td style="padding:18px 16px;border:1px solid ${t.border};background:#ffffff;font-family:${t.font};">`,
+      `<div style="font-size:18px;line-height:24px;font-weight:700;color:${t.ink};font-family:${t.font};padding:0 0 14px 0;">${escapeHtml(section.title || 'Section')}</div>`,
+      statsHtml(section.stats || []),
+      section.table ? `<div style="padding-top:4px;">${tableHtml(section.table)}</div>` : '',
+      section.insight ? `<div style="padding-top:14px;">${susanInsightHtml(section.insight)}</div>` : '',
+      `</td>`,
+      `</tr>`,
+      `</table>`,
+    ].join('')
+  }).join('')
+
+  let legacySusanHtml = ''
+  if (!resolvedSections.length && susanActions.length) {
+    legacySusanHtml = susanInsightHtml(susanActions.join(' '))
+  }
+
+  let fallbackHtml = ''
+  if (!resolvedSections.length && outstandingInvoices) {
+    fallbackHtml = tableHtml({
+      headers: ['Invoice', 'Customer', 'Vehicle', 'Due', 'Balance'],
+      rows: outstandingInvoices.length
+        ? outstandingInvoices.map(row => [
+            row.invoiceNumber,
+            row.customerName,
+            row.vehicleLabel,
+            row.overdue ? `${row.dueDate || 'n/a'} (overdue)` : (row.dueDate || 'n/a'),
+            moneyOrDash(row.balanceDue),
+          ])
+        : [['No outstanding customer invoices.', '', '', '', '']],
+    })
+  }
+
+  const susanStatusHtml = Number(susanGenerated) > 0
+    ? ''
+    : (susanSkippedReason
+        ? `<div style="padding:14px 16px;margin:0 0 18px 0;border:1px solid #fde68a;background:#fffbeb;font-size:14px;line-height:20px;color:#92400e;font-family:${t.font};"><strong>Susan AI Assistant</strong> notes used drafted copy: ${escapeHtml(String(susanSkippedReason))}.</div>`
+        : '')
+
   const bodyHtml = [
+    susanStatusHtml,
     sectionsHtml,
     fallbackHtml,
-    legacySusanHtml ? `<div style="padding-top:22px;">${legacySusanHtml}</div>` : '',
+    legacySusanHtml ? `<div style="padding-top:18px;">${legacySusanHtml}</div>` : '',
   ].filter(Boolean).join('')
 
-  const lead = susanEnabled
-    ? `Here's today's receivables snapshot${hasBilling ? ' and ops outlook' : ''}. Susan AI Assistant added a short note under each section.`
-    : `Here's today's receivables snapshot${hasBilling ? ' and ops outlook' : ''} for managers and admins.`
+  const lead = Number(susanGenerated) > 0
+    ? `Here's today's snapshot${hasBilling ? ' and ops outlook' : ''}. Susan AI Assistant wrote a note under each section.`
+    : (susanEnabled
+        ? `Here's today's snapshot${hasBilling ? ' and ops outlook' : ''}.`
+        : `Here's today's snapshot${hasBilling ? ' and ops outlook' : ''} for managers and admins.`)
+
+  // Never let a custom htmlSource wipe the structured digest body.
+  const safeOverride = templateOverride && typeof templateOverride === 'object'
+    ? { ...templateOverride, htmlSource: '' }
+    : templateOverride
 
   return styledEmail({
     headerBadge: '',
@@ -599,7 +610,7 @@ export function buildDailySummaryEmail({
       : undefined,
     appUrl,
     brand,
-    templateOverride,
+    templateOverride: safeOverride,
     templateVars: {
       reportDateLabel,
       recipientName: recipientName || '',

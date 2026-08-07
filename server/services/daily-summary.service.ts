@@ -83,6 +83,9 @@ export interface DailySummaryReport {
   billing: BillingDashboardPayload
   sections: DailySummarySection[]
   susanEnabled: boolean
+  susanGenerated: number
+  susanFailed: number
+  susanSkippedReason: string | null
 }
 
 export interface DailySummarySendResult {
@@ -94,6 +97,9 @@ export interface DailySummarySendResult {
   recipients: string[]
   errors: string[]
   delivery: 'direct' | 'queue'
+  susanGenerated: number
+  susanFailed: number
+  susanSkippedReason: string | null
 }
 
 function todayIsoDate(now = new Date()): string {
@@ -803,7 +809,11 @@ function buildSections(input: {
   return sections
 }
 
-export async function buildDailySummaryReport(db: Db, now = new Date()): Promise<DailySummaryReport> {
+export async function buildDailySummaryReport(
+  db: Db,
+  now = new Date(),
+  opts: { createdBy?: string | null } = {},
+): Promise<DailySummaryReport> {
   const reportDate = todayIsoDate(now)
   const [
     invoiceStats,
@@ -859,16 +869,21 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     },
   })
 
-  // Live Susan notes: one AI call per section. Usage stats refresh before the
-  // Susan usage note so calls/tokens/spend include this digest.
+  // Await every Susan section call before the email is built/sent (including test sends).
   const enriched = await applySusanDailyInsights(db, sections, {
+    createdBy: opts.createdBy,
     refreshSusanSection: async () => {
       const aiAfter = await loadAiUsageToday(db, now)
       return buildSusanUsageSection(aiAfter, billing)
     },
   }).catch((err) => {
     console.warn('[daily-summary] Susan enrichment unavailable:', err instanceof Error ? err.message : err)
-    return { sections, generated: 0, failed: 0 }
+    return {
+      sections,
+      generated: 0,
+      failed: 0,
+      skippedReason: err instanceof Error ? err.message : 'Susan enrichment failed',
+    }
   })
   sections = enriched.sections as DailySummarySection[]
 
@@ -890,7 +905,10 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     outstandingInvoices,
     billing,
     sections,
-    susanEnabled: billing.configured.openrouter || enriched.generated > 0,
+    susanEnabled: enriched.generated > 0 || billing.configured.openrouter,
+    susanGenerated: enriched.generated,
+    susanFailed: enriched.failed,
+    susanSkippedReason: enriched.skippedReason,
   }
 }
 
@@ -985,6 +1003,11 @@ export async function sendDailySummaryReport(
 ): Promise<DailySummarySendResult> {
   const delivery = opts.delivery ?? (opts.force ? 'direct' : 'queue')
   const recipientsMode = opts.recipientsMode ?? (opts.force ? 'actor' : 'managers')
+  const emptySusan = {
+    susanGenerated: 0,
+    susanFailed: 0,
+    susanSkippedReason: null as string | null,
+  }
   const settings = await getNotificationSettings(db)
   if (!settings.dailySummaryReport && !opts.force) {
     return {
@@ -996,10 +1019,14 @@ export async function sendDailySummaryReport(
       recipients: [],
       errors: [],
       delivery,
+      ...emptySusan,
     }
   }
 
-  const report = await buildDailySummaryReport(db)
+  // Build report (including awaited Susan AI section calls) before any send.
+  const report = await buildDailySummaryReport(db, new Date(), {
+    createdBy: opts.actor?.id ?? null,
+  })
   if (!opts.force) {
     const lastSent = await readLastSentDate(db)
     if (lastSent === report.reportDate) {
@@ -1012,6 +1039,9 @@ export async function sendDailySummaryReport(
         recipients: [],
         errors: [],
         delivery,
+        susanGenerated: report.susanGenerated,
+        susanFailed: report.susanFailed,
+        susanSkippedReason: report.susanSkippedReason,
       }
     }
   }
@@ -1036,6 +1066,9 @@ export async function sendDailySummaryReport(
       recipients: [],
       errors: ['Your account has no email address to receive the test summary.'],
       delivery,
+      susanGenerated: report.susanGenerated,
+      susanFailed: report.susanFailed,
+      susanSkippedReason: report.susanSkippedReason,
     }
   }
 
@@ -1050,18 +1083,31 @@ export async function sendDailySummaryReport(
       recipients: [],
       errors: ['No active Admin/Manager accounts with email addresses were found.'],
       delivery,
+      susanGenerated: report.susanGenerated,
+      susanFailed: report.susanFailed,
+      susanSkippedReason: report.susanSkippedReason,
     }
   }
 
   const brand = await resolveEmailBrand(db)
   const appUrl = brand.appUrl || getAppUrl()
-  const templateOverride = await getActiveEmailTemplateContent(db, 'daily_summary_report')
+  const templateOverrideRaw = await getActiveEmailTemplateContent(db, 'daily_summary_report')
+  // Keep structured section HTML — custom htmlSource overrides were wiping the digest body.
+  const templateOverride = templateOverrideRaw
+    ? { ...templateOverrideRaw, htmlSource: '' }
+    : null
   const byEmail = new Map(recipients.map(r => [r.email.trim().toLowerCase(), r]))
 
   let sent = 0
   let delivered = 0
   let failed = 0
   const errors: string[] = []
+  if (report.susanSkippedReason) {
+    errors.push(`Susan AI Assistant: ${report.susanSkippedReason}`)
+  }
+  else if (report.susanFailed > 0) {
+    errors.push(`Susan AI Assistant: ${report.susanFailed} section note${report.susanFailed === 1 ? '' : 's'} failed`)
+  }
 
   for (const email of emails) {
     const recipient = byEmail.get(email.toLowerCase())
@@ -1073,6 +1119,8 @@ export async function sendDailySummaryReport(
       billing: report.billing,
       sections: report.sections,
       susanEnabled: report.susanEnabled,
+      susanGenerated: report.susanGenerated,
+      susanSkippedReason: report.susanSkippedReason,
       appUrl,
       brand,
       templateOverride,
@@ -1128,6 +1176,9 @@ export async function sendDailySummaryReport(
     recipients: emails,
     errors,
     delivery,
+    susanGenerated: report.susanGenerated,
+    susanFailed: report.susanFailed,
+    susanSkippedReason: report.susanSkippedReason,
   }
 }
 
