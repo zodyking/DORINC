@@ -67,9 +67,9 @@ function audienceDetail(row: AnnouncementRow) {
 <template>
   <section class="page active ann-list-page">
     <StaffPageHead subtitle="Mandatory full-screen messages shown after login before the dashboard">
-      <template #title>Login messages</template>
+      <template #title>Login Messages</template>
       <template #actions>
-        <NuxtLink to="/admin/announcements/new" class="btn primary">+ New message</NuxtLink>
+        <NuxtLink to="/admin/announcements/new" class="btn primary">+ New Message</NuxtLink>
       </template>
     </StaffPageHead>
 

@@ -68,7 +68,7 @@ const nav = computed<NavSection[]>(() => {
   if (announcementLocked.value) {
     return [{
       label: 'Messages',
-      items: [{ label: 'Required message', to: '/announcements/required', icon: 'dashboard' }],
+      items: [{ label: 'Required Message', to: '/announcements/required', icon: 'login-messages' }],
     }]
   }
 
@@ -95,7 +95,7 @@ const nav = computed<NavSection[]>(() => {
       ],
     },
     {
-      label: 'System',
+      label: 'People & Audit',
       items: [
         { label: 'Users', to: '/users', icon: 'users', permission: 'users.read.all' },
         { label: 'System Logs', to: '/system-logs', icon: 'system-logs', permission: 'audit.read.all' },
@@ -108,8 +108,8 @@ const nav = computed<NavSection[]>(() => {
       label: 'Administration',
       items: [
         { label: 'Control Panel', to: '/admin', icon: 'control-panel', permission: 'system.admin.all' },
-        { label: 'Login messages', to: '/admin/announcements', icon: 'control-panel', permission: 'system.admin.all' },
-        { label: 'Roles & Permissions', to: '/admin/roles', icon: 'users', permission: 'roles.manage.all' },
+        { label: 'Login Messages', to: '/admin/announcements', icon: 'login-messages', permission: 'system.admin.all' },
+        { label: 'Roles & Permissions', to: '/admin/roles', icon: 'roles', permission: 'roles.manage.all' },
       ],
     })
   }
@@ -124,12 +124,12 @@ async function signOut() {
 
 const crumb = computed(() => {
   if (route.path === '/messages' || route.path.startsWith('/messages/')) return 'Messages'
-  if (route.path.startsWith('/announcements/required')) return 'Required message'
-  if (route.path.startsWith('/admin/announcements')) return 'Login messages'
+  if (route.path.startsWith('/announcements/required')) return 'Required Message'
+  if (route.path.startsWith('/admin/announcements')) return 'Login Messages'
   if (route.path === '/billing' || route.path.startsWith('/billing/')) return 'Billing'
   if (route.path.startsWith('/templates/email')) return 'Email Templates'
   if (route.path.startsWith('/templates/designer')) return 'Template Editor'
-  if (route.path === '/invoices/new') return 'New invoice'
+  if (route.path === '/invoices/new') return 'New Invoice'
   if (/^\/invoices\/[^/]+/.test(route.path) && route.path !== '/invoices/new') {
     return 'Invoice'
   }
@@ -254,16 +254,16 @@ watch(() => route.path, () => {
               <span class="role">{{ roleLabel }}</span>
             </div>
             <NuxtLink to="/account" class="menu-link" role="menuitem" @click="closeOverlays">
-              👤 &nbsp;My account
+              👤 &nbsp;My Account
             </NuxtLink>
             <NuxtLink v-if="isSuperAdmin" to="/admin" class="menu-link" role="menuitem" @click="closeOverlays">
-              🛡 &nbsp;Control panel
+              🛡 &nbsp;Control Panel
             </NuxtLink>
             <NuxtLink v-if="canViewBilling" to="/billing" class="menu-link" role="menuitem" @click="closeOverlays">
               💳 &nbsp;Billing
             </NuxtLink>
             <hr>
-            <button class="danger" @click="signOut">⏻ &nbsp;Sign out</button>
+            <button class="danger" @click="signOut">⏻ &nbsp;Sign Out</button>
           </div>
         </div>
       </header>

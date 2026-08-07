@@ -275,7 +275,7 @@ function applyFallbackToEmptyTasks() {
 <template>
   <div class="settings-panel">
     <header class="settings-panel-head">
-      <h3>Artificial intelligence</h3>
+      <h3>Artificial Intelligence</h3>
       <p>
         OpenRouter powers each AI workflow. Pick a model per task, set spend caps, and review usage.
         Keys are encrypted in PostgreSQL and never returned to the browser.

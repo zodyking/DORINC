@@ -83,13 +83,13 @@ function disableAll() {
     </header>
 
     <div class="card" style="margin-bottom:16px;">
-      <div class="chead"><h3>Email templates</h3></div>
+      <div class="chead"><h3>Email Templates</h3></div>
       <div class="cbody settings-form">
         <p class="help" style="margin:0 0 12px;">
           Edit subject lines, headlines, and body copy for every transactional email type, then set the active template.
         </p>
         <div class="settings-actions">
-          <NuxtLink class="btn primary" to="/templates/email">Open email template editor</NuxtLink>
+          <NuxtLink class="btn primary" to="/templates/email">Open Email Template Editor</NuxtLink>
         </div>
       </div>
     </div>

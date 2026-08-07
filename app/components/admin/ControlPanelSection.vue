@@ -39,7 +39,7 @@ function toggle() {
         </b>
         <small v-if="subtitle">{{ subtitle }}</small>
       </span>
-      <span class="cp-section__chev" aria-hidden="true">{{ isOpen ? '▾' : '▸' }}</span>
+      <span class="cp-section__chev" aria-hidden="true">▸</span>
     </button>
     <div
       v-show="isOpen"
