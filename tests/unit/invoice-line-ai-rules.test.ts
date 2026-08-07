@@ -15,8 +15,11 @@ describe('invoice line AI rules', () => {
     expect(normalizeInvoiceLineAiRules('   ')).toBe(DEFAULT_INVOICE_LINE_AI_RULES)
   })
 
-  it('keeps custom rules when provided', () => {
-    expect(normalizeInvoiceLineAiRules('Custom rule')).toBe('Custom rule')
+  it('normalizes custom newline rules into JSON cards', () => {
+    const normalized = normalizeInvoiceLineAiRules('Custom rule')
+    const parsed = JSON.parse(normalized)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].rule).toBe('Custom rule')
   })
 
   it('uses conservative audit instructions in the system prompt', () => {

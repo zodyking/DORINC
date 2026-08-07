@@ -204,14 +204,22 @@ export async function updateAiJobStatus(
   status: AiJobStatus,
   patch?: { outputPayload?: Record<string, unknown>, lastError?: string | null, workerJobId?: string },
 ): Promise<void> {
-  await db.update(aiJobs).set({
-    status,
-    outputPayload: patch?.outputPayload,
-    lastError: patch?.lastError ?? undefined,
-    workerJobId: patch?.workerJobId,
-    finishedAt: status === 'done' || status === 'failed' ? new Date() : undefined,
-    startedAt: status === 'processing' ? new Date() : undefined,
-  }).where(eq(aiJobs.id, jobId))
+  const values: Record<string, unknown> = { status }
+  if (patch && 'outputPayload' in patch) values.outputPayload = patch.outputPayload
+  if (patch && 'lastError' in patch) values.lastError = patch.lastError
+  if (patch?.workerJobId) values.workerJobId = patch.workerJobId
+  if (status === 'done' || status === 'failed') values.finishedAt = new Date()
+  if (status === 'processing') values.startedAt = new Date()
+  await db.update(aiJobs).set(values).where(eq(aiJobs.id, jobId))
+}
+
+/** Update progress payload while a job stays in processing. */
+export async function updateAiJobProgress(
+  db: Db,
+  jobId: string,
+  outputPayload: Record<string, unknown>,
+): Promise<void> {
+  await db.update(aiJobs).set({ outputPayload }).where(eq(aiJobs.id, jobId))
 }
 
 export async function linkAiJobWorker(db: Db, jobId: string, workerJobId: string): Promise<void> {

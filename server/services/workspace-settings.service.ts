@@ -19,6 +19,7 @@ import {
   type ServiceLogSheetSettings,
 } from '../../shared/workspace-settings-defaults'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
+import { normalizeServiceLogExtractionRules } from '../../shared/service-log-extraction-rules'
 import {
   businessProfileSchema,
   catalogKeywordMapSchema,
@@ -131,6 +132,9 @@ export async function getInvoiceWorkspaceSettings(db: Db): Promise<InvoiceWorksp
     ...raw,
     managerApprovalThreshold: threshold ?? raw?.managerApprovalThreshold ?? DEFAULT_INVOICE_SETTINGS.managerApprovalThreshold,
     lineItemAiRules: normalizeInvoiceLineAiRules(raw?.lineItemAiRules ?? DEFAULT_INVOICE_SETTINGS.lineItemAiRules),
+    serviceLogExtractionRules: normalizeServiceLogExtractionRules(
+      raw?.serviceLogExtractionRules ?? DEFAULT_INVOICE_SETTINGS.serviceLogExtractionRules,
+    ),
   }
   return invoiceWorkspaceSettingsSchema.parse(merged)
 }
@@ -145,6 +149,7 @@ export async function saveInvoiceWorkspaceSettings(
     defaultPaymentTermsDays: settings.defaultPaymentTermsDays,
     shopSuppliesPercent: settings.shopSuppliesPercent,
     lineItemAiRules: settings.lineItemAiRules.trim(),
+    serviceLogExtractionRules: settings.serviceLogExtractionRules.trim(),
   }, updatedBy)
   return settings
 }

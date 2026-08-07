@@ -11,6 +11,7 @@ import {
   getAiSuggestion,
   linkAiJobWorker,
   logAiUsage,
+  updateAiJobProgress,
   updateAiJobStatus,
   updateAiSuggestionReview,
 } from './ai-jobs.service'
@@ -33,6 +34,15 @@ import { getServiceLog, updateServiceLog } from './service-logs.service'
 import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } from './invoices.service'
 import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
+import {
+  buildExtractionSystemPrompt,
+  buildExtractionUserPrompt,
+  buildPageTypeSystemPrompt,
+  buildPageTypeUserPrompt,
+  mergeServiceLogPageExtractions,
+  normalizePageType,
+  normalizeServiceLogExtractionRules,
+} from '../../shared/service-log-extraction-rules'
 import {
   buildLineAuditSystemPrompt,
   buildLineAuditUserPrompt,
@@ -156,16 +166,21 @@ export async function enqueueServiceLogExtraction(
   const imageFiles = images.filter(f => f.mimeType.startsWith('image/'))
   if (!imageFiles.length) throw new AiFeaturesServiceError('NO_IMAGES', 'No images to extract from')
 
-  const targetFileId = fileId && imageFiles.some(f => f.id === fileId)
-    ? fileId
-    : imageFiles[0]!.id
+  const fileIds = fileId && imageFiles.some(f => f.id === fileId)
+    ? [fileId]
+    : imageFiles.map(f => f.id)
+
+  const invoiceSettings = await getInvoiceWorkspaceSettings(db)
+  const rules = normalizeServiceLogExtractionRules(invoiceSettings.serviceLogExtractionRules)
 
   const aiJob = await createAiJob(db, {
     jobType: 'service_log_extraction',
     entityType: 'service_log',
     entityId: serviceLogId,
     inputPayload: {
-      fileId: targetFileId,
+      fileId: fileIds[0],
+      fileIds,
+      rules,
       complaint: log.complaint,
       internalNotes: log.internalNotes,
     },
@@ -175,7 +190,7 @@ export async function enqueueServiceLogExtraction(
   const workerJob = await enqueueJob(db, 'service_log_ai_extraction', {
     aiJobId: aiJob.id,
     serviceLogId,
-    fileId: targetFileId,
+    fileIds,
   })
 
   await linkAiJobWorker(db, aiJob.id, workerJob.id)
@@ -299,11 +314,6 @@ async function prepareInvoiceLineAuditJob(
   return { aiJob, invoice }
 }
 
-const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.
-Return JSON only with keys: complaint (customer symptoms, string or null), internalNotes (mechanic notes, string or null),
-draftLineItems (array of {description, qty, rate, amount} — use plain numbers without currency symbols when possible).
-If a field is not visible, use null or omit draftLineItems. Do not invent prices — leave rate/amount null if unclear.`
-
 const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, professional customer-facing invoice descriptions.
 Return JSON only: { "description": "..." }.
 Keep factual accuracy. Do not add parts, prices, quantities, or hours. Wording only — shorter is fine.`
@@ -319,45 +329,154 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
   await updateAiJobStatus(db, aiJobId, 'processing')
 
   const input = job.inputPayload
-  const fileId = String(input.fileId ?? '')
-  const file = await getFileWithData(db, fileId)
-  if (!file.mimeType.startsWith('image/')) {
-    throw new AiFeaturesServiceError('NO_IMAGES', 'Selected file is not an image')
+  const fileIds = Array.isArray(input.fileIds) && input.fileIds.length
+    ? input.fileIds.map(String)
+    : input.fileId
+      ? [String(input.fileId)]
+      : []
+  if (!fileIds.length) throw new AiFeaturesServiceError('NO_IMAGES', 'No images to extract from')
+
+  const rules = normalizeServiceLogExtractionRules(String(input.rules ?? ''))
+  const pageCount = fileIds.length
+  const pageExtractions: Array<Record<string, unknown>> = []
+  const pageProgress = fileIds.map((id, index) => ({
+    pageIndex: index + 1,
+    fileId: id,
+    pageType: null as string | null,
+    status: 'queued',
+    message: 'Waiting…',
+  }))
+
+  let totalPrompt = 0
+  let totalCompletion = 0
+  let totalTokens = 0
+  let totalCost = 0
+  let usedModel = model
+
+  for (let i = 0; i < fileIds.length; i++) {
+    const fileId = fileIds[i]!
+    const pageIndex = i + 1
+    const file = await getFileWithData(db, fileId)
+    if (!file.mimeType.startsWith('image/')) {
+      throw new AiFeaturesServiceError('NO_IMAGES', 'Selected file is not an image')
+    }
+    const dataUrl = `data:${file.mimeType};base64,${file.binaryData.toString('base64')}`
+
+    pageProgress[i] = {
+      ...pageProgress[i]!,
+      status: 'classifying',
+      message: `Classifying page ${pageIndex} of ${pageCount}…`,
+    }
+    await updateAiJobProgress(db, aiJobId, {
+      progress: {
+        phase: 'classifying',
+        pageIndex,
+        pageCount,
+        message: pageProgress[i]!.message,
+        pages: pageProgress,
+      },
+    })
+
+    const classifyResult = await openRouterChat(apiKey, model, [
+      { role: 'system', content: buildPageTypeSystemPrompt() },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: buildPageTypeUserPrompt(pageIndex, pageCount) },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ], 'service_log_extraction')
+
+    const classifyParsed = parseOpenRouterJson(classifyResult.content) as {
+      pageType?: string
+      confidence?: number
+    }
+    const pageType = normalizePageType(classifyParsed.pageType)
+    const confidence = Number(classifyParsed.confidence)
+    totalPrompt += classifyResult.promptTokens
+    totalCompletion += classifyResult.completionTokens
+    totalTokens += classifyResult.totalTokens
+    totalCost += Number(classifyResult.estimatedCostUsd || 0)
+
+    pageProgress[i] = {
+      ...pageProgress[i]!,
+      pageType,
+      status: 'extracting',
+      message: `Extracting line items from page ${pageIndex} (${pageType === 'printed_form' ? 'printed form' : 'handwritten'})…`,
+    }
+    await updateAiJobProgress(db, aiJobId, {
+      progress: {
+        phase: 'extracting',
+        pageIndex,
+        pageCount,
+        pageType,
+        message: pageProgress[i]!.message,
+        pages: pageProgress,
+      },
+    })
+
+    const extractResult = await openRouterChat(apiKey, model, [
+      { role: 'system', content: buildExtractionSystemPrompt(rules, pageType) },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: buildExtractionUserPrompt(pageIndex, pageCount, pageType, {
+              complaint: input.complaint,
+              internalNotes: input.internalNotes,
+            }),
+          },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ], 'service_log_extraction')
+
+    const extractParsed = parseOpenRouterJson(extractResult.content) as Record<string, unknown>
+    totalPrompt += extractResult.promptTokens
+    totalCompletion += extractResult.completionTokens
+    totalTokens += extractResult.totalTokens
+    totalCost += Number(extractResult.estimatedCostUsd || 0)
+    usedModel = extractResult.model
+
+    pageExtractions.push({
+      ...extractParsed,
+      fileId,
+      pageType,
+      confidence: Number.isFinite(confidence) ? confidence : null,
+    })
+
+    pageProgress[i] = {
+      ...pageProgress[i]!,
+      status: 'done',
+      message: `Page ${pageIndex} complete`,
+    }
+    await updateAiJobProgress(db, aiJobId, {
+      progress: {
+        phase: i === fileIds.length - 1 ? 'merging' : 'extracting',
+        pageIndex,
+        pageCount,
+        pageType,
+        message: i === fileIds.length - 1
+          ? 'Merging page results…'
+          : `Finished page ${pageIndex} of ${pageCount}`,
+        pages: pageProgress,
+      },
+    })
   }
 
-  const b64 = file.binaryData.toString('base64')
-  const dataUrl = `data:${file.mimeType};base64,${b64}`
-
-  const userText = [
-    'Extract service log fields from this image.',
-    input.complaint ? `Existing complaint (may refine): ${String(input.complaint)}` : '',
-    input.internalNotes ? `Existing internal notes (may refine): ${String(input.internalNotes)}` : '',
-  ].filter(Boolean).join('\n')
-
-  const result = await openRouterChat(apiKey, model, [
-    { role: 'system', content: EXTRACTION_SYSTEM },
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: userText },
-        { type: 'image_url', image_url: { url: dataUrl } },
-      ],
-    },
-  ], 'service_log_extraction')
-
-  const parsed = serviceLogExtractionContentSchema.parse({
-    ...parseOpenRouterJson(result.content),
-    fileId,
-  })
+  const merged = mergeServiceLogPageExtractions(pageExtractions, fileIds[0])
+  const parsed = serviceLogExtractionContentSchema.parse(merged)
 
   await logAiUsage(db, {
     aiJobId,
     featureType: 'service_log_extraction',
-    model: result.model,
-    promptTokens: result.promptTokens,
-    completionTokens: result.completionTokens,
-    totalTokens: result.totalTokens,
-    estimatedCostUsd: result.estimatedCostUsd,
+    model: usedModel,
+    promptTokens: totalPrompt,
+    completionTokens: totalCompletion,
+    totalTokens,
+    estimatedCostUsd: Number(totalCost.toFixed(6)),
     createdBy: job.createdBy ?? undefined,
   })
 
@@ -372,10 +491,24 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
       internalNotes: log.internalNotes,
       draftLineItems: log.draftLineItems,
     },
-    suggestedContent: parsed,
+    suggestedContent: {
+      ...parsed,
+      pageResults: merged.pageResults,
+    },
   })
 
-  await updateAiJobStatus(db, aiJobId, 'done', { outputPayload: { suggestionId: suggestion.id } })
+  await updateAiJobStatus(db, aiJobId, 'done', {
+    outputPayload: {
+      suggestionId: suggestion.id,
+      progress: {
+        phase: 'done',
+        pageIndex: pageCount,
+        pageCount,
+        message: 'Extraction complete',
+        pages: pageProgress,
+      },
+    },
+  })
 
   return { suggestion, parsed }
 }

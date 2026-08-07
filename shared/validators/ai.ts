@@ -87,6 +87,12 @@ export const serviceLogExtractionContentSchema = z.object({
     amount: z.string().max(30).nullish(),
   })).optional(),
   fileId: z.string().uuid().optional(),
+  pageResults: z.array(z.object({
+    pageIndex: z.number().int().min(1).optional(),
+    fileId: z.string().uuid().nullable().optional(),
+    pageType: z.string().max(40).nullable().optional(),
+    confidence: z.number().min(0).max(1).nullable().optional(),
+  })).optional(),
 })
 
 export type ServiceLogExtractionContent = z.infer<typeof serviceLogExtractionContentSchema>
