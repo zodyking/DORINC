@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS "outside_geo_challenges" (
   "code_hash" text NOT NULL,
   "ip_address" inet,
   "user_agent" text,
+  "device_id" text,
   "location_label" text,
   "expires_at" timestamp with time zone NOT NULL,
   "used_at" timestamp with time zone,
@@ -19,6 +20,12 @@ CREATE TABLE IF NOT EXISTS "outside_geo_challenges" (
 CREATE INDEX IF NOT EXISTS "outside_geo_challenges_user_idx" ON "outside_geo_challenges" USING btree ("user_id");
 CREATE INDEX IF NOT EXISTS "outside_geo_challenges_expires_idx" ON "outside_geo_challenges" USING btree ("expires_at");
 CREATE INDEX IF NOT EXISTS "outside_geo_challenges_ip_idx" ON "outside_geo_challenges" USING btree ("ip_address");
+CREATE INDEX IF NOT EXISTS "outside_geo_challenges_device_id_idx" ON "outside_geo_challenges" USING btree ("device_id");
+`.trim()
+
+const OUTSIDE_GEO_DEVICE_ID_SQL = `
+ALTER TABLE "outside_geo_challenges" ADD COLUMN IF NOT EXISTS "device_id" text;
+CREATE INDEX IF NOT EXISTS "outside_geo_challenges_device_id_idx" ON "outside_geo_challenges" USING btree ("device_id");
 `.trim()
 
 /**
@@ -29,8 +36,11 @@ CREATE INDEX IF NOT EXISTS "outside_geo_challenges_ip_idx" ON "outside_geo_chall
  */
 export async function ensureOutsideGeoSchema(pool) {
   const { rows } = await pool.query(`SELECT to_regclass('public.outside_geo_challenges') AS reg`)
-  if (rows[0]?.reg) return false
-  await pool.query(OUTSIDE_GEO_CHALLENGES_SQL)
-  console.log('[migrate] ensured outside-geo table (outside_geo_challenges)')
-  return true
+  if (!rows[0]?.reg) {
+    await pool.query(OUTSIDE_GEO_CHALLENGES_SQL)
+    console.log('[migrate] ensured outside-geo table (outside_geo_challenges)')
+    return true
+  }
+  await pool.query(OUTSIDE_GEO_DEVICE_ID_SQL)
+  return false
 }

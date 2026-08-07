@@ -96,6 +96,8 @@ export const sessions = pgTable('sessions', {
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
+  /** First-party browser UUID (cookie / localStorage / IndexedDB). */
+  deviceId: text('device_id'),
   geoLatitude: doublePrecision('geo_latitude'),
   geoLongitude: doublePrecision('geo_longitude'),
   geoAccuracyM: doublePrecision('geo_accuracy_m'),
@@ -106,6 +108,8 @@ export const sessions = pgTable('sessions', {
 }, table => [
   index('sessions_user_idx').on(table.userId),
   index('sessions_expires_idx').on(table.expiresAt),
+  index('sessions_device_id_idx').on(table.deviceId),
+  index('sessions_user_device_idx').on(table.userId, table.deviceId),
 ])
 
 export const emailVerificationTokens = pgTable('email_verification_tokens', {

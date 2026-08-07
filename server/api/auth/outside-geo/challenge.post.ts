@@ -1,5 +1,6 @@
 import { getHeader, sendRedirect } from 'h3'
 import { getClientIp } from '../../../utils/client-ip'
+import { ensureDeviceId } from '../../../utils/device-id'
 import { useDb } from '../../../db/client'
 import {
   evaluateAccessDecision,
@@ -29,9 +30,10 @@ export default defineEventHandler(async (event) => {
   try {
     const ipAddress = getClientIp(event)
     const userAgent = getHeader(event, 'user-agent') ?? null
+    const deviceId = ensureDeviceId(event)
     const gate = getCachedAccessGateSettings()
 
-    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent })) {
+    if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent, deviceId })) {
       return sendRedirect(event, '/auth/login', 303)
     }
 
@@ -53,6 +55,7 @@ export default defineEventHandler(async (event) => {
     const result = await quietlyIssueOutsideGeoChallenge(useDb(), {
       ipAddress,
       userAgent,
+      deviceId,
       locationLabel,
       force: true,
     })

@@ -1,5 +1,6 @@
 import { getHeader } from 'h3'
 import { getClientIp } from '../../utils/client-ip'
+import { ensureDeviceId } from '../../utils/device-id'
 import { logout, resolveSession } from '../../auth/auth.service'
 import { verifyPendingLoginToken } from '../../auth/pending-login'
 import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
@@ -25,6 +26,8 @@ export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event))
   const body = await validateBody(event, completeStaffLoginBodySchema)
   const ipAddress = getClientIp(event)
+  const deviceId = ensureDeviceId(event)
+  const userAgent = getHeader(event, 'user-agent')
 
   const sessionToken = verifyPendingLoginToken(body.loginToken)
   if (!sessionToken) {
@@ -51,7 +54,8 @@ export default defineEventHandler(async (event) => {
       const bypass = decision.reason === 'geo_outside'
         ? hasValidOutsideGeoBypass(event, {
             ipAddress,
-            userAgent: getHeader(event, 'user-agent'),
+            userAgent,
+            deviceId,
             userId: resolved.user.id,
           })
         : null
@@ -67,7 +71,8 @@ export default defineEventHandler(async (event) => {
           userId: resolved.user.id,
           userName: resolved.user.name,
           userEmail: resolved.user.email,
-          userAgent: getHeader(event, 'user-agent'),
+          userAgent,
+          deviceId,
           latitude: loginCoords.lat,
           longitude: loginCoords.lng,
           locationLabel,
@@ -77,13 +82,15 @@ export default defineEventHandler(async (event) => {
         if (decision.reason === 'geo_outside') {
           const known = await findKnownOutsideGeoIdentity(useDb(), {
             ipAddress,
-            userAgent: getHeader(event, 'user-agent'),
+            userAgent,
+            deviceId,
           }).catch(() => null)
           if (known) {
             redirectTo = '/auth/verify-location?sent=1'
             void quietlyIssueOutsideGeoChallenge(useDb(), {
               ipAddress,
-              userAgent: getHeader(event, 'user-agent'),
+              userAgent,
+              deviceId,
               locationLabel,
             }).catch(() => {})
           }
@@ -106,7 +113,8 @@ export default defineEventHandler(async (event) => {
     userId: resolved.user.id,
     userName: resolved.user.name,
     userEmail: resolved.user.email,
-    userAgent: getHeader(event, 'user-agent'),
+    userAgent,
+    deviceId,
     latitude: loginCoords.lat,
     longitude: loginCoords.lng,
     locationLabel,
@@ -142,7 +150,7 @@ export default defineEventHandler(async (event) => {
       name: resolved.user.name,
       portal: 'staff',
       ipAddress,
-      userAgent: getHeader(event, 'user-agent'),
+      userAgent,
       deviceLocation: locationLabel,
       deviceAccuracyM: body.geo.accuracyM ?? null,
     }))

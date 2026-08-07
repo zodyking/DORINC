@@ -12,6 +12,7 @@ export const outsideGeoChallenges = pgTable('outside_geo_challenges', {
   codeHash: text('code_hash').notNull(),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
+  deviceId: text('device_id'),
   locationLabel: text('location_label'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
@@ -20,4 +21,5 @@ export const outsideGeoChallenges = pgTable('outside_geo_challenges', {
   index('outside_geo_challenges_user_idx').on(table.userId),
   index('outside_geo_challenges_expires_idx').on(table.expiresAt),
   index('outside_geo_challenges_ip_idx').on(table.ipAddress),
+  index('outside_geo_challenges_device_id_idx').on(table.deviceId),
 ])

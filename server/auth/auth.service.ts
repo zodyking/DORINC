@@ -239,6 +239,7 @@ export async function login(
   meta: {
     ipAddress?: string | null
     userAgent?: string | null
+    deviceId?: string | null
     portal?: LoginPortal
     geo?: LoginGeoMeta | null
     locationLabel?: string | null
@@ -342,6 +343,7 @@ export async function login(
     expiresAt,
     ipAddress: meta.ipAddress ?? null,
     userAgent: meta.userAgent ?? null,
+    deviceId: meta.deviceId ?? null,
     geoLatitude: meta.geo?.latitude ?? null,
     geoLongitude: meta.geo?.longitude ?? null,
     geoAccuracyM: meta.geo?.accuracyM ?? null,

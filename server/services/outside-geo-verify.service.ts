@@ -4,6 +4,7 @@ import type { Db } from '../db/client'
 import { sessions, users } from '../db/schema/auth'
 import { outsideGeoChallenges } from '../db/schema/outside-geo'
 import { normalizeClientIp } from '../utils/client-ip'
+import { normalizeDeviceId } from '../utils/device-id'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
@@ -45,17 +46,19 @@ export function maskEmail(email: string): string {
 
 /**
  * Find a previously authenticated user associated with this IP and/or device.
- * Prefer IP+device matches, then IP, then device (user-agent).
+ * Prefer IP+device_id, then device_id, then IP, then user-agent fallback.
  */
 export async function findKnownOutsideGeoIdentity(
   db: Db,
-  input: { ipAddress?: string | null, userAgent?: string | null },
+  input: { ipAddress?: string | null, userAgent?: string | null, deviceId?: string | null },
 ): Promise<KnownOutsideGeoIdentity | null> {
   const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress?.trim() ?? null
   const userAgent = input.userAgent?.trim() || null
-  if (!ip && !userAgent) return null
+  const deviceId = normalizeDeviceId(input.deviceId)
+  if (!ip && !userAgent && !deviceId) return null
 
   const conditions = []
+  if (deviceId) conditions.push(eq(sessions.deviceId, deviceId))
   if (ip) conditions.push(eq(sessions.ipAddress, ip))
   if (userAgent) conditions.push(eq(sessions.userAgent, userAgent))
   if (!conditions.length) return null
@@ -67,6 +70,7 @@ export async function findKnownOutsideGeoIdentity(
     userEmail: users.email,
     ipAddress: sessions.ipAddress,
     userAgent: sessions.userAgent,
+    deviceId: sessions.deviceId,
   })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -81,17 +85,34 @@ export async function findKnownOutsideGeoIdentity(
   let bestRank = 0
   for (const row of rows) {
     const ipMatch = !!(ip && row.ipAddress && String(row.ipAddress) === ip)
-    const deviceMatch = !!(userAgent && row.userAgent && row.userAgent === userAgent)
-    const rank = ipMatch && deviceMatch ? 3 : ipMatch ? 2 : deviceMatch ? 1 : 0
+    const deviceIdMatch = !!(deviceId && row.deviceId && row.deviceId === deviceId)
+    const uaMatch = !!(userAgent && row.userAgent && row.userAgent === userAgent)
+    const deviceMatch = deviceIdMatch || uaMatch
+    // Rank: IP+device_id (5), device_id (4), IP+UA (3), IP (2), UA (1)
+    const rank = ipMatch && deviceIdMatch
+      ? 5
+      : deviceIdMatch
+        ? 4
+        : ipMatch && uaMatch
+          ? 3
+          : ipMatch
+            ? 2
+            : deviceMatch
+              ? 1
+              : 0
     if (rank > bestRank) {
       bestRank = rank
       best = {
         userId: row.userId,
         userName: row.userName,
         userEmail: row.userEmail,
-        match: rank === 3 ? 'ip_and_device' : rank === 2 ? 'ip' : 'device',
+        match: (rank >= 3 && deviceMatch && ipMatch) || rank === 5
+          ? 'ip_and_device'
+          : rank === 2
+            ? 'ip'
+            : 'device',
       }
-      if (rank === 3) break
+      if (rank >= 5) break
     }
   }
 
@@ -127,6 +148,7 @@ export async function quietlyIssueOutsideGeoChallenge(
   input: {
     ipAddress?: string | null
     userAgent?: string | null
+    deviceId?: string | null
     locationLabel?: string | null
     force?: boolean
   },
@@ -138,6 +160,7 @@ export async function quietlyIssueOutsideGeoChallenge(
     const identity = await findKnownOutsideGeoIdentity(db, {
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
+      deviceId: input.deviceId,
     })
     if (!identity) return 'unknown'
 
@@ -145,6 +168,7 @@ export async function quietlyIssueOutsideGeoChallenge(
       identity,
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
+      deviceId: input.deviceId,
       locationLabel: input.locationLabel ?? null,
     })
     await enqueueOutsideGeoVerificationEmail(db, {
@@ -168,12 +192,14 @@ export async function issueOutsideGeoChallenge(
     identity: KnownOutsideGeoIdentity
     ipAddress?: string | null
     userAgent?: string | null
+    deviceId?: string | null
     locationLabel?: string | null
   },
 ): Promise<{ challengeId: string, maskedEmail: string, code: string }> {
   const code = generateOutsideGeoCode()
   const expiresAt = new Date(Date.now() + OUTSIDE_GEO_CODE_TTL_MS)
   const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress ?? null
+  const deviceId = normalizeDeviceId(input.deviceId)
 
   // Invalidate prior unused challenges for this user (+ IP when known).
   const invalidateWhere = [
@@ -192,6 +218,7 @@ export async function issueOutsideGeoChallenge(
     codeHash: hashCode(code),
     ipAddress: ip,
     userAgent: input.userAgent ? input.userAgent.slice(0, 500) : null,
+    deviceId,
     locationLabel: input.locationLabel ?? null,
     expiresAt,
   }).returning({ id: outsideGeoChallenges.id })

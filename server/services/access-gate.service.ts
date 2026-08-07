@@ -140,6 +140,7 @@ export interface RecordAccessEventInput {
   userEmail?: string | null
   path?: string | null
   userAgent?: string | null
+  deviceId?: string | null
   latitude?: number | null
   longitude?: number | null
   locationLabel?: string | null
@@ -156,6 +157,7 @@ export async function recordAccessEvent(db: Db, input: RecordAccessEventInput): 
     userEmail: input.userEmail ?? null,
     path: input.path ?? null,
     userAgent: input.userAgent ? input.userAgent.slice(0, 500) : null,
+    deviceId: input.deviceId ?? null,
     latitude: input.latitude ?? null,
     longitude: input.longitude ?? null,
     locationLabel: input.locationLabel ?? null,

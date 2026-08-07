@@ -1,5 +1,6 @@
 import { getHeader, getRequestURL, sendRedirect } from 'h3'
 import { getClientIp } from '../utils/client-ip'
+import { ensureDeviceId } from '../utils/device-id'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { hasDatabaseConfigured, useDb } from '../db/client'
 import {
@@ -75,6 +76,7 @@ export default defineEventHandler(async (event) => {
 
   const ip = getClientIp(event)
   const userAgent = getHeader(event, 'user-agent') ?? null
+  const deviceId = ensureDeviceId(event)
 
   // Resolve the viewer so super admins are never geo/IP blocked (anti-lockout).
   let isSuperAdmin = false
@@ -119,16 +121,17 @@ export default defineEventHandler(async (event) => {
 
   // Known users who already verified a suspicious-location challenge may proceed.
   const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
-    ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent })
+    ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
     : null
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
 
-  // Capture the visit (best-effort, off the response path).
-  if (shouldCapture(`${ip ?? 'unknown'}|${path}`)) {
+  // Capture the visit (best-effort, off the response path). Prefer device_id over IP.
+  if (shouldCapture(`${deviceId}|${path}`)) {
     void captureVisit({
       ip,
       path,
       userAgent,
+      deviceId,
       viewer,
       blocked: effectivelyBlocked,
       cachedGeo: cachedGeo ?? null,
@@ -140,14 +143,15 @@ export default defineEventHandler(async (event) => {
   // Outside geofence → internal pages only (no external redirect links).
   if (decision.reason === 'geo_outside') {
     try {
-      const known = await findKnownOutsideGeoIdentity(useDb(), { ipAddress: ip, userAgent })
+      const known = await findKnownOutsideGeoIdentity(useDb(), { ipAddress: ip, userAgent, deviceId })
       if (known) {
-        if (shouldIssueChallenge(ip ?? userAgent ?? 'unknown')) {
+        if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
           const locationLabel = cachedGeo?.label
             ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
           await quietlyIssueOutsideGeoChallenge(useDb(), {
             ipAddress: ip,
             userAgent,
+            deviceId,
             locationLabel,
           })
         }
@@ -166,6 +170,7 @@ async function captureVisit(input: {
   ip: string | null
   path: string
   userAgent: string | null
+  deviceId: string | null
   viewer: { id: string, name: string, email: string } | null
   blocked: boolean
   cachedGeo: { latitude: number | null, longitude: number | null, label: string | null, country: string | null } | null
@@ -181,6 +186,7 @@ async function captureVisit(input: {
     userEmail: input.viewer?.email ?? null,
     path: input.path,
     userAgent: input.userAgent,
+    deviceId: input.deviceId,
     latitude: geo?.latitude ?? null,
     longitude: geo?.longitude ?? null,
     locationLabel: geo?.label ?? null,
