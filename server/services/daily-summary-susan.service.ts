@@ -2,6 +2,10 @@ import { AI_ASSISTANT_NAME, AI_ASSISTANT_TITLE } from '../../shared/ai-assistant
 import { BRAND_NAME } from '../../shared/brand'
 import type { Db } from '../db/client'
 import {
+  isOpenRouterAuthErrorMessage,
+  openRouterAuthRecoveryMessage,
+} from '../../shared/openrouter-auth'
+import {
   openRouterChat,
   parseOpenRouterJson,
   OpenRouterServiceError,
@@ -13,6 +17,7 @@ import {
   getDecryptedApiKey,
   modelForFeature,
 } from './ai-provider.service'
+import { fetchOpenRouterKeyUsage } from './openrouter-billing.service'
 
 export interface SusanInsightSection {
   id: string
@@ -146,11 +151,30 @@ export async function prepareSusanClient(db: Db): Promise<
   try {
     const apiKey = await getDecryptedApiKey(db)
     if (!apiKey) return { ok: false, reason: 'OpenRouter API key is missing' }
+    const model = modelForFeature(settings, 'daily_summary')
+    if (!model?.trim()) {
+      return { ok: false, reason: 'OpenRouter model is not configured in Control Panel → AI' }
+    }
+
+    // Probe the key before running N section calls so operators see one clear auth error.
+    try {
+      await fetchOpenRouterKeyUsage(apiKey)
+    }
+    catch (probeErr) {
+      const message = probeErr instanceof Error ? probeErr.message : 'OpenRouter auth probe failed'
+      return {
+        ok: false,
+        reason: isOpenRouterAuthErrorMessage(message) || message.includes('OpenRouter authentication')
+          ? openRouterAuthRecoveryMessage()
+          : message,
+      }
+    }
+
     return {
       ok: true,
       client: {
         apiKey,
-        model: modelForFeature(settings, 'daily_summary'),
+        model,
       },
     }
   }
@@ -209,7 +233,13 @@ export async function generateSusanSectionInsight(
     }
     catch (secondErr) {
       const message = secondErr instanceof Error ? secondErr.message : lastError
-      return { insight: fallback, error: message || 'Susan call failed' }
+      const errText = message || 'Susan call failed'
+      return {
+        insight: fallback,
+        error: isOpenRouterAuthErrorMessage(errText)
+          ? openRouterAuthRecoveryMessage()
+          : errText,
+      }
     }
   }
 

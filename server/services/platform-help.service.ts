@@ -8,11 +8,17 @@ import {
   modelForFeature,
   modelSupportsVision,
 } from './ai-provider.service'
-import type { OpenRouterMessageContent } from './ai-openrouter.service'
+import {
+  openRouterChat,
+  OpenRouterServiceError,
+  type OpenRouterMessageContent,
+} from './ai-openrouter.service'
 import { logAiUsage } from './ai-jobs.service'
 import { formatPlatformHelpHtml, matchPlatformHelpAnswer } from '../../shared/platform-help'
-import { getAppUrl } from './app-config.service'
-import { BRAND_NAME } from '../../shared/brand'
+import {
+  isOpenRouterAuthErrorMessage,
+  openRouterAuthRecoveryMessage,
+} from '../../shared/openrouter-auth'
 
 const HELP_SYSTEM_PROMPT = [
   `You are the ${BRAND_NAME} platform assistant.`,
@@ -73,11 +79,6 @@ export async function getPlatformHelpStatus(db: Db): Promise<PlatformHelpStatus>
   return { enabled, aiAvailable, capped, imageUploadEnabled, model }
 }
 
-interface OpenRouterChatResponse {
-  choices?: Array<{ message?: { content?: string } }>
-  usage?: { prompt_tokens?: number, completion_tokens?: number, total_tokens?: number }
-}
-
 function buildUserTurn(
   question: string,
   pageContext?: string,
@@ -108,7 +109,7 @@ async function callOpenRouterHelp(
   },
 ): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
   const historyMessages = (input.history ?? []).slice(-40).map(row => ({
-    role: row.role,
+    role: row.role as 'user' | 'assistant',
     content: row.content,
   }))
 
@@ -118,36 +119,34 @@ async function callOpenRouterHelp(
     { role: 'user', content: buildUserTurn(input.question, input.pageContext, input.imageDataUrls) },
   ]
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': getAppUrl(),
-      'X-Title': BRAND_NAME,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: input.imageDataUrls?.length ? 2048 : 1024,
+  const result = await openRouterChat(
+    apiKey,
+    model,
+    messages,
+    'platform_help',
+    {
+      responseFormat: 'text',
       temperature: 0.3,
-      messages,
-    }),
-  })
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(body || `OpenRouter returned ${res.status}`)
-  }
-
-  const payload = await res.json() as OpenRouterChatResponse
-  const answer = payload.choices?.[0]?.message?.content?.trim()
-  if (!answer) throw new Error('Empty response from OpenRouter')
+      maxTokens: input.imageDataUrls?.length ? 2048 : 1024,
+    },
+  )
 
   return {
-    answer: formatPlatformHelpHtml(answer),
-    promptTokens: payload.usage?.prompt_tokens ?? 0,
-    completionTokens: payload.usage?.completion_tokens ?? 0,
+    answer: formatPlatformHelpHtml(result.content),
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
   }
+}
+
+function authFailureHelpHtml(): string {
+  return formatPlatformHelpHtml(
+    `<p>${openRouterAuthRecoveryMessage()}</p>`
+    + '<ol>'
+    + '<li>Open <b>Control Panel → AI</b>.</li>'
+    + '<li>Re-paste your OpenRouter API key.</li>'
+    + '<li>Click <b>Test connection</b>, then <b>Save AI settings</b>.</li>'
+    + '</ol>',
+  )
 }
 
 function visionFailureMessage(capped: boolean): string {
@@ -235,6 +234,18 @@ export async function askPlatformHelp(
     catch (e) {
       if (e instanceof AiSpendCapExceededError) {
         capped = true
+      }
+      else {
+        const message = e instanceof OpenRouterServiceError || e instanceof Error
+          ? e.message
+          : ''
+        if (isOpenRouterAuthErrorMessage(message) || message.includes('OpenRouter authentication')) {
+          return {
+            answer: authFailureHelpHtml(),
+            source: 'fallback',
+            capped: false,
+          }
+        }
       }
       if (input.imageDataUrls?.length) {
         return {
