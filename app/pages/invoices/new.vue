@@ -943,8 +943,8 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Step 2: Vehicle -->
-    <div v-show="step === 2 && !serviceLogGate" class="sl-panel active">
+    <!-- Step 2: Vehicle (stays visible; service-log prompt is a popup overlay) -->
+    <div v-show="step === 2" class="sl-panel active">
       <h3>Which vehicle?</h3>
       <p class="sl-hint">Pick the unit for this invoice, or continue without one.</p>
       <div v-if="vehiclesPending && !vehicleOptions.length" class="cp-state" style="padding:12px 0;">
@@ -998,23 +998,22 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Invisible post-vehicle gate (not a numbered step) -->
-    <div v-show="step === 2 && serviceLogGate" class="sl-panel active">
-      <InvoiceWizardServiceLogStep
-        :customer-id="customerId"
-        :vehicle-id="vehicleId"
-        :invoice-id="invoiceId"
-        :invoice-number-formatted="invoiceNumberFormatted"
-        :service-log-id="serviceLogId"
-        :service-date="invoiceDate"
-        :ensure-draft="ensureDraft"
-        @update:service-log-id="serviceLogId = $event"
-        @attached="onServiceLogAttached"
-        @skip="finishServiceLogGate"
-        @done="finishServiceLogGate"
-        @back="closeServiceLogGate"
-      />
-    </div>
+    <!-- Invisible post-vehicle popup (not a numbered stepper step) -->
+    <InvoiceWizardServiceLogStep
+      :open="serviceLogGate"
+      :customer-id="customerId"
+      :vehicle-id="vehicleId"
+      :invoice-id="invoiceId"
+      :invoice-number-formatted="invoiceNumberFormatted"
+      :service-log-id="serviceLogId"
+      :service-date="invoiceDate"
+      :ensure-draft="ensureDraft"
+      @update:service-log-id="serviceLogId = $event"
+      @attached="onServiceLogAttached"
+      @skip="finishServiceLogGate"
+      @done="finishServiceLogGate"
+      @back="closeServiceLogGate"
+    />
 
     <!-- Step 3: Dates & terms -->
     <div v-show="step === 3" class="sl-panel active">
