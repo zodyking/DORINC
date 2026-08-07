@@ -8,6 +8,10 @@ import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocume
 import ServiceLogAiExtractModal from '~/components/service-logs/ServiceLogAiExtractModal.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
+import {
+  SERVICE_LOG_MAX_PHOTOS,
+  serviceLogPhotoSlotLabel,
+} from '#shared/service-log-photos'
 
 const props = defineProps<{
   open: boolean
@@ -112,6 +116,11 @@ function clearLocal() {
 }
 
 function onCaptured(file: File) {
+  if (localPreviews.value.length >= SERVICE_LOG_MAX_PHOTOS) {
+    error.value = 'Max 2 photos — front and back only. Remove one to retake.'
+    return
+  }
+  error.value = ''
   localPreviews.value.push({
     id: crypto.randomUUID(),
     url: URL.createObjectURL(file),
@@ -124,9 +133,16 @@ function onDesktopFiles(ev: Event) {
   const files = [...(input.files ?? [])]
   input.value = ''
   for (const file of files) {
-    if (file.type.startsWith('image/')) onCaptured(file)
+    if (!file.type.startsWith('image/')) continue
+    if (localPreviews.value.length >= SERVICE_LOG_MAX_PHOTOS) {
+      error.value = 'Max 2 photos — front and back only. Remove one to retake.'
+      break
+    }
+    onCaptured(file)
   }
 }
+
+const cameraPhotos = computed(() => localPreviews.value.map(p => ({ id: p.id, url: p.url })))
 
 function removePreview(id: string) {
   const idx = localPreviews.value.findIndex(p => p.id === id)
@@ -427,19 +443,11 @@ onBeforeUnmount(() => {
                   <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-              <span class="inv-sl-cam-launch__title">Take Photo</span>
-              <span class="inv-sl-cam-launch__sub">Open full-screen camera</span>
+              <span class="inv-sl-cam-launch__title">
+                {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
+              </span>
+              <span class="inv-sl-cam-launch__sub">Front and back of the paper log</span>
             </button>
-            <label class="inv-sl-text-link">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                @change="onDesktopFiles"
-              >
-              Or Choose from Gallery
-            </label>
           </template>
           <template v-else>
             <p class="inv-sl-choice-heading">Upload or scan QR code</p>
@@ -453,8 +461,8 @@ onBeforeUnmount(() => {
                     <circle cx="19" cy="18" r="2.5" fill="#6366f1" />
                   </svg>
                 </span>
-                <b>Upload photos</b>
-                <small>Drop images here, or click to browse</small>
+                <b>Upload front &amp; back</b>
+                <small>Max 2 photos — drop or click to browse</small>
               </label>
 
               <div class="inv-sl-qr-panel">
@@ -496,9 +504,17 @@ onBeforeUnmount(() => {
           </template>
 
           <div v-if="localPreviews.length" class="inv-sl-thumbs">
-            <div v-for="p in localPreviews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" alt="Service log photo">
-              <button type="button" class="inv-sl-thumb__x" aria-label="Remove photo" @click="removePreview(p.id)">×</button>
+            <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
+              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+              <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
+              <button
+                type="button"
+                class="inv-sl-thumb__x"
+                :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
+                @click="removePreview(p.id)"
+              >
+                ×
+              </button>
             </div>
           </div>
 
@@ -547,7 +563,10 @@ onBeforeUnmount(() => {
     <ServiceLogDocumentCamera
       mode="fullscreen"
       :open="cameraOpen"
+      :photos="cameraPhotos"
       @captured="onCaptured"
+      @remove="removePreview"
+      @done="cameraOpen = false"
       @close="cameraOpen = false"
     />
   </ClientOnly>
