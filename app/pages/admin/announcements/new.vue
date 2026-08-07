@@ -249,7 +249,7 @@ function onAnnouncementId(id: string) {
 <template>
   <section class="page active ann-page">
     <StaffPageHead subtitle="Design the full-screen message staff must continue through after login">
-      <template #title>New login message</template>
+      <template #title>New Login Message</template>
       <template #actions>
         <NuxtLink to="/admin/announcements" class="btn">Cancel</NuxtLink>
         <button type="button" class="btn primary" :disabled="busy" @click="createMessage">

@@ -15,6 +15,7 @@ import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPan
 import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
 import SettingsBillingPanel from '~/components/admin/settings/SettingsBillingPanel.vue'
 import SettingsAiPanel from '~/components/admin/settings/SettingsAiPanel.vue'
+import SettingsChatPanel from '~/components/admin/settings/SettingsChatPanel.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import {
   aiFeatureLabel,
@@ -28,6 +29,12 @@ import {
   formatSuspiciousAlertIps,
   workerQueueStatusLabel,
 } from '~/utils/admin-panel-ui'
+import {
+  CONTROL_PANEL_GROUPS,
+  CONTROL_PANEL_SECTION_IDS,
+  emptyControlPanelOpenState,
+  type ControlPanelSectionId,
+} from '~/utils/control-panel-nav'
 
 definePageMeta({ layout: 'staff', permission: 'system.admin.all' })
 
@@ -101,58 +108,61 @@ const { data: suspiciousAlerts, refresh: refreshSuspiciousAlerts } = useClientFe
 
 const dismissAlertBusy = ref<string | null>(null)
 
-type ControlPanelSectionId
-  = | 'business'
-    | 'email'
-    | 'chat'
-    | 'notifications'
-    | 'invoice'
-    | 'catalog'
-    | 'line-detection'
-    | 'billing'
-    | 'import'
-    | 'backup'
-    | 'ai'
-    | 'security'
-
-const openSections = reactive<Record<ControlPanelSectionId, boolean>>({
-  business: false,
-  email: false,
-  chat: false,
-  notifications: false,
-  invoice: false,
-  catalog: false,
-  'line-detection': false,
-  billing: false,
-  import: false,
-  backup: false,
-  ai: false,
-  security: false,
-})
+const openSections = reactive(emptyControlPanelOpenState())
+const overviewOpen = ref(true)
 
 const route = useRoute()
 const router = useRouter()
+const cpGroups = CONTROL_PANEL_GROUPS
+
+onMounted(() => {
+  // Keep first paint light on phones — jump chips surface config first.
+  if (window.matchMedia('(max-width: 720px)').matches) {
+    overviewOpen.value = false
+  }
+})
 
 function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
-  openSections[id] = open
   if (open) {
+    // One section at a time — keeps the panel scannable on mobile.
+    for (const key of CONTROL_PANEL_SECTION_IDS) {
+      openSections[key] = key === id
+    }
     router.replace({ query: { ...route.query, tab: id } })
+    return
   }
-  else if (route.query.tab === id) {
-    const { tab, ...rest } = route.query
+
+  openSections[id] = false
+  if (route.query.tab === id) {
+    const { tab: _tab, ...rest } = route.query
     router.replace({ query: rest })
   }
 }
 
-watch(() => route.query.tab, (tab) => {
-  const valid: ControlPanelSectionId[] = [
-    'business', 'email', 'chat', 'notifications', 'invoice', 'catalog', 'line-detection', 'billing',
-    'import', 'backup', 'ai', 'security',
-  ]
-  if (typeof tab === 'string' && valid.includes(tab as ControlPanelSectionId)) {
-    openSections[tab as ControlPanelSectionId] = true
+function jumpToSection(id: ControlPanelSectionId) {
+  setSectionOpen(id, true)
+  nextTick(() => {
+    document.getElementById(`cp-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+function toggleOverview() {
+  overviewOpen.value = !overviewOpen.value
+  if (overviewOpen.value) {
     nextTick(() => {
-      document.getElementById(`cp-section-${tab}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      document.getElementById('cp-overview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+}
+
+watch(() => route.query.tab, (tab) => {
+  if (typeof tab === 'string' && CONTROL_PANEL_SECTION_IDS.includes(tab as ControlPanelSectionId)) {
+    const id = tab as ControlPanelSectionId
+    for (const key of CONTROL_PANEL_SECTION_IDS) {
+      openSections[key] = key === id
+    }
+    nextTick(() => {
+      document.getElementById(`cp-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
 }, { immediate: true })
@@ -206,7 +216,7 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
 </script>
 
 <template>
-  <section class="page active">
+  <section class="page active cp-page">
     <StaffPageHead subtitle="System monitoring, workspace configuration, and administration">
       <template #title>Control Panel</template>
       <template #actions>
@@ -215,266 +225,313 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
     </StaffPageHead>
 
     <div v-if="error" class="card" style="padding:24px; margin-bottom:16px;">
-      <p>You do not have access to the control panel.</p>
-      <NuxtLink to="/dashboard" class="btn">Back to dashboard</NuxtLink>
+      <p>You do not have access to the Control Panel.</p>
+      <NuxtLink to="/dashboard" class="btn">Back To Dashboard</NuxtLink>
     </div>
 
     <template v-else-if="status">
-      <div class="admin-overview">
-        <ControlPanelDatabaseChart hero style="margin-bottom:16px;" />
+      <nav class="cp-jump" aria-label="Control Panel sections">
+        <div class="cp-jump-scroll">
+          <button
+            type="button"
+            class="cp-jump-chip"
+            :class="{ on: overviewOpen }"
+            @click="toggleOverview"
+          >
+            Overview
+          </button>
+          <template v-for="group in cpGroups" :key="group.id">
+            <span class="cp-jump-group" aria-hidden="true">{{ group.label }}</span>
+            <button
+              v-for="section in group.sections"
+              :key="section.id"
+              type="button"
+              class="cp-jump-chip"
+              :class="{ on: openSections[section.id] }"
+              @click="jumpToSection(section.id)"
+            >
+              {{ section.title }}
+            </button>
+          </template>
+        </div>
+      </nav>
 
-        <ControlPanelSystemMonitor
-          v-if="monitorStatus"
-          :status="monitorStatus"
-          style="margin-bottom:20px;"
-        />
+      <div id="cp-overview" class="admin-overview">
+        <details class="cp-overview-panel" :open="overviewOpen" @toggle="overviewOpen = ($event.target as HTMLDetailsElement).open">
+          <summary class="cp-overview-summary">
+            <span>
+              <b>System Overview</b>
+              <small>Storage health and live service status</small>
+            </span>
+            <span class="cp-overview-chev" aria-hidden="true">▸</span>
+          </summary>
+          <div class="cp-overview-body">
+            <ControlPanelDatabaseChart hero />
+            <ControlPanelSystemMonitor
+              v-if="monitorStatus"
+              :status="monitorStatus"
+            />
+          </div>
+        </details>
       </div>
 
       <div class="cp-sections">
-        <p class="cp-sections-label">Configuration</p>
-        <p class="cp-sections-sublabel">Workspace</p>
+        <template v-for="group in cpGroups" :key="group.id">
+          <p class="cp-sections-label">{{ group.label }}</p>
 
-        <ControlPanelSection
-          id="business"
-          title="Business"
-          icon="🏢"
-          subtitle="Shop name, contact, and address"
-          :open="openSections.business"
-          @update:open="setSectionOpen('business', $event)"
-        >
-          <SettingsBusinessPanel @saved="refresh()" />
-        </ControlPanelSection>
+          <template v-for="section in group.sections" :key="section.id">
+            <ControlPanelSection
+              v-if="section.id === 'business'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.business"
+              @update:open="setSectionOpen('business', $event)"
+            >
+              <SettingsBusinessPanel @saved="refresh()" />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="email"
-          title="Email"
-          icon="✉️"
-          subtitle="Outbound SMTP, inbound IMAP, and test delivery"
-          :status-tone="smtpHealthTone(status.smtp.configured)"
-          :open="openSections.email"
-          @update:open="setSectionOpen('email', $event)"
-        >
-          <SettingsEmailPanel @saved="refresh()" />
-          <SettingsImapPanel @saved="refresh()" />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'invoice'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.invoice"
+              @update:open="setSectionOpen('invoice', $event)"
+            >
+              <SettingsInvoicePanel @saved="refresh()" />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="chat"
-          title="Chat"
-          icon="💬"
-          subtitle="Team chat and direct messaging"
-          :open="openSections.chat"
-          @update:open="setSectionOpen('chat', $event)"
-        >
-          <SettingsChatPanel @saved="refresh()" />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'catalog'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.catalog"
+              @update:open="setSectionOpen('catalog', $event)"
+            >
+              <SettingsCatalogPanel />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="notifications"
-          title="Notifications"
-          icon="🔔"
-          subtitle="Toggle app-wide email alerts"
-          :open="openSections.notifications"
-          @update:open="setSectionOpen('notifications', $event)"
-        >
-          <SettingsNotificationsPanel @saved="refresh()" />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'line-detection'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections['line-detection']"
+              @update:open="setSectionOpen('line-detection', $event)"
+            >
+              <SettingsLineDetectionPanel />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="invoice"
-          title="Invoices"
-          icon="🧾"
-          subtitle="Payment terms and approval thresholds"
-          :open="openSections.invoice"
-          @update:open="setSectionOpen('invoice', $event)"
-        >
-          <SettingsInvoicePanel @saved="refresh()" />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'chat'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.chat"
+              @update:open="setSectionOpen('chat', $event)"
+            >
+              <SettingsChatPanel @saved="refresh()" />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="catalog"
-          title="Catalog detection"
-          icon="📦"
-          subtitle="Category keyword rules"
-          :open="openSections.catalog"
-          @update:open="setSectionOpen('catalog', $event)"
-        >
-          <SettingsCatalogPanel />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'notifications'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.notifications"
+              @update:open="setSectionOpen('notifications', $event)"
+            >
+              <SettingsNotificationsPanel @saved="refresh()" />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="line-detection"
-          title="Line detection"
-          icon="🔤"
-          subtitle="Part, labor, and fee verb lists"
-          :open="openSections['line-detection']"
-          @update:open="setSectionOpen('line-detection', $event)"
-        >
-          <SettingsLineDetectionPanel />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'email'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :status-tone="smtpHealthTone(status.smtp.configured)"
+              :open="openSections.email"
+              @update:open="setSectionOpen('email', $event)"
+            >
+              <SettingsEmailPanel @saved="refresh()" />
+              <SettingsImapPanel @saved="refresh()" />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="billing"
-          title="Billing integrations"
-          icon="💳"
-          subtitle="Vultr, Cloudflare, and OpenRouter credentials"
-          :open="openSections.billing"
-          @update:open="setSectionOpen('billing', $event)"
-        >
-          <SettingsBillingPanel :active="openSections.billing" @saved="refresh()" />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'billing'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.billing"
+              @update:open="setSectionOpen('billing', $event)"
+            >
+              <SettingsBillingPanel :active="openSections.billing" @saved="refresh()" />
+            </ControlPanelSection>
 
-        <p class="cp-sections-sublabel">System</p>
+            <ControlPanelSection
+              v-else-if="section.id === 'ai'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :status-tone="status.ai ? aiHealthTone(status.ai.status) : undefined"
+              :open="openSections.ai"
+              @update:open="setSectionOpen('ai', $event)"
+            >
+              <SettingsAiPanel
+                v-if="canManageAi"
+                :active="openSections.ai"
+                @saved="refresh()"
+              />
+              <div v-else class="card">
+                <div class="cbody">You need AI admin permission to manage these settings.</div>
+              </div>
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="import"
-          title="Import / Export"
-          icon="⇅"
-          subtitle="Bulk data exchange"
-          :open="openSections.import"
-          @update:open="setSectionOpen('import', $event)"
-        >
-          <ControlPanelImportExport />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'import'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.import"
+              @update:open="setSectionOpen('import', $event)"
+            >
+              <ControlPanelImportExport />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="backup"
-          title="Backup & Restore"
-          icon="☁️"
-          subtitle="Encrypted archives · optional Google Drive"
-          :status-tone="backupHealthTone(status.backup.status)"
-          :open="openSections.backup"
-          @update:open="setSectionOpen('backup', $event)"
-        >
-          <ControlPanelBackupRestore
-            :backup-status="status.backup"
-            @refreshed="refresh()"
-          />
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'backup'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :status-tone="backupHealthTone(status.backup.status)"
+              :open="openSections.backup"
+              @update:open="setSectionOpen('backup', $event)"
+            >
+              <ControlPanelBackupRestore
+                :backup-status="status.backup"
+                @refreshed="refresh()"
+              />
+            </ControlPanelSection>
 
-        <ControlPanelSection
-          id="ai"
-          title="AI"
-          icon="✦"
-          subtitle="Per-task models, caps, and usage"
-          :status-tone="status.ai ? aiHealthTone(status.ai.status) : undefined"
-          :open="openSections.ai"
-          @update:open="setSectionOpen('ai', $event)"
-        >
-          <SettingsAiPanel
-            v-if="canManageAi"
-            :active="openSections.ai"
-            @saved="refresh()"
-          />
-          <div v-else class="card">
-            <div class="cbody">You need AI admin permission to manage these settings.</div>
-          </div>
-        </ControlPanelSection>
+            <ControlPanelSection
+              v-else-if="section.id === 'security'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :status-tone="securityTone"
+              :open="openSections.security"
+              @update:open="setSectionOpen('security', $event)"
+            >
+              <div class="stack">
+                <ControlPanelAccessGate />
 
-        <ControlPanelSection
-          id="security"
-          title="Security"
-          icon="🔒"
-          subtitle="Alerts and worker queue detail"
-          :status-tone="securityTone"
-          :open="openSections.security"
-          @update:open="setSectionOpen('security', $event)"
-        >
-          <div class="stack">
-            <ControlPanelAccessGate />
+                <div class="card">
+                  <div class="chead">
+                    <h3>Suspicious Activity</h3>
+                    <div class="right">
+                      <span class="pill" :class="(suspiciousAlerts?.items?.length ?? 0) > 0 ? 'warn' : 'ok'">
+                        {{ suspiciousAlerts?.items?.length ?? 0 }} open
+                      </span>
+                    </div>
+                  </div>
+                  <div v-if="suspiciousAlerts?.items?.length" class="tscroll">
+                    <table class="tbl">
+                      <thead>
+                        <tr>
+                          <th>When</th>
+                          <th>Rule</th>
+                          <th>Severity</th>
+                          <th>User</th>
+                          <th>IP Address(es)</th>
+                          <th>Summary</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="alert in suspiciousAlerts.items" :key="alert.id">
+                          <td><span class="mono" style="font-size:12px">{{ formatBackupWhen(alert.createdAt) }}</span></td>
+                          <td>{{ suspiciousAlertRuleLabel(alert.ruleKey) }}</td>
+                          <td><span class="pill" :class="suspiciousAlertSeverityClass(alert.severity)">{{ alert.severity }}</span></td>
+                          <td>{{ formatSuspiciousAlertUser(alert) }}</td>
+                          <td><span class="mono" style="font-size:12px">{{ formatSuspiciousAlertIps(alert) }}</span></td>
+                          <td>
+                            <div>{{ alert.title }}</div>
+                            <div v-if="alert.description" style="font-size:12px; color:#64748b; margin-top:2px;">
+                              {{ alert.description }}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              class="btn sm"
+                              :disabled="dismissAlertBusy === alert.id"
+                              @click="dismissSuspiciousAlert(alert.id)"
+                            >
+                              {{ dismissAlertBusy === alert.id ? '…' : 'Dismiss' }}
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p v-else class="cbody" style="font-size:13px; color:#64748b; margin:0;">
+                    No open alerts — basic rules monitor failed login bursts, off-hours admin actions, high-risk bursts, and restore attempts.
+                  </p>
+                </div>
 
-            <div class="card">
-              <div class="chead">
-                <h3>Suspicious Activity</h3>
-                <div class="right">
-                  <span class="pill" :class="(suspiciousAlerts?.items?.length ?? 0) > 0 ? 'warn' : 'ok'">
-                    {{ suspiciousAlerts?.items?.length ?? 0 }} open
-                  </span>
+                <div class="card">
+                  <div class="chead"><h3>Worker Queue</h3></div>
+                  <dl class="kv">
+                    <dt>Status</dt>
+                    <dd>{{ workerQueueStatusLabel(status.workerQueue.status) }}</dd>
+                    <dt>Queued</dt>
+                    <dd>{{ status.workerQueue.queued }}</dd>
+                    <dt>Processing</dt>
+                    <dd>{{ status.workerQueue.processing }}</dd>
+                    <dt>Failed</dt>
+                    <dd>{{ status.workerQueue.failed }}</dd>
+                    <dt>Last Activity</dt>
+                    <dd>{{ formatBackupWhen(status.workerQueue.lastActivityAt) }}</dd>
+                  </dl>
+                  <div v-if="Object.keys(status.workerQueue.byType).length" class="tscroll" style="margin-top:0;">
+                    <table class="tbl">
+                      <thead>
+                        <tr>
+                          <th>Job Type</th>
+                          <th class="num">Queued</th>
+                          <th class="num">Active</th>
+                          <th class="num">Failed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(counts, jobType) in status.workerQueue.byType" :key="jobType">
+                          <td>{{ aiFeatureLabel(String(jobType)) }}</td>
+                          <td class="num">{{ counts.queued }}</td>
+                          <td class="num">{{ counts.processing }}</td>
+                          <td class="num">{{ counts.failed }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-              <div v-if="suspiciousAlerts?.items?.length" class="tscroll">
-                <table class="tbl">
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Rule</th>
-                      <th>Severity</th>
-                      <th>User</th>
-                      <th>IP address(es)</th>
-                      <th>Summary</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="alert in suspiciousAlerts.items" :key="alert.id">
-                      <td><span class="mono" style="font-size:12px">{{ formatBackupWhen(alert.createdAt) }}</span></td>
-                      <td>{{ suspiciousAlertRuleLabel(alert.ruleKey) }}</td>
-                      <td><span class="pill" :class="suspiciousAlertSeverityClass(alert.severity)">{{ alert.severity }}</span></td>
-                      <td>{{ formatSuspiciousAlertUser(alert) }}</td>
-                      <td><span class="mono" style="font-size:12px">{{ formatSuspiciousAlertIps(alert) }}</span></td>
-                      <td>
-                        <div>{{ alert.title }}</div>
-                        <div v-if="alert.description" style="font-size:12px; color:#64748b; margin-top:2px;">
-                          {{ alert.description }}
-                        </div>
-                      </td>
-                      <td>
-                        <button
-                          class="btn sm"
-                          :disabled="dismissAlertBusy === alert.id"
-                          @click="dismissSuspiciousAlert(alert.id)"
-                        >
-                          {{ dismissAlertBusy === alert.id ? '…' : 'Dismiss' }}
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p v-else class="cbody" style="font-size:13px; color:#64748b; margin:0;">
-                No open alerts — basic rules monitor failed login bursts, off-hours admin actions, high-risk bursts, and restore attempts.
-              </p>
-            </div>
-
-            <div class="card">
-              <div class="chead"><h3>Worker Queue</h3></div>
-              <dl class="kv">
-                <dt>Status</dt>
-                <dd>{{ workerQueueStatusLabel(status.workerQueue.status) }}</dd>
-                <dt>Queued</dt>
-                <dd>{{ status.workerQueue.queued }}</dd>
-                <dt>Processing</dt>
-                <dd>{{ status.workerQueue.processing }}</dd>
-                <dt>Failed</dt>
-                <dd>{{ status.workerQueue.failed }}</dd>
-                <dt>Last activity</dt>
-                <dd>{{ formatBackupWhen(status.workerQueue.lastActivityAt) }}</dd>
-              </dl>
-              <div v-if="Object.keys(status.workerQueue.byType).length" class="tscroll" style="margin-top:0;">
-                <table class="tbl">
-                  <thead>
-                    <tr>
-                      <th>Job type</th>
-                      <th class="num">Queued</th>
-                      <th class="num">Active</th>
-                      <th class="num">Failed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(counts, jobType) in status.workerQueue.byType" :key="jobType">
-                      <td>{{ aiFeatureLabel(String(jobType)) }}</td>
-                      <td class="num">{{ counts.queued }}</td>
-                      <td class="num">{{ counts.processing }}</td>
-                      <td class="num">{{ counts.failed }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </ControlPanelSection>
+            </ControlPanelSection>
+          </template>
+        </template>
       </div>
     </template>
-
   </section>
 </template>

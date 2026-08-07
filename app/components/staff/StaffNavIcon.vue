@@ -12,6 +12,8 @@ export type StaffNavIconName =
   | 'users'
   | 'system-logs'
   | 'control-panel'
+  | 'login-messages'
+  | 'roles'
   | 'email-templates'
   | 'training'
 
@@ -185,6 +187,22 @@ defineProps<{
     <template v-else-if="name === 'email-templates'">
       <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />
       <path d="M3 7l9 6 9-6" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+    </template>
+
+    <!-- Login Messages -->
+    <template v-else-if="name === 'login-messages'">
+      <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.75" />
+      <path d="M8 9h8M8 12h8M8 15h5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+    </template>
+
+    <!-- Roles -->
+    <template v-else-if="name === 'roles'">
+      <path
+        d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linejoin="round"
+      />
     </template>
 
     <!-- Training -->

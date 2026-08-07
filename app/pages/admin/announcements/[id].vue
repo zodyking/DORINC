@@ -199,7 +199,7 @@ function clearHero() {
 <template>
   <section class="page active ann-page">
     <StaffPageHead subtitle="Edit the full-screen message and preview exactly how staff will see it">
-      <template #title>{{ form.title || 'Login message' }}</template>
+      <template #title>{{ form.title || 'Login Message' }}</template>
       <template #actions>
         <NuxtLink to="/admin/announcements" class="btn">Back</NuxtLink>
         <button type="button" class="btn primary" :disabled="busy || !hydrated" @click="saveMessage">
