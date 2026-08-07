@@ -3005,6 +3005,16 @@ section.page.active.dm-page{
   border-top:0; background:transparent; padding:12px 0 0; justify-content:center;
 }
 .inv-sl-mobile-capture{ margin-top:12px; }
+.inv-sl-capture-fallback{
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  padding:8px 0 4px;
+}
+.inv-sl-text-link{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-height:44px; padding:8px 12px; cursor:pointer;
+  color:#4f46e5; font-size:14px; font-weight:700;
+}
+.inv-sl-text-link input{ display:none; }
 .inv-sl-qr-cta{ margin-top:8px; }
 .inv-sl-modal{
   position:fixed; inset:0; z-index:80; display:grid; place-items:center;
