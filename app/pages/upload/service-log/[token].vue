@@ -1,9 +1,14 @@
 <script setup lang="ts">
 /**
  * Unauthenticated phone upload page opened from the invoice wizard QR code.
+ * In-app camera only — front & back (max 2), with remove before attach.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import {
+  SERVICE_LOG_MAX_PHOTOS,
+  serviceLogPhotoSlotLabel,
+} from '#shared/service-log-photos'
 
 definePageMeta({
   layout: false,
@@ -36,9 +41,10 @@ const loadError = ref('')
 const busy = ref(false)
 const actionError = ref('')
 const done = ref(false)
-const previews = ref<{ id: string, url: string }[]>([])
+const previews = ref<{ id: string, url: string, file: File }[]>([])
 const cameraOpen = ref(true)
-const galleryInputRef = ref<HTMLInputElement | null>(null)
+
+const cameraPhotos = computed(() => previews.value.map(p => ({ id: p.id, url: p.url })))
 
 async function loadSession() {
   loadError.value = ''
@@ -58,50 +64,49 @@ async function loadSession() {
   }
 }
 
-async function uploadFile(file: File) {
+function onCaptured(file: File) {
   if (!file.type.startsWith('image/')) {
-    actionError.value = 'Please choose a photo'
+    actionError.value = 'Please take a photo'
     return
   }
-  busy.value = true
+  if (previews.value.length >= SERVICE_LOG_MAX_PHOTOS) {
+    actionError.value = 'Max 2 photos — front and back only. Remove one to retake.'
+    return
+  }
   actionError.value = ''
-  try {
-    const form = new FormData()
-    form.append('file', file, file.name)
-    await $fetch(`/api/public/service-log-upload/${token.value}/files`, {
-      method: 'POST',
-      body: form,
-    })
-    previews.value.push({ id: crypto.randomUUID(), url: URL.createObjectURL(file) })
-    if (session.value) session.value.photoCount += 1
-  }
-  catch (e: unknown) {
-    actionError.value = syncFetchErrorMessage(e, 'Upload failed')
-  }
-  finally {
-    busy.value = false
-  }
+  previews.value.push({
+    id: crypto.randomUUID(),
+    url: URL.createObjectURL(file),
+    file,
+  })
 }
 
-function onGalleryPick(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const files = [...(input.files ?? [])]
-  input.value = ''
-  for (const file of files) {
-    void uploadFile(file)
-  }
+function removePreview(id: string) {
+  const idx = previews.value.findIndex(p => p.id === id)
+  if (idx < 0) return
+  URL.revokeObjectURL(previews.value[idx]!.url)
+  previews.value.splice(idx, 1)
+  actionError.value = ''
 }
 
 async function finish() {
-  if (!session.value || session.value.photoCount < 1) {
+  if (!session.value || previews.value.length < 1) {
     actionError.value = 'Take at least one photo first'
-    cameraOpen.value = false
     return
   }
   busy.value = true
   actionError.value = ''
   cameraOpen.value = false
   try {
+    for (const preview of previews.value) {
+      const form = new FormData()
+      form.append('file', preview.file, preview.file.name)
+      await $fetch(`/api/public/service-log-upload/${token.value}/files`, {
+        method: 'POST',
+        body: form,
+      })
+    }
+
     const res = await $fetch<{
       ok: boolean
       invoiceNumberFormatted: string | null
@@ -109,6 +114,7 @@ async function finish() {
     done.value = true
     if (session.value) {
       session.value.status = 'completed'
+      session.value.photoCount = previews.value.length
       if (res.invoiceNumberFormatted) {
         session.value.invoiceNumberFormatted = res.invoiceNumberFormatted
       }
@@ -116,6 +122,7 @@ async function finish() {
   }
   catch (e: unknown) {
     actionError.value = syncFetchErrorMessage(e, 'Could not finish upload')
+    cameraOpen.value = true
   }
   finally {
     busy.value = false
@@ -164,7 +171,7 @@ onBeforeUnmount(() => {
             · {{ session.technicianName }}
           </p>
           <p class="sl-public-upload__ai">
-            Snap the paper log so AI can help fill invoice line items faster.
+            Front and back of the paper log — max 2 photos.
           </p>
 
           <button
@@ -180,36 +187,29 @@ onBeforeUnmount(() => {
                 <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </span>
-            <span class="inv-sl-cam-launch__title">Take Photo</span>
-            <span class="inv-sl-cam-launch__sub">Open full-screen camera</span>
+            <span class="inv-sl-cam-launch__title">
+              {{ previews.length ? 'Retake Photos' : 'Take Photos' }}
+            </span>
+            <span class="inv-sl-cam-launch__sub">Open camera for front &amp; back</span>
           </button>
-
-          <button
-            type="button"
-            class="btn sl-public-upload__gallery"
-            :disabled="busy"
-            @click="galleryInputRef?.click()"
-          >
-            Choose from Gallery
-          </button>
-          <input
-            ref="galleryInputRef"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            class="sl-public-upload__file"
-            @change="onGalleryPick"
-          >
 
           <div v-if="previews.length" class="inv-sl-thumbs">
-            <div v-for="p in previews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" alt="Uploaded photo">
+            <div v-for="(p, index) in previews" :key="p.id" class="inv-sl-thumb">
+              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+              <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
+              <button
+                type="button"
+                class="inv-sl-thumb__x"
+                :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
+                @click="removePreview(p.id)"
+              >
+                ×
+              </button>
             </div>
           </div>
 
           <p v-if="previews.length" class="sl-public-upload__count">
-            {{ previews.length }} photo{{ previews.length === 1 ? '' : 's' }} uploaded
+            {{ previews.length }} of {{ SERVICE_LOG_MAX_PHOTOS }} photos ready
           </p>
 
           <p v-if="actionError" class="sl-public-upload__error">{{ actionError }}</p>
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="btn primary sl-public-upload__done"
-            :disabled="busy || session.photoCount < 1"
+            :disabled="busy || previews.length < 1"
             @click="finish"
           >
             {{ busy ? 'Working…' : 'Done — Attach to Invoice' }}
@@ -231,21 +231,13 @@ onBeforeUnmount(() => {
         v-if="session && !done && !loadError"
         mode="fullscreen"
         :open="cameraOpen"
-        @captured="uploadFile"
+        :photos="cameraPhotos"
+        @captured="onCaptured"
+        @remove="removePreview"
+        @done="finish"
         @close="cameraOpen = false"
       />
     </ClientOnly>
-
-    <!-- Floating done bar while camera is open and photos exist -->
-    <div
-      v-if="session && cameraOpen && !done && previews.length"
-      class="sl-public-upload__float"
-    >
-      <span>{{ previews.length }} photo{{ previews.length === 1 ? '' : 's' }}</span>
-      <button type="button" class="btn primary sm" :disabled="busy" @click="finish">
-        Done — Attach
-      </button>
-    </div>
   </div>
 </template>
 
@@ -296,18 +288,6 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 48px 12px;
 }
-.sl-public-upload__gallery {
-  width: 100%;
-  min-height: 48px;
-  margin-top: 10px;
-}
-.sl-public-upload__file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
 .sl-public-upload__count {
   margin: 10px 0 0;
   font-size: 13px;
@@ -323,23 +303,5 @@ onBeforeUnmount(() => {
   width: 100%;
   margin-top: 16px;
   min-height: 48px;
-}
-.sl-public-upload__float {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(110px + env(safe-area-inset-bottom, 0px));
-  z-index: 210;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.88);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
 }
 </style>

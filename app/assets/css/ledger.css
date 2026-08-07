@@ -2978,6 +2978,11 @@ section.page.active.dm-page{
 }
 .inv-sl-thumb{ position:relative; border-radius:10px; overflow:hidden; aspect-ratio:1; background:#e2e8f0; }
 .inv-sl-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.inv-sl-thumb__label{
+  position:absolute; left:0; right:0; bottom:0; padding:4px 6px;
+  font-size:10px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+  text-align:center; color:#fff; background:rgba(15,23,42,.7);
+}
 .inv-sl-thumb__x{
   position:absolute; top:4px; right:4px; width:28px; height:28px; border:0;
   border-radius:999px; background:rgba(15,23,42,.72); color:#fff; cursor:pointer;
