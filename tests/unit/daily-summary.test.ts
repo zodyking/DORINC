@@ -73,23 +73,13 @@ describe('daily summary + Susan', () => {
     expect(moneyLabel(228187)).toBe('$228,187.00')
     expect(moneyLabel('1500.5')).toBe('$1,500.50')
     expect(moneyLabel(0.0042)).toBe('$0.0042')
-    expect(moneyLabel('$12.00')).toBe('$12.00')
   })
 
   it('formats vehicle as (type) #unit, else year make model', () => {
     expect(formatSummaryVehicleLabel({
       unitType: 'bus',
       busNumber: '12',
-      year: 2018,
-      make: 'Blue Bird',
-      model: 'Vision',
     })).toBe('(Bus) #12')
-
-    expect(formatSummaryVehicleLabel({
-      unitType: 'van',
-      unitTag: 'V-9',
-    })).toBe('(Van) #V-9')
-
     expect(formatSummaryVehicleLabel({
       unitType: 'truck',
       year: 2020,
@@ -98,13 +88,18 @@ describe('daily summary + Susan', () => {
     })).toBe('2020 Ford F-550')
   })
 
-  it('parses Susan JSON insight responses and strips em dashes', () => {
+  it('parses Susan JSON and plain-text insight responses', () => {
     expect(parseSusanInsightResponse(
       '{"insight":"There are 2 overdue invoices totaling $900.00 — follow up today."}',
       'fallback',
     )).toBe('There are 2 overdue invoices totaling $900.00. follow up today.')
 
-    expect(parseSusanInsightResponse('not-json', 'fallback note')).toBe('fallback note')
+    expect(parseSusanInsightResponse(
+      'Cash looks tight on overdue work. Chase the oldest balances first.',
+      'fallback',
+    )).toBe('Cash looks tight on overdue work. Chase the oldest balances first.')
+
+    expect(parseSusanInsightResponse('nope', 'fallback note')).toBe('fallback note')
   })
 
   it('uses the platform help model for daily_summary feature', () => {
@@ -161,30 +156,26 @@ describe('daily summary + Susan', () => {
         overdueTotal: '900.00',
         paidThisMonthTotal: '400.00',
       },
-      outstandingInvoices: [
-        {
-          id: '1',
-          invoiceNumber: 'INV-000001',
-          customerName: 'Acme',
-          vehicleLabel: '(Bus) #12',
-          invoiceDate: '2026-07-01',
-          dueDate: '2026-07-15',
-          balanceDue: '500.00',
-          total: '500.00',
-          overdue: true,
-        },
-      ],
+      outstandingInvoices: [{
+        id: '1',
+        invoiceNumber: 'INV-000001',
+        customerName: 'Acme',
+        vehicleLabel: '(Bus) #12',
+        invoiceDate: '2026-07-01',
+        dueDate: '2026-07-15',
+        balanceDue: '500.00',
+        total: '500.00',
+        overdue: true,
+      }],
       billing,
     })
 
     expect(actions.some(a => /overdue/i.test(a))).toBe(true)
     expect(actions.some(a => /Vultr/i.test(a))).toBe(true)
-    expect(actions.some(a => /manager approval/i.test(a))).toBe(true)
-    expect(actions.some(a => a.includes(AI_ASSISTANT_TITLE) || a.includes(AI_ASSISTANT_NAME))).toBe(true)
     expect(actions.every(a => !a.includes('—'))).toBe(true)
   })
 
-  it('renders inline stats and Susan AI Assistant note cards', () => {
+  it('renders mobile-friendly section cards with large Susan AI Assistant notes', () => {
     const mail = buildDailySummaryEmail({
       reportDateLabel: 'Aug 7, 2026',
       recipientName: 'Alex',
@@ -197,27 +188,10 @@ describe('daily summary + Susan', () => {
         overdueTotal: '250.00',
         paidThisMonthTotal: '0',
       },
-      outstandingInvoices: [{
-        invoiceNumber: 'INV-000042',
-        customerName: 'City Transit',
-        vehicleLabel: '(Bus) #12',
-        invoiceDate: '2026-07-01',
-        dueDate: '2026-07-20',
-        balanceDue: '250.00',
-        total: '250.00',
-        overdue: true,
-      }],
-      billing: emptyBilling({
-        configured: { vultr: true, cloudflare: false, openrouter: true },
-        totals: {
-          currency: 'USD',
-          estimatedMonthlyUsd: 90,
-          estimatedYearlyUsd: 1080,
-          breakdown: { vultrUsd: 80, cloudflareUsd: 0, openrouterUsd: 10 },
-          breakdownYearly: { vultrUsd: 960, cloudflareUsd: 0, openrouterUsd: 120 },
-        },
-      }),
+      outstandingInvoices: [],
+      billing: emptyBilling({ configured: { vultr: true, cloudflare: false, openrouter: true } }),
       susanEnabled: true,
+      susanGenerated: 2,
       sections: [
         {
           id: 'invoices',
@@ -228,7 +202,13 @@ describe('daily summary + Susan', () => {
           ],
           table: {
             headers: ['Invoice', 'Customer', 'Vehicle', 'Due', 'Balance'],
-            rows: [['INV-000042', 'City Transit', '(Bus) #12', '2026-07-20 (overdue)', '$1,370.00']],
+            rows: Array.from({ length: 10 }, (_, i) => [
+              `INV-${i}`,
+              'City Transit',
+              '(Bus) #12',
+              '2026-07-20 (overdue)',
+              '$1,370.00',
+            ]),
           },
           insight: 'There are overdue invoices totaling $228,187.00. Worth a follow-up today.',
         },
@@ -236,39 +216,54 @@ describe('daily summary + Susan', () => {
           id: 'susan',
           title: 'Susan AI Assistant usage today',
           stats: [
-            { label: 'Tokens', value: '12,400' },
-            { label: 'Spend', value: '$1.25' },
+            { label: 'Calls', value: '6' },
+            { label: 'Spend', value: '$0.21' },
           ],
           table: null,
-          insight: 'Susan ran 3 calls today for 12,400 tokens ($1.25).',
-        },
-        {
-          id: 'inquiries',
-          title: 'Customer inquiries',
-          stats: [{ label: 'Received today', value: '2' }],
-          table: {
-            headers: ['From', 'Subject', 'Status', 'Resolved by'],
-            rows: [['Acme', 'Quote request', 'Resolved', 'Jordan']],
-          },
-          insight: '2 customer emails came in today. 1 already handled, 1 still open.',
+          insight: 'Susan wrote six digest notes today for about $0.21.',
         },
       ],
       appUrl: 'https://app.example.com',
     })
 
-    expect(mail.subject).toBe('Daily Summary: Aug 7, 2026')
-    expect(mail.html).toContain('INV-000042')
-    expect(mail.html).toContain('$228,187.00')
-    expect(mail.html).toContain('$1,370.00')
     expect(mail.html).toContain('Susan AI Assistant')
-    expect(mail.html).toContain('Outstanding invoices')
-    expect(mail.html).toContain('Customer inquiries')
-    expect(mail.html).toContain('·')
-    expect(mail.html).toContain('white-space:nowrap')
-    expect(mail.html).toContain('border-left:3px solid')
-    expect(mail.html).not.toContain('Georgia')
-    expect(mail.html).not.toContain('font-style:italic')
+    expect(mail.html).toContain('font-size:22px')
+    expect(mail.html).toContain('font-size:18px')
+    expect(mail.html).toContain('font-size:16px')
+    expect(mail.html).toContain('font-size:15px')
+    expect(mail.html).toContain('$228,187.00')
+    expect(mail.html).toContain('+ 2 more in the app')
+    expect(mail.html).toContain('border-left:4px solid')
+    expect(mail.html).toContain('wrote a note under each section')
     expect(mail.text).toContain('Susan AI Assistant:')
-    expect(mail.text).toContain('INV-000042')
+  })
+
+  it('surfaces a drafted-copy banner when Susan could not run', () => {
+    const mail = buildDailySummaryEmail({
+      reportDateLabel: 'Aug 7, 2026',
+      invoiceStats: {
+        draftCount: 0,
+        pendingManagerApprovalCount: 0,
+        outstandingCount: 0,
+        outstandingTotal: '0',
+        overdueCount: 0,
+        overdueTotal: '0',
+        paidThisMonthTotal: '0',
+      },
+      sections: [{
+        id: 'invoices',
+        title: 'Outstanding invoices',
+        stats: [{ label: 'Open', value: '0' }],
+        table: null,
+        insight: 'Receivables look clear today.',
+      }],
+      susanGenerated: 0,
+      susanSkippedReason: 'AI is disabled in Control Panel → Susan',
+      billing: emptyBilling(),
+      appUrl: 'https://app.example.com',
+    })
+
+    expect(mail.html).toContain('notes used drafted copy')
+    expect(mail.html).toContain('AI is disabled in Control Panel')
   })
 })

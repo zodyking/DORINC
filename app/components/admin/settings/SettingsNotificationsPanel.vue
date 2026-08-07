@@ -62,6 +62,9 @@ async function sendDailySummaryNow() {
       recipients: string[]
       errors: string[]
       delivery: 'direct' | 'queue'
+      susanGenerated?: number
+      susanFailed?: number
+      susanSkippedReason?: string | null
     }>('/api/admin/notifications/daily-summary', {
       method: 'POST',
     })
@@ -74,17 +77,26 @@ async function sendDailySummaryNow() {
       return
     }
 
+    const susanNote = res.susanGenerated && res.susanGenerated > 0
+      ? ` Susan wrote ${res.susanGenerated} section note${res.susanGenerated === 1 ? '' : 's'}.`
+      : (res.susanSkippedReason
+          ? ` Susan notes used drafts (${res.susanSkippedReason}).`
+          : '')
+
     if (res.delivery === 'direct') {
       message.value = res.delivered > 0
-        ? `Test summary emailed to you: ${res.recipients.join(', ')}`
+        ? `Test summary emailed to you: ${res.recipients.join(', ')}.${susanNote}`
         : 'Test summary finished but SMTP reported no delivery'
       if (res.failed > 0 && res.errors.length) {
         error.value = res.errors.slice(0, 2).join(' · ')
       }
+      else if (!res.susanGenerated && res.susanSkippedReason) {
+        error.value = res.susanSkippedReason
+      }
       return
     }
 
-    message.value = `Test summary queued for you (${res.sent})`
+    message.value = `Test summary queued for you (${res.sent}).${susanNote}`
   }
   catch (e: unknown) {
     error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send test summary'
@@ -199,7 +211,7 @@ function disableAll() {
               :disabled="sendBusy || !form.dailySummaryReport"
               @click="sendDailySummaryNow"
             >
-              {{ sendBusy ? 'Sending…' : 'Send test to me' }}
+              {{ sendBusy ? 'Building Susan notes…' : 'Send test to me' }}
             </button>
           </div>
         </div>
