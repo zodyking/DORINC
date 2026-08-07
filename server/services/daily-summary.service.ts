@@ -8,13 +8,18 @@ import type { Db } from '../db/client'
 import { customers } from '../db/schema/customers'
 import { formatInvoiceNumber, invoices } from '../db/schema/invoices'
 import { vehicles } from '../db/schema/vehicles'
+import { sendBrandedMail } from '../mail/branded-mail'
 import { buildDailySummaryEmail } from '../mail/templates/system'
 import { getAppUrl } from './app-config.service'
 import { buildBillingDashboard } from './billing-dashboard.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getActiveEmailTemplateContent } from './email-templates.service'
 import { enqueueJob } from './jobs.service'
-import { listManagersAndAdmins, uniqueEmails } from './notification-recipients.service'
+import {
+  listManagersAndAdmins,
+  type StaffNotifyRecipient,
+  uniqueEmails,
+} from './notification-recipients.service'
 import {
   getNotificationSettings,
   isNotificationEnabled,
@@ -268,12 +273,76 @@ export async function listOutstandingInvoicesForSummary(
   })
 }
 
+async function loadBillingForSummary(db: Db): Promise<BillingDashboardPayload> {
+  // Billing providers can hang; never block the whole digest on them.
+  try {
+    return await Promise.race([
+      buildBillingDashboard(db),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Billing dashboard timed out')), 12_000)
+      }),
+    ])
+  }
+  catch (err) {
+    console.warn('[daily-summary] billing snapshot unavailable:', err instanceof Error ? err.message : err)
+    const nowIso = new Date().toISOString()
+    return {
+      configured: { vultr: false, cloudflare: false, openrouter: false },
+      vultr: {
+        configured: false,
+        currency: 'USD',
+        monthToDateUsage: null,
+        accountBalance: null,
+        planCostMonthly: null,
+        monitoredInstances: [],
+        invoices: [],
+        hasPortalCredentials: false,
+        error: err instanceof Error ? err.message : 'Billing unavailable',
+        lastUpdated: nowIso,
+      },
+      cloudflare: {
+        configured: false,
+        domains: [],
+        hasPortalCredentials: false,
+        error: null,
+        lastUpdated: nowIso,
+      },
+      openrouter: {
+        configured: false,
+        totalCredits: null,
+        totalUsage: null,
+        remainingCredits: null,
+        usageMonthly: null,
+        usageDaily: null,
+        limit: null,
+        limitRemaining: null,
+        internalMonthlyUsd: null,
+        creditsNote: null,
+        usageHistory: [],
+        currency: 'USD',
+        hasPortalCredentials: false,
+        error: null,
+        lastUpdated: nowIso,
+      },
+      totals: {
+        currency: 'USD',
+        estimatedMonthlyUsd: 0,
+        estimatedYearlyUsd: 0,
+        breakdown: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0 },
+        breakdownYearly: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0 },
+      },
+      outlook: { currency: 'USD', points: [] },
+      lastRefreshed: nowIso,
+    }
+  }
+}
+
 export async function buildDailySummaryReport(db: Db, now = new Date()): Promise<DailySummaryReport> {
   const reportDate = todayIsoDate(now)
   const [invoiceStats, outstandingInvoices, billing] = await Promise.all([
     loadDailySummaryInvoiceStats(db),
     listOutstandingInvoicesForSummary(db),
-    buildBillingDashboard(db),
+    loadBillingForSummary(db),
   ])
 
   const susanActions = buildSusanDailyActions({ invoiceStats, outstandingInvoices, billing })
@@ -286,6 +355,17 @@ export async function buildDailySummaryReport(db: Db, now = new Date()): Promise
     susanActions,
     susanEnabled: billing.configured.openrouter,
   }
+}
+
+export interface DailySummarySendResult {
+  sent: number
+  delivered: number
+  failed: number
+  skipped: string | null
+  reportDate: string
+  recipients: string[]
+  errors: string[]
+  delivery: 'direct' | 'queue'
 }
 
 async function readLastSentDate(db: Db): Promise<string | null> {
@@ -317,27 +397,76 @@ async function writeLastSentDate(db: Db, date: string): Promise<void> {
   }
 }
 
+function mergeRecipients(
+  primary: StaffNotifyRecipient[],
+  extra?: { id: string, name: string, email: string } | null,
+): StaffNotifyRecipient[] {
+  const byId = new Map<string, StaffNotifyRecipient>()
+  for (const row of primary) byId.set(row.id, row)
+  if (extra?.email?.trim()) {
+    byId.set(extra.id, {
+      id: extra.id,
+      name: extra.name,
+      email: extra.email.trim(),
+    })
+  }
+  return [...byId.values()]
+}
+
 export async function sendDailySummaryReport(
   db: Db,
-  opts: { force?: boolean } = {},
-): Promise<{ sent: number, skipped: string | null, reportDate: string }> {
+  opts: {
+    force?: boolean
+    /** Manual Control Panel sends deliver via SMTP immediately. Scheduled uses the mail queue. */
+    delivery?: 'direct' | 'queue'
+    actor?: { id: string, name: string, email: string } | null
+  } = {},
+): Promise<DailySummarySendResult> {
+  const delivery = opts.delivery ?? (opts.force ? 'direct' : 'queue')
   const settings = await getNotificationSettings(db)
   if (!settings.dailySummaryReport && !opts.force) {
-    return { sent: 0, skipped: 'disabled', reportDate: todayIsoDate() }
+    return {
+      sent: 0,
+      delivered: 0,
+      failed: 0,
+      skipped: 'disabled',
+      reportDate: todayIsoDate(),
+      recipients: [],
+      errors: [],
+      delivery,
+    }
   }
 
   const report = await buildDailySummaryReport(db)
   if (!opts.force) {
     const lastSent = await readLastSentDate(db)
     if (lastSent === report.reportDate) {
-      return { sent: 0, skipped: 'already_sent_today', reportDate: report.reportDate }
+      return {
+        sent: 0,
+        delivered: 0,
+        failed: 0,
+        skipped: 'already_sent_today',
+        reportDate: report.reportDate,
+        recipients: [],
+        errors: [],
+        delivery,
+      }
     }
   }
 
-  const recipients = await listManagersAndAdmins(db)
+  const recipients = mergeRecipients(await listManagersAndAdmins(db), opts.actor)
   const emails = uniqueEmails(recipients)
   if (!emails.length) {
-    return { sent: 0, skipped: 'no_recipients', reportDate: report.reportDate }
+    return {
+      sent: 0,
+      delivered: 0,
+      failed: 0,
+      skipped: 'no_recipients',
+      reportDate: report.reportDate,
+      recipients: [],
+      errors: ['No active Admin/Manager accounts with email addresses were found.'],
+      delivery,
+    }
   }
 
   const brand = await resolveEmailBrand(db)
@@ -346,6 +475,10 @@ export async function sendDailySummaryReport(
   const byEmail = new Map(recipients.map(r => [r.email.trim().toLowerCase(), r]))
 
   let sent = 0
+  let delivered = 0
+  let failed = 0
+  const errors: string[] = []
+
   for (const email of emails) {
     const recipient = byEmail.get(email.toLowerCase())
     const mail = buildDailySummaryEmail({
@@ -359,25 +492,65 @@ export async function sendDailySummaryReport(
       brand,
       templateOverride,
     })
-    await enqueueJob(db, 'email_send', {
-      to: email,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-      notificationKind: 'daily_summary_report',
-    })
-    sent += 1
+
+    if (delivery === 'direct') {
+      try {
+        const result = await sendBrandedMail(db, {
+          to: email,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
+        }, brand)
+        sent += 1
+        if (result.delivered) delivered += 1
+        else {
+          failed += 1
+          errors.push(`${email}: SMTP accepted the message but reported not delivered (check SMTP config)`)
+        }
+      }
+      catch (err) {
+        failed += 1
+        const message = err instanceof Error ? err.message : 'Send failed'
+        errors.push(`${email}: ${message}`)
+      }
+    }
+    else {
+      await enqueueJob(db, 'email_send', {
+        to: email,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
+        notificationKind: 'daily_summary_report',
+      })
+      sent += 1
+    }
   }
 
-  await writeLastSentDate(db, report.reportDate)
-  return { sent, skipped: null, reportDate: report.reportDate }
+  if (delivery === 'direct' && delivered === 0 && failed > 0) {
+    throw new Error(errors[0] || 'Daily summary email could not be delivered via SMTP')
+  }
+
+  if (sent > 0) {
+    await writeLastSentDate(db, report.reportDate)
+  }
+
+  return {
+    sent,
+    delivered,
+    failed,
+    skipped: null,
+    reportDate: report.reportDate,
+    recipients: emails,
+    errors,
+    delivery,
+  }
 }
 
 /** Called from worker ticks — respects enabled flag + UTC send hour + once/day. */
 export async function maybeSendScheduledDailySummary(
   db: Db,
   now = new Date(),
-): Promise<{ sent: number, skipped: string | null, reportDate: string } | null> {
+): Promise<DailySummarySendResult | null> {
   if (!(await isNotificationEnabled(db, 'dailySummaryReport'))) {
     return null
   }
@@ -391,25 +564,34 @@ export async function maybeSendScheduledDailySummary(
   const reportDate = todayIsoDate(now)
   const lastSent = await readLastSentDate(db)
   if (lastSent === reportDate) {
-    return { sent: 0, skipped: 'already_sent_today', reportDate }
+    return {
+      sent: 0,
+      delivered: 0,
+      failed: 0,
+      skipped: 'already_sent_today',
+      reportDate,
+      recipients: [],
+      errors: [],
+      delivery: 'queue',
+    }
   }
 
-  return sendDailySummaryReport(db)
+  return sendDailySummaryReport(db, { delivery: 'queue' })
 }
 
 /** Worker entry: accept a pg Pool and run through drizzle. */
 export async function maybeSendScheduledDailySummaryFromPool(
   pool: Pool,
   now = new Date(),
-): Promise<{ sent: number, skipped: string | null, reportDate: string } | null> {
+): Promise<DailySummarySendResult | null> {
   const db = drizzle({ client: pool }) as unknown as Db
   return maybeSendScheduledDailySummary(db, now)
 }
 
 export async function sendDailySummaryReportFromPool(
   pool: Pool,
-  opts: { force?: boolean } = {},
-): Promise<{ sent: number, skipped: string | null, reportDate: string }> {
+  opts: { force?: boolean, delivery?: 'direct' | 'queue' } = {},
+): Promise<DailySummarySendResult> {
   const db = drizzle({ client: pool }) as unknown as Db
   return sendDailySummaryReport(db, opts)
 }

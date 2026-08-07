@@ -119,11 +119,12 @@ export async function listAllTeamMembers(
   return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
 }
 
-/** Active approved admin / manager / super_admin accounts (daily summary recipients). */
+/** Active admin / manager / super_admin accounts (daily summary recipients). */
 export async function listManagersAndAdmins(
   db: Db,
   excludeUserId?: string | null,
 ): Promise<StaffNotifyRecipient[]> {
+  // Include active accounts even if approvedAt is null (bootstrap super_admin edge cases).
   const rows = await db.select({
     id: users.id,
     name: users.name,
@@ -133,7 +134,6 @@ export async function listManagersAndAdmins(
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
       eq(users.isActive, true),
-      isNotNull(users.approvedAt),
       inArray(accountTypes.key, ['super_admin', 'admin', 'manager']),
     ))
 

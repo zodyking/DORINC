@@ -54,12 +54,37 @@ async function sendDailySummaryNow() {
   message.value = ''
   error.value = ''
   try {
-    const res = await $fetch<{ sent: number, skipped: string | null }>('/api/admin/notifications/daily-summary', {
+    const res = await $fetch<{
+      sent: number
+      delivered: number
+      failed: number
+      skipped: string | null
+      recipients: string[]
+      errors: string[]
+      delivery: 'direct' | 'queue'
+    }>('/api/admin/notifications/daily-summary', {
       method: 'POST',
     })
-    message.value = res.sent > 0
-      ? `Daily summary queued for ${res.sent} recipient${res.sent === 1 ? '' : 's'}`
-      : `Daily summary not sent (${res.skipped || 'no recipients'})`
+
+    if (res.skipped) {
+      error.value = res.errors[0]
+        || (res.skipped === 'no_recipients'
+          ? 'No Admin/Manager recipients found with email addresses'
+          : `Daily summary not sent (${res.skipped})`)
+      return
+    }
+
+    if (res.delivery === 'direct') {
+      message.value = res.delivered > 0
+        ? `Daily summary emailed to ${res.delivered} recipient${res.delivered === 1 ? '' : 's'}: ${res.recipients.join(', ')}`
+        : 'Daily summary finished but SMTP reported no deliveries'
+      if (res.failed > 0 && res.errors.length) {
+        error.value = res.errors.slice(0, 2).join(' · ')
+      }
+      return
+    }
+
+    message.value = `Daily summary queued for ${res.sent} recipient${res.sent === 1 ? '' : 's'}`
   }
   catch (e: unknown) {
     error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send daily summary'

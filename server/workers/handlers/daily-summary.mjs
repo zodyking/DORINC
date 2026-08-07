@@ -13,7 +13,9 @@ export async function maybeEnqueueDailySummary(pool) {
   const result = await mod.maybeSendScheduledDailySummaryFromPool(pool)
   if (!result) return false
   if (result.sent > 0) {
-    console.log(`[daily-summary] queued ${result.sent} email(s) for ${result.reportDate}`)
+    console.log(
+      `[daily-summary] ${result.delivery} sent=${result.sent} delivered=${result.delivered} failed=${result.failed} date=${result.reportDate}`,
+    )
     return true
   }
   if (result.skipped && result.skipped !== 'already_sent_today') {
