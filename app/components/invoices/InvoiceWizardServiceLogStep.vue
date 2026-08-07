@@ -93,7 +93,8 @@ watch(() => props.open, (open) => {
   error.value = ''
   successOpen.value = false
   qrOpen.value = false
-  showCamera.value = false
+  // Mobile: go straight to the document camera — one clear capture path.
+  showCamera.value = isMobile.value
   clearLocal()
   void loadTechnicians()
 })
@@ -358,10 +359,10 @@ onBeforeUnmount(() => {
       >
         <header class="inv-sl-modal-sheet__head">
           <div>
-            <p class="inv-sl-kicker">Service log</p>
-            <h2 id="inv-sl-upload-title">Import photos</h2>
+            <p class="inv-sl-kicker">Faster Invoicing</p>
+            <h2 id="inv-sl-upload-title">Import Service Log</h2>
             <p class="inv-sl-modal-sheet__sub">
-              Choose the technician, then photograph or upload the paper log.
+              Snap the paper log — AI can pull line items so you spend less time typing.
             </p>
           </div>
           <button
@@ -380,7 +381,7 @@ onBeforeUnmount(() => {
             <span>Technician</span>
             <select v-model="technicianId" :disabled="techPending || busy">
               <option disabled value="">
-                {{ techPending ? 'Loading…' : 'Select technician' }}
+                {{ techPending ? 'Loading…' : 'Select Technician' }}
               </option>
               <option v-for="t in technicians" :key="t.id" :value="t.id">
                 {{ t.name }}
@@ -388,50 +389,50 @@ onBeforeUnmount(() => {
             </select>
             <span class="help">
               {{ techSource === 'mechanics'
-                ? 'Showing mechanic accounts — the log and team message are attributed to them.'
-                : 'No mechanic accounts found — showing all staff.' }}
+                ? 'Attributed to this mechanic on the log and team chat.'
+                : 'No mechanic accounts yet — picking from all staff.' }}
             </span>
           </label>
 
           <template v-if="isMobile">
             <div class="inv-sl-mobile-capture">
-              <label class="inv-sl-drop inv-sl-drop--camera">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  @change="onDesktopFiles"
-                >
-                <b>Take photo or choose from gallery</b>
-                <small>Align the paper service log in frame</small>
-              </label>
-              <button
-                type="button"
-                class="btn"
-                style="width:100%;margin-top:10px;"
-                @click="showCamera = !showCamera"
-              >
-                {{ showCamera ? 'Hide document camera' : 'Open document camera' }}
-              </button>
               <ClientOnly>
                 <ServiceLogDocumentCamera
                   v-if="showCamera"
-                  style="margin-top:12px;"
                   @captured="onCaptured"
                 />
+                <div v-else class="inv-sl-capture-fallback">
+                  <button
+                    type="button"
+                    class="btn primary"
+                    style="width:100%;"
+                    @click="showCamera = true"
+                  >
+                    Open Camera
+                  </button>
+                  <label class="inv-sl-text-link">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      multiple
+                      @change="onDesktopFiles"
+                    >
+                    Choose from Gallery
+                  </label>
+                </div>
               </ClientOnly>
             </div>
           </template>
           <template v-else>
-            <div class="inv-sl-methods">
+            <div class="inv-sl-methods" role="group" aria-label="Upload method">
               <button
                 type="button"
                 class="btn"
                 :class="{ primary: desktopMethod === 'upload' }"
                 @click="desktopMethod = 'upload'"
               >
-                Upload photos
+                Upload Photos
               </button>
               <button
                 type="button"
@@ -439,20 +440,20 @@ onBeforeUnmount(() => {
                 :class="{ primary: desktopMethod === 'qr' }"
                 @click="desktopMethod = 'qr'"
               >
-                QR code
+                Phone QR
               </button>
             </div>
 
             <div v-if="desktopMethod === 'upload'" class="inv-sl-upload-zone">
               <label class="inv-sl-drop">
                 <input type="file" accept="image/*" multiple @change="onDesktopFiles">
-                <b>Drop photos here</b>
-                <small>or click to browse</small>
+                <b>Add Service Log Photos</b>
+                <small>Drop files here, or click to browse</small>
               </label>
             </div>
             <div v-else class="inv-sl-qr-cta">
               <p class="help">
-                Scan with your phone to open a simple upload page (no login).
+                Scan with your phone — no login needed on the upload page.
               </p>
               <button
                 type="button"
@@ -460,7 +461,7 @@ onBeforeUnmount(() => {
                 :disabled="busy || !technicianId"
                 @click="startQrSession"
               >
-                Show QR code
+                Show QR Code
               </button>
             </div>
           </template>
@@ -468,7 +469,7 @@ onBeforeUnmount(() => {
           <div v-if="localPreviews.length" class="inv-sl-thumbs">
             <div v-for="p in localPreviews" :key="p.id" class="inv-sl-thumb">
               <img :src="p.url" alt="Service log photo">
-              <button type="button" class="inv-sl-thumb__x" @click="removePreview(p.id)">×</button>
+              <button type="button" class="inv-sl-thumb__x" aria-label="Remove photo" @click="removePreview(p.id)">×</button>
             </div>
           </div>
 
@@ -479,7 +480,7 @@ onBeforeUnmount(() => {
               :disabled="busy || !technicianId"
               @click="attachLocalUploads"
             >
-              {{ busy ? 'Attaching…' : 'Attach to invoice' }}
+              {{ busy ? 'Attaching…' : 'Attach Photos' }}
             </button>
             <button
               v-if="serviceLogId"
@@ -488,7 +489,7 @@ onBeforeUnmount(() => {
               :disabled="busy"
               @click="openExtract"
             >
-              Extract line items
+              Extract Line Items
             </button>
           </div>
 
@@ -501,11 +502,12 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="btn primary"
+            class="btn"
+            :class="{ primary: Boolean(serviceLogId) }"
             :disabled="busy"
             @click="continueWithoutPhotos"
           >
-            {{ serviceLogId ? 'Continue' : 'Continue without photos' }}
+            {{ serviceLogId ? 'Continue' : 'Skip for Now' }}
           </button>
         </footer>
       </div>
@@ -521,9 +523,9 @@ onBeforeUnmount(() => {
       aria-label="Scan QR to upload"
     >
       <div class="modal inv-sl-modal-sheet inv-sl-modal-sheet--sm">
-        <h3>Scan to upload</h3>
+        <h3>Scan to Upload</h3>
         <p class="help">
-          Open the link on your phone, photograph the service log, then tap Done.
+          Open on your phone, photograph the Service Log, then tap Done.
           Status: <b>{{ qrStatus || 'waiting' }}</b>
         </p>
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code for service log upload" class="inv-sl-qr">
@@ -547,10 +549,10 @@ onBeforeUnmount(() => {
       <div class="modal inv-sl-modal-sheet inv-sl-modal-sheet--sm inv-sl-success__card">
         <div class="inv-sl-success__burst" aria-hidden="true" />
         <div class="inv-sl-success__check" aria-hidden="true">✓</div>
-        <h3>Successfully attached</h3>
+        <h3>Service Log Attached</h3>
         <p>
-          Service log photos are on
-          <b>{{ successInvoiceLabel }}</b>
+          Photos are on <b>{{ successInvoiceLabel }}</b>.
+          Next, AI can extract line items to finish faster.
         </p>
         <div class="inv-sl-modal-sheet__foot">
           <button
@@ -559,7 +561,7 @@ onBeforeUnmount(() => {
             class="btn"
             @click="openExtract()"
           >
-            Extract line items
+            Extract Line Items
           </button>
           <button type="button" class="btn primary" @click="closeSuccessAndContinue">
             Continue

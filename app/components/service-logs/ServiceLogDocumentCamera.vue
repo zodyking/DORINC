@@ -96,13 +96,13 @@ onBeforeUnmount(() => stopCamera())
         <span class="c bl" />
         <span class="c br" />
       </div>
-      <p class="sl-doc-cam__guide">Align the service log inside the frame</p>
+      <p class="sl-doc-cam__guide">Align the Service Log in the Frame</p>
     </div>
     <canvas ref="canvasRef" class="sl-doc-cam__canvas" />
     <p v-if="cameraError" class="help" style="color:#b45309;">{{ cameraError }}</p>
     <div class="sl-doc-cam__actions">
       <button type="button" class="btn primary" :disabled="busy || !stream" @click="capture">
-        Take photo
+        Take Photo
       </button>
       <button type="button" class="btn" @click="fileInputRef?.click()">
         Gallery

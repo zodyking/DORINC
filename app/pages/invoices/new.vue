@@ -1042,9 +1042,9 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
               <path d="M31 34.5l2 2 4.5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </div>
-          <h2 id="inv-sl-gate-title">Do you want to import a service log?</h2>
+          <h2 id="inv-sl-gate-title">Import a Service Log?</h2>
           <p class="inv-sl-gate__sub">
-            Optional — photograph a paper log for this vehicle, or skip and keep building the invoice.
+            Photograph the paper log and AI can extract line items so this invoice fills in faster.
           </p>
           <div class="inv-sl-gate__actions">
             <button
@@ -1052,16 +1052,16 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
               class="inv-sl-gate__btn inv-sl-gate__btn--yes"
               @click="onServiceLogGateYes"
             >
-              <span class="inv-sl-gate__btn-label">Yes</span>
-              <span class="inv-sl-gate__btn-hint">Import service log</span>
+              <span class="inv-sl-gate__btn-label">Yes, Import Log</span>
+              <span class="inv-sl-gate__btn-hint">Use AI to speed up line items</span>
             </button>
             <button
               type="button"
               class="inv-sl-gate__btn inv-sl-gate__btn--no"
               @click="onServiceLogGateNo"
             >
-              <span class="inv-sl-gate__btn-label">No</span>
-              <span class="inv-sl-gate__btn-hint">Continue without</span>
+              <span class="inv-sl-gate__btn-label">No Thanks</span>
+              <span class="inv-sl-gate__btn-hint">Enter line items myself</span>
             </button>
           </div>
           <button
@@ -1069,7 +1069,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
             class="inv-sl-gate__back"
             @click="closeServiceLogGate"
           >
-            Back to vehicle
+            Back to Vehicle
           </button>
         </div>
       </div>
