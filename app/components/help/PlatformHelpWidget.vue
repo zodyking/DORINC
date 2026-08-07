@@ -319,8 +319,13 @@ async function sendMessage() {
     })
     messages.value = messages.value.filter(m => m.role !== 'typing')
     let answer = res.answer
-    if (res.capped && res.source === 'fallback' && !imageDataUrls.length) {
-      answer += '<p><small>AI spend cap reached — showing built-in help where possible.</small></p>'
+    if (res.source === 'fallback' && !imageDataUrls.length) {
+      if (res.capped) {
+        answer += '<p><small>AI spend cap reached — showing built-in help where possible.</small></p>'
+      }
+      else if (!answer.includes('Control Panel → AI') && !answer.includes('OpenRouter')) {
+        answer += '<p><small>Using built-in help — live Susan AI was unavailable for this reply.</small></p>'
+      }
     }
     pushAssistant(answer)
   }

@@ -19,6 +19,7 @@ import {
   isOpenRouterAuthErrorMessage,
   openRouterAuthRecoveryMessage,
 } from '../../shared/openrouter-auth'
+import { BRAND_NAME } from '../../shared/brand'
 
 const HELP_SYSTEM_PROMPT = [
   `You are the ${BRAND_NAME} platform assistant.`,
@@ -238,13 +239,30 @@ export async function askPlatformHelp(
       else {
         const message = e instanceof OpenRouterServiceError || e instanceof Error
           ? e.message
-          : ''
+          : 'AI request failed'
+        console.error('[platform-help] OpenRouter call failed:', message)
         if (isOpenRouterAuthErrorMessage(message) || message.includes('OpenRouter authentication')) {
           return {
             answer: authFailureHelpHtml(),
             source: 'fallback',
             capped: false,
           }
+        }
+        if (input.imageDataUrls?.length) {
+          return {
+            answer: visionFailureMessage(false),
+            source: 'fallback',
+            capped: false,
+          }
+        }
+        return {
+          answer: formatPlatformHelpHtml(
+            `<p>Susan could not reach OpenRouter just now (${message}).</p>`
+            + '<p>Showing built-in help instead — try again in a moment, or check <b>Control Panel → AI</b>.</p>'
+            + matchPlatformHelpAnswer(input.question),
+          ),
+          source: 'fallback',
+          capped: false,
         }
       }
       if (input.imageDataUrls?.length) {
