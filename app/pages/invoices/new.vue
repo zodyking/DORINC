@@ -126,7 +126,7 @@ const INVOICE_NARRATIONS: Record<number, string> = {
 }
 
 const serviceLogStepRef = ref<{
-  wantUpload: { value: boolean | null }
+  getWantUpload: () => boolean | null
 } | null>(null)
 const serviceLogStepLabel = ref('')
 
@@ -488,8 +488,8 @@ function prevFromLinesStep() {
 }
 
 async function continueFromServiceLogStep() {
-  const choice = serviceLogStepRef.value?.wantUpload?.value
-  if (choice === null || choice === undefined) {
+  const choice = serviceLogStepRef.value?.getWantUpload?.() ?? null
+  if (choice === null) {
     submitError.value = 'Choose whether to upload a service log'
     return
   }
