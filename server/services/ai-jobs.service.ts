@@ -132,6 +132,7 @@ export async function getAiUsageSummary(db: Db, month = new Date()): Promise<AiU
     service_log_extraction: 0,
     invoice_description: 0,
     platform_help: 0,
+    daily_summary: 0,
   }
   for (const row of featureRows) {
     byFeature[row.featureType] = row.count

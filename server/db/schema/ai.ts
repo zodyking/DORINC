@@ -16,6 +16,7 @@ export const AI_FEATURE_TYPES = [
   'service_log_extraction',
   'invoice_description',
   'platform_help',
+  'daily_summary',
 ] as const
 export type AiFeatureType = (typeof AI_FEATURE_TYPES)[number]
 

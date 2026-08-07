@@ -177,6 +177,7 @@ export function modelForFeature(
     case 'invoice_description':
       return settings.invoiceDescriptionModel ?? settings.defaultModel
     case 'platform_help':
+    case 'daily_summary':
       return settings.platformHelpModel ?? settings.defaultModel
   }
 }

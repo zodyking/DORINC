@@ -27,12 +27,16 @@ function formatMoneyForDisplay(value) {
   if (value == null || String(value).trim() === '') return null
   const trimmed = String(value).trim()
   if (trimmed.startsWith('$')) return trimmed
-  const match = /^(-?\d{1,10})(?:\.(\d{1,2}))?$/.exec(trimmed)
-  if (!match) return trimmed
-  const negative = match[1].startsWith('-')
-  const whole = negative ? match[1].slice(1) : match[1]
-  const frac = (match[2] ?? '0').padEnd(2, '0').slice(0, 2)
-  return `${negative ? '-' : ''}$${whole}.${frac}`
+  const n = Number(trimmed.replace(/,/g, ''))
+  if (!Number.isFinite(n)) return trimmed
+  const abs = Math.abs(n)
+  const maxFraction = abs > 0 && abs < 0.01 ? 4 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxFraction,
+  }).format(n)
 }
 
 function titleCaseStatus(value) {
@@ -422,12 +426,12 @@ export function buildDailySummaryEmail({
       }
     }
     if (section.insight) {
-      textLines.push(`  From Susan: ${section.insight}`)
+      textLines.push(`  Susan AI Assistant: ${section.insight}`)
     }
   }
 
   if (!resolvedSections.length && susanActions.length) {
-    textLines.push('', 'Susan recommends:')
+    textLines.push('', 'Susan AI Assistant:')
     for (const action of susanActions) textLines.push(`- ${action}`)
   }
 
@@ -443,25 +447,22 @@ export function buildDailySummaryEmail({
 
   const statsHtml = (stats = []) => {
     if (!stats.length) return ''
-    const width = stats.length <= 2 ? Math.floor(100 / Math.max(stats.length, 1)) : (stats.length === 3 ? 33 : 25)
-    const cells = stats.map((stat) => [
-      `<td width="${width}%" valign="top" style="padding:12px 14px;border-right:1px solid ${t.border};">`,
-      `<div style="font-size:11px;line-height:14px;color:${t.muted};font-family:${t.font};padding-bottom:6px;">${escapeHtml(stat.label)}</div>`,
-      `<div style="font-size:16px;line-height:20px;font-weight:700;color:${t.ink};font-family:${t.font};">${escapeHtml(stat.value)}</div>`,
-      `</td>`,
-    ].join(''))
-
-    // Drop the trailing divider on the last cell
-    if (cells.length) {
-      cells[cells.length - 1] = cells[cells.length - 1].replace(
-        `border-right:1px solid ${t.border};`,
-        'border-right:0;',
-      )
-    }
+    const parts = stats.map((stat, index) => {
+      const sep = index === 0
+        ? ''
+        : `<span style="color:${t.faint};padding:0 8px;">·</span>`
+      return [
+        sep,
+        `<span style="white-space:nowrap;">`,
+        `<span style="font-size:12px;line-height:18px;color:${t.muted};font-family:${t.font};">${escapeHtml(stat.label)} </span>`,
+        `<span style="font-size:13px;line-height:18px;font-weight:700;color:${t.ink};font-family:${t.font};">${escapeHtml(stat.value)}</span>`,
+        `</span>`,
+      ].join('')
+    }).join('')
 
     return [
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};background:#f8fafc;">`,
-      `<tr>${cells.join('')}</tr>`,
+      `<tr><td style="padding:12px 14px;font-family:${t.font};">${parts}</td></tr>`,
       `</table>`,
     ].join('')
   }
@@ -499,7 +500,7 @@ export function buildDailySummaryEmail({
     if (!insight) return ''
     return [
       `<div style="padding-top:12px;">`,
-      emailQuotedMessage(insight, { title: 'From Susan' }),
+      emailQuotedMessage(insight, { title: 'Susan AI Assistant' }),
       `</div>`,
     ].join('')
   }
@@ -521,7 +522,7 @@ export function buildDailySummaryEmail({
   let legacySusanHtml = ''
   if (!resolvedSections.length && susanActions.length) {
     legacySusanHtml = [
-      `<div style="padding-top:8px;">${sectionTitleHtml(susanEnabled ? 'Susan recommends' : 'Keep things running smooth')}</div>`,
+      `<div style="padding-top:8px;">${sectionTitleHtml(susanEnabled ? 'Susan AI Assistant' : 'Keep things running smooth')}</div>`,
       `<ul style="margin:0;padding:0 0 0 18px;color:${t.ink};font-size:13px;line-height:22px;font-family:${t.font};">`,
       ...susanActions.map(action => `<li style="padding:0 0 4px 0;">${escapeHtml(action)}</li>`),
       `</ul>`,
@@ -568,7 +569,7 @@ export function buildDailySummaryEmail({
   ].filter(Boolean).join('')
 
   const lead = susanEnabled
-    ? `Here's today's receivables snapshot${hasBilling ? ' and ops outlook' : ''}. Susan added a short note under each section.`
+    ? `Here's today's receivables snapshot${hasBilling ? ' and ops outlook' : ''}. Susan AI Assistant added a short note under each section.`
     : `Here's today's receivables snapshot${hasBilling ? ' and ops outlook' : ''} for managers and admins.`
 
   return styledEmail({
