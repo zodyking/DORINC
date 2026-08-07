@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * Unauthenticated phone upload page opened from the invoice wizard QR code.
- * Must never rely on Nuxt path-prefix auto-imports — import capture UI explicitly.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
@@ -38,6 +37,7 @@ const busy = ref(false)
 const actionError = ref('')
 const done = ref(false)
 const previews = ref<{ id: string, url: string }[]>([])
+const cameraOpen = ref(true)
 const galleryInputRef = ref<HTMLInputElement | null>(null)
 
 async function loadSession() {
@@ -47,10 +47,14 @@ async function loadSession() {
       `/api/public/service-log-upload/${token.value}`,
     )
     session.value = res.session
-    if (res.session.status === 'completed') done.value = true
+    if (res.session.status === 'completed') {
+      done.value = true
+      cameraOpen.value = false
+    }
   }
   catch (e: unknown) {
     loadError.value = syncFetchErrorMessage(e, 'This upload link is not available')
+    cameraOpen.value = false
   }
 }
 
@@ -91,10 +95,12 @@ function onGalleryPick(ev: Event) {
 async function finish() {
   if (!session.value || session.value.photoCount < 1) {
     actionError.value = 'Take at least one photo first'
+    cameraOpen.value = false
     return
   }
   busy.value = true
   actionError.value = ''
+  cameraOpen.value = false
   try {
     const res = await $fetch<{
       ok: boolean
@@ -124,7 +130,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="sl-public-upload">
-    <header class="sl-public-upload__head">
+    <header v-if="!cameraOpen || done || loadError || !session" class="sl-public-upload__head">
       <strong>Service Log Upload</strong>
       <small v-if="session">{{ session.invoiceNumberFormatted || 'Invoice Draft' }}</small>
     </header>
@@ -151,23 +157,33 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
-        <h1>Photograph the Service Log</h1>
-        <p class="sl-public-upload__meta">
-          {{ session.customerName }} · {{ session.vehicleLabel }}
-          · {{ session.technicianName }}
-        </p>
-        <p class="sl-public-upload__ai">
-          Snap the paper log so AI can help fill invoice line items faster.
-        </p>
+        <div v-if="!cameraOpen" class="sl-public-upload__review">
+          <h1>Upload Service Log</h1>
+          <p class="sl-public-upload__meta">
+            {{ session.customerName }} · {{ session.vehicleLabel }}
+            · {{ session.technicianName }}
+          </p>
+          <p class="sl-public-upload__ai">
+            Snap the paper log so AI can help fill invoice line items faster.
+          </p>
 
-        <ClientOnly>
-          <ServiceLogDocumentCamera @captured="uploadFile" />
-          <template #fallback>
-            <p class="sl-public-upload__meta">Starting camera…</p>
-          </template>
-        </ClientOnly>
+          <button
+            type="button"
+            class="inv-sl-cam-launch"
+            :disabled="busy"
+            @click="cameraOpen = true"
+          >
+            <span class="inv-sl-cam-launch__icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+                <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
+                <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
+                <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="inv-sl-cam-launch__title">Take Photo</span>
+            <span class="inv-sl-cam-launch__sub">Open full-screen camera</span>
+          </button>
 
-        <div class="sl-public-upload__alt">
           <button
             type="button"
             class="btn sl-public-upload__gallery"
@@ -185,30 +201,51 @@ onBeforeUnmount(() => {
             class="sl-public-upload__file"
             @change="onGalleryPick"
           >
-        </div>
 
-        <div v-if="previews.length" class="inv-sl-thumbs">
-          <div v-for="p in previews" :key="p.id" class="inv-sl-thumb">
-            <img :src="p.url" alt="Uploaded photo">
+          <div v-if="previews.length" class="inv-sl-thumbs">
+            <div v-for="p in previews" :key="p.id" class="inv-sl-thumb">
+              <img :src="p.url" alt="Uploaded photo">
+            </div>
           </div>
+
+          <p v-if="previews.length" class="sl-public-upload__count">
+            {{ previews.length }} photo{{ previews.length === 1 ? '' : 's' }} uploaded
+          </p>
+
+          <p v-if="actionError" class="sl-public-upload__error">{{ actionError }}</p>
+
+          <button
+            type="button"
+            class="btn primary sl-public-upload__done"
+            :disabled="busy || session.photoCount < 1"
+            @click="finish"
+          >
+            {{ busy ? 'Working…' : 'Done — Attach to Invoice' }}
+          </button>
         </div>
-
-        <p v-if="previews.length" class="sl-public-upload__count">
-          {{ previews.length }} photo{{ previews.length === 1 ? '' : 's' }} uploaded
-        </p>
-
-        <p v-if="actionError" class="sl-public-upload__error">{{ actionError }}</p>
-
-        <button
-          type="button"
-          class="btn primary sl-public-upload__done"
-          :disabled="busy || session.photoCount < 1"
-          @click="finish"
-        >
-          {{ busy ? 'Working…' : 'Done — Attach to Invoice' }}
-        </button>
       </template>
     </main>
+
+    <ClientOnly>
+      <ServiceLogDocumentCamera
+        v-if="session && !done && !loadError"
+        mode="fullscreen"
+        :open="cameraOpen"
+        @captured="uploadFile"
+        @close="cameraOpen = false"
+      />
+    </ClientOnly>
+
+    <!-- Floating done bar while camera is open and photos exist -->
+    <div
+      v-if="session && cameraOpen && !done && previews.length"
+      class="sl-public-upload__float"
+    >
+      <span>{{ previews.length }} photo{{ previews.length === 1 ? '' : 's' }}</span>
+      <button type="button" class="btn primary sm" :disabled="busy" @click="finish">
+        Done — Attach
+      </button>
+    </div>
   </div>
 </template>
 
@@ -234,7 +271,8 @@ onBeforeUnmount(() => {
   max-width: 520px;
   margin: 0 auto;
 }
-.sl-public-upload__main h1 {
+.sl-public-upload__main h1,
+.sl-public-upload__review h1 {
   font-size: 1.4rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -258,12 +296,10 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 48px 12px;
 }
-.sl-public-upload__alt {
-  margin-top: 12px;
-}
 .sl-public-upload__gallery {
   width: 100%;
   min-height: 48px;
+  margin-top: 10px;
 }
 .sl-public-upload__file {
   position: absolute;
@@ -288,30 +324,22 @@ onBeforeUnmount(() => {
   margin-top: 16px;
   min-height: 48px;
 }
-
-/* Keep camera chrome usable even if global ledger CSS is delayed. */
-:deep(.sl-doc-cam) { margin-top: 4px; }
-:deep(.sl-doc-cam__stage) {
-  position: relative;
-  aspect-ratio: 3 / 4;
-  max-height: min(58dvh, 520px);
-  border-radius: 16px;
-  overflow: hidden;
-  background: #0f172a;
-}
-:deep(.sl-doc-cam__video) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-:deep(.sl-doc-cam__actions) {
+.sl-public-upload__float {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  z-index: 210;
   display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-:deep(.sl-doc-cam__actions .btn) {
-  flex: 1;
-  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
 }
 </style>
