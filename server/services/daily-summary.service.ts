@@ -533,7 +533,7 @@ function estimateDaysUntilFull(opts: {
   }
 }
 
-function buildSusanUsageSection(
+export function buildSusanUsageSection(
   aiToday: { costUsd: number, tokens: number, calls: number },
   billing: BillingDashboardPayload,
 ): DailySummarySection {
@@ -809,10 +809,10 @@ function buildSections(input: {
   return sections
 }
 
-export async function buildDailySummaryReport(
+/** Build the digest stats/tables with draft Susan copy (no OpenRouter calls). */
+export async function buildDailySummaryReportDraft(
   db: Db,
   now = new Date(),
-  opts: { createdBy?: string | null } = {},
 ): Promise<DailySummaryReport> {
   const reportDate = todayIsoDate(now)
   const [
@@ -851,7 +851,7 @@ export async function buildDailySummaryReport(
     change7dBytes: dbSize.change7dBytes,
   })
 
-  let sections = buildSections({
+  const sections = buildSections({
     invoiceStats,
     outstandingInvoices,
     billing,
@@ -869,35 +869,6 @@ export async function buildDailySummaryReport(
     },
   })
 
-  // Await every Susan section call before the email is built/sent (including test sends).
-  const enriched = await applySusanDailyInsights(db, sections, {
-    createdBy: opts.createdBy,
-    refreshSusanSection: async () => {
-      const aiAfter = await loadAiUsageToday(db, now)
-      return buildSusanUsageSection(aiAfter, billing)
-    },
-  }).catch((err) => {
-    console.warn('[daily-summary] Susan enrichment unavailable:', err instanceof Error ? err.message : err)
-    return {
-      sections,
-      generated: 0,
-      failed: 0,
-      skippedReason: err instanceof Error ? err.message : 'Susan enrichment failed',
-    }
-  })
-  sections = enriched.sections as DailySummarySection[]
-
-  if (enriched.generated > 0) {
-    const aiFinal = await loadAiUsageToday(db, now)
-    const susanIdx = sections.findIndex(s => s.id === 'susan')
-    if (susanIdx >= 0) {
-      sections[susanIdx] = {
-        ...buildSusanUsageSection(aiFinal, billing),
-        insight: sections[susanIdx]!.insight,
-      }
-    }
-  }
-
   return {
     reportDate,
     reportDateLabel: formatReportDateLabel(reportDate),
@@ -905,10 +876,82 @@ export async function buildDailySummaryReport(
     outstandingInvoices,
     billing,
     sections,
-    susanEnabled: enriched.generated > 0 || billing.configured.openrouter,
+    susanEnabled: billing.configured.openrouter,
+    susanGenerated: 0,
+    susanFailed: 0,
+    susanSkippedReason: null,
+  }
+}
+
+export async function enrichDailySummaryReportWithSusan(
+  db: Db,
+  draft: DailySummaryReport,
+  opts: { createdBy?: string | null, now?: Date } = {},
+): Promise<DailySummaryReport> {
+  const now = opts.now ?? new Date()
+  const enriched = await applySusanDailyInsights(db, draft.sections, {
+    createdBy: opts.createdBy,
+    refreshSusanSection: async () => {
+      const aiAfter = await loadAiUsageToday(db, now)
+      return buildSusanUsageSection(aiAfter, draft.billing)
+    },
+  }).catch((err) => {
+    console.warn('[daily-summary] Susan enrichment unavailable:', err instanceof Error ? err.message : err)
+    return {
+      sections: draft.sections,
+      generated: 0,
+      failed: 0,
+      skippedReason: err instanceof Error ? err.message : 'Susan enrichment failed',
+      lastError: err instanceof Error ? err.message : 'Susan enrichment failed',
+    }
+  })
+
+  const sections = enriched.sections as DailySummarySection[]
+  if (enriched.generated > 0) {
+    const aiFinal = await loadAiUsageToday(db, now)
+    const susanIdx = sections.findIndex(s => s.id === 'susan')
+    if (susanIdx >= 0) {
+      sections[susanIdx] = {
+        ...buildSusanUsageSection(aiFinal, draft.billing),
+        insight: sections[susanIdx]!.insight,
+      }
+    }
+  }
+
+  return {
+    ...draft,
+    sections,
+    susanEnabled: enriched.generated > 0 || draft.billing.configured.openrouter,
     susanGenerated: enriched.generated,
     susanFailed: enriched.failed,
     susanSkippedReason: enriched.skippedReason,
+  }
+}
+
+export async function buildDailySummaryReport(
+  db: Db,
+  now = new Date(),
+  opts: { createdBy?: string | null } = {},
+): Promise<DailySummaryReport> {
+  const draft = await buildDailySummaryReportDraft(db, now)
+  return enrichDailySummaryReportWithSusan(db, draft, { createdBy: opts.createdBy, now })
+}
+
+export async function refreshSusanUsageSectionInReport(
+  db: Db,
+  report: DailySummaryReport,
+  now = new Date(),
+): Promise<DailySummaryReport> {
+  const aiToday = await loadAiUsageToday(db, now)
+  const previous = report.sections.find(s => s.id === 'susan')
+  const refreshed = buildSusanUsageSection(aiToday, report.billing)
+  return {
+    ...report,
+    sections: report.sections.map(section => (
+      section.id === 'susan'
+        ? { ...refreshed, insight: previous?.insight || refreshed.insight }
+        : section
+    )),
   }
 }
 
@@ -991,60 +1034,18 @@ function mergeRecipients(
   return [...byId.values()]
 }
 
-export async function sendDailySummaryReport(
+export async function deliverDailySummaryReport(
   db: Db,
+  report: DailySummaryReport,
   opts: {
     force?: boolean
     delivery?: 'direct' | 'queue'
-    /** Manual test sends only to the current admin. Scheduled sends go to managers/admins. */
     recipientsMode?: 'actor' | 'managers'
     actor?: { id: string, name: string, email: string } | null
   } = {},
 ): Promise<DailySummarySendResult> {
   const delivery = opts.delivery ?? (opts.force ? 'direct' : 'queue')
   const recipientsMode = opts.recipientsMode ?? (opts.force ? 'actor' : 'managers')
-  const emptySusan = {
-    susanGenerated: 0,
-    susanFailed: 0,
-    susanSkippedReason: null as string | null,
-  }
-  const settings = await getNotificationSettings(db)
-  if (!settings.dailySummaryReport && !opts.force) {
-    return {
-      sent: 0,
-      delivered: 0,
-      failed: 0,
-      skipped: 'disabled',
-      reportDate: todayIsoDate(),
-      recipients: [],
-      errors: [],
-      delivery,
-      ...emptySusan,
-    }
-  }
-
-  // Build report (including awaited Susan AI section calls) before any send.
-  const report = await buildDailySummaryReport(db, new Date(), {
-    createdBy: opts.actor?.id ?? null,
-  })
-  if (!opts.force) {
-    const lastSent = await readLastSentDate(db)
-    if (lastSent === report.reportDate) {
-      return {
-        sent: 0,
-        delivered: 0,
-        failed: 0,
-        skipped: 'already_sent_today',
-        reportDate: report.reportDate,
-        recipients: [],
-        errors: [],
-        delivery,
-        susanGenerated: report.susanGenerated,
-        susanFailed: report.susanFailed,
-        susanSkippedReason: report.susanSkippedReason,
-      }
-    }
-  }
 
   const recipients: StaffNotifyRecipient[] = recipientsMode === 'actor'
     ? (opts.actor?.email?.trim()
@@ -1092,7 +1093,6 @@ export async function sendDailySummaryReport(
   const brand = await resolveEmailBrand(db)
   const appUrl = brand.appUrl || getAppUrl()
   const templateOverrideRaw = await getActiveEmailTemplateContent(db, 'daily_summary_report')
-  // Keep structured section HTML — custom htmlSource overrides were wiping the digest body.
   const templateOverride = templateOverrideRaw
     ? { ...templateOverrideRaw, htmlSource: '' }
     : null
@@ -1180,6 +1180,70 @@ export async function sendDailySummaryReport(
     susanFailed: report.susanFailed,
     susanSkippedReason: report.susanSkippedReason,
   }
+}
+
+export async function sendDailySummaryReport(
+  db: Db,
+  opts: {
+    force?: boolean
+    delivery?: 'direct' | 'queue'
+    /** Manual test sends only to the current admin. Scheduled sends go to managers/admins. */
+    recipientsMode?: 'actor' | 'managers'
+    actor?: { id: string, name: string, email: string } | null
+    /** Optional prebuilt report (progressive UI). Otherwise builds + enriches Susan notes first. */
+    report?: DailySummaryReport | null
+  } = {},
+): Promise<DailySummarySendResult> {
+  const delivery = opts.delivery ?? (opts.force ? 'direct' : 'queue')
+  const emptySusan = {
+    susanGenerated: 0,
+    susanFailed: 0,
+    susanSkippedReason: null as string | null,
+  }
+  const settings = await getNotificationSettings(db)
+  if (!settings.dailySummaryReport && !opts.force) {
+    return {
+      sent: 0,
+      delivered: 0,
+      failed: 0,
+      skipped: 'disabled',
+      reportDate: todayIsoDate(),
+      recipients: [],
+      errors: [],
+      delivery,
+      ...emptySusan,
+    }
+  }
+
+  const report = opts.report ?? await buildDailySummaryReport(db, new Date(), {
+    createdBy: opts.actor?.id ?? null,
+  })
+
+  if (!opts.force) {
+    const lastSent = await readLastSentDate(db)
+    if (lastSent === report.reportDate) {
+      return {
+        sent: 0,
+        delivered: 0,
+        failed: 0,
+        skipped: 'already_sent_today',
+        reportDate: report.reportDate,
+        recipients: [],
+        errors: [],
+        delivery,
+        susanGenerated: report.susanGenerated,
+        susanFailed: report.susanFailed,
+        susanSkippedReason: report.susanSkippedReason,
+      }
+    }
+  }
+
+  return deliverDailySummaryReport(db, report, {
+    force: opts.force,
+    delivery,
+    recipientsMode: opts.recipientsMode,
+    actor: opts.actor,
+  })
 }
 
 export async function maybeSendScheduledDailySummary(

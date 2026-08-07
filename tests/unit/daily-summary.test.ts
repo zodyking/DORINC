@@ -7,6 +7,12 @@ import {
   moneyLabel,
 } from '../../server/services/daily-summary.service'
 import { parseSusanInsightResponse } from '../../server/services/daily-summary-susan.service'
+import {
+  createDailySummarySession,
+  listSusanSteps,
+  updateDailySummarySessionReport,
+} from '../../server/services/daily-summary-session.service'
+import type { DailySummaryReport } from '../../server/services/daily-summary.service'
 import { buildDailySummaryEmail } from '../../server/mail/templates/system'
 import { modelForFeature } from '../../server/services/ai-provider.service'
 import type { AiProviderSettingsView } from '../../server/services/ai-provider.service'
@@ -236,6 +242,63 @@ describe('daily summary + Susan', () => {
     expect(mail.html).toContain('border-left:4px solid')
     expect(mail.html).toContain('wrote a note under each section')
     expect(mail.text).toContain('Susan AI Assistant:')
+  })
+
+  it('lists progressive Susan steps one section at a time from a session', () => {
+    const draft = {
+      reportDate: '2026-08-07',
+      reportDateLabel: 'Aug 7, 2026',
+      invoiceStats: {
+        draftCount: 0,
+        pendingManagerApprovalCount: 0,
+        outstandingCount: 0,
+        outstandingTotal: '0',
+        overdueCount: 0,
+        overdueTotal: '0',
+        paidThisMonthTotal: '0',
+      },
+      outstandingInvoices: [],
+      billing: emptyBilling(),
+      sections: [
+        {
+          id: 'invoices',
+          title: 'Outstanding invoices',
+          stats: [],
+          table: null,
+          insight: 'draft a',
+        },
+        {
+          id: 'susan',
+          title: 'Susan AI Assistant usage today',
+          stats: [],
+          table: null,
+          insight: 'draft b',
+        },
+      ],
+      susanEnabled: true,
+      susanGenerated: 0,
+      susanFailed: 0,
+      susanSkippedReason: null,
+    } satisfies DailySummaryReport
+
+    expect(listSusanSteps(draft)).toEqual([
+      { id: 'invoices', title: 'Outstanding invoices' },
+      { id: 'susan', title: 'Susan AI Assistant usage today' },
+    ])
+
+    const session = createDailySummarySession(
+      { id: 'u1', name: 'Alex', email: 'alex@example.com' },
+      draft,
+    )
+    const updated = updateDailySummarySessionReport(session.id, {
+      ...draft,
+      susanGenerated: 1,
+      sections: draft.sections.map(s => (
+        s.id === 'invoices' ? { ...s, insight: 'live note' } : s
+      )),
+    })
+    expect(updated?.report.susanGenerated).toBe(1)
+    expect(updated?.report.sections[0]?.insight).toBe('live note')
   })
 
   it('surfaces a drafted-copy banner when Susan could not run', () => {
