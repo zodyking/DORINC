@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import type { InvoiceWorkspaceSettings } from '#shared/workspace-settings-defaults'
-import { DEFAULT_INVOICE_LINE_AI_RULES } from '#shared/invoice-line-ai-rules'
+import {
+  DEFAULT_INVOICE_LINE_AI_RULE_CARDS,
+  DEFAULT_INVOICE_LINE_AI_RULES,
+} from '#shared/invoice-line-ai-rules'
+import {
+  DEFAULT_SERVICE_LOG_EXTRACTION_RULE_CARDS,
+  DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
+} from '#shared/service-log-extraction-rules'
 import { templateOptionLabel } from '~/utils/invoice-template-designer-ui'
+import AiRulesEditor from '~/components/admin/settings/AiRulesEditor.vue'
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -21,6 +29,7 @@ const { data: templatesData, refresh: refreshTemplates } = useClientFetch<{
 const form = reactive({
   defaultPaymentTermsDays: 30,
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
+  serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
 })
 
 watch(() => settingsData.value?.settings, (s) => {
@@ -66,7 +75,9 @@ async function save() {
         settings: {
           defaultPaymentTermsDays: form.defaultPaymentTermsDays,
           shopSuppliesPercent: settingsData.value?.settings.shopSuppliesPercent ?? '3.5',
+          managerApprovalThreshold: settingsData.value?.settings.managerApprovalThreshold ?? '5000.00',
           lineItemAiRules: form.lineItemAiRules,
+          serviceLogExtractionRules: form.serviceLogExtractionRules,
         },
       },
     })
@@ -167,28 +178,31 @@ async function onTemplateChange(ev: Event) {
     <form class="card" style="margin-top:16px;" @submit.prevent="save">
       <div class="chead"><h3>Line item AI audit rules</h3></div>
       <div class="cbody settings-form">
-        <label class="fld">
-          Audit rules (used before save on the invoice editor)
-          <textarea
-            v-model="form.lineItemAiRules"
-            rows="12"
-            spellcheck="false"
-            placeholder="One rule per line…"
-          />
-          <span class="help">
-            The line audit runs once when you save or finalize. It only flags lines with a clear rule violation —
-            acceptable shop wording should stay untouched. Edit rules for your shop, or restore the built-in defaults.
-          </span>
-        </label>
-        <div class="settings-actions" style="margin-top:8px;">
-          <button
-            type="button"
-            class="btn sm"
-            @click="form.lineItemAiRules = DEFAULT_INVOICE_LINE_AI_RULES"
-          >
-            Restore default rules
-          </button>
+        <AiRulesEditor
+          v-model="form.lineItemAiRules"
+          :fallback-cards="DEFAULT_INVOICE_LINE_AI_RULE_CARDS"
+          title="Audit rules"
+          help="Used before save on the invoice editor. Each rule is edited as its own card; the full set is saved and sent to AI as one JSON string."
+        />
+
+        <p v-if="message" class="settings-ok">{{ message }}</p>
+        <p v-if="error" class="settings-err">{{ error }}</p>
+
+        <div class="settings-actions">
+          <button type="submit" class="btn primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save invoice settings' }}</button>
         </div>
+      </div>
+    </form>
+
+    <form class="card" style="margin-top:16px;" @submit.prevent="save">
+      <div class="chead"><h3>Service log extraction rules</h3></div>
+      <div class="cbody settings-form">
+        <AiRulesEditor
+          v-model="form.serviceLogExtractionRules"
+          :fallback-cards="DEFAULT_SERVICE_LOG_EXTRACTION_RULE_CARDS"
+          title="Detection & extraction rules"
+          help="Applied after page-type classification (handwritten vs printed form). Each rule is a sub-card; the complete list is one JSON string for AI."
+        />
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>

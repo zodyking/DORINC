@@ -1,17 +1,56 @@
 /** Shared invoice line audit prompts + conservative filtering (used by API and worker). */
 
-export const DEFAULT_INVOICE_LINE_AI_RULES = [
-  'Every line description must be shop language, not simplified customer-facing grammar (example: keep "Replace Tire", do not rewrite to "Tire Replacement"). Descriptions must be grammatically correct, title cased, and free of spelling errors.',
-  'Do not repeat quantity in the description when the qty column already holds the count — move counts out of the description into qty.',
-  'When the description mentions a numeric count (e.g. "2 windows", "four tires"), qty must match unless the line is clearly one bundled lump-sum job.',
-  'When a line total implies a per-unit rate for a mentioned quantity, set unitPrice = line total ÷ qty (example: $350 for 2 units → qty 2, unitPrice 175).',
-  'quantity × unitPrice must equal the intended line amount; adjust fields together when fixing mismatches.',
-  'Preserve factual accuracy — do not invent parts, labor hours, or services not implied by the original line.',
-  'Keep lineType (part / labor / fee) consistent with the work described.',
-  'Try to keep original wording as much as possible — ignore lines that are already acceptable; only change lines that actually need changing.',
-  'Ignore abbreviations such as F/R, F/L, R/R, R/L, R/S, L/S, and combinations — they are correct for this platform.',
-  'When correcting a line, preserve shop wording where possible; stay professional, concise, and descriptive — never output generic filler lines.',
-].join('\n')
+import {
+  createAiRuleCard,
+  formatAiRulesForPrompt,
+  parseAiRuleCards,
+  serializeAiRuleCards,
+} from './ai-rules.mjs'
+
+export const DEFAULT_INVOICE_LINE_AI_RULE_CARDS = [
+  createAiRuleCard({
+    title: 'Shop language',
+    rule: 'Every line description must be shop language, not simplified customer-facing grammar (example: keep "Replace Tire", do not rewrite to "Tire Replacement"). Descriptions must be grammatically correct, title cased, and free of spelling errors.',
+  }),
+  createAiRuleCard({
+    title: 'Quantity column',
+    rule: 'Do not repeat quantity in the description when the qty column already holds the count — move counts out of the description into qty.',
+  }),
+  createAiRuleCard({
+    title: 'Count match',
+    rule: 'When the description mentions a numeric count (e.g. "2 windows", "four tires"), qty must match unless the line is clearly one bundled lump-sum job.',
+  }),
+  createAiRuleCard({
+    title: 'Unit price from total',
+    rule: 'When a line total implies a per-unit rate for a mentioned quantity, set unitPrice = line total ÷ qty (example: $350 for 2 units → qty 2, unitPrice 175).',
+  }),
+  createAiRuleCard({
+    title: 'Math consistency',
+    rule: 'quantity × unitPrice must equal the intended line amount; adjust fields together when fixing mismatches.',
+  }),
+  createAiRuleCard({
+    title: 'No invention',
+    rule: 'Preserve factual accuracy — do not invent parts, labor hours, or services not implied by the original line.',
+  }),
+  createAiRuleCard({
+    title: 'Line type',
+    rule: 'Keep lineType (part / labor / fee) consistent with the work described.',
+  }),
+  createAiRuleCard({
+    title: 'Minimal changes',
+    rule: 'Try to keep original wording as much as possible — ignore lines that are already acceptable; only change lines that actually need changing.',
+  }),
+  createAiRuleCard({
+    title: 'Abbreviations',
+    rule: 'Ignore abbreviations such as F/R, F/L, R/R, R/L, R/S, L/S, and combinations — they are correct for this platform.',
+  }),
+  createAiRuleCard({
+    title: 'Correction style',
+    rule: 'When correcting a line, preserve shop wording where possible; stay professional, concise, and descriptive — never output generic filler lines.',
+  }),
+]
+
+export const DEFAULT_INVOICE_LINE_AI_RULES = serializeAiRuleCards(DEFAULT_INVOICE_LINE_AI_RULE_CARDS)
 
 export const LINE_AUDIT_SYSTEM_INSTRUCTIONS = [
   'You audit invoice line items before they are saved.',
@@ -29,12 +68,14 @@ export const LINE_AUDIT_SYSTEM_INSTRUCTIONS = [
 ].join(' ')
 
 export function normalizeInvoiceLineAiRules(rules) {
-  const trimmed = rules?.trim()
-  return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_INVOICE_LINE_AI_RULES
+  return serializeAiRuleCards(
+    parseAiRuleCards(rules, DEFAULT_INVOICE_LINE_AI_RULE_CARDS),
+  )
 }
 
 export function buildLineAuditSystemPrompt(rules) {
-  return `${LINE_AUDIT_SYSTEM_INSTRUCTIONS}\n${normalizeInvoiceLineAiRules(rules)}`
+  const normalized = normalizeInvoiceLineAiRules(rules)
+  return `${LINE_AUDIT_SYSTEM_INSTRUCTIONS}\n${formatAiRulesForPrompt(normalized, DEFAULT_INVOICE_LINE_AI_RULE_CARDS)}`
 }
 
 export function buildLineAuditUserPrompt(complaint, inputLines) {

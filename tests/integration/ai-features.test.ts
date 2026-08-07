@@ -195,18 +195,44 @@ function trackFetchMock(content: Record<string, unknown>) {
   } as Response)
 }
 
+function trackFetchMockSequence(contents: Array<Record<string, unknown>>) {
+  let i = 0
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    const content = contents[Math.min(i, contents.length - 1)]!
+    i += 1
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(content) } }],
+        usage: { prompt_tokens: 100, completion_tokens: 40, total_tokens: 140, cost: 0.0012 },
+      }),
+    } as Response
+  })
+}
+
+const mockPageTypeJson = {
+  pageType: 'handwritten',
+  confidence: 0.91,
+  notes: 'Freeform shop notes',
+}
+
 describe('P2-13 service log AI extraction', () => {
   it('queues extraction and worker creates a pending suggestion', async () => {
     await ensureAiReady()
-    const fetchMock = trackFetchMock(mockExtractionJson)
+    const fetchMock = trackFetchMockSequence([mockPageTypeJson, mockExtractionJson])
 
     const { aiJob, workerJob } = await enqueueServiceLogExtraction(db, serviceLogId, actorId, createdFileIds[0])
     createdJobIds.push(aiJob.id)
     createdWorkerJobIds.push(workerJob.id)
+    expect(Array.isArray(aiJob.inputPayload.fileIds)).toBe(true)
+    expect(typeof aiJob.inputPayload.rules).toBe('string')
 
     await pool.query(`UPDATE worker_jobs SET run_after = now() WHERE id = $1`, [workerJob.id])
     const result = await processAiJobs(pool)
     expect(result.processed).toBe(1)
+
+    const { rows: jobs } = await pool.query(`SELECT output_payload FROM ai_jobs WHERE id = $1`, [aiJob.id])
+    expect(jobs[0].output_payload.progress.phase).toBe('done')
 
     const { rows: suggestions } = await pool.query(
       `SELECT * FROM ai_suggestions WHERE ai_job_id = $1`,
@@ -214,6 +240,7 @@ describe('P2-13 service log AI extraction', () => {
     )
     expect(suggestions[0].status).toBe('pending')
     expect(suggestions[0].suggested_content.complaint).toBe(mockExtractionJson.complaint)
+    expect(suggestions[0].suggested_content.pageResults?.[0]?.pageType).toBe('handwritten')
     createdSuggestionIds.push(suggestions[0].id)
 
     fetchMock.mockRestore()
@@ -221,7 +248,7 @@ describe('P2-13 service log AI extraction', () => {
 
   it('accept applies extraction to service log and preserves audit trail via review', async () => {
     await ensureAiReady()
-    const fetchMock = trackFetchMock(mockExtractionJson)
+    const fetchMock = trackFetchMockSequence([mockPageTypeJson, mockExtractionJson])
     const { aiJob, workerJob } = await enqueueServiceLogExtraction(db, serviceLogId, actorId, createdFileIds[0])
     createdJobIds.push(aiJob.id)
     createdWorkerJobIds.push(workerJob.id)

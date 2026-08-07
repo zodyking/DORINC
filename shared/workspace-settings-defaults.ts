@@ -6,6 +6,7 @@ import {
   DEFAULT_FEE_DESCRIPTION_VERBS,
 } from './line-item-type-from-description'
 import { DEFAULT_INVOICE_LINE_AI_RULES } from './invoice-line-ai-rules'
+import { DEFAULT_SERVICE_LOG_EXTRACTION_RULES } from './service-log-extraction-rules'
 import {
   DEFAULT_SERVICE_LOG_SHEET_DOCUMENT,
   defaultServiceLogSheetDocument,
@@ -78,6 +79,8 @@ export interface InvoiceWorkspaceSettings {
   managerApprovalThreshold: string
   /** Editable rule set for invoice line-item AI audit before save. */
   lineItemAiRules: string
+  /** Editable rule set for service log photo extraction (page type + line items). */
+  serviceLogExtractionRules: string
 }
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
@@ -85,6 +88,7 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   shopSuppliesPercent: '3.5',
   managerApprovalThreshold: '5000.00',
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
+  serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
 }
 
 /** App-wide email notification toggles (Control Panel → Notifications). */

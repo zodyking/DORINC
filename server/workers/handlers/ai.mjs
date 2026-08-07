@@ -5,11 +5,15 @@ import {
   buildLineAuditUserPrompt,
   normalizeLineAuditResults,
 } from '../../../shared/invoice-line-audit.mjs'
-
-const EXTRACTION_SYSTEM = `You extract structured service log data from photos of handwritten or printed shop notes.
-Return JSON only with keys: complaint (customer symptoms, string or null), internalNotes (mechanic notes, string or null),
-draftLineItems (array of {description, qty, rate, amount} — use plain numbers without currency symbols when possible).
-If a field is not visible, use null or omit draftLineItems. Do not invent prices — leave rate/amount null if unclear.`
+import {
+  buildExtractionSystemPrompt,
+  buildExtractionUserPrompt,
+  buildPageTypeSystemPrompt,
+  buildPageTypeUserPrompt,
+  mergeServiceLogPageExtractions,
+  normalizePageType,
+  normalizeServiceLogExtractionRules,
+} from '../../../shared/service-log-extraction-rules.mjs'
 
 const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, professional customer-facing invoice descriptions.
 Return JSON only: { "description": "..." }.
@@ -164,6 +168,13 @@ async function completeAiJob(pool, aiJobId, outputPayload) {
   )
 }
 
+async function updateExtractionProgress(pool, aiJobId, progress) {
+  await pool.query(
+    `UPDATE ai_jobs SET output_payload = $2 WHERE id = $1`,
+    [aiJobId, JSON.stringify({ progress })],
+  )
+}
+
 async function processExtraction(pool, aiJobId, settings) {
   if (!settings.serviceLogExtractionEnabled) throw new Error('Service log extraction is disabled')
 
@@ -173,35 +184,140 @@ async function processExtraction(pool, aiJobId, settings) {
 
   await pool.query(`UPDATE ai_jobs SET status = 'processing', started_at = now() WHERE id = $1`, [aiJobId])
 
-  const input = job.input_payload
-  const fileId = input.fileId
-  const { rows: fileRows } = await pool.query(
-    `SELECT mime_type, binary_data FROM app_files WHERE id = $1 AND archived_at IS NULL`,
-    [fileId],
-  )
-  const file = fileRows[0]
-  if (!file?.mime_type?.startsWith('image/')) throw new Error('Selected file is not an image')
+  const input = job.input_payload || {}
+  const fileIds = Array.isArray(input.fileIds) && input.fileIds.length
+    ? input.fileIds.map(String)
+    : input.fileId
+      ? [String(input.fileId)]
+      : []
+  if (!fileIds.length) throw new Error('No images to extract from')
 
-  const dataUrl = `data:${file.mime_type};base64,${file.binary_data.toString('base64')}`
-  const userText = [
-    'Extract service log fields from this image.',
-    input.complaint ? `Existing complaint (may refine): ${input.complaint}` : '',
-    input.internalNotes ? `Existing internal notes (may refine): ${input.internalNotes}` : '',
-  ].filter(Boolean).join('\n')
-
+  const rules = normalizeServiceLogExtractionRules(input.rules ?? '')
   const model = modelFor(settings, 'service_log_extraction')
-  const result = await openRouterChat(settings.apiKey, model, [
-    { role: 'system', content: EXTRACTION_SYSTEM },
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: userText },
-        { type: 'image_url', image_url: { url: dataUrl } },
-      ],
-    },
-  ], 0.2)
+  const pageCount = fileIds.length
+  const pageExtractions = []
+  const pageProgress = fileIds.map((fileId, index) => ({
+    pageIndex: index + 1,
+    fileId,
+    pageType: null,
+    status: 'queued',
+    message: 'Waiting…',
+  }))
 
-  const parsed = { ...parseJsonBlock(result.content), fileId }
+  let totalPrompt = 0
+  let totalCompletion = 0
+  let totalTokens = 0
+  let totalCost = 0
+  let usedModel = model
+
+  for (let i = 0; i < fileIds.length; i++) {
+    const fileId = fileIds[i]
+    const pageIndex = i + 1
+
+    const { rows: fileRows } = await pool.query(
+      `SELECT mime_type, binary_data FROM app_files WHERE id = $1 AND archived_at IS NULL`,
+      [fileId],
+    )
+    const file = fileRows[0]
+    if (!file?.mime_type?.startsWith('image/')) throw new Error(`Selected file is not an image (${fileId})`)
+    const dataUrl = `data:${file.mime_type};base64,${file.binary_data.toString('base64')}`
+
+    pageProgress[i] = {
+      ...pageProgress[i],
+      status: 'classifying',
+      message: `Classifying page ${pageIndex} of ${pageCount}…`,
+    }
+    await updateExtractionProgress(pool, aiJobId, {
+      phase: 'classifying',
+      pageIndex,
+      pageCount,
+      message: `Classifying page ${pageIndex} of ${pageCount}…`,
+      pages: pageProgress,
+    })
+
+    const classifyResult = await openRouterChat(settings.apiKey, model, [
+      { role: 'system', content: buildPageTypeSystemPrompt() },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: buildPageTypeUserPrompt(pageIndex, pageCount) },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ], 0.1)
+
+    const classifyParsed = parseJsonBlock(classifyResult.content)
+    const pageType = normalizePageType(classifyParsed.pageType)
+    const confidence = Number(classifyParsed.confidence)
+    totalPrompt += classifyResult.promptTokens
+    totalCompletion += classifyResult.completionTokens
+    totalTokens += classifyResult.totalTokens
+    totalCost += Number(classifyResult.estimatedCostUsd || 0)
+
+    pageProgress[i] = {
+      ...pageProgress[i],
+      pageType,
+      status: 'extracting',
+      message: `Extracting line items from page ${pageIndex} (${pageType === 'printed_form' ? 'printed form' : 'handwritten'})…`,
+    }
+    await updateExtractionProgress(pool, aiJobId, {
+      phase: 'extracting',
+      pageIndex,
+      pageCount,
+      pageType,
+      message: pageProgress[i].message,
+      pages: pageProgress,
+    })
+
+    const extractResult = await openRouterChat(settings.apiKey, model, [
+      { role: 'system', content: buildExtractionSystemPrompt(rules, pageType) },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: buildExtractionUserPrompt(pageIndex, pageCount, pageType, {
+              complaint: input.complaint,
+              internalNotes: input.internalNotes,
+            }),
+          },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ], 0.2)
+
+    const extractParsed = parseJsonBlock(extractResult.content)
+    totalPrompt += extractResult.promptTokens
+    totalCompletion += extractResult.completionTokens
+    totalTokens += extractResult.totalTokens
+    totalCost += Number(extractResult.estimatedCostUsd || 0)
+    usedModel = extractResult.model
+
+    pageExtractions.push({
+      ...extractParsed,
+      fileId,
+      pageType,
+      confidence: Number.isFinite(confidence) ? confidence : null,
+    })
+
+    pageProgress[i] = {
+      ...pageProgress[i],
+      status: 'done',
+      message: `Page ${pageIndex} complete`,
+    }
+    await updateExtractionProgress(pool, aiJobId, {
+      phase: i === fileIds.length - 1 ? 'merging' : 'extracting',
+      pageIndex,
+      pageCount,
+      pageType,
+      message: i === fileIds.length - 1
+        ? 'Merging page results…'
+        : `Finished page ${pageIndex} of ${pageCount}`,
+      pages: pageProgress,
+    })
+  }
+
+  const parsed = mergeServiceLogPageExtractions(pageExtractions, fileIds[0])
 
   const { rows: logRows } = await pool.query(
     `SELECT complaint, internal_notes, draft_line_items FROM service_logs WHERE id = $1`,
@@ -229,15 +345,24 @@ async function processExtraction(pool, aiJobId, settings) {
   await logUsage(pool, {
     aiJobId,
     featureType: 'service_log_extraction',
-    model: result.model,
-    promptTokens: result.promptTokens,
-    completionTokens: result.completionTokens,
-    totalTokens: result.totalTokens,
-    estimatedCostUsd: result.estimatedCostUsd,
+    model: usedModel,
+    promptTokens: totalPrompt,
+    completionTokens: totalCompletion,
+    totalTokens,
+    estimatedCostUsd: Number(totalCost.toFixed(6)),
     createdBy: job.created_by,
   })
 
-  await completeAiJob(pool, aiJobId, { suggestionId: sugRows[0].id })
+  await completeAiJob(pool, aiJobId, {
+    suggestionId: sugRows[0].id,
+    progress: {
+      phase: 'done',
+      pageIndex: pageCount,
+      pageCount,
+      message: 'Extraction complete',
+      pages: pageProgress,
+    },
+  })
 }
 
 async function processDescription(pool, aiJobId, settings) {

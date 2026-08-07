@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
- * In-app service log camera with live document quality checks:
- * page border detection, blur, brightness, contrast, coverage.
- * Accepted shots are perspective-cropped to the detected page.
+ * In-app service log camera — take front/back photos.
+ * Document border detection will return later; capture is unrestricted for now.
  */
 import {
   SERVICE_LOG_MAX_PHOTOS,
@@ -10,12 +9,6 @@ import {
   serviceLogPhotoCountLabel,
   serviceLogPhotoSlotLabel,
 } from '#shared/service-log-photos'
-import {
-  analyzeDocumentImageData,
-  imageDataToJpegBlob,
-  warpDocumentToImageData,
-  type DocumentQualityResult,
-} from '#shared/document-scan-quality'
 
 const props = withDefaults(defineProps<{
   mode?: 'inline' | 'fullscreen'
@@ -44,7 +37,6 @@ const busy = ref(false)
 const torchSupported = ref(false)
 const torchOn = ref(false)
 const flashPulse = ref(false)
-const quality = ref<DocumentQualityResult | null>(null)
 const captureHint = ref('')
 
 const isFullscreen = computed(() => props.mode === 'fullscreen')
@@ -54,28 +46,19 @@ const atMax = computed(() => photoCount.value >= props.maxPhotos)
 const prompt = computed(() => serviceLogNextPhotoPrompt(photoCount.value))
 const countLabel = computed(() => serviceLogPhotoCountLabel(photoCount.value))
 const canFinish = computed(() => photoCount.value >= 1)
-const qualityOk = computed(() => Boolean(quality.value?.ok))
-const qualityMessage = computed(() => {
+const statusMessage = computed(() => {
   if (atMax.value) return 'Front and back ready — remove one to retake'
   if (captureHint.value) return captureHint.value
-  if (quality.value) return quality.value.message
-  return 'Point at the paper log — checking borders…'
+  return photoCount.value === 0
+    ? 'Take a clear photo of the front of the service log'
+    : 'Take a clear photo of the back of the service log'
 })
 
-const overlayPoints = computed(() => {
-  const quad = quality.value?.normalizedQuad
-  if (!quad) return ''
-  return quad.map(p => `${(p.x * 100).toFixed(2)},${(p.y * 100).toFixed(2)}`).join(' ')
-})
-
-let analyzeTimer: ReturnType<typeof setTimeout> | null = null
-let analyzeInFlight = false
 let stopped = true
 
 async function startCamera() {
   cameraError.value = ''
   captureHint.value = ''
-  quality.value = null
   torchSupported.value = false
   torchOn.value = false
   if (!import.meta.client) return
@@ -107,7 +90,6 @@ async function startCamera() {
       videoRef.value.srcObject = media
       await videoRef.value.play().catch(() => {})
     }
-    scheduleAnalyze(120)
   }
   catch {
     cameraError.value = 'Could not open the camera. Check permissions and try again.'
@@ -116,58 +98,12 @@ async function startCamera() {
 
 function stopCamera() {
   stopped = true
-  if (analyzeTimer) {
-    clearTimeout(analyzeTimer)
-    analyzeTimer = null
-  }
   void setTorch(false)
   stream.value?.getTracks().forEach(t => t.stop())
   stream.value = null
   if (videoRef.value) videoRef.value.srcObject = null
   torchSupported.value = false
   torchOn.value = false
-  quality.value = null
-}
-
-function scheduleAnalyze(delayMs = 280) {
-  if (stopped) return
-  if (analyzeTimer) clearTimeout(analyzeTimer)
-  analyzeTimer = setTimeout(() => { void runAnalyzeLoop() }, delayMs)
-}
-
-async function runAnalyzeLoop() {
-  if (stopped || analyzeInFlight || busy.value || atMax.value) {
-    scheduleAnalyze(400)
-    return
-  }
-  const video = videoRef.value
-  const canvas = canvasRef.value
-  if (!video || !canvas || !video.videoWidth) {
-    scheduleAnalyze(200)
-    return
-  }
-
-  analyzeInFlight = true
-  try {
-    // Analyze a downscaled live frame for snappy feedback.
-    const targetW = 320
-    const targetH = Math.max(1, Math.round(video.videoHeight * (targetW / video.videoWidth)))
-    canvas.width = targetW
-    canvas.height = targetH
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    if (!ctx) return
-    ctx.drawImage(video, 0, 0, targetW, targetH)
-    const image = ctx.getImageData(0, 0, targetW, targetH)
-    quality.value = analyzeDocumentImageData(image)
-    if (captureHint.value && quality.value.ok) captureHint.value = ''
-  }
-  catch {
-    // Keep prior quality state
-  }
-  finally {
-    analyzeInFlight = false
-    scheduleAnalyze(quality.value?.ok ? 360 : 240)
-  }
 }
 
 async function setTorch(on: boolean) {
@@ -200,36 +136,21 @@ async function capture() {
   try {
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.drawImage(video, 0, 0)
-    const full = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const result = analyzeDocumentImageData(full)
-    quality.value = result
-
-    if (!result.ok || !result.quad) {
-      captureHint.value = result.issues[0] || 'Adjust the page and try again'
-      return
-    }
-
-    const warped = warpDocumentToImageData(full, result.quad)
-    const exportImage = warped || full
-    const blob = await imageDataToJpegBlob(exportImage, 0.92)
-      || await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
     if (!blob) {
       captureHint.value = 'Could not save that photo — try again'
       return
     }
-
     const slot = photoCount.value === 0 ? 'front' : 'back'
     const file = new File([blob], `service-log-${slot}-${Date.now()}.jpg`, { type: 'image/jpeg' })
     emit('captured', file)
-    captureHint.value = ''
   }
   finally {
     busy.value = false
     window.setTimeout(() => { flashPulse.value = false }, 180)
-    scheduleAnalyze(200)
   }
 }
 
@@ -249,7 +170,6 @@ onBeforeUnmount(() => stopCamera())
       :class="{
         'sl-doc-cam--fullscreen': isFullscreen,
         'sl-doc-cam--flash': flashPulse,
-        'sl-doc-cam--ready': qualityOk && !atMax,
       }"
       role="dialog"
       :aria-modal="isFullscreen ? 'true' : undefined"
@@ -297,29 +217,8 @@ onBeforeUnmount(() => stopCamera())
           muted
           autoplay
         />
-
-        <svg
-          v-if="overlayPoints && !atMax"
-          class="sl-doc-cam__overlay"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <polygon
-            :points="overlayPoints"
-            class="sl-doc-cam__quad"
-            :class="{ ok: qualityOk }"
-          />
-        </svg>
-
-        <div
-          class="sl-doc-cam__status"
-          :class="{
-            ok: qualityOk && !atMax,
-            warn: !qualityOk && !atMax,
-          }"
-        >
-          <strong>{{ qualityMessage }}</strong>
+        <div class="sl-doc-cam__status">
+          <strong>{{ statusMessage }}</strong>
           <span>{{ countLabel }}</span>
         </div>
       </div>
@@ -359,7 +258,6 @@ onBeforeUnmount(() => stopCamera())
         <button
           type="button"
           class="sl-doc-cam__shutter"
-          :class="{ ready: qualityOk && !atMax }"
           :disabled="busy || !stream || atMax"
           :aria-label="atMax ? 'Maximum photos reached' : (photoCount === 0 ? 'Take front photo' : 'Take back photo')"
           @click="capture"
@@ -412,138 +310,71 @@ onBeforeUnmount(() => stopCamera())
 .sl-doc-cam__video {
   width: 100%;
   height: 100%;
-  /* contain keeps the analyzed frame aligned with the live border overlay */
-  object-fit: contain;
+  object-fit: cover;
   background: #020617;
   display: block;
-}
-.sl-doc-cam__overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.sl-doc-cam__quad {
-  fill: rgba(251, 191, 36, 0.12);
-  stroke: #fbbf24;
-  stroke-width: 1.4;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-  transition: fill 0.2s ease, stroke 0.2s ease;
-}
-.sl-doc-cam__quad.ok {
-  fill: rgba(16, 185, 129, 0.14);
-  stroke: #34d399;
 }
 .sl-doc-cam__status {
   position: absolute;
   left: 12px;
   right: 12px;
   bottom: 14px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.62);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
   color: #f8fafc;
-  text-align: center;
-  backdrop-filter: blur(6px);
+  font-size: 12px;
 }
-.sl-doc-cam__status strong {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
+.sl-doc-cam__status strong { font-size: 13px; }
+.sl-doc-cam__canvas { display: none; }
+.sl-doc-cam__error { margin: 10px 12px 0; color: #fbbf24; font-size: 13px; }
+.sl-doc-cam__shots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 14px 0;
 }
-.sl-doc-cam__status span {
-  font-size: 11px;
-  font-weight: 600;
-  color: #cbd5e1;
+.sl-doc-cam__shot {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  background: #1e293b;
 }
-.sl-doc-cam__status.ok {
-  background: rgba(6, 78, 59, 0.72);
-}
-.sl-doc-cam__status.ok strong { color: #d1fae5; }
-.sl-doc-cam__status.warn {
-  background: rgba(69, 26, 3, 0.72);
-}
-.sl-doc-cam__status.warn strong { color: #fde68a; }
-.sl-doc-cam__canvas {
+.sl-doc-cam__shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sl-doc-cam__shot-label {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+  left: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sl-doc-cam__shot-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fff;
+  cursor: pointer;
 }
 .sl-doc-cam__actions {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  margin: 12px;
 }
-.sl-doc-cam__actions :deep(.btn),
-.sl-doc-cam__actions .btn {
-  flex: 1;
-  min-height: 48px;
-}
-.sl-doc-cam__error {
-  margin: 10px 12px 0;
-  color: #fbbf24;
-  font-size: 13px;
-  text-align: center;
-}
-.sl-doc-cam__shots {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px 14px 0;
-  flex-shrink: 0;
-}
-.sl-doc-cam__shot {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #1e293b;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-}
-.sl-doc-cam__shot img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.sl-doc-cam__shot-label {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 3px 4px;
-  font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-  color: #fff;
-  background: rgba(15, 23, 42, 0.72);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.sl-doc-cam__shot-x {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.82);
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
+.sl-doc-cam__actions .btn { flex: 1; min-height: 48px; }
+
 .sl-doc-cam--fullscreen {
   position: fixed;
   inset: 0;
@@ -574,10 +405,9 @@ onBeforeUnmount(() => stopCamera())
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.88), transparent);
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.85), transparent);
   position: relative;
   z-index: 2;
-  flex-shrink: 0;
 }
 .sl-doc-cam__top-copy {
   display: flex;
@@ -586,14 +416,8 @@ onBeforeUnmount(() => stopCamera())
   text-align: center;
   min-width: 0;
 }
-.sl-doc-cam__top-copy strong {
-  font-size: 15px;
-  font-weight: 800;
-}
-.sl-doc-cam__top-copy span {
-  font-size: 12px;
-  color: #cbd5e1;
-}
+.sl-doc-cam__top-copy strong { font-size: 15px; font-weight: 800; }
+.sl-doc-cam__top-copy span { font-size: 12px; color: #cbd5e1; }
 .sl-doc-cam__icon-btn {
   width: 44px;
   height: 44px;
@@ -605,22 +429,15 @@ onBeforeUnmount(() => stopCamera())
   place-items: center;
   cursor: pointer;
 }
-.sl-doc-cam__icon-btn.on {
-  background: rgba(250, 204, 21, 0.25);
-  color: #fde047;
-}
-.sl-doc-cam__icon-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
+.sl-doc-cam__icon-btn.on { background: rgba(250, 204, 21, 0.25); color: #fde047; }
+.sl-doc-cam__icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .sl-doc-cam__dock {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px 18px;
-  background: linear-gradient(0deg, rgba(2, 6, 23, 0.98), rgba(2, 6, 23, 0.72));
-  flex-shrink: 0;
+  padding: 18px 20px 22px;
+  background: linear-gradient(0deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0.55));
 }
 .sl-doc-cam__side-btn {
   min-height: 44px;
@@ -632,16 +449,10 @@ onBeforeUnmount(() => stopCamera())
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0 12px;
+  padding: 0 14px;
 }
-.sl-doc-cam__side-btn.on {
-  background: rgba(250, 204, 21, 0.22);
-  color: #fde047;
-}
-.sl-doc-cam__side-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
+.sl-doc-cam__side-btn.on { background: rgba(250, 204, 21, 0.22); color: #fde047; }
+.sl-doc-cam__side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .sl-doc-cam__shutter {
   width: 78px;
   height: 78px;
@@ -660,21 +471,9 @@ onBeforeUnmount(() => stopCamera())
   border: 4px solid #fff;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.35) inset;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.sl-doc-cam__shutter.ready .sl-doc-cam__shutter-ring {
-  border-color: #34d399;
-  box-shadow:
-    0 0 0 3px rgba(15, 23, 42, 0.35) inset,
-    0 0 0 4px rgba(52, 211, 153, 0.35);
-}
-.sl-doc-cam__shutter:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.sl-doc-cam__shutter:not(:disabled):active .sl-doc-cam__shutter-ring {
-  transform: scale(0.94);
-}
+.sl-doc-cam__shutter:disabled { opacity: 0.45; cursor: not-allowed; }
+.sl-doc-cam__shutter:not(:disabled):active .sl-doc-cam__shutter-ring { transform: scale(0.94); }
 .sl-doc-cam--flash::after {
   content: '';
   position: absolute;
@@ -688,9 +487,7 @@ onBeforeUnmount(() => stopCamera())
   from { opacity: 0.85; }
   to { opacity: 0; }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .sl-doc-cam--flash::after { animation: none; opacity: 0; }
-  .sl-doc-cam__quad { transition: none; }
 }
 </style>
