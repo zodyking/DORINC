@@ -1,4 +1,9 @@
 import type { AiFeatureType } from '../db/schema/ai'
+import {
+  isOpenRouterAuthErrorMessage,
+  normalizeOpenRouterApiKey,
+  openRouterAuthRecoveryMessage,
+} from '../../shared/openrouter-auth'
 import { BRAND_NAME } from '../../shared/brand'
 import { getAppUrl } from './app-config.service'
 
@@ -75,10 +80,14 @@ export async function openRouterChat(
   feature: AiFeatureType,
   opts: { responseFormat?: 'json' | 'text', temperature?: number } = {},
 ): Promise<OpenRouterChatResult> {
-  if (!apiKey.trim()) {
+  const key = normalizeOpenRouterApiKey(apiKey)
+  if (!key) {
+    throw new OpenRouterServiceError('API_ERROR', openRouterAuthRecoveryMessage())
+  }
+  if (!String(model || '').trim()) {
     throw new OpenRouterServiceError(
       'API_ERROR',
-      'OpenRouter API key is missing — re-save AI settings in Control Panel after deploy',
+      'OpenRouter model is not configured — set a model in Control Panel → AI',
     )
   }
 
@@ -92,7 +101,7 @@ export async function openRouterChat(
         : 0.2)
 
   const body: Record<string, unknown> = {
-    model,
+    model: String(model).trim(),
     messages,
     temperature,
   }
@@ -100,22 +109,26 @@ export async function openRouterChat(
     body.response_format = { type: 'json_object' }
   }
 
+  // Explicit Headers so Authorization cannot be dropped by object-spread quirks.
+  const headers = new Headers()
+  headers.set('Authorization', `Bearer ${key}`)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Accept', 'application/json')
+  headers.set('HTTP-Referer', getAppUrl())
+  headers.set('X-Title', BRAND_NAME)
+
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': getAppUrl(),
-      'X-Title': BRAND_NAME,
-    },
+    headers,
     body: JSON.stringify(body),
   })
 
-  const payload = await res.json() as OpenRouterResponse
+  const payload = await res.json().catch(() => ({})) as OpenRouterResponse
   if (!res.ok) {
+    const raw = payload.error?.message ?? `OpenRouter returned ${res.status}`
     throw new OpenRouterServiceError(
       'API_ERROR',
-      payload.error?.message ?? `OpenRouter returned ${res.status}`,
+      isOpenRouterAuthErrorMessage(raw) ? openRouterAuthRecoveryMessage() : raw,
     )
   }
 
