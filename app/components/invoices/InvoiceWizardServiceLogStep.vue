@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * Post-vehicle popup: optionally upload a service log before Dates & terms.
- * Rendered as a Teleport modal so it never replaces / blanks the wizard panel.
+ * Upload UI after the user answers Yes to "import a service log?".
+ * Parent owns the Yes/No gate popup; this is the follow-up modal only.
  */
+import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
+import ServiceLogAiExtractModal from '~/components/service-logs/ServiceLogAiExtractModal.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 
@@ -20,7 +22,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:serviceLogId': [id: string]
   'attached': [payload: { serviceLogId: string, invoiceNumberFormatted: string | null }]
-  'skip': []
   'done': []
   'back': []
 }>()
@@ -28,7 +29,6 @@ const emit = defineEmits<{
 type Tech = { id: string, name: string, email: string, accountType: string }
 type DesktopMethod = 'upload' | 'qr'
 
-const wantUpload = ref<boolean | null>(null)
 const technicianId = ref('')
 const technicians = ref<Tech[]>([])
 const techSource = ref<'mechanics' | 'all_staff'>('all_staff')
@@ -41,13 +41,13 @@ const successOpen = ref(false)
 const successInvoiceLabel = ref('')
 const extractOpen = ref(false)
 const extractFileId = ref<string | null>(null)
+const showCamera = ref(false)
 
 const qrOpen = ref(false)
 const qrDataUrl = ref('')
 const qrUploadUrl = ref('')
 const qrSessionId = ref('')
 const qrStatus = ref('')
-const showCamera = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const isMobile = computed(() => {
@@ -90,7 +90,6 @@ watch(() => props.open, (open) => {
     showCamera.value = false
     return
   }
-  wantUpload.value = null
   error.value = ''
   successOpen.value = false
   qrOpen.value = false
@@ -98,15 +97,6 @@ watch(() => props.open, (open) => {
   clearLocal()
   void loadTechnicians()
 })
-
-function selectWant(value: boolean) {
-  wantUpload.value = value
-  error.value = ''
-  if (!value) {
-    clearLocal()
-    void cancelQr()
-  }
-}
 
 function clearLocal() {
   for (const p of localPreviews.value) URL.revokeObjectURL(p.url)
@@ -341,20 +331,7 @@ function openExtract() {
   extractOpen.value = true
 }
 
-function continueGate() {
-  error.value = ''
-  if (wantUpload.value === null) {
-    error.value = 'Choose whether to upload a service log'
-    return
-  }
-  if (wantUpload.value === false) {
-    emit('skip')
-    return
-  }
-  if (!props.serviceLogId) {
-    error.value = 'Attach the service log photos, or choose continue without'
-    return
-  }
+function continueWithoutPhotos() {
   emit('done')
 }
 
@@ -376,14 +353,15 @@ onBeforeUnmount(() => {
         class="modal inv-sl-modal-sheet"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="inv-sl-title"
+        aria-labelledby="inv-sl-upload-title"
         @click.stop
       >
         <header class="inv-sl-modal-sheet__head">
           <div>
-            <h2 id="inv-sl-title">Upload a service log?</h2>
+            <p class="inv-sl-kicker">Service log</p>
+            <h2 id="inv-sl-upload-title">Import photos</h2>
             <p class="inv-sl-modal-sheet__sub">
-              Optional — photograph a paper log now, or continue without.
+              Choose the technician, then photograph or upload the paper log.
             </p>
           </div>
           <button
@@ -398,144 +376,121 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="inv-sl-modal-sheet__body">
-          <div class="inv-sl-choice" role="group" aria-label="Upload service log choice">
-            <button
-              type="button"
-              class="inv-sl-choice-btn"
-              :class="{ on: wantUpload === true }"
-              @click="selectWant(true)"
-            >
-              <span class="inv-sl-choice-btn__title">Yes — upload service log</span>
-              <span class="inv-sl-choice-btn__sub">Photos create a service log on this invoice</span>
-            </button>
-            <button
-              type="button"
-              class="inv-sl-choice-btn"
-              :class="{ on: wantUpload === false }"
-              @click="selectWant(false)"
-            >
-              <span class="inv-sl-choice-btn__title">No — continue without</span>
-              <span class="inv-sl-choice-btn__sub">Skip for now and keep building the invoice</span>
-            </button>
-          </div>
+          <label class="fld">
+            <span>Technician</span>
+            <select v-model="technicianId" :disabled="techPending || busy">
+              <option disabled value="">
+                {{ techPending ? 'Loading…' : 'Select technician' }}
+              </option>
+              <option v-for="t in technicians" :key="t.id" :value="t.id">
+                {{ t.name }}
+              </option>
+            </select>
+            <span class="help">
+              {{ techSource === 'mechanics'
+                ? 'Showing mechanic accounts — the log and team message are attributed to them.'
+                : 'No mechanic accounts found — showing all staff.' }}
+            </span>
+          </label>
 
-          <template v-if="wantUpload">
-            <label class="fld" style="margin-top:16px;">
-              <span>Technician</span>
-              <select v-model="technicianId" :disabled="techPending || busy">
-                <option disabled value="">
-                  {{ techPending ? 'Loading…' : 'Select technician' }}
-                </option>
-                <option v-for="t in technicians" :key="t.id" :value="t.id">
-                  {{ t.name }}
-                </option>
-              </select>
-              <span class="help">
-                {{ techSource === 'mechanics'
-                  ? 'Showing mechanic accounts — the log and team message are attributed to them.'
-                  : 'No mechanic accounts found — showing all staff.' }}
-              </span>
-            </label>
-
-            <template v-if="isMobile">
-              <div class="inv-sl-mobile-capture">
-                <label class="inv-sl-drop inv-sl-drop--camera">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    @change="onDesktopFiles"
-                  >
-                  <b>Take photo or choose from gallery</b>
-                  <small>Align the paper service log in frame</small>
-                </label>
-                <button
-                  type="button"
-                  class="btn"
-                  style="width:100%;margin-top:10px;"
-                  @click="showCamera = !showCamera"
+          <template v-if="isMobile">
+            <div class="inv-sl-mobile-capture">
+              <label class="inv-sl-drop inv-sl-drop--camera">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  @change="onDesktopFiles"
                 >
-                  {{ showCamera ? 'Hide document camera' : 'Open document camera' }}
-                </button>
-                <ClientOnly>
-                  <ServiceLogDocumentCamera
-                    v-if="showCamera"
-                    style="margin-top:12px;"
-                    @captured="onCaptured"
-                  />
-                </ClientOnly>
-              </div>
-            </template>
-            <template v-else>
-              <div class="inv-sl-methods">
-                <button
-                  type="button"
-                  class="btn"
-                  :class="{ primary: desktopMethod === 'upload' }"
-                  @click="desktopMethod = 'upload'"
-                >
-                  Upload photos
-                </button>
-                <button
-                  type="button"
-                  class="btn"
-                  :class="{ primary: desktopMethod === 'qr' }"
-                  @click="desktopMethod = 'qr'"
-                >
-                  QR code
-                </button>
-              </div>
-
-              <div v-if="desktopMethod === 'upload'" class="inv-sl-upload-zone">
-                <label class="inv-sl-drop">
-                  <input type="file" accept="image/*" multiple @change="onDesktopFiles">
-                  <b>Drop photos here</b>
-                  <small>or click to browse</small>
-                </label>
-              </div>
-              <div v-else class="inv-sl-qr-cta">
-                <p class="help">
-                  Scan with your phone to open a simple upload page (no login).
-                </p>
-                <button
-                  type="button"
-                  class="btn primary"
-                  :disabled="busy || !technicianId"
-                  @click="startQrSession"
-                >
-                  Show QR code
-                </button>
-              </div>
-            </template>
-
-            <div v-if="localPreviews.length" class="inv-sl-thumbs">
-              <div v-for="p in localPreviews" :key="p.id" class="inv-sl-thumb">
-                <img :src="p.url" alt="Service log photo">
-                <button type="button" class="inv-sl-thumb__x" @click="removePreview(p.id)">×</button>
-              </div>
+                <b>Take photo or choose from gallery</b>
+                <small>Align the paper service log in frame</small>
+              </label>
+              <button
+                type="button"
+                class="btn"
+                style="width:100%;margin-top:10px;"
+                @click="showCamera = !showCamera"
+              >
+                {{ showCamera ? 'Hide document camera' : 'Open document camera' }}
+              </button>
+              <ClientOnly>
+                <ServiceLogDocumentCamera
+                  v-if="showCamera"
+                  style="margin-top:12px;"
+                  @captured="onCaptured"
+                />
+              </ClientOnly>
+            </div>
+          </template>
+          <template v-else>
+            <div class="inv-sl-methods">
+              <button
+                type="button"
+                class="btn"
+                :class="{ primary: desktopMethod === 'upload' }"
+                @click="desktopMethod = 'upload'"
+              >
+                Upload photos
+              </button>
+              <button
+                type="button"
+                class="btn"
+                :class="{ primary: desktopMethod === 'qr' }"
+                @click="desktopMethod = 'qr'"
+              >
+                QR code
+              </button>
             </div>
 
-            <div v-if="localPreviews.length" class="inv-sl-attach-row">
+            <div v-if="desktopMethod === 'upload'" class="inv-sl-upload-zone">
+              <label class="inv-sl-drop">
+                <input type="file" accept="image/*" multiple @change="onDesktopFiles">
+                <b>Drop photos here</b>
+                <small>or click to browse</small>
+              </label>
+            </div>
+            <div v-else class="inv-sl-qr-cta">
+              <p class="help">
+                Scan with your phone to open a simple upload page (no login).
+              </p>
               <button
                 type="button"
                 class="btn primary"
                 :disabled="busy || !technicianId"
-                @click="attachLocalUploads"
+                @click="startQrSession"
               >
-                {{ busy ? 'Attaching…' : 'Attach to invoice' }}
-              </button>
-              <button
-                v-if="serviceLogId"
-                type="button"
-                class="btn"
-                :disabled="busy"
-                @click="openExtract"
-              >
-                Extract line items
+                Show QR code
               </button>
             </div>
           </template>
+
+          <div v-if="localPreviews.length" class="inv-sl-thumbs">
+            <div v-for="p in localPreviews" :key="p.id" class="inv-sl-thumb">
+              <img :src="p.url" alt="Service log photo">
+              <button type="button" class="inv-sl-thumb__x" @click="removePreview(p.id)">×</button>
+            </div>
+          </div>
+
+          <div v-if="localPreviews.length" class="inv-sl-attach-row">
+            <button
+              type="button"
+              class="btn primary"
+              :disabled="busy || !technicianId"
+              @click="attachLocalUploads"
+            >
+              {{ busy ? 'Attaching…' : 'Attach to invoice' }}
+            </button>
+            <button
+              v-if="serviceLogId"
+              type="button"
+              class="btn"
+              :disabled="busy"
+              @click="openExtract"
+            >
+              Extract line items
+            </button>
+          </div>
 
           <p v-if="error" class="help inv-sl-error">{{ error }}</p>
         </div>
@@ -548,9 +503,9 @@ onBeforeUnmount(() => {
             type="button"
             class="btn primary"
             :disabled="busy"
-            @click="continueGate"
+            @click="continueWithoutPhotos"
           >
-            Continue
+            {{ serviceLogId ? 'Continue' : 'Continue without photos' }}
           </button>
         </footer>
       </div>

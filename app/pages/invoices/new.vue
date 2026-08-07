@@ -44,6 +44,7 @@ import {
 } from '~/composables/useSessionLogoutHandlers'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
+import InvoiceWizardServiceLogStep from '~/components/invoices/InvoiceWizardServiceLogStep.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import type { InvoiceLineAuditContent } from '#shared/validators/ai'
 import {
@@ -126,6 +127,8 @@ const INVOICE_NARRATIONS: Record<number, string> = {
 
 /** Invisible post-vehicle gate — not a numbered wizard step. */
 const serviceLogGate = ref(false)
+/** Follow-up upload modal after the user answers Yes on the gate. */
+const serviceLogUploadOpen = ref(false)
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
 const submitError = ref('')
@@ -307,6 +310,7 @@ watch(customerId, (id, oldId) => {
     vehicleId.value = ''
     serviceLogId.value = ''
     serviceLogGate.value = false
+    serviceLogUploadOpen.value = false
   }
 })
 
@@ -486,16 +490,32 @@ function prevFromLinesStep() {
 
 function openServiceLogGate() {
   submitError.value = ''
+  serviceLogUploadOpen.value = false
   serviceLogGate.value = true
 }
 
 function closeServiceLogGate() {
   serviceLogGate.value = false
+  serviceLogUploadOpen.value = false
+  submitError.value = ''
+}
+
+function onServiceLogGateNo() {
+  serviceLogGate.value = false
+  serviceLogUploadOpen.value = false
+  submitError.value = ''
+  step.value = 3
+}
+
+function onServiceLogGateYes() {
+  serviceLogGate.value = false
+  serviceLogUploadOpen.value = true
   submitError.value = ''
 }
 
 function finishServiceLogGate() {
   serviceLogGate.value = false
+  serviceLogUploadOpen.value = false
   submitError.value = ''
   step.value = 3
 }
@@ -998,9 +1018,65 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Invisible post-vehicle popup (not a numbered stepper step) -->
+    <!-- Invisible post-vehicle Yes/No gate (not a numbered stepper step) -->
+    <Teleport to="body">
+      <div
+        v-if="serviceLogGate"
+        class="modal-scrim open inv-sl-gate-scrim"
+        role="presentation"
+        @click.self="closeServiceLogGate"
+      >
+        <div
+          class="inv-sl-gate"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inv-sl-gate-title"
+          @click.stop
+        >
+          <div class="inv-sl-gate__glow" aria-hidden="true" />
+          <div class="inv-sl-gate__icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
+              <rect x="8" y="6" width="32" height="36" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-width="2" />
+              <path d="M16 18h16M16 24h12M16 30h10" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" />
+              <circle cx="34" cy="34" r="9" fill="#4f46e5" />
+              <path d="M31 34.5l2 2 4.5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <h2 id="inv-sl-gate-title">Do you want to import a service log?</h2>
+          <p class="inv-sl-gate__sub">
+            Optional — photograph a paper log for this vehicle, or skip and keep building the invoice.
+          </p>
+          <div class="inv-sl-gate__actions">
+            <button
+              type="button"
+              class="inv-sl-gate__btn inv-sl-gate__btn--yes"
+              @click="onServiceLogGateYes"
+            >
+              <span class="inv-sl-gate__btn-label">Yes</span>
+              <span class="inv-sl-gate__btn-hint">Import service log</span>
+            </button>
+            <button
+              type="button"
+              class="inv-sl-gate__btn inv-sl-gate__btn--no"
+              @click="onServiceLogGateNo"
+            >
+              <span class="inv-sl-gate__btn-label">No</span>
+              <span class="inv-sl-gate__btn-hint">Continue without</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="inv-sl-gate__back"
+            @click="closeServiceLogGate"
+          >
+            Back to vehicle
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
     <InvoiceWizardServiceLogStep
-      :open="serviceLogGate"
+      :open="serviceLogUploadOpen"
       :customer-id="customerId"
       :vehicle-id="vehicleId"
       :invoice-id="invoiceId"
@@ -1010,7 +1086,6 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       :ensure-draft="ensureDraft"
       @update:service-log-id="serviceLogId = $event"
       @attached="onServiceLogAttached"
-      @skip="finishServiceLogGate"
       @done="finishServiceLogGate"
       @back="closeServiceLogGate"
     />
