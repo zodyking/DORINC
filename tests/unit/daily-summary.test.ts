@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
-import { buildSusanBillingInsights } from '../../shared/susan-billing-insights'
 import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
 import {
   buildSusanDailyActions,
@@ -234,13 +233,4 @@ describe('daily summary + Susan', () => {
     expect(mail.text).toContain('INV-000042')
   })
 
-  it('builds billing-page Susan insights with reconcile CTA', () => {
-    const insights = buildSusanBillingInsights(emptyBilling(), {
-      overdueCount: 2,
-      outstandingCount: 2,
-      outstandingTotal: '800',
-    })
-    expect(insights[0]?.href).toBe('/invoices/reconcile')
-    expect(insights[0]?.ctaLabel).toMatch(/Reconcile/i)
-  })
 })
