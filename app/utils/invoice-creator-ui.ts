@@ -7,10 +7,9 @@ import type { InvoiceLineType } from './invoices-ui'
 export const INVOICE_WIZARD_STEPS = [
   { n: 1, label: 'Customer' },
   { n: 2, label: 'Vehicle' },
-  { n: 3, label: 'Service log' },
-  { n: 4, label: 'Dates & terms' },
-  { n: 5, label: 'Line items' },
-  { n: 6, label: 'Review' },
+  { n: 3, label: 'Dates & terms' },
+  { n: 4, label: 'Line items' },
+  { n: 5, label: 'Review' },
 ] as const
 
 export const LINE_TYPE_OPTIONS: { value: InvoiceLineType, label: string }[] = [
@@ -120,8 +119,7 @@ export function canProceedWizardStep(
   if (step === 1) return Boolean(ctx.customerId)
   if (step === 2) return Boolean(ctx.customerId)
   if (step === 3) return Boolean(ctx.customerId)
-  if (step === 4) return Boolean(ctx.customerId)
-  if (step === 5) return ctx.lines.some(isDraftLineValid)
+  if (step === 4) return ctx.lines.some(isDraftLineValid)
   return true
 }
 
