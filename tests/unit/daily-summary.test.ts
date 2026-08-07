@@ -141,7 +141,7 @@ describe('daily summary + Susan', () => {
     expect(actions.every(a => !a.includes('—'))).toBe(true)
   })
 
-  it('renders section stats, tables, and alternating Susan quotes', () => {
+  it('renders section stats, tables, and polished Susan note cards', () => {
     const mail = buildDailySummaryEmail({
       reportDateLabel: 'Aug 7, 2026',
       recipientName: 'Alex',
@@ -224,12 +224,12 @@ describe('daily summary + Susan', () => {
     expect(mail.html).toContain('12,400')
     expect(mail.html).toContain('$1.25')
     expect(mail.html).toContain('Jordan')
-    expect(mail.html).toContain('&ldquo;')
-    expect(mail.html).toContain('font-style:italic')
-    expect(mail.html).toContain('font-weight:700')
-    expect(mail.html).toContain('align="right"')
-    expect(mail.html).toContain('align="left"')
-    expect(mail.text).toContain('Susan: "')
+    expect(mail.html).toContain('From Susan')
+    expect(mail.html).toContain('border-left:3px solid')
+    expect(mail.html).not.toContain('Georgia')
+    expect(mail.html).not.toContain('font-style:italic')
+    expect(mail.html).not.toContain('&ldquo;')
+    expect(mail.text).toContain('From Susan:')
     expect(mail.text).toContain('INV-000042')
   })
 
