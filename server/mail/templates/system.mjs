@@ -369,12 +369,13 @@ export function buildBackupNotificationEmail({
 }
 
 function moneyOrDash(value) {
-  return formatMoneyForDisplay(value) ?? '—'
+  return formatMoneyForDisplay(value) ?? 'n/a'
 }
 
 /**
- * Daily ops summary for admins/managers — outstanding invoices + billing snapshot.
- * Sections expand when Vultr / Cloudflare / OpenRouter (Susan) integrations are enabled.
+ * Daily ops summary for admins/managers.
+ * Each section shows stats (+ optional table) and a bold-italic quoted Susan insight,
+ * alternating left/right alignment for visual rhythm.
  */
 export function buildDailySummaryEmail({
   reportDateLabel,
@@ -382,7 +383,9 @@ export function buildDailySummaryEmail({
   invoiceStats,
   outstandingInvoices = [],
   billing,
+  sections = [],
   susanActions = [],
+  susanEnabled: susanEnabledOpt,
   appUrl,
   brand,
   templateOverride,
@@ -393,154 +396,193 @@ export function buildDailySummaryEmail({
   const outstandingCount = Number(invoiceStats?.outstandingCount ?? 0)
   const paidThisMonth = moneyOrDash(invoiceStats?.paidThisMonthTotal)
   const hasBilling = Boolean(billing?.configured?.vultr || billing?.configured?.cloudflare || billing?.configured?.openrouter)
-  const susanEnabled = Boolean(billing?.configured?.openrouter)
+  const susanEnabled = susanEnabledOpt != null
+    ? Boolean(susanEnabledOpt)
+    : Boolean(billing?.configured?.openrouter)
 
-  const subject = `Daily Summary — ${reportDateLabel}`
+  const resolvedSections = Array.isArray(sections) && sections.length
+    ? sections
+    : []
+
+  const subject = `Daily Summary: ${reportDateLabel}`
   const textLines = [
     recipientName ? `Hi ${recipientName},` : 'Hi,',
     '',
     `Daily summary for ${reportDateLabel}.`,
-    '',
-    `Outstanding invoices: ${outstandingCount} (${outstandingTotal})`,
-    `Overdue: ${overdueCount}`,
-    `Paid this month: ${paidThisMonth}`,
   ]
-  if (hasBilling) {
-    textLines.push(
-      '',
-      `Est. monthly ops: ${moneyOrDash(billing.totals?.estimatedMonthlyUsd)}`,
-      `Est. yearly ops: ${moneyOrDash(billing.totals?.estimatedYearlyUsd)}`,
-    )
-  }
-  if (outstandingInvoices.length) {
-    textLines.push('', 'Outstanding invoices:')
-    for (const row of outstandingInvoices) {
-      textLines.push(
-        `- ${row.invoiceNumber} | ${row.customerName} | ${row.vehicleLabel} | due ${row.dueDate || '—'} | ${moneyOrDash(row.balanceDue)}${row.overdue ? ' (overdue)' : ''}`,
-      )
+
+  for (const section of resolvedSections) {
+    textLines.push('', `${section.title}:`)
+    for (const stat of section.stats || []) {
+      textLines.push(`  ${stat.label}: ${stat.value}`)
+    }
+    if (section.table?.rows?.length) {
+      for (const row of section.table.rows) {
+        textLines.push(`  - ${row.filter(Boolean).join(' | ')}`)
+      }
+    }
+    if (section.insight) {
+      textLines.push(`  Susan: "${section.insight}"`)
     }
   }
-  if (susanActions.length) {
-    textLines.push('', 'Susan recommends:')
+
+  // Legacy fallback when callers still pass susanActions without sections
+  if (!resolvedSections.length && susanActions.length) {
+    textLines.push('', 'Susan notes:')
     for (const action of susanActions) textLines.push(`- ${action}`)
   }
+
   if (base) {
     textLines.push('', `Billing: ${base}/billing`, `Invoices: ${base}/invoices`)
   }
 
   const t = EMAIL_TOKENS
-  const sectionTitle = label => (
-    `<div style="font-size:13px;line-height:18px;font-weight:700;color:${t.ink};font-family:${t.font};padding:0 0 10px 0;">${escapeHtml(label)}</div>`
+
+  const sectionTitleHtml = label => (
+    `<div style="font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${t.accent};font-family:${t.font};padding:0 0 12px 0;">${escapeHtml(label)}</div>`
   )
 
-  const invoiceRowsHtml = outstandingInvoices.length
-    ? outstandingInvoices.map((row, index) => {
-        const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc'
-        const dueColor = row.overdue ? '#b91c1c' : t.ink
-        return [
-          `<tr bgcolor="${bg}">`,
-          `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};">${escapeHtml(row.invoiceNumber)}</td>`,
-          `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};">${escapeHtml(row.customerName)}</td>`,
-          `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.muted};">${escapeHtml(row.vehicleLabel)}</td>`,
-          `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${dueColor};white-space:nowrap;">${escapeHtml(row.dueDate || '—')}${row.overdue ? '<br><span style="font-size:11px;font-weight:700;">Overdue</span>' : ''}</td>`,
-          `<td align="right" style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};font-weight:700;white-space:nowrap;">${escapeHtml(moneyOrDash(row.balanceDue))}</td>`,
-          `</tr>`,
-        ].join('')
-      }).join('')
-    : `<tr><td colspan="5" style="padding:14px 8px;border-top:1px solid ${t.border};font-size:13px;color:${t.muted};font-family:${t.font};">No outstanding customer invoices.</td></tr>`
-
-  const invoiceTable = [
-    sectionTitle('Outstanding invoices'),
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};">`,
-    `<tr bgcolor="#f8fafc">`,
-    `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Invoice</th>`,
-    `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Customer</th>`,
-    `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Vehicle</th>`,
-    `<th align="left" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Due</th>`,
-    `<th align="right" style="padding:10px 8px;font-size:11px;line-height:14px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;">Balance</th>`,
-    `</tr>`,
-    invoiceRowsHtml,
-    `</table>`,
-  ].join('')
-
-  const billingParts = []
-  if (hasBilling) {
-    const details = [
-      { label: 'Est. monthly', value: moneyOrDash(billing.totals?.estimatedMonthlyUsd) },
-      { label: 'Est. yearly', value: moneyOrDash(billing.totals?.estimatedYearlyUsd) },
-    ]
-    if (billing.configured?.vultr) {
-      details.push(
-        { label: 'Hosting (monthly)', value: moneyOrDash(billing.totals?.breakdown?.vultrUsd) },
-        { label: 'Vultr balance', value: moneyOrDash(billing.vultr?.accountBalance) },
-      )
+  const statsGridHtml = (stats = []) => {
+    if (!stats.length) return ''
+    const cells = stats.map((stat) => {
+      return [
+        `<td width="25%" valign="top" style="padding:0 8px 12px 0;">`,
+        `<div style="font-size:11px;line-height:14px;color:${t.muted};font-family:${t.font};padding-bottom:4px;">${escapeHtml(stat.label)}</div>`,
+        `<div style="font-size:18px;line-height:22px;font-weight:700;color:${t.ink};font-family:${t.font};letter-spacing:-0.2px;">${escapeHtml(stat.value)}</div>`,
+        `</td>`,
+      ].join('')
+    })
+    // Chunk into rows of 4 for email-safe layout
+    const rows = []
+    for (let i = 0; i < cells.length; i += 4) {
+      const slice = cells.slice(i, i + 4)
+      while (slice.length < 4) {
+        slice.push(`<td width="25%" style="padding:0;"></td>`)
+      }
+      rows.push(`<tr>${slice.join('')}</tr>`)
     }
-    if (billing.configured?.cloudflare) {
-      const dueSoon = (billing.cloudflare?.domains || []).filter(d => d.daysUntilRenewal <= 30).length
-      details.push(
-        { label: 'Domains', value: String(billing.cloudflare?.domains?.length ?? 0) },
-        { label: 'Renewals ≤30 days', value: String(dueSoon) },
-        { label: 'Domain yearly', value: moneyOrDash(billing.totals?.breakdownYearly?.cloudflareUsd) },
-      )
-    }
-    if (billing.configured?.openrouter) {
-      details.push(
-        { label: 'Susan usage (month)', value: moneyOrDash(billing.totals?.breakdown?.openrouterUsd) },
-        { label: 'Susan credit left', value: moneyOrDash(billing.openrouter?.remainingCredits ?? billing.openrouter?.limitRemaining) },
-      )
-    }
-    billingParts.push(sectionTitle('Operations billing'))
-    billingParts.push(
+    return [
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">`,
-      ...details.map((row, index) => [
-        `<tr>`,
-        `<td style="padding:${index === 0 ? 0 : 8}px 12px 0 0;font-size:12px;color:${t.muted};font-family:${t.font};">${escapeHtml(row.label)}</td>`,
-        `<td align="right" style="padding:${index === 0 ? 0 : 8}px 0 0 0;font-size:13px;font-weight:700;color:${t.ink};font-family:${t.font};">${escapeHtml(row.value)}</td>`,
-        `</tr>`,
-      ].join('')),
+      ...rows,
       `</table>`,
-    )
-
-    if (billing.configured?.vultr || billing.configured?.cloudflare || billing.configured?.openrouter) {
-      const yearly = billing.totals?.breakdownYearly || {}
-      billingParts.push(
-        `<div style="padding-top:16px;">${sectionTitle('Year outlook')}</div>`,
-        `<div style="font-size:13px;line-height:20px;color:${t.muted};font-family:${t.font};">`,
-        `Projected full-year ops spend is <strong style="color:${t.ink};">${escapeHtml(moneyOrDash(billing.totals?.estimatedYearlyUsd))}</strong>`,
-        billing.configured?.vultr ? ` · hosting ${escapeHtml(moneyOrDash(yearly.vultrUsd))}` : '',
-        billing.configured?.cloudflare ? ` · domains ${escapeHtml(moneyOrDash(yearly.cloudflareUsd))}` : '',
-        billing.configured?.openrouter ? ` · Susan ${escapeHtml(moneyOrDash(yearly.openrouterUsd))}` : '',
-        `.</div>`,
-      )
-    }
+    ].join('')
   }
 
-  let susanHtml = ''
-  if (susanActions.length) {
-    susanHtml = [
-      `<div style="padding-top:8px;">${sectionTitle(susanEnabled ? 'Susan recommends' : 'Keep things running smooth')}</div>`,
+  const tableHtml = (table) => {
+    if (!table?.headers?.length) return ''
+    const colCount = table.headers.length
+    const head = table.headers.map((h, idx) => {
+      const align = idx === colCount - 1 ? 'right' : 'left'
+      return `<th align="${align}" style="padding:9px 8px;font-size:10px;line-height:13px;font-weight:700;color:${t.muted};font-family:${t.font};text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid ${t.border};">${escapeHtml(h)}</th>`
+    }).join('')
+    const body = (table.rows || []).map((row, index) => {
+      const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc'
+      const cells = row.map((cell, idx) => {
+        const align = idx === colCount - 1 ? 'right' : 'left'
+        const weight = idx === colCount - 1 ? '700' : '400'
+        return `<td align="${align}" style="padding:9px 8px;border-top:1px solid ${t.border};font-size:12px;line-height:17px;font-family:${t.font};color:${t.ink};font-weight:${weight};">${escapeHtml(cell ?? '')}</td>`
+      }).join('')
+      // Pad short rows
+      const pad = Math.max(0, colCount - row.length)
+      const pads = Array.from({ length: pad }, () => `<td style="padding:9px 8px;border-top:1px solid ${t.border};"></td>`).join('')
+      return `<tr bgcolor="${bg}">${cells}${pads}</tr>`
+    }).join('')
+
+    return [
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};">`,
+      `<tr bgcolor="#f8fafc">${head}</tr>`,
+      body,
+      `</table>`,
+    ].join('')
+  }
+
+  const susanInsightHtml = (insight, index) => {
+    if (!insight) return ''
+    const alignRight = index % 2 === 1
+    const align = alignRight ? 'right' : 'left'
+    const pad = alignRight ? '0 0 0 28px' : '0 28px 0 0'
+    const borderSide = alignRight ? 'border-right' : 'border-left'
+    return [
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-top:14px;">`,
+      `<tr>`,
+      `<td align="${align}" style="padding:${pad};${borderSide}:3px solid ${t.accent};">`,
+      `<div style="font-size:10px;line-height:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${t.accent};font-family:${t.font};padding-bottom:4px;">Susan</div>`,
+      `<div style="font-size:14px;line-height:21px;font-weight:700;font-style:italic;color:${t.ink};font-family:Georgia,'Times New Roman',serif;">&ldquo;${escapeHtml(insight)}&rdquo;</div>`,
+      `</td>`,
+      `</tr>`,
+      `</table>`,
+    ].join('')
+  }
+
+  const sectionsHtml = resolvedSections.map((section, index) => {
+    return [
+      `<div style="padding:${index === 0 ? '0' : '26'}px 0 0 0;">`,
+      sectionTitleHtml(section.title || 'Section'),
+      statsGridHtml(section.stats || []),
+      section.table ? `<div style="padding-top:4px;">${tableHtml(section.table)}</div>` : '',
+      susanInsightHtml(section.insight, index),
+      `</div>`,
+    ].join('')
+  }).join('')
+
+  let legacySusanHtml = ''
+  if (!resolvedSections.length && susanActions.length) {
+    legacySusanHtml = [
+      `<div style="padding-top:8px;">${sectionTitleHtml(susanEnabled ? 'Susan notes' : 'Notes')}</div>`,
       `<ul style="margin:0;padding:0 0 0 18px;color:${t.ink};font-size:13px;line-height:22px;font-family:${t.font};">`,
       ...susanActions.map(action => `<li style="padding:0 0 4px 0;">${escapeHtml(action)}</li>`),
       `</ul>`,
     ].join('')
   }
 
+  // Fallback invoice table if no sections (older callers)
+  let fallbackHtml = ''
+  if (!resolvedSections.length && outstandingInvoices) {
+    const rows = outstandingInvoices.length
+      ? outstandingInvoices.map((row, index) => {
+          const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc'
+          return [
+            `<tr bgcolor="${bg}">`,
+            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;font-family:${t.font};">${escapeHtml(row.invoiceNumber)}</td>`,
+            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;font-family:${t.font};">${escapeHtml(row.customerName)}</td>`,
+            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;font-family:${t.font};color:${t.muted};">${escapeHtml(row.vehicleLabel)}</td>`,
+            `<td style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;font-family:${t.font};">${escapeHtml(row.dueDate || '-')}${row.overdue ? ' (overdue)' : ''}</td>`,
+            `<td align="right" style="padding:10px 8px;border-top:1px solid ${t.border};font-size:12px;font-weight:700;font-family:${t.font};">${escapeHtml(moneyOrDash(row.balanceDue))}</td>`,
+            `</tr>`,
+          ].join('')
+        }).join('')
+      : `<tr><td colspan="5" style="padding:14px 8px;border-top:1px solid ${t.border};font-size:13px;color:${t.muted};font-family:${t.font};">No outstanding customer invoices.</td></tr>`
+    fallbackHtml = [
+      sectionTitleHtml('Outstanding invoices'),
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;border:1px solid ${t.border};">`,
+      `<tr bgcolor="#f8fafc">`,
+      `<th align="left" style="padding:10px 8px;font-size:11px;font-weight:700;color:${t.muted};font-family:${t.font};">Invoice</th>`,
+      `<th align="left" style="padding:10px 8px;font-size:11px;font-weight:700;color:${t.muted};font-family:${t.font};">Customer</th>`,
+      `<th align="left" style="padding:10px 8px;font-size:11px;font-weight:700;color:${t.muted};font-family:${t.font};">Vehicle</th>`,
+      `<th align="left" style="padding:10px 8px;font-size:11px;font-weight:700;color:${t.muted};font-family:${t.font};">Due</th>`,
+      `<th align="right" style="padding:10px 8px;font-size:11px;font-weight:700;color:${t.muted};font-family:${t.font};">Balance</th>`,
+      `</tr>`,
+      rows,
+      `</table>`,
+    ].join('')
+  }
+
   const bodyHtml = [
-    invoiceTable,
-    billingParts.length ? `<div style="padding-top:22px;">${billingParts.join('')}</div>` : '',
-    susanHtml ? `<div style="padding-top:22px;">${susanHtml}</div>` : '',
+    sectionsHtml,
+    fallbackHtml,
+    legacySusanHtml ? `<div style="padding-top:22px;">${legacySusanHtml}</div>` : '',
   ].filter(Boolean).join('')
 
   const lead = susanEnabled
-    ? `Here's today's receivables snapshot${hasBilling ? ' and ops billing outlook' : ''}. Susan flagged a few items to keep cash flow and infrastructure smooth.`
-    : `Here's today's receivables snapshot${hasBilling ? ' and ops billing outlook' : ''} for managers and admins.`
+    ? `Stats for ${reportDateLabel}, with a short note from Susan under each section.`
+    : `Ops snapshot for ${reportDateLabel}.`
 
   return styledEmail({
     headerBadge: '',
     subject,
     text: textLines.join('\n'),
     eyebrow: '',
-    headline: `Daily summary — ${reportDateLabel}`,
+    headline: `Daily summary: ${reportDateLabel}`,
     lead,
     highlight: {
       label: 'Outstanding balance',
@@ -554,12 +596,6 @@ export function buildDailySummaryEmail({
       { label: 'Drafts', value: String(invoiceStats?.draftCount ?? 0) },
       { label: 'Awaiting approval', value: String(invoiceStats?.pendingManagerApprovalCount ?? 0) },
     ],
-    note: susanEnabled
-      ? {
-          title: 'From Susan',
-          body: 'Review outstanding invoices for reconciliation, then clear any ops bills that are due so hosting, domains, and AI stay uninterrupted.',
-        }
-      : undefined,
     primaryAction: base
       ? { href: `${base}/invoices/reconcile`, label: 'Reconcile invoices' }
       : undefined,

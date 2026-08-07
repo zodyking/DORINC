@@ -258,7 +258,7 @@ export const NOTIFICATION_SETTING_META: Array<{
   {
     key: 'dailySummaryReport',
     label: 'Daily summary report',
-    description: 'Email admins and managers a daily billing + outstanding invoice digest. Set the send time below.',
+    description: 'Email admins and managers a daily ops digest (invoices, Susan usage, inquiries, deletions, backups, disk, billing). Set the send time below. Test send goes only to you.',
     group: 'system',
   },
 ]
