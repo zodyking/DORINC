@@ -13,7 +13,11 @@ import {
   getAppUrl,
 } from './app-config.service'
 import { BRAND_NAME } from '../../shared/brand'
-import { normalizeOpenRouterApiKey } from '../../shared/openrouter-auth'
+import {
+  isOpenRouterAuthErrorMessage,
+  normalizeOpenRouterApiKey,
+  openRouterAuthRecoveryMessage,
+} from '../../shared/openrouter-auth'
 import type { AiProviderSettingsPatch } from '../../shared/validators/ai'
 
 export type AiProviderServiceErrorCode = 'NOT_CONFIGURED' | 'KEY_MISSING' | 'CONNECTION_FAILED' | 'SPEND_CAP_EXCEEDED'
@@ -334,8 +338,8 @@ function toModelOption(row: OpenRouterModelRow): OpenRouterModelOption | null {
 
 /** Resolve OpenRouter key for admin model picker — never throws; falls back to public catalog. */
 export async function resolveOpenRouterApiKey(db: Db, overrideKey?: string): Promise<string | undefined> {
-  const trimmed = overrideKey?.trim()
-  if (trimmed) return trimmed
+  const normalized = normalizeOpenRouterApiKey(overrideKey)
+  if (normalized) return normalized
 
   try {
     return await getDecryptedApiKey(db) ?? undefined
@@ -347,20 +351,20 @@ export async function resolveOpenRouterApiKey(db: Db, overrideKey?: string): Pro
 
 /** List OpenRouter models with pricing. API key optional (public catalog). */
 export async function listOpenRouterModels(apiKey?: string): Promise<OpenRouterModelOption[]> {
-  const headers: Record<string, string> = {
-    'HTTP-Referer': getAppUrl(),
-    'X-Title': BRAND_NAME,
-  }
-  if (apiKey?.trim()) {
-    headers.Authorization = `Bearer ${apiKey.trim()}`
-  }
+  const key = normalizeOpenRouterApiKey(apiKey)
+  const headers = new Headers()
+  headers.set('Accept', 'application/json')
+  headers.set('HTTP-Referer', getAppUrl())
+  headers.set('X-Title', BRAND_NAME)
+  if (key) headers.set('Authorization', `Bearer ${key}`)
 
   const res = await fetch('https://openrouter.ai/api/v1/models', { headers })
   if (!res.ok) {
-    const body = await res.text().catch(() => '')
+    const payload = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    const raw = payload.error?.message || `OpenRouter returned ${res.status}`
     throw new AiProviderServiceError(
       'CONNECTION_FAILED',
-      body || `OpenRouter returned ${res.status}`,
+      isOpenRouterAuthErrorMessage(raw) ? openRouterAuthRecoveryMessage() : raw,
     )
   }
 
@@ -375,17 +379,45 @@ export async function listOpenRouterModels(apiKey?: string): Promise<OpenRouterM
   return options
 }
 
-/** Verify OpenRouter credentials via GET /api/v1/models. */
+/**
+ * Verify OpenRouter credentials via authenticated GET /api/v1/key.
+ * Do NOT use the public /models catalog — it can succeed without a valid chat key.
+ */
 export async function testOpenRouterConnection(apiKey: string): Promise<OpenRouterTestResult> {
-  const models = await listOpenRouterModels(apiKey)
+  const key = normalizeOpenRouterApiKey(apiKey)
+  if (!key) {
+    throw new AiProviderServiceError('NOT_CONFIGURED', openRouterAuthRecoveryMessage())
+  }
+
+  const headers = new Headers()
+  headers.set('Authorization', `Bearer ${key}`)
+  headers.set('Accept', 'application/json')
+  headers.set('HTTP-Referer', getAppUrl())
+  headers.set('X-Title', BRAND_NAME)
+
+  const res = await fetch('https://openrouter.ai/api/v1/key', { headers })
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    const raw = payload.error?.message || `OpenRouter returned ${res.status}`
+    throw new AiProviderServiceError(
+      'CONNECTION_FAILED',
+      isOpenRouterAuthErrorMessage(raw) ? openRouterAuthRecoveryMessage() : raw,
+    )
+  }
+
+  // Optional catalog count for the success message (public endpoint).
+  const modelCount = await listOpenRouterModels(key)
+    .then(models => models.length)
+    .catch(() => 0)
+
   return {
     ok: true,
-    modelCount: models.length,
+    modelCount,
   }
 }
 
 export async function testAiConnection(db: Db, overrideKey?: string): Promise<OpenRouterTestResult> {
-  const apiKey = overrideKey ?? await getDecryptedApiKey(db)
+  const apiKey = normalizeOpenRouterApiKey(overrideKey) || await getDecryptedApiKey(db)
   if (!apiKey) {
     throw new AiProviderServiceError('NOT_CONFIGURED', 'OpenRouter API key is not configured')
   }

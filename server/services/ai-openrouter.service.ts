@@ -78,7 +78,11 @@ export async function openRouterChat(
   model: string,
   messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }>,
   feature: AiFeatureType,
-  opts: { responseFormat?: 'json' | 'text', temperature?: number } = {},
+  opts: {
+    responseFormat?: 'json' | 'text'
+    temperature?: number
+    maxTokens?: number
+  } = {},
 ): Promise<OpenRouterChatResult> {
   const key = normalizeOpenRouterApiKey(apiKey)
   if (!key) {
@@ -104,6 +108,9 @@ export async function openRouterChat(
     model: String(model).trim(),
     messages,
     temperature,
+  }
+  if (opts.maxTokens != null && Number.isFinite(opts.maxTokens)) {
+    body.max_tokens = Math.max(1, Math.floor(opts.maxTokens))
   }
   if (responseFormat === 'json') {
     body.response_format = { type: 'json_object' }

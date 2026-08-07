@@ -38,6 +38,30 @@ function parseJsonBlock(text) {
   }
 }
 
+function normalizeOpenRouterApiKey(raw) {
+  if (!raw) return ''
+  return String(raw)
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/\s+/g, '')
+}
+
+function isOpenRouterAuthErrorMessage(message) {
+  const text = String(message || '').trim().toLowerCase()
+  return (
+    text.includes('missing authentication header')
+    || text.includes('no auth credentials')
+    || text.includes('unauthorized')
+    || text.includes('invalid api key')
+    || text.includes('invalid token')
+    || text.includes('user not found')
+    || text.includes('authentication failed')
+  )
+}
+
+const OPENROUTER_AUTH_RECOVERY
+  = 'OpenRouter authentication failed. Re-paste your OpenRouter API key in Control Panel → AI, then save.'
+
 async function loadAiSettings(pool) {
   const { rows } = await pool.query(`SELECT * FROM ai_provider_settings LIMIT 1`)
   const row = rows[0]
@@ -45,7 +69,7 @@ async function loadAiSettings(pool) {
     throw new Error('AI is not configured or disabled')
   }
   await hydrateMasterKeyFromDb(pool)
-  const apiKey = decryptBuffer(row.encrypted_api_key).toString('utf8').trim()
+  const apiKey = normalizeOpenRouterApiKey(decryptBuffer(row.encrypted_api_key).toString('utf8'))
   if (!apiKey) {
     throw new Error('Stored OpenRouter API key is empty — re-save AI settings in Control Panel')
   }
@@ -75,14 +99,19 @@ function modelFor(settings, feature) {
 }
 
 async function openRouterChat(apiKey, model, messages, temperature = 0.3) {
+  const key = normalizeOpenRouterApiKey(apiKey)
+  if (!key) throw new Error(OPENROUTER_AUTH_RECOVERY)
+
+  const headers = new Headers()
+  headers.set('Authorization', `Bearer ${key}`)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Accept', 'application/json')
+  headers.set('HTTP-Referer', process.env.APP_URL ?? 'http://localhost:3000')
+  headers.set('X-Title', 'DORINC')
+
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.APP_URL ?? 'http://localhost:3000',
-      'X-Title': 'DORINC',
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages,
@@ -91,9 +120,10 @@ async function openRouterChat(apiKey, model, messages, temperature = 0.3) {
     }),
   })
 
-  const payload = await res.json()
+  const payload = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(payload.error?.message ?? `OpenRouter returned ${res.status}`)
+    const raw = payload.error?.message ?? `OpenRouter returned ${res.status}`
+    throw new Error(isOpenRouterAuthErrorMessage(raw) ? OPENROUTER_AUTH_RECOVERY : raw)
   }
 
   const content = payload.choices?.[0]?.message?.content?.trim()
