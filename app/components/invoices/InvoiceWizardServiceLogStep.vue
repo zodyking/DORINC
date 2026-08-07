@@ -1,12 +1,17 @@
 <script setup lang="ts">
 /**
  * Post-vehicle service log upload prompt (not a numbered wizard step).
- * Desktop: neat photo dropzone (+ phone QR). Mobile: camera icon → 100dvh capture.
+ * Desktop: upload dropzone + live QR side by side.
+ * Mobile: camera icon → 100dvh capture.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
 import ServiceLogAiExtractModal from '~/components/service-logs/ServiceLogAiExtractModal.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
+import {
+  SERVICE_LOG_MAX_PHOTOS,
+  serviceLogPhotoSlotLabel,
+} from '#shared/service-log-photos'
 
 const props = defineProps<{
   open: boolean
@@ -27,14 +32,13 @@ const emit = defineEmits<{
 }>()
 
 type Tech = { id: string, name: string, email: string, accountType: string }
-type DesktopMethod = 'upload' | 'qr'
 
 const technicianId = ref('')
 const technicians = ref<Tech[]>([])
 const techSource = ref<'mechanics' | 'all_staff'>('all_staff')
 const techPending = ref(false)
-const desktopMethod = ref<DesktopMethod>('upload')
 const busy = ref(false)
+const qrBusy = ref(false)
 const error = ref('')
 const localPreviews = ref<{ id: string, url: string, file: File }[]>([])
 const successOpen = ref(false)
@@ -43,12 +47,12 @@ const extractOpen = ref(false)
 const extractFileId = ref<string | null>(null)
 const cameraOpen = ref(false)
 
-const qrOpen = ref(false)
 const qrDataUrl = ref('')
 const qrUploadUrl = ref('')
 const qrSessionId = ref('')
 const qrStatus = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let qrRequestSeq = 0
 
 const isMobile = computed(() => {
   if (!import.meta.client) return false
@@ -81,10 +85,10 @@ async function loadTechnicians() {
   }
 }
 
-watch(() => props.open, (open) => {
+watch(() => props.open, async (open) => {
   if (!open) {
     stopPoll()
-    qrOpen.value = false
+    await cancelQr(false)
     successOpen.value = false
     extractOpen.value = false
     cameraOpen.value = false
@@ -92,10 +96,18 @@ watch(() => props.open, (open) => {
   }
   error.value = ''
   successOpen.value = false
-  qrOpen.value = false
   cameraOpen.value = false
   clearLocal()
-  void loadTechnicians()
+  await loadTechnicians()
+  if (!isMobile.value && technicianId.value) {
+    void ensureQrSession()
+  }
+})
+
+watch(technicianId, async (id, prev) => {
+  if (!props.open || isMobile.value || !id || id === prev) return
+  await cancelQr(false)
+  void ensureQrSession()
 })
 
 function clearLocal() {
@@ -104,12 +116,16 @@ function clearLocal() {
 }
 
 function onCaptured(file: File) {
+  if (localPreviews.value.length >= SERVICE_LOG_MAX_PHOTOS) {
+    error.value = 'Max 2 photos — front and back only. Remove one to retake.'
+    return
+  }
+  error.value = ''
   localPreviews.value.push({
     id: crypto.randomUUID(),
     url: URL.createObjectURL(file),
     file,
   })
-  // Keep fullscreen open so they can shoot another page; close if they prefer from X.
 }
 
 function onDesktopFiles(ev: Event) {
@@ -117,9 +133,16 @@ function onDesktopFiles(ev: Event) {
   const files = [...(input.files ?? [])]
   input.value = ''
   for (const file of files) {
-    if (file.type.startsWith('image/')) onCaptured(file)
+    if (!file.type.startsWith('image/')) continue
+    if (localPreviews.value.length >= SERVICE_LOG_MAX_PHOTOS) {
+      error.value = 'Max 2 photos — front and back only. Remove one to retake.'
+      break
+    }
+    onCaptured(file)
   }
 }
+
+const cameraPhotos = computed(() => localPreviews.value.map(p => ({ id: p.id, url: p.url })))
 
 function removePreview(id: string) {
   const idx = localPreviews.value.findIndex(p => p.id === id)
@@ -132,7 +155,7 @@ async function buildQrDataUrl(url: string): Promise<string> {
   try {
     const QRCode = (await import('qrcode')).default
     return await QRCode.toDataURL(url, {
-      width: 280,
+      width: 220,
       margin: 2,
       color: { dark: '#0f172a', light: '#ffffff' },
     })
@@ -142,15 +165,17 @@ async function buildQrDataUrl(url: string): Promise<string> {
   }
 }
 
-async function startQrSession() {
-  if (!technicianId.value) {
-    error.value = 'Select a technician first'
-    return
-  }
-  busy.value = true
+async function ensureQrSession() {
+  if (!technicianId.value || isMobile.value || qrBusy.value || busy.value) return
+  if (qrSessionId.value && (qrStatus.value === 'pending' || qrStatus.value === 'uploading')) return
+
+  const seq = ++qrRequestSeq
+  qrBusy.value = true
   error.value = ''
   try {
     const invoiceId = await props.ensureDraft()
+    if (seq !== qrRequestSeq) return
+
     const res = await $fetch<{
       session: {
         id: string
@@ -170,21 +195,24 @@ async function startQrSession() {
       },
     })
 
+    if (seq !== qrRequestSeq) return
+
     if (res.session.serviceLogId) {
       emit('update:serviceLogId', res.session.serviceLogId)
     }
     qrSessionId.value = res.session.id
     qrUploadUrl.value = res.session.uploadUrl
     qrDataUrl.value = await buildQrDataUrl(res.session.uploadUrl)
-    qrOpen.value = true
     qrStatus.value = 'pending'
     startPoll()
   }
   catch (e: unknown) {
-    error.value = syncFetchErrorMessage(e, 'Could not start QR upload')
+    if (seq === qrRequestSeq) {
+      error.value = syncFetchErrorMessage(e, 'Could not start QR upload')
+    }
   }
   finally {
-    busy.value = false
+    if (seq === qrRequestSeq) qrBusy.value = false
   }
 }
 
@@ -207,7 +235,6 @@ function startPoll() {
         successInvoiceLabel.value = session.invoiceNumberFormatted
           || props.invoiceNumberFormatted
           || 'your invoice'
-        qrOpen.value = false
         successOpen.value = true
         emit('attached', {
           serviceLogId: session.serviceLogId || props.serviceLogId,
@@ -217,8 +244,11 @@ function startPoll() {
       else if (session.status === 'expired' || session.status === 'cancelled') {
         stopPoll()
         error.value = session.status === 'expired'
-          ? 'QR upload expired — start a new one'
+          ? 'QR upload expired — tap Refresh QR'
           : 'QR upload was cancelled'
+        qrSessionId.value = ''
+        qrDataUrl.value = ''
+        qrUploadUrl.value = ''
       }
     }
     catch {
@@ -234,17 +264,19 @@ function stopPoll() {
   }
 }
 
-async function cancelQr() {
+async function cancelQr(notify = true) {
   stopPoll()
+  qrRequestSeq += 1
   const id = qrSessionId.value
-  qrOpen.value = false
   qrSessionId.value = ''
   qrUploadUrl.value = ''
   qrDataUrl.value = ''
+  qrStatus.value = ''
   if (!id) return
   await $fetch(`/api/invoices/wizard/service-log-upload-sessions/${id}/cancel`, {
     method: 'POST',
   }).catch(() => {})
+  if (notify) error.value = ''
 }
 
 async function attachLocalUploads() {
@@ -354,6 +386,7 @@ onBeforeUnmount(() => {
     >
       <div
         class="modal inv-sl-modal-sheet"
+        :class="{ 'inv-sl-modal-sheet--wide': !isMobile }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="inv-sl-upload-title"
@@ -364,7 +397,7 @@ onBeforeUnmount(() => {
             <p class="inv-sl-kicker">Upload Service Log</p>
             <h2 id="inv-sl-upload-title">Speed Up This Invoice</h2>
             <p class="inv-sl-modal-sheet__sub">
-              Add the paper log and AI can extract line items so invoicing goes faster.
+              Upload photos or scan the QR code — AI can extract line items so invoicing goes faster.
             </p>
           </div>
           <button
@@ -381,7 +414,7 @@ onBeforeUnmount(() => {
         <div class="inv-sl-modal-sheet__body">
           <label class="fld">
             <span>Technician</span>
-            <select v-model="technicianId" :disabled="techPending || busy">
+            <select v-model="technicianId" :disabled="techPending || busy || qrBusy">
               <option disabled value="">
                 {{ techPending ? 'Loading…' : 'Select Technician' }}
               </option>
@@ -410,41 +443,15 @@ onBeforeUnmount(() => {
                   <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-              <span class="inv-sl-cam-launch__title">Take Photo</span>
-              <span class="inv-sl-cam-launch__sub">Open full-screen camera</span>
+              <span class="inv-sl-cam-launch__title">
+                {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
+              </span>
+              <span class="inv-sl-cam-launch__sub">Front and back of the paper log</span>
             </button>
-            <label class="inv-sl-text-link">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                @change="onDesktopFiles"
-              >
-              Or Choose from Gallery
-            </label>
           </template>
           <template v-else>
-            <div class="inv-sl-methods" role="group" aria-label="Upload method">
-              <button
-                type="button"
-                class="btn"
-                :class="{ primary: desktopMethod === 'upload' }"
-                @click="desktopMethod = 'upload'"
-              >
-                Upload Photos
-              </button>
-              <button
-                type="button"
-                class="btn"
-                :class="{ primary: desktopMethod === 'qr' }"
-                @click="desktopMethod = 'qr'"
-              >
-                Phone QR
-              </button>
-            </div>
-
-            <div v-if="desktopMethod === 'upload'" class="inv-sl-upload-zone">
+            <p class="inv-sl-choice-heading">Upload or scan QR code</p>
+            <div class="inv-sl-split" role="group" aria-label="Upload or scan QR code">
               <label class="inv-sl-drop inv-sl-drop--neat">
                 <input type="file" accept="image/*" multiple @change="onDesktopFiles">
                 <span class="inv-sl-drop__icon" aria-hidden="true">
@@ -454,29 +461,60 @@ onBeforeUnmount(() => {
                     <circle cx="19" cy="18" r="2.5" fill="#6366f1" />
                   </svg>
                 </span>
-                <b>Upload Service Log Photos</b>
-                <small>Drop images here, or click to browse</small>
+                <b>Upload front &amp; back</b>
+                <small>Max 2 photos — drop or click to browse</small>
               </label>
-            </div>
-            <div v-else class="inv-sl-qr-cta">
-              <p class="help">
-                Scan with your phone for a full-screen camera — no login on the upload page.
-              </p>
-              <button
-                type="button"
-                class="btn primary"
-                :disabled="busy || !technicianId"
-                @click="startQrSession"
-              >
-                Show QR Code
-              </button>
+
+              <div class="inv-sl-qr-panel">
+                <template v-if="qrDataUrl">
+                  <img :src="qrDataUrl" alt="QR code for phone upload" class="inv-sl-qr-panel__img">
+                  <b>Scan with phone</b>
+                  <small>
+                    Status:
+                    <strong>{{ qrStatus || 'waiting' }}</strong>
+                  </small>
+                  <button
+                    type="button"
+                    class="btn sm"
+                    :disabled="qrBusy || busy"
+                    @click="cancelQr(false).then(() => ensureQrSession())"
+                  >
+                    Refresh QR
+                  </button>
+                </template>
+                <template v-else-if="qrBusy || techPending">
+                  <span class="inv-sl-qr-panel__spinner" aria-hidden="true" />
+                  <b>Preparing QR…</b>
+                  <small>Ready in a moment</small>
+                </template>
+                <template v-else>
+                  <b>QR unavailable</b>
+                  <small>Select a technician, then try again.</small>
+                  <button
+                    type="button"
+                    class="btn sm primary"
+                    :disabled="!technicianId || qrBusy || busy"
+                    @click="ensureQrSession"
+                  >
+                    Show QR Code
+                  </button>
+                </template>
+              </div>
             </div>
           </template>
 
           <div v-if="localPreviews.length" class="inv-sl-thumbs">
-            <div v-for="p in localPreviews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" alt="Service log photo">
-              <button type="button" class="inv-sl-thumb__x" aria-label="Remove photo" @click="removePreview(p.id)">×</button>
+            <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
+              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+              <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
+              <button
+                type="button"
+                class="inv-sl-thumb__x"
+                :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
+                @click="removePreview(p.id)"
+              >
+                ×
+              </button>
             </div>
           </div>
 
@@ -525,34 +563,13 @@ onBeforeUnmount(() => {
     <ServiceLogDocumentCamera
       mode="fullscreen"
       :open="cameraOpen"
+      :photos="cameraPhotos"
       @captured="onCaptured"
+      @remove="removePreview"
+      @done="cameraOpen = false"
       @close="cameraOpen = false"
     />
   </ClientOnly>
-
-  <Teleport to="body">
-    <div
-      v-if="qrOpen"
-      class="modal-scrim open inv-sl-scrim"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Scan QR to upload"
-    >
-      <div class="modal inv-sl-modal-sheet inv-sl-modal-sheet--sm">
-        <h3>Scan to Upload</h3>
-        <p class="help">
-          Open on your phone, photograph the Service Log, then tap Done.
-          Status: <b>{{ qrStatus || 'waiting' }}</b>
-        </p>
-        <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code for service log upload" class="inv-sl-qr">
-        <p v-else class="help">QR preview unavailable — open this link on your phone:</p>
-        <p class="inv-sl-link">{{ qrUploadUrl }}</p>
-        <div class="inv-sl-modal-sheet__foot">
-          <button type="button" class="btn" @click="cancelQr">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
 
   <Teleport to="body">
     <div
