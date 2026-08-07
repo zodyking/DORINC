@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
 import { buildSusanBillingInsights } from '../../shared/susan-billing-insights'
 import type { BillingDashboardPayload } from '../../shared/validators/billing-integrations'
-import { buildSusanDailyActions } from '../../server/services/daily-summary.service'
+import {
+  buildSusanDailyActions,
+  formatSummaryVehicleLabel,
+} from '../../server/services/daily-summary.service'
 import { buildDailySummaryEmail } from '../../server/mail/templates/system'
 
 function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): BillingDashboardPayload {
@@ -62,7 +65,29 @@ describe('daily summary + Susan', () => {
     expect(AI_ASSISTANT_NAME).toBe('Susan')
   })
 
-  it('builds actionable Susan recommendations from overdue invoices and Vultr balance', () => {
+  it('formats vehicle as (type) #unit, else year make model', () => {
+    expect(formatSummaryVehicleLabel({
+      unitType: 'bus',
+      busNumber: '12',
+      year: 2018,
+      make: 'Blue Bird',
+      model: 'Vision',
+    })).toBe('(Bus) #12')
+
+    expect(formatSummaryVehicleLabel({
+      unitType: 'van',
+      unitTag: 'V-9',
+    })).toBe('(Van) #V-9')
+
+    expect(formatSummaryVehicleLabel({
+      unitType: 'truck',
+      year: 2020,
+      make: 'Ford',
+      model: 'F-550',
+    })).toBe('2020 Ford F-550')
+  })
+
+  it('builds Susan section insights without em dashes', () => {
     const billing = emptyBilling({
       configured: { vultr: true, cloudflare: false, openrouter: true },
       vultr: {
@@ -100,7 +125,7 @@ describe('daily summary + Susan', () => {
           id: '1',
           invoiceNumber: 'INV-000001',
           customerName: 'Acme',
-          vehicleLabel: '12 · Ford',
+          vehicleLabel: '(Bus) #12',
           invoiceDate: '2026-07-01',
           dueDate: '2026-07-15',
           balanceDue: '500.00',
@@ -114,10 +139,10 @@ describe('daily summary + Susan', () => {
     expect(actions.some(a => /overdue/i.test(a))).toBe(true)
     expect(actions.some(a => /Vultr/i.test(a))).toBe(true)
     expect(actions.some(a => /manager approval/i.test(a))).toBe(true)
-    expect(actions.some(a => a.includes(AI_ASSISTANT_NAME))).toBe(true)
+    expect(actions.every(a => !a.includes('—'))).toBe(true)
   })
 
-  it('renders outstanding invoice table HTML in the daily summary email', () => {
+  it('renders section stats, tables, and alternating Susan quotes', () => {
     const mail = buildDailySummaryEmail({
       reportDateLabel: 'Aug 7, 2026',
       recipientName: 'Alex',
@@ -133,7 +158,7 @@ describe('daily summary + Susan', () => {
       outstandingInvoices: [{
         invoiceNumber: 'INV-000042',
         customerName: 'City Transit',
-        vehicleLabel: 'Bus 12 · Blue Bird',
+        vehicleLabel: '(Bus) #12',
         invoiceDate: '2026-07-01',
         dueDate: '2026-07-20',
         balanceDue: '250.00',
@@ -150,17 +175,62 @@ describe('daily summary + Susan', () => {
           breakdownYearly: { vultrUsd: 960, cloudflareUsd: 0, openrouterUsd: 120 },
         },
       }),
-      susanActions: ['Reconcile overdue invoices'],
+      susanEnabled: true,
+      sections: [
+        {
+          id: 'invoices',
+          title: 'Outstanding invoices',
+          stats: [
+            { label: 'Open', value: '1' },
+            { label: 'Balance', value: '$250.00' },
+          ],
+          table: {
+            headers: ['Invoice', 'Customer', 'Vehicle', 'Due', 'Balance'],
+            rows: [['INV-000042', 'City Transit', '(Bus) #12', '2026-07-20 (overdue)', '$250.00']],
+          },
+          insight: '1 overdue invoice totaling $250.00. Follow up or mark paid before end of day.',
+        },
+        {
+          id: 'susan',
+          title: 'Susan usage today',
+          stats: [
+            { label: 'Tokens', value: '12,400' },
+            { label: 'Spend', value: '$1.25' },
+          ],
+          table: null,
+          insight: 'Susan handled 3 calls today using 12,400 tokens ($1.25).',
+        },
+        {
+          id: 'inquiries',
+          title: 'Customer inquiries',
+          stats: [{ label: 'Received today', value: '2' }],
+          table: {
+            headers: ['From', 'Subject', 'Status', 'Resolved by'],
+            rows: [['Acme', 'Quote request', 'Resolved', 'Jordan']],
+          },
+          insight: '2 customer emails came in. 1 resolved, 1 still open.',
+        },
+      ],
       appUrl: 'https://app.example.com',
     })
 
-    expect(mail.subject).toContain('Daily Summary')
+    expect(mail.subject).toBe('Daily Summary: Aug 7, 2026')
+    expect(mail.subject).not.toContain('—')
     expect(mail.html).toContain('INV-000042')
     expect(mail.html).toContain('City Transit')
-    expect(mail.html).toContain('Bus 12')
+    expect(mail.html).toContain('(Bus) #12')
     expect(mail.html).toContain('Outstanding invoices')
-    expect(mail.html).toContain('Year outlook')
-    expect(mail.html).toContain('Susan')
+    expect(mail.html).toContain('Susan usage today')
+    expect(mail.html).toContain('Customer inquiries')
+    expect(mail.html).toContain('12,400')
+    expect(mail.html).toContain('$1.25')
+    expect(mail.html).toContain('Jordan')
+    expect(mail.html).toContain('&ldquo;')
+    expect(mail.html).toContain('font-style:italic')
+    expect(mail.html).toContain('font-weight:700')
+    expect(mail.html).toContain('align="right"')
+    expect(mail.html).toContain('align="left"')
+    expect(mail.text).toContain('Susan: "')
     expect(mail.text).toContain('INV-000042')
   })
 

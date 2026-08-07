@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
     const result = await sendDailySummaryReport(db, {
       force: true,
       delivery: 'direct',
+      recipientsMode: 'actor',
       actor: {
         id: auth.user.id || user.id,
         name: auth.user.name,

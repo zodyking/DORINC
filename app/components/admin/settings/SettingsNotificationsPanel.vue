@@ -69,25 +69,25 @@ async function sendDailySummaryNow() {
     if (res.skipped) {
       error.value = res.errors[0]
         || (res.skipped === 'no_recipients'
-          ? 'No Admin/Manager recipients found with email addresses'
-          : `Daily summary not sent (${res.skipped})`)
+          ? 'Your account needs an email address to receive the test summary'
+          : `Test summary not sent (${res.skipped})`)
       return
     }
 
     if (res.delivery === 'direct') {
       message.value = res.delivered > 0
-        ? `Daily summary emailed to ${res.delivered} recipient${res.delivered === 1 ? '' : 's'}: ${res.recipients.join(', ')}`
-        : 'Daily summary finished but SMTP reported no deliveries'
+        ? `Test summary emailed to you: ${res.recipients.join(', ')}`
+        : 'Test summary finished but SMTP reported no delivery'
       if (res.failed > 0 && res.errors.length) {
         error.value = res.errors.slice(0, 2).join(' · ')
       }
       return
     }
 
-    message.value = `Daily summary queued for ${res.sent} recipient${res.sent === 1 ? '' : 's'}`
+    message.value = `Test summary queued for you (${res.sent})`
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send daily summary'
+    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send test summary'
   }
   finally {
     sendBusy.value = false
@@ -188,7 +188,8 @@ function disableAll() {
                 </option>
               </select>
               <span class="help">
-                Sent once per day to Admin and Manager accounts at this UTC hour. Default 1:00 PM UTC.
+                Scheduled send goes once per day to all Admin and Manager accounts at this UTC hour (default 1:00 PM UTC).
+                The test button emails only your account.
               </span>
             </label>
             <button
@@ -198,7 +199,7 @@ function disableAll() {
               :disabled="sendBusy || !form.dailySummaryReport"
               @click="sendDailySummaryNow"
             >
-              {{ sendBusy ? 'Queuing…' : 'Send daily summary now' }}
+              {{ sendBusy ? 'Sending…' : 'Send test to me' }}
             </button>
           </div>
         </div>
