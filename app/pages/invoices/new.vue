@@ -125,9 +125,7 @@ const INVOICE_NARRATIONS: Record<number, string> = {
   5: 'Preview PDF and save.',
 }
 
-/** Invisible post-vehicle gate — not a numbered wizard step. */
-const serviceLogGate = ref(false)
-/** Follow-up upload modal after the user answers Yes on the gate. */
+/** Invisible post-vehicle upload prompt — not a numbered wizard step. */
 const serviceLogUploadOpen = ref(false)
 
 useWizardStepNarration(step, INVOICE_NARRATIONS)
@@ -309,7 +307,6 @@ watch(customerId, (id, oldId) => {
   if (oldId !== undefined && id !== oldId) {
     vehicleId.value = ''
     serviceLogId.value = ''
-    serviceLogGate.value = false
     serviceLogUploadOpen.value = false
   }
 })
@@ -490,31 +487,15 @@ function prevFromLinesStep() {
 
 function openServiceLogGate() {
   submitError.value = ''
-  serviceLogUploadOpen.value = false
-  serviceLogGate.value = true
+  serviceLogUploadOpen.value = true
 }
 
 function closeServiceLogGate() {
-  serviceLogGate.value = false
   serviceLogUploadOpen.value = false
-  submitError.value = ''
-}
-
-function onServiceLogGateNo() {
-  serviceLogGate.value = false
-  serviceLogUploadOpen.value = false
-  submitError.value = ''
-  step.value = 3
-}
-
-function onServiceLogGateYes() {
-  serviceLogGate.value = false
-  serviceLogUploadOpen.value = true
   submitError.value = ''
 }
 
 function finishServiceLogGate() {
-  serviceLogGate.value = false
   serviceLogUploadOpen.value = false
   submitError.value = ''
   step.value = 3
@@ -1018,63 +999,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       </div>
     </div>
 
-    <!-- Invisible post-vehicle Yes/No gate (not a numbered stepper step) -->
-    <Teleport to="body">
-      <div
-        v-if="serviceLogGate"
-        class="modal-scrim open inv-sl-gate-scrim"
-        role="presentation"
-        @click.self="closeServiceLogGate"
-      >
-        <div
-          class="inv-sl-gate"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="inv-sl-gate-title"
-          @click.stop
-        >
-          <div class="inv-sl-gate__glow" aria-hidden="true" />
-          <div class="inv-sl-gate__icon" aria-hidden="true">
-            <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
-              <rect x="8" y="6" width="32" height="36" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-width="2" />
-              <path d="M16 18h16M16 24h12M16 30h10" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" />
-              <circle cx="34" cy="34" r="9" fill="#4f46e5" />
-              <path d="M31 34.5l2 2 4.5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </div>
-          <h2 id="inv-sl-gate-title">Import a Service Log?</h2>
-          <p class="inv-sl-gate__sub">
-            Photograph the paper log and AI can extract line items so this invoice fills in faster.
-          </p>
-          <div class="inv-sl-gate__actions">
-            <button
-              type="button"
-              class="inv-sl-gate__btn inv-sl-gate__btn--yes"
-              @click="onServiceLogGateYes"
-            >
-              <span class="inv-sl-gate__btn-label">Yes, Import Log</span>
-              <span class="inv-sl-gate__btn-hint">Use AI to speed up line items</span>
-            </button>
-            <button
-              type="button"
-              class="inv-sl-gate__btn inv-sl-gate__btn--no"
-              @click="onServiceLogGateNo"
-            >
-              <span class="inv-sl-gate__btn-label">No Thanks</span>
-              <span class="inv-sl-gate__btn-hint">Enter line items myself</span>
-            </button>
-          </div>
-          <button
-            type="button"
-            class="inv-sl-gate__back"
-            @click="closeServiceLogGate"
-          >
-            Back to Vehicle
-          </button>
-        </div>
-      </div>
-    </Teleport>
-
+    <!-- Invisible post-vehicle upload prompt (not a numbered stepper step) -->
     <InvoiceWizardServiceLogStep
       :open="serviceLogUploadOpen"
       :customer-id="customerId"

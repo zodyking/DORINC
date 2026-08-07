@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Upload UI after the user answers Yes to "import a service log?".
- * Parent owns the Yes/No gate popup; this is the follow-up modal only.
+ * Post-vehicle service log upload prompt (not a numbered wizard step).
+ * Desktop: neat photo dropzone (+ phone QR). Mobile: camera icon → 100dvh capture.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
 import ServiceLogAiExtractModal from '~/components/service-logs/ServiceLogAiExtractModal.vue'
@@ -41,7 +41,7 @@ const successOpen = ref(false)
 const successInvoiceLabel = ref('')
 const extractOpen = ref(false)
 const extractFileId = ref<string | null>(null)
-const showCamera = ref(false)
+const cameraOpen = ref(false)
 
 const qrOpen = ref(false)
 const qrDataUrl = ref('')
@@ -87,14 +87,13 @@ watch(() => props.open, (open) => {
     qrOpen.value = false
     successOpen.value = false
     extractOpen.value = false
-    showCamera.value = false
+    cameraOpen.value = false
     return
   }
   error.value = ''
   successOpen.value = false
   qrOpen.value = false
-  // Mobile: go straight to the document camera — one clear capture path.
-  showCamera.value = isMobile.value
+  cameraOpen.value = false
   clearLocal()
   void loadTechnicians()
 })
@@ -110,6 +109,7 @@ function onCaptured(file: File) {
     url: URL.createObjectURL(file),
     file,
   })
+  // Keep fullscreen open so they can shoot another page; close if they prefer from X.
 }
 
 function onDesktopFiles(ev: Event) {
@@ -263,6 +263,7 @@ async function attachLocalUploads() {
 
   busy.value = true
   error.value = ''
+  cameraOpen.value = false
   try {
     const invoiceId = await props.ensureDraft()
     const created = await $fetch<{
@@ -333,6 +334,7 @@ function openExtract() {
 }
 
 function continueWithoutPhotos() {
+  cameraOpen.value = false
   emit('done')
 }
 
@@ -348,7 +350,7 @@ onBeforeUnmount(() => {
       v-if="open"
       class="modal-scrim open inv-sl-scrim"
       role="presentation"
-      @click.self="!busy && emit('back')"
+      @click.self="!busy && !cameraOpen && emit('back')"
     >
       <div
         class="modal inv-sl-modal-sheet"
@@ -359,10 +361,10 @@ onBeforeUnmount(() => {
       >
         <header class="inv-sl-modal-sheet__head">
           <div>
-            <p class="inv-sl-kicker">Faster Invoicing</p>
-            <h2 id="inv-sl-upload-title">Import Service Log</h2>
+            <p class="inv-sl-kicker">Upload Service Log</p>
+            <h2 id="inv-sl-upload-title">Speed Up This Invoice</h2>
             <p class="inv-sl-modal-sheet__sub">
-              Snap the paper log — AI can pull line items so you spend less time typing.
+              Add the paper log and AI can extract line items so invoicing goes faster.
             </p>
           </div>
           <button
@@ -395,34 +397,32 @@ onBeforeUnmount(() => {
           </label>
 
           <template v-if="isMobile">
-            <div class="inv-sl-mobile-capture">
-              <ClientOnly>
-                <ServiceLogDocumentCamera
-                  v-if="showCamera"
-                  @captured="onCaptured"
-                />
-                <div v-else class="inv-sl-capture-fallback">
-                  <button
-                    type="button"
-                    class="btn primary"
-                    style="width:100%;"
-                    @click="showCamera = true"
-                  >
-                    Open Camera
-                  </button>
-                  <label class="inv-sl-text-link">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      multiple
-                      @change="onDesktopFiles"
-                    >
-                    Choose from Gallery
-                  </label>
-                </div>
-              </ClientOnly>
-            </div>
+            <button
+              type="button"
+              class="inv-sl-cam-launch"
+              :disabled="busy"
+              @click="cameraOpen = true"
+            >
+              <span class="inv-sl-cam-launch__icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+                  <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
+                  <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
+                  <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="inv-sl-cam-launch__title">Take Photo</span>
+              <span class="inv-sl-cam-launch__sub">Open full-screen camera</span>
+            </button>
+            <label class="inv-sl-text-link">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                @change="onDesktopFiles"
+              >
+              Or Choose from Gallery
+            </label>
           </template>
           <template v-else>
             <div class="inv-sl-methods" role="group" aria-label="Upload method">
@@ -445,15 +445,22 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="desktopMethod === 'upload'" class="inv-sl-upload-zone">
-              <label class="inv-sl-drop">
+              <label class="inv-sl-drop inv-sl-drop--neat">
                 <input type="file" accept="image/*" multiple @change="onDesktopFiles">
-                <b>Add Service Log Photos</b>
-                <small>Drop files here, or click to browse</small>
+                <span class="inv-sl-drop__icon" aria-hidden="true">
+                  <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
+                    <rect x="8" y="10" width="32" height="28" rx="6" stroke="#6366f1" stroke-width="2.2" />
+                    <path d="M16 30l6-7 5 5 3-3 6 5" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                    <circle cx="19" cy="18" r="2.5" fill="#6366f1" />
+                  </svg>
+                </span>
+                <b>Upload Service Log Photos</b>
+                <small>Drop images here, or click to browse</small>
               </label>
             </div>
             <div v-else class="inv-sl-qr-cta">
               <p class="help">
-                Scan with your phone — no login needed on the upload page.
+                Scan with your phone for a full-screen camera — no login on the upload page.
               </p>
               <button
                 type="button"
@@ -513,6 +520,15 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </Teleport>
+
+  <ClientOnly>
+    <ServiceLogDocumentCamera
+      mode="fullscreen"
+      :open="cameraOpen"
+      @captured="onCaptured"
+      @close="cameraOpen = false"
+    />
+  </ClientOnly>
 
   <Teleport to="body">
     <div
