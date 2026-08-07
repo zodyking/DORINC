@@ -84,9 +84,9 @@ const AI_TASKS = [
     key: 'platform_help' as const,
     enabledKey: 'platformHelpEnabled' as const,
     modelKey: 'platformHelpModel' as const,
-    title: 'Platform help assistant',
-    description: 'Answers in-app help questions for staff.',
-    modelHint: 'Use a vision model if staff attach screenshots in help.',
+    title: 'Susan (help assistant)',
+    description: 'Susan answers in-app help questions for staff.',
+    modelHint: 'Use a vision model if staff attach screenshots for Susan.',
   },
 ]
 
@@ -275,9 +275,9 @@ function applyFallbackToEmptyTasks() {
 <template>
   <div class="settings-panel">
     <header class="settings-panel-head">
-      <h3>Artificial intelligence</h3>
+      <h3>Susan</h3>
       <p>
-        OpenRouter powers each AI workflow. Pick a model per task, set spend caps, and review usage.
+        Susan is powered by OpenRouter. Pick a model per task, set spend caps, and review usage.
         Keys are encrypted in PostgreSQL and never returned to the browser.
       </p>
     </header>

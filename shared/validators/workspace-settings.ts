@@ -67,6 +67,8 @@ export const notificationSettingsSchema = z.object({
   portalRequestStatus: z.boolean().default(true),
   portalCredentials: z.boolean().default(true),
   backupResult: z.boolean().default(true),
+  dailySummaryReport: z.boolean().default(true),
+  dailySummarySendHourUtc: z.coerce.number().int().min(0).max(23).default(13),
   userSignupPendingApproval: z.boolean().default(true),
   invoicePendingApproval: z.boolean().default(true),
   customerServiceRequestSubmitted: z.boolean().default(true),

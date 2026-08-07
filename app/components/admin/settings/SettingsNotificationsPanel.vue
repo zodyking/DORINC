@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NotificationSettings } from '#shared/workspace-settings-defaults'
+import type { NotificationSettings, NotificationToggleKey } from '#shared/workspace-settings-defaults'
 import { DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_SETTING_META } from '#shared/workspace-settings-defaults'
 
 const emit = defineEmits<{ saved: [] }>()
@@ -35,9 +35,39 @@ const groups = computed(() => {
   })).filter(g => g.items.length)
 })
 
+const sendHourOptions = Array.from({ length: 24 }, (_, hour) => {
+  const h12 = hour % 12 || 12
+  const ampm = hour < 12 ? 'AM' : 'PM'
+  return {
+    value: hour,
+    label: `${h12}:00 ${ampm} UTC`,
+  }
+})
+
 const busy = ref(false)
+const sendBusy = ref(false)
 const message = ref('')
 const error = ref('')
+
+async function sendDailySummaryNow() {
+  sendBusy.value = true
+  message.value = ''
+  error.value = ''
+  try {
+    const res = await $fetch<{ sent: number, skipped: string | null }>('/api/admin/notifications/daily-summary', {
+      method: 'POST',
+    })
+    message.value = res.sent > 0
+      ? `Daily summary queued for ${res.sent} recipient${res.sent === 1 ? '' : 's'}`
+      : `Daily summary not sent (${res.skipped || 'no recipients'})`
+  }
+  catch (e: unknown) {
+    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not send daily summary'
+  }
+  finally {
+    sendBusy.value = false
+  }
+}
 
 async function save() {
   busy.value = true
@@ -62,13 +92,17 @@ async function save() {
 
 function enableAll() {
   for (const key of Object.keys(form) as Array<keyof NotificationSettings>) {
-    form[key] = true
+    if (typeof form[key] === 'boolean') {
+      ;(form as Record<NotificationToggleKey, boolean>)[key as NotificationToggleKey] = true
+    }
   }
 }
 
 function disableAll() {
   for (const key of Object.keys(form) as Array<keyof NotificationSettings>) {
-    form[key] = false
+    if (typeof form[key] === 'boolean') {
+      ;(form as Record<NotificationToggleKey, boolean>)[key as NotificationToggleKey] = false
+    }
   }
 }
 </script>
@@ -119,6 +153,29 @@ function disableAll() {
               <span class="tr" />
             </span>
           </div>
+
+          <div v-if="group.id === 'system'" class="notif-schedule">
+            <label class="fld">
+              Daily summary send time
+              <select v-model.number="form.dailySummarySendHourUtc" :disabled="!form.dailySummaryReport">
+                <option v-for="opt in sendHourOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <span class="help">
+                Sent once per day to Admin and Manager accounts at this UTC hour. Default 1:00 PM UTC.
+              </span>
+            </label>
+            <button
+              type="button"
+              class="btn"
+              style="margin-top:10px;"
+              :disabled="sendBusy || !form.dailySummaryReport"
+              @click="sendDailySummaryNow"
+            >
+              {{ sendBusy ? 'Queuing…' : 'Send daily summary now' }}
+            </button>
+          </div>
         </div>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
@@ -166,5 +223,17 @@ function disableAll() {
 
 .tglrow {
   align-items: flex-start;
+}
+
+.notif-schedule {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.notif-schedule .fld {
+  margin: 0;
 }
 </style>

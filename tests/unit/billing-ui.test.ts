@@ -23,11 +23,12 @@ describe('billing-ui helpers', () => {
   it('builds manage account button labels', () => {
     expect(billingProviderManageLabel('vultr')).toBe('Manage Vultr account')
     expect(billingProviderManageLabel('cloudflare')).toBe('Manage Cloudflare account')
-    expect(billingProviderManageLabel('openrouter')).toBe('Manage OpenRouter account')
+    expect(billingProviderManageLabel('openrouter')).toBe('Manage Susan account')
   })
 
   it('keeps provider labels stable', () => {
-    expect(BILLING_PROVIDER_LABELS.openrouter.category).toBe('Artificial intelligence')
+    expect(BILLING_PROVIDER_LABELS.openrouter.name).toBe('Susan')
+    expect(BILLING_PROVIDER_LABELS.openrouter.category).toBe('AI assistant (OpenRouter)')
     expect(BILLING_PROVIDER_LABELS.cloudflare.category).toBe('Domain provider')
   })
 

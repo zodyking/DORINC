@@ -8,8 +8,8 @@ export const BILLING_PROVIDER_LABELS = {
     category: 'Domain provider',
   },
   openrouter: {
-    name: 'OpenRouter',
-    category: 'Artificial intelligence',
+    name: 'Susan',
+    category: 'AI assistant (OpenRouter)',
   },
 } as const
 

@@ -84,7 +84,7 @@ const welcomeSlides = [
   {
     image: '/images/welcome-ai-help.png',
     tagline: 'Answers without leaving the app',
-    title: 'AI help assistant',
+    title: 'Susan (AI help)',
     desc: 'Staff can ask how-to questions inside DORINC and get answers about daily shop workflows.',
     details: ['Help chat on staff screens', 'Invoices, customers, and logs', 'Great for new hires'],
     ai: true,

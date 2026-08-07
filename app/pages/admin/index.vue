@@ -317,7 +317,7 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
           id="billing"
           title="Billing integrations"
           icon="💳"
-          subtitle="Vultr, Cloudflare, and OpenRouter credentials"
+          subtitle="Vultr, Cloudflare, and Susan (OpenRouter) credentials"
           :open="openSections.billing"
           @update:open="setSectionOpen('billing', $event)"
         >

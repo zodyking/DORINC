@@ -107,6 +107,13 @@ export interface NotificationSettings {
   portalCredentials: boolean
   /** Email backup success/failure alerts to the configured notify address. */
   backupResult: boolean
+  /** Daily ops/billing summary email to admin and manager accounts. */
+  dailySummaryReport: boolean
+  /**
+   * UTC hour (0–23) when the daily summary is sent.
+   * Not a toggle — edited beside the daily summary control in Notifications.
+   */
+  dailySummarySendHourUtc: number
   /** Notify user managers when a new staff signup is awaiting approval. */
   userSignupPendingApproval: boolean
   /** Notify invoice approvers when an invoice needs manager approval. */
@@ -119,6 +126,10 @@ export interface NotificationSettings {
   customerEmailReceived: boolean
 }
 
+export type NotificationToggleKey = {
+  [K in keyof NotificationSettings]: NotificationSettings[K] extends boolean ? K : never
+}[keyof NotificationSettings]
+
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   staffLoginAlert: true,
   customerLoginAlert: true,
@@ -129,6 +140,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   portalRequestStatus: true,
   portalCredentials: true,
   backupResult: true,
+  dailySummaryReport: true,
+  dailySummarySendHourUtc: 13,
   userSignupPendingApproval: true,
   invoicePendingApproval: true,
   customerServiceRequestSubmitted: true,
@@ -153,7 +166,7 @@ export const DEFAULT_SERVICE_LOG_SHEET_SETTINGS: ServiceLogSheetSettings
   = DEFAULT_SERVICE_LOG_SHEET_DOCUMENT
 
 export const NOTIFICATION_SETTING_META: Array<{
-  key: keyof NotificationSettings
+  key: NotificationToggleKey
   label: string
   description: string
   group: 'security' | 'workflow' | 'customer' | 'system'
@@ -234,6 +247,18 @@ export const NOTIFICATION_SETTING_META: Array<{
     key: 'backupResult',
     label: 'Backup results',
     description: 'Email backup success and failure alerts to the configured address.',
+    group: 'system',
+  },
+  {
+    key: 'deletionRequestSubmitted',
+    label: 'Deletion request submitted',
+    description: 'Notify deletion reviewers when a new deletion request is submitted.',
+    group: 'workflow',
+  },
+  {
+    key: 'dailySummaryReport',
+    label: 'Daily summary report',
+    description: 'Email admins and managers a daily billing + outstanding invoice digest. Set the send time below.',
     group: 'system',
   },
 ]

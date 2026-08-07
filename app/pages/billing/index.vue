@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { BillingDashboardPayload } from '#shared/validators/billing-integrations'
 import { resolveOpenRouterMonthlySpend } from '#shared/billing-openrouter-spend'
+import { AI_ASSISTANT_NAME } from '#shared/ai-assistant'
+import { buildSusanBillingInsights } from '#shared/susan-billing-insights'
 import type { BillingProviderKey } from '~/utils/billing-ui'
 import {
   BILLING_PROVIDER_ACCOUNT_URLS,
@@ -45,6 +47,31 @@ const openRouterUsedThisMonth = computed(() => {
   if (!row) return null
   return resolveOpenRouterMonthlySpend(row.usageMonthly, row.internalMonthlyUsd)
 })
+
+const { data: invoiceStats } = useClientFetch<{
+  outstandingCount: number
+  overdueCount: number
+  outstandingTotal: string
+}>('/api/invoices/stats', { server: false, lazy: true })
+
+const susanInsights = computed(() => {
+  if (!dashboard.value) return []
+  return buildSusanBillingInsights(dashboard.value, {
+    outstandingCount: invoiceStats.value?.outstandingCount,
+    overdueCount: invoiceStats.value?.overdueCount,
+    outstandingTotal: invoiceStats.value?.outstandingTotal,
+  })
+})
+
+function susanInsightHref(href?: string) {
+  if (!href) return undefined
+  if (href.startsWith('http')) return href
+  return href
+}
+
+function isExternalHref(href?: string) {
+  return Boolean(href?.startsWith('http'))
+}
 
 const chart = computed(() => {
   const points = dashboard.value?.outlook?.points ?? []
@@ -244,9 +271,48 @@ function selectProvider(provider: BillingProviderKey) {
             <div class="s">{{ breakdownShare(dashboard.totals.breakdown.vultrUsd) }}% of this month</div>
           </div>
           <div class="kpi">
-            <div class="l">AI usage</div>
+            <div class="l">{{ AI_ASSISTANT_NAME }}</div>
             <div class="v">{{ billingAiMoney(dashboard.totals.breakdown.openrouterUsd) }}</div>
             <div class="s">{{ breakdownShare(dashboard.totals.breakdown.openrouterUsd) }}% of this month</div>
+          </div>
+        </div>
+
+        <!-- Susan keeps ops + receivables smooth -->
+        <div v-if="susanInsights.length" class="card billing-susan-card">
+          <div class="chead">
+            <div>
+              <h3>{{ AI_ASSISTANT_NAME }}</h3>
+              <p class="billing-outlook-sub">Invoice reconciliation and ops bills — keep things running smooth</p>
+            </div>
+          </div>
+          <div class="cbody billing-susan-body">
+            <div
+              v-for="insight in susanInsights"
+              :key="insight.id"
+              class="billing-susan-item"
+              :data-tone="insight.tone"
+            >
+              <div class="billing-susan-item__text">
+                <strong>{{ insight.title }}</strong>
+                <p>{{ insight.detail }}</p>
+              </div>
+              <a
+                v-if="insight.href && insight.ctaLabel && isExternalHref(insight.href)"
+                class="btn"
+                :href="insight.href"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ insight.ctaLabel }}
+              </a>
+              <NuxtLink
+                v-else-if="insight.href && insight.ctaLabel"
+                class="btn"
+                :to="susanInsightHref(insight.href)!"
+              >
+                {{ insight.ctaLabel }}
+              </NuxtLink>
+            </div>
           </div>
         </div>
 
@@ -847,6 +913,57 @@ section.page.active.billing-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.billing-susan-body {
+  display: grid;
+  gap: 12px;
+}
+
+.billing-susan-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  border-left-width: 3px;
+  background: #fff;
+}
+
+.billing-susan-item[data-tone='action'] {
+  border-left-color: #b45309;
+  background: #fffbeb;
+}
+
+.billing-susan-item[data-tone='warn'] {
+  border-left-color: #d97706;
+  background: #fff7ed;
+}
+
+.billing-susan-item[data-tone='ok'] {
+  border-left-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.billing-susan-item__text {
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+
+.billing-susan-item__text strong {
+  display: block;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.billing-susan-item__text p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #475569;
 }
 
 .billing-kpis {
