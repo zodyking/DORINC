@@ -2846,6 +2846,19 @@ section.page.active.dm-page{
 .sl-doc-cam__actions .btn{ flex:1; min-height:48px; }
 
 .inv-sl-choice{ display:grid; gap:10px; }
+.inv-sl-choice-btn{
+  display:flex; flex-direction:column; align-items:flex-start; gap:4px;
+  width:100%; text-align:left; padding:14px 16px; border-radius:14px;
+  border:1.5px solid #cbd5e1; background:#fff; cursor:pointer;
+  color:#0f172a; min-height:64px;
+}
+.inv-sl-choice-btn.on{
+  border-color:#4f46e5; background:#eef2ff;
+  box-shadow:0 0 0 3px rgba(79,70,229,.15);
+}
+.inv-sl-choice-btn__title{ font-weight:800; font-size:15px; }
+.inv-sl-choice-btn__sub{ font-size:12px; color:#64748b; line-height:1.35; }
+.inv-sl-error{ color:#dc2626 !important; margin-top:10px; }
 .inv-sl-methods{ display:flex; gap:8px; margin:14px 0 10px; }
 .inv-sl-upload-zone{ margin-top:4px; }
 .inv-sl-drop{

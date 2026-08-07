@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import QRCode from 'qrcode'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 
@@ -16,6 +15,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:serviceLogId': [id: string]
   'attached': [payload: { serviceLogId: string, invoiceNumberFormatted: string | null }]
+  'skip': []
+  'done': []
+  'back': []
 }>()
 
 type Tech = { id: string, name: string, email: string, accountType: string }
@@ -56,13 +58,6 @@ watch(technicians, (items) => {
   if (!technicianId.value && items[0]) technicianId.value = items[0].id
 }, { immediate: true })
 
-const canContinueWithout = computed(() => wantUpload.value === false)
-const canAttach = computed(() => Boolean(
-  wantUpload.value
-  && technicianId.value
-  && (localPreviews.value.length > 0 || qrStatus.value === 'completed'),
-))
-
 function selectWant(value: boolean) {
   wantUpload.value = value
   error.value = ''
@@ -101,6 +96,20 @@ function removePreview(id: string) {
   localPreviews.value.splice(idx, 1)
 }
 
+async function buildQrDataUrl(url: string): Promise<string> {
+  try {
+    const QRCode = (await import('qrcode')).default
+    return await QRCode.toDataURL(url, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    })
+  }
+  catch {
+    return ''
+  }
+}
+
 async function startQrSession() {
   if (!technicianId.value) {
     error.value = 'Select a technician first'
@@ -110,13 +119,6 @@ async function startQrSession() {
   error.value = ''
   try {
     const invoiceId = await props.ensureDraft()
-    const body = {
-      customerId: props.customerId,
-      vehicleId: props.vehicleId,
-      technicianId: technicianId.value,
-      invoiceId,
-      serviceDate: props.serviceDate,
-    }
     const res = await $fetch<{
       session: {
         id: string
@@ -127,7 +129,13 @@ async function startQrSession() {
       token: string
     }>('/api/invoices/wizard/service-log-upload-sessions', {
       method: 'POST',
-      body,
+      body: {
+        customerId: props.customerId,
+        vehicleId: props.vehicleId,
+        technicianId: technicianId.value,
+        invoiceId,
+        serviceDate: props.serviceDate,
+      },
     })
 
     if (res.session.serviceLogId) {
@@ -135,11 +143,7 @@ async function startQrSession() {
     }
     qrSessionId.value = res.session.id
     qrUploadUrl.value = res.session.uploadUrl
-    qrDataUrl.value = await QRCode.toDataURL(res.session.uploadUrl, {
-      width: 280,
-      margin: 2,
-      color: { dark: '#0f172a', light: '#ffffff' },
-    })
+    qrDataUrl.value = await buildQrDataUrl(res.session.uploadUrl)
     qrOpen.value = true
     qrStatus.value = 'pending'
     startPoll()
@@ -230,7 +234,6 @@ async function attachLocalUploads() {
   error.value = ''
   try {
     const invoiceId = await props.ensureDraft()
-
     const created = await $fetch<{
       session: {
         id: string
@@ -253,7 +256,6 @@ async function attachLocalUploads() {
     if (!logId) throw new Error('Service log missing from upload session')
     emit('update:serviceLogId', logId)
 
-    // Upload via the session token so files attach even when submittedBy is another technician.
     for (const preview of localPreviews.value) {
       const form = new FormData()
       form.append('file', preview.file, preview.file.name)
@@ -289,8 +291,9 @@ async function attachLocalUploads() {
   }
 }
 
-function closeSuccess() {
+function closeSuccessAndContinue() {
   successOpen.value = false
+  emit('done')
 }
 
 function openExtract() {
@@ -298,24 +301,26 @@ function openExtract() {
   extractOpen.value = true
 }
 
+function continueGate() {
+  error.value = ''
+  if (wantUpload.value === null) {
+    error.value = 'Choose whether to upload a service log'
+    return
+  }
+  if (wantUpload.value === false) {
+    emit('skip')
+    return
+  }
+  if (!props.serviceLogId) {
+    error.value = 'Attach the service log photos, or choose continue without'
+    return
+  }
+  emit('done')
+}
+
 onBeforeUnmount(() => {
   stopPoll()
   clearLocal()
-})
-
-function getWantUpload(): boolean | null {
-  return wantUpload.value
-}
-
-defineExpose({
-  getWantUpload,
-  wantUpload,
-  canContinueWithout,
-  canAttach,
-  attachLocalUploads,
-  startQrSession,
-  desktopMethod,
-  isMobile,
 })
 </script>
 
@@ -327,32 +332,24 @@ defineExpose({
       and can extract line items for this invoice.
     </p>
 
-    <div class="inv-sl-choice">
+    <div class="inv-sl-choice" role="group" aria-label="Upload service log choice">
       <button
         type="button"
-        class="sl-pick"
+        class="inv-sl-choice-btn"
         :class="{ on: wantUpload === true }"
         @click="selectWant(true)"
       >
-        <span class="av indigo">↑</span>
-        <span class="nm">
-          <b>Yes — upload service log</b>
-          <small>Photos create a service log on this invoice</small>
-        </span>
-        <span class="chk" />
+        <span class="inv-sl-choice-btn__title">Yes — upload service log</span>
+        <span class="inv-sl-choice-btn__sub">Photos create a service log on this invoice</span>
       </button>
       <button
         type="button"
-        class="sl-pick"
+        class="inv-sl-choice-btn"
         :class="{ on: wantUpload === false }"
         @click="selectWant(false)"
       >
-        <span class="av gray">→</span>
-        <span class="nm">
-          <b>No — continue without</b>
-          <small>You can still link an existing log from Vehicle</small>
-        </span>
-        <span class="chk" />
+        <span class="inv-sl-choice-btn__title">No — continue without</span>
+        <span class="inv-sl-choice-btn__sub">Skip for now and keep building the invoice</span>
       </button>
     </div>
 
@@ -447,9 +444,20 @@ defineExpose({
       </div>
     </template>
 
-    <p v-if="error" class="help" style="color:#dc2626;margin-top:10px;">{{ error }}</p>
+    <p v-if="error" class="help inv-sl-error">{{ error }}</p>
 
-    <!-- QR modal -->
+    <div class="sl-foot">
+      <button type="button" class="btn" :disabled="busy" @click="emit('back')">Back</button>
+      <button
+        type="button"
+        class="btn primary"
+        :disabled="busy"
+        @click="continueGate"
+      >
+        Continue
+      </button>
+    </div>
+
     <div v-if="qrOpen" class="inv-sl-modal" role="dialog" aria-modal="true">
       <div class="inv-sl-modal__card">
         <h4>Scan to upload</h4>
@@ -458,6 +466,7 @@ defineExpose({
           Status: <b>{{ qrStatus || 'waiting' }}</b>
         </p>
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code for service log upload" class="inv-sl-qr">
+        <p v-else class="help">QR preview unavailable — open this link on your phone:</p>
         <p class="inv-sl-link">{{ qrUploadUrl }}</p>
         <div class="inv-sl-modal__actions">
           <button type="button" class="btn" @click="cancelQr">Cancel</button>
@@ -465,7 +474,6 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Success -->
     <div v-if="successOpen" class="inv-sl-modal inv-sl-success" role="dialog" aria-modal="true">
       <div class="inv-sl-modal__card inv-sl-success__card">
         <div class="inv-sl-success__burst" aria-hidden="true" />
@@ -480,11 +488,11 @@ defineExpose({
             v-if="serviceLogId"
             type="button"
             class="btn"
-            @click="openExtract(); closeSuccess()"
+            @click="openExtract()"
           >
             Extract line items
           </button>
-          <button type="button" class="btn primary" @click="closeSuccess">
+          <button type="button" class="btn primary" @click="closeSuccessAndContinue">
             Continue
           </button>
         </div>

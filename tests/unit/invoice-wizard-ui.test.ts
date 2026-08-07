@@ -39,27 +39,22 @@ describe('invoice-wizard-ui', () => {
 
     expect(invoiceWizardStepHint({
       step: 3,
-      serviceLogLabel: 'Attached',
-    })).toBe('Attached')
-
-    expect(invoiceWizardStepHint({
-      step: 4,
       invoiceDate: '2026-07-15',
     })).toMatch(/Jul 15, 2026/)
 
     expect(invoiceWizardStepHint({
-      step: 5,
+      step: 4,
       lines,
     })).toBe('$145.00')
 
     expect(invoiceWizardStepHint({
-      step: 6,
+      step: 5,
       dirty: true,
       invoiceId: 'inv-1',
     })).toBe('Unsaved')
 
     expect(invoiceWizardStepHint({
-      step: 6,
+      step: 5,
       dirty: false,
       invoiceId: 'inv-1',
       savedAtLabel: 'Saved Jul 15, 09:45 PM',
@@ -67,8 +62,8 @@ describe('invoice-wizard-ui', () => {
   })
 
   it('marks review hint pending when unsaved', () => {
-    expect(invoiceWizardStepHintClass(6, { step: 6, dirty: true, invoiceId: 'inv-1' })).toBe('pending')
-    expect(invoiceWizardStepHintClass(6, { step: 6, dirty: false, invoiceId: 'inv-1' })).toBe('saved')
+    expect(invoiceWizardStepHintClass(5, { step: 5, dirty: true, invoiceId: 'inv-1' })).toBe('pending')
+    expect(invoiceWizardStepHintClass(5, { step: 5, dirty: false, invoiceId: 'inv-1' })).toBe('saved')
     expect(invoiceWizardStepHintClass(1, { step: 1 })).toBe('')
   })
 })
