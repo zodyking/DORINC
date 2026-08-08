@@ -1,22 +1,18 @@
 import { useDb } from '../../../../db/client'
 import { apiError } from '../../../../utils/api-error'
-import { hasPermission } from '../../../../utils/require-permission'
 import type { AuthContext } from '../../../../utils/require-permission'
+import { canStartStaplesPrint } from '../../../../utils/staples-print-access'
 import {
   StaplesPrintMeServiceError,
   startStaplesPrintMeJob,
 } from '../../../../services/staples-printme.service'
 
-/** Email the blank service log sheet to Staples PrintMe; release code lands on the Service Logs page. */
+/** Email the blank service log sheet to Staples PrintMe; release code lands on the Staples page. */
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as AuthContext | undefined
   if (!auth?.user) throw apiError(event, 'UNAUTHENTICATED', 'Authentication required')
 
-  const allowed = hasPermission(event, 'service_logs.read.all')
-    || hasPermission(event, 'service_logs.read.own')
-    || hasPermission(event, 'service_logs.upload.own')
-
-  if (!allowed) {
+  if (!canStartStaplesPrint(event)) {
     throw apiError(event, 'FORBIDDEN', 'You do not have permission to print the service log sheet')
   }
 

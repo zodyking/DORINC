@@ -51,6 +51,72 @@ async function hasAwaitingStaplesPrintJobs(pool) {
   }
 }
 
+/**
+ * Re-read recent PrintMe confirmations (subject/body correlation) for open jobs.
+ * @param {import('pg').Pool} pool
+ * @param {import('imapflow').ImapFlow} client
+ */
+async function rescanRecentPrintMeReplies(pool, client) {
+  const out = { matched: 0, errors: 0 }
+  try {
+    const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+    /** @type {number[]} */
+    let uids = []
+    try {
+      const found = await client.search({ from: 'printme.com', since }, { uid: true })
+      uids = Array.isArray(found) ? found.map(Number).filter(Boolean) : []
+    }
+    catch {
+      const found = await client.search({ from: 'no-reply@printme.com', since }, { uid: true })
+      uids = Array.isArray(found) ? found.map(Number).filter(Boolean) : []
+    }
+    if (!uids.length) return out
+
+    // Newest first, cap work per sync tick.
+    uids = [...new Set(uids)].sort((a, b) => b - a).slice(0, 40)
+    for await (const msg of client.fetch(uids, {
+      uid: true,
+      source: true,
+      envelope: true,
+    })) {
+      try {
+        const parsed = await simpleParser(msg.source)
+        const from = parsed.from?.value?.[0]?.address ?? msg.envelope?.from?.[0]?.address ?? ''
+        if (!isPrintMeSender(from)) continue
+        const internetMessageId = String(parsed.messageId ?? msg.envelope?.messageId ?? '').trim()
+        if (!internetMessageId) continue
+        const subject = parsed.subject ?? msg.envelope?.subject ?? ''
+        const text = parsed.text ?? parsed.textAsHtml ?? ''
+        const html = typeof parsed.html === 'string' ? parsed.html : null
+        const inReplyTo = parsed.inReplyTo ?? null
+        const references = Array.isArray(parsed.references)
+          ? parsed.references.join(' ')
+          : (parsed.references ?? null)
+        const matched = await matchStaplesPrintMeReply(pool, {
+          from,
+          subject,
+          text,
+          html,
+          internetMessageId,
+          inReplyTo,
+          references,
+          attachments: parsed.attachments,
+        })
+        if (matched.matched) out.matched++
+      }
+      catch (err) {
+        out.errors++
+        console.error('[imap-sync] printme rescan message failed', err)
+      }
+    }
+  }
+  catch (err) {
+    out.errors++
+    console.error('[imap-sync] printme rescan failed', err)
+  }
+  return out
+}
+
 let syncInProgress = false
 let cachedTransport
 let cachedTransportKey
@@ -632,6 +698,17 @@ export async function runImapInboxSync(pool, opts = {}) {
           catch (err) {
             result.errors++
             console.error('[imap-sync] message ingest failed', err)
+          }
+        }
+
+        // Re-scan recent PrintMe mail when jobs are still awaiting — confirmation
+        // messages may already be past last_uid from an earlier failed match.
+        if (await hasAwaitingStaplesPrintJobs(pool)) {
+          const rescanned = await rescanRecentPrintMeReplies(pool, client)
+          result.ingested += rescanned.matched
+          result.errors += rescanned.errors
+          if (rescanned.matched || rescanned.errors) {
+            console.log(`[imap-sync] printme rescan matched=${rescanned.matched} errors=${rescanned.errors}`)
           }
         }
       }

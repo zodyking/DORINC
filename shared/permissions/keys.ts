@@ -36,6 +36,10 @@ export const PERMISSIONS = {
   'service_logs.convert.own': 'Send own service logs to invoice',
   'service_logs.revert_invoice.own': 'Undo send to invoice on own service logs',
 
+  // Staples PrintMe
+  'staples.read.all': 'View Staples PrintMe page and release codes',
+  'staples.print.all': 'Email service log sheets to Staples PrintMe',
+
   // Invoices
   'invoices.read.all': 'View all invoices',
   'invoices.create.all': 'Create invoices',
@@ -138,6 +142,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'vehicles.read.all', 'vehicles.create.all', 'vehicles.update.all', 'vehicles.archive.all', 'vehicles.decode_vin.all',
     'catalog.read.all', 'catalog.manage.all',
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
+    'staples.read.all', 'staples.print.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
     'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
     'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
@@ -160,6 +165,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'vehicles.read.all', 'vehicles.create.all', 'vehicles.update.all', 'vehicles.decode_vin.all',
     'catalog.read.all', 'catalog.manage.all',
     'service_logs.read.all', 'service_logs.review.all', 'service_logs.convert.all',
+    'staples.read.all', 'staples.print.all',
     'invoices.read.all', 'invoices.create.all', 'invoices.update.all', 'invoices.approve.all',
     'invoices.send.all', 'invoices.record_payment.all', 'invoices.generate_pdf.all',
     'estimates.read.all', 'estimates.manage.all', 'estimates.generate_pdf.all',
@@ -178,6 +184,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'vehicles.read.all',
     'service_logs.read.own', 'service_logs.upload.own',
     'service_logs.convert.own', 'service_logs.revert_invoice.own',
+    'staples.read.all', 'staples.print.all',
     'files.upload.all',
     'ai.help.all',
     'deletion_requests.submit.all',
@@ -189,6 +196,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'vehicles.read.all',
     'catalog.read.all',
     'service_logs.read.all',
+    'staples.read.all',
     'invoices.read.all',
     'estimates.read.all',
     'reports.read.all',

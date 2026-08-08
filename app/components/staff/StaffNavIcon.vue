@@ -6,6 +6,7 @@ export type StaffNavIconName =
   | 'customers'
   | 'vehicles'
   | 'service-logs'
+  | 'staples'
   | 'portal-requests'
   | 'deletion-requests'
   | 'catalog'
@@ -23,7 +24,18 @@ defineProps<{
 </script>
 
 <template>
+  <!-- Staples brand mark (colored logo, not stroke icon) -->
+  <img
+    v-if="name === 'staples'"
+    class="staff-nav-icon staff-nav-icon--logo"
+    src="/icons/staples.svg"
+    width="18"
+    height="18"
+    alt=""
+    aria-hidden="true"
+  >
   <svg
+    v-else
     class="staff-nav-icon"
     width="18"
     height="18"

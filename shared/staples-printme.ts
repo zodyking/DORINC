@@ -13,6 +13,7 @@ export {
   assertPrintMePdfAttachment,
   buildPrintMeMailPayload,
   extractPrintMeSubjectToken,
+  extractPrintMeCorrelationToken,
   extractPrintMeReleaseCode,
   pickPrintMeBarcodeAttachment,
   buildCode128Svg,

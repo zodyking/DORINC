@@ -97,6 +97,16 @@ export const PERMISSION_AREAS: PermissionArea[] = [
     ],
   },
   {
+    id: 'staples',
+    label: 'Staples',
+    description: 'Staples PrintMe release codes and blank sheet printing',
+    navKeys: ['staples.read.all'],
+    cells: [
+      cell('staples.read.all', 'View page', 'view'),
+      cell('staples.print.all', 'Send to PrintMe', 'edit'),
+    ],
+  },
+  {
     id: 'catalog',
     label: 'Catalog',
     description: 'Parts, labor rates, and categories',

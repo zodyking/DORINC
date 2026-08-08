@@ -343,6 +343,9 @@ a{ color:#4f46e5; }
   width:18px; height:18px; display:flex; align-items:center; justify-content:center;
   flex:none; color:#64748b;
 }
+.side .nav-item .ico .staff-nav-icon--logo{
+  width:18px; height:18px; border-radius:3px; object-fit:cover; display:block;
+}
 .side .nav-item .nav-label{ flex:1; min-width:0; }
 .side .nav-item:hover{ background:#f1f5f9; color:#0f172a; }
 .side .nav-item:hover .ico{ color:#475569; }
