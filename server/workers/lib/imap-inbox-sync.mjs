@@ -24,10 +24,32 @@ import {
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 import { notifyCustomerEmailReceivedStaff } from './customer-email-staff-notify.mjs'
 import { drainMailQueue } from '../handlers/mail-drain.mjs'
-import { isPrintMeSender } from '../../../shared/staples-printme.mjs'
+import {
+  STAPLES_PRINTME_IMAP_POLL_MS,
+  isPrintMeSender,
+} from '../../../shared/staples-printme.mjs'
 import { matchStaplesPrintMeReply } from './staples-printme-match.mjs'
+import { ensureStaplesPrintJobsSchema } from '../../lib/ensure-staples-print-jobs-schema.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
+
+/** @param {import('pg').Pool} pool */
+async function hasAwaitingStaplesPrintJobs(pool) {
+  try {
+    await ensureStaplesPrintJobsSchema(pool)
+    const { rows } = await pool.query(
+      `SELECT 1
+       FROM staples_print_jobs
+       WHERE dismissed_at IS NULL
+         AND status IN ('queued', 'emailed', 'awaiting_reply')
+       LIMIT 1`,
+    )
+    return Boolean(rows[0])
+  }
+  catch {
+    return false
+  }
+}
 
 let syncInProgress = false
 let cachedTransport
@@ -566,6 +588,7 @@ export async function runImapInboxSync(pool, opts = {}) {
                   internetMessageId,
                   inReplyTo,
                   references,
+                  attachments: parsed.attachments,
                 })
                 printMeMatched = Boolean(matched.matched)
               }
@@ -665,6 +688,17 @@ export function defaultSyncIntervalMs() {
 }
 
 /**
+ * Prefer ~5s IMAP cadence while any Staples PrintMe job is waiting on a reply.
+ * @param {import('pg').Pool} pool
+ */
+export async function effectiveImapSyncIntervalMs(pool) {
+  if (await hasAwaitingStaplesPrintJobs(pool)) {
+    return Math.min(defaultSyncIntervalMs(), STAPLES_PRINTME_IMAP_POLL_MS)
+  }
+  return defaultSyncIntervalMs()
+}
+
+/**
  * Run sync inline when the interval has elapsed (fast path for auto-responder).
  * @param {import('pg').Pool} pool
  */
@@ -672,7 +706,7 @@ export async function maybeRunImapInboxSync(pool) {
   const config = await loadImapConfig(pool)
   if (!config?.host || !config?.user) return null
 
-  const intervalMs = defaultSyncIntervalMs()
+  const intervalMs = await effectiveImapSyncIntervalMs(pool)
   const { rows } = await pool.query(
     `SELECT last_sync_at FROM imap_sync_state WHERE id = 'default' LIMIT 1`,
   )

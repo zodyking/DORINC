@@ -3,6 +3,7 @@
 import ServiceLogListRowActions from '~/components/service-logs/ServiceLogListRowActions.vue'
 import ServiceLogSheetEditorModal from '~/components/service-logs/ServiceLogSheetEditorModal.vue'
 import ServiceLogSheetPrintModal from '~/components/service-logs/ServiceLogSheetPrintModal.vue'
+import StaplesPrintActiveSection from '~/components/service-logs/StaplesPrintActiveSection.vue'
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { fetchServiceLogSheetPdf } from '~/utils/service-log-sheet'
@@ -60,6 +61,7 @@ const showPageActions = computed(() => canUpload.value || canPrintSheet.value ||
 const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && auth.can('service_logs.read.own'))
 const editSheetOpen = ref(false)
 const printSheetChooserOpen = ref(false)
+const staplesActiveSection = ref<{ refresh: () => Promise<void> } | null>(null)
 const sheetBusy = ref(false)
 const sheetPdfDialogOpen = ref(false)
 const sheetPdfBlob = ref<Blob | null>(null)
@@ -224,6 +226,10 @@ function closeSheetPdfDialog() {
   sheetPdfBlob.value = null
   revokeSheetPdf()
 }
+
+async function onStaplesPrintSent() {
+  await staplesActiveSection.value?.refresh()
+}
 </script>
 
 <template>
@@ -264,6 +270,7 @@ function closeSheetPdfDialog() {
     <ServiceLogSheetPrintModal
       v-model:open="printSheetChooserOpen"
       @print-device="printServiceLogSheetFromDevice"
+      @staples-sent="onStaplesPrintSent"
     />
 
     <PdfViewerDialog
@@ -274,6 +281,11 @@ function closeSheetPdfDialog() {
       :download-href="sheetPdfUrl || undefined"
       download-filename="service-log-sheet.pdf"
       @close="closeSheetPdfDialog"
+    />
+
+    <StaplesPrintActiveSection
+      v-if="canPrintSheet"
+      ref="staplesActiveSection"
     />
 
     <ListFilterBar

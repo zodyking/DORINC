@@ -3,6 +3,7 @@ import {
   extractPrintMeReleaseCode,
   extractPrintMeSubjectToken,
   isPrintMeSender,
+  pickPrintMeBarcodeAttachment,
   replyMatchesPrintMeJob,
 } from '../../../shared/staples-printme.mjs'
 import { ensureStaplesPrintJobsSchema } from '../../lib/ensure-staples-print-jobs-schema.mjs'
@@ -18,6 +19,13 @@ import { ensureStaplesPrintJobsSchema } from '../../lib/ensure-staples-print-job
  *   internetMessageId: string,
  *   inReplyTo?: string | null,
  *   references?: string | null,
+ *   attachments?: Array<{
+ *     filename?: string | null,
+ *     contentType?: string | null,
+ *     content?: Buffer | Uint8Array | null,
+ *     contentDisposition?: string | null,
+ *     cid?: string | null,
+ *   }> | null,
  * }} input
  */
 export async function matchStaplesPrintMeReply(pool, input) {
@@ -31,6 +39,8 @@ export async function matchStaplesPrintMeReply(pool, input) {
     return { matched: false, reason: 'no_code' }
   }
 
+  const barcode = pickPrintMeBarcodeAttachment(input.attachments)
+
   const token = extractPrintMeSubjectToken(input.subject)
   let job = null
 
@@ -39,6 +49,7 @@ export async function matchStaplesPrintMeReply(pool, input) {
       `SELECT id, outbound_message_id, status
        FROM staples_print_jobs
        WHERE subject_token = $1
+         AND dismissed_at IS NULL
          AND status IN ('queued', 'emailed', 'awaiting_reply')
        LIMIT 1`,
       [token],
@@ -50,7 +61,8 @@ export async function matchStaplesPrintMeReply(pool, input) {
     const { rows } = await pool.query(
       `SELECT id, outbound_message_id, status
        FROM staples_print_jobs
-       WHERE status IN ('queued', 'emailed', 'awaiting_reply')
+       WHERE dismissed_at IS NULL
+         AND status IN ('queued', 'emailed', 'awaiting_reply')
          AND outbound_message_id IS NOT NULL
        ORDER BY created_at DESC
        LIMIT 25`,
@@ -77,14 +89,27 @@ export async function matchStaplesPrintMeReply(pool, input) {
      SET status = 'ready',
          release_code = $2,
          reply_internet_message_id = $3,
-         ready_at = $4,
-         expires_at = $5,
+         barcode_image = COALESCE($4, barcode_image),
+         barcode_content_type = COALESCE($5, barcode_content_type),
+         ready_at = $6,
+         expires_at = $7,
          error_message = NULL,
-         updated_at = $4
+         updated_at = $6
      WHERE id = $1`,
-    [job.id, releaseCode, input.internetMessageId, now, expiresAt],
+    [
+      job.id,
+      releaseCode,
+      input.internetMessageId,
+      barcode?.content ?? null,
+      barcode?.contentType ?? null,
+      now,
+      expiresAt,
+    ],
   )
 
-  console.info('[staples-printme] release code captured for job', job.id)
-  return { matched: true, jobId: job.id, releaseCode }
+  console.info('[staples-printme] release code captured for job', job.id, {
+    releaseCode,
+    hasBarcode: Boolean(barcode),
+  })
+  return { matched: true, jobId: job.id, releaseCode, hasBarcode: Boolean(barcode) }
 }
