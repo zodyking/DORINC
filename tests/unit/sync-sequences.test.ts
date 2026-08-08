@@ -2,11 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   ensureInvoiceNumberSequence,
   ensureServiceLogNumberSequence,
+  sequenceSetvalArgs,
   syncInvoiceNumberSequence,
   syncNumberSequences,
 } from '../../server/db/sync-sequences'
 
 describe('sync-sequences', () => {
+  it('never asks setval for 0 on an empty estimate table (minvalue 1)', () => {
+    expect(sequenceSetvalArgs(0, 1)).toEqual({ value: 1, isCalled: false })
+    expect(sequenceSetvalArgs(0, 93)).toEqual({ value: 93, isCalled: false })
+    expect(sequenceSetvalArgs(42, 1)).toEqual({ value: 42, isCalled: true })
+    expect(sequenceSetvalArgs(711, 93)).toEqual({ value: 711, isCalled: true })
+  })
+
   it('reads invoice setval from db.execute rows', async () => {
     const db = {
       execute: vi.fn().mockResolvedValue({ rows: [{ setval: '711' }] }),
@@ -20,13 +28,13 @@ describe('sync-sequences', () => {
       execute: vi.fn()
         .mockResolvedValueOnce({ rows: [{ setval: '711' }] })
         .mockResolvedValueOnce({ rows: [{ setval: '1007' }] })
-        .mockResolvedValueOnce({ rows: [{ setval: '42' }] }),
+        .mockResolvedValueOnce({ rows: [{ setval: '1' }] }),
     }
 
     await expect(syncNumberSequences(db as never)).resolves.toEqual({
       invoiceNumber: 711,
       serviceLogNumber: 1007,
-      estimateNumber: 42,
+      estimateNumber: 1,
     })
   })
 
