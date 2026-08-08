@@ -10,7 +10,7 @@ import {
   STAPLES_PRINTME_CODE_TTL_MS,
   STAPLES_PRINTME_LOCATOR_URL,
   STAPLES_PRINTME_TO,
-  buildPrintMeSubject,
+  buildPrintMeMailPayload,
 } from '../../shared/staples-printme'
 
 export class StaplesPrintMeServiceError extends Error {
@@ -35,6 +35,9 @@ export interface StaplesPrintJobView {
   expiresAt: string | null
   createdAt: string
   printMeTo: string
+  delivered: boolean
+  attachmentFilename: string | null
+  attachmentBytes: number | null
 }
 
 function newSubjectToken(): string {
@@ -59,7 +62,10 @@ async function buildReleaseCodeQrDataUrl(code: string): Promise<string | null> {
   }
 }
 
-async function toView(row: typeof staplesPrintJobs.$inferSelect): Promise<StaplesPrintJobView> {
+async function toView(
+  row: typeof staplesPrintJobs.$inferSelect,
+  extras: { delivered?: boolean, attachmentFilename?: string | null, attachmentBytes?: number | null } = {},
+): Promise<StaplesPrintJobView> {
   const releaseCode = row.releaseCode
   return {
     id: row.id,
@@ -73,6 +79,9 @@ async function toView(row: typeof staplesPrintJobs.$inferSelect): Promise<Staple
     expiresAt: iso(row.expiresAt),
     createdAt: row.createdAt.toISOString(),
     printMeTo: STAPLES_PRINTME_TO,
+    delivered: extras.delivered ?? Boolean(row.emailedAt && row.status !== 'failed'),
+    attachmentFilename: extras.attachmentFilename ?? 'service-log-sheet.pdf',
+    attachmentBytes: extras.attachmentBytes ?? null,
   }
 }
 
@@ -112,9 +121,15 @@ export async function startStaplesPrintMeJob(
   }
 
   const subjectToken = newSubjectToken()
-  const subject = buildPrintMeSubject(subjectToken)
-  const now = new Date()
+  const payload = buildPrintMeMailPayload({ token: subjectToken, pdf })
+  if (!payload.ok || !payload.mail) {
+    throw new StaplesPrintMeServiceError(
+      'PDF_FAILED',
+      payload.reason || 'Could not prepare the PrintMe PDF attachment',
+    )
+  }
 
+  const now = new Date()
   const [job] = await db.insert(staplesPrintJobs).values({
     createdBy,
     documentType: 'service_log_sheet',
@@ -128,61 +143,64 @@ export async function startStaplesPrintMeJob(
     throw new StaplesPrintMeServiceError('SEND_FAILED', 'Could not create Staples print job')
   }
 
+  const attachment = payload.mail.attachments[0]!
+
   try {
     const { delivered, messageId } = await sendNotificationMail(db, {
-      to: STAPLES_PRINTME_TO,
-      subject,
-      text: [
-        'Please accept this service log sheet PDF for Staples PrintMe cloud printing.',
-        '',
-        `Correlation: DORINC-PRINT-${subjectToken}`,
-        'Reply with the release code as usual.',
-      ].join('\n'),
-      html: [
-        '<p>Please accept this <b>service log sheet</b> PDF for Staples PrintMe cloud printing.</p>',
-        `<p>Correlation: <code>DORINC-PRINT-${subjectToken}</code></p>`,
-        '<p>Reply with the release code as usual.</p>',
-      ].join(''),
+      to: payload.mail.to,
+      subject: payload.mail.subject,
+      text: payload.mail.text,
+      // No HTML on purpose — PrintMe supports HTML as a printable document type.
       debugLabel: 'staples-printme',
       attachments: [{
-        filename: 'service-log-sheet.pdf',
-        content: pdf,
-        contentType: 'application/pdf',
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType,
+        contentDisposition: 'attachment',
       }],
     })
 
     const outboundMessageId = messageId
     const emailedAt = new Date()
+    const attachmentBytes = attachment.content.length
 
-    if (!delivered && process.env.NODE_ENV === 'production') {
+    if (!delivered) {
       const [failed] = await db.update(staplesPrintJobs).set({
         status: 'failed',
-        errorMessage: 'SMTP did not accept the PrintMe email',
+        errorMessage: 'SMTP did not accept the PrintMe email with the PDF attachment. Check Control Panel → Email / SMTP.',
         outboundMessageId,
         updatedAt: new Date(),
       }).where(eq(staplesPrintJobs.id, job.id)).returning()
-      return toView(failed!)
+      return toView(failed!, {
+        delivered: false,
+        attachmentFilename: attachment.filename,
+        attachmentBytes,
+      })
     }
+
+    console.info(
+      `[staples-printme] emailed PDF to=${payload.mail.to} bytes=${attachmentBytes} subject="${payload.mail.subject}" messageId=${outboundMessageId}`,
+    )
 
     const [updated] = await db.update(staplesPrintJobs).set({
       status: 'awaiting_reply',
       outboundMessageId,
       emailedAt,
-      // Soft expiry window even before reply (PrintMe docs: ~24h from upload).
       expiresAt: new Date(emailedAt.getTime() + STAPLES_PRINTME_CODE_TTL_MS),
-      errorMessage: delivered
-        ? null
-        : 'Email queued in development without SMTP — waiting for a PrintMe reply if IMAP is connected',
+      errorMessage: null,
       updatedAt: new Date(),
     }).where(eq(staplesPrintJobs.id, job.id)).returning()
 
-    // Nudge IMAP so the release-code reply is picked up quickly.
     await enqueueJob(db, 'imap_sync', {
       trigger: 'staples_printme',
       jobId: job.id,
     }, 3).catch(() => null)
 
-    return toView(updated!)
+    return toView(updated!, {
+      delivered: true,
+      attachmentFilename: attachment.filename,
+      attachmentBytes,
+    })
   }
   catch (err) {
     const [failed] = await db.update(staplesPrintJobs).set({
@@ -190,7 +208,13 @@ export async function startStaplesPrintMeJob(
       errorMessage: err instanceof Error ? err.message : 'Failed to email Staples PrintMe',
       updatedAt: new Date(),
     }).where(eq(staplesPrintJobs.id, job.id)).returning()
-    if (failed) return toView(failed)
+    if (failed) {
+      return toView(failed, {
+        delivered: false,
+        attachmentFilename: attachment.filename,
+        attachmentBytes: attachment.content.length,
+      })
+    }
     throw new StaplesPrintMeServiceError(
       'SEND_FAILED',
       err instanceof Error ? err.message : 'Failed to email Staples PrintMe',

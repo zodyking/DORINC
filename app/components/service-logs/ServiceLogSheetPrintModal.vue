@@ -19,6 +19,9 @@ type StaplesJob = {
   expiresAt: string | null
   createdAt: string
   printMeTo: string
+  delivered?: boolean
+  attachmentFilename?: string | null
+  attachmentBytes?: number | null
 }
 
 type Step = 'choose' | 'staples'
@@ -223,7 +226,12 @@ onBeforeUnmount(() => stopPoll())
             <span class="sl-staples-spinner" aria-hidden="true" />
             <strong>Waiting for Staples PrintMe…</strong>
             <p>
-              Sheet emailed to <code>{{ staplesJob?.printMeTo || 'print@printme.com' }}</code>.
+              PDF
+              <code>{{ staplesJob?.attachmentFilename || 'service-log-sheet.pdf' }}</code>
+              <template v-if="staplesJob?.attachmentBytes">
+                ({{ Math.round((staplesJob.attachmentBytes || 0) / 1024) }} KB)
+              </template>
+              emailed to <code>{{ staplesJob?.printMeTo || 'print@printme.com' }}</code>.
               IMAP will pick up the confirmation and show your release code here.
             </p>
           </div>

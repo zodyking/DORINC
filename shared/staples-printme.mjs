@@ -43,6 +43,68 @@ export function buildPrintMeSubject(token) {
 }
 
 /**
+ * Plain-text-only PrintMe upload body.
+ * Avoid HTML bodies — PrintMe treats HTML as a printable document type.
+ * @param {string} token
+ */
+export function buildPrintMeTextBody(token) {
+  return [
+    'Service log sheet PDF attached for Staples PrintMe cloud printing.',
+    '',
+    `Correlation: DORINC-PRINT-${token}`,
+  ].join('\n')
+}
+
+/**
+ * @param {Buffer | Uint8Array | null | undefined} pdf
+ */
+export function assertPrintMePdfAttachment(pdf) {
+  if (!pdf || !pdf.length) {
+    return { ok: false, reason: 'PDF is empty' }
+  }
+  if (pdf.length < 100) {
+    return { ok: false, reason: 'PDF is too small to be valid' }
+  }
+  const head = Buffer.from(pdf.subarray(0, 5)).toString('utf8')
+  if (head !== '%PDF-') {
+    return { ok: false, reason: 'Rendered file is not a PDF' }
+  }
+  if (pdf.length > 25 * 1024 * 1024) {
+    return { ok: false, reason: 'PDF exceeds PrintMe 25 MB limit' }
+  }
+  return { ok: true, reason: null, bytes: pdf.length }
+}
+
+/**
+ * Build the outbound PrintMe mail payload (to/subject/text/attachment).
+ * @param {{ token: string, pdf: Buffer | Uint8Array }} input
+ */
+export function buildPrintMeMailPayload(input) {
+  const check = assertPrintMePdfAttachment(input.pdf)
+  if (!check.ok) {
+    return { ok: false, reason: check.reason, mail: null }
+  }
+
+  const content = Buffer.isBuffer(input.pdf) ? input.pdf : Buffer.from(input.pdf)
+  return {
+    ok: true,
+    reason: null,
+    mail: {
+      to: STAPLES_PRINTME_TO,
+      subject: buildPrintMeSubject(input.token),
+      text: buildPrintMeTextBody(input.token),
+      // Intentionally no HTML — PrintMe can treat HTML as a document.
+      attachments: [{
+        filename: 'service-log-sheet.pdf',
+        content,
+        contentType: 'application/pdf',
+        contentDisposition: 'attachment',
+      }],
+    },
+  }
+}
+
+/**
  * @param {string | null | undefined} subject
  */
 export function extractPrintMeSubjectToken(subject) {
