@@ -13,12 +13,15 @@ type StaplesJob = {
   errorMessage: string | null
   locatorUrl: string
   expiresAt: string | null
+  createdAt?: string
+  createdByName?: string | null
   hasBarcode?: boolean
   hasPdf?: boolean
   awaitingReply?: boolean
   attachmentFilename?: string | null
 }
 
+const route = useRoute()
 const jobs = ref<StaplesJob[]>([])
 const loadError = ref('')
 const dismissBusyId = ref<string | null>(null)
@@ -35,6 +38,10 @@ const pdfBusyId = ref<string | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const hasJobs = computed(() => jobs.value.length > 0)
+const highlightJobId = computed(() => {
+  const raw = route.query.job
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : ''
+})
 
 function stopPoll() {
   if (pollTimer) {
@@ -57,8 +64,14 @@ function revokeBarcodeModalUrl() {
 
 function documentTitle(job: StaplesJob) {
   if (job.documentLabel?.trim()) return job.documentLabel.trim()
-  if (job.documentType === 'invoice') return 'Invoice'
+  if (job.documentType === 'invoice' || job.documentType === 'invoice_batch') return 'Invoice'
   return 'Service log sheet'
+}
+
+function documentTypeLabel(job: StaplesJob) {
+  if (job.documentType === 'invoice_batch') return 'Invoices'
+  if (job.documentType === 'invoice') return 'Invoice'
+  return 'Service log'
 }
 
 function statusLabel(job: StaplesJob) {
@@ -74,6 +87,17 @@ function statusPill(job: StaplesJob) {
   if (job.releaseCode && job.status !== 'expired') return 'pill ok'
   if (job.status === 'failed' || job.status === 'expired') return 'pill bad'
   return 'pill warn'
+}
+
+function orderDateDisplay(iso: string | undefined) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 async function loadBarcodeForJob(job: StaplesJob) {
@@ -118,12 +142,22 @@ async function hydrateMedia(list: StaplesJob[]) {
   }
 }
 
+async function scrollToHighlightedJob() {
+  if (!import.meta.client || !highlightJobId.value) return
+  await nextTick()
+  document.getElementById(`staples-job-${highlightJobId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+}
+
 async function refreshJobs() {
   try {
     const res = await $fetch<{ jobs: StaplesJob[] }>('/api/service-logs/sheet/staples-print')
     jobs.value = res.jobs || []
     loadError.value = ''
     await hydrateMedia(jobs.value)
+    await scrollToHighlightedJob()
   }
   catch (e: unknown) {
     loadError.value = syncFetchErrorMessage(e, 'Could not load Staples print status')
@@ -258,61 +292,71 @@ onBeforeUnmount(() => {
       </p>
     </div>
 
-    <article
-      v-for="job in jobs"
-      :key="job.id"
-      class="staples-card"
-    >
-      <button
-        v-if="job.hasPdf"
-        type="button"
-        class="staples-card__pdf"
-        :disabled="pdfBusyId === job.id"
-        :aria-label="`Open PDF for ${documentTitle(job)}`"
-        @click="openPdf(job)"
+    <div v-else class="staples-panel__grid">
+      <article
+        v-for="job in jobs"
+        :id="`staples-job-${job.id}`"
+        :key="job.id"
+        class="staples-card"
+        :class="{ 'staples-card--highlight': highlightJobId === job.id }"
       >
-        <iframe
-          v-if="pdfPreviewUrls[job.id]"
-          class="staples-card__pdf-frame"
-          :src="`${pdfPreviewUrls[job.id]}#toolbar=0&navpanes=0&scrollbar=0`"
-          title=""
-          tabindex="-1"
-        />
-        <div class="staples-card__pdf-shade">
-          <span class="staples-card__pdf-badge">PDF</span>
-          <span class="staples-card__pdf-title">{{ documentTitle(job) }}</span>
-          <span class="staples-card__pdf-hint">
-            {{ pdfBusyId === job.id ? 'Opening…' : (pdfPreviewUrls[job.id] ? 'Tap to enlarge' : 'Loading preview…') }}
-          </span>
-        </div>
-      </button>
-      <div v-else class="staples-card__pdf staples-card__pdf--static">
-        <span class="staples-card__pdf-badge">DOC</span>
-        <span class="staples-card__pdf-title">{{ documentTitle(job) }}</span>
-        <span class="staples-card__pdf-hint">Preview unavailable</span>
-      </div>
-
-      <div class="staples-card__body">
-        <div class="staples-card__top">
-          <div class="staples-card__meta">
-            <span :class="statusPill(job)">{{ statusLabel(job) }}</span>
-            <span v-if="job.documentType === 'invoice'" class="pill info">Invoice</span>
-            <span v-else class="pill gray">Service log</span>
+        <button
+          v-if="job.hasPdf"
+          type="button"
+          class="staples-card__pdf"
+          :disabled="pdfBusyId === job.id"
+          :aria-label="`Open PDF for ${documentTitle(job)}`"
+          @click="openPdf(job)"
+        >
+          <iframe
+            v-if="pdfPreviewUrls[job.id]"
+            class="staples-card__pdf-frame"
+            :src="`${pdfPreviewUrls[job.id]}#toolbar=0&navpanes=0&scrollbar=0`"
+            title=""
+            tabindex="-1"
+          />
+          <div class="staples-card__pdf-shade">
+            <span class="staples-card__pdf-badge">PDF</span>
+            <span class="staples-card__pdf-title">{{ documentTitle(job) }}</span>
+            <span class="staples-card__pdf-hint">
+              {{ pdfBusyId === job.id ? 'Opening…' : (pdfPreviewUrls[job.id] ? 'Tap to enlarge' : 'Loading preview…') }}
+            </span>
           </div>
-          <button
-            type="button"
-            class="btn"
-            :disabled="dismissBusyId === job.id"
-            @click="requestRemoval(job)"
-          >
-            {{ dismissBusyId === job.id ? 'Removing…' : 'Remove' }}
-          </button>
+        </button>
+        <div v-else class="staples-card__pdf staples-card__pdf--static">
+          <span class="staples-card__pdf-badge">DOC</span>
+          <span class="staples-card__pdf-title">{{ documentTitle(job) }}</span>
+          <span class="staples-card__pdf-hint">Preview unavailable</span>
         </div>
 
-        <template v-if="job.releaseCode">
-          <div class="staples-card__code-block">
-            <p class="staples-card__label">Release code</p>
-            <p class="staples-card__code">{{ job.releaseCode }}</p>
+        <div class="staples-card__body">
+          <div class="staples-card__top">
+            <div class="staples-card__meta">
+              <span :class="statusPill(job)">{{ statusLabel(job) }}</span>
+              <span
+                class="pill"
+                :class="job.documentType === 'invoice' || job.documentType === 'invoice_batch' ? 'info' : 'gray'"
+              >
+                {{ documentTypeLabel(job) }}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn"
+              :disabled="dismissBusyId === job.id"
+              @click="requestRemoval(job)"
+            >
+              {{ dismissBusyId === job.id ? 'Removing…' : 'Remove' }}
+            </button>
+          </div>
+
+          <div class="staples-card__who">
+            <p class="staples-card__label">Ordered by</p>
+            <p class="staples-card__who-name">{{ job.createdByName?.trim() || 'Staff' }}</p>
+            <p class="staples-card__who-date">{{ orderDateDisplay(job.createdAt) }}</p>
+          </div>
+
+          <template v-if="job.releaseCode">
             <button
               v-if="barcodeUrls[job.id] || job.hasBarcode"
               type="button"
@@ -327,19 +371,20 @@ onBeforeUnmount(() => {
                 class="staples-card__barcode-img"
               >
               <span v-else class="help">Loading barcode…</span>
+              <span class="staples-card__barcode-code">{{ job.releaseCode }}</span>
               <span class="staples-card__barcode-hint">Tap to enlarge</span>
             </button>
-          </div>
-          <p v-if="job.status === 'expired'" class="staples-card__note">Expired — remove when finished at the store</p>
-        </template>
-        <template v-else-if="job.status === 'failed'">
-          <p class="staples-card__note staples-panel-error">{{ job.errorMessage || 'PrintMe send failed' }}</p>
-        </template>
-        <template v-else>
-          <p class="staples-card__note">Waiting for confirmation from PrintMe…</p>
-        </template>
-      </div>
-    </article>
+            <p v-if="job.status === 'expired'" class="staples-card__note">Expired — remove when finished at the store</p>
+          </template>
+          <template v-else-if="job.status === 'failed'">
+            <p class="staples-card__note staples-panel-error">{{ job.errorMessage || 'PrintMe send failed' }}</p>
+          </template>
+          <template v-else>
+            <p class="staples-card__note">Waiting for confirmation from PrintMe…</p>
+          </template>
+        </div>
+      </article>
+    </div>
 
     <div
       v-if="barcodeOpen"
@@ -396,6 +441,12 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 12px;
 }
+.staples-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
 .staples-panel-empty {
   padding: 28px 20px;
   border: 1px dashed #cbd5e1;
@@ -427,15 +478,19 @@ onBeforeUnmount(() => {
 }
 .staples-card {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: 16px;
-  max-width: 720px;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
   padding: 14px;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   align-items: stretch;
+}
+.staples-card--highlight {
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
 }
 .staples-card__pdf {
   position: relative;
@@ -518,11 +573,10 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 6px;
 }
-.staples-card__code-block {
+.staples-card__who {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  gap: 2px;
 }
 .staples-card__label {
   margin: 0;
@@ -532,14 +586,17 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   color: #64748b;
 }
-.staples-card__code {
+.staples-card__who-name {
   margin: 0;
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  font-size: 15px;
+  font-weight: 700;
   color: #0f172a;
-  font-variant-numeric: tabular-nums;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  line-height: 1.3;
+}
+.staples-card__who-date {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
 }
 .staples-card__barcode {
   margin-top: 2px;
@@ -564,6 +621,14 @@ onBeforeUnmount(() => {
   max-height: 72px;
   object-fit: contain;
   image-rendering: pixelated;
+}
+.staples-card__barcode-code {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 .staples-card__barcode-hint {
   font-size: 11px;
@@ -596,10 +661,14 @@ onBeforeUnmount(() => {
   height: auto;
   image-rendering: pixelated;
 }
+@media (max-width: 900px) {
+  .staples-panel__grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 640px) {
   .staples-card {
     grid-template-columns: 1fr;
-    max-width: none;
   }
   .staples-card__pdf {
     min-height: 140px;

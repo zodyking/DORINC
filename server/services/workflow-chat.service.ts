@@ -1,5 +1,6 @@
 import type { Db } from '../db/client'
 import { formatInvoiceNumber } from '../db/schema/invoices'
+import type { MessageEntityType } from '../db/schema/messages'
 import { formatMoney, parseMoney } from '../../shared/money'
 import { formatVehicleUnitLabel } from '../../shared/format/vehicle-unit'
 import {
@@ -168,6 +169,31 @@ export async function postInvoiceCreatedTeamMessage(
   return postTeamChatMessage(db, {
     senderUserId: opts.senderUserId,
     body: parts.join(' '),
+    entityRefs: refs,
+    skipNormalize: true,
+    workflowNotification: true,
+  })
+}
+
+/** Local device print completed — posts team chat (and staff email via chat notify). */
+export async function postDocumentPrintedTeamMessage(
+  db: Db,
+  opts: {
+    senderUserId: string
+    documentLabel: string
+    entityType?: MessageEntityType | null
+    entityId?: string | null
+  },
+) {
+  const refs: ReturnType<typeof buildEntityRef>[] = []
+  let docPart = opts.documentLabel
+  if (opts.entityType && opts.entityId) {
+    docPart = entityRefToken(opts.entityType, opts.entityId, opts.documentLabel)
+    refs.push(buildEntityRef(opts.entityType, opts.entityId, opts.documentLabel))
+  }
+  return postTeamChatMessage(db, {
+    senderUserId: opts.senderUserId,
+    body: `${docPart} has been printed.`,
     entityRefs: refs,
     skipNormalize: true,
     workflowNotification: true,

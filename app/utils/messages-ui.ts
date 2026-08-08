@@ -40,6 +40,7 @@ export const ENTITY_TYPE_LABELS: Record<MessageEntityType, string> = {
   vehicle: 'Vehicle',
   service_log: 'Service log',
   deletion_request: 'Deletion request',
+  staples_print_job: 'Staples print order',
 }
 
 export function entityRefToken(ref: EntityRefToken): string {
@@ -58,6 +59,8 @@ export function entityPath(entityType: MessageEntityType, entityId: string): str
       return `/service-logs/${entityId}`
     case 'deletion_request':
       return `/deletion-requests?request=${entityId}`
+    case 'staples_print_job':
+      return `/staples?job=${entityId}`
     default:
       return '/'
   }
@@ -88,6 +91,8 @@ export function entityPathForMessageLink(
       return `/service-logs/${entityId}?${refQuery}`
     case 'deletion_request':
       return `/deletion-requests?request=${entityId}&${refQuery}`
+    case 'staples_print_job':
+      return `/staples?job=${entityId}&${refQuery}`
     default:
       return '/'
   }

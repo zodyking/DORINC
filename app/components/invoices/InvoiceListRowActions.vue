@@ -2,7 +2,10 @@
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import SendInvoiceButton from '~/components/SendInvoiceButton.vue'
 import DeleteEntityButton from '~/components/DeleteEntityButton.vue'
+import { PdfViewerDialog } from '~/utils/pdf-viewer'
 import { isInvoiceEditable, isInvoiceEmailable, isInvoiceResend, type InvoiceStatus } from '~/utils/invoices-ui'
+import { fetchInvoicePreviewPdf } from '~/utils/invoice-pdf'
+import { fetchErrorMessage, syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 const props = defineProps<{
   invoiceId: string
@@ -20,6 +23,12 @@ const sendRef = ref<InstanceType<typeof SendInvoiceButton> | null>(null)
 const canSendPerm = computed(() => auth.can('invoices.send.all'))
 const canUpdatePerm = computed(() => auth.can('invoices.update.all'))
 const canDeletePerm = computed(() => auth.can('deletion_requests.submit.all'))
+const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all') || auth.can('invoices.read.all'))
+const canStaplesPrint = computed(() =>
+  auth.can('staples.print.all')
+  || auth.can('invoices.read.all')
+  || auth.can('invoices.update.all'),
+)
 
 const isResend = computed(() => isInvoiceResend(props.status))
 const sendAllowed = computed(() => canSendPerm.value && isInvoiceEmailable(props.status))
@@ -50,9 +59,64 @@ const deleteTitle = computed(() => {
   return 'Void invoices cannot be deleted'
 })
 
+const printBusy = ref(false)
+const staplesBusy = ref(false)
+const actionError = ref('')
+const pdfOpen = ref(false)
+const pdfBlob = ref<Blob | null>(null)
+const { url: pdfUrl, setFromBlob, revoke: revokePdf } = usePdfBlobUrl()
+
 function onSendClick() {
   if (!sendAllowed.value) return
   sendRef.value?.openModal()
+}
+
+async function printLocal() {
+  if (!canGeneratePdf.value || printBusy.value) return
+  printBusy.value = true
+  actionError.value = ''
+  try {
+    const blob = await fetchInvoicePreviewPdf(props.invoiceId)
+    pdfBlob.value = blob
+    setFromBlob(blob)
+    pdfOpen.value = true
+    await $fetch(`/api/invoices/${props.invoiceId}/print-notify`, { method: 'POST' })
+  }
+  catch (e: unknown) {
+    actionError.value = await fetchErrorMessage(e, 'Could not open invoice PDF')
+  }
+  finally {
+    printBusy.value = false
+  }
+}
+
+async function printViaStaples() {
+  if (!canStaplesPrint.value || staplesBusy.value) return
+  staplesBusy.value = true
+  actionError.value = ''
+  try {
+    const res = await $fetch<{ job: { id: string, status: string, errorMessage: string | null } }>(
+      `/api/invoices/${props.invoiceId}/staples-print`,
+      { method: 'POST' },
+    )
+    if (res.job.status === 'failed') {
+      actionError.value = res.job.errorMessage || 'Could not email Staples PrintMe'
+      return
+    }
+    await navigateTo('/staples')
+  }
+  catch (e: unknown) {
+    actionError.value = syncFetchErrorMessage(e, 'Could not start Staples PrintMe')
+  }
+  finally {
+    staplesBusy.value = false
+  }
+}
+
+function closePdf() {
+  pdfOpen.value = false
+  pdfBlob.value = null
+  revokePdf()
 }
 </script>
 
@@ -85,6 +149,26 @@ function onSendClick() {
       >
         {{ sendLabel }}
       </button>
+      <button
+        v-if="canGeneratePdf"
+        type="button"
+        class="btn"
+        :disabled="printBusy"
+        title="Print invoice PDF on this device"
+        @click="printLocal"
+      >
+        {{ printBusy ? 'Opening…' : 'Print' }}
+      </button>
+      <button
+        v-if="canStaplesPrint"
+        type="button"
+        class="btn"
+        :disabled="staplesBusy"
+        title="Send invoice PDF to Staples PrintMe"
+        @click="printViaStaples"
+      >
+        {{ staplesBusy ? 'Sending…' : 'Print via Staples' }}
+      </button>
       <DeleteEntityButton
         v-if="canDeletePerm"
         :entity-id="invoiceId"
@@ -106,6 +190,8 @@ function onSendClick() {
       </button>
     </PageActionsMenu>
 
+    <p v-if="actionError" class="inv-row-actions__err">{{ actionError }}</p>
+
     <SendInvoiceButton
       ref="sendRef"
       :invoice-id="invoiceId"
@@ -113,6 +199,18 @@ function onSendClick() {
       hide-trigger
       @sent="emit('changed')"
     />
+
+    <ClientOnly>
+      <PdfViewerDialog
+        v-model:open="pdfOpen"
+        :src="pdfUrl"
+        :blob="pdfBlob"
+        :title="`${invoiceLabel} PDF`"
+        :download-href="pdfUrl || undefined"
+        :download-filename="`${invoiceLabel}.pdf`"
+        @close="closePdf"
+      />
+    </ClientOnly>
   </div>
 </template>
 
@@ -120,9 +218,17 @@ function onSendClick() {
 .inv-row-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .inv-row-actions :deep(.page-actions__panel .btn:disabled) {
   opacity: 0.55;
   cursor: not-allowed;
+}
+.inv-row-actions__err {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #dc2626;
+  text-align: right;
 }
 </style>

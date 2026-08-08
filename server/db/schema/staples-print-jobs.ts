@@ -16,6 +16,7 @@ export type StaplesPrintJobStatus = (typeof STAPLES_PRINT_JOB_STATUSES)[number]
 export const STAPLES_PRINT_DOCUMENT_TYPES = [
   'service_log_sheet',
   'invoice',
+  'invoice_batch',
 ] as const
 
 export type StaplesPrintDocumentType = (typeof STAPLES_PRINT_DOCUMENT_TYPES)[number]
