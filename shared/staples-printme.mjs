@@ -1,6 +1,7 @@
-/** Staples / EFI PrintMe email-to-print helpers (shared by API + IMAP worker). */
+/** Staples PrintMe email-to-print helpers (shared by API + IMAP worker). */
 
-export const STAPLES_PRINTME_TO = 'print@printme.com'
+/** Staples branded PrintMe inbox (not the generic print@printme.com address). */
+export const STAPLES_PRINTME_TO = 'staples@printme.com'
 export const STAPLES_PRINTME_SUBJECT_PREFIX = 'DORINC Service Log Sheet'
 export const STAPLES_PRINTME_TOKEN_RE = /\[DORINC-PRINT-([A-Z0-9]{8,20})\]/i
 export const STAPLES_PRINTME_CODE_TTL_MS = 24 * 60 * 60 * 1000
@@ -113,8 +114,8 @@ export function extractPrintMeSubjectToken(subject) {
 }
 
 /**
- * Extract a PrintMe release / document ID from confirmation email text.
- * Codes are typically 6–8 alphanumeric characters.
+ * Extract Staples PrintMe retrieval code from confirmation email text.
+ * Staples replies with an 8-digit code (and sometimes a barcode) — not a QR code.
  * @param {string | null | undefined} text
  * @param {string | null | undefined} html
  */
@@ -124,24 +125,38 @@ export function extractPrintMeReleaseCode(text, html = null) {
     String(html || '').replace(/<[^>]+>/g, ' '),
   ].join('\n').replace(/&nbsp;/gi, ' ')
 
-  const labeled = plain.match(
-    /(?:release\s*code|document\s*id|doc(?:ument)?\s*id|printme\s*(?:code|id)|your\s*code)\s*(?:is\s*)?[:#-]?\s*([A-Z0-9]{6,8})\b/i,
+  // Prefer labeled 8-digit retrieval / release codes (Staples docs).
+  const labeledEight = plain.match(
+    /(?:retrieval\s*code|release\s*code|document\s*id|doc(?:ument)?\s*id|printme\s*(?:code|id)|your\s*code|barcode)\s*(?:is\s*)?[:#-]?\s*(\d{8})\b/i,
   )
-  if (labeled?.[1]) return labeled[1].toUpperCase()
+  if (labeledEight?.[1]) return labeledEight[1]
 
-  // Short confirmation bodies often put the code on its own line.
+  // Labeled alphanumeric fallback (generic PrintMe 6–8 char codes).
+  const labeledAlpha = plain.match(
+    /(?:retrieval\s*code|release\s*code|document\s*id|doc(?:ument)?\s*id|printme\s*(?:code|id)|your\s*code)\s*(?:is\s*)?[:#-]?\s*([A-Z0-9]{6,8})\b/i,
+  )
+  if (labeledAlpha?.[1]) return labeledAlpha[1].toUpperCase()
+
+  // Standalone 8-digit line (common in Staples confirmation emails).
   const lines = plain.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
   for (const line of lines) {
-    if (/^[A-Z0-9]{6,8}$/i.test(line) && !/THANKS|PRINTME|STAPLES|SERVICE|DOCUMENT|RELEASE/i.test(line)) {
+    if (/^\d{8}$/.test(line)) return line
+  }
+
+  // Any 8-digit token in the body.
+  const eightDigit = plain.match(/\b(\d{8})\b/)
+  if (eightDigit?.[1]) return eightDigit[1]
+
+  for (const line of lines) {
+    if (/^[A-Z0-9]{6,8}$/i.test(line) && !/THANKS|PRINTME|STAPLES|SERVICE|DOCUMENT|RELEASE|RETRIEVAL|BARCODE/i.test(line)) {
       return line.toUpperCase()
     }
   }
 
-  // Prefer mixed alphanumeric codes over common English words.
   const candidates = [...plain.matchAll(/\b(?=[A-Z0-9]*\d)([A-Z0-9]{6,8})\b/gi)]
     .map(m => String(m[1] || '').toUpperCase())
     .filter(Boolean)
-    .filter(code => !/DORINC|PRINTME|STAPLES|SERVICE|DOCUMENT|RELEASE/i.test(code))
+    .filter(code => !/DORINC|PRINTME|STAPLES|SERVICE|DOCUMENT|RELEASE|RETRIEVAL|BARCODE/i.test(code))
   if (candidates[0]) return candidates[0]
 
   return null
@@ -161,7 +176,6 @@ export function replyMatchesPrintMeJob(outboundMessageId, reply) {
   ].filter(Boolean).join(' ')
 
   if (haystack.includes(outbound)) return true
-  // Some MTAs strip angle brackets inconsistently.
   const bare = outbound.replace(/^<|>$/g, '')
   if (bare && haystack.includes(bare)) return true
   return Boolean(extractPrintMeSubjectToken(reply.subject))

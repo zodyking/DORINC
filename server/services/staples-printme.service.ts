@@ -27,7 +27,6 @@ export interface StaplesPrintJobView {
   id: string
   status: string
   releaseCode: string | null
-  qrDataUrl: string | null
   errorMessage: string | null
   locatorUrl: string
   emailedAt: string | null
@@ -48,30 +47,14 @@ function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null
 }
 
-async function buildReleaseCodeQrDataUrl(code: string): Promise<string | null> {
-  try {
-    const QRCode = (await import('qrcode')).default
-    return await QRCode.toDataURL(code, {
-      width: 240,
-      margin: 2,
-      color: { dark: '#0f172a', light: '#ffffff' },
-    })
-  }
-  catch {
-    return null
-  }
-}
-
-async function toView(
+function toView(
   row: typeof staplesPrintJobs.$inferSelect,
   extras: { delivered?: boolean, attachmentFilename?: string | null, attachmentBytes?: number | null } = {},
-): Promise<StaplesPrintJobView> {
-  const releaseCode = row.releaseCode
+): StaplesPrintJobView {
   return {
     id: row.id,
     status: row.status,
-    releaseCode,
-    qrDataUrl: releaseCode ? await buildReleaseCodeQrDataUrl(releaseCode) : null,
+    releaseCode: row.releaseCode,
     errorMessage: row.errorMessage,
     locatorUrl: STAPLES_PRINTME_LOCATOR_URL,
     emailedAt: iso(row.emailedAt),
