@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { staplesPrintJobs } from '../db/schema'
+import { imapSyncState } from '../db/schema/email-inbox'
 import { workerJobs } from '../db/schema/jobs'
 import { getSmtpConfig } from './app-config.service'
 import { renderServiceLogSheetPdf } from './service-log-sheet.service'
@@ -9,6 +10,7 @@ import { sendNotificationMail } from '../mail/mailer'
 import { enqueueJob } from './jobs.service'
 import {
   STAPLES_PRINTME_CODE_TTL_MS,
+  STAPLES_PRINTME_IMAP_POLL_MS,
   STAPLES_PRINTME_LOCATOR_URL,
   STAPLES_PRINTME_TO,
   buildCode128Svg,
@@ -92,7 +94,15 @@ async function maybeExpireJob(db: Db, row: typeof staplesPrintJobs.$inferSelect)
   return updated ?? row
 }
 
-async function enqueueImapIfIdle(db: Db, payload: Record<string, unknown>) {
+/**
+ * Queue an IMAP sync when idle. Non-force nudges respect the ~5s PrintMe
+ * cadence via imap_sync_state.last_sync_at so the worker is not flooded.
+ */
+async function enqueueImapIfIdle(
+  db: Db,
+  payload: Record<string, unknown>,
+  opts: { force?: boolean, minIntervalMs?: number } = {},
+) {
   const [active] = await db.select({ id: workerJobs.id })
     .from(workerJobs)
     .where(and(
@@ -102,6 +112,19 @@ async function enqueueImapIfIdle(db: Db, payload: Record<string, unknown>) {
     .limit(1)
 
   if (active) return false
+
+  if (!opts.force) {
+    const minIntervalMs = opts.minIntervalMs ?? STAPLES_PRINTME_IMAP_POLL_MS
+    const [state] = await db.select({ lastSyncAt: imapSyncState.lastSyncAt })
+      .from(imapSyncState)
+      .where(eq(imapSyncState.id, 'default'))
+      .limit(1)
+    if (state?.lastSyncAt) {
+      const elapsed = Date.now() - state.lastSyncAt.getTime()
+      if (elapsed < minIntervalMs) return false
+    }
+  }
+
   await enqueueJob(db, 'imap_sync', payload, 3).catch(() => null)
   return true
 }
@@ -204,7 +227,7 @@ export async function startStaplesPrintMeJob(
     await enqueueImapIfIdle(db, {
       trigger: 'staples_printme',
       jobId: job.id,
-    })
+    }, { force: true })
 
     return toView(updated!, {
       delivered: true,
@@ -274,8 +297,13 @@ export async function listActiveStaplesPrintMeJobs(
     views.push(view)
   }
 
+  // Status polls must not enqueue a sync every few seconds — the general worker
+  // already runs maybeRunImapInboxSync on the PrintMe ~5s cadence while awaiting.
+  // Only nudge when the last sync is stale (e.g. worker lag).
   if (opts.nudgeImap && awaiting) {
-    await enqueueImapIfIdle(db, { trigger: 'staples_printme_poll' })
+    await enqueueImapIfIdle(db, { trigger: 'staples_printme_poll' }, {
+      minIntervalMs: STAPLES_PRINTME_IMAP_POLL_MS,
+    })
   }
 
   return views
