@@ -15,7 +15,7 @@ export type PortalRequestReviewKind = (typeof PORTAL_REQUEST_REVIEW_KINDS)[numbe
 
 export const portalRequestReviewListQuerySchema = z.object({
   kind: z.enum(PORTAL_REQUEST_REVIEW_KINDS).optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'all']).optional().default('pending'),
+  status: z.enum(['pending', 'approved', 'rejected', 'decided', 'all']).optional().default('pending'),
   q: z.string().trim().max(200).optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(25),

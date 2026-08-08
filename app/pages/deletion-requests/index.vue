@@ -4,7 +4,6 @@ import {
   DELETION_ENTITY_TABS,
   deletionEntityLabel,
   deletionRequestApproveHint,
-  deletionRequestApproveLabel,
   deletionRequestOutcomeSummary,
   deletionRequestPreviewText,
   deletionRequestSubmitter,
@@ -33,29 +32,43 @@ interface DeletionRequestRow {
   entityHref: string
 }
 
+type ViewMode = 'queue' | 'log'
+type ModalStep = 'review' | 'accept' | 'reject'
+
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 const canReview = computed(() => auth.can('deletion_requests.review.all'))
 
 const highlightRequestId = computed(() =>
   typeof route.query.request === 'string' ? route.query.request : '',
 )
 
+const view = ref<ViewMode>(highlightRequestId.value ? 'queue' : 'queue')
 const tab = ref<'all' | DeletionEntityType>('all')
-const status = ref<'pending' | 'approved' | 'rejected' | 'all'>('pending')
+const logStatus = ref<'decided' | 'approved' | 'rejected'>('decided')
 const q = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 
 if (highlightRequestId.value) {
-  status.value = 'all'
+  view.value = 'queue'
 }
 
-watch([tab, status, q], () => { page.value = 1 })
+watch([view, tab, logStatus, q], () => { page.value = 1 })
+
+watch(view, (next) => {
+  if (next === 'queue') page.value = 1
+})
+
+const queryStatus = computed(() => {
+  if (highlightRequestId.value) return 'all' as const
+  return view.value === 'queue' ? 'pending' as const : logStatus.value
+})
 
 const query = computed(() => ({
   entityType: tab.value === 'all' ? undefined : tab.value,
-  status: highlightRequestId.value ? 'all' : status.value,
+  status: queryStatus.value,
   requestId: highlightRequestId.value || undefined,
   q: q.value || undefined,
   page: page.value,
@@ -75,37 +88,34 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE))
 const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
 const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.value))
 
-const filtersDirty = computed(() => tab.value !== 'all' || status.value !== 'pending' || !!q.value)
+const filtersDirty = computed(() => {
+  if (view.value === 'queue') return tab.value !== 'all' || !!q.value
+  return tab.value !== 'all' || logStatus.value !== 'decided' || !!q.value
+})
 
 function clearFilters() {
   tab.value = 'all'
-  status.value = 'pending'
+  logStatus.value = 'decided'
   q.value = ''
 }
 
 const listCountLabel = computed(() => {
   if (loading.value && !items.value.length) return 'Loading…'
-  const prefix = status.value === 'pending' ? 'Pending requests' : 'Request history'
-  return `${prefix} · ${total.value}`
+  if (view.value === 'queue') return `Pending queue · ${total.value}`
+  return `Decision log · ${total.value}`
 })
 
 const busyId = ref('')
 const modalOpen = ref(false)
-const modalMode = ref<'approve' | 'reject' | 'review'>('approve')
+const modalStep = ref<ModalStep>('review')
 const modalRow = ref<DeletionRequestRow | null>(null)
 const modalReason = ref('')
 const actionError = ref('')
 const deepLinkHandled = ref(false)
 
-const router = useRouter()
-
-const modalApproveLabel = computed(() =>
-  modalRow.value ? deletionRequestApproveLabel(modalRow.value.entityType) : 'Confirm deletion',
-)
-
-function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject' | 'review') {
+function openReview(row: DeletionRequestRow) {
   modalRow.value = row
-  modalMode.value = mode
+  modalStep.value = 'review'
   modalReason.value = ''
   actionError.value = ''
   modalOpen.value = true
@@ -114,27 +124,35 @@ function openModal(row: DeletionRequestRow, mode: 'approve' | 'reject' | 'review
 function closeModal() {
   modalOpen.value = false
   modalRow.value = null
+  modalStep.value = 'review'
   if (highlightRequestId.value) {
     const { request: _request, ...rest } = route.query
     void router.replace({ query: rest })
   }
 }
 
-function beginRejectFromReview() {
-  modalMode.value = 'reject'
+function beginAccept() {
+  modalStep.value = 'accept'
   modalReason.value = ''
   actionError.value = ''
 }
 
-async function confirmApproveFromReview() {
-  modalMode.value = 'approve'
-  await submitModal()
+function beginReject() {
+  modalStep.value = 'reject'
+  modalReason.value = ''
+  actionError.value = ''
 }
 
-async function submitModal() {
+function backToReview() {
+  modalStep.value = 'review'
+  modalReason.value = ''
+  actionError.value = ''
+}
+
+async function submitDecision(action: 'approve' | 'reject') {
   const row = modalRow.value
   if (!row) return
-  if (modalMode.value === 'reject' && modalReason.value.trim().length < 3) {
+  if (action === 'reject' && modalReason.value.trim().length < 3) {
     actionError.value = 'A rejection reason is required.'
     return
   }
@@ -142,7 +160,7 @@ async function submitModal() {
   busyId.value = row.id
   actionError.value = ''
   try {
-    const path = `/api/deletion-requests/${row.id}/${modalMode.value}`
+    const path = `/api/deletion-requests/${row.id}/${action}`
     const body = modalReason.value.trim() ? { reason: modalReason.value.trim() } : {}
     await $fetch(path, { method: 'POST', body })
     closeModal()
@@ -165,13 +183,14 @@ watch([items, highlightRequestId], () => {
   const row = items.value.find(r => r.id === highlightRequestId.value)
   if (!row) return
   deepLinkHandled.value = true
-  openModal(row, 'review')
+  view.value = row.status === 'pending' ? 'queue' : 'log'
+  openReview(row)
 }, { immediate: true })
 </script>
 
 <template>
   <section class="page active">
-    <StaffPageHead subtitle="Staff requests to permanently delete records — admin approval required">
+    <StaffPageHead subtitle="Staff requests to permanently delete records — review and decide here">
       <template #title>Deletion requests</template>
       <template #actions>
         <NuxtLink to="/dashboard" class="btn">Dashboard</NuxtLink>
@@ -185,6 +204,29 @@ watch([items, highlightRequestId], () => {
     </div>
 
     <template v-else>
+      <div class="req-view-bar">
+        <div class="req-view-toggle" role="tablist" aria-label="Deletion request views">
+          <button
+            type="button"
+            role="tab"
+            :class="{ on: view === 'queue' }"
+            :aria-selected="view === 'queue'"
+            @click="view = 'queue'"
+          >
+            Queue{{ pendingCount ? ` (${pendingCount})` : '' }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :class="{ on: view === 'log' }"
+            :aria-selected="view === 'log'"
+            @click="view = 'log'"
+          >
+            Decision log
+          </button>
+        </div>
+      </div>
+
       <ListFilterBar
         v-model:search="q"
         search-placeholder="Search record, reason, or submitter…"
@@ -203,13 +245,12 @@ watch([items, highlightRequestId], () => {
               </option>
             </select>
           </label>
-          <label class="fld">
-            Status
-            <select v-model="status" aria-label="Request status filter">
-              <option value="pending">Pending only</option>
-              <option value="approved">Approved</option>
+          <label v-if="view === 'log'" class="fld">
+            Decision
+            <select v-model="logStatus" aria-label="Decision filter">
+              <option value="decided">All decisions</option>
+              <option value="approved">Accepted</option>
               <option value="rejected">Rejected</option>
-              <option value="all">All statuses</option>
             </select>
           </label>
         </template>
@@ -217,69 +258,89 @@ watch([items, highlightRequestId], () => {
 
       <div class="card">
         <div class="chead">
-          <h3>Review queue</h3>
+          <h3>{{ view === 'queue' ? 'Pending queue' : 'Decision log' }}</h3>
           <div class="right">
-            <span v-if="pendingCount" class="pill warn">{{ pendingCount }} pending</span>
+            <span v-if="view === 'queue' && pendingCount" class="pill warn">{{ pendingCount }} pending</span>
           </div>
         </div>
 
         <div v-if="loading && !items.length" class="cbody" style="color:#94a3b8; font-size:13px;">Loading…</div>
         <div v-else-if="!items.length" class="cbody" style="color:#94a3b8; font-size:13px;">
-          No deletion requests match this filter.
+          {{ view === 'queue' ? 'No pending deletion requests.' : 'No past deletion decisions match this filter.' }}
         </div>
-        <div v-else id="deletion-req-queue">
+
+        <div v-else-if="view === 'queue'" id="deletion-req-queue">
           <div
             v-for="row in items"
-            :key="row.id"
             :id="`deletion-req-${row.id}`"
-            class="modrow"
+            :key="row.id"
+            class="req-row"
           >
             <span class="av" :class="avColor(row.entityLabel)">{{ initials(row.entityLabel) }}</span>
-            <div class="nm">
-              <div class="row-title">
+            <div class="req-row__main">
+              <div class="req-row__title">
                 <b>{{ row.entityLabel }}</b>
                 <span :class="deletionRequestTypeBadge(row.entityType).cls">
                   {{ deletionRequestTypeBadge(row.entityType).label }}
                 </span>
+                <span :class="deletionStatusPill(row.status).cls">{{ deletionStatusPill(row.status).label }}</span>
               </div>
-              <small>
+              <p class="req-row__meta">
                 {{ deletionEntityLabel(row.entityType) }}
                 · {{ deletionRequestSubmitter(row.submittedByName, row.submittedByEmail) }}
                 · {{ deletionWhen(row.createdAt) }}
-              </small>
-
-              <div class="request-preview">{{ deletionRequestPreviewText(row.reason) }}</div>
-
-              <div class="request-meta">
+              </p>
+              <div class="req-row__preview">{{ deletionRequestPreviewText(row.reason) }}</div>
+              <div class="req-row__links">
                 <NuxtLink :to="row.entityHref" class="link">View record</NuxtLink>
               </div>
-
-              <div class="request-badges">
-                <span :class="deletionStatusPill(row.status).cls">{{ deletionStatusPill(row.status).label }}</span>
-              </div>
-              <div v-if="row.reviewReason && row.status !== 'pending'" class="review-note">
-                Staff note{{ row.reviewedByName ? ` (${row.reviewedByName})` : '' }}: {{ row.reviewReason }}
-              </div>
             </div>
-            <div v-if="row.status === 'pending'" class="acts">
+            <div class="req-row__acts">
               <button
                 class="btn sm primary"
                 type="button"
                 :disabled="busyId === row.id"
-                @click="openModal(row, 'approve')"
+                @click="openReview(row)"
               >
-                {{ deletionRequestApproveLabel(row.entityType) }}
-              </button>
-              <button
-                class="btn sm"
-                type="button"
-                :disabled="busyId === row.id"
-                @click="openModal(row, 'reject')"
-              >
-                Reject
+                Review
               </button>
             </div>
           </div>
+        </div>
+
+        <div v-else class="tscroll">
+          <table id="deletion-req-log" class="tbl audit-tbl req-log-tbl">
+            <thead>
+              <tr>
+                <th class="col-when">Requested</th>
+                <th>Record</th>
+                <th>Submitted by</th>
+                <th class="col-decision">Decision</th>
+                <th>Reviewed</th>
+                <th class="col-detail">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in items" :key="row.id">
+                <td class="col-when mono">{{ deletionWhen(row.createdAt) }}</td>
+                <td>
+                  <b>{{ row.entityLabel }}</b>
+                  <div class="muted">{{ deletionEntityLabel(row.entityType) }}</div>
+                </td>
+                <td>{{ deletionRequestSubmitter(row.submittedByName, row.submittedByEmail) }}</td>
+                <td class="col-decision">
+                  <span :class="deletionStatusPill(row.status).cls">
+                    {{ row.status === 'approved' ? 'Accepted' : deletionStatusPill(row.status).label }}
+                  </span>
+                </td>
+                <td>
+                  <div>{{ row.reviewedByName || '—' }}</div>
+                  <div class="muted">{{ row.reviewedAt ? deletionWhen(row.reviewedAt) : '—' }}</div>
+                </td>
+                <td class="col-detail">{{ row.reviewReason || row.reason || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div v-if="total > 0" class="cfoot">
@@ -306,88 +367,110 @@ watch([items, highlightRequestId], () => {
       class="modal-scrim open"
       @click.self="closeModal"
     >
-      <div class="modal staff-req-modal" role="dialog" aria-modal="true" @click.stop>
+      <div class="modal req-modal" role="dialog" aria-modal="true" aria-labelledby="deletion-review-title" @click.stop>
         <div class="mhead">
           <div>
-            <h3>
+            <h3 id="deletion-review-title">
               {{
-                modalMode === 'review'
-                  ? 'Review deletion request'
-                  : modalMode === 'approve'
-                    ? modalApproveLabel
-                    : 'Reject request'
+                modalStep === 'accept'
+                  ? 'Accept deletion'
+                  : modalStep === 'reject'
+                    ? 'Reject request'
+                    : 'Review deletion request'
               }}
             </h3>
-            <p v-if="modalMode === 'review' && modalRow.status === 'pending'">
-              Approve or reject this deletion request.
+            <p v-if="modalStep === 'review' && modalRow.status === 'pending'">
+              Review the request, then accept or reject.
             </p>
-            <p v-else-if="modalMode === 'review'">
-              This request has already been {{ modalRow.status === 'approved' ? 'approved' : 'declined' }}.
+            <p v-else-if="modalStep === 'review'">
+              This request was already {{ modalRow.status === 'approved' ? 'accepted' : 'declined' }}.
             </p>
-            <p v-else-if="modalMode === 'approve'">{{ deletionRequestApproveHint(modalRow.entityType) }}</p>
+            <p v-else-if="modalStep === 'accept'">{{ deletionRequestApproveHint(modalRow.entityType) }}</p>
             <p v-else>The record stays active. Tell the requester why deletion was declined.</p>
           </div>
           <button type="button" class="close" aria-label="Close" @click="closeModal">×</button>
         </div>
 
-        <div class="mbody">
-          <div class="staff-req-modal-context">
-            <p class="staff-req-modal-title">
-              <b>{{ modalRow.entityLabel }}</b> — {{ deletionEntityLabel(modalRow.entityType) }}
-            </p>
-            <p class="staff-req-modal-meta">
-              {{ deletionRequestSubmitter(modalRow.submittedByName, modalRow.submittedByEmail) }}
+        <div class="mbody req-modal__grid">
+          <div class="req-modal__panel">
+            <p class="req-modal__kicker">Record</p>
+            <p class="req-modal__title">{{ modalRow.entityLabel }}</p>
+            <p class="req-modal__meta">
+              {{ deletionEntityLabel(modalRow.entityType) }}
+              · {{ deletionRequestSubmitter(modalRow.submittedByName, modalRow.submittedByEmail) }}
               · {{ deletionWhen(modalRow.createdAt) }}
             </p>
-            <p v-if="modalMode === 'approve'" class="callout info staff-req-outcome">
-              {{ deletionRequestOutcomeSummary(modalRow.entityType) }}
-            </p>
           </div>
 
-          <div class="staff-req-message">
-            <p class="staff-req-message-label">Deletion reason</p>
-            <div class="staff-req-message-body">{{ deletionRequestPreviewText(modalRow.reason) }}</div>
+          <div class="req-modal__panel">
+            <p class="req-modal__kicker">Deletion reason</p>
+            <p class="req-modal__body-text">{{ deletionRequestPreviewText(modalRow.reason) }}</p>
           </div>
 
-          <div class="staff-req-links">
-            <NuxtLink :to="modalRow.entityHref" class="link">View record</NuxtLink>
+          <div class="req-modal__links">
+            <NuxtLink :to="modalRow.entityHref" class="link">Open record</NuxtLink>
+            <span :class="deletionStatusPill(modalRow.status).cls">{{ deletionStatusPill(modalRow.status).label }}</span>
           </div>
 
-          <label v-if="modalMode !== 'review'" class="fld" style="margin-top:16px;">
-            <span>{{ modalMode === 'reject' ? 'Rejection reason' : 'Staff note (optional)' }}</span>
+          <p v-if="modalStep === 'accept'" class="callout info">
+            {{ deletionRequestOutcomeSummary(modalRow.entityType) }}
+          </p>
+
+          <label v-if="modalStep === 'accept' || modalStep === 'reject'" class="fld">
+            <span>{{ modalStep === 'reject' ? 'Rejection reason' : 'Staff note (optional)' }}</span>
             <textarea
               v-model="modalReason"
               rows="4"
-              :required="modalMode === 'reject'"
-              :placeholder="modalMode === 'reject' ? 'Required — visible in audit log' : 'Optional internal note'"
+              :required="modalStep === 'reject'"
+              :placeholder="modalStep === 'reject' ? 'Required — visible in the decision log' : 'Optional internal note'"
             />
           </label>
-          <p v-if="actionError" class="staff-req-error">{{ actionError }}</p>
+
+          <p v-if="modalRow.reviewReason && modalRow.status !== 'pending'" class="req-modal__foot-note">
+            Staff note{{ modalRow.reviewedByName ? ` (${modalRow.reviewedByName})` : '' }}: {{ modalRow.reviewReason }}
+          </p>
+          <p v-if="actionError" class="req-modal__error">{{ actionError }}</p>
         </div>
 
         <div class="mfoot">
-          <button type="button" class="btn" @click="closeModal">
-            {{ modalMode === 'review' && modalRow.status !== 'pending' ? 'Close' : 'Cancel' }}
+          <button
+            v-if="modalStep !== 'review'"
+            type="button"
+            class="btn"
+            @click="backToReview"
+          >
+            Back
           </button>
-          <template v-if="modalMode === 'review' && modalRow.status === 'pending'">
-            <button type="button" class="btn" @click="beginRejectFromReview">Reject</button>
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="busyId === modalRow.id"
-              @click="confirmApproveFromReview"
-            >
-              {{ modalApproveLabel }}
-            </button>
+          <button
+            v-else
+            type="button"
+            class="btn"
+            @click="closeModal"
+          >
+            {{ modalRow.status === 'pending' ? 'Cancel' : 'Close' }}
+          </button>
+          <span class="spacer" />
+          <template v-if="modalStep === 'review' && modalRow.status === 'pending'">
+            <button type="button" class="btn reject" @click="beginReject">Reject</button>
+            <button type="button" class="btn primary" @click="beginAccept">Accept</button>
           </template>
           <button
-            v-else-if="modalMode !== 'review'"
+            v-else-if="modalStep === 'accept'"
             type="button"
             class="btn primary"
             :disabled="busyId === modalRow.id"
-            @click="submitModal"
+            @click="submitDecision('approve')"
           >
-            {{ modalMode === 'approve' ? 'Confirm deletion' : 'Confirm reject' }}
+            Confirm deletion
+          </button>
+          <button
+            v-else-if="modalStep === 'reject'"
+            type="button"
+            class="btn primary"
+            :disabled="busyId === modalRow.id"
+            @click="submitDecision('reject')"
+          >
+            Confirm reject
           </button>
         </div>
       </div>
@@ -395,101 +478,10 @@ watch([items, highlightRequestId], () => {
   </section>
 </template>
 
+<style src="~/assets/css/staff-request-review.css"></style>
 <style scoped>
-.modrow {
-  display: flex;
-  gap: 14px;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
-  align-items: flex-start;
-}
-.modrow:last-child { border-bottom: none; }
-.modrow .nm { flex: 1; min-width: 0; }
-.row-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 2px;
-}
-.row-title b { font-size: 14px; }
-.modrow .nm small { color: #94a3b8; font-size: 12px; }
-.modrow .acts { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-.request-preview {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #334155;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-.request-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
+.mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 12px;
-  color: #64748b;
-}
-.request-badges {
-  margin-top: 8px;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.review-note {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-.staff-req-modal {
-  width: min(640px, 100%);
-}
-.staff-req-modal-context {
-  margin-bottom: 12px;
-}
-.staff-req-modal-title {
-  margin: 0 0 4px;
-  font-size: 14px;
-}
-.staff-req-modal-meta {
-  margin: 0;
-  font-size: 12px;
-  color: #64748b;
-}
-.staff-req-outcome {
-  margin: 12px 0 0;
-  font-size: 13px;
-}
-.staff-req-message-label {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.staff-req-message-body {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  font-size: 13px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  color: #334155;
-}
-.staff-req-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: #64748b;
-}
-.staff-req-error {
-  color: #dc2626;
-  font-size: 13px;
-  margin: 8px 0 0;
 }
 </style>

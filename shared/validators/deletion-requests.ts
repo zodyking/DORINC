@@ -27,6 +27,6 @@ export const deletionRequestListQuerySchema = paginationSchema.extend({
   entityType: deletionEntityTypeSchema.optional(),
   entityId: uuidSchema.optional(),
   requestId: uuidSchema.optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'all']).optional().default('pending'),
+  status: z.enum(['pending', 'approved', 'rejected', 'decided', 'all']).optional().default('pending'),
   q: z.string().trim().max(200).optional(),
 })

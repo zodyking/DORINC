@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, or } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, inArray, or } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { Db } from '../db/client'
 import { users } from '../db/schema/auth'
@@ -61,7 +61,7 @@ export interface ListDeletionRequestsFilter {
   entityType?: DeletionEntityType
   entityId?: string
   requestId?: string
-  status?: 'pending' | 'approved' | 'rejected' | 'all'
+  status?: 'pending' | 'approved' | 'rejected' | 'decided' | 'all'
   q?: string
   page?: number
   pageSize?: number
@@ -288,7 +288,10 @@ export async function listDeletionRequests(db: Db, filter: ListDeletionRequestsF
   if (filter.entityType) conditions.push(eq(entityDeletionRequests.entityType, filter.entityType))
   if (filter.entityId) conditions.push(eq(entityDeletionRequests.entityId, filter.entityId))
   if (filter.requestId) conditions.push(eq(entityDeletionRequests.id, filter.requestId))
-  if (filter.status && filter.status !== 'all') {
+  if (filter.status === 'decided') {
+    conditions.push(inArray(entityDeletionRequests.status, ['approved', 'rejected']))
+  }
+  else if (filter.status && filter.status !== 'all') {
     conditions.push(eq(entityDeletionRequests.status, filter.status))
   }
 
