@@ -8,10 +8,13 @@ CREATE TABLE IF NOT EXISTS "staples_print_jobs" (
   "outbound_message_id" text,
   "release_code" text,
   "reply_internet_message_id" text,
+  "barcode_image" bytea,
+  "barcode_content_type" text,
   "error_message" text,
   "emailed_at" timestamp with time zone,
   "ready_at" timestamp with time zone,
   "expires_at" timestamp with time zone,
+  "dismissed_at" timestamp with time zone,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -24,6 +27,16 @@ CREATE INDEX IF NOT EXISTS "staples_print_jobs_outbound_idx"
   ON "staples_print_jobs" USING btree ("outbound_message_id");
 CREATE INDEX IF NOT EXISTS "staples_print_jobs_created_by_idx"
   ON "staples_print_jobs" USING btree ("created_by");
+CREATE INDEX IF NOT EXISTS "staples_print_jobs_dismissed_idx"
+  ON "staples_print_jobs" USING btree ("dismissed_at");
+`.trim()
+
+const STAPLES_PRINT_JOBS_COLUMNS_SQL = `
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "barcode_image" bytea;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "barcode_content_type" text;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "dismissed_at" timestamp with time zone;
+CREATE INDEX IF NOT EXISTS "staples_print_jobs_dismissed_idx"
+  ON "staples_print_jobs" USING btree ("dismissed_at");
 `.trim()
 
 /**
@@ -32,8 +45,11 @@ CREATE INDEX IF NOT EXISTS "staples_print_jobs_created_by_idx"
  */
 export async function ensureStaplesPrintJobsSchema(pool) {
   const { rows } = await pool.query(`SELECT to_regclass('public.staples_print_jobs') AS reg`)
-  if (rows[0]?.reg) return false
-  await pool.query(STAPLES_PRINT_JOBS_SQL)
-  console.log('[migrate] ensured staples_print_jobs')
-  return true
+  if (!rows[0]?.reg) {
+    await pool.query(STAPLES_PRINT_JOBS_SQL)
+    console.log('[migrate] ensured staples_print_jobs')
+    return true
+  }
+  await pool.query(STAPLES_PRINT_JOBS_COLUMNS_SQL)
+  return false
 }

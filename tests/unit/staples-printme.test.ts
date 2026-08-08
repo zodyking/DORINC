@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertPrintMePdfAttachment,
+  buildCode128Svg,
   buildPrintMeMailPayload,
   buildPrintMeSubject,
   extractPrintMeReleaseCode,
   extractPrintMeSubjectToken,
   isPrintMeSender,
+  pickPrintMeBarcodeAttachment,
   replyMatchesPrintMeJob,
 } from '../../shared/staples-printme'
 import {
@@ -32,7 +34,11 @@ describe('staples printme helpers', () => {
     expect(extractPrintMeSubjectToken(`Re: ${subject}`)).toBe('ABC12DEF')
   })
 
-  it('extracts Staples 8-digit retrieval codes from confirmation text', () => {
+  it('extracts Staples 8-character alphanumeric release codes from confirmation text', () => {
+    expect(extractPrintMeReleaseCode(
+      'Thank you for your online submission to Staples.\nRelease code: BE9C8635\nYour document and code will expire in 24 hours.',
+    )).toBe('BE9C8635')
+
     expect(extractPrintMeReleaseCode(
       'Thanks for using Staples PrintMe.\nYour retrieval code is: 48291037\nEnter it at any Staples self-service printer.',
     )).toBe('48291037')
@@ -45,6 +51,30 @@ describe('staples printme helpers', () => {
       null,
       '<p>Document ID: <b>88312015</b></p>',
     )).toBe('88312015')
+
+    expect(isPrintMeSender('PrintMe <no-reply@printme.com>')).toBe(true)
+  })
+
+  it('picks a barcode image attachment from PrintMe MIME parts', () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, ...Array.from({ length: 80 }, () => 1)])
+    const picked = pickPrintMeBarcodeAttachment([
+      { filename: 'notes.txt', contentType: 'text/plain', content: Buffer.from('hi') },
+      {
+        filename: 'barcode.png',
+        contentType: 'image/png',
+        contentDisposition: 'inline',
+        content: png,
+      },
+    ])
+    expect(picked?.contentType).toBe('image/png')
+    expect(picked?.content.equals(png)).toBe(true)
+  })
+
+  it('builds a Code 128 SVG fallback for alphanumeric release codes', () => {
+    const svg = buildCode128Svg('BE9C8635')
+    expect(svg).toContain('<svg')
+    expect(svg).toContain('BE9C8635')
+    expect(svg).toContain('<rect')
   })
 
   it('matches replies by In-Reply-To / References', () => {

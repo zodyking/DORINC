@@ -5,6 +5,7 @@ const open = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
   'print-device': []
+  'staples-sent': [{ jobId: string }]
 }>()
 
 type StaplesJob = {
@@ -28,31 +29,11 @@ type Step = 'choose' | 'staples'
 const deviceBusy = ref(false)
 const staplesBusy = ref(false)
 const step = ref<Step>('choose')
-const staplesJob = ref<StaplesJob | null>(null)
 const staplesError = ref('')
-const copied = ref(false)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-const waitingForCode = computed(() => {
-  const status = staplesJob.value?.status
-  return status === 'queued' || status === 'emailed' || status === 'awaiting_reply'
-})
-
-const staplesReady = computed(() => staplesJob.value?.status === 'ready' && Boolean(staplesJob.value.releaseCode))
-
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
 
 function resetStaples() {
-  stopPoll()
-  staplesJob.value = null
   staplesError.value = ''
   staplesBusy.value = false
-  copied.value = false
   step.value = 'choose'
 }
 
@@ -83,70 +64,29 @@ async function chooseDevice() {
   }
 }
 
-async function pollStaplesJob(jobId: string) {
-  try {
-    const res = await $fetch<{ job: StaplesJob }>(`/api/service-logs/sheet/staples-print/${jobId}`)
-    staplesJob.value = res.job
-    if (res.job.status === 'ready' || res.job.status === 'failed' || res.job.status === 'expired') {
-      stopPoll()
-      staplesBusy.value = false
-      if (res.job.status === 'failed' || res.job.status === 'expired') {
-        staplesError.value = res.job.errorMessage || 'Staples PrintMe job ended without a release code'
-      }
-    }
-  }
-  catch (e: unknown) {
-    staplesError.value = syncFetchErrorMessage(e, 'Could not refresh Staples print status')
-  }
-}
-
-function startPoll(jobId: string) {
-  stopPoll()
-  pollTimer = setInterval(() => { void pollStaplesJob(jobId) }, 2500)
-}
-
 async function chooseStaples() {
   if (deviceBusy.value || staplesBusy.value) return
   staplesBusy.value = true
   staplesError.value = ''
-  copied.value = false
   step.value = 'staples'
   try {
     const res = await $fetch<{ job: StaplesJob }>('/api/service-logs/sheet/staples-print', {
       method: 'POST',
     })
-    staplesJob.value = res.job
-    if (res.job.status === 'ready') {
-      staplesBusy.value = false
-      return
-    }
     if (res.job.status === 'failed') {
-      staplesBusy.value = false
       staplesError.value = res.job.errorMessage || 'Could not email Staples PrintMe'
+      staplesBusy.value = false
       return
     }
-    startPoll(res.job.id)
+    emit('staples-sent', { jobId: res.job.id })
+    open.value = false
+    resetStaples()
   }
   catch (e: unknown) {
     staplesBusy.value = false
     staplesError.value = syncFetchErrorMessage(e, 'Could not start Staples PrintMe')
   }
 }
-
-async function copyCode() {
-  const code = staplesJob.value?.releaseCode
-  if (!code || !import.meta.client) return
-  try {
-    await navigator.clipboard.writeText(code)
-    copied.value = true
-    window.setTimeout(() => { copied.value = false }, 1600)
-  }
-  catch {
-    copied.value = false
-  }
-}
-
-onBeforeUnmount(() => stopPoll())
 </script>
 
 <template>
@@ -159,7 +99,6 @@ onBeforeUnmount(() => stopPoll())
   >
     <div
       class="modal sl-print-modal"
-      :class="{ 'sl-print-modal--wide': step === 'staples' }"
       role="dialog"
       aria-labelledby="sl-print-title"
       aria-modal="true"
@@ -172,7 +111,7 @@ onBeforeUnmount(() => stopPoll())
           </h3>
           <p>
             {{ step === 'staples'
-              ? 'We email the sheet to Staples PrintMe, then show your 8-digit retrieval code here.'
+              ? 'Sending the sheet to Staples PrintMe…'
               : 'Choose how to print the blank Letter service catalog' }}
           </p>
         </div>
@@ -180,7 +119,7 @@ onBeforeUnmount(() => stopPoll())
           type="button"
           class="close"
           aria-label="Close"
-          :disabled="deviceBusy || (staplesBusy && !staplesReady)"
+          :disabled="deviceBusy || staplesBusy"
           @click="close"
         >
           ✕
@@ -215,48 +154,17 @@ onBeforeUnmount(() => stopPoll())
               Print via Staples
             </span>
             <span class="sl-print-option-desc">
-              Email to Staples PrintMe and get an 8-digit retrieval code in this app
+              Email to Staples PrintMe — the release code appears on this page when ready
             </span>
           </button>
         </div>
 
         <div v-else class="sl-staples">
-          <div v-if="waitingForCode" class="sl-staples-wait">
+          <div v-if="!staplesError" class="sl-staples-wait">
             <span class="sl-staples-spinner" aria-hidden="true" />
-            <strong>Waiting for Staples PrintMe…</strong>
-            <p>
-              PDF
-              <code>{{ staplesJob?.attachmentFilename || 'service-log-sheet.pdf' }}</code>
-              <template v-if="staplesJob?.attachmentBytes">
-                ({{ Math.round((staplesJob.attachmentBytes || 0) / 1024) }} KB)
-              </template>
-              emailed to <code>{{ staplesJob?.printMeTo || 'staples@printme.com' }}</code>.
-              IMAP will pick up the confirmation and show your 8-digit retrieval code here.
-            </p>
+            <strong>Sending to Staples PrintMe…</strong>
+            <p>After the email sends, this dialog closes. Your release code will show on the Service Logs page.</p>
           </div>
-
-          <div v-else-if="staplesReady && staplesJob" class="sl-staples-ready">
-            <p class="sl-staples-kicker">8-digit retrieval code</p>
-            <p class="sl-staples-code">{{ staplesJob.releaseCode }}</p>
-            <p class="sl-staples-help">
-              At a Staples self-service printer, choose Print, enter this code, then pick color/B&amp;W and pay at the machine.
-              Codes usually expire in about 24 hours.
-            </p>
-            <div class="sl-staples-actions">
-              <button type="button" class="btn primary" @click="copyCode">
-                {{ copied ? 'Copied' : 'Copy code' }}
-              </button>
-              <a
-                class="btn"
-                :href="staplesJob.locatorUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Find a PrintMe printer
-              </a>
-            </div>
-          </div>
-
           <p v-if="staplesError" class="sl-staples-error">{{ staplesError }}</p>
         </div>
       </div>
@@ -266,7 +174,7 @@ onBeforeUnmount(() => stopPoll())
           v-if="step === 'staples'"
           type="button"
           class="btn"
-          :disabled="staplesBusy && waitingForCode"
+          :disabled="staplesBusy"
           @click="resetStaples"
         >
           Back
@@ -274,13 +182,13 @@ onBeforeUnmount(() => stopPoll())
         <button
           type="button"
           class="btn"
-          :disabled="deviceBusy || (staplesBusy && waitingForCode)"
+          :disabled="deviceBusy || staplesBusy"
           @click="close"
         >
-          {{ staplesReady ? 'Done' : 'Cancel' }}
+          Cancel
         </button>
         <button
-          v-if="step === 'staples' && (staplesError || staplesJob?.status === 'expired')"
+          v-if="step === 'staples' && staplesError"
           type="button"
           class="btn primary"
           :disabled="staplesBusy"
@@ -296,9 +204,6 @@ onBeforeUnmount(() => stopPoll())
 <style scoped>
 .sl-print-modal {
   width: min(440px, 94vw);
-}
-.sl-print-modal--wide {
-  width: min(480px, 94vw);
 }
 .sl-print-options {
   display: flex;
@@ -344,8 +249,7 @@ onBeforeUnmount(() => stopPoll())
   line-height: 1.35;
   color: #64748b;
 }
-.sl-staples-wait,
-.sl-staples-ready {
+.sl-staples-wait {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -353,8 +257,7 @@ onBeforeUnmount(() => stopPoll())
   gap: 8px;
   padding: 8px 4px 4px;
 }
-.sl-staples-wait p,
-.sl-staples-help {
+.sl-staples-wait p {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
@@ -372,29 +275,6 @@ onBeforeUnmount(() => stopPoll())
   border: 2.5px solid #c7d2fe;
   border-top-color: #4f46e5;
   animation: slStaplesSpin 0.7s linear infinite;
-}
-.sl-staples-kicker {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-.sl-staples-code {
-  margin: 0;
-  font-size: 2.25rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-.sl-staples-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 6px;
 }
 .sl-staples-error {
   margin: 12px 0 0;

@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { staplesPrintJobs } from '../db/schema'
+import { workerJobs } from '../db/schema/jobs'
 import { getSmtpConfig } from './app-config.service'
 import { renderServiceLogSheetPdf } from './service-log-sheet.service'
 import { sendNotificationMail } from '../mail/mailer'
@@ -10,6 +11,7 @@ import {
   STAPLES_PRINTME_CODE_TTL_MS,
   STAPLES_PRINTME_LOCATOR_URL,
   STAPLES_PRINTME_TO,
+  buildCode128Svg,
   buildPrintMeMailPayload,
 } from '../../shared/staples-printme'
 
@@ -37,7 +39,12 @@ export interface StaplesPrintJobView {
   delivered: boolean
   attachmentFilename: string | null
   attachmentBytes: number | null
+  hasBarcode: boolean
+  awaitingReply: boolean
 }
+
+/** Shown on Service Logs until the user requests removal (soft-dismiss). */
+const ACTIVE_STATUSES = ['queued', 'emailed', 'awaiting_reply', 'ready', 'expired', 'failed'] as const
 
 function newSubjectToken(): string {
   return randomBytes(5).toString('hex').toUpperCase()
@@ -51,6 +58,9 @@ function toView(
   row: typeof staplesPrintJobs.$inferSelect,
   extras: { delivered?: boolean, attachmentFilename?: string | null, attachmentBytes?: number | null } = {},
 ): StaplesPrintJobView {
+  const awaitingReply = row.status === 'queued'
+    || row.status === 'emailed'
+    || row.status === 'awaiting_reply'
   return {
     id: row.id,
     status: row.status,
@@ -65,10 +75,13 @@ function toView(
     delivered: extras.delivered ?? Boolean(row.emailedAt && row.status !== 'failed'),
     attachmentFilename: extras.attachmentFilename ?? 'service-log-sheet.pdf',
     attachmentBytes: extras.attachmentBytes ?? null,
+    hasBarcode: Boolean(row.barcodeImage?.length) || Boolean(row.releaseCode),
+    awaitingReply,
   }
 }
 
 async function maybeExpireJob(db: Db, row: typeof staplesPrintJobs.$inferSelect) {
+  if (row.dismissedAt) return row
   if (row.status !== 'ready' || !row.expiresAt) return row
   if (row.expiresAt.getTime() > Date.now()) return row
   const [updated] = await db.update(staplesPrintJobs).set({
@@ -77,6 +90,20 @@ async function maybeExpireJob(db: Db, row: typeof staplesPrintJobs.$inferSelect)
     updatedAt: new Date(),
   }).where(eq(staplesPrintJobs.id, row.id)).returning()
   return updated ?? row
+}
+
+async function enqueueImapIfIdle(db: Db, payload: Record<string, unknown>) {
+  const [active] = await db.select({ id: workerJobs.id })
+    .from(workerJobs)
+    .where(and(
+      eq(workerJobs.jobType, 'imap_sync'),
+      inArray(workerJobs.status, ['queued', 'processing']),
+    ))
+    .limit(1)
+
+  if (active) return false
+  await enqueueJob(db, 'imap_sync', payload, 3).catch(() => null)
+  return true
 }
 
 /** Email the blank service log sheet PDF to Staples PrintMe and await the release-code reply via IMAP. */
@@ -174,10 +201,10 @@ export async function startStaplesPrintMeJob(
       updatedAt: new Date(),
     }).where(eq(staplesPrintJobs.id, job.id)).returning()
 
-    await enqueueJob(db, 'imap_sync', {
+    await enqueueImapIfIdle(db, {
       trigger: 'staples_printme',
       jobId: job.id,
-    }, 3).catch(() => null)
+    })
 
     return toView(updated!, {
       delivered: true,
@@ -212,25 +239,106 @@ export async function getStaplesPrintMeJob(
   opts: { allowAdminAll?: boolean } = {},
 ): Promise<StaplesPrintJobView> {
   const [row] = await db.select().from(staplesPrintJobs).where(eq(staplesPrintJobs.id, jobId)).limit(1)
-  if (!row) throw new StaplesPrintMeServiceError('NOT_FOUND', 'Print job not found')
+  if (!row || row.dismissedAt) throw new StaplesPrintMeServiceError('NOT_FOUND', 'Print job not found')
   if (row.createdBy !== userId && !opts.allowAdminAll) {
     throw new StaplesPrintMeServiceError('FORBIDDEN', 'This print job belongs to another user')
   }
   return toView(await maybeExpireJob(db, row))
 }
 
+export async function listActiveStaplesPrintMeJobs(
+  db: Db,
+  userId: string,
+  opts: { nudgeImap?: boolean } = {},
+): Promise<StaplesPrintJobView[]> {
+  const rows = await db.select().from(staplesPrintJobs)
+    .where(and(
+      eq(staplesPrintJobs.createdBy, userId),
+      eq(staplesPrintJobs.documentType, 'service_log_sheet'),
+      isNull(staplesPrintJobs.dismissedAt),
+      inArray(staplesPrintJobs.status, [...ACTIVE_STATUSES]),
+    ))
+    .orderBy(desc(staplesPrintJobs.createdAt))
+    .limit(20)
+
+  const views: StaplesPrintJobView[] = []
+  let awaiting = false
+  for (const row of rows) {
+    const next = await maybeExpireJob(db, row)
+    if (!ACTIVE_STATUSES.includes(next.status as typeof ACTIVE_STATUSES[number])) continue
+    if (next.dismissedAt) continue
+    const view = toView(next)
+    if (view.awaitingReply) awaiting = true
+    views.push(view)
+  }
+
+  if (opts.nudgeImap && awaiting) {
+    await enqueueImapIfIdle(db, { trigger: 'staples_printme_poll' })
+  }
+
+  return views
+}
+
 export async function getLatestOpenStaplesPrintMeJob(
   db: Db,
   userId: string,
 ): Promise<StaplesPrintJobView | null> {
-  const [row] = await db.select().from(staplesPrintJobs)
-    .where(and(
-      eq(staplesPrintJobs.createdBy, userId),
-      eq(staplesPrintJobs.documentType, 'service_log_sheet'),
-    ))
-    .orderBy(desc(staplesPrintJobs.createdAt))
-    .limit(1)
-  if (!row) return null
-  if (!['queued', 'emailed', 'awaiting_reply', 'ready'].includes(row.status)) return null
-  return toView(await maybeExpireJob(db, row))
+  const jobs = await listActiveStaplesPrintMeJobs(db, userId)
+  return jobs[0] ?? null
+}
+
+/** Soft-remove an active Staples print order from the Service Logs page. */
+export async function dismissStaplesPrintMeJob(
+  db: Db,
+  jobId: string,
+  userId: string,
+  opts: { allowAdminAll?: boolean } = {},
+): Promise<StaplesPrintJobView> {
+  const [row] = await db.select().from(staplesPrintJobs).where(eq(staplesPrintJobs.id, jobId)).limit(1)
+  if (!row || row.dismissedAt) throw new StaplesPrintMeServiceError('NOT_FOUND', 'Print job not found')
+  if (row.createdBy !== userId && !opts.allowAdminAll) {
+    throw new StaplesPrintMeServiceError('FORBIDDEN', 'This print job belongs to another user')
+  }
+
+  const now = new Date()
+  const [updated] = await db.update(staplesPrintJobs).set({
+    status: 'dismissed',
+    dismissedAt: now,
+    updatedAt: now,
+  }).where(eq(staplesPrintJobs.id, jobId)).returning()
+
+  return toView(updated!)
+}
+
+export async function getStaplesPrintMeBarcode(
+  db: Db,
+  jobId: string,
+  userId: string,
+  opts: { allowAdminAll?: boolean } = {},
+): Promise<{ contentType: string, body: Buffer | string, filename: string }> {
+  const [row] = await db.select().from(staplesPrintJobs).where(eq(staplesPrintJobs.id, jobId)).limit(1)
+  if (!row || row.dismissedAt) throw new StaplesPrintMeServiceError('NOT_FOUND', 'Print job not found')
+  if (row.createdBy !== userId && !opts.allowAdminAll) {
+    throw new StaplesPrintMeServiceError('FORBIDDEN', 'This print job belongs to another user')
+  }
+
+  const current = await maybeExpireJob(db, row)
+  if (!current.releaseCode) {
+    throw new StaplesPrintMeServiceError('NOT_FOUND', 'Release code is not ready yet')
+  }
+
+  if (current.barcodeImage?.length) {
+    return {
+      contentType: current.barcodeContentType || 'image/png',
+      body: current.barcodeImage,
+      filename: `staples-release-${current.releaseCode}.png`,
+    }
+  }
+
+  const svg = buildCode128Svg(current.releaseCode)
+  return {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: svg,
+    filename: `staples-release-${current.releaseCode}.svg`,
+  }
 }

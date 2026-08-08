@@ -1,7 +1,7 @@
 // imap_sync handler — periodic Gmail/IMAP inbox polling for customer email threads.
 import { loadImapConfig } from '../lib/app-config.mjs'
 import {
-  defaultSyncIntervalMs,
+  effectiveImapSyncIntervalMs,
   maybeRunImapInboxSync,
   runImapInboxSync,
 } from '../lib/imap-inbox-sync.mjs'
@@ -21,7 +21,7 @@ export async function maybeEnqueueImapSync(pool) {
   )
   if (active[0]) return false
 
-  const intervalMs = defaultSyncIntervalMs()
+  const intervalMs = await effectiveImapSyncIntervalMs(pool)
   const { rows: stateRows } = await pool.query(
     `SELECT last_sync_at FROM imap_sync_state WHERE id = 'default' LIMIT 1`,
   )

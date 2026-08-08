@@ -4,6 +4,7 @@ export {
   STAPLES_PRINTME_TOKEN_RE,
   STAPLES_PRINTME_CODE_TTL_MS,
   STAPLES_PRINTME_LOCATOR_URL,
+  STAPLES_PRINTME_IMAP_POLL_MS,
   STAPLES_PRINT_JOB_STATUSES,
   normalizePrintMeAddress,
   isPrintMeSender,
@@ -13,5 +14,7 @@ export {
   buildPrintMeMailPayload,
   extractPrintMeSubjectToken,
   extractPrintMeReleaseCode,
+  pickPrintMeBarcodeAttachment,
+  buildCode128Svg,
   replyMatchesPrintMeJob,
 } from './staples-printme.mjs'
