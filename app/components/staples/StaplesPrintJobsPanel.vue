@@ -142,12 +142,22 @@ async function hydrateMedia(list: StaplesJob[]) {
   }
 }
 
+async function scrollToHighlightedJob() {
+  if (!import.meta.client || !highlightJobId.value) return
+  await nextTick()
+  document.getElementById(`staples-job-${highlightJobId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+}
+
 async function refreshJobs() {
   try {
     const res = await $fetch<{ jobs: StaplesJob[] }>('/api/service-logs/sheet/staples-print')
     jobs.value = res.jobs || []
     loadError.value = ''
     await hydrateMedia(jobs.value)
+    await scrollToHighlightedJob()
   }
   catch (e: unknown) {
     loadError.value = syncFetchErrorMessage(e, 'Could not load Staples print status')
