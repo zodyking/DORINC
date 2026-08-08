@@ -210,6 +210,12 @@ async function printServiceLogSheetFromDevice() {
     sheetPdfBlob.value = blob
     setSheetPdfBlob(blob)
     sheetPdfDialogOpen.value = true
+    try {
+      await $fetch('/api/service-logs/sheet/print-notify', { method: 'POST' })
+    }
+    catch {
+      // PDF opened; chat notify is best-effort.
+    }
   }
   catch (err) {
     actionError.value = await fetchErrorMessage(err, 'Could not open service log sheet PDF')

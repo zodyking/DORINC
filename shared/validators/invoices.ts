@@ -72,8 +72,14 @@ export const invoiceBulkSendSchema = z.object({
   message: z.string().trim().max(5000).optional(),
 })
 
+export const invoiceBulkPrintSchema = z.object({
+  invoiceIds: z.array(uuidSchema).min(1, 'Select at least one invoice').max(100),
+  mode: z.enum(['device', 'staples']),
+})
+
 export type InvoiceSendInput = z.infer<typeof invoiceSendSchema>
 export type InvoiceBulkSendInput = z.infer<typeof invoiceBulkSendSchema>
+export type InvoiceBulkPrintInput = z.infer<typeof invoiceBulkPrintSchema>
 
 export const invoiceLineCreateSchema = z.object({
   lineType: invoiceLineTypeSchema,

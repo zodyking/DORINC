@@ -2,6 +2,7 @@
 // Invoices list — KPI cards, status chips, filters, table (mockup: PAGE: INVOICES).
 import InvoiceListRowActions from '~/components/invoices/InvoiceListRowActions.vue'
 import BulkSendInvoicesButton from '~/components/BulkSendInvoicesButton.vue'
+import BulkPrintInvoicesButton from '~/components/BulkPrintInvoicesButton.vue'
 import {
   invoiceDateDisplay,
   invoiceStatusPill,
@@ -58,7 +59,13 @@ const canRead = computed(() => auth.loaded && auth.can('invoices.read.all'))
 const canCreate = computed(() => auth.can('invoices.create.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
+const canBulkPrint = computed(() =>
+  auth.can('invoices.read.all')
+  || auth.can('invoices.generate_pdf.all')
+  || auth.can('staples.print.all'),
+)
 const bulkSendRef = ref<InstanceType<typeof BulkSendInvoicesButton> | null>(null)
+const bulkPrintRef = ref<InstanceType<typeof BulkPrintInvoicesButton> | null>(null)
 
 type InvoiceSort = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'status' | 'customer' | 'unit' | 'amount_high' | 'amount_low'
 
@@ -284,6 +291,14 @@ async function exportCsv() {
         >
           Bulk send
         </button>
+        <button
+          v-if="canBulkPrint"
+          type="button"
+          class="btn"
+          @click="bulkPrintRef?.openModal()"
+        >
+          Bulk print
+        </button>
         <NuxtLink
           v-if="canRecordPayment"
           to="/invoices/reconcile"
@@ -302,6 +317,12 @@ async function exportCsv() {
       ref="bulkSendRef"
       hide-trigger
       @sent="retryLoad"
+    />
+    <BulkPrintInvoicesButton
+      v-if="canBulkPrint"
+      ref="bulkPrintRef"
+      hide-trigger
+      @printed="retryLoad"
     />
 
     <div v-if="exportError" class="card" style="padding:12px 16px; margin-bottom:16px;">

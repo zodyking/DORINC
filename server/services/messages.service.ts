@@ -750,6 +750,13 @@ async function entityExists(db: Db, type: MessageEntityType, id: string) {
       const [row] = await db.select({ id: serviceLogs.id }).from(serviceLogs).where(eq(serviceLogs.id, id))
       return !!row
     }
+    case 'staples_print_job': {
+      const { staplesPrintJobs } = await import('../db/schema/staples-print-jobs')
+      const [row] = await db.select({ id: staplesPrintJobs.id }).from(staplesPrintJobs).where(eq(staplesPrintJobs.id, id))
+      return !!row
+    }
+    case 'deletion_request':
+      return true
     default:
       return false
   }

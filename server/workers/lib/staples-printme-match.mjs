@@ -7,6 +7,7 @@ import {
   replyMatchesPrintMeJob,
 } from '../../../shared/staples-printme.mjs'
 import { ensureStaplesPrintJobsSchema } from '../../lib/ensure-staples-print-jobs-schema.mjs'
+import { notifyStaplesPrintReadyTeamMessage } from '../../lib/print-team-notify.mjs'
 
 /**
  * Match a PrintMe confirmation email to an open staples_print_jobs row and store the release code.
@@ -49,9 +50,11 @@ export async function matchStaplesPrintMeReply(pool, input) {
   })
   let job = null
 
+  const jobSelect = `id, outbound_message_id, status, created_by, document_type, document_label, entity_id`
+
   if (token) {
     const { rows } = await pool.query(
-      `SELECT id, outbound_message_id, status
+      `SELECT ${jobSelect}
        FROM staples_print_jobs
        WHERE subject_token = $1
          AND dismissed_at IS NULL
@@ -64,7 +67,7 @@ export async function matchStaplesPrintMeReply(pool, input) {
 
   if (!job) {
     const { rows } = await pool.query(
-      `SELECT id, outbound_message_id, status
+      `SELECT ${jobSelect}
        FROM staples_print_jobs
        WHERE dismissed_at IS NULL
          AND status IN ('queued', 'emailed', 'awaiting_reply')
@@ -83,7 +86,7 @@ export async function matchStaplesPrintMeReply(pool, input) {
   // is waiting, attach the confirmation to it.
   if (!job) {
     const { rows } = await pool.query(
-      `SELECT id, outbound_message_id, status
+      `SELECT ${jobSelect}
        FROM staples_print_jobs
        WHERE dismissed_at IS NULL
          AND status IN ('queued', 'emailed', 'awaiting_reply')
@@ -132,5 +135,23 @@ export async function matchStaplesPrintMeReply(pool, input) {
     token,
     hasBarcode: Boolean(barcode),
   })
+
+  try {
+    const entityType = job.document_type === 'invoice' || job.document_type === 'invoice_batch'
+      ? (job.entity_id ? 'invoice' : null)
+      : null
+    await notifyStaplesPrintReadyTeamMessage(pool, {
+      senderUserId: job.created_by,
+      jobId: job.id,
+      releaseCode,
+      documentLabel: job.document_label,
+      entityType,
+      entityId: job.entity_id,
+    })
+  }
+  catch (err) {
+    console.error('[staples-printme] team notify failed', err)
+  }
+
   return { matched: true, jobId: job.id, releaseCode, hasBarcode: Boolean(barcode), token }
 }
