@@ -54,4 +54,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureServiceLogUploadSchema } = await import('../lib/ensure-service-log-upload-schema.mjs')
   await ensureServiceLogUploadSchema(usePool())
+
+  const { ensureStaplesPrintJobsSchema } = await import('../lib/ensure-staples-print-jobs-schema.mjs')
+  await ensureStaplesPrintJobsSchema(usePool())
 }

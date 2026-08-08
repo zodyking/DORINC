@@ -24,6 +24,8 @@ import {
 import { suppressesInboundEmail } from './email-ingest-suppression.mjs'
 import { notifyCustomerEmailReceivedStaff } from './customer-email-staff-notify.mjs'
 import { drainMailQueue } from '../handlers/mail-drain.mjs'
+import { isPrintMeSender } from '../../../shared/staples-printme.mjs'
+import { matchStaplesPrintMeReply } from './staples-printme-match.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
 
@@ -133,10 +135,13 @@ async function resolveConversationIdFromThreadHeaders(pool, inReplyTo, reference
 function shouldSkipAutoResponder(input) {
   if (input.autoSubmitted && !/^no$/i.test(String(input.autoSubmitted).trim())) return true
   if (input.precedence && /bulk|junk|list/i.test(String(input.precedence))) return true
+  if (isPrintMeSender(input.from)) return true
   const subject = String(input.subject ?? '').toLowerCase()
   return subject.includes('automatic reply')
     || subject.includes('auto-reply')
     || subject.includes('out of office')
+    || subject.includes('printme')
+    || subject.includes('release code')
 }
 
 async function resolveCustomerByEmail(pool, email) {
@@ -392,6 +397,7 @@ async function ingestInboundEmail(pool, input, filters) {
       isNewThread
       && shouldAutoRespondToInbound(customer, filters)
       && !shouldSkipAutoResponder({
+        from: input.from,
         subject: input.subject,
         autoSubmitted: input.autoSubmitted,
         precedence: input.precedence,
@@ -528,7 +534,8 @@ export async function runImapInboxSync(pool, opts = {}) {
             const customerEmails = await buildCustomerEmailAddresses(pool, filters.includeCustomerEmails)
             const ingestInbound = shouldIngestInboundEmail(companyInboxes, customerEmails, from, to, cc, filters)
             const ingestCompanyOutbound = shouldIngestCompanyOutboundEmail(companyInboxes, from, to)
-            if (!ingestInbound && !ingestCompanyOutbound) {
+            const printMe = isPrintMeSender(from)
+            if (!ingestInbound && !ingestCompanyOutbound && !printMe) {
               result.skipped++
               continue
             }
@@ -539,18 +546,51 @@ export async function runImapInboxSync(pool, opts = {}) {
               continue
             }
 
+            const subject = parsed.subject ?? msg.envelope?.subject ?? ''
+            const text = parsed.text ?? parsed.textAsHtml ?? ''
+            const html = typeof parsed.html === 'string' ? parsed.html : null
+            const inReplyTo = parsed.inReplyTo ?? null
+            const references = Array.isArray(parsed.references)
+              ? parsed.references.join(' ')
+              : (parsed.references ?? null)
+
+            // Staples PrintMe release-code replies: match jobs without requiring customer inbox filters.
+            if (printMe) {
+              let printMeMatched = false
+              try {
+                const matched = await matchStaplesPrintMeReply(pool, {
+                  from,
+                  subject,
+                  text,
+                  html,
+                  internetMessageId,
+                  inReplyTo,
+                  references,
+                })
+                printMeMatched = Boolean(matched.matched)
+              }
+              catch (err) {
+                result.errors++
+                console.error('[imap-sync] staples printme match failed', err)
+              }
+              // Keep PrintMe out of the customer inbox / auto-responder path.
+              if (!ingestInbound && !ingestCompanyOutbound) {
+                if (printMeMatched) result.ingested++
+                else result.skipped++
+                continue
+              }
+            }
+
             const ingest = await ingestInboundEmail(pool, {
               from,
               to,
               cc,
-              subject: parsed.subject ?? msg.envelope?.subject ?? '',
-              text: parsed.text ?? parsed.textAsHtml ?? '',
-              html: typeof parsed.html === 'string' ? parsed.html : null,
+              subject,
+              text,
+              html,
               internetMessageId,
-              inReplyTo: parsed.inReplyTo ?? null,
-              references: Array.isArray(parsed.references)
-                ? parsed.references.join(' ')
-                : (parsed.references ?? null),
+              inReplyTo,
+              references,
               receivedAt: msg.internalDate ?? parsed.date ?? new Date(),
               autoSubmitted: headerValue(parsed, 'auto-submitted'),
               precedence: headerValue(parsed, 'precedence'),

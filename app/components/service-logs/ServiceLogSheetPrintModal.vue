@@ -1,32 +1,150 @@
 <script setup lang="ts">
+import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+
 const open = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
   'print-device': []
 }>()
 
+type StaplesJob = {
+  id: string
+  status: string
+  releaseCode: string | null
+  qrDataUrl: string | null
+  errorMessage: string | null
+  locatorUrl: string
+  emailedAt: string | null
+  readyAt: string | null
+  expiresAt: string | null
+  createdAt: string
+  printMeTo: string
+}
+
+type Step = 'choose' | 'staples'
+
 const deviceBusy = ref(false)
+const staplesBusy = ref(false)
+const step = ref<Step>('choose')
+const staplesJob = ref<StaplesJob | null>(null)
+const staplesError = ref('')
+const copied = ref(false)
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const waitingForCode = computed(() => {
+  const status = staplesJob.value?.status
+  return status === 'queued' || status === 'emailed' || status === 'awaiting_reply'
+})
+
+const staplesReady = computed(() => staplesJob.value?.status === 'ready' && Boolean(staplesJob.value.releaseCode))
+
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function resetStaples() {
+  stopPoll()
+  staplesJob.value = null
+  staplesError.value = ''
+  staplesBusy.value = false
+  copied.value = false
+  step.value = 'choose'
+}
 
 function close() {
-  if (deviceBusy.value) return
+  if (deviceBusy.value || staplesBusy.value) return
   open.value = false
+  resetStaples()
 }
 
 function onScrimClick(e: MouseEvent) {
   if ((e.target as HTMLElement).id === 'sl-print-scrim') close()
 }
 
+watch(open, (isOpen) => {
+  if (!isOpen) resetStaples()
+})
+
 async function chooseDevice() {
-  if (deviceBusy.value) return
+  if (deviceBusy.value || staplesBusy.value) return
   deviceBusy.value = true
   try {
     emit('print-device')
     open.value = false
+    resetStaples()
   }
   finally {
     deviceBusy.value = false
   }
 }
+
+async function pollStaplesJob(jobId: string) {
+  try {
+    const res = await $fetch<{ job: StaplesJob }>(`/api/service-logs/sheet/staples-print/${jobId}`)
+    staplesJob.value = res.job
+    if (res.job.status === 'ready' || res.job.status === 'failed' || res.job.status === 'expired') {
+      stopPoll()
+      staplesBusy.value = false
+      if (res.job.status === 'failed' || res.job.status === 'expired') {
+        staplesError.value = res.job.errorMessage || 'Staples PrintMe job ended without a release code'
+      }
+    }
+  }
+  catch (e: unknown) {
+    staplesError.value = syncFetchErrorMessage(e, 'Could not refresh Staples print status')
+  }
+}
+
+function startPoll(jobId: string) {
+  stopPoll()
+  pollTimer = setInterval(() => { void pollStaplesJob(jobId) }, 2500)
+}
+
+async function chooseStaples() {
+  if (deviceBusy.value || staplesBusy.value) return
+  staplesBusy.value = true
+  staplesError.value = ''
+  copied.value = false
+  step.value = 'staples'
+  try {
+    const res = await $fetch<{ job: StaplesJob }>('/api/service-logs/sheet/staples-print', {
+      method: 'POST',
+    })
+    staplesJob.value = res.job
+    if (res.job.status === 'ready') {
+      staplesBusy.value = false
+      return
+    }
+    if (res.job.status === 'failed') {
+      staplesBusy.value = false
+      staplesError.value = res.job.errorMessage || 'Could not email Staples PrintMe'
+      return
+    }
+    startPoll(res.job.id)
+  }
+  catch (e: unknown) {
+    staplesBusy.value = false
+    staplesError.value = syncFetchErrorMessage(e, 'Could not start Staples PrintMe')
+  }
+}
+
+async function copyCode() {
+  const code = staplesJob.value?.releaseCode
+  if (!code || !import.meta.client) return
+  try {
+    await navigator.clipboard.writeText(code)
+    copied.value = true
+    window.setTimeout(() => { copied.value = false }, 1600)
+  }
+  catch {
+    copied.value = false
+  }
+}
+
+onBeforeUnmount(() => stopPoll())
 </script>
 
 <template>
@@ -39,6 +157,7 @@ async function chooseDevice() {
   >
     <div
       class="modal sl-print-modal"
+      :class="{ 'sl-print-modal--wide': step === 'staples' }"
       role="dialog"
       aria-labelledby="sl-print-title"
       aria-modal="true"
@@ -46,19 +165,33 @@ async function chooseDevice() {
     >
       <div class="mhead">
         <div>
-          <h3 id="sl-print-title">Print Template</h3>
-          <p>Choose how to print the blank Letter service catalog</p>
+          <h3 id="sl-print-title">
+            {{ step === 'staples' ? 'Print via Staples' : 'Print Template' }}
+          </h3>
+          <p>
+            {{ step === 'staples'
+              ? 'We email the sheet to Staples PrintMe, then show your release code here.'
+              : 'Choose how to print the blank Letter service catalog' }}
+          </p>
         </div>
-        <button type="button" class="close" aria-label="Close" :disabled="deviceBusy" @click="close">✕</button>
+        <button
+          type="button"
+          class="close"
+          aria-label="Close"
+          :disabled="deviceBusy || (staplesBusy && !staplesReady)"
+          @click="close"
+        >
+          ✕
+        </button>
       </div>
 
       <div class="mbody">
-        <div class="sl-print-options" role="list">
+        <div v-if="step === 'choose'" class="sl-print-options" role="list">
           <button
             type="button"
             class="sl-print-option"
             role="listitem"
-            :disabled="deviceBusy"
+            :disabled="deviceBusy || staplesBusy"
             @click="chooseDevice"
           >
             <span class="sl-print-option-title">
@@ -73,23 +206,86 @@ async function chooseDevice() {
             type="button"
             class="sl-print-option"
             role="listitem"
-            disabled
-            aria-disabled="true"
-            title="Coming soon"
+            :disabled="deviceBusy || staplesBusy"
+            @click="chooseStaples"
           >
             <span class="sl-print-option-title">
               Print via Staples
-              <span class="pill">Coming soon</span>
             </span>
             <span class="sl-print-option-desc">
-              Send the service log sheet to Staples for pickup printing
+              Email to Staples PrintMe and get a pickup release code + QR in this app
             </span>
           </button>
+        </div>
+
+        <div v-else class="sl-staples">
+          <div v-if="waitingForCode" class="sl-staples-wait">
+            <span class="sl-staples-spinner" aria-hidden="true" />
+            <strong>Waiting for Staples PrintMe…</strong>
+            <p>
+              Sheet emailed to <code>{{ staplesJob?.printMeTo || 'print@printme.com' }}</code>.
+              IMAP will pick up the confirmation and show your release code here.
+            </p>
+          </div>
+
+          <div v-else-if="staplesReady && staplesJob" class="sl-staples-ready">
+            <p class="sl-staples-kicker">Release code</p>
+            <p class="sl-staples-code">{{ staplesJob.releaseCode }}</p>
+            <img
+              v-if="staplesJob.qrDataUrl"
+              :src="staplesJob.qrDataUrl"
+              alt="QR code for Staples PrintMe release code"
+              class="sl-staples-qr"
+            >
+            <p class="sl-staples-help">
+              At a Staples PrintMe kiosk, enter this code (or scan the QR). Codes usually expire in about 24 hours.
+            </p>
+            <div class="sl-staples-actions">
+              <button type="button" class="btn primary" @click="copyCode">
+                {{ copied ? 'Copied' : 'Copy code' }}
+              </button>
+              <a
+                class="btn"
+                :href="staplesJob.locatorUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Find a PrintMe printer
+              </a>
+            </div>
+          </div>
+
+          <p v-if="staplesError" class="sl-staples-error">{{ staplesError }}</p>
         </div>
       </div>
 
       <div class="mfoot">
-        <button type="button" class="btn" :disabled="deviceBusy" @click="close">Cancel</button>
+        <button
+          v-if="step === 'staples'"
+          type="button"
+          class="btn"
+          :disabled="staplesBusy && waitingForCode"
+          @click="resetStaples"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :disabled="deviceBusy || (staplesBusy && waitingForCode)"
+          @click="close"
+        >
+          {{ staplesReady ? 'Done' : 'Cancel' }}
+        </button>
+        <button
+          v-if="step === 'staples' && (staplesError || staplesJob?.status === 'expired')"
+          type="button"
+          class="btn primary"
+          :disabled="staplesBusy"
+          @click="chooseStaples"
+        >
+          Try again
+        </button>
       </div>
     </div>
   </div>
@@ -98,6 +294,9 @@ async function chooseDevice() {
 <style scoped>
 .sl-print-modal {
   width: min(440px, 94vw);
+}
+.sl-print-modal--wide {
+  width: min(480px, 94vw);
 }
 .sl-print-options {
   display: flex;
@@ -143,16 +342,77 @@ async function chooseDevice() {
   line-height: 1.35;
   color: #64748b;
 }
-.pill {
-  display: inline-flex;
+.sl-staples-wait,
+.sl-staples-ready {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 1px 7px;
+  text-align: center;
+  gap: 8px;
+  padding: 8px 4px 4px;
+}
+.sl-staples-wait p,
+.sl-staples-help {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #64748b;
+  max-width: 36ch;
+}
+.sl-staples-wait strong {
+  font-size: 15px;
+  color: #0f172a;
+}
+.sl-staples-spinner {
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  border: 2.5px solid #c7d2fe;
+  border-top-color: #4f46e5;
+  animation: slStaplesSpin 0.7s linear infinite;
+}
+.sl-staples-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: #64748b;
+}
+.sl-staples-code {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+.sl-staples-qr {
+  width: 180px;
+  height: 180px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  margin: 6px 0;
+}
+.sl-staples-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 6px;
+}
+.sl-staples-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #b91c1c;
+  text-align: center;
+  line-height: 1.4;
+}
+@keyframes slStaplesSpin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sl-staples-spinner { animation: none; }
 }
 </style>
