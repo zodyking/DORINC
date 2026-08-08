@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { users } from '../db/schema/auth'
 import { customers } from '../db/schema/customers'
@@ -78,10 +78,16 @@ export interface StaffPortalRequestRow {
 
 export interface ListStaffPortalRequestsFilter {
   kind?: PortalRequestReviewKind
-  status?: 'pending' | 'approved' | 'rejected' | 'all'
+  status?: 'pending' | 'approved' | 'rejected' | 'decided' | 'all'
   q?: string
   page?: number
   pageSize?: number
+}
+
+function statusWhere(column: Parameters<typeof eq>[0], statusFilter?: string): SQL | undefined {
+  if (!statusFilter || statusFilter === 'all') return undefined
+  if (statusFilter === 'decided') return inArray(column, ['approved', 'rejected'])
+  return eq(column, statusFilter)
 }
 
 function vehicleLabel(busNumber: string | null, unitTag: string | null, make: string | null, model: string | null): string {
@@ -124,7 +130,7 @@ export async function countPendingPortalRequests(db: Db): Promise<number> {
 }
 
 async function mapServiceRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all' ? [eq(serviceRequests.status, statusFilter)] : []
+  const statusCond = statusWhere(serviceRequests.status, statusFilter)
   const rows = await db.select({
     request: serviceRequests,
     customerName: customers.displayName,
@@ -139,7 +145,7 @@ async function mapServiceRows(db: Db, statusFilter?: string): Promise<StaffPorta
     .innerJoin(customers, eq(serviceRequests.customerId, customers.id))
     .innerJoin(users, eq(serviceRequests.submittedBy, users.id))
     .innerJoin(vehicles, eq(serviceRequests.vehicleId, vehicles.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(serviceRequests.createdAt))
 
   return rows.map(r => ({
@@ -168,7 +174,7 @@ async function mapServiceRows(db: Db, statusFilter?: string): Promise<StaffPorta
 }
 
 async function mapInvoiceChangeRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all' ? [eq(invoiceChangeRequests.status, statusFilter)] : []
+  const statusCond = statusWhere(invoiceChangeRequests.status, statusFilter)
   const rows = await db.select({
     request: invoiceChangeRequests,
     customerName: customers.displayName,
@@ -186,7 +192,7 @@ async function mapInvoiceChangeRows(db: Db, statusFilter?: string): Promise<Staf
     .innerJoin(users, eq(invoiceChangeRequests.submittedBy, users.id))
     .leftJoin(invoices, eq(invoiceChangeRequests.invoiceId, invoices.id))
     .leftJoin(vehicles, eq(invoices.vehicleId, vehicles.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(invoiceChangeRequests.createdAt))
 
   return rows.map(r => ({
@@ -219,7 +225,7 @@ async function mapInvoiceChangeRows(db: Db, statusFilter?: string): Promise<Staf
 }
 
 async function mapVehicleChangeRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all' ? [eq(vehicleChangeRequests.status, statusFilter)] : []
+  const statusCond = statusWhere(vehicleChangeRequests.status, statusFilter)
   const rows = await db.select({
     request: vehicleChangeRequests,
     customerName: customers.displayName,
@@ -234,7 +240,7 @@ async function mapVehicleChangeRows(db: Db, statusFilter?: string): Promise<Staf
     .innerJoin(customers, eq(vehicleChangeRequests.customerId, customers.id))
     .innerJoin(users, eq(vehicleChangeRequests.submittedBy, users.id))
     .innerJoin(vehicles, eq(vehicleChangeRequests.vehicleId, vehicles.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(vehicleChangeRequests.createdAt))
 
   return rows.map(r => ({
@@ -263,7 +269,7 @@ async function mapVehicleChangeRows(db: Db, statusFilter?: string): Promise<Staf
 }
 
 async function mapGeneralRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all' ? [eq(portalGeneralRequests.status, statusFilter)] : []
+  const statusCond = statusWhere(portalGeneralRequests.status, statusFilter)
   const rows = await db.select({
     request: portalGeneralRequests,
     customerName: customers.displayName,
@@ -273,7 +279,7 @@ async function mapGeneralRows(db: Db, statusFilter?: string): Promise<StaffPorta
     .from(portalGeneralRequests)
     .innerJoin(customers, eq(portalGeneralRequests.customerId, customers.id))
     .innerJoin(users, eq(portalGeneralRequests.submittedBy, users.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(portalGeneralRequests.createdAt))
 
   return rows.map(r => ({
@@ -302,7 +308,7 @@ async function mapGeneralRows(db: Db, statusFilter?: string): Promise<StaffPorta
 }
 
 async function mapNewVehicleRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all' ? [eq(newVehicleRequests.status, statusFilter)] : []
+  const statusCond = statusWhere(newVehicleRequests.status, statusFilter)
   const rows = await db.select({
     request: newVehicleRequests,
     customerName: customers.displayName,
@@ -312,7 +318,7 @@ async function mapNewVehicleRows(db: Db, statusFilter?: string): Promise<StaffPo
     .from(newVehicleRequests)
     .innerJoin(customers, eq(newVehicleRequests.customerId, customers.id))
     .innerJoin(users, eq(newVehicleRequests.submittedBy, users.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(newVehicleRequests.createdAt))
 
   return rows.map(r => ({
@@ -341,9 +347,7 @@ async function mapNewVehicleRows(db: Db, statusFilter?: string): Promise<StaffPo
 }
 
 async function mapDocumentChangeRows(db: Db, statusFilter?: string): Promise<StaffPortalRequestRow[]> {
-  const conditions = statusFilter && statusFilter !== 'all'
-    ? [eq(documentChangeRequests.status, statusFilter)]
-    : []
+  const statusCond = statusWhere(documentChangeRequests.status, statusFilter)
   const rows = await db.select({
     request: documentChangeRequests,
     customerName: customers.displayName,
@@ -361,7 +365,7 @@ async function mapDocumentChangeRows(db: Db, statusFilter?: string): Promise<Sta
     .innerJoin(customers, eq(documentChangeRequests.customerId, customers.id))
     .innerJoin(users, eq(documentChangeRequests.submittedBy, users.id))
     .leftJoin(vehicles, eq(documentChangeRequests.vehicleId, vehicles.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(statusCond)
     .orderBy(desc(documentChangeRequests.createdAt))
 
   return rows.map(r => ({
