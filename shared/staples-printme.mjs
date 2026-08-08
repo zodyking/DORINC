@@ -3,6 +3,7 @@
 /** Staples branded PrintMe inbox (not the generic print@printme.com address). */
 export const STAPLES_PRINTME_TO = 'staples@printme.com'
 export const STAPLES_PRINTME_SUBJECT_PREFIX = 'DORINC Service Log Sheet'
+export const STAPLES_PRINTME_INVOICE_SUBJECT_PREFIX = 'DORINC Invoice'
 export const STAPLES_PRINTME_TOKEN_RE = /\[DORINC-PRINT-([A-Z0-9]{8,20})\]/i
 export const STAPLES_PRINTME_CODE_TTL_MS = 24 * 60 * 60 * 1000
 export const STAPLES_PRINTME_LOCATOR_URL = 'https://www.printme.com'
@@ -41,19 +42,21 @@ export function isPrintMeSender(from) {
 
 /**
  * @param {string} token
+ * @param {string} [subjectPrefix]
  */
-export function buildPrintMeSubject(token) {
-  return `${STAPLES_PRINTME_SUBJECT_PREFIX} [DORINC-PRINT-${token}]`
+export function buildPrintMeSubject(token, subjectPrefix = STAPLES_PRINTME_SUBJECT_PREFIX) {
+  return `${subjectPrefix} [DORINC-PRINT-${token}]`
 }
 
 /**
  * Plain-text-only PrintMe upload body.
  * Avoid HTML bodies — PrintMe treats HTML as a printable document type.
  * @param {string} token
+ * @param {string} [documentLabel]
  */
-export function buildPrintMeTextBody(token) {
+export function buildPrintMeTextBody(token, documentLabel = 'Service log sheet PDF') {
   return [
-    'Service log sheet PDF attached for Staples PrintMe cloud printing.',
+    `${documentLabel} attached for Staples PrintMe cloud printing.`,
     '',
     `Correlation: DORINC-PRINT-${token}`,
   ].join('\n')
@@ -81,7 +84,13 @@ export function assertPrintMePdfAttachment(pdf) {
 
 /**
  * Build the outbound PrintMe mail payload (to/subject/text/attachment).
- * @param {{ token: string, pdf: Buffer | Uint8Array }} input
+ * @param {{
+ *   token: string,
+ *   pdf: Buffer | Uint8Array,
+ *   filename?: string,
+ *   subjectPrefix?: string,
+ *   documentLabel?: string,
+ * }} input
  */
 export function buildPrintMeMailPayload(input) {
   const check = assertPrintMePdfAttachment(input.pdf)
@@ -90,16 +99,17 @@ export function buildPrintMeMailPayload(input) {
   }
 
   const content = Buffer.isBuffer(input.pdf) ? input.pdf : Buffer.from(input.pdf)
+  const filename = String(input.filename || 'service-log-sheet.pdf').trim() || 'document.pdf'
   return {
     ok: true,
     reason: null,
     mail: {
       to: STAPLES_PRINTME_TO,
-      subject: buildPrintMeSubject(input.token),
-      text: buildPrintMeTextBody(input.token),
+      subject: buildPrintMeSubject(input.token, input.subjectPrefix),
+      text: buildPrintMeTextBody(input.token, input.documentLabel),
       // Intentionally no HTML — PrintMe can treat HTML as a document.
       attachments: [{
-        filename: 'service-log-sheet.pdf',
+        filename,
         content,
         contentType: 'application/pdf',
         contentDisposition: 'attachment',

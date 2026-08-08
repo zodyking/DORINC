@@ -40,7 +40,7 @@ async function sendBlankSheet() {
 
 <template>
   <section class="page active">
-    <StaffPageHead subtitle="PrintMe release codes for blank service log sheets at Staples">
+    <StaffPageHead subtitle="Release codes, barcodes, and PDFs for Staples PrintMe jobs">
       <template #title>
         <span class="staples-page-title">
           <StaffNavIcon name="staples" class="staples-page-logo" />
@@ -59,11 +59,16 @@ async function sendBlankSheet() {
       </template>
     </StaffPageHead>
 
-    <p v-if="actionError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ actionError }}</p>
-    <p v-else-if="actionOk" class="help" style="color:#15803d; margin:0 0 12px;">{{ actionOk }}</p>
+    <p v-if="actionError" class="help staples-flash staples-flash--err">{{ actionError }}</p>
+    <p v-else-if="actionOk" class="help staples-flash staples-flash--ok">{{ actionOk }}</p>
 
     <div class="card staples-page-card">
-      <StaplesPrintJobsPanel ref="jobsPanel" />
+      <div class="chead">
+        <h3>Active print orders</h3>
+      </div>
+      <div class="cbody">
+        <StaplesPrintJobsPanel ref="jobsPanel" />
+      </div>
     </div>
   </section>
 </template>
@@ -79,7 +84,12 @@ async function sendBlankSheet() {
   height: 22px;
   color: #64748b;
 }
-.staples-page-card {
-  padding: 16px;
+.staples-page-card .cbody {
+  padding-top: 14px;
 }
+.staples-flash {
+  margin: 0 0 12px;
+}
+.staples-flash--err { color: #dc2626; }
+.staples-flash--ok { color: #15803d; }
 </style>

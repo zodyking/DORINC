@@ -228,6 +228,11 @@ const canUpdate = computed(() => auth.can('invoices.update.all'))
 const canSend = computed(() => auth.can('invoices.send.all'))
 const canRecordPayment = computed(() => auth.can('invoices.record_payment.all'))
 const canGeneratePdf = computed(() => auth.can('invoices.generate_pdf.all'))
+const canStaplesPrint = computed(() =>
+  auth.can('staples.print.all')
+  || auth.can('invoices.read.all')
+  || auth.can('invoices.update.all'),
+)
 
 const { busy: pdfDownloadBusy, error: pdfDownloadError, download: downloadInvoicePdf } = useInvoicePdfDownload({
   invoiceId: () => id.value,
@@ -271,6 +276,34 @@ const showMarkUnpaid = computed(() => {
 
 const markUnpaidBusy = ref(false)
 const markUnpaidError = ref('')
+const staplesPrintBusy = ref(false)
+const staplesPrintError = ref('')
+const staplesPrintOk = ref('')
+
+async function printViaStaples() {
+  if (!invoice.value || !canStaplesPrint.value || staplesPrintBusy.value) return
+  staplesPrintBusy.value = true
+  staplesPrintError.value = ''
+  staplesPrintOk.value = ''
+  try {
+    const res = await $fetch<{ job: { id: string, status: string, errorMessage: string | null } }>(
+      `/api/invoices/${id.value}/staples-print`,
+      { method: 'POST' },
+    )
+    if (res.job.status === 'failed') {
+      staplesPrintError.value = res.job.errorMessage || 'Could not email Staples PrintMe'
+      return
+    }
+    staplesPrintOk.value = 'Invoice sent to Staples PrintMe. Open Staples for the release code.'
+    await navigateTo('/staples')
+  }
+  catch (e: unknown) {
+    staplesPrintError.value = syncFetchErrorMessage(e, 'Could not start Staples PrintMe')
+  }
+  finally {
+    staplesPrintBusy.value = false
+  }
+}
 
 async function markUnpaid() {
   if (!invoice.value || markUnpaidBusy.value) return
@@ -454,6 +487,15 @@ const summaryRows = computed(() => {
         >
           {{ pdfDownloadBusy ? 'Preparing…' : 'Download' }}
         </button>
+        <button
+          v-if="canStaplesPrint"
+          type="button"
+          class="btn"
+          :disabled="staplesPrintBusy"
+          @click="printViaStaples"
+        >
+          {{ staplesPrintBusy ? 'Sending to Staples…' : 'Print via Staples' }}
+        </button>
         <DeleteEntityButton
           v-if="removableInvoice"
           entity-type="invoice"
@@ -462,6 +504,9 @@ const summaryRows = computed(() => {
         />
       </template>
     </StaffPageHead>
+
+    <p v-if="staplesPrintError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ staplesPrintError }}</p>
+    <p v-else-if="staplesPrintOk" class="help" style="color:#15803d; margin:0 0 12px;">{{ staplesPrintOk }}</p>
 
     <SendInvoiceButton
       v-if="canSend && canSendNow"

@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
     // Anyone with the Staples page permission sees shop-wide active codes.
     allUsers: hasPermission(event, 'staples.read.all')
       || hasPermission(event, 'service_logs.read.all')
+      || hasPermission(event, 'invoices.read.all')
       || hasPermission(event, 'system.admin.all'),
   })
   return { jobs }
