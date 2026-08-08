@@ -24,18 +24,7 @@ defineProps<{
 </script>
 
 <template>
-  <!-- Staples brand mark (colored logo, not stroke icon) -->
-  <img
-    v-if="name === 'staples'"
-    class="staff-nav-icon staff-nav-icon--logo"
-    src="/icons/staples.svg"
-    width="18"
-    height="18"
-    alt=""
-    aria-hidden="true"
-  >
   <svg
-    v-else
     class="staff-nav-icon"
     width="18"
     height="18"
@@ -49,6 +38,26 @@ defineProps<{
       <rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.75" />
       <rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.75" />
       <rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.75" />
+    </template>
+
+    <!-- Staples / PrintMe (printer) -->
+    <template v-else-if="name === 'staples'">
+      <path
+        d="M6 9V3h12v6"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <rect x="6" y="13" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.75" />
+      <path d="M17 11h.01" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" />
     </template>
 
     <!-- Invoices -->

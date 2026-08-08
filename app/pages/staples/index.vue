@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StaplesPrintJobsPanel from '~/components/staples/StaplesPrintJobsPanel.vue'
+import StaffNavIcon from '~/components/staff/StaffNavIcon.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 definePageMeta({ layout: 'staff', permission: 'staples.read.all' })
@@ -42,7 +43,7 @@ async function sendBlankSheet() {
     <StaffPageHead subtitle="PrintMe release codes for blank service log sheets at Staples">
       <template #title>
         <span class="staples-page-title">
-          <img src="/icons/staples.svg" alt="" class="staples-page-logo" width="28" height="28">
+          <StaffNavIcon name="staples" class="staples-page-logo" />
           Staples
         </span>
       </template>
@@ -74,10 +75,9 @@ async function sendBlankSheet() {
   gap: 10px;
 }
 .staples-page-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  object-fit: cover;
+  width: 22px;
+  height: 22px;
+  color: #64748b;
 }
 .staples-page-card {
   padding: 16px;

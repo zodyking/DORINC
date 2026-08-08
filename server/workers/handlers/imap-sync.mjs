@@ -58,6 +58,7 @@ function jobWantsFullSync(job) {
 export async function processImapSyncJobs(pool, batch = 1) {
   let processed = 0
   let failed = 0
+  let ingested = 0
 
   for (let i = 0; i < batch; i++) {
     const client = await pool.connect()
@@ -106,6 +107,7 @@ export async function processImapSyncJobs(pool, batch = 1) {
         [job.id],
       )
       processed++
+      ingested += Number(result.ingested || 0)
     }
     catch (err) {
       const attempts = job.attempts
@@ -126,7 +128,7 @@ export async function processImapSyncJobs(pool, batch = 1) {
     }
   }
 
-  return { processed, failed }
+  return { processed, failed, ingested }
 }
 
 export { maybeRunImapInboxSync }

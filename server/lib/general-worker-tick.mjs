@@ -70,7 +70,14 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   }
 
   const imap = await processImapSyncJobs(pool)
-  if (imap.processed || imap.failed) {
+  // Quiet no-op sync ticks (common while awaiting PrintMe); log failures or real work.
+  if (imap.failed || (imap.processed && imap.ingested)) {
+    console.log(
+      `${logPrefix} imap_sync processed=${imap.processed} failed=${imap.failed}`
+      + (imap.ingested != null ? ` ingested=${imap.ingested}` : ''),
+    )
+  }
+  else if (imap.processed && process.env.IMAP_SYNC_VERBOSE === '1') {
     console.log(`${logPrefix} imap_sync processed=${imap.processed} failed=${imap.failed}`)
   }
 }
