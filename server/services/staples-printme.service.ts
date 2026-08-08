@@ -249,17 +249,19 @@ export async function getStaplesPrintMeJob(
 export async function listActiveStaplesPrintMeJobs(
   db: Db,
   userId: string,
-  opts: { nudgeImap?: boolean } = {},
+  opts: { nudgeImap?: boolean, allUsers?: boolean } = {},
 ): Promise<StaplesPrintJobView[]> {
+  const filters = [
+    eq(staplesPrintJobs.documentType, 'service_log_sheet'),
+    isNull(staplesPrintJobs.dismissedAt),
+    inArray(staplesPrintJobs.status, [...ACTIVE_STATUSES]),
+  ]
+  if (!opts.allUsers) filters.unshift(eq(staplesPrintJobs.createdBy, userId))
+
   const rows = await db.select().from(staplesPrintJobs)
-    .where(and(
-      eq(staplesPrintJobs.createdBy, userId),
-      eq(staplesPrintJobs.documentType, 'service_log_sheet'),
-      isNull(staplesPrintJobs.dismissedAt),
-      inArray(staplesPrintJobs.status, [...ACTIVE_STATUSES]),
-    ))
+    .where(and(...filters))
     .orderBy(desc(staplesPrintJobs.createdAt))
-    .limit(20)
+    .limit(40)
 
   const views: StaplesPrintJobView[] = []
   let awaiting = false

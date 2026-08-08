@@ -116,21 +116,52 @@ export function extractPrintMeSubjectToken(subject) {
   return match?.[1]?.toUpperCase() ?? null
 }
 
+/**
+ * PrintMe confirmation subjects do not echo our correlation token.
+ * The token appears in the body as e.g. "Mail body: … [DORINC-PRINT-C7E15DC391]".
+ * @param {{
+ *   subject?: string | null,
+ *   text?: string | null,
+ *   html?: string | null,
+ * }} parts
+ */
+export function extractPrintMeCorrelationToken(parts = {}) {
+  const haystack = [
+    String(parts.subject || ''),
+    String(parts.text || ''),
+    String(parts.html || '').replace(/<[^>]+>/g, ' '),
+  ].join('\n').replace(/&nbsp;/gi, ' ')
+  const match = haystack.match(STAPLES_PRINTME_TOKEN_RE)
+  return match?.[1]?.toUpperCase() ?? null
+}
+
 const RELEASE_CODE_LABEL_RE = /(?:retrieval\s*code|release\s*code|document\s*id|doc(?:ument)?\s*id|printme\s*(?:code|id)|your\s*code|barcode)\s*(?:is\s*)?[:#-]?\s*/i
 const NOISE_CODE_RE = /DORINC|PRINTME|STAPLES|SERVICE|DOCUMENT|RELEASE|RETRIEVAL|BARCODE|THANK/i
 
 /**
- * Extract Staples PrintMe release code from confirmation email text.
- * Real Staples replies use an 8-character alphanumeric code (e.g. BE9C8635),
- * often labeled "Release code:" — not digits-only and not a QR code.
+ * Flatten subject/text/html for release-code parsing.
  * @param {string | null | undefined} text
  * @param {string | null | undefined} html
+ * @param {string | null | undefined} subject
  */
-export function extractPrintMeReleaseCode(text, html = null) {
-  const plain = [
+function printMePlainBody(text, html = null, subject = null) {
+  return [
+    String(subject || ''),
     String(text || ''),
     String(html || '').replace(/<[^>]+>/g, ' '),
   ].join('\n').replace(/&nbsp;/gi, ' ')
+}
+
+/**
+ * Extract Staples PrintMe release code from confirmation email text.
+ * Real Staples replies use an 8-character alphanumeric code (e.g. FA710D12),
+ * in the subject ("Release code FA710D12 is ready…") and body ("Release code: FA710D12").
+ * @param {string | null | undefined} text
+ * @param {string | null | undefined} html
+ * @param {string | null | undefined} subject
+ */
+export function extractPrintMeReleaseCode(text, html = null, subject = null) {
+  const plain = printMePlainBody(text, html, subject)
 
   // Prefer labeled 8-char alphanumeric codes (PrintMe / Staples confirmation).
   const labeledEightAlpha = plain.match(

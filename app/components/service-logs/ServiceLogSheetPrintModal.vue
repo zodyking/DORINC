@@ -154,7 +154,7 @@ async function chooseStaples() {
               Print via Staples
             </span>
             <span class="sl-print-option-desc">
-              Email to Staples PrintMe — the release code appears on this page when ready
+              Email to Staples PrintMe — the release code appears on the Staples page when ready
             </span>
           </button>
         </div>
@@ -163,7 +163,7 @@ async function chooseStaples() {
           <div v-if="!staplesError" class="sl-staples-wait">
             <span class="sl-staples-spinner" aria-hidden="true" />
             <strong>Sending to Staples PrintMe…</strong>
-            <p>After the email sends, this dialog closes. Your release code will show on the Service Logs page.</p>
+            <p>After the email sends, this dialog closes. Your release code will show on the Staples page.</p>
           </div>
           <p v-if="staplesError" class="sl-staples-error">{{ staplesError }}</p>
         </div>

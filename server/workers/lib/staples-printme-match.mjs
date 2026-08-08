@@ -1,7 +1,7 @@
 import {
   STAPLES_PRINTME_CODE_TTL_MS,
+  extractPrintMeCorrelationToken,
   extractPrintMeReleaseCode,
-  extractPrintMeSubjectToken,
   isPrintMeSender,
   pickPrintMeBarcodeAttachment,
   replyMatchesPrintMeJob,
@@ -33,7 +33,7 @@ export async function matchStaplesPrintMeReply(pool, input) {
 
   await ensureStaplesPrintJobsSchema(pool)
 
-  const releaseCode = extractPrintMeReleaseCode(input.text, input.html)
+  const releaseCode = extractPrintMeReleaseCode(input.text, input.html, input.subject)
   if (!releaseCode) {
     console.warn('[staples-printme] PrintMe reply had no parseable release code', input.subject)
     return { matched: false, reason: 'no_code' }
@@ -41,7 +41,12 @@ export async function matchStaplesPrintMeReply(pool, input) {
 
   const barcode = pickPrintMeBarcodeAttachment(input.attachments)
 
-  const token = extractPrintMeSubjectToken(input.subject)
+  // PrintMe puts [DORINC-PRINT-…] in the body ("Mail body: …"), not the reply subject.
+  const token = extractPrintMeCorrelationToken({
+    subject: input.subject,
+    text: input.text,
+    html: input.html,
+  })
   let job = null
 
   if (token) {
@@ -74,9 +79,24 @@ export async function matchStaplesPrintMeReply(pool, input) {
     })) ?? null
   }
 
+  // PrintMe often sends a fresh message (no In-Reply-To). If exactly one open job
+  // is waiting, attach the confirmation to it.
+  if (!job) {
+    const { rows } = await pool.query(
+      `SELECT id, outbound_message_id, status
+       FROM staples_print_jobs
+       WHERE dismissed_at IS NULL
+         AND status IN ('queued', 'emailed', 'awaiting_reply')
+       ORDER BY created_at DESC
+       LIMIT 2`,
+    )
+    if (rows.length === 1) job = rows[0]
+  }
+
   if (!job) {
     console.warn('[staples-printme] PrintMe reply did not match an open job', {
       subject: input.subject,
+      token,
       inReplyTo: input.inReplyTo,
     })
     return { matched: false, reason: 'no_job' }
@@ -109,7 +129,8 @@ export async function matchStaplesPrintMeReply(pool, input) {
 
   console.info('[staples-printme] release code captured for job', job.id, {
     releaseCode,
+    token,
     hasBarcode: Boolean(barcode),
   })
-  return { matched: true, jobId: job.id, releaseCode, hasBarcode: Boolean(barcode) }
+  return { matched: true, jobId: job.id, releaseCode, hasBarcode: Boolean(barcode), token }
 }

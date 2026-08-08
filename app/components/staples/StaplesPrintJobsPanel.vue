@@ -23,7 +23,9 @@ const barcodeError = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const hasJobs = computed(() => jobs.value.length > 0)
-const awaitingAny = computed(() => jobs.value.some(j => j.awaitingReply || ['queued', 'emailed', 'awaiting_reply'].includes(j.status)))
+const awaitingAny = computed(() => jobs.value.some(j =>
+  j.awaitingReply || ['queued', 'emailed', 'awaiting_reply'].includes(j.status),
+))
 
 function stopPoll() {
   if (pollTimer) {
@@ -53,13 +55,7 @@ async function refreshJobs() {
 function startPoll() {
   stopPoll()
   if (!import.meta.client) return
-  pollTimer = setInterval(() => {
-    if (!awaitingAny.value && !hasJobs.value) {
-      stopPoll()
-      return
-    }
-    void refreshJobs()
-  }, STAPLES_PRINTME_IMAP_POLL_MS)
+  pollTimer = setInterval(() => { void refreshJobs() }, STAPLES_PRINTME_IMAP_POLL_MS)
 }
 
 async function openBarcode(job: StaplesJob) {
@@ -110,7 +106,6 @@ async function requestRemoval(job: StaplesJob) {
   }
 }
 
-/** Called by the parent after a successful Staples send. */
 async function onStaplesSent() {
   await refreshJobs()
   startPoll()
@@ -119,13 +114,7 @@ async function onStaplesSent() {
 defineExpose({ refresh: onStaplesSent })
 
 onMounted(() => {
-  void refreshJobs().then(() => {
-    if (hasJobs.value) startPoll()
-  })
-})
-
-watch(awaitingAny, (waiting) => {
-  if (waiting) startPoll()
+  void refreshJobs().then(() => startPoll())
 })
 
 onBeforeUnmount(() => {
@@ -135,29 +124,39 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-if="hasJobs || loadError" class="staples-active" aria-label="Active Staples print orders">
-    <p v-if="loadError" class="help staples-active-error">{{ loadError }}</p>
+  <section class="staples-panel" aria-label="Active Staples print orders">
+    <p v-if="loadError" class="help staples-panel-error">{{ loadError }}</p>
+
+    <div v-if="!hasJobs && !loadError" class="staples-panel-empty">
+      <p>No active Staples PrintMe orders.</p>
+      <p class="help">
+        Send a blank service log sheet from here or Service Logs → Print Template.
+        When PrintMe replies, the 8-character release code appears here.
+      </p>
+    </div>
 
     <div
       v-for="job in jobs"
       :key="job.id"
-      class="staples-active-row"
+      class="staples-panel-row"
     >
-      <div class="staples-active-main">
-        <p class="staples-active-label">Staples PrintMe</p>
+      <div class="staples-panel-main">
+        <p class="staples-panel-label">
+          {{ awaitingAny && !job.releaseCode ? 'Awaiting PrintMe' : 'Release code' }}
+        </p>
         <template v-if="job.releaseCode">
-          <p class="staples-active-code">{{ job.releaseCode }}</p>
+          <p class="staples-panel-code">{{ job.releaseCode }}</p>
           <button type="button" class="btn linkish" @click="openBarcode(job)">
             Click to see barcode
           </button>
-          <p v-if="job.status === 'expired'" class="staples-active-wait">Expired — remove when done</p>
+          <p v-if="job.status === 'expired'" class="staples-panel-wait">Expired — remove when done</p>
         </template>
         <template v-else-if="job.status === 'failed'">
-          <p class="staples-active-wait">{{ job.errorMessage || 'PrintMe send failed' }}</p>
+          <p class="staples-panel-wait">{{ job.errorMessage || 'PrintMe send failed' }}</p>
         </template>
         <template v-else>
-          <p class="staples-active-wait">
-            Waiting for confirmation email…
+          <p class="staples-panel-wait">
+            Waiting for confirmation from no-reply@printme.com…
           </p>
         </template>
       </div>
@@ -199,7 +198,7 @@ onBeforeUnmount(() => {
             alt="Staples PrintMe release barcode"
             class="staples-barcode-img"
           >
-          <p v-else-if="barcodeError" class="help staples-active-error">{{ barcodeError }}</p>
+          <p v-else-if="barcodeError" class="help staples-panel-error">{{ barcodeError }}</p>
           <p v-else class="help">Loading barcode…</p>
         </div>
         <div class="mfoot">
@@ -211,30 +210,40 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.staples-active {
-  margin: 0 0 14px;
+.staples-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
-.staples-active-row {
+.staples-panel-empty {
+  padding: 18px 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.staples-panel-empty p {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 14px;
+}
+.staples-panel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 14px 16px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #f8fafc;
+  border-radius: 12px;
+  background: #fff;
 }
-.staples-active-main {
+.staples-panel-main {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px 14px;
   min-width: 0;
 }
-.staples-active-label {
+.staples-panel-label {
   margin: 0;
   font-size: 11px;
   font-weight: 800;
@@ -242,20 +251,20 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   color: #64748b;
 }
-.staples-active-code {
+.staples-panel-code {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
 }
-.staples-active-wait {
+.staples-panel-wait {
   margin: 0;
   font-size: 13px;
   color: #64748b;
 }
-.staples-active-error {
+.staples-panel-error {
   color: #b91c1c;
   margin: 0;
 }
@@ -287,7 +296,7 @@ onBeforeUnmount(() => {
   image-rendering: pixelated;
 }
 @media (max-width: 560px) {
-  .staples-active-row {
+  .staples-panel-row {
     flex-direction: column;
     align-items: stretch;
   }

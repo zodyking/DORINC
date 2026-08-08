@@ -4,6 +4,7 @@ import {
   buildCode128Svg,
   buildPrintMeMailPayload,
   buildPrintMeSubject,
+  extractPrintMeCorrelationToken,
   extractPrintMeReleaseCode,
   extractPrintMeSubjectToken,
   isPrintMeSender,
@@ -52,7 +53,28 @@ describe('staples printme helpers', () => {
       '<p>Document ID: <b>88312015</b></p>',
     )).toBe('88312015')
 
+    expect(extractPrintMeReleaseCode(
+      null,
+      null,
+      'Release code FA710D12 is ready for printing at Staples',
+    )).toBe('FA710D12')
+
     expect(isPrintMeSender('PrintMe <no-reply@printme.com>')).toBe(true)
+  })
+
+  it('extracts DORINC correlation tokens from PrintMe body (not reply subject)', () => {
+    expect(extractPrintMeCorrelationToken({
+      subject: 'Release code FA710D12 is ready for printing at Staples',
+      text: [
+        'List of document(s):',
+        'service-log-sheet.pdf',
+        'Mail body: DORINC Service Log Sheet [DORINC-PRINT-C7E15DC391]',
+      ].join('\n'),
+    })).toBe('C7E15DC391')
+
+    expect(extractPrintMeSubjectToken(
+      'Release code FA710D12 is ready for printing at Staples',
+    )).toBeNull()
   })
 
   it('picks a barcode image attachment from PrintMe MIME parts', () => {
