@@ -40,6 +40,24 @@ export default defineNitroPlugin(() => {
     try {
       const { runGeneralWorkerTick } = await import('../lib/general-worker-tick.mjs')
       await runGeneralWorkerTick(pool, { mailBatch, logPrefix: '[embedded-worker]' })
+
+      // Daily summary uses the TS service graph — keep it out of the plain Node
+      // worker tick (tsx/tsImport there overflowed the module resolve stack).
+      try {
+        const { isDailySummaryDue } = await import('../workers/handlers/daily-summary.mjs')
+        if (await isDailySummaryDue(pool)) {
+          const { maybeSendScheduledDailySummaryFromPool } = await import('../services/daily-summary.service')
+          const result = await maybeSendScheduledDailySummaryFromPool(pool)
+          if (result?.sent) {
+            console.log(
+              `[embedded-worker] daily_summary_report sent=${result.sent} delivered=${result.delivered} failed=${result.failed}`,
+            )
+          }
+        }
+      }
+      catch (dailyErr) {
+        console.error('[embedded-worker] daily_summary_report failed', dailyErr)
+      }
     }
     catch (err) {
       console.error('[embedded-worker] tick failed', err)

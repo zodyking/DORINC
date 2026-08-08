@@ -1,25 +1,55 @@
-// Daily summary report — schedule check + send via TS service (tsx).
-import { tsImport } from 'tsx/esm/api'
+/**
+ * Daily summary helpers for worker processes (SQL-only).
+ *
+ * The dedicated worker image must never load `tsx` or TypeScript services —
+ * repeated `tsImport()` registration caused:
+ *   RangeError: Maximum call stack size exceeded
+ * in Node module customization hooks.
+ *
+ * Scheduled delivery runs from the Nitro embedded worker
+ * (`server/plugins/background-workers.ts`) which can import the TS service.
+ */
+
+const NOTIFICATION_SETTINGS_KEY = 'workspace.notification_settings'
+const LAST_SENT_SETTING_KEY = 'system.daily_summary_last_sent'
+const DEFAULT_SEND_HOUR_UTC = 13
+
+function todayIsoDate(now = new Date()) {
+  return now.toISOString().slice(0, 10)
+}
 
 /**
+ * Cheap SQL-only due check (enabled + UTC hour + not already sent today).
  * @param {import('pg').Pool} pool
- * @returns {Promise<boolean>} true when a send was attempted (or already handled for the hour)
+ * @param {Date} [now]
  */
-export async function maybeEnqueueDailySummary(pool) {
-  const mod = await tsImport(
-    new URL('../../services/daily-summary.service.ts', import.meta.url).href,
-    import.meta.url,
+export async function isDailySummaryDue(pool, now = new Date()) {
+  const { rows } = await pool.query(
+    `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
+    [NOTIFICATION_SETTINGS_KEY],
   )
-  const result = await mod.maybeSendScheduledDailySummaryFromPool(pool)
-  if (!result) return false
-  if (result.sent > 0) {
-    console.log(
-      `[daily-summary] ${result.delivery} sent=${result.sent} delivered=${result.delivered} failed=${result.failed} date=${result.reportDate}`,
-    )
-    return true
-  }
-  if (result.skipped && result.skipped !== 'already_sent_today') {
-    console.log(`[daily-summary] skipped: ${result.skipped}`)
-  }
-  return Boolean(result.sent)
+  const settings = rows[0]?.value || {}
+  if (settings.dailySummaryReport === false) return false
+
+  const hourRaw = settings.dailySummarySendHourUtc
+  const hour = Number.isInteger(hourRaw) ? hourRaw : DEFAULT_SEND_HOUR_UTC
+  if (now.getUTCHours() !== hour) return false
+
+  const reportDate = todayIsoDate(now)
+  const last = await pool.query(
+    `SELECT value FROM app_settings WHERE key = $1 LIMIT 1`,
+    [LAST_SENT_SETTING_KEY],
+  )
+  const lastDate = String(last.rows[0]?.value?.date ?? '').trim()
+  return lastDate !== reportDate
+}
+
+/**
+ * @deprecated Kept for import compatibility. Always returns false — scheduled
+ * sends are handled by the Nitro embedded worker, not the plain Node worker.
+ * @param {import('pg').Pool} [_pool]
+ * @returns {Promise<boolean>}
+ */
+export async function maybeEnqueueDailySummary() {
+  return false
 }
