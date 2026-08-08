@@ -92,7 +92,8 @@ export function buildNotificationSendMailOptions(input) {
     filename: att.filename,
     content: att.content,
     contentType: att.contentType ?? 'application/octet-stream',
-    contentDisposition: att.cid ? 'inline' : 'attachment',
+    contentDisposition: att.contentDisposition
+      ?? (att.cid ? 'inline' : 'attachment'),
     cid: att.cid,
   }))
 
