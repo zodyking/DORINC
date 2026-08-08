@@ -32,15 +32,19 @@ describe('staples printme helpers', () => {
     expect(extractPrintMeSubjectToken(`Re: ${subject}`)).toBe('ABC12DEF')
   })
 
-  it('extracts labeled release codes from confirmation text', () => {
+  it('extracts Staples 8-digit retrieval codes from confirmation text', () => {
     expect(extractPrintMeReleaseCode(
-      'Thanks for using PrintMe.\nYour Release Code is: 4F92KQ\nEnter it at any Staples PrintMe kiosk.',
-    )).toBe('4F92KQ')
+      'Thanks for using Staples PrintMe.\nYour retrieval code is: 48291037\nEnter it at any Staples self-service printer.',
+    )).toBe('48291037')
+
+    expect(extractPrintMeReleaseCode(
+      'Check your email for the 8-digit code or barcode.\n\n71930482\n',
+    )).toBe('71930482')
 
     expect(extractPrintMeReleaseCode(
       null,
-      '<p>Document ID: <b>8831201</b></p>',
-    )).toBe('8831201')
+      '<p>Document ID: <b>88312015</b></p>',
+    )).toBe('88312015')
   })
 
   it('matches replies by In-Reply-To / References', () => {
@@ -70,11 +74,11 @@ describe('staples printme helpers', () => {
     expect(assertPrintMePdfAttachment(fakePdf()).ok).toBe(true)
   })
 
-  it('builds a PrintMe mail with the PDF attached and no HTML body', () => {
+  it('builds a Staples PrintMe mail with the PDF attached and no HTML body', () => {
     const pdf = fakePdf(2048)
     const built = buildPrintMeMailPayload({ token: 'AABBCCDD11', pdf })
     expect(built.ok).toBe(true)
-    expect(built.mail?.to).toBe('print@printme.com')
+    expect(built.mail?.to).toBe('staples@printme.com')
     expect(built.mail?.subject).toContain('[DORINC-PRINT-AABBCCDD11]')
     expect((built.mail as { html?: string }).html).toBeUndefined()
     expect(built.mail?.attachments).toHaveLength(1)
@@ -100,7 +104,7 @@ describe('staples printme helpers', () => {
 
     const raw = await composeRawMimeMessage(options)
     const mime = raw.toString('utf8')
-    expect(mime).toContain('To: print@printme.com')
+    expect(mime).toContain('To: staples@printme.com')
     expect(mime).toContain('Subject: DORINC Service Log Sheet [DORINC-PRINT-MIMETEST01]')
     expect(mime).toMatch(/Content-Type:\s*application\/pdf/i)
     expect(mime).toMatch(/Content-Disposition:\s*attachment/i)

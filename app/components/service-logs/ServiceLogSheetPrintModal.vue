@@ -11,7 +11,6 @@ type StaplesJob = {
   id: string
   status: string
   releaseCode: string | null
-  qrDataUrl: string | null
   errorMessage: string | null
   locatorUrl: string
   emailedAt: string | null
@@ -173,7 +172,7 @@ onBeforeUnmount(() => stopPoll())
           </h3>
           <p>
             {{ step === 'staples'
-              ? 'We email the sheet to Staples PrintMe, then show your release code here.'
+              ? 'We email the sheet to Staples PrintMe, then show your 8-digit retrieval code here.'
               : 'Choose how to print the blank Letter service catalog' }}
           </p>
         </div>
@@ -216,7 +215,7 @@ onBeforeUnmount(() => stopPoll())
               Print via Staples
             </span>
             <span class="sl-print-option-desc">
-              Email to Staples PrintMe and get a pickup release code + QR in this app
+              Email to Staples PrintMe and get an 8-digit retrieval code in this app
             </span>
           </button>
         </div>
@@ -231,22 +230,17 @@ onBeforeUnmount(() => stopPoll())
               <template v-if="staplesJob?.attachmentBytes">
                 ({{ Math.round((staplesJob.attachmentBytes || 0) / 1024) }} KB)
               </template>
-              emailed to <code>{{ staplesJob?.printMeTo || 'print@printme.com' }}</code>.
-              IMAP will pick up the confirmation and show your release code here.
+              emailed to <code>{{ staplesJob?.printMeTo || 'staples@printme.com' }}</code>.
+              IMAP will pick up the confirmation and show your 8-digit retrieval code here.
             </p>
           </div>
 
           <div v-else-if="staplesReady && staplesJob" class="sl-staples-ready">
-            <p class="sl-staples-kicker">Release code</p>
+            <p class="sl-staples-kicker">8-digit retrieval code</p>
             <p class="sl-staples-code">{{ staplesJob.releaseCode }}</p>
-            <img
-              v-if="staplesJob.qrDataUrl"
-              :src="staplesJob.qrDataUrl"
-              alt="QR code for Staples PrintMe release code"
-              class="sl-staples-qr"
-            >
             <p class="sl-staples-help">
-              At a Staples PrintMe kiosk, enter this code (or scan the QR). Codes usually expire in about 24 hours.
+              At a Staples self-service printer, choose Print, enter this code, then pick color/B&amp;W and pay at the machine.
+              Codes usually expire in about 24 hours.
             </p>
             <div class="sl-staples-actions">
               <button type="button" class="btn primary" @click="copyCode">
@@ -389,19 +383,11 @@ onBeforeUnmount(() => stopPoll())
 }
 .sl-staples-code {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
-}
-.sl-staples-qr {
-  width: 180px;
-  height: 180px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  margin: 6px 0;
 }
 .sl-staples-actions {
   display: flex;
