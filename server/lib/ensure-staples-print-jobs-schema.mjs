@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS "staples_print_jobs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "created_by" uuid NOT NULL,
   "document_type" text DEFAULT 'service_log_sheet' NOT NULL,
+  "document_label" text,
+  "entity_id" uuid,
   "status" text DEFAULT 'queued' NOT NULL,
   "subject_token" text NOT NULL,
   "outbound_message_id" text,
@@ -10,6 +12,8 @@ CREATE TABLE IF NOT EXISTS "staples_print_jobs" (
   "reply_internet_message_id" text,
   "barcode_image" bytea,
   "barcode_content_type" text,
+  "pdf_data" bytea,
+  "pdf_filename" text,
   "error_message" text,
   "emailed_at" timestamp with time zone,
   "ready_at" timestamp with time zone,
@@ -53,11 +57,13 @@ CREATE INDEX IF NOT EXISTS "staples_print_jobs_document_type_idx"
  */
 export async function ensureStaplesPrintJobsSchema(pool) {
   const { rows } = await pool.query(`SELECT to_regclass('public.staples_print_jobs') AS reg`)
+  let created = false
   if (!rows[0]?.reg) {
     await pool.query(STAPLES_PRINT_JOBS_SQL)
     console.log('[migrate] ensured staples_print_jobs')
-    return true
+    created = true
   }
+  // Always apply additive columns — CREATE TABLE above may race older deploys.
   await pool.query(STAPLES_PRINT_JOBS_COLUMNS_SQL)
-  return false
+  return created
 }

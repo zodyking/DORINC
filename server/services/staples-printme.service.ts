@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { staplesPrintJobs, type StaplesPrintDocumentType } from '../db/schema'
 import { imapSyncState } from '../db/schema/email-inbox'
@@ -68,8 +68,20 @@ function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null
 }
 
+function canPreviewPdf(row: {
+  documentType: string
+  entityId?: string | null
+  pdfData?: Buffer | null
+  hasPdfStored?: boolean
+}): boolean {
+  if (row.hasPdfStored || (row.pdfData?.length ?? 0) > 0) return true
+  if (row.documentType === 'service_log_sheet') return true
+  if (row.documentType === 'invoice' && row.entityId) return true
+  return false
+}
+
 function toView(
-  row: typeof staplesPrintJobs.$inferSelect,
+  row: typeof staplesPrintJobs.$inferSelect & { hasPdfStored?: boolean },
   extras: { delivered?: boolean, attachmentFilename?: string | null, attachmentBytes?: number | null } = {},
 ): StaplesPrintJobView {
   const awaitingReply = row.status === 'queued'
@@ -78,6 +90,7 @@ function toView(
   const defaultFilename = row.documentType === 'invoice'
     ? 'invoice.pdf'
     : 'service-log-sheet.pdf'
+  const pdfBytes = row.pdfData?.length ?? null
   return {
     id: row.id,
     status: row.status,
@@ -94,9 +107,10 @@ function toView(
     printMeTo: STAPLES_PRINTME_TO,
     delivered: extras.delivered ?? Boolean(row.emailedAt && row.status !== 'failed'),
     attachmentFilename: extras.attachmentFilename ?? row.pdfFilename ?? defaultFilename,
-    attachmentBytes: extras.attachmentBytes ?? (row.pdfData?.length ?? null),
+    attachmentBytes: extras.attachmentBytes ?? pdfBytes,
     hasBarcode: Boolean(row.barcodeImage?.length) || Boolean(row.releaseCode),
-    hasPdf: Boolean(row.pdfData?.length),
+    // Preview when stored, or when we can regenerate the same document type.
+    hasPdf: canPreviewPdf(row),
     awaitingReply,
   }
 }
@@ -349,7 +363,30 @@ export async function listActiveStaplesPrintMeJobs(
   ]
   if (!opts.allUsers) filters.unshift(eq(staplesPrintJobs.createdBy, userId))
 
-  const rows = await db.select().from(staplesPrintJobs)
+  // Avoid selecting pdf_data / barcode_image bytea on the list path.
+  const rows = await db.select({
+    id: staplesPrintJobs.id,
+    createdBy: staplesPrintJobs.createdBy,
+    documentType: staplesPrintJobs.documentType,
+    documentLabel: staplesPrintJobs.documentLabel,
+    entityId: staplesPrintJobs.entityId,
+    status: staplesPrintJobs.status,
+    subjectToken: staplesPrintJobs.subjectToken,
+    outboundMessageId: staplesPrintJobs.outboundMessageId,
+    releaseCode: staplesPrintJobs.releaseCode,
+    replyInternetMessageId: staplesPrintJobs.replyInternetMessageId,
+    barcodeContentType: staplesPrintJobs.barcodeContentType,
+    pdfFilename: staplesPrintJobs.pdfFilename,
+    errorMessage: staplesPrintJobs.errorMessage,
+    emailedAt: staplesPrintJobs.emailedAt,
+    readyAt: staplesPrintJobs.readyAt,
+    expiresAt: staplesPrintJobs.expiresAt,
+    dismissedAt: staplesPrintJobs.dismissedAt,
+    createdAt: staplesPrintJobs.createdAt,
+    updatedAt: staplesPrintJobs.updatedAt,
+    hasPdfStored: sql<boolean>`(${staplesPrintJobs.pdfData} is not null)`.mapWith(Boolean),
+    hasBarcodeStored: sql<boolean>`(${staplesPrintJobs.barcodeImage} is not null)`.mapWith(Boolean),
+  }).from(staplesPrintJobs)
     .where(and(...filters))
     .orderBy(desc(staplesPrintJobs.createdAt))
     .limit(40)
@@ -357,10 +394,15 @@ export async function listActiveStaplesPrintMeJobs(
   const views: StaplesPrintJobView[] = []
   let awaiting = false
   for (const row of rows) {
-    const next = await maybeExpireJob(db, row)
+    const asSelect = {
+      ...row,
+      barcodeImage: row.hasBarcodeStored ? Buffer.from([1]) : null,
+      pdfData: row.hasPdfStored ? Buffer.from([1]) : null,
+    } as typeof staplesPrintJobs.$inferSelect & { hasPdfStored: boolean }
+    const next = await maybeExpireJob(db, asSelect)
     if (!ACTIVE_STATUSES.includes(next.status as typeof ACTIVE_STATUSES[number])) continue
     if (next.dismissedAt) continue
-    const view = toView(next)
+    const view = toView({ ...next, hasPdfStored: row.hasPdfStored })
     if (view.awaitingReply) awaiting = true
     views.push(view)
   }
@@ -449,13 +491,31 @@ export async function getStaplesPrintMePdf(
   if (row.createdBy !== userId && !opts.allowAdminAll) {
     throw new StaplesPrintMeServiceError('FORBIDDEN', 'This print job belongs to another user')
   }
-  if (!row.pdfData?.length) {
-    throw new StaplesPrintMeServiceError('NOT_FOUND', 'PDF is not available for this print job')
+
+  if (row.pdfData?.length) {
+    return {
+      contentType: 'application/pdf',
+      body: row.pdfData,
+      filename: row.pdfFilename || (row.documentType === 'invoice' ? 'invoice.pdf' : 'service-log-sheet.pdf'),
+    }
   }
+
+  // Older jobs (pre pdf_data column) — regenerate and backfill for preview.
+  const rendered = await renderPrintPdf(
+    db,
+    row.documentType as StaplesPrintDocumentType,
+    row.entityId,
+  )
+  await db.update(staplesPrintJobs).set({
+    pdfData: rendered.pdf,
+    pdfFilename: rendered.filename,
+    documentLabel: row.documentLabel || rendered.documentLabel,
+    updatedAt: new Date(),
+  }).where(eq(staplesPrintJobs.id, row.id))
 
   return {
     contentType: 'application/pdf',
-    body: row.pdfData,
-    filename: row.pdfFilename || (row.documentType === 'invoice' ? 'invoice.pdf' : 'service-log-sheet.pdf'),
+    body: rendered.pdf,
+    filename: rendered.filename,
   }
 }
