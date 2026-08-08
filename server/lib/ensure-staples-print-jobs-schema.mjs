@@ -35,8 +35,16 @@ const STAPLES_PRINT_JOBS_COLUMNS_SQL = `
 ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "barcode_image" bytea;
 ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "barcode_content_type" text;
 ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "dismissed_at" timestamp with time zone;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "pdf_data" bytea;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "pdf_filename" text;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "entity_id" uuid;
+ALTER TABLE "staples_print_jobs" ADD COLUMN IF NOT EXISTS "document_label" text;
 CREATE INDEX IF NOT EXISTS "staples_print_jobs_dismissed_idx"
   ON "staples_print_jobs" USING btree ("dismissed_at");
+CREATE INDEX IF NOT EXISTS "staples_print_jobs_entity_idx"
+  ON "staples_print_jobs" USING btree ("document_type", "entity_id");
+CREATE INDEX IF NOT EXISTS "staples_print_jobs_document_type_idx"
+  ON "staples_print_jobs" USING btree ("document_type");
 `.trim()
 
 /**

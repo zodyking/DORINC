@@ -1,17 +1,20 @@
 import { randomBytes } from 'node:crypto'
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { staplesPrintJobs } from '../db/schema'
+import { staplesPrintJobs, type StaplesPrintDocumentType } from '../db/schema'
 import { imapSyncState } from '../db/schema/email-inbox'
 import { workerJobs } from '../db/schema/jobs'
 import { getSmtpConfig } from './app-config.service'
+import { previewInvoicePdf, InvoicePdfServiceError } from './invoice-pdf.service'
 import { renderServiceLogSheetPdf } from './service-log-sheet.service'
 import { sendNotificationMail } from '../mail/mailer'
 import { enqueueJob } from './jobs.service'
 import {
   STAPLES_PRINTME_CODE_TTL_MS,
   STAPLES_PRINTME_IMAP_POLL_MS,
+  STAPLES_PRINTME_INVOICE_SUBJECT_PREFIX,
   STAPLES_PRINTME_LOCATOR_URL,
+  STAPLES_PRINTME_SUBJECT_PREFIX,
   STAPLES_PRINTME_TO,
   buildCode128Svg,
   buildPrintMeMailPayload,
@@ -30,6 +33,9 @@ export class StaplesPrintMeServiceError extends Error {
 export interface StaplesPrintJobView {
   id: string
   status: string
+  documentType: string
+  documentLabel: string | null
+  entityId: string | null
   releaseCode: string | null
   errorMessage: string | null
   locatorUrl: string
@@ -42,10 +48,16 @@ export interface StaplesPrintJobView {
   attachmentFilename: string | null
   attachmentBytes: number | null
   hasBarcode: boolean
+  hasPdf: boolean
   awaitingReply: boolean
 }
 
-/** Shown on Service Logs until the user requests removal (soft-dismiss). */
+export interface StartStaplesPrintMeOptions {
+  documentType?: StaplesPrintDocumentType
+  entityId?: string | null
+}
+
+/** Shown until the user requests removal (soft-dismiss). */
 const ACTIVE_STATUSES = ['queued', 'emailed', 'awaiting_reply', 'ready', 'expired', 'failed'] as const
 
 function newSubjectToken(): string {
@@ -63,9 +75,15 @@ function toView(
   const awaitingReply = row.status === 'queued'
     || row.status === 'emailed'
     || row.status === 'awaiting_reply'
+  const defaultFilename = row.documentType === 'invoice'
+    ? 'invoice.pdf'
+    : 'service-log-sheet.pdf'
   return {
     id: row.id,
     status: row.status,
+    documentType: row.documentType,
+    documentLabel: row.documentLabel,
+    entityId: row.entityId,
     releaseCode: row.releaseCode,
     errorMessage: row.errorMessage,
     locatorUrl: STAPLES_PRINTME_LOCATOR_URL,
@@ -75,9 +93,10 @@ function toView(
     createdAt: row.createdAt.toISOString(),
     printMeTo: STAPLES_PRINTME_TO,
     delivered: extras.delivered ?? Boolean(row.emailedAt && row.status !== 'failed'),
-    attachmentFilename: extras.attachmentFilename ?? 'service-log-sheet.pdf',
-    attachmentBytes: extras.attachmentBytes ?? null,
+    attachmentFilename: extras.attachmentFilename ?? row.pdfFilename ?? defaultFilename,
+    attachmentBytes: extras.attachmentBytes ?? (row.pdfData?.length ?? null),
     hasBarcode: Boolean(row.barcodeImage?.length) || Boolean(row.releaseCode),
+    hasPdf: Boolean(row.pdfData?.length),
     awaitingReply,
   }
 }
@@ -129,11 +148,61 @@ async function enqueueImapIfIdle(
   return true
 }
 
-/** Email the blank service log sheet PDF to Staples PrintMe and await the release-code reply via IMAP. */
+async function renderPrintPdf(
+  db: Db,
+  documentType: StaplesPrintDocumentType,
+  entityId?: string | null,
+): Promise<{ pdf: Buffer, filename: string, documentLabel: string, subjectPrefix: string }> {
+  if (documentType === 'invoice') {
+    if (!entityId) {
+      throw new StaplesPrintMeServiceError('PDF_FAILED', 'Invoice id is required for Staples invoice print')
+    }
+    try {
+      const preview = await previewInvoicePdf(db, entityId)
+      return {
+        pdf: preview.pdf,
+        filename: preview.filename,
+        documentLabel: `Invoice ${preview.invoiceNumberFormatted}`,
+        subjectPrefix: STAPLES_PRINTME_INVOICE_SUBJECT_PREFIX,
+      }
+    }
+    catch (err) {
+      if (err instanceof InvoicePdfServiceError && err.code === 'NOT_FOUND') {
+        throw new StaplesPrintMeServiceError('NOT_FOUND', 'Invoice not found')
+      }
+      throw new StaplesPrintMeServiceError(
+        'PDF_FAILED',
+        err instanceof Error ? err.message : 'Could not render the invoice PDF',
+      )
+    }
+  }
+
+  try {
+    const pdf = await renderServiceLogSheetPdf(db)
+    return {
+      pdf,
+      filename: 'service-log-sheet.pdf',
+      documentLabel: 'Blank service log sheet',
+      subjectPrefix: STAPLES_PRINTME_SUBJECT_PREFIX,
+    }
+  }
+  catch (err) {
+    throw new StaplesPrintMeServiceError(
+      'PDF_FAILED',
+      err instanceof Error ? err.message : 'Could not render the service log sheet PDF',
+    )
+  }
+}
+
+/** Email a PDF to Staples PrintMe and await the release-code reply via IMAP. */
 export async function startStaplesPrintMeJob(
   db: Db,
   createdBy: string,
+  opts: StartStaplesPrintMeOptions = {},
 ): Promise<StaplesPrintJobView> {
+  const documentType: StaplesPrintDocumentType = opts.documentType ?? 'service_log_sheet'
+  const entityId = opts.entityId ?? null
+
   const smtp = getSmtpConfig()
   if (!smtp?.from || !smtp.host) {
     throw new StaplesPrintMeServiceError(
@@ -142,19 +211,15 @@ export async function startStaplesPrintMeJob(
     )
   }
 
-  let pdf: Buffer
-  try {
-    pdf = await renderServiceLogSheetPdf(db)
-  }
-  catch (err) {
-    throw new StaplesPrintMeServiceError(
-      'PDF_FAILED',
-      err instanceof Error ? err.message : 'Could not render the service log sheet PDF',
-    )
-  }
-
+  const rendered = await renderPrintPdf(db, documentType, entityId)
   const subjectToken = newSubjectToken()
-  const payload = buildPrintMeMailPayload({ token: subjectToken, pdf })
+  const payload = buildPrintMeMailPayload({
+    token: subjectToken,
+    pdf: rendered.pdf,
+    filename: rendered.filename,
+    subjectPrefix: rendered.subjectPrefix,
+    documentLabel: `${rendered.documentLabel} PDF`,
+  })
   if (!payload.ok || !payload.mail) {
     throw new StaplesPrintMeServiceError(
       'PDF_FAILED',
@@ -165,9 +230,13 @@ export async function startStaplesPrintMeJob(
   const now = new Date()
   const [job] = await db.insert(staplesPrintJobs).values({
     createdBy,
-    documentType: 'service_log_sheet',
+    documentType,
+    documentLabel: rendered.documentLabel,
+    entityId,
     status: 'queued',
     subjectToken,
+    pdfData: rendered.pdf,
+    pdfFilename: rendered.filename,
     createdAt: now,
     updatedAt: now,
   }).returning()
@@ -212,7 +281,7 @@ export async function startStaplesPrintMeJob(
     }
 
     console.info(
-      `[staples-printme] emailed PDF to=${payload.mail.to} bytes=${attachmentBytes} subject="${payload.mail.subject}" messageId=${outboundMessageId}`,
+      `[staples-printme] emailed PDF to=${payload.mail.to} bytes=${attachmentBytes} type=${documentType} subject="${payload.mail.subject}" messageId=${outboundMessageId}`,
     )
 
     const [updated] = await db.update(staplesPrintJobs).set({
@@ -275,7 +344,6 @@ export async function listActiveStaplesPrintMeJobs(
   opts: { nudgeImap?: boolean, allUsers?: boolean } = {},
 ): Promise<StaplesPrintJobView[]> {
   const filters = [
-    eq(staplesPrintJobs.documentType, 'service_log_sheet'),
     isNull(staplesPrintJobs.dismissedAt),
     inArray(staplesPrintJobs.status, [...ACTIVE_STATUSES]),
   ]
@@ -297,9 +365,6 @@ export async function listActiveStaplesPrintMeJobs(
     views.push(view)
   }
 
-  // Status polls must not enqueue a sync every few seconds — the general worker
-  // already runs maybeRunImapInboxSync on the PrintMe ~5s cadence while awaiting.
-  // Only nudge when the last sync is stale (e.g. worker lag).
   if (opts.nudgeImap && awaiting) {
     await enqueueImapIfIdle(db, { trigger: 'staples_printme_poll' }, {
       minIntervalMs: STAPLES_PRINTME_IMAP_POLL_MS,
@@ -317,7 +382,7 @@ export async function getLatestOpenStaplesPrintMeJob(
   return jobs[0] ?? null
 }
 
-/** Soft-remove an active Staples print order from the Service Logs page. */
+/** Soft-remove an active Staples print order from the Staples page. */
 export async function dismissStaplesPrintMeJob(
   db: Db,
   jobId: string,
@@ -370,5 +435,27 @@ export async function getStaplesPrintMeBarcode(
     contentType: 'image/svg+xml; charset=utf-8',
     body: svg,
     filename: `staples-release-${current.releaseCode}.svg`,
+  }
+}
+
+export async function getStaplesPrintMePdf(
+  db: Db,
+  jobId: string,
+  userId: string,
+  opts: { allowAdminAll?: boolean } = {},
+): Promise<{ contentType: string, body: Buffer, filename: string }> {
+  const [row] = await db.select().from(staplesPrintJobs).where(eq(staplesPrintJobs.id, jobId)).limit(1)
+  if (!row || row.dismissedAt) throw new StaplesPrintMeServiceError('NOT_FOUND', 'Print job not found')
+  if (row.createdBy !== userId && !opts.allowAdminAll) {
+    throw new StaplesPrintMeServiceError('FORBIDDEN', 'This print job belongs to another user')
+  }
+  if (!row.pdfData?.length) {
+    throw new StaplesPrintMeServiceError('NOT_FOUND', 'PDF is not available for this print job')
+  }
+
+  return {
+    contentType: 'application/pdf',
+    body: row.pdfData,
+    filename: row.pdfFilename || (row.documentType === 'invoice' ? 'invoice.pdf' : 'service-log-sheet.pdf'),
   }
 }
