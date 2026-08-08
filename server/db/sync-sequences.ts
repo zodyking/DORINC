@@ -37,20 +37,32 @@ function nextNumberFromSequence(state: SequenceState): number {
 }
 
 function nextNumberAfterMax(maxNum: number, floor: number): number {
-  return Math.max(maxNum, floor - 1) + 1
+  return maxNum < floor ? floor : maxNum + 1
+}
+
+/**
+ * Match migration 0046: never setval(0) (sequences have minvalue 1).
+ * When the table is below the schema floor, set the floor with is_called=false
+ * so the next nextval() returns the floor itself.
+ */
+export function sequenceSetvalArgs(maxNum: number, floor: number): { value: number, isCalled: boolean } {
+  if (maxNum < floor) return { value: floor, isCalled: false }
+  return { value: maxNum, isCalled: true }
 }
 
 /** Align sequence so the next nextval() returns MAX(column) + 1 (respecting schema floor). */
 function syncSequenceSql(sequenceName: NumberSequenceName, maxColumn: string, tableName: string) {
   const floor = SEQUENCE_FLOORS[sequenceName]
+  // Quote the sequence name as a literal — setval() needs a regclass, not a bound text param.
   return sql`
     SELECT setval(
-      ${sequenceName},
-      GREATEST(
-        COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0),
-        ${floor - 1}
-      ),
-      true
+      ${sql.raw(`'${sequenceName}'`)}::regclass,
+      CASE
+        WHEN COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0) < ${floor}
+        THEN ${floor}
+        ELSE (SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)})
+      END,
+      COALESCE((SELECT MAX(${sql.raw(maxColumn)}) FROM ${sql.raw(tableName)}), 0) < ${floor}
     ) AS setval
   `
 }
@@ -128,13 +140,18 @@ export async function syncServiceLogNumberSequence(db: Db): Promise<number> {
   return syncSequence(db, 'service_log_number_seq', maxColumn, tableName)
 }
 
+/** Realign estimate_number_seq with the highest stored estimate number. */
+export async function syncEstimateNumberSequence(db: Db): Promise<number> {
+  const { maxColumn, tableName } = SEQUENCE_TABLES.estimate_number_seq
+  return syncSequence(db, 'estimate_number_seq', maxColumn, tableName)
+}
+
 /** Realign PG sequences with current MAX() values after imports or manual inserts. */
 export async function syncNumberSequences(db: Db): Promise<SyncedSequences> {
-  const [invoiceNumber, serviceLogNumber, estimateNumber] = await Promise.all([
-    syncInvoiceNumberSequence(db),
-    syncServiceLogNumberSequence(db),
-    syncSequence(db, 'estimate_number_seq', SEQUENCE_TABLES.estimate_number_seq.maxColumn, SEQUENCE_TABLES.estimate_number_seq.tableName),
-  ])
+  // Sequential so one sequence error does not hide the others in Promise.all.
+  const invoiceNumber = await syncInvoiceNumberSequence(db)
+  const serviceLogNumber = await syncServiceLogNumberSequence(db)
+  const estimateNumber = await syncEstimateNumberSequence(db)
 
   return {
     invoiceNumber,
