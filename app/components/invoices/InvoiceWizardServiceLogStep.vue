@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Post-vehicle service log upload prompt (not a numbered wizard step).
+ * Invoice wizard Service log step (numbered when AI extraction is on).
  * Desktop: upload dropzone + live QR side by side.
  * Mobile: camera icon → 100dvh capture.
  */
@@ -99,7 +99,7 @@ watch(() => props.open, async (open) => {
   cameraOpen.value = false
   clearLocal()
   await loadTechnicians()
-  if (!isMobile.value && technicianId.value) {
+  if (!isMobile.value && technicianId.value && props.vehicleId) {
     void ensureQrSession()
   }
 })
@@ -107,7 +107,7 @@ watch(() => props.open, async (open) => {
 watch(technicianId, async (id, prev) => {
   if (!props.open || isMobile.value || !id || id === prev) return
   await cancelQr(false)
-  void ensureQrSession()
+  if (props.vehicleId) void ensureQrSession()
 })
 
 function clearLocal() {
@@ -168,12 +168,29 @@ async function buildQrDataUrl(url: string): Promise<string> {
 async function ensureQrSession() {
   if (!technicianId.value || isMobile.value || qrBusy.value || busy.value) return
   if (qrSessionId.value && (qrStatus.value === 'pending' || qrStatus.value === 'uploading')) return
+  if (!props.vehicleId) {
+    error.value = 'Select a vehicle before uploading a service log'
+    return
+  }
+  if (!props.customerId) {
+    error.value = 'Select a customer before uploading a service log'
+    return
+  }
 
   const seq = ++qrRequestSeq
   qrBusy.value = true
   error.value = ''
   try {
-    const invoiceId = await props.ensureDraft()
+    let invoiceId: string
+    try {
+      invoiceId = await props.ensureDraft()
+    }
+    catch (e: unknown) {
+      if (seq === qrRequestSeq) {
+        error.value = syncFetchErrorMessage(e, 'Could not save invoice draft for upload')
+      }
+      return
+    }
     if (seq !== qrRequestSeq) return
 
     const res = await $fetch<{
@@ -292,12 +309,23 @@ async function attachLocalUploads() {
     error.value = 'Select a vehicle before uploading a service log'
     return
   }
+  if (!props.customerId) {
+    error.value = 'Select a customer before uploading a service log'
+    return
+  }
 
   busy.value = true
   error.value = ''
   cameraOpen.value = false
   try {
-    const invoiceId = await props.ensureDraft()
+    let invoiceId: string
+    try {
+      invoiceId = await props.ensureDraft()
+    }
+    catch (e: unknown) {
+      error.value = syncFetchErrorMessage(e, 'Could not save invoice draft for upload')
+      return
+    }
     const created = await $fetch<{
       session: {
         id: string
@@ -377,187 +405,160 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="modal-scrim open inv-sl-scrim"
-      role="presentation"
-      @click.self="!busy && !cameraOpen && emit('back')"
-    >
-      <div
-        class="modal inv-sl-modal-sheet"
-        :class="{ 'inv-sl-modal-sheet--wide': !isMobile }"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="inv-sl-upload-title"
-        @click.stop
+  <div v-show="open" class="inv-sl-step">
+    <p class="inv-sl-kicker">Upload Service Log</p>
+    <h3>Speed Up This Invoice</h3>
+    <p class="sl-hint">
+      Upload photos or scan the QR code — AI can extract line items so invoicing goes faster.
+    </p>
+
+    <label class="fld">
+      <span>Technician</span>
+      <select v-model="technicianId" :disabled="techPending || busy || qrBusy">
+        <option disabled value="">
+          {{ techPending ? 'Loading…' : 'Select Technician' }}
+        </option>
+        <option v-for="t in technicians" :key="t.id" :value="t.id">
+          {{ t.name }}
+        </option>
+      </select>
+      <span class="help">
+        {{ techSource === 'mechanics'
+          ? 'Attributed to this mechanic on the log and team chat.'
+          : 'No mechanic accounts yet — picking from all staff.' }}
+      </span>
+    </label>
+
+    <p v-if="!vehicleId" class="help inv-sl-error" style="margin-top:12px;">
+      Select a vehicle on the previous step before uploading a service log.
+    </p>
+
+    <template v-else-if="isMobile">
+      <button
+        type="button"
+        class="inv-sl-cam-launch"
+        :disabled="busy"
+        @click="cameraOpen = true"
       >
-        <header class="inv-sl-modal-sheet__head">
-          <div>
-            <p class="inv-sl-kicker">Upload Service Log</p>
-            <h2 id="inv-sl-upload-title">Speed Up This Invoice</h2>
-            <p class="inv-sl-modal-sheet__sub">
-              Upload photos or scan the QR code — AI can extract line items so invoicing goes faster.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="btn sm"
-            aria-label="Close"
-            :disabled="busy"
-            @click="emit('back')"
-          >
-            ✕
-          </button>
-        </header>
+        <span class="inv-sl-cam-launch__icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+            <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
+            <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
+            <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="inv-sl-cam-launch__title">
+          {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
+        </span>
+        <span class="inv-sl-cam-launch__sub">Front and back of the paper log</span>
+      </button>
+    </template>
+    <template v-else>
+      <p class="inv-sl-choice-heading">Upload or scan QR code</p>
+      <div class="inv-sl-split" role="group" aria-label="Upload or scan QR code">
+        <label class="inv-sl-drop inv-sl-drop--neat">
+          <input type="file" accept="image/*" multiple @change="onDesktopFiles">
+          <span class="inv-sl-drop__icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
+              <rect x="8" y="10" width="32" height="28" rx="6" stroke="#6366f1" stroke-width="2.2" />
+              <path d="M16 30l6-7 5 5 3-3 6 5" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="19" cy="18" r="2.5" fill="#6366f1" />
+            </svg>
+          </span>
+          <b>Upload front &amp; back</b>
+          <small>Max 2 photos — drop or click to browse</small>
+        </label>
 
-        <div class="inv-sl-modal-sheet__body">
-          <label class="fld">
-            <span>Technician</span>
-            <select v-model="technicianId" :disabled="techPending || busy || qrBusy">
-              <option disabled value="">
-                {{ techPending ? 'Loading…' : 'Select Technician' }}
-              </option>
-              <option v-for="t in technicians" :key="t.id" :value="t.id">
-                {{ t.name }}
-              </option>
-            </select>
-            <span class="help">
-              {{ techSource === 'mechanics'
-                ? 'Attributed to this mechanic on the log and team chat.'
-                : 'No mechanic accounts yet — picking from all staff.' }}
-            </span>
-          </label>
-
-          <template v-if="isMobile">
+        <div class="inv-sl-qr-panel">
+          <template v-if="qrDataUrl">
+            <img :src="qrDataUrl" alt="QR code for phone upload" class="inv-sl-qr-panel__img">
+            <b>Scan with phone</b>
+            <small>
+              Status:
+              <strong>{{ qrStatus || 'waiting' }}</strong>
+            </small>
             <button
               type="button"
-              class="inv-sl-cam-launch"
-              :disabled="busy"
-              @click="cameraOpen = true"
+              class="btn sm"
+              :disabled="qrBusy || busy"
+              @click="cancelQr(false).then(() => ensureQrSession())"
             >
-              <span class="inv-sl-cam-launch__icon" aria-hidden="true">
-                <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
-                  <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
-                  <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
-                  <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </span>
-              <span class="inv-sl-cam-launch__title">
-                {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
-              </span>
-              <span class="inv-sl-cam-launch__sub">Front and back of the paper log</span>
+              Refresh QR
             </button>
+          </template>
+          <template v-else-if="qrBusy || techPending">
+            <span class="inv-sl-qr-panel__spinner" aria-hidden="true" />
+            <b>Preparing QR…</b>
+            <small>Ready in a moment</small>
           </template>
           <template v-else>
-            <p class="inv-sl-choice-heading">Upload or scan QR code</p>
-            <div class="inv-sl-split" role="group" aria-label="Upload or scan QR code">
-              <label class="inv-sl-drop inv-sl-drop--neat">
-                <input type="file" accept="image/*" multiple @change="onDesktopFiles">
-                <span class="inv-sl-drop__icon" aria-hidden="true">
-                  <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
-                    <rect x="8" y="10" width="32" height="28" rx="6" stroke="#6366f1" stroke-width="2.2" />
-                    <path d="M16 30l6-7 5 5 3-3 6 5" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-                    <circle cx="19" cy="18" r="2.5" fill="#6366f1" />
-                  </svg>
-                </span>
-                <b>Upload front &amp; back</b>
-                <small>Max 2 photos — drop or click to browse</small>
-              </label>
-
-              <div class="inv-sl-qr-panel">
-                <template v-if="qrDataUrl">
-                  <img :src="qrDataUrl" alt="QR code for phone upload" class="inv-sl-qr-panel__img">
-                  <b>Scan with phone</b>
-                  <small>
-                    Status:
-                    <strong>{{ qrStatus || 'waiting' }}</strong>
-                  </small>
-                  <button
-                    type="button"
-                    class="btn sm"
-                    :disabled="qrBusy || busy"
-                    @click="cancelQr(false).then(() => ensureQrSession())"
-                  >
-                    Refresh QR
-                  </button>
-                </template>
-                <template v-else-if="qrBusy || techPending">
-                  <span class="inv-sl-qr-panel__spinner" aria-hidden="true" />
-                  <b>Preparing QR…</b>
-                  <small>Ready in a moment</small>
-                </template>
-                <template v-else>
-                  <b>QR unavailable</b>
-                  <small>Select a technician, then try again.</small>
-                  <button
-                    type="button"
-                    class="btn sm primary"
-                    :disabled="!technicianId || qrBusy || busy"
-                    @click="ensureQrSession"
-                  >
-                    Show QR Code
-                  </button>
-                </template>
-              </div>
-            </div>
+            <b>QR unavailable</b>
+            <small>Select a technician, then try again.</small>
+            <button
+              type="button"
+              class="btn sm primary"
+              :disabled="!technicianId || !vehicleId || qrBusy || busy"
+              @click="ensureQrSession"
+            >
+              Show QR Code
+            </button>
           </template>
-
-          <div v-if="localPreviews.length" class="inv-sl-thumbs">
-            <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
-              <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-              <button
-                type="button"
-                class="inv-sl-thumb__x"
-                :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-                @click="removePreview(p.id)"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-
-          <div v-if="localPreviews.length" class="inv-sl-attach-row">
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="busy || !technicianId"
-              @click="attachLocalUploads"
-            >
-              {{ busy ? 'Attaching…' : 'Attach Photos' }}
-            </button>
-            <button
-              v-if="serviceLogId"
-              type="button"
-              class="btn"
-              :disabled="busy"
-              @click="openExtract"
-            >
-              Extract Line Items
-            </button>
-          </div>
-
-          <p v-if="error" class="help inv-sl-error">{{ error }}</p>
         </div>
+      </div>
+    </template>
 
-        <footer class="inv-sl-modal-sheet__foot">
-          <button type="button" class="btn" :disabled="busy" @click="emit('back')">
-            Back
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="{ primary: Boolean(serviceLogId) }"
-            :disabled="busy"
-            @click="continueWithoutPhotos"
-          >
-            {{ serviceLogId ? 'Continue' : 'Skip for Now' }}
-          </button>
-        </footer>
+    <div v-if="localPreviews.length" class="inv-sl-thumbs">
+      <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
+        <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+        <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
+        <button
+          type="button"
+          class="inv-sl-thumb__x"
+          :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
+          @click="removePreview(p.id)"
+        >
+          ×
+        </button>
       </div>
     </div>
-  </Teleport>
+
+    <div v-if="localPreviews.length" class="inv-sl-attach-row">
+      <button
+        type="button"
+        class="btn primary"
+        :disabled="busy || !technicianId || !vehicleId"
+        @click="attachLocalUploads"
+      >
+        {{ busy ? 'Attaching…' : 'Attach Photos' }}
+      </button>
+      <button
+        v-if="serviceLogId"
+        type="button"
+        class="btn"
+        :disabled="busy"
+        @click="openExtract"
+      >
+        Extract Line Items
+      </button>
+    </div>
+
+    <p v-if="error" class="help inv-sl-error">{{ error }}</p>
+
+    <div class="sl-foot">
+      <button type="button" class="btn" :disabled="busy" @click="emit('back')">
+        Back
+      </button>
+      <button
+        type="button"
+        class="btn"
+        :class="{ primary: Boolean(serviceLogId) }"
+        :disabled="busy"
+        @click="continueWithoutPhotos"
+      >
+        {{ serviceLogId ? 'Continue' : 'Skip for Now' }}
+      </button>
+    </div>
+  </div>
 
   <ClientOnly>
     <ServiceLogDocumentCamera

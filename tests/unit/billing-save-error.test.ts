@@ -14,6 +14,15 @@ describe('billing save API errors', () => {
     expect(syncFetchErrorMessage(err, 'Save failed')).toBe('Billing settings row was not updated')
   })
 
+  it('ignores generic Server Error status text in favor of fallback', () => {
+    expect(syncFetchErrorMessage({ message: 'Server Error' }, 'Could not start QR upload'))
+      .toBe('Could not start QR upload')
+    expect(syncFetchErrorMessage({
+      message: 'Server Error',
+      data: { message: 'Vehicle not found — go back and pick a vehicle' },
+    }, 'Could not start QR upload')).toBe('Vehicle not found — go back and pick a vehicle')
+  })
+
   it('reads validation issues nested under details', () => {
     const payload = {
       message: 'Request validation failed',

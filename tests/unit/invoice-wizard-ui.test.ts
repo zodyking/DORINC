@@ -17,7 +17,7 @@ describe('invoice-wizard-ui', () => {
     trim: null,
   }
 
-  it('shows step hints from wizard data', () => {
+  it('shows step hints from wizard data (5-step, no service log)', () => {
     const line = createEmptyLine()
     line.description = 'Labor'
     const lines: DraftLine[] = [line]
@@ -65,13 +65,40 @@ describe('invoice-wizard-ui', () => {
     })).toBe('Saved Jul 15, 09:45 PM')
   })
 
+  it('shows service log hint when 6-step upload flow is active', () => {
+    expect(invoiceWizardStepHint({
+      step: 3,
+      includeServiceLog: true,
+      serviceLogLabel: 'Attached',
+    })).toBe('Attached')
+
+    expect(invoiceWizardStepHint({
+      step: 4,
+      includeServiceLog: true,
+      invoiceDate: '2026-07-15',
+    })).toMatch(/Jul 15, 2026/)
+
+    expect(invoiceWizardStepHint({
+      step: 6,
+      includeServiceLog: true,
+      dirty: true,
+      invoiceId: 'inv-1',
+    })).toBe('Unsaved')
+  })
+
   it('marks review hint pending when unsaved', () => {
     expect(invoiceWizardStepHintClass(5, { step: 5, dirty: true, invoiceId: 'inv-1' })).toBe('pending')
     expect(invoiceWizardStepHintClass(5, { step: 5, dirty: false, invoiceId: 'inv-1' })).toBe('saved')
+    expect(invoiceWizardStepHintClass(6, {
+      step: 6,
+      includeServiceLog: true,
+      dirty: true,
+      invoiceId: 'inv-1',
+    })).toBe('pending')
     expect(invoiceWizardStepHintClass(1, { step: 1 })).toBe('')
   })
 
-  it('offers service log upload interstitial only when extraction is on', () => {
+  it('offers service log upload step only when extraction is on', () => {
     expect(shouldOfferInvoiceWizardServiceLogUpload(null)).toBe(false)
     expect(shouldOfferInvoiceWizardServiceLogUpload({
       aiEnabled: false,

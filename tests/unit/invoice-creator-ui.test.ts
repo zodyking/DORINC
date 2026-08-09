@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildInvoiceLinePatchBody,
+  buildInvoiceWizardSteps,
   previewLineAmount,
   previewLinesSubtotal,
   previewLineTypeBreakdown,
@@ -25,6 +26,17 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     expect(wizardStateLabel(1)).toBe('Step 1 of 5 — Customer')
     expect(wizardStateLabel(3)).toBe('Step 3 of 5 — Dates & terms')
     expect(wizardStateLabel(5)).toBe('Step 5 of 5 — Review')
+    expect(wizardStateLabel(3, true)).toBe('Step 3 of 6 — Service log')
+    expect(wizardStateLabel(6, true)).toBe('Step 6 of 6 — Review')
+  })
+
+  it('builds optional service log step into the wizard', () => {
+    expect(buildInvoiceWizardSteps(false).map(s => s.key)).toEqual([
+      'customer', 'vehicle', 'dates', 'lines', 'review',
+    ])
+    expect(buildInvoiceWizardSteps(true).map(s => s.key)).toEqual([
+      'customer', 'vehicle', 'service_log', 'dates', 'lines', 'review',
+    ])
   })
 
   it('formats invoice numbers like the mockup', () => {
@@ -40,6 +52,9 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
     expect(canProceedWizardStep(2, { customerId: 'c1', vehicleId: '', lines: [] })).toBe(true)
     expect(canProceedWizardStep(3, { customerId: 'c1', vehicleId: 'v1', lines: [] })).toBe(true)
     expect(canProceedWizardStep(4, { customerId: 'c1', vehicleId: 'v1', lines: [line] })).toBe(true)
+    expect(canProceedWizardStep(5, { customerId: 'c1', vehicleId: 'v1', lines: [line] }, {
+      includeServiceLog: true,
+    })).toBe(true)
   })
 
   it('previews line amounts and subtotals while typing', () => {

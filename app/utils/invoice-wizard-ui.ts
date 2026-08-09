@@ -1,4 +1,5 @@
 import {
+  buildInvoiceWizardSteps,
   isDraftLineValid,
   previewDraftTotals,
   type DraftLine,
@@ -8,8 +9,10 @@ import { vehicleTag, type VehicleDisplay } from './vehicles-ui'
 
 export interface InvoiceWizardStepHintInput {
   step: number
+  includeServiceLog?: boolean
   customerName?: string | null
   vehicle?: VehicleDisplay | null
+  serviceLogLabel?: string | null
   invoiceDate?: string | null
   lines?: DraftLine[]
   taxExempt?: boolean
@@ -20,22 +23,27 @@ export interface InvoiceWizardStepHintInput {
 }
 
 export function invoiceWizardStepHint(input: InvoiceWizardStepHintInput): string {
-  switch (input.step) {
-    case 1:
+  const def = buildInvoiceWizardSteps(input.includeServiceLog ?? false)
+    .find(s => s.n === input.step)
+
+  switch (def?.key) {
+    case 'customer':
       return input.customerName?.trim() ?? ''
-    case 2:
+    case 'vehicle':
       return input.vehicle ? vehicleTag(input.vehicle) : ''
-    case 3:
+    case 'service_log':
+      return input.serviceLogLabel?.trim() ?? ''
+    case 'dates':
       if (!input.invoiceDate?.trim()) return ''
       return invoiceDateDisplay(input.invoiceDate)
-    case 4: {
+    case 'lines': {
       const hasLines = (input.lines ?? []).some(isDraftLineValid)
       if (!hasLines) return ''
       const total = input.savedTotal
         ?? previewDraftTotals(input.lines ?? [], { taxExempt: input.taxExempt }).total
       return moneyDisplay(total)
     }
-    case 5:
+    case 'review':
       if (input.dirty || !input.invoiceId) return 'Unsaved'
       return input.savedAtLabel?.trim() || 'Saved'
     default:
@@ -44,12 +52,14 @@ export function invoiceWizardStepHint(input: InvoiceWizardStepHintInput): string
 }
 
 export function invoiceWizardStepHintClass(step: number, input: InvoiceWizardStepHintInput): string {
-  if (step !== 5) return ''
+  const def = buildInvoiceWizardSteps(input.includeServiceLog ?? false)
+    .find(s => s.n === step)
+  if (def?.key !== 'review') return ''
   if (input.dirty || !input.invoiceId) return 'pending'
   return 'saved'
 }
 
-/** When false, invoice wizard skips the post-vehicle service log upload interstitial. */
+/** When false, invoice wizard skips the service log upload step. */
 export function shouldOfferInvoiceWizardServiceLogUpload(flags: {
   aiEnabled?: boolean | null
   serviceLogExtractionEnabled?: boolean | null

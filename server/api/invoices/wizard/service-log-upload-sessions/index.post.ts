@@ -3,6 +3,7 @@ import {
   createServiceLogUploadSession,
   ServiceLogUploadServiceError,
 } from '../../../../services/service-log-upload.service'
+import { ServiceLogsServiceError } from '../../../../services/service-logs.service'
 import { apiError } from '../../../../utils/api-error'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateBody } from '../../../../utils/validate'
@@ -49,6 +50,22 @@ export default defineEventHandler(async (event) => {
       }
       if (err.code === 'INVOICE_NOT_FOUND') throw apiError(event, 'NOT_FOUND', 'Invoice not found')
     }
-    throw err
+    if (err instanceof ServiceLogsServiceError) {
+      if (err.code === 'CUSTOMER_NOT_FOUND') {
+        throw apiError(event, 'VALIDATION_ERROR', 'Customer not found — go back and pick a customer')
+      }
+      if (err.code === 'VEHICLE_NOT_FOUND') {
+        throw apiError(event, 'VALIDATION_ERROR', 'Vehicle not found — go back and pick a vehicle')
+      }
+      if (err.code === 'VEHICLE_CUSTOMER_MISMATCH') {
+        throw apiError(event, 'VALIDATION_ERROR', 'That vehicle does not belong to the selected customer')
+      }
+    }
+    console.error('[service-log-upload-sessions] create failed:', err)
+    throw apiError(
+      event,
+      'INTERNAL_ERROR',
+      'Could not start service log upload — check customer, vehicle, and technician, then try again',
+    )
   }
 })
