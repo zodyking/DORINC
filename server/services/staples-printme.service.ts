@@ -20,6 +20,7 @@ import {
   buildCode128Svg,
   buildPrintMeMailPayload,
 } from '../../shared/staples-printme'
+import { deleteStaplesPrintMeReplyFromInbox } from './staples-printme-imap-delete.service'
 
 export class StaplesPrintMeServiceError extends Error {
   constructor(
@@ -474,6 +475,13 @@ export async function dismissStaplesPrintMeJob(
     dismissedAt: now,
     updatedAt: now,
   }).where(eq(staplesPrintJobs.id, jobId)).returning()
+
+  // Remove the PrintMe confirmation from the IMAP inbox when we know its Message-ID.
+  // Best-effort — dismiss still succeeds if IMAP delete fails.
+  const replyId = updated?.replyInternetMessageId ?? row.replyInternetMessageId
+  if (replyId) {
+    await deleteStaplesPrintMeReplyFromInbox(db, replyId)
+  }
 
   return toView(updated!)
 }
