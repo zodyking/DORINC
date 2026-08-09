@@ -4,6 +4,7 @@ import {
   SIMILAR_DELETION_REQUEST_LOOKBACK_MS,
   deletionReasonsLookSimilar,
   findSimilarDeletionRequest,
+  hardDeclineDeletionContext,
   isRetryableSusanSkip,
   looksLikeWeakDeletionReason,
   normalizeDeletionReasonForCompare,
@@ -66,7 +67,7 @@ describe('ai administrator helpers', () => {
     )).toBe(false)
   })
 
-  it('finds repeated same-record and similar-reason deletion requests', () => {
+  it('detects related prior requests as context only (not an auto-reject rule)', () => {
     const history = [
       {
         id: '11111111-1111-4111-8111-111111111111',
@@ -103,6 +104,32 @@ describe('ai administrator helpers', () => {
       entityId: '55555555-5555-4555-8555-555555555555',
       reason: 'duplicate draft created for wrong customer again',
     }, history)).toBeNull()
+  })
+
+  it('hard-declines sent, paid, or billing-linked records', () => {
+    expect(hardDeclineDeletionContext({
+      kind: 'invoice',
+      sentToCustomer: true,
+      paid: false,
+    })).toMatch(/already sent to the customer/i)
+
+    expect(hardDeclineDeletionContext({
+      kind: 'invoice',
+      sentToCustomer: false,
+      paid: true,
+    })).toMatch(/payment/i)
+
+    expect(hardDeclineDeletionContext({
+      kind: 'service_log',
+      linkedToInvoice: true,
+    })).toMatch(/linked to an invoice/i)
+
+    expect(hardDeclineDeletionContext({
+      kind: 'invoice',
+      status: 'draft',
+      sentToCustomer: false,
+      paid: false,
+    })).toBeNull()
   })
 
   it('uses the AI Administrator model override', () => {

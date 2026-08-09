@@ -35,7 +35,7 @@ export const DELETION_REASON_WEAK_MESSAGE
 
 export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
 
-/** How far back Susan looks for similar/repeated deletion requests from the same user. */
+/** How far back Susan loads prior requests as review context (not an auto-reject window). */
 export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 60 * 60 * 1000
 
 export const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
@@ -223,7 +223,7 @@ async function loadSubmitterDeletionHistory(
   }))
 }
 
-/** Deterministic repeat/similar match from the same submitter. */
+/** Deterministic repeat/similar match from the same submitter (context only — not an auto-reject). */
 export function findSimilarDeletionRequest(
   current: {
     entityType: DeletionEntityType
@@ -261,6 +261,24 @@ export function findSimilarDeletionRequest(
         kind: 'similar_reason',
       }
     }
+  }
+  return null
+}
+
+/**
+ * Hard declines based on record state — not on whether the user asked before.
+ * Sent / paid / billing-linked records must not be auto-deleted.
+ */
+export function hardDeclineDeletionContext(ctx: Record<string, unknown> | null | undefined): string | null {
+  if (!ctx || ctx.missing === true) return null
+  if (ctx.paid === true) {
+    return 'Rejected — this record has payment activity and should not be deleted.'
+  }
+  if (ctx.sentToCustomer === true) {
+    return 'Rejected — this invoice was already sent to the customer. Edit or void it instead of deleting.'
+  }
+  if (ctx.linkedToInvoice === true) {
+    return 'Rejected — this service log is linked to an invoice/billing record and should not be deleted.'
   }
   return null
 }
@@ -714,18 +732,17 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
   const susanId = await ensureSusanSystemUser(db)
   const submitter = await loadSubmitterContext(db, req.submittedBy)
   const history = await loadSubmitterDeletionHistory(db, req.submittedBy, { excludeRequestId: req.id })
+  // Prior requests are context for the model only — never an automatic reject.
   const similar = findSimilarDeletionRequest(
     { entityType: req.entityType, entityId: req.entityId, reason: req.reason },
     history,
   )
 
-  // Deterministic: repeated / near-duplicate requests from the same user are rejected.
-  if (similar) {
-    const note = similar.kind === 'same_record'
-      ? 'Rejected — you already submitted a deletion request for this same record recently. Ask a manager if it still needs to be removed.'
-      : 'Rejected — this is too similar to another deletion request you submitted recently. Give a distinct business reason for a different cleanup, or ask a manager.'
+  // Hard decline: already sent / paid / billing-linked — independent of repeat history.
+  const hardDecline = hardDeclineDeletionContext(entityContext as Record<string, unknown>)
+  if (hardDecline) {
     try {
-      await rejectDeletionRequest(db, requestId, susanId, note)
+      await rejectDeletionRequest(db, requestId, susanId, hardDecline)
       await logSusanDeletionAudit({
         action: 'deletion_requests.reject',
         entityType: req.entityType,
@@ -735,11 +752,11 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
           requestId,
           entityType: req.entityType,
           entityLabel: req.entityLabel,
-          reviewReason: note,
-          rule: similar.kind,
+          reviewReason: hardDecline,
+          rule: 'record_state',
         },
       })
-      return { decision: 'reject', note }
+      return { decision: 'reject', note: hardDecline }
     }
     catch (err) {
       if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
@@ -801,15 +818,16 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
 
   const system = [
     `You are ${AI_ASSISTANT_NAME}, AI Administrator for ${BRAND_NAME}.`,
-    'Review staff deletion requests. Be conservative and require a clear why.',
-    'Reject vague reasons that only say testing happened (e.g. "test system") without explaining the purpose or mistake.',
-    'Accept reasons that show understanding, such as testing to verify features and now cleaning up the leftover record.',
-    'Weigh the submitter account type with the reason and record type (mechanic/training mistakes, admin cleanup, accountant/billing caution).',
-    'REJECT similar or repeated deletion requests from the same user (same record or near-duplicate reason for the same entity type).',
-    'Prefer REJECT when an edit can fix the problem (wrong field, typo, wrong notes) — tell them to edit instead.',
-    'Prefer REJECT when the record was already sent to a customer, paid, linked to billing, or clearly still in use — unless the reason proves a true duplicate/mistake that cannot be fixed by edit.',
-    'APPROVE only for clear junk/duplicate/test leftovers or irreversible mistakes where deletion is the right cleanup and the reason explains why.',
-    'Write a concise review note (1–2 short sentences, no fluff).',
+    'Review staff deletion requests on the merits of the reason and the record state.',
+    'Do NOT reject solely because the same user asked before — admins and developers often resubmit legitimate cleanup requests.',
+    'Judge whether the reason sounds truthful and specific (why this record exists / why deletion is the right cleanup).',
+    'Reject vague filler (e.g. "test system") that does not explain the purpose.',
+    'Accept clear reasons such as testing features and now removing a leftover draft, duplicate draft, wrong customer, training leftover, etc.',
+    'Weigh the submitter account type with the reason (mechanic/training, admin/dev cleanup, accountant/billing caution).',
+    'REJECT when the invoice was already sent to a customer, has payment activity, or a service log is linked to billing — tell them to edit or void instead.',
+    'Prefer REJECT when a simple edit can fix the problem (wrong field, typo, wrong notes).',
+    'APPROVE unsent drafts / junk / duplicate leftovers when the reason is truthful and deletion is appropriate cleanup.',
+    'Write a concise review note (1–2 short sentences, no fluff). Explain the record-state or reason issue — never "because you asked before".',
     'Return JSON only: { "decision": "approve" | "reject", "note": "..." }.',
   ].join(' ')
 
@@ -821,9 +839,12 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
       ? `Submitter: ${submitter.name || 'staff'} · account type ${submitter.accountTypeLabel} (${submitter.accountTypeKey})`
       : 'Submitter: unknown',
     `Submitter reason: ${req.reason}`,
+    similar
+      ? `Note: submitter has a recent related request (${similar.kind} · ${similar.status} · ${similar.entityLabel}). Use as context only — do not reject only for that.`
+      : null,
     `Recent deletion requests by this submitter (JSON): ${JSON.stringify(recentHistoryForPrompt)}`,
     `Entity context JSON: ${JSON.stringify(entityContext)}`,
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 
   let decision: 'approve' | 'reject' = 'reject'
   let note = 'Rejected — please edit the record instead of deleting it.'
@@ -876,12 +897,12 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     return { decision: 'skipped', note: 'AI review failed' }
   }
 
-  // Hard safety: never auto-approve paid invoices / SL linked to invoice.
+  // Hard safety: never auto-approve sent/paid/billing-linked records.
   if (decision === 'approve') {
-    const ctx = entityContext as Record<string, unknown>
-    if (ctx.paid === true || ctx.linkedToInvoice === true) {
+    const safety = hardDeclineDeletionContext(entityContext as Record<string, unknown>)
+    if (safety) {
       decision = 'reject'
-      note = 'Rejected — this record is linked to billing and should not be deleted.'
+      note = safety
     }
   }
 
