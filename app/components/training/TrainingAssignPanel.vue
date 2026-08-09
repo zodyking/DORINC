@@ -34,6 +34,10 @@ const availableModules = computed(() => {
   return modules.value.filter(m => !assigned.has(m.id))
 })
 
+function statusLabel(status: string): string {
+  return status.replace(/_/g, ' ')
+}
+
 async function assign() {
   if (!moduleId.value) return
   busy.value = true
@@ -78,36 +82,33 @@ async function removeAssignment(id: string) {
 
 <template>
   <div class="training-assign-panel">
-    <div v-if="assignments.length" class="stack" style="gap:8px;">
-      <div
+    <ul v-if="assignments.length" class="training-assign-list">
+      <li
         v-for="row in assignments"
         :key="row.id"
-        class="card"
-        style="padding:12px 14px;"
+        class="training-assign-item"
       >
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-          <div>
-            <b style="display:block;font-size:0.92rem;">{{ row.module.title }}</b>
-            <span class="help">
-              {{ row.status.replace('_', ' ') }}
-              <template v-if="row.locksAccess"> · locks login</template>
-            </span>
-          </div>
-          <button
-            v-if="row.status !== 'completed'"
-            type="button"
-            class="btn sm danger"
-            :disabled="busy"
-            @click="removeAssignment(row.id)"
-          >
-            Remove
-          </button>
+        <div class="training-assign-item__main">
+          <b>{{ row.module.title }}</b>
+          <span class="training-assign-item__meta">
+            <span class="pill gray">{{ statusLabel(row.status) }}</span>
+            <span v-if="row.locksAccess" class="pill warn">Locks access</span>
+          </span>
         </div>
-      </div>
-    </div>
-    <p v-else class="help" style="margin:0;">No training assigned yet.</p>
+        <button
+          v-if="row.status !== 'completed'"
+          type="button"
+          class="btn sm danger"
+          :disabled="busy"
+          @click="removeAssignment(row.id)"
+        >
+          Remove
+        </button>
+      </li>
+    </ul>
+    <p v-else class="help training-assign-empty">No training assigned yet.</p>
 
-    <div class="training-assign-row">
+    <div class="training-assign-form">
       <label class="fld">
         Assign module
         <select v-model="moduleId" :disabled="busy || !availableModules.length">
@@ -117,19 +118,22 @@ async function removeAssignment(id: string) {
           </option>
         </select>
       </label>
-      <label class="tglrow" style="margin:0;align-self:center;">
-        Lock until complete
-        <span class="tgl"><input v-model="locksAccess" type="checkbox"><span class="tr" /></span>
+      <label class="fld">
+        Notes for assignee (optional)
+        <input v-model="notes" type="text" placeholder="Complete before first solo log" :disabled="busy">
       </label>
-      <button type="button" class="btn primary" :disabled="busy || !moduleId" @click="assign">
-        Assign
-      </button>
+      <div class="training-assign-form__foot">
+        <label class="tglrow training-assign-lock">
+          Lock until complete
+          <span class="tgl"><input v-model="locksAccess" type="checkbox" :disabled="busy"><span class="tr" /></span>
+        </label>
+        <button type="button" class="btn primary" :disabled="busy || !moduleId" @click="assign">
+          Assign
+        </button>
+      </div>
     </div>
-    <label class="fld">
-      Notes for assignee (optional)
-      <input v-model="notes" type="text" placeholder="Complete before first solo log">
-    </label>
+
     <p v-if="notice" class="flash ok">{{ notice }}</p>
-    <p v-if="errorMsg" class="help" style="color:#dc2626;">{{ errorMsg }}</p>
+    <p v-if="errorMsg" class="help" style="color:#dc2626; margin:0;">{{ errorMsg }}</p>
   </div>
 </template>

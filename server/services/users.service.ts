@@ -1,6 +1,6 @@
-import { and, asc, count, eq, ilike, isNull, notInArray, or } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, notInArray, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { accountTypes, users } from '../db/schema/auth'
+import { accountTypes, sessions, users } from '../db/schema/auth'
 import type { AccountType } from '../../shared/permissions/keys'
 
 export type UsersServiceErrorCode
@@ -276,6 +276,13 @@ export async function listUsers(db: Db, filter: ListUsersFilter) {
 export async function getUserDetail(db: Db, userId: string) {
   const row = await getUserWithType(db, userId)
   if (!row) throw new UsersServiceError('NOT_FOUND')
+
+  const [sessionRow] = await db
+    .select({ value: sql<number>`1` })
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+    .limit(1)
+
   return {
     id: row.user.id,
     name: row.user.name,
@@ -293,6 +300,8 @@ export async function getUserDetail(db: Db, userId: string) {
     disabledReason: row.user.disabledReason,
     customerId: row.user.customerId,
     mustChangePassword: row.user.mustChangePassword,
+    /** True once the user has signed in at least once (any session row). */
+    hasLoggedIn: Boolean(sessionRow),
     createdAt: row.user.createdAt,
     updatedAt: row.user.updatedAt,
   }

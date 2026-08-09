@@ -1,9 +1,9 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { hashPassword } from '../auth/password'
 import { generatePortalTempPassword } from '../auth/portal-password'
 import type { Db } from '../db/client'
-import { accountTypes, users } from '../db/schema/auth'
-import { buildStaffInviteEmail } from '../mail/templates/system'
+import { accountTypes, sessions, users } from '../db/schema/auth'
+import { buildStaffInviteEmail, buildStaffPasswordResetEmail } from '../mail/templates/system'
 import { getAppUrl } from './app-config.service'
 import { enqueueJob } from './jobs.service'
 import {
@@ -148,6 +148,71 @@ export async function resendStaffInvite(db: Db, userId: string, invitedBy: strin
     .where(eq(users.id, userId))
 
   await sendInviteEmail(db, { name: row.user.name, email, tempPassword })
+
+  return {
+    userId,
+    email,
+    accountTypeKey: row.accountTypeKey,
+  }
+}
+
+async function sendPasswordResetEmail(db: Db, input: {
+  name: string
+  email: string
+  tempPassword: string
+}) {
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const brand = await resolveEmailBrand(db)
+  const templateOverride = await getActiveEmailTemplateContent(db, 'staff_password_reset')
+  const mail = buildStaffPasswordResetEmail({
+    name: input.name,
+    email: input.email,
+    tempPassword: input.tempPassword,
+    appUrl: brand?.appUrl || getAppUrl(),
+    brand,
+    templateOverride,
+  })
+
+  await enqueueJob(db, 'email_send', {
+    to: input.email,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+  })
+}
+
+/** Admin password reset for staff who have already signed in — temp password + forced change. */
+export async function resetStaffPassword(db: Db, userId: string, _actorId: string) {
+  const [row] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.id, userId))
+
+  if (!row) throw new StaffInviteServiceError('NOT_FOUND')
+  if (row.accountTypeKey === 'customer') throw new StaffInviteServiceError('CUSTOMER_ACCOUNT')
+  if (row.accountTypeKey === 'super_admin') throw new StaffInviteServiceError('NOT_STAFF')
+
+  const tempPassword = generatePortalTempPassword()
+  const expiresAt = new Date(Date.now() + TEMP_PASSWORD_TTL_MS)
+  const email = row.user.email.trim().toLowerCase()
+
+  await db.update(users)
+    .set({
+      passwordHash: await hashPassword(tempPassword),
+      mustChangePassword: true,
+      tempPasswordExpiresAt: expiresAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId))
+
+  // Force re-login with the temporary password.
+  await db.update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+
+  await sendPasswordResetEmail(db, { name: row.user.name, email, tempPassword })
 
   return {
     userId,

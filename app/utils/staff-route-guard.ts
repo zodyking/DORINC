@@ -7,10 +7,16 @@ type AuthStoreLike = {
   user?: { mustChangePassword?: boolean } | null
 }
 
+export function isPasswordRequiredPath(path: string): boolean {
+  return path === '/account/password-required'
+    || path.startsWith('/account/password-required/')
+}
+
 /** Post-login / index landing for staff after /me is hydrated. */
 export function resolveStaffLandingPath(auth: AuthStoreLike): string {
-  if (auth.user?.mustChangePassword) return '/account?password=required'
+  // Login messages → password reset → training → dashboard
   if (auth.announcementGate?.locked) return '/announcements/required'
+  if (auth.user?.mustChangePassword) return '/account/password-required'
   if (auth.trainingGate?.locked) {
     const slug = auth.trainingGate.moduleSlug
     return slug ? `/training/learn/${slug}` : '/training'
@@ -33,19 +39,25 @@ export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof 
 
   const routePath = path ?? useRoute().path
 
-  if (auth.user?.mustChangePassword) {
-    if (routePath !== '/account') {
-      return navigateTo('/account?password=required')
-    }
-    return undefined
-  }
-
-  // Mandatory login messages — before training lock and dashboard.
+  // Mandatory login messages first.
   if (auth.announcementGate?.locked && !isAnnouncementPath(routePath)) {
     return navigateTo('/announcements/required')
   }
 
-  if (auth.trainingGate?.locked && !isTrainingPath(routePath) && !isAnnouncementPath(routePath)) {
+  // Then forced password reset — no dashboard / training until done.
+  if (auth.user?.mustChangePassword) {
+    if (!isPasswordRequiredPath(routePath)) {
+      return navigateTo('/account/password-required')
+    }
+    return undefined
+  }
+
+  if (
+    auth.trainingGate?.locked
+    && !isTrainingPath(routePath)
+    && !isAnnouncementPath(routePath)
+    && !isPasswordRequiredPath(routePath)
+  ) {
     const slug = auth.trainingGate.moduleSlug
     return navigateTo(slug ? `/training/learn/${slug}` : '/training')
   }

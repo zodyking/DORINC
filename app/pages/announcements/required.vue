@@ -57,12 +57,8 @@ async function continueMessage() {
     items.value = advanceAnnouncementQueue(items.value)
     if (!items.value.length) {
       await auth.fetchMe()
-      if (auth.trainingGate?.locked) {
-        const slug = auth.trainingGate.moduleSlug
-        await navigateTo(slug ? `/training/learn/${slug}` : '/training')
-        return
-      }
-      await navigateTo('/dashboard')
+      const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
+      await navigateTo(resolveStaffLandingPath(auth))
       return
     }
   }

@@ -62,6 +62,7 @@ const isSuperAdmin = computed(() => auth.can('system.admin.all'))
 const canViewBilling = computed(() => auth.can('billing.read.all'))
 const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
 const announcementLocked = computed(() => auth.announcementGate?.locked ?? false)
+const passwordLocked = computed(() => auth.user?.mustChangePassword === true)
 
 // Counts become live once list APIs land (Phase 1)
 const nav = computed<NavSection[]>(() => {
@@ -69,6 +70,13 @@ const nav = computed<NavSection[]>(() => {
     return [{
       label: 'Messages',
       items: [{ label: 'Required Message', to: '/announcements/required', icon: 'login-messages' }],
+    }]
+  }
+
+  if (passwordLocked.value) {
+    return [{
+      label: 'Security',
+      items: [{ label: 'Password Reset', to: '/account/password-required', icon: 'users' }],
     }]
   }
 

@@ -325,6 +325,49 @@ export function buildStaffInviteEmail({ name, email, tempPassword, appUrl, brand
 })
 }
 
+export function buildStaffPasswordResetEmail({ name, email, tempPassword, appUrl, brand,
+  templateOverride,
+}) {
+  const resolvedBrand = brandNameFrom({ brand })
+  const loginUrl = `${String(appUrl || brand?.appUrl || '').replace(/\/$/, '')}/auth/login?card=staff`
+  const subject = `Password reset — ${resolvedBrand}`
+  const text = [
+    `Hello ${name},`,
+    '',
+    `An administrator reset your ${resolvedBrand} staff password.`,
+    '',
+    `Sign in: ${loginUrl}`,
+    `Email: ${email}`,
+    `Temporary password: ${tempPassword}`,
+    '',
+    'After any required login messages, you will be asked to choose a new password before continuing.',
+    'This temporary password expires in 7 days.',
+  ].join('\n')
+
+  return styledEmail({
+    headerBadge: '',
+    subject,
+    text,
+    eyebrow: '',
+    headline: 'Password reset',
+    lead: `An administrator reset your ${resolvedBrand} staff password. Sign in with the temporary password below, then choose a new one.`,
+    details: [
+      { label: 'Email', value: email },
+      { label: 'Temporary Password', value: tempPassword },
+      { label: 'Expires', value: '7 days' },
+    ],
+    note: {
+      title: 'Next step',
+      body: 'Use the temporary password to sign in. You will be locked to a password form until you create a new password. If you did not expect this, contact your administrator.',
+    },
+    primaryAction: { href: loginUrl, label: 'Sign in to staff workspace' },
+    appUrl,
+    brand,
+    templateOverride,
+    templateVars: { name, brandName: resolvedBrand, email, tempPassword },
+  })
+}
+
 export function buildBackupNotificationEmail({
   success,
   filename,
