@@ -49,6 +49,8 @@ export default defineEventHandler(async (event) => {
     await assertDeletionReasonAcceptable(db, body.reason, {
       entityType: body.entityType,
       entityLabel,
+      submitterId: actor.id,
+      accountTypeKey: actor.accountType,
     })
 
     const request = await createDeletionRequest(
