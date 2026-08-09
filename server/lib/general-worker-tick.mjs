@@ -3,6 +3,7 @@ import { processThumbnailJobs } from '../workers/handlers/derivatives.mjs'
 import { drainMailQueue } from '../workers/handlers/mail-drain.mjs'
 import { processInvoiceSendJobs } from '../workers/handlers/invoice-send.mjs'
 import { processAiJobs } from '../workers/handlers/ai.mjs'
+import { processDeletionAiReviewJobs } from '../workers/handlers/deletion-ai-review.mjs'
 import { maybeEnqueueScheduledBackup, processBackupJobs } from '../workers/handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from '../workers/handlers/retention.mjs'
 import { maybeRunImapInboxSync, processImapSyncJobs } from '../workers/handlers/imap-sync.mjs'
@@ -42,6 +43,16 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   const ai = await processAiJobs(pool)
   if (ai.processed || ai.failed) {
     console.log(`${logPrefix} ai_jobs processed=${ai.processed} failed=${ai.failed}`)
+  }
+
+  const deletionAi = await processDeletionAiReviewJobs(pool)
+  if (deletionAi.processed || deletionAi.failed) {
+    console.log(
+      `${logPrefix} deletion_request_ai_review processed=${deletionAi.processed} failed=${deletionAi.failed}`,
+    )
+  }
+  else if (deletionAi.skipped && process.env.DELETION_AI_REVIEW_VERBOSE === '1') {
+    console.warn(`${logPrefix} deletion_request_ai_review skipped — set INTERNAL_WORKER_TOKEN or ENCRYPTION_MASTER_KEY`)
   }
 
   const scheduled = await maybeEnqueueScheduledBackup(pool)

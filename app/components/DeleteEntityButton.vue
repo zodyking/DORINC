@@ -48,9 +48,31 @@ const reason = ref('')
 const busy = ref(false)
 const error = ref('')
 
+function looksWeakLocally(raw: string): boolean {
+  const text = raw.trim().toLowerCase()
+  if (text.length < 10) return true
+  const compact = text.replace(/\s+/g, '')
+  if (/^(.)\1{7,}$/.test(compact)) return true
+  if (/^(asdf+|qwer+|zxcv+|test+|abc+|xxx+|1234+)/.test(compact)) return true
+  const words = text.split(/[^a-z0-9]+/).filter(Boolean)
+  const filler = new Set([
+    'test', 'testing', 'asdf', 'qwer', 'delete', 'remove', 'please', 'pls',
+    'thanks', 'thank', 'you', 'need', 'want', 'just', 'because', 'reason',
+    'blah', 'stuff', 'thing', 'things', 'idk', 'whatever', 'none', 'n/a', 'na',
+  ])
+  const meaningful = words.filter(w => !filler.has(w) && w.length > 2)
+  if (meaningful.length === 0) return true
+  return false
+}
+
 async function submitRequest() {
-  if (reason.value.trim().length < 10) {
+  const trimmed = reason.value.trim()
+  if (trimmed.length < 10) {
     error.value = 'Please explain why this should be removed (min 10 characters).'
+    return
+  }
+  if (looksWeakLocally(trimmed)) {
+    error.value = 'Enter a more descriptive reason for your request'
     return
   }
   busy.value = true
@@ -61,7 +83,7 @@ async function submitRequest() {
       body: {
         entityType: props.entityType,
         entityId: props.entityId,
-        reason: reason.value.trim(),
+        reason: trimmed,
       },
     })
     requestModalOpen.value = false
