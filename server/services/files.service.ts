@@ -217,6 +217,19 @@ const BROWSER_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 export async function resolveImageDisplayPreview(db: Db, fileId: string) {
   const original = await getFileWithData(db, fileId)
 
+  // Paper service-log photos must stay readable — serve the original capture when
+  // the browser can display it (do not downscale to the 1600px preview derivative).
+  if (
+    original.ownerEntityType === 'service_log'
+    && BROWSER_IMAGE_MIMES.has(original.mimeType)
+  ) {
+    return {
+      binaryData: original.binaryData,
+      mimeType: original.mimeType,
+      fileSizeBytes: original.fileSizeBytes,
+    }
+  }
+
   const [derivative] = await db.select({ id: appFiles.id })
     .from(appFiles)
     .where(and(
@@ -252,10 +265,12 @@ export async function resolveImageDisplayPreview(db: Db, fileId: string) {
   }
 
   const sharp = (await import('sharp')).default
+  const maxPx = original.ownerEntityType === 'service_log' ? 3200 : 1600
+  const quality = original.ownerEntityType === 'service_log' ? 92 : 82
   const webp = await sharp(original.binaryData, { failOn: 'error' })
     .rotate()
-    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 82 })
+    .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality })
     .toBuffer()
 
   return {

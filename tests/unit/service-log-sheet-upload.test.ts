@@ -40,4 +40,10 @@ describe('service log sheet upload QR landing', () => {
     expect(isAllowedStaffReturnPath('/dashboard')).toBe(false)
     expect(isAllowedStaffReturnPath('https://evil.example/upload/service-log/sheet')).toBe(false)
   })
+
+  it('exports device confirm helpers for passwordless continue', async () => {
+    const mod = await import('../../server/services/service-log-sheet-upload.service')
+    expect(typeof mod.confirmSheetUploadDeviceUser).toBe('function')
+    expect(typeof mod.findStaffUserForDevice).toBe('function')
+  })
 })
