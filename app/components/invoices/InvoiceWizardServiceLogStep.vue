@@ -178,6 +178,11 @@ async function buildQrDataUrl(url: string): Promise<string> {
   }
 }
 
+/**
+ * Preparing a QR must not force-save an invoice draft.
+ * Sessions accept a null invoiceId; the wizard links the log when photos arrive
+ * (or when the draft is saved later).
+ */
 async function ensureQrSession() {
   if (!technicianId.value || isMobile.value || qrBusy.value || busy.value) return
   if (qrSessionId.value && (qrStatus.value === 'pending' || qrStatus.value === 'uploading')) return
@@ -194,18 +199,6 @@ async function ensureQrSession() {
   qrBusy.value = true
   error.value = ''
   try {
-    let invoiceId: string
-    try {
-      invoiceId = await props.ensureDraft()
-    }
-    catch (e: unknown) {
-      if (seq === qrRequestSeq) {
-        error.value = syncFetchErrorMessage(e, 'Could not save invoice draft for upload')
-      }
-      return
-    }
-    if (seq !== qrRequestSeq) return
-
     const res = await $fetch<{
       session: {
         id: string
@@ -220,8 +213,8 @@ async function ensureQrSession() {
         customerId: props.customerId,
         vehicleId: props.vehicleId,
         technicianId: technicianId.value,
-        invoiceId,
-        serviceDate: props.serviceDate,
+        invoiceId: props.invoiceId || undefined,
+        serviceDate: props.serviceDate || undefined,
       },
     })
 
@@ -241,6 +234,17 @@ async function ensureQrSession() {
   }
   finally {
     if (seq === qrRequestSeq) qrBusy.value = false
+  }
+}
+
+/** Best-effort draft save after photos exist — never block a successful upload. */
+async function linkDraftAfterPhotosQuietly() {
+  if (props.invoiceId) return
+  try {
+    await props.ensureDraft()
+  }
+  catch {
+    // Draft can still be saved on a later wizard step.
   }
 }
 
@@ -268,6 +272,7 @@ function startPoll() {
           serviceLogId: session.serviceLogId || props.serviceLogId,
           invoiceNumberFormatted: session.invoiceNumberFormatted,
         })
+        void linkDraftAfterPhotosQuietly()
       }
       else if (session.status === 'expired' || session.status === 'cancelled') {
         stopPoll()
@@ -329,14 +334,7 @@ async function attachLocalUploads() {
   error.value = ''
   cameraOpen.value = false
   try {
-    let invoiceId: string
-    try {
-      invoiceId = await props.ensureDraft()
-    }
-    catch (e: unknown) {
-      error.value = syncFetchErrorMessage(e, 'Could not save invoice draft for upload')
-      return
-    }
+    // Photos can upload without saving the invoice draft first.
     const created = await $fetch<{
       session: {
         id: string
@@ -350,8 +348,8 @@ async function attachLocalUploads() {
         customerId: props.customerId,
         vehicleId: props.vehicleId,
         technicianId: technicianId.value,
-        invoiceId,
-        serviceDate: props.serviceDate,
+        invoiceId: props.invoiceId || undefined,
+        serviceDate: props.serviceDate || undefined,
       },
     })
 
@@ -389,6 +387,7 @@ async function attachLocalUploads() {
       serviceLogId: done.session.serviceLogId || logId,
       invoiceNumberFormatted: done.session.invoiceNumberFormatted,
     })
+    await linkDraftAfterPhotosQuietly()
   }
   catch (e: unknown) {
     error.value = syncFetchErrorMessage(e, 'Could not attach service log')
@@ -507,8 +506,12 @@ onBeforeUnmount(() => {
             <small>Ready in a moment</small>
           </template>
           <template v-else>
-            <b>QR unavailable</b>
-            <small>Select a technician, then try again.</small>
+            <b>{{ technicianId ? 'QR not ready' : 'QR unavailable' }}</b>
+            <small>
+              {{ technicianId
+                ? 'Tap below to prepare the phone upload code.'
+                : 'Select a technician, then try again.' }}
+            </small>
             <button
               type="button"
               class="btn sm primary"
