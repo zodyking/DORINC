@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { and, count, eq } from 'drizzle-orm'
+import { and, count, eq, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { users } from '../db/schema/auth'
 import { customers } from '../db/schema/customers'
@@ -14,6 +14,7 @@ import { getAppUrl } from './app-config.service'
 import {
   createServiceLog,
   getServiceLog,
+  ServiceLogsServiceError,
   transitionServiceLog,
 } from './service-logs.service'
 import { assertActiveStaffUser } from './technicians.service'
@@ -54,6 +55,33 @@ export function publicUploadPath(token: string): string {
 export function publicUploadUrl(token: string): string {
   const base = getAppUrl().replace(/\/$/, '')
   return `${base}${publicUploadPath(token)}`
+}
+
+/** Empty draft/uploaded logs from a cancelled QR session should not stay in the list. */
+export function shouldDiscardUploadSessionServiceLog(opts: {
+  photoCount: number
+  status: string
+}): boolean {
+  return opts.photoCount < 1 && (opts.status === 'draft' || opts.status === 'uploaded')
+}
+
+async function assertCustomerVehiclePair(
+  db: Db,
+  customerId: string,
+  vehicleId: string,
+) {
+  const [customer] = await db.select({ id: customers.id })
+    .from(customers)
+    .where(and(eq(customers.id, customerId), isNull(customers.archivedAt)))
+    .limit(1)
+  if (!customer) throw new ServiceLogsServiceError('CUSTOMER_NOT_FOUND')
+
+  const [vehicle] = await db.select({ id: vehicles.id, customerId: vehicles.customerId })
+    .from(vehicles)
+    .where(and(eq(vehicles.id, vehicleId), isNull(vehicles.archivedAt)))
+    .limit(1)
+  if (!vehicle) throw new ServiceLogsServiceError('VEHICLE_NOT_FOUND')
+  if (vehicle.customerId !== customerId) throw new ServiceLogsServiceError('VEHICLE_CUSTOMER_MISMATCH')
 }
 
 async function loadSessionContext(db: Db, session: typeof serviceLogUploadSessions.$inferSelect) {
@@ -118,12 +146,8 @@ export async function createServiceLogUploadSession(
     if (!inv) throw new ServiceLogUploadServiceError('INVOICE_NOT_FOUND')
   }
 
-  const serviceDate = input.serviceDate ?? new Date().toISOString().slice(0, 10)
-  const log = await createServiceLog(db, {
-    customerId: input.customerId,
-    vehicleId: input.vehicleId,
-    serviceDate,
-  }, input.technicianId)
+  // Validate customer/vehicle now; create the service log only when photos arrive.
+  await assertCustomerVehiclePair(db, input.customerId, input.vehicleId)
 
   const token = mintToken()
   const expiresAt = new Date(Date.now() + SERVICE_LOG_UPLOAD_SESSION_TTL_MS)
@@ -134,7 +158,7 @@ export async function createServiceLogUploadSession(
     customerId: input.customerId,
     vehicleId: input.vehicleId,
     invoiceId: input.invoiceId ?? null,
-    serviceLogId: log.id,
+    serviceLogId: null,
     status: 'pending',
     expiresAt,
   }).returning()
@@ -147,8 +171,75 @@ export async function createServiceLogUploadSession(
     token,
     uploadUrl: publicUploadUrl(token),
     uploadPath: publicUploadPath(token),
-    serviceLog: log,
+    serviceLog: null,
     context: ctx,
+    serviceDate: input.serviceDate ?? null,
+  }
+}
+
+/**
+ * Lazily create the service log the first time a photo is uploaded for the session.
+ * Preparing a QR code must not leave empty logs in the service-log list.
+ */
+export async function ensureUploadSessionServiceLog(
+  db: Db,
+  session: typeof serviceLogUploadSessions.$inferSelect,
+  opts: { serviceDate?: string | null } = {},
+) {
+  if (session.serviceLogId) {
+    return {
+      session,
+      serviceLogId: session.serviceLogId,
+      created: false as const,
+    }
+  }
+
+  let serviceDate = opts.serviceDate?.trim() || ''
+  if (!serviceDate && session.invoiceId) {
+    const [inv] = await db.select({ invoiceDate: invoices.invoiceDate })
+      .from(invoices)
+      .where(eq(invoices.id, session.invoiceId))
+      .limit(1)
+    serviceDate = inv?.invoiceDate ?? ''
+  }
+  if (!serviceDate) serviceDate = new Date().toISOString().slice(0, 10)
+
+  const log = await createServiceLog(db, {
+    customerId: session.customerId,
+    vehicleId: session.vehicleId,
+    serviceDate,
+  }, session.technicianId)
+
+  // Only one parallel upload should win the serviceLogId write.
+  const [updated] = await db.update(serviceLogUploadSessions)
+    .set({ serviceLogId: log.id, updatedAt: new Date() })
+    .where(and(
+      eq(serviceLogUploadSessions.id, session.id),
+      isNull(serviceLogUploadSessions.serviceLogId),
+    ))
+    .returning()
+
+  if (!updated) {
+    await transitionServiceLog(db, log.id, 'archived', {
+      reason: 'Duplicate upload-session log',
+    }).catch(() => {})
+    const [fresh] = await db.select()
+      .from(serviceLogUploadSessions)
+      .where(eq(serviceLogUploadSessions.id, session.id))
+      .limit(1)
+    if (!fresh?.serviceLogId) throw new ServiceLogUploadServiceError('NOT_FOUND')
+    return {
+      session: fresh,
+      serviceLogId: fresh.serviceLogId,
+      created: false as const,
+    }
+  }
+
+  return {
+    session: updated,
+    serviceLogId: log.id,
+    serviceLog: log,
+    created: true as const,
   }
 }
 
@@ -340,6 +431,32 @@ export async function cancelUploadSession(db: Db, sessionId: string, actorId: st
   if (!session) throw new ServiceLogUploadServiceError('NOT_FOUND')
   if (session.status === 'completed') throw new ServiceLogUploadServiceError('ALREADY_COMPLETED')
 
+  if (session.serviceLogId) {
+    const photoCount = await countServiceLogPhotos(db, session.serviceLogId)
+    try {
+      const log = await getServiceLog(db, session.serviceLogId)
+      if (shouldDiscardUploadSessionServiceLog({ photoCount, status: log.status })) {
+        await transitionServiceLog(db, log.id, 'archived', {
+          reason: 'Upload cancelled before any photos were attached',
+        })
+        if (session.invoiceId) {
+          await db.update(invoices)
+            .set({
+              serviceLogId: null,
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(invoices.id, session.invoiceId),
+              eq(invoices.serviceLogId, session.serviceLogId),
+            ))
+        }
+      }
+    }
+    catch {
+      // Best-effort orphan cleanup — still cancel the session.
+    }
+  }
+
   const [updated] = await db.update(serviceLogUploadSessions)
     .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(serviceLogUploadSessions.id, session.id))
@@ -349,10 +466,10 @@ export async function cancelUploadSession(db: Db, sessionId: string, actorId: st
 
 export async function resolveSessionForFileUpload(db: Db, token: string) {
   const session = await markUploadSessionUploading(db, token)
-  if (!session.serviceLogId) throw new ServiceLogUploadServiceError('NOT_FOUND')
+  const ensured = await ensureUploadSessionServiceLog(db, session)
   return {
-    session,
-    serviceLogId: session.serviceLogId,
+    session: ensured.session,
+    serviceLogId: ensured.serviceLogId,
     uploadedBy: session.technicianId,
   }
 }

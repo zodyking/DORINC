@@ -37,10 +37,13 @@ export default defineEventHandler(async (event) => {
         ...created.context,
       },
       token: created.token,
-      serviceLog: {
-        id: created.serviceLog.id,
-        logNumber: created.serviceLog.logNumber,
-      },
+      // Service log is created lazily on first photo upload — not when QR is prepared.
+      serviceLog: created.serviceLog
+        ? {
+            id: created.serviceLog.id,
+            logNumber: created.serviceLog.logNumber,
+          }
+        : null,
     }
   }
   catch (err) {

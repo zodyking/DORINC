@@ -214,9 +214,7 @@ async function ensureQrSession() {
 
     if (seq !== qrRequestSeq) return
 
-    if (res.session.serviceLogId) {
-      emit('update:serviceLogId', res.session.serviceLogId)
-    }
+    // Service log is created only after photos upload — do not bind an empty log here.
     qrSessionId.value = res.session.id
     qrUploadUrl.value = res.session.uploadUrl
     qrDataUrl.value = await buildQrDataUrl(res.session.uploadUrl)
@@ -344,18 +342,22 @@ async function attachLocalUploads() {
       },
     })
 
-    const logId = created.session.serviceLogId
-    if (!logId) throw new Error('Service log missing from upload session')
-    emit('update:serviceLogId', logId)
-
+    let logId: string | null = created.session.serviceLogId
     for (const preview of localPreviews.value) {
       const form = new FormData()
       form.append('file', preview.file, preview.file.name)
-      await $fetch(`/api/public/service-log-upload/${created.token}/files`, {
-        method: 'POST',
-        body: form,
-      })
+      const uploaded = await $fetch<{ serviceLogId?: string | null }>(
+        `/api/public/service-log-upload/${created.token}/files`,
+        {
+          method: 'POST',
+          body: form,
+        },
+      )
+      if (uploaded.serviceLogId) logId = uploaded.serviceLogId
     }
+
+    if (!logId) throw new Error('Service log missing after photo upload')
+    emit('update:serviceLogId', logId)
 
     const done = await $fetch<{
       session: {

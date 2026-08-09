@@ -58,7 +58,10 @@ export default defineEventHandler(async (event) => {
     }, uploadedBy)
 
     await enqueueJob(db, 'thumbnail_generate', { fileId: file.id }).catch(() => {})
-    return { file: { id: file.id, originalFilename: file.originalFilename } }
+    return {
+      file: { id: file.id, originalFilename: file.originalFilename },
+      serviceLogId,
+    }
   }
   catch (err) {
     if (err instanceof FilesServiceError) {
