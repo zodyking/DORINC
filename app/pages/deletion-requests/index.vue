@@ -84,6 +84,20 @@ const { data, refresh, pending: loading } = useClientFetch<{
 const items = computed(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const pendingCount = computed(() => data.value?.pending ?? 0)
+
+// Auto-refresh the pending queue while Susan (or a reviewer) may still decide.
+let pendingPollTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  pendingPollTimer = setInterval(() => {
+    if (view.value === 'queue' && pendingCount.value > 0 && !loading.value) {
+      void refresh()
+    }
+  }, 5_000)
+})
+onUnmounted(() => {
+  if (pendingPollTimer) clearInterval(pendingPollTimer)
+  pendingPollTimer = null
+})
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const pagerPages = computed(() => windowedPagerPages(page.value, pageCount.value))
 const rangeLabel = computed(() => listRangeLabel(page.value, PAGE_SIZE, total.value))

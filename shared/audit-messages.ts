@@ -120,6 +120,12 @@ const ACTION_LABELS: Record<string, string> = {
   'editing_sessions.admin_release': 'Editing lock released by admin',
   'portal_requests.approve': 'Portal request approved',
   'portal_requests.reject': 'Portal request rejected',
+  'deletion_requests.submit': 'Deletion request submitted',
+  'deletion_requests.approve': 'Deletion request approved',
+  'deletion_requests.reject': 'Deletion request rejected',
+  'deletion_requests.ai_review.trigger': 'Susan AI Administrator review triggered',
+  'deletion_requests.ai_review.trigger_skipped': 'Susan AI Administrator review not queued',
+  'deletion_requests.ai_review.skip': 'Susan AI Administrator review skipped',
 }
 
 const ENTITY_HISTORY_NOISE = new Set([

@@ -82,6 +82,8 @@ export async function openRouterChat(
     responseFormat?: 'json' | 'text'
     temperature?: number
     maxTokens?: number
+    /** Abort hung OpenRouter calls (default 30s). */
+    timeoutMs?: number
   } = {},
 ): Promise<OpenRouterChatResult> {
   const key = normalizeOpenRouterApiKey(apiKey)
@@ -103,6 +105,8 @@ export async function openRouterChat(
       : feature === 'daily_summary'
         ? 0.55
         : 0.2)
+  const timeoutMs = opts.timeoutMs
+    ?? (feature === 'ai_administrator' ? 25_000 : 30_000)
 
   const body: Record<string, unknown> = {
     model: String(model).trim(),
@@ -124,11 +128,29 @@ export async function openRouterChat(
   headers.set('HTTP-Referer', getAppUrl())
   headers.set('X-Title', BRAND_NAME)
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Math.max(1_000, timeoutMs))
+  let res: Response
+  try {
+    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  }
+  catch (err) {
+    if ((err as Error)?.name === 'AbortError') {
+      throw new OpenRouterServiceError(
+        'API_ERROR',
+        `OpenRouter timed out after ${Math.round(timeoutMs / 1000)}s`,
+      )
+    }
+    throw err
+  }
+  finally {
+    clearTimeout(timer)
+  }
 
   const payload = await res.json().catch(() => ({})) as OpenRouterResponse
   if (!res.ok) {

@@ -4,6 +4,7 @@ import {
   SIMILAR_DELETION_REQUEST_LOOKBACK_MS,
   deletionReasonsLookSimilar,
   findSimilarDeletionRequest,
+  isRetryableSusanSkip,
   looksLikeWeakDeletionReason,
   normalizeDeletionReasonForCompare,
   pendingDeletionIdsNeedingReview,
@@ -134,5 +135,13 @@ describe('ai administrator helpers', () => {
       ['oldest', 'newest'],
       [],
     )).toEqual(['oldest', 'newest'])
+  })
+
+  it('retries soft Susan skips but not terminal ones', () => {
+    expect(isRetryableSusanSkip('skipped', 'AI Administrator unavailable')).toBe(true)
+    expect(isRetryableSusanSkip('skipped', 'AI review failed')).toBe(true)
+    expect(isRetryableSusanSkip('skipped', 'Already decided')).toBe(false)
+    expect(isRetryableSusanSkip('skipped', 'Request not found')).toBe(false)
+    expect(isRetryableSusanSkip('reject', 'nope')).toBe(false)
   })
 })
