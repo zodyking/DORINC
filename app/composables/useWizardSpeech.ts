@@ -14,13 +14,13 @@ export interface FormSpeechSection {
 /** Step-based wizard narration (service log, invoice). */
 export function useWizardStepNarration(
   step: Ref<number>,
-  narrations: Record<number, string>,
+  narrations: MaybeRefOrGetter<Record<number, string>>,
 ) {
   const enabled = ref(false)
 
   function narrateCurrentStep() {
     if (!enabled.value || !isMobileSpeechTarget()) return
-    const text = narrations[step.value]
+    const text = toValue(narrations)[step.value]
     if (text) speakWizardText(text, { fromGesture: true })
   }
 

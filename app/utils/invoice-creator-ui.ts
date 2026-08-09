@@ -4,13 +4,39 @@ import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '#shared/mon
 import { computeWaivedTaxAmount, taxableSubtotalFromLines } from '#shared/invoice-tax-exempt'
 import type { InvoiceLineType } from './invoices-ui'
 
-export const INVOICE_WIZARD_STEPS = [
-  { n: 1, label: 'Customer' },
-  { n: 2, label: 'Vehicle' },
-  { n: 3, label: 'Dates & terms' },
-  { n: 4, label: 'Line items' },
-  { n: 5, label: 'Review' },
-] as const
+export type InvoiceWizardStepKey =
+  | 'customer'
+  | 'vehicle'
+  | 'service_log'
+  | 'dates'
+  | 'lines'
+  | 'review'
+
+export interface InvoiceWizardStepDef {
+  n: number
+  key: InvoiceWizardStepKey
+  label: string
+}
+
+/** Build wizard steps. When AI service-log extraction is on, insert Service log after Vehicle. */
+export function buildInvoiceWizardSteps(includeServiceLog = false): InvoiceWizardStepDef[] {
+  const defs: Array<{ key: InvoiceWizardStepKey, label: string }> = [
+    { key: 'customer', label: 'Customer' },
+    { key: 'vehicle', label: 'Vehicle' },
+  ]
+  if (includeServiceLog) {
+    defs.push({ key: 'service_log', label: 'Service log' })
+  }
+  defs.push(
+    { key: 'dates', label: 'Dates & terms' },
+    { key: 'lines', label: 'Line items' },
+    { key: 'review', label: 'Review' },
+  )
+  return defs.map((d, i) => ({ n: i + 1, key: d.key, label: d.label }))
+}
+
+/** Default 5-step list (training / when service-log upload is not offered). */
+export const INVOICE_WIZARD_STEPS = buildInvoiceWizardSteps(false)
 
 export const LINE_TYPE_OPTIONS: { value: InvoiceLineType, label: string }[] = [
   { value: 'labor', label: 'Labor' },
@@ -46,9 +72,10 @@ export function dueDateFromTerms(invoiceDate: string, terms: string): string {
   return base.toISOString().slice(0, 10)
 }
 
-export function wizardStateLabel(step: number): string {
-  const s = INVOICE_WIZARD_STEPS.find(x => x.n === step)
-  return `Step ${step} of ${INVOICE_WIZARD_STEPS.length} — ${s?.label ?? ''}`
+export function wizardStateLabel(step: number, includeServiceLog = false): string {
+  const steps = buildInvoiceWizardSteps(includeServiceLog)
+  const s = steps.find(x => x.n === step)
+  return `Step ${step} of ${steps.length} — ${s?.label ?? ''}`
 }
 
 export function formatInvoiceNumberDisplay(invoiceNumber: number): string {
@@ -115,12 +142,13 @@ export function buildInvoiceLinePatchBody(
 export function canProceedWizardStep(
   step: number,
   ctx: { customerId: string, vehicleId: string, lines: DraftLine[] },
+  opts: { includeServiceLog?: boolean } = {},
 ): boolean {
-  if (step === 1) return Boolean(ctx.customerId)
-  if (step === 2) return Boolean(ctx.customerId)
-  if (step === 3) return Boolean(ctx.customerId)
-  if (step === 4) return ctx.lines.some(isDraftLineValid)
-  return true
+  const def = buildInvoiceWizardSteps(opts.includeServiceLog ?? false).find(s => s.n === step)
+  if (!def) return true
+  if (def.key === 'lines') return ctx.lines.some(isDraftLineValid)
+  if (def.key === 'review') return true
+  return Boolean(ctx.customerId)
 }
 
 /** Live line total while typing — matches server rounding. */
