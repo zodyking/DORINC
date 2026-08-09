@@ -9,6 +9,7 @@ import {
   serviceLogPhotoCountLabel,
   serviceLogPhotoSlotLabel,
 } from '../../shared/service-log-photos'
+import { serviceLogUploadSessionCreateSchema } from '../../shared/validators/service-log-upload'
 
 describe('service log upload session helpers', () => {
   it('builds a public upload path from the token', () => {
@@ -39,5 +40,15 @@ describe('invoice wizard public upload auth path', () => {
     expect(isPublicAppPath('/upload/service-log/sheet')).toBe(true)
     expect(isProtectedAppPath('/upload/service-log/tok')).toBe(false)
     expect(isProtectedAppPath('/invoices/new')).toBe(true)
+  })
+
+  it('allows preparing a QR upload session without an invoice draft id', () => {
+    const parsed = serviceLogUploadSessionCreateSchema.parse({
+      customerId: '11111111-1111-4111-8111-111111111111',
+      vehicleId: '22222222-2222-4222-8222-222222222222',
+      technicianId: '33333333-3333-4333-8333-333333333333',
+      serviceDate: '2026-08-09',
+    })
+    expect(parsed.invoiceId).toBeUndefined()
   })
 })
