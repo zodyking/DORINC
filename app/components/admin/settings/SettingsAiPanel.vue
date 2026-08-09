@@ -19,9 +19,11 @@ interface AiSettingsView {
   serviceLogExtractionModel: string | null
   invoiceDescriptionModel: string | null
   platformHelpModel: string | null
+  aiAdministratorModel: string | null
   serviceLogExtractionEnabled: boolean
   invoiceDescriptionEnabled: boolean
   platformHelpEnabled: boolean
+  aiAdministratorEnabled: boolean
   dailySpendCapUsd: string | null
   monthlySpendCapUsd: string | null
   updatedAt: string
@@ -88,6 +90,14 @@ const AI_TASKS = [
     description: 'Susan answers in-app help questions for staff.',
     modelHint: 'Use a vision model if staff attach screenshots for Susan.',
   },
+  {
+    key: 'ai_administrator' as const,
+    enabledKey: 'aiAdministratorEnabled' as const,
+    modelKey: 'aiAdministratorModel' as const,
+    title: 'AI Administrator',
+    description: 'Susan reviews deletion requests (~30s after open) and gates vague deletion reasons.',
+    modelHint: 'Prefer a careful text model — Susan can approve or reject deletions.',
+  },
 ]
 
 const { data, pending, refresh } = useClientFetch<AiSettingsResponse>(
@@ -119,9 +129,11 @@ const form = reactive({
   serviceLogExtractionModel: '',
   invoiceDescriptionModel: '',
   platformHelpModel: '',
+  aiAdministratorModel: '',
   serviceLogExtractionEnabled: true,
   invoiceDescriptionEnabled: true,
   platformHelpEnabled: true,
+  aiAdministratorEnabled: true,
   dailySpendCapUsd: '' as string | number,
   monthlySpendCapUsd: '' as string | number,
 })
@@ -134,9 +146,11 @@ function hydrate(s: AiSettingsView) {
   form.serviceLogExtractionModel = s.serviceLogExtractionModel ?? s.defaultModel
   form.invoiceDescriptionModel = s.invoiceDescriptionModel ?? s.defaultModel
   form.platformHelpModel = s.platformHelpModel ?? s.defaultModel
+  form.aiAdministratorModel = s.aiAdministratorModel ?? s.defaultModel
   form.serviceLogExtractionEnabled = s.serviceLogExtractionEnabled
   form.invoiceDescriptionEnabled = s.invoiceDescriptionEnabled
   form.platformHelpEnabled = s.platformHelpEnabled
+  form.aiAdministratorEnabled = s.aiAdministratorEnabled
   form.dailySpendCapUsd = s.dailySpendCapUsd ?? ''
   form.monthlySpendCapUsd = s.monthlySpendCapUsd ?? ''
   form.apiKey = ''
@@ -188,9 +202,11 @@ async function save() {
       serviceLogExtractionModel: normalizeTaskModel(form.serviceLogExtractionModel, fallback),
       invoiceDescriptionModel: normalizeTaskModel(form.invoiceDescriptionModel, fallback),
       platformHelpModel: normalizeTaskModel(form.platformHelpModel, fallback),
+      aiAdministratorModel: normalizeTaskModel(form.aiAdministratorModel, fallback),
       serviceLogExtractionEnabled: form.serviceLogExtractionEnabled,
       invoiceDescriptionEnabled: form.invoiceDescriptionEnabled,
       platformHelpEnabled: form.platformHelpEnabled,
+      aiAdministratorEnabled: form.aiAdministratorEnabled,
       dailySpendCapUsd: parseOptionalSpendCap(form.dailySpendCapUsd),
       monthlySpendCapUsd: parseOptionalSpendCap(form.monthlySpendCapUsd),
     }
@@ -413,6 +429,8 @@ function applyFallbackToEmptyTasks() {
           <dd>{{ data.usage.byFeature.platform_help ?? 0 }} queries</dd>
           <dt>{{ aiFeatureLabel('daily_summary') }}</dt>
           <dd>{{ data.usage.byFeature.daily_summary ?? 0 }} notes</dd>
+          <dt>{{ aiFeatureLabel('ai_administrator') }}</dt>
+          <dd>{{ data.usage.byFeature.ai_administrator ?? 0 }} reviews</dd>
           <dt>Approved</dt>
           <dd>{{ data.usage.approvedSuggestions }}</dd>
           <dt>Est. cost (month)</dt>

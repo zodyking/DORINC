@@ -6,6 +6,7 @@ export const AI_FEATURE_TYPES = [
   'invoice_description',
   'platform_help',
   'daily_summary',
+  'ai_administrator',
 ] as const
 
 export const aiProviderSettingsPatchSchema = z.object({
@@ -16,9 +17,11 @@ export const aiProviderSettingsPatchSchema = z.object({
   serviceLogExtractionModel: z.string().trim().min(1).max(200).nullable().optional(),
   invoiceDescriptionModel: z.string().trim().min(1).max(200).nullable().optional(),
   platformHelpModel: z.string().trim().min(1).max(200).nullable().optional(),
+  aiAdministratorModel: z.string().trim().min(1).max(200).nullable().optional(),
   serviceLogExtractionEnabled: z.boolean().optional(),
   invoiceDescriptionEnabled: z.boolean().optional(),
   platformHelpEnabled: z.boolean().optional(),
+  aiAdministratorEnabled: z.boolean().optional(),
   dailySpendCapUsd: z.number().min(0).max(1_000_000).nullable().optional(),
   monthlySpendCapUsd: z.number().min(0).max(1_000_000).nullable().optional(),
 })

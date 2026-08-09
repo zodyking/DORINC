@@ -112,12 +112,14 @@ export function aiFeatureLabel(feature: string): string {
     case 'invoice_description': return 'Descriptions'
     case 'platform_help': return 'Help queries'
     case 'daily_summary': return 'Daily summary'
+    case 'ai_administrator': return 'Administrator'
     case 'thumbnail_generate': return 'Thumbnails'
     case 'email_send': return 'Email'
     case 'backup_run': return 'Backups'
     case 'backup_verify': return 'Backup verify'
     case 'service_log_ai_extraction': return 'Log extraction'
     case 'invoice_description_ai': return 'Descriptions'
+    case 'deletion_request_ai_review': return 'Deletion review'
     default: return feature.replace(/_/g, ' ')
   }
 }

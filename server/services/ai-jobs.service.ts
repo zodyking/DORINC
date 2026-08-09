@@ -98,7 +98,7 @@ export async function logAiUsage(db: Db, input: AiUsageLogCreate): Promise<{ id:
     completionTokens: input.completionTokens,
     totalTokens,
     estimatedCostUsd: String(input.estimatedCostUsd),
-    provider: input.provider,
+    provider: input.provider ?? 'openrouter',
     createdBy: input.createdBy ?? null,
   }).returning({ id: aiUsageLogs.id })
 
@@ -133,6 +133,7 @@ export async function getAiUsageSummary(db: Db, month = new Date()): Promise<AiU
     invoice_description: 0,
     platform_help: 0,
     daily_summary: 0,
+    ai_administrator: 0,
   }
   for (const row of featureRows) {
     byFeature[row.featureType] = row.count

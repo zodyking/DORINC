@@ -85,7 +85,7 @@ function entityHref(type: DeletionEntityType, id: string): string {
   }
 }
 
-async function resolveEntityLabel(db: Db, entityType: DeletionEntityType, entityId: string): Promise<string> {
+export async function resolveEntityLabel(db: Db, entityType: DeletionEntityType, entityId: string): Promise<string> {
   switch (entityType) {
     case 'customer': {
       const row = await getCustomer(db, entityId)
@@ -275,6 +275,14 @@ export async function createDeletionRequest(
   }
   catch (err) {
     console.warn('[team-chat] deletion request team message failed:', (err as Error).message)
+  }
+
+  try {
+    const { enqueueDeletionRequestAiReview } = await import('./ai-administrator.service')
+    await enqueueDeletionRequestAiReview(db, row!.id)
+  }
+  catch (err) {
+    console.warn('[ai-administrator] enqueue review failed:', (err as Error).message)
   }
 
   return row!

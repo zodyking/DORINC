@@ -1,8 +1,14 @@
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
 import {
+  AiAdministratorServiceError,
+  assertDeletionReasonAcceptable,
+  DELETION_REASON_WEAK_MESSAGE,
+} from '../../services/ai-administrator.service'
+import {
   createDeletionRequest,
   DeletionRequestsServiceError,
+  resolveEntityLabel,
 } from '../../services/deletion-requests.service'
 import { apiError } from '../../utils/api-error'
 import { requirePermission } from '../../utils/require-permission'
@@ -29,10 +35,24 @@ function mapError(event: Parameters<typeof apiError>[0], err: DeletionRequestsSe
 export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'deletion_requests.submit.all')
   const body = await validateBody(event, deletionRequestCreateSchema)
+  const db = useDb()
 
   try {
+    let entityLabel: string | null = null
+    try {
+      entityLabel = await resolveEntityLabel(db, body.entityType, body.entityId)
+    }
+    catch {
+      entityLabel = null
+    }
+
+    await assertDeletionReasonAcceptable(db, body.reason, {
+      entityType: body.entityType,
+      entityLabel,
+    })
+
     const request = await createDeletionRequest(
-      useDb(),
+      db,
       body.entityType,
       body.entityId,
       body.reason,
@@ -64,6 +84,9 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (err) {
+    if (err instanceof AiAdministratorServiceError && err.code === 'WEAK_REASON') {
+      throw apiError(event, 'VALIDATION_ERROR', err.message || DELETION_REASON_WEAK_MESSAGE)
+    }
     if (err instanceof DeletionRequestsServiceError) mapError(event, err, body.entityType)
     throw err
   }

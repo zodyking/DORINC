@@ -70,7 +70,10 @@ async function submitRequest() {
     emit('submitted')
   }
   catch (e: unknown) {
-    error.value = syncFetchErrorMessage(e, 'Could not submit deletion request')
+    const msg = syncFetchErrorMessage(e, 'Could not submit deletion request')
+    error.value = /more descriptive reason/i.test(msg)
+      ? 'Enter a more descriptive reason for your request'
+      : msg
   }
   finally {
     busy.value = false
