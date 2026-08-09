@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { PdfViewerDialog } from '~/utils/pdf-viewer'
 import { invoiceDateDisplay, moneyDisplay, type InvoiceStatus } from '~/utils/invoices-ui'
 import { assertPdfBlob, syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { printPdfBlob } from '~/utils/print-pdf'
 
 withDefaults(defineProps<{
   buttonClass?: string
@@ -49,12 +49,9 @@ const error = ref('')
 const selected = ref<Set<string>>(new Set())
 const busy = ref(false)
 
-const pdfOpen = ref(false)
-const pdfBlob = ref<Blob | null>(null)
-const pdfFilename = ref('invoices.pdf')
-const { url: pdfUrl, setFromBlob, revoke: revokePdf } = usePdfBlobUrl()
-
 const {
+
+
   data: invoicesData,
   refresh: refreshInvoices,
   pending: invoicesPending,
@@ -134,13 +131,8 @@ async function submit() {
         responseType: 'blob',
       })
       await assertPdfBlob(blob)
-      pdfBlob.value = blob
-      pdfFilename.value = selected.value.size === 1
-        ? `${invoices.value.find(i => selected.value.has(i.id))?.invoiceNumberFormatted || 'invoice'}.pdf`
-        : `invoices-${selected.value.size}.pdf`
-      setFromBlob(blob)
       open.value = false
-      pdfOpen.value = true
+      await printPdfBlob(blob)
       emit('printed')
     }
     else {
@@ -171,12 +163,6 @@ async function submit() {
   finally {
     busy.value = false
   }
-}
-
-function closePdf() {
-  pdfOpen.value = false
-  pdfBlob.value = null
-  revokePdf()
 }
 
 defineExpose({ openModal })
@@ -216,7 +202,7 @@ defineExpose({ openModal })
               >
                 <span class="bulk-print-option__title">Print from this device</span>
                 <span class="bulk-print-option__desc">
-                  Merge invoices into one PDF and open it for local printing
+                  Merge invoices into one PDF and open the browser print dialog
                 </span>
               </button>
               <button
@@ -303,18 +289,6 @@ defineExpose({ openModal })
       </div>
     </div>
   </Teleport>
-
-  <ClientOnly>
-    <PdfViewerDialog
-      v-model:open="pdfOpen"
-      :src="pdfUrl"
-      :blob="pdfBlob"
-      title="Merged invoices PDF"
-      :download-href="pdfUrl || undefined"
-      :download-filename="pdfFilename"
-      @close="closePdf"
-    />
-  </ClientOnly>
 </template>
 
 <style scoped>
