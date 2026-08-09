@@ -48,3 +48,12 @@ export function invoiceWizardStepHintClass(step: number, input: InvoiceWizardSte
   if (input.dirty || !input.invoiceId) return 'pending'
   return 'saved'
 }
+
+/** When false, invoice wizard skips the post-vehicle service log upload interstitial. */
+export function shouldOfferInvoiceWizardServiceLogUpload(flags: {
+  aiEnabled?: boolean | null
+  serviceLogExtractionEnabled?: boolean | null
+} | null | undefined): boolean {
+  if (!flags) return false
+  return flags.aiEnabled === true && flags.serviceLogExtractionEnabled === true
+}

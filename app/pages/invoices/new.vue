@@ -30,7 +30,11 @@ import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { odoDisplay, vehicleSub, vehicleTag, type VehicleDisplay } from '~/utils/vehicles-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { focusVisibleLineDescription, focusVisibleLineInput } from '~/utils/line-field-focus'
-import { invoiceWizardStepHint, invoiceWizardStepHintClass } from '~/utils/invoice-wizard-ui'
+import {
+  invoiceWizardStepHint,
+  invoiceWizardStepHintClass,
+  shouldOfferInvoiceWizardServiceLogUpload,
+} from '~/utils/invoice-wizard-ui'
 import { useProseField } from '~/composables/useProseField'
 import {
   draftLineToWizard,
@@ -59,6 +63,18 @@ const { data: invoiceDefaults } = useClientFetch<{
   defaultTaxRateDecimal: string
   shopSuppliesPercent: string
 }>('/api/settings/invoice-defaults')
+
+const { data: aiFeatureFlags, pending: aiFeatureFlagsPending } = useClientFetch<{
+  enabled: boolean
+  serviceLogExtractionEnabled: boolean
+  invoiceDescriptionEnabled: boolean
+  platformHelpEnabled: boolean
+}>('/api/settings/ai-features')
+
+const offerServiceLogUpload = computed(() => shouldOfferInvoiceWizardServiceLogUpload({
+  aiEnabled: aiFeatureFlags.value?.enabled,
+  serviceLogExtractionEnabled: aiFeatureFlags.value?.serviceLogExtractionEnabled,
+}))
 
 interface CustomerPick {
   id: string
@@ -487,6 +503,14 @@ function prevFromLinesStep() {
 
 function openServiceLogGate() {
   submitError.value = ''
+  // Wait for AI flags so we don't flash the upload interstitial when extraction is off.
+  if (aiFeatureFlagsPending.value) return
+  // Extraction off → skip the AI upload interstitial; stay on simple wizard.
+  if (!offerServiceLogUpload.value) {
+    serviceLogUploadOpen.value = false
+    step.value = 3
+    return
+  }
   serviceLogUploadOpen.value = true
 }
 
@@ -991,7 +1015,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <button
           type="button"
           class="btn primary"
-          :disabled="!canProceedWizardStep(2, { customerId, vehicleId, lines })"
+          :disabled="aiFeatureFlagsPending || !canProceedWizardStep(2, { customerId, vehicleId, lines })"
           @click="openServiceLogGate"
         >
           Continue
@@ -1001,6 +1025,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
 
     <!-- Invisible post-vehicle upload prompt (not a numbered stepper step) -->
     <InvoiceWizardServiceLogStep
+      v-if="offerServiceLogUpload"
       :open="serviceLogUploadOpen"
       :customer-id="customerId"
       :vehicle-id="vehicleId"
