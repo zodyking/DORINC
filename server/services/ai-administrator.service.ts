@@ -35,7 +35,7 @@ export const DELETION_REASON_WEAK_MESSAGE
 export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
 
 /** How far back Susan looks for similar/repeated deletion requests from the same user. */
-export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
+export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 60 * 60 * 1000
 
 export const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
 

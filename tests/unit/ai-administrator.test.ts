@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DELETION_REASON_WEAK_MESSAGE,
+  SIMILAR_DELETION_REQUEST_LOOKBACK_MS,
   deletionReasonsLookSimilar,
   findSimilarDeletionRequest,
   looksLikeWeakDeletionReason,
@@ -113,5 +114,9 @@ describe('ai administrator helpers', () => {
     expect(aiFeatureLabel('ai_administrator')).toBe('Administrator')
     expect(aiFeatureLabel('deletion_request_ai_review')).toBe('Deletion review')
     expect(DELETION_REASON_WEAK_MESSAGE).toMatch(/explain why/i)
+  })
+
+  it('looks back one hour for similar deletion requests', () => {
+    expect(SIMILAR_DELETION_REQUEST_LOOKBACK_MS).toBe(60 * 60 * 1000)
   })
 })
