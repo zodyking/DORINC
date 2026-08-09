@@ -17,6 +17,7 @@ export const AI_FEATURE_TYPES = [
   'invoice_description',
   'platform_help',
   'daily_summary',
+  'ai_administrator',
 ] as const
 export type AiFeatureType = (typeof AI_FEATURE_TYPES)[number]
 
@@ -36,9 +37,11 @@ export const aiProviderSettings = pgTable('ai_provider_settings', {
   serviceLogExtractionModel: text('service_log_extraction_model'),
   invoiceDescriptionModel: text('invoice_description_model'),
   platformHelpModel: text('platform_help_model'),
+  aiAdministratorModel: text('ai_administrator_model'),
   serviceLogExtractionEnabled: boolean('service_log_extraction_enabled').notNull().default(true),
   invoiceDescriptionEnabled: boolean('invoice_description_enabled').notNull().default(true),
   platformHelpEnabled: boolean('platform_help_enabled').notNull().default(true),
+  aiAdministratorEnabled: boolean('ai_administrator_enabled').notNull().default(true),
   dailySpendCapUsd: numeric('daily_spend_cap_usd', { precision: 12, scale: 4 }),
   monthlySpendCapUsd: numeric('monthly_spend_cap_usd', { precision: 12, scale: 4 }),
   updatedBy: uuid('updated_by').references(() => users.id),

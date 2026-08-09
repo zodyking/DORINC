@@ -48,9 +48,11 @@ export interface AiProviderSettingsView {
   serviceLogExtractionModel: string | null
   invoiceDescriptionModel: string | null
   platformHelpModel: string | null
+  aiAdministratorModel: string | null
   serviceLogExtractionEnabled: boolean
   invoiceDescriptionEnabled: boolean
   platformHelpEnabled: boolean
+  aiAdministratorEnabled: boolean
   dailySpendCapUsd: string | null
   monthlySpendCapUsd: string | null
   updatedAt: Date
@@ -75,9 +77,11 @@ function toView(row: typeof aiProviderSettings.$inferSelect): AiProviderSettings
     serviceLogExtractionModel: row.serviceLogExtractionModel,
     invoiceDescriptionModel: row.invoiceDescriptionModel,
     platformHelpModel: row.platformHelpModel,
+    aiAdministratorModel: row.aiAdministratorModel,
     serviceLogExtractionEnabled: row.serviceLogExtractionEnabled,
     invoiceDescriptionEnabled: row.invoiceDescriptionEnabled,
     platformHelpEnabled: row.platformHelpEnabled,
+    aiAdministratorEnabled: row.aiAdministratorEnabled,
     dailySpendCapUsd: row.dailySpendCapUsd,
     monthlySpendCapUsd: row.monthlySpendCapUsd,
     updatedAt: row.updatedAt,
@@ -183,6 +187,8 @@ export function modelForFeature(
     case 'platform_help':
     case 'daily_summary':
       return settings.platformHelpModel ?? settings.defaultModel
+    case 'ai_administrator':
+      return settings.aiAdministratorModel ?? settings.defaultModel
   }
 }
 

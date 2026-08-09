@@ -122,7 +122,9 @@ async function assertAiFeatureEnabled(db: Db, feature: AiFeatureType): Promise<{
     ? settings.serviceLogExtractionEnabled
     : feature === 'invoice_description'
       ? settings.invoiceDescriptionEnabled
-      : settings.platformHelpEnabled
+      : feature === 'ai_administrator'
+        ? settings.aiAdministratorEnabled
+        : settings.platformHelpEnabled
 
   if (!featureEnabled) {
     throw new AiFeaturesServiceError('FEATURE_DISABLED', 'This AI feature is disabled')

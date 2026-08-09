@@ -83,9 +83,11 @@ async function loadAiSettings(pool) {
     serviceLogExtractionModel: row.service_log_extraction_model,
     invoiceDescriptionModel: row.invoice_description_model,
     platformHelpModel: row.platform_help_model,
+    aiAdministratorModel: row.ai_administrator_model,
     serviceLogExtractionEnabled: row.service_log_extraction_enabled,
     invoiceDescriptionEnabled: row.invoice_description_enabled,
     platformHelpEnabled: row.platform_help_enabled,
+    aiAdministratorEnabled: row.ai_administrator_enabled,
   }
 }
 
@@ -98,6 +100,9 @@ function modelFor(settings, feature) {
   }
   if (feature === 'platform_help' || feature === 'daily_summary') {
     return settings.platformHelpModel ?? settings.defaultModel
+  }
+  if (feature === 'ai_administrator') {
+    return settings.aiAdministratorModel ?? settings.defaultModel
   }
   return settings.defaultModel
 }
