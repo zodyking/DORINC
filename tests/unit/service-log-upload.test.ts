@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { publicUploadPath } from '../../server/services/service-log-upload.service'
+import {
+  publicUploadPath,
+  shouldDiscardUploadSessionServiceLog,
+} from '../../server/services/service-log-upload.service'
 import {
   SERVICE_LOG_MAX_PHOTOS,
   serviceLogNextPhotoPrompt,
@@ -10,6 +13,13 @@ import {
 describe('service log upload session helpers', () => {
   it('builds a public upload path from the token', () => {
     expect(publicUploadPath('abc123')).toBe('/upload/service-log/abc123')
+  })
+
+  it('discards empty draft/uploaded logs when a QR session is cancelled', () => {
+    expect(shouldDiscardUploadSessionServiceLog({ photoCount: 0, status: 'draft' })).toBe(true)
+    expect(shouldDiscardUploadSessionServiceLog({ photoCount: 0, status: 'uploaded' })).toBe(true)
+    expect(shouldDiscardUploadSessionServiceLog({ photoCount: 1, status: 'draft' })).toBe(false)
+    expect(shouldDiscardUploadSessionServiceLog({ photoCount: 0, status: 'ready_for_review' })).toBe(false)
   })
 
   it('limits service log captures to front and back', () => {
