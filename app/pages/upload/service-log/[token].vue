@@ -4,6 +4,7 @@
  * In-app camera only — front & back (max 2), with remove before attach.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
+import ServiceLogPhotoLightbox from '~/components/service-logs/ServiceLogPhotoLightbox.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   SERVICE_LOG_MAX_PHOTOS,
@@ -43,8 +44,15 @@ const actionError = ref('')
 const done = ref(false)
 const previews = ref<{ id: string, url: string, file: File }[]>([])
 const cameraOpen = ref(true)
+const previewId = ref<string | null>(null)
 
 const cameraPhotos = computed(() => previews.value.map(p => ({ id: p.id, url: p.url })))
+const previewPhoto = computed(() =>
+  previews.value.find(photo => photo.id === previewId.value) ?? null,
+)
+const previewIndex = computed(() =>
+  previews.value.findIndex(photo => photo.id === previewId.value),
+)
 
 async function loadSession() {
   loadError.value = ''
@@ -86,7 +94,12 @@ function removePreview(id: string) {
   if (idx < 0) return
   URL.revokeObjectURL(previews.value[idx]!.url)
   previews.value.splice(idx, 1)
+  if (previewId.value === id) previewId.value = null
   actionError.value = ''
+}
+
+function openPreview(id: string) {
+  previewId.value = id
 }
 
 async function finish() {
@@ -194,18 +207,28 @@ onBeforeUnmount(() => {
           </button>
 
           <div v-if="previews.length" class="inv-sl-thumbs">
-            <div v-for="(p, index) in previews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+            <button
+              v-for="(p, index) in previews"
+              :key="p.id"
+              type="button"
+              class="inv-sl-thumb"
+              :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
+              @click="openPreview(p.id)"
+            >
+              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
               <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-              <button
-                type="button"
+              <span
                 class="inv-sl-thumb__x"
+                role="button"
+                tabindex="0"
                 :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-                @click="removePreview(p.id)"
+                @click.stop="removePreview(p.id)"
+                @keydown.enter.stop="removePreview(p.id)"
+                @keydown.space.prevent.stop="removePreview(p.id)"
               >
                 ×
-              </button>
-            </div>
+              </span>
+            </button>
           </div>
 
           <p v-if="previews.length" class="sl-public-upload__count">
@@ -238,6 +261,14 @@ onBeforeUnmount(() => {
         @close="cameraOpen = false"
       />
     </ClientOnly>
+
+    <ServiceLogPhotoLightbox
+      :open="Boolean(previewPhoto)"
+      :url="previewPhoto?.url || ''"
+      :label="previewIndex >= 0 ? serviceLogPhotoSlotLabel(previewIndex) : ''"
+      :alt="previewIndex >= 0 ? `${serviceLogPhotoSlotLabel(previewIndex)} of service log` : 'Service log photo'"
+      @close="previewId = null"
+    />
   </div>
 </template>
 

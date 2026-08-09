@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * In-app service log camera — take front/back photos.
- * Document border detection will return later; capture is unrestricted for now.
+ * Fullscreen mode: true 100dvh video with overlaid chrome (invoice QR upload UX).
  */
+import ServiceLogPhotoLightbox from '~/components/service-logs/ServiceLogPhotoLightbox.vue'
 import {
   SERVICE_LOG_MAX_PHOTOS,
   serviceLogNextPhotoPrompt,
@@ -38,6 +39,7 @@ const torchSupported = ref(false)
 const torchOn = ref(false)
 const flashPulse = ref(false)
 const captureHint = ref('')
+const previewId = ref<string | null>(null)
 
 const isFullscreen = computed(() => props.mode === 'fullscreen')
 const active = computed(() => props.open !== false)
@@ -53,8 +55,26 @@ const statusMessage = computed(() => {
     ? 'Take a clear photo of the front of the service log'
     : 'Take a clear photo of the back of the service log'
 })
+const previewPhoto = computed(() =>
+  props.photos.find(photo => photo.id === previewId.value) ?? null,
+)
+const previewIndex = computed(() =>
+  props.photos.findIndex(photo => photo.id === previewId.value),
+)
 
 let stopped = true
+let previousBodyOverflow = ''
+
+function lockBodyScroll(lock: boolean) {
+  if (!import.meta.client) return
+  if (lock) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  else {
+    document.body.style.overflow = previousBodyOverflow
+  }
+}
 
 async function startCamera() {
   cameraError.value = ''
@@ -154,12 +174,30 @@ async function capture() {
   }
 }
 
+function openPreview(id: string) {
+  previewId.value = id
+}
+
+function closePreview() {
+  previewId.value = null
+}
+
 watch(active, (on) => {
-  if (on) void startCamera()
-  else stopCamera()
+  if (on) {
+    if (isFullscreen.value) lockBodyScroll(true)
+    void startCamera()
+  }
+  else {
+    stopCamera()
+    closePreview()
+    if (isFullscreen.value) lockBodyScroll(false)
+  }
 }, { immediate: true })
 
-onBeforeUnmount(() => stopCamera())
+onBeforeUnmount(() => {
+  stopCamera()
+  if (isFullscreen.value && active.value) lockBodyScroll(false)
+})
 </script>
 
 <template>
@@ -170,11 +208,26 @@ onBeforeUnmount(() => stopCamera())
       :class="{
         'sl-doc-cam--fullscreen': isFullscreen,
         'sl-doc-cam--flash': flashPulse,
+        'sl-doc-cam--has-shots': photos.length > 0,
       }"
       role="dialog"
       :aria-modal="isFullscreen ? 'true' : undefined"
       aria-label="Service log camera"
     >
+      <div class="sl-doc-cam__stage">
+        <video
+          ref="videoRef"
+          class="sl-doc-cam__video"
+          playsinline
+          muted
+          autoplay
+        />
+        <div class="sl-doc-cam__status">
+          <strong>{{ statusMessage }}</strong>
+          <span>{{ countLabel }}</span>
+        </div>
+      </div>
+
       <header v-if="isFullscreen" class="sl-doc-cam__top">
         <button
           type="button"
@@ -209,41 +262,33 @@ onBeforeUnmount(() => stopCamera())
         </button>
       </header>
 
-      <div class="sl-doc-cam__stage">
-        <video
-          ref="videoRef"
-          class="sl-doc-cam__video"
-          playsinline
-          muted
-          autoplay
-        />
-        <div class="sl-doc-cam__status">
-          <strong>{{ statusMessage }}</strong>
-          <span>{{ countLabel }}</span>
-        </div>
-      </div>
-
       <canvas ref="canvasRef" class="sl-doc-cam__canvas" />
 
       <p v-if="cameraError" class="sl-doc-cam__error">{{ cameraError }}</p>
 
       <div v-if="photos.length" class="sl-doc-cam__shots">
-        <div
+        <button
           v-for="(photo, index) in photos"
           :key="photo.id"
+          type="button"
           class="sl-doc-cam__shot"
+          :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
+          @click="openPreview(photo.id)"
         >
-          <img :src="photo.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+          <img :src="photo.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
           <span class="sl-doc-cam__shot-label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-          <button
-            type="button"
+          <span
             class="sl-doc-cam__shot-x"
+            role="button"
+            tabindex="0"
             :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-            @click="emit('remove', photo.id)"
+            @click.stop="emit('remove', photo.id)"
+            @keydown.enter.stop="emit('remove', photo.id)"
+            @keydown.space.prevent.stop="emit('remove', photo.id)"
           >
             ×
-          </button>
-        </div>
+          </span>
+        </button>
       </div>
 
       <div v-if="isFullscreen" class="sl-doc-cam__dock">
@@ -295,6 +340,14 @@ onBeforeUnmount(() => stopCamera())
       </div>
     </div>
   </Teleport>
+
+  <ServiceLogPhotoLightbox
+    :open="Boolean(previewPhoto)"
+    :url="previewPhoto?.url || ''"
+    :label="previewIndex >= 0 ? serviceLogPhotoSlotLabel(previewIndex) : ''"
+    :alt="previewIndex >= 0 ? `${serviceLogPhotoSlotLabel(previewIndex)} of service log` : 'Service log photo'"
+    @close="closePreview"
+  />
 </template>
 
 <style scoped>
@@ -322,51 +375,74 @@ onBeforeUnmount(() => stopCamera())
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.72);
   color: #f8fafc;
   font-size: 12px;
+  pointer-events: none;
 }
 .sl-doc-cam__status strong { font-size: 13px; }
 .sl-doc-cam__canvas { display: none; }
-.sl-doc-cam__error { margin: 10px 12px 0; color: #fbbf24; font-size: 13px; }
+.sl-doc-cam__error {
+  margin: 10px 12px 0;
+  color: #fbbf24;
+  font-size: 13px;
+  position: relative;
+  z-index: 4;
+}
 .sl-doc-cam__shots {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px 14px 0;
 }
 .sl-doc-cam__shot {
   position: relative;
+  border: 0;
+  padding: 0;
   border-radius: 12px;
   overflow: hidden;
-  aspect-ratio: 3 / 4;
+  width: 72px;
+  height: 72px;
   background: #1e293b;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
-.sl-doc-cam__shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sl-doc-cam__shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
 .sl-doc-cam__shot-label {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 3px 8px;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.75);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  pointer-events: none;
 }
 .sl-doc-cam__shot-x {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 28px;
-  height: 28px;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.8);
   color: #fff;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
 }
 .sl-doc-cam__actions {
   display: flex;
@@ -375,40 +451,109 @@ onBeforeUnmount(() => stopCamera())
 }
 .sl-doc-cam__actions .btn { flex: 1; min-height: 48px; }
 
+/* ---- Fullscreen: video is the viewport; chrome overlays it ---- */
 .sl-doc-cam--fullscreen {
   position: fixed;
   inset: 0;
   z-index: 200;
   margin: 0;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: #020617;
   color: #fff;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding:
-    env(safe-area-inset-top, 0)
-    env(safe-area-inset-right, 0)
-    env(safe-area-inset-bottom, 0)
-    env(safe-area-inset-left, 0);
+  padding: 0;
 }
 .sl-doc-cam--fullscreen .sl-doc-cam__stage {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   max-height: none;
   aspect-ratio: auto;
   border-radius: 0;
   min-height: 0;
 }
-.sl-doc-cam__top {
+.sl-doc-cam--fullscreen .sl-doc-cam__top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
   display: grid;
   grid-template-columns: 48px 1fr 48px;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.85), transparent);
-  position: relative;
-  z-index: 2;
+  padding:
+    max(10px, env(safe-area-inset-top))
+    14px
+    28px;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.88), transparent);
 }
+.sl-doc-cam--fullscreen .sl-doc-cam__status {
+  left: auto;
+  right: 14px;
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+  max-width: min(52vw, 220px);
+  padding: 6px 10px;
+  border-radius: 10px;
+  gap: 0;
+  text-align: right;
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__status strong {
+  display: none;
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__status span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.sl-doc-cam--fullscreen.sl-doc-cam--has-shots .sl-doc-cam__status {
+  bottom: calc(158px + env(safe-area-inset-bottom, 0px));
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__shots {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+  padding: 0;
+  justify-content: flex-start;
+  gap: 6px;
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__shot {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding:
+    16px 20px
+    max(18px, env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.35));
+}
+.sl-doc-cam--fullscreen .sl-doc-cam__error {
+  position: absolute;
+  top: calc(72px + env(safe-area-inset-top, 0px));
+  left: 14px;
+  right: 14px;
+  margin: 0;
+  z-index: 4;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+}
+
 .sl-doc-cam__top-copy {
   display: flex;
   flex-direction: column;
@@ -431,14 +576,6 @@ onBeforeUnmount(() => stopCamera())
 }
 .sl-doc-cam__icon-btn.on { background: rgba(250, 204, 21, 0.25); color: #fde047; }
 .sl-doc-cam__icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.sl-doc-cam__dock {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 20px 22px;
-  background: linear-gradient(0deg, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0.55));
-}
 .sl-doc-cam__side-btn {
   min-height: 44px;
   border: 0;
@@ -481,6 +618,7 @@ onBeforeUnmount(() => stopCamera())
   background: #fff;
   opacity: 0.72;
   pointer-events: none;
+  z-index: 5;
   animation: slCamFlash 0.18s ease-out;
 }
 @keyframes slCamFlash {
