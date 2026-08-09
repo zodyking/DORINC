@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyLine, type DraftLine } from '../../app/utils/invoice-creator-ui'
-import { invoiceWizardStepHint, invoiceWizardStepHintClass } from '../../app/utils/invoice-wizard-ui'
+import {
+  invoiceWizardStepHint,
+  invoiceWizardStepHintClass,
+  shouldOfferInvoiceWizardServiceLogUpload,
+} from '../../app/utils/invoice-wizard-ui'
 
 describe('invoice-wizard-ui', () => {
   const vehicle = {
@@ -65,5 +69,21 @@ describe('invoice-wizard-ui', () => {
     expect(invoiceWizardStepHintClass(5, { step: 5, dirty: true, invoiceId: 'inv-1' })).toBe('pending')
     expect(invoiceWizardStepHintClass(5, { step: 5, dirty: false, invoiceId: 'inv-1' })).toBe('saved')
     expect(invoiceWizardStepHintClass(1, { step: 1 })).toBe('')
+  })
+
+  it('offers service log upload interstitial only when extraction is on', () => {
+    expect(shouldOfferInvoiceWizardServiceLogUpload(null)).toBe(false)
+    expect(shouldOfferInvoiceWizardServiceLogUpload({
+      aiEnabled: false,
+      serviceLogExtractionEnabled: true,
+    })).toBe(false)
+    expect(shouldOfferInvoiceWizardServiceLogUpload({
+      aiEnabled: true,
+      serviceLogExtractionEnabled: false,
+    })).toBe(false)
+    expect(shouldOfferInvoiceWizardServiceLogUpload({
+      aiEnabled: true,
+      serviceLogExtractionEnabled: true,
+    })).toBe(true)
   })
 })
