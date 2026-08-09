@@ -4,6 +4,7 @@
  * Device cookie → “Are you …?” → login (with return) or simple upload wizard.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
+import ServiceLogPhotoLightbox from '~/components/service-logs/ServiceLogPhotoLightbox.vue'
 import { BRAND_NAME } from '~/constants/brand'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { setStaffReturnPath, consumeStaffReturnAutoContinue } from '~/utils/staff-return-path'
@@ -62,6 +63,7 @@ const wizardStep = ref(1)
 const busy = ref(false)
 const actionError = ref('')
 const cameraOpen = ref(false)
+const previewId = ref<string | null>(null)
 const submittedLogLabel = ref('')
 
 const customerId = ref('')
@@ -69,6 +71,12 @@ const vehicleId = ref('')
 const localPreviews = ref<{ id: string, url: string, file: File }[]>([])
 
 const cameraPhotos = computed(() => localPreviews.value.map(p => ({ id: p.id, url: p.url })))
+const previewPhoto = computed(() =>
+  localPreviews.value.find(photo => photo.id === previewId.value) ?? null,
+)
+const previewIndex = computed(() =>
+  localPreviews.value.findIndex(photo => photo.id === previewId.value),
+)
 
 const { data: customersData, pending: customersPending } = useClientFetch<{ items: CustomerPick[] }>(
   () => (phase.value === 'wizard' ? '/api/customers' : null),
@@ -91,6 +99,11 @@ const { data: vehiclesData, pending: vehiclesPending, refresh: refreshVehicles }
 watch(customerId, () => {
   vehicleId.value = ''
   if (customerId.value) void refreshVehicles()
+})
+
+watch(wizardStep, (step) => {
+  // Match invoice QR upload: open fullscreen camera as soon as photo step starts.
+  if (step === 3 && phase.value === 'wizard') cameraOpen.value = true
 })
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
@@ -182,6 +195,16 @@ function removePreview(id: string) {
   if (idx < 0) return
   URL.revokeObjectURL(localPreviews.value[idx]!.url)
   localPreviews.value.splice(idx, 1)
+  if (previewId.value === id) previewId.value = null
+}
+
+function openPreview(id: string) {
+  previewId.value = id
+}
+
+function goPhotoStep() {
+  wizardStep.value = 3
+  cameraOpen.value = true
 }
 
 function clearPreviews() {
@@ -240,12 +263,12 @@ onBeforeUnmount(() => { clearPreviews() })
 
 <template>
   <div class="sl-sheet-upload">
-    <header class="sl-sheet-upload__head">
+    <header v-if="!cameraOpen" class="sl-sheet-upload__head">
       <strong>Service Log Upload</strong>
       <small>{{ BRAND_NAME }} SUITE</small>
     </header>
 
-    <main class="sl-sheet-upload__main">
+    <main v-show="!cameraOpen" class="sl-sheet-upload__main">
       <div v-if="phase === 'boot'" class="sl-sheet-upload__state">
         <p v-if="bootError">{{ bootError }}</p>
         <p v-else>Loading…</p>
@@ -341,7 +364,7 @@ onBeforeUnmount(() => { clearPreviews() })
               type="button"
               class="btn primary"
               :disabled="!vehicleId"
-              @click="wizardStep = 3"
+              @click="goPhotoStep"
             >
               Continue
             </button>
@@ -349,8 +372,8 @@ onBeforeUnmount(() => { clearPreviews() })
         </div>
 
         <div v-show="wizardStep === 3" class="sl-sheet-upload__panel">
-          <h1>Photograph the log</h1>
-          <p class="sl-sheet-upload__hint">Front and back of the paper service log — max 2 photos.</p>
+          <h1>Upload Service Log</h1>
+          <p class="sl-sheet-upload__hint">Front and back of the paper log — max 2 photos.</p>
 
           <button
             type="button"
@@ -372,19 +395,33 @@ onBeforeUnmount(() => { clearPreviews() })
           </button>
 
           <div v-if="localPreviews.length" class="inv-sl-thumbs">
-            <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
-              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+            <button
+              v-for="(p, index) in localPreviews"
+              :key="p.id"
+              type="button"
+              class="inv-sl-thumb"
+              :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
+              @click="openPreview(p.id)"
+            >
+              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
               <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-              <button
-                type="button"
+              <span
                 class="inv-sl-thumb__x"
+                role="button"
+                tabindex="0"
                 :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-                @click="removePreview(p.id)"
+                @click.stop="removePreview(p.id)"
+                @keydown.enter.stop="removePreview(p.id)"
+                @keydown.space.prevent.stop="removePreview(p.id)"
               >
                 ×
-              </button>
-            </div>
+              </span>
+            </button>
           </div>
+
+          <p v-if="localPreviews.length" class="sl-sheet-upload__count">
+            {{ localPreviews.length }} of {{ SERVICE_LOG_MAX_PHOTOS }} photos ready
+          </p>
 
           <p v-if="actionError" class="sl-sheet-upload__error">{{ actionError }}</p>
 
@@ -414,6 +451,14 @@ onBeforeUnmount(() => { clearPreviews() })
         @close="cameraOpen = false"
       />
     </ClientOnly>
+
+    <ServiceLogPhotoLightbox
+      :open="Boolean(previewPhoto)"
+      :url="previewPhoto?.url || ''"
+      :label="previewIndex >= 0 ? serviceLogPhotoSlotLabel(previewIndex) : ''"
+      :alt="previewIndex >= 0 ? `${serviceLogPhotoSlotLabel(previewIndex)} of service log` : 'Service log photo'"
+      @close="previewId = null"
+    />
   </div>
 </template>
 
@@ -500,6 +545,12 @@ onBeforeUnmount(() => { clearPreviews() })
   color: #dc2626;
   font-size: 13px;
   margin: 10px 0 0;
+}
+.sl-sheet-upload__count {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
 }
 .sl-sheet-upload__success {
   text-align: center;

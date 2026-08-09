@@ -5,6 +5,7 @@
  * Mobile: camera icon → 100dvh capture.
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
+import ServiceLogPhotoLightbox from '~/components/service-logs/ServiceLogPhotoLightbox.vue'
 import ServiceLogAiExtractModal from '~/components/service-logs/ServiceLogAiExtractModal.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
@@ -46,6 +47,7 @@ const successInvoiceLabel = ref('')
 const extractOpen = ref(false)
 const extractFileId = ref<string | null>(null)
 const cameraOpen = ref(false)
+const previewId = ref<string | null>(null)
 
 const qrDataUrl = ref('')
 const qrUploadUrl = ref('')
@@ -143,12 +145,23 @@ function onDesktopFiles(ev: Event) {
 }
 
 const cameraPhotos = computed(() => localPreviews.value.map(p => ({ id: p.id, url: p.url })))
+const previewPhoto = computed(() =>
+  localPreviews.value.find(photo => photo.id === previewId.value) ?? null,
+)
+const previewIndex = computed(() =>
+  localPreviews.value.findIndex(photo => photo.id === previewId.value),
+)
 
 function removePreview(id: string) {
   const idx = localPreviews.value.findIndex(p => p.id === id)
   if (idx < 0) return
   URL.revokeObjectURL(localPreviews.value[idx]!.url)
   localPreviews.value.splice(idx, 1)
+  if (previewId.value === id) previewId.value = null
+}
+
+function openPreview(id: string) {
+  previewId.value = id
 }
 
 async function buildQrDataUrl(url: string): Promise<string> {
@@ -510,18 +523,28 @@ onBeforeUnmount(() => {
     </template>
 
     <div v-if="localPreviews.length" class="inv-sl-thumbs">
-      <div v-for="(p, index) in localPreviews" :key="p.id" class="inv-sl-thumb">
-        <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`">
+      <button
+        v-for="(p, index) in localPreviews"
+        :key="p.id"
+        type="button"
+        class="inv-sl-thumb"
+        :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
+        @click="openPreview(p.id)"
+      >
+        <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
         <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-        <button
-          type="button"
+        <span
           class="inv-sl-thumb__x"
+          role="button"
+          tabindex="0"
           :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-          @click="removePreview(p.id)"
+          @click.stop="removePreview(p.id)"
+          @keydown.enter.stop="removePreview(p.id)"
+          @keydown.space.prevent.stop="removePreview(p.id)"
         >
           ×
-        </button>
-      </div>
+        </span>
+      </button>
     </div>
 
     <div v-if="localPreviews.length" class="inv-sl-attach-row">
@@ -573,6 +596,14 @@ onBeforeUnmount(() => {
       @close="cameraOpen = false"
     />
   </ClientOnly>
+
+  <ServiceLogPhotoLightbox
+    :open="Boolean(previewPhoto)"
+    :url="previewPhoto?.url || ''"
+    :label="previewIndex >= 0 ? serviceLogPhotoSlotLabel(previewIndex) : ''"
+    :alt="previewIndex >= 0 ? `${serviceLogPhotoSlotLabel(previewIndex)} of service log` : 'Service log photo'"
+    @close="previewId = null"
+  />
 
   <Teleport to="body">
     <div
