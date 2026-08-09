@@ -1,4 +1,4 @@
-import { count, eq } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ne } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { Db } from '../db/client'
 import { usePool } from '../db/client'
@@ -11,6 +11,7 @@ import { vehicles } from '../db/schema/vehicles'
 import { conversations } from '../db/schema/messages'
 import { AI_ADMINISTRATOR_DISPLAY_NAME, AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
 import { BRAND_NAME } from '../../shared/brand'
+import { signatureAccountTypeLabel } from '../../shared/format/account-type-label'
 import { parseOpenRouterJson, openRouterChat } from './ai-openrouter.service'
 import {
   AiSpendCapExceededError,
@@ -29,9 +30,12 @@ import {
 import { hashPassword } from '../auth/password'
 
 export const DELETION_REASON_WEAK_MESSAGE
-  = 'Enter a more descriptive reason for your request'
+  = 'Explain why this record should be deleted — a short phrase like "test system" is not enough'
 
 export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
+
+/** How far back Susan looks for similar/repeated deletion requests from the same user. */
+export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 
 export const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
 
@@ -50,13 +54,47 @@ export async function isAiAdministratorEnabled(db: Db): Promise<boolean> {
   return settings.enabled && settings.aiAdministratorEnabled && settings.hasApiKey
 }
 
+/** Normalize deletion reasons for similarity checks. */
+export function normalizeDeletionReasonForCompare(reason: string): string {
+  return String(reason || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** True when two deletion reasons are the same or near-duplicates. */
+export function deletionReasonsLookSimilar(a: string, b: string): boolean {
+  const na = normalizeDeletionReasonForCompare(a)
+  const nb = normalizeDeletionReasonForCompare(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
+  if (na.length >= 12 && nb.length >= 12 && (na.includes(nb) || nb.includes(na))) return true
+
+  const stop = new Set([
+    'the', 'and', 'for', 'this', 'that', 'with', 'from', 'into', 'a', 'an', 'of', 'to', 'in', 'on',
+    'please', 'pls', 'just', 'record', 'delete', 'deleted', 'deletion', 'remove', 'removed',
+  ])
+  const tokens = (value: string) => new Set(
+    value.split(' ').filter(w => w.length > 2 && !stop.has(w)),
+  )
+  const ta = tokens(na)
+  const tb = tokens(nb)
+  if (ta.size === 0 || tb.size === 0) return false
+  let inter = 0
+  for (const w of ta) if (tb.has(w)) inter += 1
+  const union = ta.size + tb.size - inter
+  return union > 0 && inter / union >= 0.72
+}
+
 /** Cheap local filter before spending tokens. */
 export function looksLikeWeakDeletionReason(reason: string): boolean {
   const text = reason.trim().toLowerCase()
-  if (text.length < 10) return true
+  if (text.length < 12) return true
 
   const compact = text.replace(/\s+/g, '')
-  if (compact.length < 8) return true
+  if (compact.length < 10) return true
 
   // Keyboard spam / filler
   if (/^(.)\1{7,}$/.test(compact)) return true
@@ -64,16 +102,25 @@ export function looksLikeWeakDeletionReason(reason: string): boolean {
   if (/^(asdf+|qwer+|zxcv+|test+|abc+|xxx+|yyy+|zzz+|1234+|0000+)/.test(compact)) return true
 
   const words = text.split(/[^a-z0-9]+/).filter(Boolean)
-  if (words.length <= 1 && text.length < 24) return true
+  if (words.length <= 2 && text.length < 36) return true
 
   const filler = new Set([
-    'test', 'testing', 'asdf', 'qwer', 'delete', 'remove', 'please', 'pls',
-    'thanks', 'thank', 'you', 'need', 'want', 'just', 'because', 'reason',
-    'blah', 'stuff', 'thing', 'things', 'idk', 'whatever', 'none', 'n/a', 'na',
+    'test', 'testing', 'tests', 'tested', 'asdf', 'qwer', 'delete', 'deleted', 'deletion',
+    'remove', 'removed', 'please', 'pls', 'thanks', 'thank', 'you', 'need', 'want', 'just',
+    'because', 'reason', 'blah', 'stuff', 'thing', 'things', 'idk', 'whatever', 'none',
+    'n/a', 'na', 'system', 'systems', 'app', 'application', 'feature', 'features', 'software',
+    'platform', 'portal', 'site', 'check', 'checking', 'try', 'trying', 'demo', 'sample',
   ])
   const meaningful = words.filter(w => !filler.has(w) && w.length > 2)
   if (meaningful.length === 0) return true
-  if (words.length >= 3 && meaningful.length <= 1 && text.length < 40) return true
+  if (words.length >= 2 && meaningful.length <= 1 && text.length < 48) return true
+
+  // "test system" / "testing the app" without explaining the purpose.
+  const mentionsTesting = /\b(test|tests|testing|tested|demo|sample)\b/.test(text)
+  if (mentionsTesting) {
+    const explainsPurpose = /\b(ensur(e|ed|ing)|verif(y|ied|ying)|confirm(ed|ing)?|because|so that|in order|mistake|mistaken|accident|accidental|wrong|duplicate|training|practice|sandbox|cleanup|clean up|created by|should not|shouldn'?t|no longer|obsolete|invalid)\b/.test(text)
+    if (!explainsPurpose && text.length < 80) return true
+  }
 
   return false
 }
@@ -100,6 +147,123 @@ async function prepareAdministratorClient(db: Db): Promise<{
   return { apiKey, model }
 }
 
+type SubmitterContext = {
+  id: string
+  name: string | null
+  accountTypeKey: string
+  accountTypeLabel: string
+}
+
+async function loadSubmitterContext(db: Db, submitterId: string): Promise<SubmitterContext | null> {
+  const [row] = await db.select({
+    id: users.id,
+    name: users.name,
+    accountTypeKey: accountTypes.key,
+  })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.id, submitterId))
+    .limit(1)
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    accountTypeKey: row.accountTypeKey,
+    accountTypeLabel: signatureAccountTypeLabel(row.accountTypeKey),
+  }
+}
+
+type PriorDeletionRequest = {
+  id: string
+  entityType: DeletionEntityType
+  entityId: string
+  entityLabel: string
+  status: string
+  reason: string
+  createdAt: Date
+}
+
+async function loadSubmitterDeletionHistory(
+  db: Db,
+  submitterId: string,
+  opts: { excludeRequestId?: string | null } = {},
+): Promise<PriorDeletionRequest[]> {
+  const since = new Date(Date.now() - SIMILAR_DELETION_REQUEST_LOOKBACK_MS)
+  const conditions = [
+    eq(entityDeletionRequests.submittedBy, submitterId),
+    gte(entityDeletionRequests.createdAt, since),
+  ]
+  if (opts.excludeRequestId) {
+    conditions.push(ne(entityDeletionRequests.id, opts.excludeRequestId))
+  }
+
+  const rows = await db.select({
+    id: entityDeletionRequests.id,
+    entityType: entityDeletionRequests.entityType,
+    entityId: entityDeletionRequests.entityId,
+    entityLabel: entityDeletionRequests.entityLabel,
+    status: entityDeletionRequests.status,
+    reason: entityDeletionRequests.reason,
+    createdAt: entityDeletionRequests.createdAt,
+  })
+    .from(entityDeletionRequests)
+    .where(and(...conditions))
+    .orderBy(desc(entityDeletionRequests.createdAt))
+    .limit(25)
+
+  return rows.map(row => ({
+    id: row.id,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    entityLabel: row.entityLabel,
+    status: row.status,
+    reason: row.reason,
+    createdAt: row.createdAt,
+  }))
+}
+
+/** Deterministic repeat/similar match from the same submitter. */
+export function findSimilarDeletionRequest(
+  current: {
+    entityType: DeletionEntityType
+    entityId: string
+    reason: string
+  },
+  history: Array<{
+    id: string
+    entityType: DeletionEntityType
+    entityId: string
+    entityLabel: string
+    status: string
+    reason: string
+  }>,
+): { id: string, entityLabel: string, status: string, reason: string, kind: 'same_record' | 'similar_reason' } | null {
+  for (const prior of history) {
+    if (prior.entityType === current.entityType && prior.entityId === current.entityId) {
+      return {
+        id: prior.id,
+        entityLabel: prior.entityLabel,
+        status: prior.status,
+        reason: prior.reason,
+        kind: 'same_record',
+      }
+    }
+  }
+  for (const prior of history) {
+    if (prior.entityType !== current.entityType) continue
+    if (deletionReasonsLookSimilar(current.reason, prior.reason)) {
+      return {
+        id: prior.id,
+        entityLabel: prior.entityLabel,
+        status: prior.status,
+        reason: prior.reason,
+        kind: 'similar_reason',
+      }
+    }
+  }
+  return null
+}
+
 /**
  * Gate vague / filler deletion reasons when AI Administrator is enabled.
  * Local heuristic catches obvious filler; Susan confirms borderline cases.
@@ -108,7 +272,12 @@ async function prepareAdministratorClient(db: Db): Promise<{
 export async function assertDeletionReasonAcceptable(
   db: Db,
   reason: string,
-  context: { entityType: DeletionEntityType, entityLabel?: string | null },
+  context: {
+    entityType: DeletionEntityType
+    entityLabel?: string | null
+    submitterId?: string | null
+    accountTypeKey?: string | null
+  },
 ): Promise<void> {
   if (!(await isAiAdministratorEnabled(db))) return
 
@@ -117,21 +286,31 @@ export async function assertDeletionReasonAcceptable(
     throw new AiAdministratorServiceError('WEAK_REASON', DELETION_REASON_WEAK_MESSAGE)
   }
 
+  const submitter = context.submitterId
+    ? await loadSubmitterContext(db, context.submitterId)
+    : null
+  const accountTypeKey = submitter?.accountTypeKey || context.accountTypeKey || null
+  const accountTypeLabel = submitter
+    ? submitter.accountTypeLabel
+    : (accountTypeKey ? signatureAccountTypeLabel(accountTypeKey) : null)
+
   const client = await prepareAdministratorClient(db)
   if (!client) return
 
   const system = [
     `You are ${AI_ASSISTANT_NAME}, AI Administrator for ${BRAND_NAME}.`,
-    'Decide if a staff deletion-request reason is a real business explanation,',
-    'or filler written only to pass a minimum character check.',
-    'Reject keyboard spam, nonsense, jokes, and vague filler like "delete please" / "test test test".',
-    'Accept concise but real reasons (duplicate draft, wrong customer, created by mistake, etc.).',
+    'Decide if a staff deletion-request reason shows a real understanding of why the record should be deleted.',
+    'Reject keyboard spam, nonsense, jokes, and vague filler such as "delete please", "test test test", or "test system".',
+    'Require the why: what went wrong / why it exists / what cleanup goal is — not just that they were testing.',
+    'Accept clear reasons even when concise (duplicate draft, wrong customer, created by mistake, training leftover that should be removed, etc.).',
+    'Weigh the submitter account type with the reason (e.g. mechanic training mistakes vs admin cleanup vs accountant billing records).',
     'Return JSON only: { "ok": boolean, "reason": "short note" }.',
   ].join(' ')
 
   const user = [
     `Entity type: ${context.entityType}`,
     context.entityLabel ? `Entity: ${context.entityLabel}` : null,
+    accountTypeKey ? `Submitter account type: ${accountTypeLabel} (${accountTypeKey})` : null,
     `Submitted reason: ${trimmed}`,
   ].filter(Boolean).join('\n')
 
@@ -369,13 +548,63 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
 
   const entityContext = await loadEntityContext(db, req.entityType, req.entityId)
   const susanId = await ensureSusanSystemUser(db)
+  const submitter = await loadSubmitterContext(db, req.submittedBy)
+  const history = await loadSubmitterDeletionHistory(db, req.submittedBy, { excludeRequestId: req.id })
+  const similar = findSimilarDeletionRequest(
+    { entityType: req.entityType, entityId: req.entityId, reason: req.reason },
+    history,
+  )
+
+  // Deterministic: repeated / near-duplicate requests from the same user are rejected.
+  if (similar) {
+    const note = similar.kind === 'same_record'
+      ? 'Rejected — you already submitted a deletion request for this same record recently. Ask a manager if it still needs to be removed.'
+      : 'Rejected — this is too similar to another deletion request you submitted recently. Give a distinct business reason for a different cleanup, or ask a manager.'
+    try {
+      await rejectDeletionRequest(db, requestId, susanId, note)
+      return { decision: 'reject', note }
+    }
+    catch (err) {
+      if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
+        return { decision: 'skipped', note: 'Already decided' }
+      }
+      throw err
+    }
+  }
+
+  // Deterministic: vague reasons that slipped past submit still get rejected before approval.
+  if (looksLikeWeakDeletionReason(req.reason)) {
+    const note = 'Rejected — explain why this record should be deleted. A short phrase like "test system" is not enough.'
+    try {
+      await rejectDeletionRequest(db, requestId, susanId, note)
+      return { decision: 'reject', note }
+    }
+    catch (err) {
+      if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
+        return { decision: 'skipped', note: 'Already decided' }
+      }
+      throw err
+    }
+  }
+
+  const recentHistoryForPrompt = history.slice(0, 8).map(item => ({
+    status: item.status,
+    entityType: item.entityType,
+    entityLabel: item.entityLabel,
+    reason: item.reason,
+    createdAt: item.createdAt.toISOString(),
+  }))
 
   const system = [
     `You are ${AI_ASSISTANT_NAME}, AI Administrator for ${BRAND_NAME}.`,
-    'Review staff deletion requests. Be conservative.',
+    'Review staff deletion requests. Be conservative and require a clear why.',
+    'Reject vague reasons that only say testing happened (e.g. "test system") without explaining the purpose or mistake.',
+    'Accept reasons that show understanding, such as testing to verify features and now cleaning up the leftover record.',
+    'Weigh the submitter account type with the reason and record type (mechanic/training mistakes, admin cleanup, accountant/billing caution).',
+    'REJECT similar or repeated deletion requests from the same user (same record or near-duplicate reason for the same entity type).',
     'Prefer REJECT when an edit can fix the problem (wrong field, typo, wrong notes) — tell them to edit instead.',
     'Prefer REJECT when the record was already sent to a customer, paid, linked to billing, or clearly still in use — unless the reason proves a true duplicate/mistake that cannot be fixed by edit.',
-    'APPROVE only for clear junk/duplicate/test records or irreversible mistakes where deletion is the right cleanup.',
+    'APPROVE only for clear junk/duplicate/test leftovers or irreversible mistakes where deletion is the right cleanup and the reason explains why.',
     'Write a concise review note (1–2 short sentences, no fluff).',
     'Return JSON only: { "decision": "approve" | "reject", "note": "..." }.',
   ].join(' ')
@@ -384,7 +613,11 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     `Request id: ${req.id}`,
     `Entity type: ${req.entityType}`,
     `Entity label: ${req.entityLabel}`,
+    submitter
+      ? `Submitter: ${submitter.name || 'staff'} · account type ${submitter.accountTypeLabel} (${submitter.accountTypeKey})`
+      : 'Submitter: unknown',
     `Submitter reason: ${req.reason}`,
+    `Recent deletion requests by this submitter (JSON): ${JSON.stringify(recentHistoryForPrompt)}`,
     `Entity context JSON: ${JSON.stringify(entityContext)}`,
   ].join('\n')
 
