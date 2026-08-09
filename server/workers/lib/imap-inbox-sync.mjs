@@ -29,6 +29,10 @@ import {
   isPrintMeSender,
 } from '../../../shared/staples-printme.mjs'
 import { matchStaplesPrintMeReply } from './staples-printme-match.mjs'
+import {
+  deleteImapUids,
+  shouldDeleteUnmatchedPrintMeReply,
+} from './staples-printme-imap-delete.mjs'
 import { ensureStaplesPrintJobsSchema } from '../../lib/ensure-staples-print-jobs-schema.mjs'
 
 const DEFAULT_SYNC_INTERVAL_MS = 15_000
@@ -57,7 +61,7 @@ async function hasAwaitingStaplesPrintJobs(pool) {
  * @param {import('imapflow').ImapFlow} client
  */
 async function rescanRecentPrintMeReplies(pool, client) {
-  const out = { matched: 0, errors: 0 }
+  const out = { matched: 0, deleted: 0, errors: 0 }
   try {
     const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
     /** @type {number[]} */
@@ -74,6 +78,8 @@ async function rescanRecentPrintMeReplies(pool, client) {
 
     // Newest first, cap work per sync tick.
     uids = [...new Set(uids)].sort((a, b) => b - a).slice(0, 40)
+    /** @type {number[]} */
+    const deleteUids = []
     for await (const msg of client.fetch(uids, {
       uid: true,
       source: true,
@@ -103,10 +109,27 @@ async function rescanRecentPrintMeReplies(pool, client) {
           attachments: parsed.attachments,
         })
         if (matched.matched) out.matched++
+        else if (shouldDeleteUnmatchedPrintMeReply(matched) && msg.uid) {
+          // Collect UIDs — never delete inside fetch().
+          deleteUids.push(msg.uid)
+        }
       }
       catch (err) {
         out.errors++
         console.error('[imap-sync] printme rescan message failed', err)
+      }
+    }
+
+    if (deleteUids.length) {
+      try {
+        out.deleted = await deleteImapUids(client, deleteUids)
+        console.info('[imap-sync] deleted unmatched PrintMe confirmations', {
+          deleted: out.deleted,
+        })
+      }
+      catch (err) {
+        out.errors++
+        console.error('[imap-sync] printme unmatched delete failed', err)
       }
     }
   }
@@ -590,8 +613,19 @@ export async function runImapInboxSync(pool, opts = {}) {
       logger: false,
     })
 
-    const result = { fetched: 0, ingested: 0, skipped: 0, errors: 0, attachments: 0, repaired: 0, busy: false }
+    const result = {
+      fetched: 0,
+      ingested: 0,
+      skipped: 0,
+      errors: 0,
+      attachments: 0,
+      repaired: 0,
+      deleted: 0,
+      busy: false,
+    }
     let maxUid = lastUid
+    /** @type {number[]} PrintMe UIDs to delete after the fetch loop (never inside fetch). */
+    const printMeDeleteUids = []
 
     await client.connect()
     try {
@@ -657,6 +691,9 @@ export async function runImapInboxSync(pool, opts = {}) {
                   attachments: parsed.attachments,
                 })
                 printMeMatched = Boolean(matched.matched)
+                if (shouldDeleteUnmatchedPrintMeReply(matched) && msg.uid) {
+                  printMeDeleteUids.push(msg.uid)
+                }
               }
               catch (err) {
                 result.errors++
@@ -701,15 +738,32 @@ export async function runImapInboxSync(pool, opts = {}) {
           }
         }
 
-        // Re-scan recent PrintMe mail when jobs are still awaiting — confirmation
-        // messages may already be past last_uid from an earlier failed match.
-        if (await hasAwaitingStaplesPrintJobs(pool)) {
-          const rescanned = await rescanRecentPrintMeReplies(pool, client)
-          result.ingested += rescanned.matched
-          result.errors += rescanned.errors
-          if (rescanned.matched || rescanned.errors) {
-            console.log(`[imap-sync] printme rescan matched=${rescanned.matched} errors=${rescanned.errors}`)
+        // Delete PrintMe confirmations that did not match an open order.
+        if (printMeDeleteUids.length) {
+          try {
+            const deleted = await deleteImapUids(client, printMeDeleteUids)
+            result.deleted += deleted
+            if (deleted) {
+              console.info('[imap-sync] deleted unmatched PrintMe confirmations', { deleted })
+            }
           }
+          catch (err) {
+            result.errors++
+            console.error('[imap-sync] printme unmatched delete failed', err)
+          }
+        }
+
+        // Re-scan recent PrintMe mail:
+        // - match confirmations for open awaiting jobs (may be below last_uid)
+        // - delete confirmations that do not match any open order
+        const rescanned = await rescanRecentPrintMeReplies(pool, client)
+        result.ingested += rescanned.matched
+        result.deleted += rescanned.deleted
+        result.errors += rescanned.errors
+        if (rescanned.matched || rescanned.deleted || rescanned.errors) {
+          console.log(
+            `[imap-sync] printme rescan matched=${rescanned.matched} deleted=${rescanned.deleted} errors=${rescanned.errors}`,
+          )
         }
       }
       finally {
