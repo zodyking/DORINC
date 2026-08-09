@@ -106,3 +106,23 @@ export function sheetGridRows(document: ServiceLogSheetDocument): SheetGridRow[]
     rightEnd: index === rightRows.length - 1,
   }))
 }
+
+/**
+ * Trailing empty right-column rows under the last right section (Inspection).
+ * Used to seat the scan-to-upload QR in the bottom-right void on page 1.
+ */
+export function sheetRightTrailingVoid(document: ServiceLogSheetDocument): {
+  startIndex: number
+  rowCount: number
+} | null {
+  const rows = sheetGridRows(document)
+  let start = -1
+  for (let i = 0; i < rows.length; i++) {
+    if (!rows[i]!.right && rows.slice(i).every(row => !row.right)) {
+      start = i
+      break
+    }
+  }
+  if (start < 0) return null
+  return { startIndex: start, rowCount: rows.length - start }
+}

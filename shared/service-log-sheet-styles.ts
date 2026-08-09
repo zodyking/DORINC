@@ -227,47 +227,40 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   text-align: center;
 }
 
-/* ---------- sheet QR (bottom-right under Inspection void) ---------- */
-.sheet-doc .sheet-upload-qr {
-  margin-top: 6pt;
-  width: 100%;
-}
-.sheet-doc .sheet-upload-qr-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.sheet-doc .sheet-upload-qr-table td {
-  border: none;
-  padding: 0;
-  vertical-align: top;
-}
-.sheet-doc .sheet-upload-qr-spacer { width: 51.5%; }
+/* ---------- sheet QR (right-column void under Inspection) ---------- */
 .sheet-doc .sheet-upload-qr-cell {
-  width: 48.5%;
+  border: 0.6pt solid #9ca3af;
+  background: #fafafa;
   text-align: center;
-  padding-top: 2pt;
+  vertical-align: middle;
+  padding: 5pt 6pt;
+}
+.sheet-doc .sheet-upload-qr-inner {
+  margin: 0 auto;
+  max-width: 150pt;
+}
+.sheet-doc .sheet-upload-qr-title {
+  margin: 0 0 3pt;
+  font-size: 7.6pt;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #111111;
 }
 .sheet-doc .sheet-upload-qr-img {
-  width: 70pt;
-  height: 70pt;
+  width: 56pt;
+  height: 56pt;
   display: block;
-  margin: 0 auto 3pt;
+  margin: 0 auto 4pt;
 }
-.sheet-doc .sheet-upload-qr-caption {
+.sheet-doc .sheet-upload-qr-help {
   margin: 0;
-  font-size: 6.6pt;
-  line-height: 1.25;
-  color: #111111;
+  font-size: 5.9pt;
+  line-height: 1.3;
+  font-weight: 500;
+  color: #374151;
   text-align: center;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-.sheet-doc .sheet-upload-qr-caption strong {
-  display: block;
-  margin-top: 1pt;
-  font-size: 7.2pt;
-  letter-spacing: 0.06em;
 }
 
 /* ---------- back page ---------- */
