@@ -55,6 +55,8 @@ const qrSessionId = ref('')
 const qrStatus = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let qrRequestSeq = 0
+/** Ignore technician watcher while the step bootstraps its default selection. */
+let suppressTechQrWatch = false
 
 const isMobile = computed(() => {
   if (!import.meta.client) return false
@@ -65,6 +67,14 @@ const isMobile = computed(() => {
     return true
   }
 })
+
+const canAutoloadQr = computed(() =>
+  props.open
+  && !isMobile.value
+  && Boolean(technicianId.value)
+  && Boolean(props.vehicleId)
+  && Boolean(props.customerId),
+)
 
 async function loadTechnicians() {
   techPending.value = true
@@ -87,6 +97,11 @@ async function loadTechnicians() {
   }
 }
 
+async function autoloadQrIfReady() {
+  if (!canAutoloadQr.value) return
+  await ensureQrSession()
+}
+
 watch(() => props.open, async (open) => {
   if (!open) {
     stopPoll()
@@ -100,16 +115,28 @@ watch(() => props.open, async (open) => {
   successOpen.value = false
   cameraOpen.value = false
   clearLocal()
-  await loadTechnicians()
-  if (!isMobile.value && technicianId.value && props.vehicleId) {
-    void ensureQrSession()
+  // Load technician list (auto-selects first), then prepare QR immediately.
+  suppressTechQrWatch = true
+  try {
+    await loadTechnicians()
   }
+  finally {
+    suppressTechQrWatch = false
+  }
+  await autoloadQrIfReady()
 })
 
 watch(technicianId, async (id, prev) => {
+  if (suppressTechQrWatch) return
   if (!props.open || isMobile.value || !id || id === prev) return
   await cancelQr(false)
-  if (props.vehicleId) void ensureQrSession()
+  await autoloadQrIfReady()
+})
+
+watch(() => props.vehicleId, async (id, prev) => {
+  if (!props.open || isMobile.value || !id || id === prev) return
+  await cancelQr(false)
+  await autoloadQrIfReady()
 })
 
 function clearLocal() {
@@ -184,8 +211,11 @@ async function buildQrDataUrl(url: string): Promise<string> {
  * (or when the draft is saved later).
  */
 async function ensureQrSession() {
-  if (!technicianId.value || isMobile.value || qrBusy.value || busy.value) return
-  if (qrSessionId.value && (qrStatus.value === 'pending' || qrStatus.value === 'uploading')) return
+  if (!technicianId.value || isMobile.value || busy.value) return
+  if (qrBusy.value) return
+  if (qrSessionId.value && qrDataUrl.value && (qrStatus.value === 'pending' || qrStatus.value === 'uploading')) {
+    return
+  }
   if (!props.vehicleId) {
     error.value = 'Select a vehicle before uploading a service log'
     return
@@ -221,9 +251,16 @@ async function ensureQrSession() {
     if (seq !== qrRequestSeq) return
 
     // Service log is created only after photos upload — do not bind an empty log here.
+    const dataUrl = await buildQrDataUrl(res.session.uploadUrl)
+    if (seq !== qrRequestSeq) return
+    if (!dataUrl) {
+      error.value = 'Could not render QR code — tap Show QR Code to try again'
+      return
+    }
+
     qrSessionId.value = res.session.id
     qrUploadUrl.value = res.session.uploadUrl
-    qrDataUrl.value = await buildQrDataUrl(res.session.uploadUrl)
+    qrDataUrl.value = dataUrl
     qrStatus.value = 'pending'
     startPoll()
   }
@@ -233,6 +270,7 @@ async function ensureQrSession() {
     }
   }
   finally {
+    // cancelQr bumps seq and clears busy so a cancelled in-flight prep cannot stick.
     if (seq === qrRequestSeq) qrBusy.value = false
   }
 }
@@ -300,6 +338,7 @@ function stopPoll() {
 async function cancelQr(notify = true) {
   stopPoll()
   qrRequestSeq += 1
+  qrBusy.value = false
   const id = qrSessionId.value
   qrSessionId.value = ''
   qrUploadUrl.value = ''
