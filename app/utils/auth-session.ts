@@ -1,3 +1,5 @@
+import { isAllowedStaffReturnPath } from './staff-return-path'
+
 const PUBLIC_PATH_PREFIXES = ['/auth/', '/setup', '/upload/']
 const PUBLIC_PATHS = new Set(['/', '/index'])
 
@@ -12,7 +14,11 @@ export function isProtectedAppPath(path: string): boolean {
 
 export function loginPathForRoute(path: string): string {
   if (path.startsWith('/portal')) return '/auth/login'
-  return '/auth/login?card=staff'
+  const base = '/auth/login?card=staff'
+  if (isAllowedStaffReturnPath(path)) {
+    return `${base}&redirect=${encodeURIComponent(path.split('?')[0] || path)}`
+  }
+  return base
 }
 
 export function isUnauthorizedError(error: unknown): boolean {

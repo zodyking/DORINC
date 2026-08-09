@@ -103,8 +103,14 @@ async function onLessonComplete() {
   }
 }
 
-function goHub() {
-  navigateTo('/training')
+async function goHub() {
+  const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
+  // Prefer post-login return (e.g. sheet QR upload) once training unlocks.
+  if (!auth.trainingGate?.locked) {
+    await navigateTo(resolveStaffLandingPath(auth))
+    return
+  }
+  await navigateTo('/training')
 }
 </script>
 

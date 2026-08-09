@@ -3,6 +3,7 @@ import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { toTitleCase } from '#shared/format/person-name'
 import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-errors'
 import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
+import { isAllowedStaffReturnPath, setStaffReturnPath } from '~/utils/staff-return-path'
 import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
 
 const props = defineProps<{
@@ -13,6 +14,7 @@ const props = defineProps<{
 const card = ref<'customer' | 'staff'>(props.initialCard ?? 'customer')
 const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
+const route = useRoute()
 const auth = useAuthStore()
 const { busy: resendBusy, message: resendMessage, error: resendError, resend, reset: resetResend } = useResendVerification()
 
@@ -47,6 +49,19 @@ const loginBlockedReason = ref<string | null>(null)
 const signupSubmittedEmail = ref('')
 const pendingLoginToken = ref<string | null>(null)
 const showLocationPrompt = ref(false)
+
+function rememberReturnFromQuery() {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  if (redirect && isAllowedStaffReturnPath(redirect)) {
+    setStaffReturnPath(redirect, { autoContinue: true })
+  }
+  const email = typeof route.query.email === 'string' ? route.query.email.trim() : ''
+  if (email && card.value === 'staff') loginEmail.value = email
+}
+
+onMounted(() => {
+  rememberReturnFromQuery()
+})
 
 function messageFrom(err: unknown): string {
   return authErrorMessage(err)

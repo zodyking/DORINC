@@ -57,7 +57,10 @@ describe('renderServiceLogSheetHtml', () => {
   }
 
   it('renders Letter two-column template content', () => {
-    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+    const html = renderServiceLogSheetHtml(payload, {
+      forPdf: true,
+      uploadQrDataUrl: 'data:image/png;base64,qrtest',
+    })
     expect(html).toContain('Devon Onsite Repairs INC')
     expect(html).toContain('Service Log Sheet')
     expect(html).not.toContain('Service Catalog')
@@ -78,6 +81,10 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).toContain('blank-work-table')
     expect(html).not.toContain('Customer Signature')
     expect(html).not.toContain('sign-row')
+    expect(html).toContain('sheet-upload-qr')
+    expect(html).toContain('Scan to upload to')
+    expect(html).toContain('DORINC SUITE')
+    expect(html).toContain('data:image/png;base64,qrtest')
     // DomPDF uses default_media_type=screen — screen chrome must never ship in PDF HTML.
     expect(html).not.toMatch(/@media\s+screen/)
     expect(html).not.toContain('width: 8.5in')
