@@ -22,6 +22,9 @@ describe('auth session helpers', () => {
   it('builds login paths by area', () => {
     expect(loginPathForRoute('/invoices')).toBe('/auth/login?card=staff')
     expect(loginPathForRoute('/portal')).toBe('/auth/login')
+    expect(loginPathForRoute('/upload/service-log/sheet')).toBe(
+      '/auth/login?card=staff&redirect=%2Fupload%2Fservice-log%2Fsheet',
+    )
   })
 
   it('recognizes unauthorized fetch errors', () => {

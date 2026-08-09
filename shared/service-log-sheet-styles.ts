@@ -227,6 +227,49 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   text-align: center;
 }
 
+/* ---------- sheet QR (bottom-right under Inspection void) ---------- */
+.sheet-doc .sheet-upload-qr {
+  margin-top: 6pt;
+  width: 100%;
+}
+.sheet-doc .sheet-upload-qr-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sheet-doc .sheet-upload-qr-table td {
+  border: none;
+  padding: 0;
+  vertical-align: top;
+}
+.sheet-doc .sheet-upload-qr-spacer { width: 51.5%; }
+.sheet-doc .sheet-upload-qr-cell {
+  width: 48.5%;
+  text-align: center;
+  padding-top: 2pt;
+}
+.sheet-doc .sheet-upload-qr-img {
+  width: 70pt;
+  height: 70pt;
+  display: block;
+  margin: 0 auto 3pt;
+}
+.sheet-doc .sheet-upload-qr-caption {
+  margin: 0;
+  font-size: 6.6pt;
+  line-height: 1.25;
+  color: #111111;
+  text-align: center;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.sheet-doc .sheet-upload-qr-caption strong {
+  display: block;
+  margin-top: 1pt;
+  font-size: 7.2pt;
+  letter-spacing: 0.06em;
+}
+
 /* ---------- back page ---------- */
 .sheet-doc .back-title {
   margin: 6pt 0 2pt;

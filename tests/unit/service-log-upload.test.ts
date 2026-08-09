@@ -36,6 +36,7 @@ describe('invoice wizard public upload auth path', () => {
   it('treats /upload/ as a public app path', async () => {
     const { isPublicAppPath, isProtectedAppPath } = await import('../../app/utils/auth-session')
     expect(isPublicAppPath('/upload/service-log/tok')).toBe(true)
+    expect(isPublicAppPath('/upload/service-log/sheet')).toBe(true)
     expect(isProtectedAppPath('/upload/service-log/tok')).toBe(false)
     expect(isProtectedAppPath('/invoices/new')).toBe(true)
   })

@@ -16,6 +16,7 @@ import {
   SERVICE_LOG_SHEET_PDF_CSS,
   SERVICE_LOG_SHEET_SCOPE_CLASS,
 } from '../../shared/service-log-sheet-styles'
+import { SERVICE_LOG_SHEET_UPLOAD_CAPTION } from '../../shared/service-log-sheet-upload'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
 import {
   getBusinessProfile,
@@ -23,6 +24,7 @@ import {
   saveServiceLogSheetSettings,
 } from './workspace-settings.service'
 import { renderHtmlPdfBuffer } from './laravel-pdf.service'
+import { buildServiceLogSheetUploadQrDataUrl } from './service-log-sheet-upload.service'
 
 export interface CatalogPickItem {
   id: string
@@ -211,7 +213,10 @@ function renderSheetHeaderHtml(businessName: string, companyDetails: string): st
 
 export function renderServiceLogSheetHtml(
   payload: ServiceLogSheetPayload,
-  _options: { forPdf?: boolean } = {},
+  opts: {
+    forPdf?: boolean
+    uploadQrDataUrl?: string | null
+  } = {},
 ): string {
   const { business, document } = payload
   const { left, right } = sectionsByColumn(document)
@@ -249,6 +254,26 @@ export function renderServiceLogSheetHtml(
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Template to add categories and services.</div>`
 
   const header = renderSheetHeaderHtml(title, companyDetails)
+  const qrBlock = opts.uploadQrDataUrl
+    ? `<div class="sheet-upload-qr">
+    <table class="sheet-upload-qr-table" role="presentation">
+      <tr>
+        <td class="sheet-upload-qr-spacer"></td>
+        <td class="sheet-upload-qr-cell">
+          <img
+            class="sheet-upload-qr-img"
+            src="${opts.uploadQrDataUrl}"
+            alt="${escapeHtml(SERVICE_LOG_SHEET_UPLOAD_CAPTION)}"
+          />
+          <p class="sheet-upload-qr-caption">
+            Scan to upload to
+            <strong>DORINC SUITE</strong>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>`
+    : ''
 
   return `<!doctype html>
 <html lang="en">
@@ -289,6 +314,7 @@ export function renderServiceLogSheetHtml(
     </div>
 
     ${catalogBody}
+    ${qrBlock}
   </div>
 
   <div class="page page-back">
@@ -318,7 +344,11 @@ export async function renderServiceLogSheetPdf(
 ): Promise<Buffer> {
   const payload = await getServiceLogSheetPayload(db)
   if (documentOverride) payload.document = documentOverride
-  const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+  const qr = await buildServiceLogSheetUploadQrDataUrl()
+  const html = renderServiceLogSheetHtml(payload, {
+    forPdf: true,
+    uploadQrDataUrl: qr.dataUrl,
+  })
   const m = SERVICE_LOG_SHEET_PAGE_MARGIN_IN
   return renderHtmlPdfBuffer(html, {
     paper: 'letter',

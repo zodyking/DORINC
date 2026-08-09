@@ -1,5 +1,6 @@
 import { isAnnouncementPath } from './announcements-ui'
 import { isTrainingPath } from './training-ui'
+import { consumeStaffReturnPath } from './staff-return-path'
 
 type AuthStoreLike = {
   announcementGate?: { locked?: boolean } | null
@@ -14,14 +15,14 @@ export function isPasswordRequiredPath(path: string): boolean {
 
 /** Post-login / index landing for staff after /me is hydrated. */
 export function resolveStaffLandingPath(auth: AuthStoreLike): string {
-  // Login messages → password reset → training → dashboard
+  // Login messages → password reset → training → optional return path → dashboard
   if (auth.announcementGate?.locked) return '/announcements/required'
   if (auth.user?.mustChangePassword) return '/account/password-required'
   if (auth.trainingGate?.locked) {
     const slug = auth.trainingGate.moduleSlug
     return slug ? `/training/learn/${slug}` : '/training'
   }
-  return '/dashboard'
+  return consumeStaffReturnPath() ?? '/dashboard'
 }
 
 /** Shared staff-route guard — used by global middleware and staff layout. */

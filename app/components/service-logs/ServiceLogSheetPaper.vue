@@ -105,6 +105,21 @@ const pageStyle = {
       <div v-else class="empty-sheet">
         No sections yet — add a left or right section to start the catalog.
       </div>
+
+      <div class="sheet-upload-qr">
+        <table class="sheet-upload-qr-table" role="presentation">
+          <tr>
+            <td class="sheet-upload-qr-spacer" />
+            <td class="sheet-upload-qr-cell">
+              <div class="sheet-upload-qr-placeholder" aria-hidden="true">QR</div>
+              <p class="sheet-upload-qr-caption">
+                Scan to upload to
+                <strong>DORINC SUITE</strong>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
     </div>
 
     <div class="page page-back" :style="pageStyle">
@@ -156,5 +171,16 @@ const pageStyle = {
   gap: 24px;
   color: #111111;
   background: transparent;
+}
+.sheet-upload-qr-placeholder {
+  width: 70pt;
+  height: 70pt;
+  margin: 0 auto 3pt;
+  border: 0.8pt solid #111;
+  display: grid;
+  place-items: center;
+  font-size: 9pt;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 </style>
