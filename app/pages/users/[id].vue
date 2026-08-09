@@ -16,6 +16,7 @@ interface UserDetail {
   isActive: boolean
   disabledReason: string | null
   mustChangePassword: boolean
+  hasLoggedIn: boolean
   createdAt: string
 }
 
@@ -214,6 +215,13 @@ const resendInvite = () => run(
   'Invite email sent with a new temporary password',
 )
 
+const sendPasswordReset = () => run(
+  () => $fetch(`/api/admin/users/${route.params.id}/password-reset`, {
+    method: 'POST',
+  }),
+  'Temporary password emailed — user must set a new password on next sign-in',
+)
+
 const canResendVerification = computed(() =>
   canManage.value
   && user.value
@@ -223,7 +231,7 @@ const canResendVerification = computed(() =>
   && user.value.status !== 'rejected'
 )
 
-const canResendInvite = computed(() =>
+const canCredentialAction = computed(() =>
   canManage.value
   && user.value
   && user.value.accountType !== 'customer'
@@ -231,6 +239,10 @@ const canResendInvite = computed(() =>
   && user.value.isActive
   && user.value.status !== 'rejected'
 )
+
+/** Never signed in yet → resend invite. Already logged in → password reset. */
+const canResendInvite = computed(() => canCredentialAction.value && !user.value?.hasLoggedIn)
+const canPasswordReset = computed(() => canCredentialAction.value && Boolean(user.value?.hasLoggedIn))
 
 const canDelete = computed(() =>
   canManage.value
@@ -359,6 +371,14 @@ const showPermissionsModal = ref(false)
               Resend invite
             </button>
             <button
+              v-if="canPasswordReset"
+              class="btn"
+              :disabled="busy"
+              @click="sendPasswordReset"
+            >
+              Password Reset
+            </button>
+            <button
               v-if="canResendVerification"
               class="btn"
               :disabled="busy"
@@ -477,10 +497,7 @@ const showPermissionsModal = ref(false)
           </div>
           <div v-if="canManage && user && user.accountType !== 'customer'" class="card">
             <div class="chead"><h3>Training</h3></div>
-            <div class="cbody">
-              <p class="help" style="margin-top:0;">
-                Assign interactive modules. Locked assignments restrict the user to Training until complete.
-              </p>
+            <div class="cbody" style="padding-top:14px;">
               <TrainingAssignPanel
                 :user-id="user.id"
                 :user-name="user.name"

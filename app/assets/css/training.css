@@ -571,7 +571,73 @@
 .training-assign-panel {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.training-assign-empty {
+  margin: 0;
+}
+
+.training-assign-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.training-assign-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.training-assign-item__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.training-assign-item__main b {
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+
+.training-assign-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.training-assign-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 4px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.training-assign-form .fld {
+  margin-bottom: 12px;
+}
+
+.training-assign-form__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.training-assign-lock {
+  margin: 0;
 }
 
 .training-assign-row {
