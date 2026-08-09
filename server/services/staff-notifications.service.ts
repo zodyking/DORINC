@@ -114,6 +114,7 @@ export async function notifyDeletionRequestResult(
     status: 'approved' | 'rejected'
     entityType: DeletionEntityType
     entityLabel: string
+    reason?: string | null
     reviewReason?: string | null
     reviewedByName?: string | null
     requestId: string
@@ -134,6 +135,7 @@ export async function notifyDeletionRequestResult(
     status: opts.status,
     entityTypeLabel: ENTITY_TYPE_LABELS[opts.entityType],
     entityLabel: opts.entityLabel,
+    reason: opts.reason,
     reviewReason: opts.reviewReason,
     reviewedByName: opts.reviewedByName,
     appUrl: brand.appUrl || getAppUrl(),

@@ -163,15 +163,31 @@ describe('system email templates', () => {
       status: 'rejected',
       entityTypeLabel: 'Invoice',
       entityLabel: 'INV-000010',
+      reason: 'Duplicate entry',
       reviewReason: 'Still needed for audit',
-      reviewedByName: 'Admin',
+      reviewedByName: 'Susan AI Administrator',
       appUrl,
       brand,
     })
-    expect(submitted.html).toContain('New deletion request')
+    expect(submitted.subject).toBe('Deletion Request — INV-000010')
+    expect(submitted.html).toContain('Deletion request')
+    expect(submitted.html).not.toContain('New deletion request')
+    expect(submitted.html).toContain('Reason for deletion')
     expect(submitted.html).toContain('Duplicate entry')
-    expect(result.html).toContain('Deletion denied')
+    expect(submitted.html.indexOf('INV-000010')).toBeLessThan(submitted.html.indexOf('Reason for deletion'))
+
+    expect(result.subject).toBe('Deletion Request — INV-000010')
+    expect(result.html).toContain('Deletion request')
+    expect(result.html).not.toContain('Deletion denied')
+    expect(result.html).not.toContain('Deletion approved')
+    expect(result.html).toContain('Reason for deletion')
+    expect(result.html).toContain('Duplicate entry')
+    expect(result.html).toContain('Decision')
+    expect(result.html).toContain('Denied')
     expect(result.html).toContain('Still needed for audit')
+    expect(result.html).toContain('Susan AI Administrator')
+    expect(result.html.indexOf('Reason for deletion')).toBeLessThan(result.html.indexOf('Decision'))
+    expect(result.html.indexOf('Decision')).toBeLessThan(result.html.indexOf('Reviewer note'))
   })
 
   it('builds user signup and invoice approval staff alerts', () => {

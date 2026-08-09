@@ -95,7 +95,7 @@ const AI_TASKS = [
     enabledKey: 'aiAdministratorEnabled' as const,
     modelKey: 'aiAdministratorModel' as const,
     title: 'AI Administrator',
-    description: 'Susan reviews deletion requests (~30s after open) and gates vague deletion reasons.',
+    description: 'Susan reviews deletion requests (~10s after open) and gates vague deletion reasons.',
     modelHint: 'Prefer a careful text model — Susan can approve or reject deletions.',
   },
 ]

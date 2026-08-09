@@ -5,6 +5,9 @@ import {
   EMAIL_BRAND_NAME,
   EMAIL_TOKENS,
   buildStyledEmail,
+  emailDetails,
+  emailHighlight,
+  emailNote,
   emailQuotedMessage,
   escapeHtml,
 } from '../email-layout.mjs'
@@ -12,6 +15,14 @@ import {
   applyEmailTemplateOverride,
   finalizeMailWithTemplateOverride,
 } from '../email-template-override.mjs'
+
+/** Stack email sections with consistent vertical spacing (for custom body order). */
+function joinEmailSections(parts) {
+  return (parts || [])
+    .filter(Boolean)
+    .map((html, index) => (index === 0 ? html : `<div style="padding-top:24px;">${html}</div>`))
+    .join('')
+}
 
 function styledEmail(opts) {
   const { templateOverride = null, templateVars = {}, ...rest } = opts || {}
@@ -802,37 +813,59 @@ export function buildDeletionRequestSubmittedEmail({
   brand,
   templateOverride,
 }) {
-  const subject = `Deletion Request Pending — ${entityLabel}`
+  const subject = `Deletion Request — ${entityLabel}`
   const text = [
     `Hi ${reviewerName},`,
     '',
-    `${submitterName} requested deletion of ${entityTypeLabel} "${entityLabel}".`,
+    'Deletion request',
     '',
-    `Reason: ${reason}`,
+    `Record: ${entityLabel}`,
+    `Type: ${entityTypeLabel}`,
+    `Requested by: ${submitterName}`,
+    '',
+    `Reason for deletion: ${reason}`,
     '',
     `Review: ${reviewUrl}`,
   ].join('\n')
+
+  const lead = `${submitterName} requested deletion of a ${entityTypeLabel.toLowerCase()}. Review the record and reason, then approve or deny.`
+  // Title → record details → reason (custom body order; layout puts note before details).
+  const bodyHtml = joinEmailSections([
+    emailDetails([
+      { label: 'Record', value: entityLabel },
+      { label: 'Type', value: entityTypeLabel },
+      { label: 'Requested By', value: submitterName },
+      { label: 'Reviewer', value: reviewerName },
+    ]),
+    emailNote({ title: 'Reason for deletion', body: reason }),
+  ])
+
+  // Reason already lives in bodyHtml — strip override note fields to avoid a duplicate block.
+  const layoutOverride = templateOverride
+    ? {
+        ...templateOverride,
+        subject,
+        headline: 'Deletion request',
+        lead,
+        noteTitle: undefined,
+        noteBody: undefined,
+      }
+    : null
 
   return styledEmail({
     headerBadge: '',
     subject,
     text,
     eyebrow: '',
-    headline: 'New deletion request',
-    lead: `${submitterName} requested deletion of a ${entityTypeLabel.toLowerCase()}. Review the details and approve or deny the request.`,
-    details: [
-      { label: 'Record', value: entityLabel },
-      { label: 'Type', value: entityTypeLabel },
-      { label: 'Requested By', value: submitterName },
-      { label: 'Reviewer', value: reviewerName },
-    ],
-    note: { title: 'Request reason', body: reason },
+    headline: 'Deletion request',
+    lead,
+    bodyHtml,
     primaryAction: { href: reviewUrl, label: 'Review request' },
     appUrl,
     brand,
-    templateOverride,
+    templateOverride: layoutOverride,
     templateVars: { reviewerName, submitterName, entityTypeLabel, entityTypeLabelLower: entityTypeLabel.toLowerCase(), entityLabel, reason },
-})
+  })
 }
 
 export function buildDeletionRequestResultEmail({
@@ -840,6 +873,7 @@ export function buildDeletionRequestResultEmail({
   status,
   entityTypeLabel,
   entityLabel,
+  reason,
   reviewReason,
   reviewedByName,
   appUrl,
@@ -848,36 +882,62 @@ export function buildDeletionRequestResultEmail({
 }) {
   const approved = status === 'approved'
   const statusLabel = approved ? 'approved' : 'denied'
-  const subject = `Deletion Request ${titleCaseStatus(statusLabel)} — ${entityLabel}`
+  const statusLabelTitle = titleCaseStatus(statusLabel)
+  const subject = `Deletion Request — ${entityLabel}`
+  const requestReason = String(reason || '').trim()
   const text = [
     `Hi ${requestorName},`,
     '',
-    `Your deletion request for ${entityTypeLabel} "${entityLabel}" was ${statusLabel}.`,
+    'Deletion request',
+    '',
+    `Record: ${entityLabel}`,
+    `Type: ${entityTypeLabel}`,
+    requestReason ? `Reason for deletion: ${requestReason}` : '',
+    '',
+    `Decision: ${statusLabelTitle}`,
     reviewedByName ? `Reviewed by: ${reviewedByName}` : '',
-    reviewReason ? `Note: ${reviewReason}` : '',
+    reviewReason ? `Reviewer note: ${reviewReason}` : '',
   ].filter(Boolean).join('\n')
 
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
+  const lead = `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" has been reviewed.`
+
+  // Title → record + user reason → decision (avoid stating the decision in the headline).
+  const bodyHtml = joinEmailSections([
+    emailDetails([
+      { label: 'Record', value: entityLabel },
+      { label: 'Type', value: entityTypeLabel },
+      { label: 'Requestor', value: requestorName },
+      reviewedByName ? { label: 'Reviewed By', value: reviewedByName } : null,
+    ].filter(Boolean)),
+    requestReason
+      ? emailNote({ title: 'Reason for deletion', body: requestReason })
+      : '',
+    emailHighlight({
+      label: 'Decision',
+      value: approved ? 'Approved' : 'Denied',
+      status: approved ? 'Completed' : 'Rejected',
+      statusTone: approved ? 'ok' : 'error',
+    }),
+  ])
+
+  const layoutOverride = templateOverride
+    ? {
+        ...templateOverride,
+        subject,
+        headline: 'Deletion request',
+        lead,
+      }
+    : null
 
   return styledEmail({
     headerBadge: '',
     subject,
     text,
     eyebrow: '',
-    headline: approved ? 'Deletion approved' : 'Deletion denied',
-    lead: `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" was ${statusLabel}.`,
-    highlight: {
-      label: 'Decision',
-      value: approved ? 'Approved' : 'Denied',
-      status: approved ? 'Completed' : 'Rejected',
-      statusTone: approved ? 'ok' : 'error',
-    },
-    details: [
-      { label: 'Record', value: entityLabel },
-      { label: 'Type', value: entityTypeLabel },
-      reviewedByName ? { label: 'Reviewed By', value: reviewedByName } : null,
-      { label: 'Requestor', value: requestorName },
-    ].filter(Boolean),
+    headline: 'Deletion request',
+    lead,
+    bodyHtml,
     note: reviewReason
       ? { title: 'Reviewer note', body: reviewReason }
       : undefined,
@@ -886,9 +946,19 @@ export function buildDeletionRequestResultEmail({
       : undefined,
     appUrl,
     brand,
-    templateOverride,
-    templateVars: { requestorName, statusLabel, statusLabelTitle: titleCaseStatus(statusLabel), entityTypeLabel, entityTypeLabelLower: entityTypeLabel.toLowerCase(), entityLabel, reviewReason, reviewedByName },
-})
+    templateOverride: layoutOverride,
+    templateVars: {
+      requestorName,
+      statusLabel,
+      statusLabelTitle,
+      entityTypeLabel,
+      entityTypeLabelLower: entityTypeLabel.toLowerCase(),
+      entityLabel,
+      reason: requestReason,
+      reviewReason,
+      reviewedByName,
+    },
+  })
 }
 
 export function buildUserSignupPendingEmail({

@@ -9,7 +9,7 @@ import { serviceLogs } from '../db/schema/service-logs'
 import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { conversations } from '../db/schema/messages'
-import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
+import { AI_ADMINISTRATOR_DISPLAY_NAME, AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
 import { BRAND_NAME } from '../../shared/brand'
 import { parseOpenRouterJson, openRouterChat } from './ai-openrouter.service'
 import {
@@ -31,9 +31,9 @@ import { hashPassword } from '../auth/password'
 export const DELETION_REASON_WEAK_MESSAGE
   = 'Enter a more descriptive reason for your request'
 
-export const AI_ADMIN_REVIEW_DELAY_MS = 30_000
+export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
 
-const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
+export const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
 
 export class AiAdministratorServiceError extends Error {
   constructor(
@@ -163,14 +163,21 @@ export async function assertDeletionReasonAcceptable(
 }
 
 export async function ensureSusanSystemUser(db: Db): Promise<string> {
-  const [existing] = await db.select({ id: users.id, silentDeveloperMode: users.silentDeveloperMode })
+  const [existing] = await db.select({
+    id: users.id,
+    name: users.name,
+    silentDeveloperMode: users.silentDeveloperMode,
+  })
     .from(users)
     .where(eq(users.email, SUSAN_SYSTEM_EMAIL))
     .limit(1)
   if (existing) {
-    if (existing.silentDeveloperMode) {
+    const patch: Partial<typeof users.$inferInsert> = {}
+    if (existing.silentDeveloperMode) patch.silentDeveloperMode = false
+    if (existing.name !== AI_ADMINISTRATOR_DISPLAY_NAME) patch.name = AI_ADMINISTRATOR_DISPLAY_NAME
+    if (Object.keys(patch).length) {
       await db.update(users)
-        .set({ silentDeveloperMode: false, updatedAt: new Date() })
+        .set({ ...patch, updatedAt: new Date() })
         .where(eq(users.id, existing.id))
     }
     return existing.id
@@ -187,7 +194,7 @@ export async function ensureSusanSystemUser(db: Db): Promise<string> {
   const passwordHash = await hashPassword(`susan-system-${randomUUID()}`)
   try {
     const [created] = await db.insert(users).values({
-      name: AI_ASSISTANT_NAME,
+      name: AI_ADMINISTRATOR_DISPLAY_NAME,
       email: SUSAN_SYSTEM_EMAIL,
       passwordHash,
       accountTypeId: adminType.id,
