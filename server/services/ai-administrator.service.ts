@@ -163,11 +163,18 @@ export async function assertDeletionReasonAcceptable(
 }
 
 export async function ensureSusanSystemUser(db: Db): Promise<string> {
-  const [existing] = await db.select({ id: users.id })
+  const [existing] = await db.select({ id: users.id, silentDeveloperMode: users.silentDeveloperMode })
     .from(users)
     .where(eq(users.email, SUSAN_SYSTEM_EMAIL))
     .limit(1)
-  if (existing) return existing.id
+  if (existing) {
+    if (existing.silentDeveloperMode) {
+      await db.update(users)
+        .set({ silentDeveloperMode: false, updatedAt: new Date() })
+        .where(eq(users.id, existing.id))
+    }
+    return existing.id
+  }
 
   const [adminType] = await db.select({ id: accountTypes.id })
     .from(accountTypes)
@@ -191,7 +198,8 @@ export async function ensureSusanSystemUser(db: Db): Promise<string> {
       emailVerifiedAt: new Date(),
       teamChatEnabled: false,
       messageEmailNotify: false,
-      silentDeveloperMode: true,
+      // Must stay false — silent mode would suppress workflow side-effects in some paths.
+      silentDeveloperMode: false,
     }).returning({ id: users.id })
     return created!.id
   }
@@ -322,9 +330,21 @@ async function loadEntityContext(db: Db, entityType: DeletionEntityType, entityI
 }
 
 export async function enqueueDeletionRequestAiReview(db: Db, requestId: string) {
-  if (!(await isAiAdministratorEnabled(db))) return null
+  if (!(await isAiAdministratorEnabled(db))) {
+    console.info('[ai-administrator] skip enqueue — feature disabled or AI not configured', requestId)
+    return null
+  }
   const runAfter = new Date(Date.now() + AI_ADMIN_REVIEW_DELAY_MS)
-  return enqueueJob(db, 'deletion_request_ai_review', { requestId }, 3, { runAfter })
+  const job = await enqueueJob(db, 'deletion_request_ai_review', { requestId }, 3, { runAfter })
+  console.info(
+    '[ai-administrator] enqueued deletion review',
+    requestId,
+    'runAfter=',
+    runAfter.toISOString(),
+    'job=',
+    job.id,
+  )
+  return job
 }
 
 export async function reviewDeletionRequestWithSusan(db: Db, requestId: string): Promise<{

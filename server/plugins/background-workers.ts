@@ -59,20 +59,8 @@ export default defineNitroPlugin(() => {
         console.error('[embedded-worker] daily_summary_report failed', dailyErr)
       }
 
-      // Susan AI Administrator reviews — TS service (OpenRouter + approve/reject).
-      try {
-        const { useDb } = await import('../db/client')
-        const { processDeletionRequestAiReviews } = await import('../services/ai-administrator.service')
-        const reviewed = await processDeletionRequestAiReviews(useDb())
-        if (reviewed.processed || reviewed.failed) {
-          console.log(
-            `[embedded-worker] deletion_request_ai_review processed=${reviewed.processed} failed=${reviewed.failed}`,
-          )
-        }
-      }
-      catch (adminErr) {
-        console.error('[embedded-worker] deletion_request_ai_review failed', adminErr)
-      }
+      // Susan AI Administrator reviews run in server/plugins/ai-administrator-worker.ts
+      // (always-on) and in the general worker via deletion-ai-review.mjs.
     }
     catch (err) {
       console.error('[embedded-worker] tick failed', err)
