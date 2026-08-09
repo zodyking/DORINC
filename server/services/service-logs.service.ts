@@ -322,6 +322,64 @@ export async function transitionServiceLog(
   return { log: updated!, before }
 }
 
+/**
+ * Attach an existing service log to an existing invoice and mark it sent.
+ * Idempotent when the log is already converted to the same invoice.
+ * Used by the invoice wizard upload flow (log is created for an invoice draft).
+ */
+export async function linkServiceLogToExistingInvoice(
+  db: Db,
+  serviceLogId: string,
+  invoiceId: string,
+) {
+  const [invoice] = await db.select({ id: invoices.id, serviceLogId: invoices.serviceLogId })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1)
+  if (!invoice) throw new ServiceLogsServiceError('NOT_FOUND')
+
+  let log = await getServiceLog(db, serviceLogId)
+
+  if (log.status === 'converted_to_invoice' && log.invoiceId === invoiceId) {
+    if (invoice.serviceLogId !== serviceLogId) {
+      await db.update(invoices)
+        .set({
+          serviceLogId,
+          creationSource: 'service_log',
+          updatedAt: new Date(),
+        })
+        .where(eq(invoices.id, invoiceId))
+    }
+    return log
+  }
+
+  if (log.status === 'converted_to_invoice' && log.invoiceId && log.invoiceId !== invoiceId) {
+    throw new ServiceLogsServiceError('ALREADY_CONVERTED')
+  }
+
+  if (log.status === 'draft' || log.status === 'uploaded') {
+    const promoted = await transitionServiceLog(db, serviceLogId, 'ready_for_review')
+    log = promoted.log
+  }
+
+  if (!isServiceLogSendable(log.status)) {
+    throw new ServiceLogsServiceError('INVALID_TRANSITION')
+  }
+
+  await db.update(invoices)
+    .set({
+      serviceLogId,
+      creationSource: 'service_log',
+      updatedAt: new Date(),
+    })
+    .where(eq(invoices.id, invoiceId))
+
+  const { log: linked } = await transitionServiceLog(db, serviceLogId, 'converted_to_invoice', {
+    invoiceId,
+  })
+  return linked
+}
+
 /** Creates a draft invoice from a reviewed log and marks the log converted (SPEC §6.4, §6.5). */
 export async function convertServiceLogToInvoice(
   db: Db,
@@ -347,7 +405,12 @@ export async function convertServiceLogToInvoice(
       dueDate: opts.dueDate ?? before.dueDate ?? null,
     }, actorId)
 
-    const { log } = await transitionServiceLog(tx, id, 'converted_to_invoice', { invoiceId: invoice.id })
+    // createInvoice(service_log) already marks the log converted; re-read for the return value.
+    const log = await getServiceLog(tx, id)
+    if (log.status !== 'converted_to_invoice' || log.invoiceId !== invoice.id) {
+      const linked = await linkServiceLogToExistingInvoice(tx, id, invoice.id)
+      return { invoice, log: linked, before }
+    }
     return { invoice, log, before }
   })
 }

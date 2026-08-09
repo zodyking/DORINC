@@ -211,6 +211,27 @@ describe('P1-21 creation paths', () => {
     expect(invoice.serviceLocation).toBe('Bay 3')
   })
 
+  it('marks the service log converted when creating an invoice from it', async () => {
+    const { getServiceLog, transitionServiceLog } = await import('../../server/services/service-logs.service')
+    const freshLog = await createLog(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      serviceDate: '2026-07-02',
+      complaint: 'Wizard upload link test',
+    }, ACTOR)
+    await transitionServiceLog(db, freshLog.id, 'ready_for_review')
+
+    const invoice = await createInvoice(db, {
+      creationSource: 'service_log',
+      serviceLogId: freshLog.id,
+      invoiceDate: '2026-07-08',
+    }, ACTOR)
+    const linked = await getServiceLog(db, freshLog.id)
+    expect(linked.status).toBe('converted_to_invoice')
+    expect(linked.invoiceId).toBe(invoice.id)
+    expect(invoice.serviceLogId).toBe(freshLog.id)
+  })
+
   it('allocates the next invoice number from MAX even when the sequence is stale', async () => {
     const [{ max }] = await db.select({
       max: sql<number>`COALESCE(MAX(${invoices.invoiceNumber}), 0)`,

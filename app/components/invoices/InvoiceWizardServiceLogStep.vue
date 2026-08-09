@@ -275,14 +275,22 @@ async function ensureQrSession() {
   }
 }
 
-/** Best-effort draft save after photos exist — never block a successful upload. */
-async function linkDraftAfterPhotosQuietly() {
-  if (props.invoiceId) return
+/**
+ * After photos exist: save/create the invoice draft (if needed) and mark the
+ * service log as already sent to that invoice. Never block a successful upload.
+ */
+async function linkDraftAfterPhotosQuietly(serviceLogId: string) {
+  if (!serviceLogId) return
   try {
-    await props.ensureDraft()
+    const invoiceId = props.invoiceId || await props.ensureDraft()
+    if (!invoiceId) return
+    await $fetch(`/api/invoices/${invoiceId}/attach-service-log`, {
+      method: 'POST',
+      body: { serviceLogId },
+    })
   }
   catch {
-    // Draft can still be saved on a later wizard step.
+    // Draft/link can still be completed on a later wizard step.
   }
 }
 
@@ -310,7 +318,7 @@ function startPoll() {
           serviceLogId: session.serviceLogId || props.serviceLogId,
           invoiceNumberFormatted: session.invoiceNumberFormatted,
         })
-        void linkDraftAfterPhotosQuietly()
+        void linkDraftAfterPhotosQuietly(session.serviceLogId || props.serviceLogId)
       }
       else if (session.status === 'expired' || session.status === 'cancelled') {
         stopPoll()
@@ -426,7 +434,7 @@ async function attachLocalUploads() {
       serviceLogId: done.session.serviceLogId || logId,
       invoiceNumberFormatted: done.session.invoiceNumberFormatted,
     })
-    await linkDraftAfterPhotosQuietly()
+    await linkDraftAfterPhotosQuietly(done.session.serviceLogId || logId)
   }
   catch (e: unknown) {
     error.value = syncFetchErrorMessage(e, 'Could not attach service log')
