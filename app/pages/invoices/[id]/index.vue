@@ -28,7 +28,7 @@ import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
 import { invoiceDetailSummaryRows } from '~/utils/invoice-editor-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { fetchInvoicePreviewPdf } from '~/utils/invoice-pdf'
-import { PdfViewerDialog } from '~/utils/pdf-viewer'
+import { printPdfBlob } from '~/utils/print-pdf'
 
 definePageMeta({ layout: 'staff' })
 
@@ -282,9 +282,6 @@ const localPrintBusy = ref(false)
 const staplesPrintBusy = ref(false)
 const staplesPrintError = ref('')
 const staplesPrintOk = ref('')
-const localPrintOpen = ref(false)
-const localPrintBlob = ref<Blob | null>(null)
-const { url: localPrintUrl, setFromBlob: setLocalPrintBlob, revoke: revokeLocalPrint } = usePdfBlobUrl()
 
 async function printLocal() {
   if (!invoice.value || !canGeneratePdf.value || localPrintBusy.value) return
@@ -293,23 +290,15 @@ async function printLocal() {
   staplesPrintOk.value = ''
   try {
     const blob = await fetchInvoicePreviewPdf(id.value)
-    localPrintBlob.value = blob
-    setLocalPrintBlob(blob)
-    localPrintOpen.value = true
+    await printPdfBlob(blob)
     await $fetch(`/api/invoices/${id.value}/print-notify`, { method: 'POST' })
   }
   catch (e: unknown) {
-    staplesPrintError.value = syncFetchErrorMessage(e, 'Could not open invoice PDF for printing')
+    staplesPrintError.value = syncFetchErrorMessage(e, 'Could not print invoice PDF')
   }
   finally {
     localPrintBusy.value = false
   }
-}
-
-function closeLocalPrint() {
-  localPrintOpen.value = false
-  localPrintBlob.value = null
-  revokeLocalPrint()
 }
 
 async function printViaStaples() {
@@ -526,7 +515,7 @@ const summaryRows = computed(() => {
           :disabled="localPrintBusy"
           @click="printLocal"
         >
-          {{ localPrintBusy ? 'Opening…' : 'Print' }}
+          {{ localPrintBusy ? 'Printing…' : 'Print' }}
         </button>
         <button
           v-if="canStaplesPrint"
@@ -557,18 +546,6 @@ const summaryRows = computed(() => {
       hide-trigger
       @sent="refresh()"
     />
-
-    <ClientOnly>
-      <PdfViewerDialog
-        v-model:open="localPrintOpen"
-        :src="localPrintUrl"
-        :blob="localPrintBlob"
-        :title="`${invoice.invoiceNumberFormatted} PDF`"
-        :download-href="localPrintUrl || undefined"
-        :download-filename="`${invoice.invoiceNumberFormatted}.pdf`"
-        @close="closeLocalPrint"
-      />
-    </ClientOnly>
 
     <div class="inv-meta">
       <div class="inv-meta__item">

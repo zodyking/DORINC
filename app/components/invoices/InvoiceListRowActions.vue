@@ -2,9 +2,9 @@
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import SendInvoiceButton from '~/components/SendInvoiceButton.vue'
 import DeleteEntityButton from '~/components/DeleteEntityButton.vue'
-import { PdfViewerDialog } from '~/utils/pdf-viewer'
 import { isInvoiceEditable, isInvoiceEmailable, isInvoiceResend, type InvoiceStatus } from '~/utils/invoices-ui'
 import { fetchInvoicePreviewPdf } from '~/utils/invoice-pdf'
+import { printPdfBlob } from '~/utils/print-pdf'
 import { fetchErrorMessage, syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
 const props = defineProps<{
@@ -62,9 +62,6 @@ const deleteTitle = computed(() => {
 const printBusy = ref(false)
 const staplesBusy = ref(false)
 const actionError = ref('')
-const pdfOpen = ref(false)
-const pdfBlob = ref<Blob | null>(null)
-const { url: pdfUrl, setFromBlob, revoke: revokePdf } = usePdfBlobUrl()
 
 function onSendClick() {
   if (!sendAllowed.value) return
@@ -77,13 +74,11 @@ async function printLocal() {
   actionError.value = ''
   try {
     const blob = await fetchInvoicePreviewPdf(props.invoiceId)
-    pdfBlob.value = blob
-    setFromBlob(blob)
-    pdfOpen.value = true
+    await printPdfBlob(blob)
     await $fetch(`/api/invoices/${props.invoiceId}/print-notify`, { method: 'POST' })
   }
   catch (e: unknown) {
-    actionError.value = await fetchErrorMessage(e, 'Could not open invoice PDF')
+    actionError.value = await fetchErrorMessage(e, 'Could not print invoice PDF')
   }
   finally {
     printBusy.value = false
@@ -113,11 +108,6 @@ async function printViaStaples() {
   }
 }
 
-function closePdf() {
-  pdfOpen.value = false
-  pdfBlob.value = null
-  revokePdf()
-}
 </script>
 
 <template>
@@ -157,7 +147,7 @@ function closePdf() {
         title="Print invoice PDF on this device"
         @click="printLocal"
       >
-        {{ printBusy ? 'Opening…' : 'Print' }}
+        {{ printBusy ? 'Printing…' : 'Print' }}
       </button>
       <button
         v-if="canStaplesPrint"
@@ -199,18 +189,6 @@ function closePdf() {
       hide-trigger
       @sent="emit('changed')"
     />
-
-    <ClientOnly>
-      <PdfViewerDialog
-        v-model:open="pdfOpen"
-        :src="pdfUrl"
-        :blob="pdfBlob"
-        :title="`${invoiceLabel} PDF`"
-        :download-href="pdfUrl || undefined"
-        :download-filename="`${invoiceLabel}.pdf`"
-        @close="closePdf"
-      />
-    </ClientOnly>
   </div>
 </template>
 

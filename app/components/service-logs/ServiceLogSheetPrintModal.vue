@@ -136,10 +136,10 @@ async function chooseStaples() {
             @click="chooseDevice"
           >
             <span class="sl-print-option-title">
-              {{ deviceBusy ? 'Opening…' : 'Print from this device' }}
+              {{ deviceBusy ? 'Printing…' : 'Print from this device' }}
             </span>
             <span class="sl-print-option-desc">
-              Open the PDF preview and print with your local printer
+              Open the browser print dialog for your local printer
             </span>
           </button>
 

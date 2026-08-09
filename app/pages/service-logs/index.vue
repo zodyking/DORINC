@@ -6,7 +6,7 @@ import ServiceLogSheetPrintModal from '~/components/service-logs/ServiceLogSheet
 import { windowedPagerPages, listRangeLabel } from '~/utils/pager-ui'
 import { serviceLogInvoicePreviewPdfHref, openServiceLogInvoicePdf } from '~/utils/invoice-pdf'
 import { fetchServiceLogSheetPdf } from '~/utils/service-log-sheet'
-import { PdfViewerDialog } from '~/utils/pdf-viewer'
+import { printPdfBlob } from '~/utils/print-pdf'
 import { fetchErrorMessage, syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import {
   serviceLogInvoiceLinkStatusClass,
@@ -61,9 +61,6 @@ const isMechanicScope = computed(() => !auth.can('service_logs.read.all') && aut
 const editSheetOpen = ref(false)
 const printSheetChooserOpen = ref(false)
 const sheetBusy = ref(false)
-const sheetPdfDialogOpen = ref(false)
-const sheetPdfBlob = ref<Blob | null>(null)
-const { url: sheetPdfUrl, setFromBlob: setSheetPdfBlob, revoke: revokeSheetPdf } = usePdfBlobUrl()
 
 type ServiceLogSort = 'newest' | 'oldest' | 'status' | 'service_date' | 'customer' | 'unit'
 
@@ -203,32 +200,22 @@ async function printServiceLogSheetFromDevice() {
   if (sheetBusy.value) return
   sheetBusy.value = true
   actionError.value = ''
-  revokeSheetPdf()
-  sheetPdfBlob.value = null
   try {
     const blob = await fetchServiceLogSheetPdf()
-    sheetPdfBlob.value = blob
-    setSheetPdfBlob(blob)
-    sheetPdfDialogOpen.value = true
+    await printPdfBlob(blob)
     try {
       await $fetch('/api/service-logs/sheet/print-notify', { method: 'POST' })
     }
     catch {
-      // PDF opened; chat notify is best-effort.
+      // Print dialog opened; chat notify is best-effort.
     }
   }
   catch (err) {
-    actionError.value = await fetchErrorMessage(err, 'Could not open service log sheet PDF')
+    actionError.value = await fetchErrorMessage(err, 'Could not print service log sheet PDF')
   }
   finally {
     sheetBusy.value = false
   }
-}
-
-function closeSheetPdfDialog() {
-  sheetPdfDialogOpen.value = false
-  sheetPdfBlob.value = null
-  revokeSheetPdf()
 }
 
 </script>
@@ -271,16 +258,6 @@ function closeSheetPdfDialog() {
     <ServiceLogSheetPrintModal
       v-model:open="printSheetChooserOpen"
       @print-device="printServiceLogSheetFromDevice"
-    />
-
-    <PdfViewerDialog
-      v-model:open="sheetPdfDialogOpen"
-      :src="sheetPdfUrl"
-      :blob="sheetPdfBlob"
-      title="Service Log Sheet PDF"
-      :download-href="sheetPdfUrl || undefined"
-      download-filename="service-log-sheet.pdf"
-      @close="closeSheetPdfDialog"
     />
 
     <ListFilterBar
