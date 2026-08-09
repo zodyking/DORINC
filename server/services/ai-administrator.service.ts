@@ -1,9 +1,10 @@
-import { and, count, desc, eq, gte, ne } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, ne, or } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { Db } from '../db/client'
 import { usePool } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { entityDeletionRequests, type DeletionEntityType } from '../db/schema/deletion-requests'
+import { workerJobs } from '../db/schema/jobs'
 import { formatInvoiceNumber, invoices } from '../db/schema/invoices'
 import { serviceLogs } from '../db/schema/service-logs'
 import { customers } from '../db/schema/customers'
@@ -515,12 +516,16 @@ async function loadEntityContext(db: Db, entityType: DeletionEntityType, entityI
   }
 }
 
-export async function enqueueDeletionRequestAiReview(db: Db, requestId: string) {
+export async function enqueueDeletionRequestAiReview(
+  db: Db,
+  requestId: string,
+  opts: { runAfter?: Date } = {},
+) {
   if (!(await isAiAdministratorEnabled(db))) {
     console.info('[ai-administrator] skip enqueue — feature disabled or AI not configured', requestId)
     return null
   }
-  const runAfter = new Date(Date.now() + AI_ADMIN_REVIEW_DELAY_MS)
+  const runAfter = opts.runAfter ?? new Date(Date.now() + AI_ADMIN_REVIEW_DELAY_MS)
   const job = await enqueueJob(db, 'deletion_request_ai_review', { requestId }, 3, { runAfter })
   console.info(
     '[ai-administrator] enqueued deletion review',
@@ -531,6 +536,93 @@ export async function enqueueDeletionRequestAiReview(db: Db, requestId: string) 
     job.id,
   )
   return job
+}
+
+/** Poll catch-up cooldown so skipped/unavailable reviews are not re-queued every few seconds. */
+export const DELETION_AI_CATCH_UP_COOLDOWN_MS = 2 * 60 * 1000
+
+/** Pure helper — pending ids (oldest first) that lack a blocking review job. */
+export function pendingDeletionIdsNeedingReview(
+  pendingIdsOldestFirst: string[],
+  blockedJobRequestIds: Iterable<string>,
+): string[] {
+  const blocked = new Set(
+    [...blockedJobRequestIds].map(id => String(id || '').trim()).filter(Boolean),
+  )
+  return pendingIdsOldestFirst
+    .map(id => String(id || '').trim())
+    .filter(id => id && !blocked.has(id))
+}
+
+/**
+ * Re-queue Susan reviews for open deletion requests that have no queued/processing job.
+ * Used on app start, AI settings save, and worker ticks so reviews don't go dormant after
+ * restarts or settings changes (jobs marked done after a skipped/unavailable review, etc.).
+ *
+ * @param opts.ignoreCooldown  Startup / settings-save: only skip active queued/processing jobs.
+ *                             Poll ticks also skip requests with a recent job (cooldown).
+ */
+export async function catchUpPendingDeletionRequestAiReviews(
+  db: Db,
+  opts: { limit?: number, ignoreCooldown?: boolean } = {},
+): Promise<{
+  enqueued: number
+  skipped: number
+  pending: number
+}> {
+  const limit = opts.limit ?? 50
+  const ignoreCooldown = opts.ignoreCooldown === true
+
+  if (!(await isAiAdministratorEnabled(db))) {
+    return { enqueued: 0, skipped: 0, pending: 0 }
+  }
+
+  const pending = await db.select({ id: entityDeletionRequests.id })
+    .from(entityDeletionRequests)
+    .where(eq(entityDeletionRequests.status, 'pending'))
+    .orderBy(asc(entityDeletionRequests.createdAt))
+    .limit(limit)
+
+  if (!pending.length) return { enqueued: 0, skipped: 0, pending: 0 }
+
+  const cooldownSince = new Date(Date.now() - DELETION_AI_CATCH_UP_COOLDOWN_MS)
+  const blockingJobs = await db.select({ payload: workerJobs.payload })
+    .from(workerJobs)
+    .where(and(
+      eq(workerJobs.jobType, 'deletion_request_ai_review'),
+      ignoreCooldown
+        ? inArray(workerJobs.status, ['queued', 'processing'])
+        : or(
+            inArray(workerJobs.status, ['queued', 'processing']),
+            // Recent job of any status (including skipped/done) — avoid re-queue spam.
+            gte(workerJobs.createdAt, cooldownSince),
+          ),
+    ))
+
+  const blockedIds = blockingJobs.map((job) => {
+    const payload = job.payload as { requestId?: unknown } | null
+    return String(payload?.requestId || '')
+  })
+
+  const needing = pendingDeletionIdsNeedingReview(
+    pending.map(row => row.id),
+    blockedIds,
+  )
+
+  let enqueued = 0
+  for (const requestId of needing) {
+    // Catch-up runs immediately — these requests already missed (or never got) the delay window.
+    const job = await enqueueDeletionRequestAiReview(db, requestId, { runAfter: new Date() })
+    if (job) enqueued += 1
+  }
+
+  const skipped = pending.length - needing.length
+  if (enqueued) {
+    console.info(
+      `[ai-administrator] catch-up enqueued=${enqueued} skippedBlocked=${skipped} pendingScanned=${pending.length} ignoreCooldown=${ignoreCooldown}`,
+    )
+  }
+  return { enqueued, skipped, pending: pending.length }
 }
 
 export async function reviewDeletionRequestWithSusan(db: Db, requestId: string): Promise<{

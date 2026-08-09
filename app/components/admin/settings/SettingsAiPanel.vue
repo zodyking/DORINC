@@ -95,7 +95,7 @@ const AI_TASKS = [
     enabledKey: 'aiAdministratorEnabled' as const,
     modelKey: 'aiAdministratorModel' as const,
     title: 'AI Administrator',
-    description: 'Susan reviews deletion requests (~10s after open), requires a clear why, weighs account type, and rejects vague or repeated similar requests.',
+    description: 'Susan reviews deletion requests (~10s after open), requires a clear why, weighs account type, and rejects vague or repeated similar requests. Saving these settings (and app start) re-queues any open pending reviews.',
     modelHint: 'Prefer a careful text model — Susan can approve or reject deletions.',
   },
 ]
