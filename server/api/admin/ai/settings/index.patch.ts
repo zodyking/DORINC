@@ -34,6 +34,23 @@ export default defineEventHandler(async (event) => {
       console.error('[ai-settings] audit write failed:', (auditErr as Error).message)
     }
 
+    // Whenever AI / Susan settings are saved, re-queue open deletion reviews
+    // that may have gone dormant while the feature was off or jobs were skipped.
+    try {
+      const { catchUpPendingDeletionRequestAiReviews } = await import(
+        '../../../../services/ai-administrator.service'
+      )
+      const catchUp = await catchUpPendingDeletionRequestAiReviews(db, { ignoreCooldown: true })
+      if (catchUp.enqueued) {
+        console.info(
+          `[ai-settings] Susan catch-up enqueued=${catchUp.enqueued} pending=${catchUp.pending}`,
+        )
+      }
+    }
+    catch (catchUpErr) {
+      console.warn('[ai-settings] Susan catch-up failed:', (catchUpErr as Error).message)
+    }
+
     return { settings: updated }
   }
   catch (err) {

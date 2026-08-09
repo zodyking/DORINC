@@ -14,6 +14,79 @@ function workerToken() {
 }
 
 /**
+ * Re-queue open pending deletion requests that have no active (or recent) review job.
+ * Mirrors Nitro catch-up for dedicated workers after restarts / dormant queues.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {{ limit?: number, ignoreCooldown?: boolean }} [opts]
+ */
+export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
+  const limit = opts.limit ?? 50
+  const ignoreCooldown = opts.ignoreCooldown === true
+  const cooldownSecs = Number(process.env.DELETION_AI_CATCH_UP_COOLDOWN_SECS ?? 120)
+
+  const enabled = await pool.query(
+    `SELECT 1
+     FROM ai_provider_settings
+     WHERE enabled = true
+       AND ai_administrator_enabled = true
+       AND encrypted_api_key IS NOT NULL
+     LIMIT 1`,
+  )
+  if (!enabled.rowCount) return { enqueued: 0, pending: 0 }
+
+  const pending = await pool.query(
+    `SELECT id
+     FROM entity_deletion_requests
+     WHERE status = 'pending'
+     ORDER BY created_at ASC
+     LIMIT $1`,
+    [limit],
+  )
+  if (!pending.rowCount) return { enqueued: 0, pending: 0 }
+
+  const blocked = await pool.query(
+    ignoreCooldown
+      ? `SELECT payload->>'requestId' AS request_id
+         FROM worker_jobs
+         WHERE job_type = 'deletion_request_ai_review'
+           AND status IN ('queued', 'processing')`
+      : `SELECT payload->>'requestId' AS request_id
+         FROM worker_jobs
+         WHERE job_type = 'deletion_request_ai_review'
+           AND (
+             status IN ('queued', 'processing')
+             OR created_at >= now() - make_interval(secs => $1)
+             OR coalesce(finished_at, created_at) >= now() - make_interval(secs => $1)
+           )`,
+    ignoreCooldown ? [] : [cooldownSecs],
+  )
+  const blockedIds = new Set(
+    blocked.rows.map(row => String(row.request_id || '')).filter(Boolean),
+  )
+
+  let enqueued = 0
+  for (const row of pending.rows) {
+    const requestId = String(row.id || '')
+    if (!requestId || blockedIds.has(requestId)) continue
+    await pool.query(
+      `INSERT INTO worker_jobs (job_type, payload, max_attempts, status, run_after)
+       VALUES ('deletion_request_ai_review', $1::jsonb, 3, 'queued', now())`,
+      [JSON.stringify({ requestId })],
+    )
+    blockedIds.add(requestId)
+    enqueued += 1
+  }
+
+  if (enqueued) {
+    console.info(
+      `[deletion-ai-review] catch-up enqueued=${enqueued} pending=${pending.rowCount} ignoreCooldown=${ignoreCooldown}`,
+    )
+  }
+  return { enqueued, pending: pending.rowCount }
+}
+
+/**
  * @param {import('pg').Pool} pool
  * @param {number} [batch]
  */
@@ -25,6 +98,11 @@ export async function processDeletionAiReviewJobs(pool, batch = 3) {
     // Without a token we cannot call the internal review API safely.
     return { processed, failed, skipped: true }
   }
+
+  // Keep Susan awake for open requests (dedicated-worker path).
+  await catchUpPendingDeletionAiReviewJobs(pool, { ignoreCooldown: false }).catch((err) => {
+    console.warn('[deletion-ai-review] catch-up failed:', err?.message || err)
+  })
 
   for (let i = 0; i < batch; i++) {
     const client = await pool.connect()

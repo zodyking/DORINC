@@ -6,6 +6,7 @@ import {
   findSimilarDeletionRequest,
   looksLikeWeakDeletionReason,
   normalizeDeletionReasonForCompare,
+  pendingDeletionIdsNeedingReview,
 } from '../../server/services/ai-administrator.service'
 import { modelForFeature } from '../../server/services/ai-provider.service'
 import type { AiProviderSettingsView } from '../../server/services/ai-provider.service'
@@ -118,5 +119,20 @@ describe('ai administrator helpers', () => {
 
   it('looks back one hour for similar deletion requests', () => {
     expect(SIMILAR_DELETION_REQUEST_LOOKBACK_MS).toBe(60 * 60 * 1000)
+  })
+
+  it('catch-up picks oldest pending requests that lack an active review job', () => {
+    expect(pendingDeletionIdsNeedingReview(
+      ['a', 'b', 'c'],
+      ['b'],
+    )).toEqual(['a', 'c'])
+    expect(pendingDeletionIdsNeedingReview(
+      ['a', 'b'],
+      ['a', 'b'],
+    )).toEqual([])
+    expect(pendingDeletionIdsNeedingReview(
+      ['oldest', 'newest'],
+      [],
+    )).toEqual(['oldest', 'newest'])
   })
 })
