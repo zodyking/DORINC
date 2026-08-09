@@ -15,7 +15,7 @@ export async function buildServiceLogSheetUploadQrDataUrl(
   const url = serviceLogSheetUploadUrl(appUrl)
   const QRCode = (await import('qrcode')).default
   const dataUrl = await QRCode.toDataURL(url, {
-    width: 220,
+    width: 160,
     margin: 1,
     errorCorrectionLevel: 'M',
     color: { dark: '#111111', light: '#ffffff' },

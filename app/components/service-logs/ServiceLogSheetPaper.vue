@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import { SERVICE_LOG_SHEET_PAGE_MARGIN_IN, SERVICE_LOG_SHEET_SCOPE_CLASS } from '#shared/service-log-sheet-styles'
+import { sheetRightTrailingVoid } from '#shared/service-log-sheet-layout'
+import {
+  SERVICE_LOG_SHEET_UPLOAD_HELP,
+  SERVICE_LOG_SHEET_UPLOAD_TITLE,
+} from '#shared/service-log-sheet-upload'
 import type { ServiceLogSheetEditor } from '~/composables/useServiceLogSheetEditor'
 
 /**
@@ -19,6 +24,13 @@ const blankWorkRows = Array.from({ length: 24 }, (_unused, index) => index)
 const scopeClass = SERVICE_LOG_SHEET_SCOPE_CLASS
 const gridRows = computed(() => props.api.gridRows ?? [])
 
+const showUploadQr = computed(() => {
+  const doc = props.api.doc
+  if (!doc) return false
+  const voidInfo = sheetRightTrailingVoid(doc)
+  return Boolean(voidInfo && voidInfo.rowCount >= 3)
+})
+
 /** Inline Letter chrome — never depend only on injected styles for visibility. */
 const pageStyle = {
   width: '8.5in',
@@ -29,6 +41,7 @@ const pageStyle = {
   color: '#111111',
   boxSizing: 'border-box' as const,
   boxShadow: '0 18px 50px -20px rgba(15, 23, 42, 0.45)',
+  position: 'relative' as const,
 }
 </script>
 
@@ -106,19 +119,15 @@ const pageStyle = {
         No sections yet — add a left or right section to start the catalog.
       </div>
 
-      <div class="sheet-upload-qr">
-        <table class="sheet-upload-qr-table" role="presentation">
-          <tr>
-            <td class="sheet-upload-qr-spacer" />
-            <td class="sheet-upload-qr-cell">
-              <div class="sheet-upload-qr-placeholder" aria-hidden="true">QR</div>
-              <p class="sheet-upload-qr-caption">
-                Scan to upload to
-                <strong>DORINC SUITE</strong>
-              </p>
-            </td>
-          </tr>
-        </table>
+      <!-- Preview stand-in for the PDF rowspan QR seated under Inspection -->
+      <div v-if="showUploadQr" class="sheet-upload-qr-editor">
+        <div class="sheet-upload-qr-cell">
+          <div class="sheet-upload-qr-inner">
+            <p class="sheet-upload-qr-title">{{ SERVICE_LOG_SHEET_UPLOAD_TITLE }}</p>
+            <div class="sheet-upload-qr-placeholder" aria-hidden="true">QR</div>
+            <p class="sheet-upload-qr-help">{{ SERVICE_LOG_SHEET_UPLOAD_HELP }}</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -172,10 +181,17 @@ const pageStyle = {
   color: #111111;
   background: transparent;
 }
+.sheet-upload-qr-editor {
+  position: absolute;
+  right: 0.4in;
+  bottom: 0.4in;
+  width: 46%;
+  pointer-events: none;
+}
 .sheet-upload-qr-placeholder {
-  width: 70pt;
-  height: 70pt;
-  margin: 0 auto 3pt;
+  width: 56pt;
+  height: 56pt;
+  margin: 0 auto 4pt;
   border: 0.8pt solid #111;
   display: grid;
   place-items: center;

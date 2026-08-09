@@ -9,6 +9,7 @@ import {
 import {
   sectionsByColumn,
   sheetGridRows,
+  sheetRightTrailingVoid,
   type SheetColumnRow,
 } from '../../shared/service-log-sheet-layout'
 import {
@@ -16,7 +17,10 @@ import {
   SERVICE_LOG_SHEET_PDF_CSS,
   SERVICE_LOG_SHEET_SCOPE_CLASS,
 } from '../../shared/service-log-sheet-styles'
-import { SERVICE_LOG_SHEET_UPLOAD_CAPTION } from '../../shared/service-log-sheet-upload'
+import {
+  SERVICE_LOG_SHEET_UPLOAD_HELP,
+  SERVICE_LOG_SHEET_UPLOAD_TITLE,
+} from '../../shared/service-log-sheet-upload'
 import type { BusinessProfile } from '../../shared/workspace-settings-defaults'
 import {
   getBusinessProfile,
@@ -177,12 +181,53 @@ function renderGroupCells(row: SheetColumnRow | null, groupEnd: boolean): string
               <td class="new-price-cell${end}">&nbsp;</td>`
 }
 
-function renderCatalogRowsHtml(document: ServiceLogSheetDocument): string {
-  return sheetGridRows(document).map(row => `<tr>
+function renderUploadQrCellHtml(dataUrl: string, rowspan: number): string {
+  return `<td colspan="4" rowspan="${rowspan}" class="sheet-upload-qr-cell">
+                <div class="sheet-upload-qr-inner">
+                  <p class="sheet-upload-qr-title">${escapeHtml(SERVICE_LOG_SHEET_UPLOAD_TITLE)}</p>
+                  <img
+                    class="sheet-upload-qr-img"
+                    src="${dataUrl}"
+                    alt="${escapeHtml(SERVICE_LOG_SHEET_UPLOAD_TITLE)}"
+                  />
+                  <p class="sheet-upload-qr-help">${escapeHtml(SERVICE_LOG_SHEET_UPLOAD_HELP)}</p>
+                </div>
+              </td>`
+}
+
+/**
+ * Catalog rows with the scan QR seated in the trailing right-column void
+ * (under Inspection), so DomPDF keeps it on page 1 instead of spilling after
+ * the full-height left column.
+ */
+function renderCatalogRowsHtml(
+  document: ServiceLogSheetDocument,
+  uploadQrDataUrl?: string | null,
+): string {
+  const rows = sheetGridRows(document)
+  const voidInfo = uploadQrDataUrl ? sheetRightTrailingVoid(document) : null
+  // Seat QR in the empty right-column pocket (needs a few void rows).
+  const qrRowspan = voidInfo && voidInfo.rowCount >= 3 ? voidInfo.rowCount : 0
+  const qrStart = qrRowspan > 0 ? voidInfo!.startIndex : -1
+
+  return rows.map((row, index) => {
+    let rightHtml: string
+    if (qrRowspan > 0 && index === qrStart) {
+      rightHtml = renderUploadQrCellHtml(uploadQrDataUrl!, qrRowspan)
+    }
+    else if (qrRowspan > 0 && index > qrStart && index < qrStart + qrRowspan) {
+      rightHtml = ''
+    }
+    else {
+      rightHtml = renderGroupCells(row.right, row.rightEnd)
+    }
+
+    return `<tr>
               ${renderGroupCells(row.left, row.leftEnd)}
               <td class="grid-gap"></td>
-              ${renderGroupCells(row.right, row.rightEnd)}
-            </tr>`).join('\n')
+              ${rightHtml}
+            </tr>`
+  }).join('\n')
 }
 
 const BLANK_WORK_ROWS = 24
@@ -232,6 +277,8 @@ export function renderServiceLogSheetHtml(
   // One flat table: DomPDF cannot split a table containing nested tables, so a
   // nested grid that outgrows page 1 moves wholesale to page 2 and leaves the
   // first page blank. Flat rows split like invoice line items and repeat <thead>.
+  // QR lives inside the trailing right-column void (under Inspection) via rowspan
+  // so it stays on page 1 in the bottom-right pocket.
   const catalogBody = hasSections
     ? `<table class="catalog-grid">
       <thead>
@@ -248,32 +295,12 @@ export function renderServiceLogSheetHtml(
         </tr>
       </thead>
       <tbody>
-        ${renderCatalogRowsHtml(document)}
+        ${renderCatalogRowsHtml(document, opts.uploadQrDataUrl)}
       </tbody>
     </table>`
     : `<div class="empty-sheet">No sections on this service log sheet yet. Use Edit Template to add categories and services.</div>`
 
   const header = renderSheetHeaderHtml(title, companyDetails)
-  const qrBlock = opts.uploadQrDataUrl
-    ? `<div class="sheet-upload-qr">
-    <table class="sheet-upload-qr-table" role="presentation">
-      <tr>
-        <td class="sheet-upload-qr-spacer"></td>
-        <td class="sheet-upload-qr-cell">
-          <img
-            class="sheet-upload-qr-img"
-            src="${opts.uploadQrDataUrl}"
-            alt="${escapeHtml(SERVICE_LOG_SHEET_UPLOAD_CAPTION)}"
-          />
-          <p class="sheet-upload-qr-caption">
-            Scan to upload to
-            <strong>DORINC SUITE</strong>
-          </p>
-        </td>
-      </tr>
-    </table>
-  </div>`
-    : ''
 
   return `<!doctype html>
 <html lang="en">
@@ -314,7 +341,6 @@ export function renderServiceLogSheetHtml(
     </div>
 
     ${catalogBody}
-    ${qrBlock}
   </div>
 
   <div class="page page-back">
