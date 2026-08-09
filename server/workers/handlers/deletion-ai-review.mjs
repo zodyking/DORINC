@@ -13,8 +13,15 @@ function workerToken() {
   return (process.env.INTERNAL_WORKER_TOKEN || process.env.ENCRYPTION_MASTER_KEY || '').trim()
 }
 
+function isRetryableSusanSkip(decision, note) {
+  if (decision !== 'skipped') return false
+  const n = String(note || '').toLowerCase()
+  if (n.includes('already decided') || n.includes('not found')) return false
+  return true
+}
+
 /**
- * Re-queue open pending deletion requests that have no active (or recent) review job.
+ * Re-queue open pending deletion requests that have no active review job.
  * Mirrors Nitro catch-up for dedicated workers after restarts / dormant queues.
  *
  * @param {import('pg').Pool} pool
@@ -22,8 +29,7 @@ function workerToken() {
  */
 export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
   const limit = opts.limit ?? 50
-  const ignoreCooldown = opts.ignoreCooldown === true
-  const cooldownSecs = Number(process.env.DELETION_AI_CATCH_UP_COOLDOWN_SECS ?? 120)
+  void opts.ignoreCooldown
 
   const enabled = await pool.query(
     `SELECT 1
@@ -45,21 +51,12 @@ export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
   )
   if (!pending.rowCount) return { enqueued: 0, pending: 0 }
 
+  // Only block live jobs — retryable skips must not freeze the queue.
   const blocked = await pool.query(
-    ignoreCooldown
-      ? `SELECT payload->>'requestId' AS request_id
-         FROM worker_jobs
-         WHERE job_type = 'deletion_request_ai_review'
-           AND status IN ('queued', 'processing')`
-      : `SELECT payload->>'requestId' AS request_id
-         FROM worker_jobs
-         WHERE job_type = 'deletion_request_ai_review'
-           AND (
-             status IN ('queued', 'processing')
-             OR created_at >= now() - make_interval(secs => $1)
-             OR coalesce(finished_at, created_at) >= now() - make_interval(secs => $1)
-           )`,
-    ignoreCooldown ? [] : [cooldownSecs],
+    `SELECT payload->>'requestId' AS request_id
+     FROM worker_jobs
+     WHERE job_type = 'deletion_request_ai_review'
+       AND status IN ('queued', 'processing')`,
   )
   const blockedIds = new Set(
     blocked.rows.map(row => String(row.request_id || '')).filter(Boolean),
@@ -80,7 +77,7 @@ export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
 
   if (enqueued) {
     console.info(
-      `[deletion-ai-review] catch-up enqueued=${enqueued} pending=${pending.rowCount} ignoreCooldown=${ignoreCooldown}`,
+      `[deletion-ai-review] catch-up enqueued=${enqueued} pending=${pending.rowCount}`,
     )
   }
   return { enqueued, pending: pending.rowCount }
@@ -157,6 +154,34 @@ export async function processDeletionAiReviewJobs(pool, batch = 3) {
         throw new Error(message)
       }
 
+      const decision = payload?.decision || 'unknown'
+      const note = payload?.note || null
+      const attempts = Number(job.attempts || 0) + 1
+
+      if (isRetryableSusanSkip(decision, note)) {
+        if (attempts >= Number(job.max_attempts || 3)) {
+          await pool.query(
+            `UPDATE worker_jobs SET status = 'failed', finished_at = now(), last_error = $2 WHERE id = $1`,
+            [job.id, note || 'AI Administrator skipped'],
+          )
+        }
+        else {
+          const backoffSecs = Math.min(60, Math.max(10, attempts * 10))
+          await pool.query(
+            `UPDATE worker_jobs
+             SET status = 'queued',
+                 started_at = NULL,
+                 run_after = now() + make_interval(secs => $2),
+                 last_error = $3
+             WHERE id = $1`,
+            [job.id, backoffSecs, note || 'AI Administrator skipped'],
+          )
+        }
+        failed += 1
+        console.warn('[deletion-ai-review] retryable skip', requestId, note)
+        continue
+      }
+
       await pool.query(
         `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
         [job.id],
@@ -165,7 +190,7 @@ export async function processDeletionAiReviewJobs(pool, batch = 3) {
       console.info(
         '[deletion-ai-review] done',
         requestId,
-        payload?.decision || 'unknown',
+        decision,
       )
     }
     catch (err) {

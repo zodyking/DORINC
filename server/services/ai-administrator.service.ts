@@ -1,7 +1,6 @@
-import { and, asc, count, desc, eq, gte, inArray, ne, or } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, ne } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
-import type { Db } from '../db/client'
-import { usePool } from '../db/client'
+import { useDb, usePool, type Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { entityDeletionRequests, type DeletionEntityType } from '../db/schema/deletion-requests'
 import { workerJobs } from '../db/schema/jobs'
@@ -29,6 +28,7 @@ import {
   rejectDeletionRequest,
 } from './deletion-requests.service'
 import { hashPassword } from '../auth/password'
+import { writeAudit } from './audit.service'
 
 export const DELETION_REASON_WEAK_MESSAGE
   = 'Explain why this record should be deleted — a short phrase like "test system" is not enough'
@@ -516,6 +516,49 @@ async function loadEntityContext(db: Db, entityType: DeletionEntityType, entityI
   }
 }
 
+/** Retryable soft-skips must not be marked done (they left the request pending). */
+export function isRetryableSusanSkip(
+  decision: 'approve' | 'reject' | 'skipped',
+  note: string | null | undefined,
+): boolean {
+  if (decision !== 'skipped') return false
+  const n = String(note || '').toLowerCase()
+  if (n.includes('already decided') || n.includes('not found')) return false
+  return true
+}
+
+async function logSusanDeletionAudit(input: {
+  action: string
+  entityType: string
+  entityId?: string | null
+  afterData?: Record<string, unknown>
+  susanId?: string
+}): Promise<void> {
+  try {
+    const susanId = input.susanId || await ensureSusanSystemUser(useDb())
+    await writeAudit(null, {
+      entityType: input.entityType,
+      entityId: input.entityId ?? null,
+      action: input.action,
+      afterData: {
+        via: 'ai_administrator',
+        ...(input.afterData || {}),
+      },
+      actor: {
+        id: susanId,
+        name: AI_ADMINISTRATOR_DISPLAY_NAME,
+        email: SUSAN_SYSTEM_EMAIL,
+        accountType: 'admin',
+      },
+      permissionKey: 'deletion_requests.review.all',
+      riskLevel: 'sensitive',
+    })
+  }
+  catch (err) {
+    console.warn('[ai-administrator] system log write failed:', (err as Error).message)
+  }
+}
+
 export async function enqueueDeletionRequestAiReview(
   db: Db,
   requestId: string,
@@ -523,6 +566,12 @@ export async function enqueueDeletionRequestAiReview(
 ) {
   if (!(await isAiAdministratorEnabled(db))) {
     console.info('[ai-administrator] skip enqueue — feature disabled or AI not configured', requestId)
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.trigger_skipped',
+      entityType: 'deletion_request',
+      entityId: requestId,
+      afterData: { requestId, reason: 'AI Administrator disabled or not configured' },
+    })
     return null
   }
   const runAfter = opts.runAfter ?? new Date(Date.now() + AI_ADMIN_REVIEW_DELAY_MS)
@@ -535,11 +584,18 @@ export async function enqueueDeletionRequestAiReview(
     'job=',
     job.id,
   )
+  await logSusanDeletionAudit({
+    action: 'deletion_requests.ai_review.trigger',
+    entityType: 'deletion_request',
+    entityId: requestId,
+    afterData: {
+      requestId,
+      jobId: job.id,
+      runAfter: runAfter.toISOString(),
+    },
+  })
   return job
 }
-
-/** Poll catch-up cooldown so skipped/unavailable reviews are not re-queued every few seconds. */
-export const DELETION_AI_CATCH_UP_COOLDOWN_MS = 2 * 60 * 1000
 
 /** Pure helper — pending ids (oldest first) that lack a blocking review job. */
 export function pendingDeletionIdsNeedingReview(
@@ -557,10 +613,7 @@ export function pendingDeletionIdsNeedingReview(
 /**
  * Re-queue Susan reviews for open deletion requests that have no queued/processing job.
  * Used on app start, AI settings save, and worker ticks so reviews don't go dormant after
- * restarts or settings changes (jobs marked done after a skipped/unavailable review, etc.).
- *
- * @param opts.ignoreCooldown  Startup / settings-save: only skip active queued/processing jobs.
- *                             Poll ticks also skip requests with a recent job (cooldown).
+ * restarts or settings changes.
  */
 export async function catchUpPendingDeletionRequestAiReviews(
   db: Db,
@@ -571,7 +624,8 @@ export async function catchUpPendingDeletionRequestAiReviews(
   pending: number
 }> {
   const limit = opts.limit ?? 50
-  const ignoreCooldown = opts.ignoreCooldown === true
+  // ignoreCooldown kept for API compatibility; catch-up only blocks active jobs now.
+  void opts.ignoreCooldown
 
   if (!(await isAiAdministratorEnabled(db))) {
     return { enqueued: 0, skipped: 0, pending: 0 }
@@ -585,18 +639,12 @@ export async function catchUpPendingDeletionRequestAiReviews(
 
   if (!pending.length) return { enqueued: 0, skipped: 0, pending: 0 }
 
-  const cooldownSince = new Date(Date.now() - DELETION_AI_CATCH_UP_COOLDOWN_MS)
+  // Only block on live jobs — retryable skips must not freeze the queue.
   const blockingJobs = await db.select({ payload: workerJobs.payload })
     .from(workerJobs)
     .where(and(
       eq(workerJobs.jobType, 'deletion_request_ai_review'),
-      ignoreCooldown
-        ? inArray(workerJobs.status, ['queued', 'processing'])
-        : or(
-            inArray(workerJobs.status, ['queued', 'processing']),
-            // Recent job of any status (including skipped/done) — avoid re-queue spam.
-            gte(workerJobs.createdAt, cooldownSince),
-          ),
+      inArray(workerJobs.status, ['queued', 'processing']),
     ))
 
   const blockedIds = blockingJobs.map((job) => {
@@ -619,7 +667,7 @@ export async function catchUpPendingDeletionRequestAiReviews(
   const skipped = pending.length - needing.length
   if (enqueued) {
     console.info(
-      `[ai-administrator] catch-up enqueued=${enqueued} skippedBlocked=${skipped} pendingScanned=${pending.length} ignoreCooldown=${ignoreCooldown}`,
+      `[ai-administrator] catch-up enqueued=${enqueued} skippedBlocked=${skipped} pendingScanned=${pending.length}`,
     )
   }
   return { enqueued, skipped, pending: pending.length }
@@ -630,13 +678,37 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
   note: string | null
 }> {
   const client = await prepareAdministratorClient(db)
-  if (!client) return { decision: 'skipped', note: 'AI Administrator unavailable' }
+  if (!client) {
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.skip',
+      entityType: 'deletion_request',
+      entityId: requestId,
+      afterData: { requestId, reason: 'AI Administrator unavailable' },
+    })
+    return { decision: 'skipped', note: 'AI Administrator unavailable' }
+  }
 
   const [req] = await db.select().from(entityDeletionRequests)
     .where(eq(entityDeletionRequests.id, requestId))
     .limit(1)
-  if (!req) return { decision: 'skipped', note: 'Request not found' }
-  if (req.status !== 'pending') return { decision: 'skipped', note: 'Already decided' }
+  if (!req) {
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.skip',
+      entityType: 'deletion_request',
+      entityId: requestId,
+      afterData: { requestId, reason: 'Request not found' },
+    })
+    return { decision: 'skipped', note: 'Request not found' }
+  }
+  if (req.status !== 'pending') {
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.skip',
+      entityType: req.entityType,
+      entityId: req.entityId,
+      afterData: { requestId, reason: 'Already decided', status: req.status },
+    })
+    return { decision: 'skipped', note: 'Already decided' }
+  }
 
   const entityContext = await loadEntityContext(db, req.entityType, req.entityId)
   const susanId = await ensureSusanSystemUser(db)
@@ -654,10 +726,30 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
       : 'Rejected — this is too similar to another deletion request you submitted recently. Give a distinct business reason for a different cleanup, or ask a manager.'
     try {
       await rejectDeletionRequest(db, requestId, susanId, note)
+      await logSusanDeletionAudit({
+        action: 'deletion_requests.reject',
+        entityType: req.entityType,
+        entityId: req.entityId,
+        susanId,
+        afterData: {
+          requestId,
+          entityType: req.entityType,
+          entityLabel: req.entityLabel,
+          reviewReason: note,
+          rule: similar.kind,
+        },
+      })
       return { decision: 'reject', note }
     }
     catch (err) {
       if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
+        await logSusanDeletionAudit({
+          action: 'deletion_requests.ai_review.skip',
+          entityType: req.entityType,
+          entityId: req.entityId,
+          susanId,
+          afterData: { requestId, reason: 'Already decided' },
+        })
         return { decision: 'skipped', note: 'Already decided' }
       }
       throw err
@@ -669,10 +761,30 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     const note = 'Rejected — explain why this record should be deleted. A short phrase like "test system" is not enough.'
     try {
       await rejectDeletionRequest(db, requestId, susanId, note)
+      await logSusanDeletionAudit({
+        action: 'deletion_requests.reject',
+        entityType: req.entityType,
+        entityId: req.entityId,
+        susanId,
+        afterData: {
+          requestId,
+          entityType: req.entityType,
+          entityLabel: req.entityLabel,
+          reviewReason: note,
+          rule: 'weak_reason',
+        },
+      })
       return { decision: 'reject', note }
     }
     catch (err) {
       if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
+        await logSusanDeletionAudit({
+          action: 'deletion_requests.ai_review.skip',
+          entityType: req.entityType,
+          entityId: req.entityId,
+          susanId,
+          afterData: { requestId, reason: 'Already decided' },
+        })
         return { decision: 'skipped', note: 'Already decided' }
       }
       throw err
@@ -720,7 +832,12 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     const result = await openRouterChat(client.apiKey, client.model, [
       { role: 'system', content: system },
       { role: 'user', content: user },
-    ], 'ai_administrator', { responseFormat: 'json', temperature: 0.15, maxTokens: 350 })
+    ], 'ai_administrator', {
+      responseFormat: 'json',
+      temperature: 0.15,
+      maxTokens: 350,
+      timeoutMs: 25_000,
+    })
 
     await logAiUsage(db, {
       featureType: 'ai_administrator',
@@ -745,6 +862,17 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
   }
   catch (err) {
     console.warn('[ai-administrator] review AI failed:', (err as Error).message)
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.skip',
+      entityType: req.entityType,
+      entityId: req.entityId,
+      susanId,
+      afterData: {
+        requestId,
+        reason: 'AI review failed',
+        error: (err as Error).message,
+      },
+    })
     return { decision: 'skipped', note: 'AI review failed' }
   }
 
@@ -764,18 +892,46 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     else {
       await rejectDeletionRequest(db, requestId, susanId, note)
     }
+    await logSusanDeletionAudit({
+      action: decision === 'approve' ? 'deletion_requests.approve' : 'deletion_requests.reject',
+      entityType: req.entityType,
+      entityId: req.entityId,
+      susanId,
+      afterData: {
+        requestId,
+        entityType: req.entityType,
+        entityLabel: req.entityLabel,
+        reviewReason: note,
+      },
+    })
   }
   catch (err) {
     if (err instanceof DeletionRequestsServiceError && err.code === 'NOT_PENDING') {
+      await logSusanDeletionAudit({
+        action: 'deletion_requests.ai_review.skip',
+        entityType: req.entityType,
+        entityId: req.entityId,
+        susanId,
+        afterData: { requestId, reason: 'Already decided' },
+      })
       return { decision: 'skipped', note: 'Already decided' }
     }
     if (err instanceof DeletionRequestsServiceError && err.code === 'INVALID_TRANSITION') {
-      await rejectDeletionRequest(
-        db,
-        requestId,
+      const rejectNote = 'Rejected — this record cannot be deleted in its current state. Edit or void it instead.'
+      await rejectDeletionRequest(db, requestId, susanId, rejectNote)
+      await logSusanDeletionAudit({
+        action: 'deletion_requests.reject',
+        entityType: req.entityType,
+        entityId: req.entityId,
         susanId,
-        'Rejected — this record cannot be deleted in its current state. Edit or void it instead.',
-      )
+        afterData: {
+          requestId,
+          entityType: req.entityType,
+          entityLabel: req.entityLabel,
+          reviewReason: rejectNote,
+          rule: 'invalid_transition',
+        },
+      })
       return { decision: 'reject', note: 'Rejected — invalid deletion state' }
     }
     throw err
@@ -814,7 +970,37 @@ export async function processDeletionRequestAiReviews(db: Db, limit = 5): Promis
     const requestId = String(row.payload?.requestId || '')
     try {
       if (!requestId) throw new Error('Missing requestId in job payload')
-      await reviewDeletionRequestWithSusan(db, requestId)
+      const result = await reviewDeletionRequestWithSusan(db, requestId)
+
+      // Soft skip (AI unavailable / timeout) — keep pending and retry soon.
+      if (isRetryableSusanSkip(result.decision, result.note)) {
+        const exhausted = row.attempts >= row.max_attempts
+        const backoffSecs = Math.min(60, Math.max(10, row.attempts * 10))
+        await pool.query(
+          `UPDATE worker_jobs
+           SET status = $2,
+               last_error = $3,
+               finished_at = CASE WHEN $2 = 'failed' THEN now() ELSE NULL END,
+               run_after = CASE WHEN $2 = 'failed' THEN run_after ELSE now() + make_interval(secs => $4) END,
+               started_at = NULL
+           WHERE id = $1`,
+          [
+            row.id,
+            exhausted ? 'failed' : 'queued',
+            result.note || 'AI Administrator skipped',
+            backoffSecs,
+          ],
+        )
+        failed += 1
+        console.warn(
+          '[ai-administrator] retryable skip',
+          requestId,
+          result.note,
+          exhausted ? 'exhausted' : `retryIn=${backoffSecs}s`,
+        )
+        continue
+      }
+
       await pool.query(
         `UPDATE worker_jobs SET status = 'done', finished_at = now(), last_error = NULL WHERE id = $1`,
         [row.id],
