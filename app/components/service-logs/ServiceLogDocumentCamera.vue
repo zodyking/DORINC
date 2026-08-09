@@ -93,8 +93,8 @@ async function startCamera() {
       audio: false,
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: 3840 },
+        height: { ideal: 2160 },
       },
     })
     if (stopped) {
@@ -159,7 +159,8 @@ async function capture() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.drawImage(video, 0, 0)
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
+    // High JPEG quality — paper logs need readable handwriting/print.
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.97))
     if (!blob) {
       captureHint.value = 'Could not save that photo — try again'
       return

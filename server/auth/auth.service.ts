@@ -324,21 +324,48 @@ export async function login(
     throw new AuthError('WRONG_PORTAL')
   }
 
-  // Session rotation: revoke any live sessions, then issue a fresh token
-  await db.update(sessions)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(sessions.userId, row.user.id), isNull(sessions.revokedAt)))
+  return issueSessionForUser(db, row.user, row.accountTypeKey as AccountType, {
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+    deviceId: meta.deviceId,
+    geo: meta.geo,
+    locationLabel: meta.locationLabel,
+    rotateSessions: true,
+    resetAnnouncementAcks: true,
+  })
+}
 
-  // Active login messages should reappear on every sign-in while scheduled.
-  // Acknowledgements only dismiss them for the current session.
-  await db.delete(announcementAcknowledgements)
-    .where(eq(announcementAcknowledgements.userId, row.user.id))
+/** Mint a staff/customer session for an already-authenticated user identity. */
+export async function issueSessionForUser(
+  db: Db,
+  user: typeof users.$inferSelect,
+  accountTypeKey: AccountType,
+  meta: {
+    ipAddress?: string | null
+    userAgent?: string | null
+    deviceId?: string | null
+    geo?: LoginGeoMeta | null
+    locationLabel?: string | null
+    rotateSessions?: boolean
+    resetAnnouncementAcks?: boolean
+  } = {},
+): Promise<LoginResult> {
+  if (meta.rotateSessions !== false) {
+    await db.update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, user.id), isNull(sessions.revokedAt)))
+  }
+
+  if (meta.resetAnnouncementAcks) {
+    await db.delete(announcementAcknowledgements)
+      .where(eq(announcementAcknowledgements.userId, user.id))
+  }
 
   const { token, tokenHash } = generateToken()
   const expiresAt = new Date(Date.now() + SESSION_ABSOLUTE_TTL_MS)
 
   await db.insert(sessions).values({
-    userId: row.user.id,
+    userId: user.id,
     tokenHash,
     expiresAt,
     ipAddress: meta.ipAddress ?? null,
@@ -351,8 +378,8 @@ export async function login(
   })
 
   return {
-    user: row.user,
-    accountTypeKey: row.accountTypeKey as AccountType,
+    user,
+    accountTypeKey,
     sessionToken: token,
     sessionExpiresAt: expiresAt,
   }

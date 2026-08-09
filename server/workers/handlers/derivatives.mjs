@@ -6,6 +6,9 @@ import sharp from 'sharp'
 
 export const THUMBNAIL_MAX_PX = 320
 export const PREVIEW_MAX_PX = 1600
+/** Higher-fidelity previews for paper service-log photos (text must stay readable). */
+export const SERVICE_LOG_PREVIEW_MAX_PX = 3200
+export const SERVICE_LOG_PREVIEW_QUALITY = 92
 
 /**
  * Claim and process up to `batch` queued thumbnail jobs.
@@ -113,9 +116,14 @@ export async function generateDerivatives(pool, fileId) {
   )
   const existingKinds = new Set(existing.map(r => r.file_kind))
 
+  const isServiceLog = original.owner_entity_type === 'service_log'
   const targets = [
     { kind: 'thumbnail', maxPx: THUMBNAIL_MAX_PX, quality: 70 },
-    { kind: 'preview', maxPx: PREVIEW_MAX_PX, quality: 82 },
+    {
+      kind: 'preview',
+      maxPx: isServiceLog ? SERVICE_LOG_PREVIEW_MAX_PX : PREVIEW_MAX_PX,
+      quality: isServiceLog ? SERVICE_LOG_PREVIEW_QUALITY : 82,
+    },
   ].filter(t => !existingKinds.has(t.kind))
 
   const baseName = original.original_filename.replace(/\.[^.]+$/, '')

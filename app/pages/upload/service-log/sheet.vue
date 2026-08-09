@@ -59,12 +59,16 @@ const phase = ref<Phase>('boot')
 const bootError = ref('')
 const confirmName = ref('')
 const confirmEmail = ref('')
+const confirmUserId = ref('')
+const contextMode = ref<ContextMode | null>(null)
+const confirmBusy = ref(false)
 const wizardStep = ref(1)
 const busy = ref(false)
 const actionError = ref('')
 const cameraOpen = ref(false)
 const previewId = ref<string | null>(null)
 const submittedLogLabel = ref('')
+const submittedInvoiceLabel = ref('')
 
 const customerId = ref('')
 const vehicleId = ref('')
@@ -135,8 +139,10 @@ async function bootstrap() {
     const auto = consumeStaffReturnAutoContinue()
 
     if (ctx.mode === 'signed_in' && ctx.user) {
+      contextMode.value = 'signed_in'
       confirmName.value = ctx.user.name
       confirmEmail.value = ctx.user.email
+      confirmUserId.value = ctx.user.id
       if (!ctx.canUpload) {
         bootError.value = 'Your account cannot upload service logs. Sign in with a mechanic or staff account that can.'
         phase.value = 'boot'
@@ -151,8 +157,10 @@ async function bootstrap() {
     }
 
     if (ctx.mode === 'suggested' && ctx.suggestedUser) {
+      contextMode.value = 'suggested'
       confirmName.value = ctx.suggestedUser.name
       confirmEmail.value = ctx.suggestedUser.email
+      confirmUserId.value = ctx.suggestedUser.id
       phase.value = 'confirm'
       return
     }
@@ -165,11 +173,41 @@ async function bootstrap() {
   }
 }
 
-function onConfirmYes() {
-  if (auth.isSignedIn && !auth.isCustomer) {
+async function onConfirmYes() {
+  // Already signed in — trust context (don't re-gate on a stale client auth store).
+  if (contextMode.value === 'signed_in') {
     phase.value = 'wizard'
     return
   }
+
+  // Remembered device: mint a session for the confirmed staff user (no password).
+  if (contextMode.value === 'suggested' && confirmUserId.value) {
+    confirmBusy.value = true
+    bootError.value = ''
+    try {
+      await $fetch('/api/public/service-log-sheet-upload/confirm', {
+        method: 'POST',
+        body: { userId: confirmUserId.value },
+      })
+      await auth.fetchMe().catch(() => {})
+      if (!auth.isSignedIn || auth.isCustomer) {
+        goLogin(confirmEmail.value)
+        return
+      }
+      phase.value = 'wizard'
+      return
+    }
+    catch (e: unknown) {
+      // Fall back to normal sign-in with email prefilled.
+      bootError.value = syncFetchErrorMessage(e, 'Could not continue — sign in to upload')
+      goLogin(confirmEmail.value)
+      return
+    }
+    finally {
+      confirmBusy.value = false
+    }
+  }
+
   goLogin(confirmEmail.value)
 }
 
@@ -246,7 +284,18 @@ async function submitLog() {
       await $fetch('/api/files', { method: 'POST', body })
     }
 
+    // Same as UI “Send to invoice” — tech is ready when submitting from the sheet QR.
+    const converted = await $fetch<{
+      invoice: { invoiceNumber?: number }
+    }>(`/api/service-logs/${log.id}/convert-to-invoice`, {
+      method: 'POST',
+      body: {},
+    })
+
     submittedLogLabel.value = logNumberDisplay(log.logNumber)
+    submittedInvoiceLabel.value = converted.invoice.invoiceNumber != null
+      ? `INV-${String(converted.invoice.invoiceNumber).padStart(6, '0')}`
+      : ''
     phase.value = 'done'
   }
   catch (e: unknown) {
@@ -289,11 +338,17 @@ onBeforeUnmount(() => { clearPreviews() })
           This phone was used with <b>{{ confirmName }}</b> before.
           Confirm to upload a paper service log, or sign in as someone else.
         </p>
+        <p v-if="bootError" class="sl-sheet-upload__error">{{ bootError }}</p>
         <div class="sl-sheet-upload__actions">
-          <button type="button" class="btn primary" @click="onConfirmYes">
-            Yes — continue
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="confirmBusy"
+            @click="onConfirmYes"
+          >
+            {{ confirmBusy ? 'Continuing…' : 'Yes — continue' }}
           </button>
-          <button type="button" class="btn" @click="onConfirmNo">
+          <button type="button" class="btn" :disabled="confirmBusy" @click="onConfirmNo">
             No — sign in
           </button>
         </div>
@@ -302,9 +357,15 @@ onBeforeUnmount(() => { clearPreviews() })
       <div v-else-if="phase === 'done'" class="sl-sheet-upload__success">
         <div class="inv-sl-success__burst" aria-hidden="true" />
         <div class="inv-sl-success__check" aria-hidden="true">✓</div>
-        <h1>Service Log Uploaded</h1>
+        <h1>Service Log Sent to Invoice</h1>
         <p>
-          <b>{{ submittedLogLabel || 'Your log' }}</b> is in the review queue.
+          <b>{{ submittedLogLabel || 'Your log' }}</b>
+          <template v-if="submittedInvoiceLabel">
+            is on <b>{{ submittedInvoiceLabel }}</b>.
+          </template>
+          <template v-else>
+            was sent to invoice.
+          </template>
           You can close this page.
         </p>
       </div>
