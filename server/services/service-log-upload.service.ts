@@ -14,6 +14,7 @@ import { getAppUrl } from './app-config.service'
 import {
   createServiceLog,
   getServiceLog,
+  linkServiceLogToExistingInvoice,
   ServiceLogsServiceError,
   transitionServiceLog,
 } from './service-logs.service'
@@ -374,18 +375,12 @@ async function completeUploadSession(
   if (photoCount < 1) throw new ServiceLogUploadServiceError('NO_PHOTOS')
 
   const log = await getServiceLog(db, session.serviceLogId)
-  if (log.status === 'draft' || log.status === 'uploaded') {
-    await transitionServiceLog(db, log.id, 'ready_for_review')
-  }
-
   if (session.invoiceId) {
-    await db.update(invoices)
-      .set({
-        serviceLogId: session.serviceLogId,
-        creationSource: 'service_log',
-        updatedAt: new Date(),
-      })
-      .where(eq(invoices.id, session.invoiceId))
+    // Wizard upload onto an invoice draft: mark the log as already sent to that invoice.
+    await linkServiceLogToExistingInvoice(db, session.serviceLogId, session.invoiceId)
+  }
+  else if (log.status === 'draft' || log.status === 'uploaded') {
+    await transitionServiceLog(db, log.id, 'ready_for_review')
   }
 
   const ctx = await loadSessionContext(db, session)

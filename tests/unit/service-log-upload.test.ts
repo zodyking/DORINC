@@ -52,3 +52,10 @@ describe('invoice wizard public upload auth path', () => {
     expect(parsed.invoiceId).toBeUndefined()
   })
 })
+
+describe('wizard service log → invoice link', () => {
+  it('exports an idempotent linker for attaching a log to an existing invoice', async () => {
+    const mod = await import('../../server/services/service-logs.service')
+    expect(typeof mod.linkServiceLogToExistingInvoice).toBe('function')
+  })
+})

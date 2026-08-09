@@ -18,7 +18,11 @@ import { normalizeLineType } from '#shared/line-item-types'
 import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import { getDefaultInvoiceTaxRateDecimal } from './workspace-settings.service'
 import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
-import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
+import {
+  getServiceLog,
+  linkServiceLogToExistingInvoice,
+  ServiceLogsServiceError,
+} from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
 import { users } from '../db/schema/auth'
 import { serviceRequests } from '../db/schema/portal-requests'
@@ -415,6 +419,15 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       if (log.draftLineItems) {
         await copyServiceLogDraftLineItems(db, invoice.id, log.draftLineItems, actorId)
       }
+      // Invoice-from-log and wizard upload: the log is already on this invoice.
+      try {
+        await linkServiceLogToExistingInvoice(db, log.id, invoice.id)
+      }
+      catch (err) {
+        if (!(err instanceof ServiceLogsServiceError && err.code === 'ALREADY_CONVERTED')) {
+          throw err
+        }
+      }
       return getInvoice(db, invoice.id)
     }
     catch (err) {
@@ -519,8 +532,7 @@ export async function createInvoiceDraft(
     updatedBy: actorId,
   }
 
-  let row: typeof invoices.$inferSelect | undefined
-  row = await db.transaction(async (tx) => {
+  const row = await db.transaction(async (tx) => {
     let inserted: typeof invoices.$inferSelect | undefined
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt === 0) {
