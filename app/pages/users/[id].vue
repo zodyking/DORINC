@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isSusanSystemEmail } from '#shared/ai-assistant'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
+import { normalizePhoneE164 } from '#shared/format/phone-e164'
 
 definePageMeta({ layout: 'staff', permission: 'users.read.all' })
 
@@ -62,7 +64,7 @@ const editPhone = ref('')
 watchEffect(() => {
   if (user.value) {
     selectedType.value = user.value.accountType
-    editPhone.value = user.value.phone ?? ''
+    editPhone.value = formatPhoneDisplay(user.value.phone ?? '')
   }
 })
 
@@ -78,7 +80,9 @@ const isLockedSystemRecord = computed(() => isSuperAdminRecord.value || isSusanR
 const typeDirty = computed(() => !!user.value && selectedType.value !== user.value.accountType)
 const phoneDirty = computed(() => {
   if (!user.value) return false
-  return editPhone.value.trim() !== (user.value.phone ?? '').trim()
+  const next = normalizePhoneE164(editPhone.value) ?? (editPhone.value.trim() || null)
+  const current = normalizePhoneE164(user.value.phone) ?? (user.value.phone?.trim() || null)
+  return next !== current
 })
 const profileDirty = computed(() => typeDirty.value || phoneDirty.value)
 
@@ -465,11 +469,12 @@ const showPermissionsModal = ref(false)
                     v-model="editPhone"
                     type="tel"
                     autocomplete="tel"
-                    placeholder="+15551234567"
+                    placeholder="(212) 203 7378"
                     :readonly="!canManage || isSusanRecord"
                     :disabled="busy || isSusanRecord"
+                    @blur="editPhone = formatPhoneDisplay(editPhone)"
                   >
-                  <span class="help">Always available for admins to set. Used for text alerts when Quo SMS is enabled.</span>
+                  <span class="help">Always available for admins to set. Format like (212) 203 7378. Used for text alerts when Quo SMS is enabled.</span>
                 </label>
                 <label class="fld">Email verified
                   <input type="text" :value="user.emailVerified ? 'Yes' : 'No'" readonly>

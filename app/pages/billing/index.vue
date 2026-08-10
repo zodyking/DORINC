@@ -25,6 +25,7 @@ import {
   formatYesNo,
 } from '~/utils/billing-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { formatPhoneDisplay, phoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff', permission: 'billing.read.all' })
 
@@ -563,7 +564,7 @@ function selectProvider(provider: BillingProviderKey) {
                   </div>
                   <div>
                     <dt>From</dt>
-                    <dd>{{ dashboard.quo.fromNumber || '—' }}</dd>
+                    <dd>{{ phoneDisplay(dashboard.quo.fromNumber) }}</dd>
                   </div>
                   <div>
                     <dt>Credits</dt>
@@ -830,7 +831,7 @@ function selectProvider(provider: BillingProviderKey) {
                   </div>
                   <div>
                     <dt>From number</dt>
-                    <dd>{{ dashboard.quo.fromNumber || '—' }}</dd>
+                    <dd>{{ phoneDisplay(dashboard.quo.fromNumber) }}</dd>
                   </div>
                   <div>
                     <dt>Workspace numbers</dt>
@@ -847,7 +848,7 @@ function selectProvider(provider: BillingProviderKey) {
                     </thead>
                     <tbody>
                       <tr v-for="row in dashboard.quo.phoneNumbers" :key="row.id || row.number">
-                        <td>{{ row.formattedNumber || row.number }}</td>
+                        <td>{{ row.formattedNumber || formatPhoneDisplay(row.number) || row.number }}</td>
                         <td>{{ row.name || '—' }}</td>
                       </tr>
                     </tbody>

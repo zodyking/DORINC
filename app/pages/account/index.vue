@@ -11,6 +11,7 @@ import {
 } from '~/utils/account-ui'
 import { accountTypeLabel, accountTypePill, avColor, initials } from '~/utils/users-ui'
 import { redirectToLogin } from '~/utils/auth-session'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 definePageMeta({ layout: 'staff' })
 
@@ -77,7 +78,7 @@ watch(account, (a) => {
   profileFirstName.value = firstName
   profileLastName.value = lastName
   profileEmail.value = a.email
-  profilePhone.value = a.phone ?? ''
+  profilePhone.value = formatPhoneDisplay(a.phone ?? '')
 }, { immediate: true })
 
 const currentPassword = ref('')
@@ -311,9 +312,10 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   v-model="profilePhone"
                   type="tel"
                   autocomplete="tel"
-                  placeholder="+15551234567"
+                  placeholder="(212) 203 7378"
+                  @blur="profilePhone = formatPhoneDisplay(profilePhone)"
                 >
-                <span class="help">Always available on your account. Include country code (E.164). Used for text alerts when Quo SMS is enabled.</span>
+                <span class="help">Always available on your account. Format like (212) 203 7378. Used for text alerts when Quo SMS is enabled.</span>
               </label>
               <p v-if="profileMessage" style="color:#059669; font-size:13px;">{{ profileMessage }}</p>
               <p v-if="profileError" style="color:#dc2626; font-size:13px;">{{ profileError }}</p>

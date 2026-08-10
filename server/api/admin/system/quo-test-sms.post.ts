@@ -16,6 +16,7 @@ import { requirePermission } from '../../../utils/require-permission'
 import { validateBody } from '../../../utils/validate'
 import { quoTestSmsSchema } from '../../../../shared/validators/quo'
 import { normalizePhoneE164 } from '../../../../shared/format/phone-e164'
+import { formatPhoneDisplay } from '../../../../shared/format/phone'
 
 export default defineEventHandler(async (event) => {
   const actor = requirePermission(event, 'system.admin.all')
@@ -24,8 +25,13 @@ export default defineEventHandler(async (event) => {
   await refreshQuoConfigCache(db)
 
   const config = await getQuoConfig(db)
-  if (!isQuoSmsEnabled(config) && !(config.apiKey && config.fromNumber)) {
-    throw apiError(event, 'VALIDATION_ERROR', 'Save a Quo API key and from number first')
+  // Require the same enabled gate as notification SMS delivery (worker path).
+  if (!isQuoSmsEnabled(config)) {
+    throw apiError(
+      event,
+      'VALIDATION_ERROR',
+      'Enable Quo SMS and save a from number before sending a test text',
+    )
   }
 
   let to = body.to ?? null
@@ -63,7 +69,12 @@ export default defineEventHandler(async (event) => {
       permissionKey: 'system.admin.all',
       riskLevel: 'sensitive',
     })
-    return { ok: true, to, messageId: result.id, message: `Test SMS sent to ${to}` }
+    return {
+      ok: true,
+      to,
+      messageId: result.id,
+      message: `Test SMS sent to ${formatPhoneDisplay(to) || to}`,
+    }
   }
   catch (err) {
     throw apiError(event, 'UPSTREAM_ERROR', err instanceof Error ? err.message : 'Quo SMS send failed')

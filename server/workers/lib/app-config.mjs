@@ -1,4 +1,4 @@
-import { createDecipheriv, createHash } from 'node:crypto'
+import { decryptBuffer, hydrateMasterKeyFromDb } from './encryption.mjs'
 
 const APP_CONFIG_KEYS = {
   masterKey: 'security.master_key',
@@ -7,39 +7,16 @@ const APP_CONFIG_KEYS = {
   quo: 'quo.config',
 }
 
-function masterKeyFromEnvOrRow(masterHex) {
-  const env = process.env.ENCRYPTION_MASTER_KEY?.trim()
-  const keys = []
-  if (masterHex && /^[0-9a-f]{64}$/i.test(masterHex)) keys.push(Buffer.from(masterHex, 'hex'))
-  if (env) {
-    const envKey = /^[0-9a-f]{64}$/i.test(env)
-      ? Buffer.from(env, 'hex')
-      : createHash('sha256').update(env).digest()
-    if (!keys.some(k => k.equals(envKey))) keys.push(envKey)
+async function decryptSetting(pool, encryptedValue) {
+  if (!encryptedValue) return null
+  try {
+    await hydrateMasterKeyFromDb(pool)
+    return decryptBuffer(Buffer.from(encryptedValue, 'base64'))
   }
-  return keys
-}
-
-function decryptPayload(key, payload) {
-  const iv = payload.subarray(0, 12)
-  const tag = payload.subarray(12, 28)
-  const data = payload.subarray(28)
-  const decipher = createDecipheriv('aes-256-gcm', key, iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(data), decipher.final()])
-}
-
-function decryptSetting(encryptedValue, masterHex) {
-  const payload = Buffer.from(encryptedValue, 'base64')
-  for (const key of masterKeyFromEnvOrRow(masterHex)) {
-    try {
-      return decryptPayload(key, payload)
-    }
-    catch {
-      // try next key candidate
-    }
+  catch (err) {
+    console.warn('[worker] failed to decrypt app_settings secret:', err instanceof Error ? err.message : err)
+    return null
   }
-  return null
 }
 
 function envSmtpConfig() {
@@ -80,10 +57,9 @@ export async function loadSmtpConfig(pool) {
   )
 
   const byKey = new Map(rows.map(r => [r.key, r]))
-  const masterHex = byKey.get(APP_CONFIG_KEYS.masterKey)?.value?.hex
   const smtpRow = byKey.get(APP_CONFIG_KEYS.smtp)
   if (smtpRow?.encrypted_value) {
-    const decrypted = decryptSetting(smtpRow.encrypted_value, masterHex)
+    const decrypted = await decryptSetting(pool, smtpRow.encrypted_value)
     if (decrypted) {
       const json = JSON.parse(decrypted.toString('utf8'))
       return {
@@ -110,10 +86,9 @@ export async function loadImapConfig(pool) {
   )
 
   const byKey = new Map(rows.map(r => [r.key, r]))
-  const masterHex = byKey.get(APP_CONFIG_KEYS.masterKey)?.value?.hex
   const imapRow = byKey.get(APP_CONFIG_KEYS.imap)
   if (imapRow?.encrypted_value) {
-    const decrypted = decryptSetting(imapRow.encrypted_value, masterHex)
+    const decrypted = await decryptSetting(pool, imapRow.encrypted_value)
     if (decrypted) {
       const json = JSON.parse(decrypted.toString('utf8'))
       return {
@@ -132,6 +107,10 @@ export async function loadImapConfig(pool) {
 
 /**
  * Load Quo SMS config from encrypted app_settings.
+ * Uses the same master-key hydration as AI/backup workers so passphrase /
+ * non-hex DB keys decrypt correctly (the previous hex-only path caused
+ * notifications to fail while Nitro test SMS still worked).
+ *
  * @param {import('pg').Pool} pool
  * @returns {Promise<{ enabled: boolean, apiKey: string, fromNumber: string } | null>}
  */
@@ -142,11 +121,10 @@ export async function loadQuoConfig(pool) {
   )
 
   const byKey = new Map(rows.map(r => [r.key, r]))
-  const masterHex = byKey.get(APP_CONFIG_KEYS.masterKey)?.value?.hex
   const quoRow = byKey.get(APP_CONFIG_KEYS.quo)
   if (!quoRow?.encrypted_value) return null
 
-  const decrypted = decryptSetting(quoRow.encrypted_value, masterHex)
+  const decrypted = await decryptSetting(pool, quoRow.encrypted_value)
   if (!decrypted) return null
 
   try {

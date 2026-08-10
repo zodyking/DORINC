@@ -21,6 +21,8 @@ const DEFAULT_CONFIG: QuoConfig = {
 }
 
 let cache: QuoConfig | null = null
+let cacheLoadedAt = 0
+const CACHE_TTL_MS = 15_000
 
 function toView(config: QuoConfig): QuoSettingsView {
   const hasApiKey = Boolean(config.apiKey?.trim())
@@ -64,11 +66,14 @@ async function readEncryptedConfig(db: Db): Promise<QuoConfig> {
 
 export async function refreshQuoConfigCache(db: Db): Promise<QuoConfig> {
   cache = await readEncryptedConfig(db)
+  cacheLoadedAt = Date.now()
   return cache
 }
 
 export async function getQuoConfig(db: Db): Promise<QuoConfig> {
-  if (!cache) await refreshQuoConfigCache(db)
+  if (!cache || Date.now() - cacheLoadedAt > CACHE_TTL_MS) {
+    await refreshQuoConfigCache(db)
+  }
   return cache ?? { ...DEFAULT_CONFIG }
 }
 
@@ -82,6 +87,7 @@ export async function getQuoSettingsView(db: Db): Promise<QuoSettingsView> {
 }
 
 export async function isQuoEnabled(db: Db): Promise<boolean> {
+  // Prefer a fresh read when cache is empty; settings saves refresh the cache explicitly.
   const view = await getQuoSettingsView(db)
   return isQuoSmsEnabled(view)
 }
@@ -130,6 +136,7 @@ export async function saveQuoSettings(
   }
 
   cache = next
+  cacheLoadedAt = Date.now()
   return toView(next)
 }
 

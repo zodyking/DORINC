@@ -5,6 +5,7 @@ import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-
 import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
 import { isAllowedStaffReturnPath, setStaffReturnPath } from '~/utils/staff-return-path'
 import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -356,9 +357,10 @@ async function submitSignup() {
                 id="signup-phone"
                 v-model="signupPhone"
                 type="tel"
-                placeholder="+15551234567"
+                placeholder="(212) 203 7378"
                 autocomplete="tel"
                 required
+                @blur="signupPhone = formatPhoneDisplay(signupPhone)"
               >
             </div>
             <div class="fld">

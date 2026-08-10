@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { isSavedPasswordMask, passwordForSave, SAVED_PASSWORD_MASK } from '~/utils/settings-credentials'
+import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 const emit = defineEmits<{ saved: [] }>()
 
@@ -53,7 +54,8 @@ function normalizeOptionNumber(raw: string | null | undefined): string {
 }
 
 function optionLabel(row: QuoPhoneOption): string {
-  const number = row.formattedNumber?.trim() || row.number
+  const raw = row.formattedNumber?.trim() || row.number
+  const number = formatPhoneDisplay(raw) || raw
   const name = row.name?.trim()
   return name ? `${number} — ${name}` : number
 }
@@ -379,7 +381,12 @@ const variableHelp = computed(() => {
       <div class="cbody settings-form">
         <label class="fld">
           Send test to
-          <input v-model="testTo" type="tel" placeholder="+15551234567 (or leave blank for your account phone)">
+          <input
+            v-model="testTo"
+            type="tel"
+            placeholder="(212) 203 7378 (or leave blank for your account phone)"
+            @blur="testTo = testTo ? formatPhoneDisplay(testTo) : ''"
+          >
         </label>
         <button type="button" class="btn" :disabled="testSmsBusy" @click="runTestSms">
           {{ testSmsBusy ? 'Sending…' : 'Send test SMS' }}
