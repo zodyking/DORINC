@@ -18,6 +18,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
+  if (body.provider === 'quo') {
+    throw apiError(event, 'NOT_FOUND', 'Quo credentials are managed in Control Panel → Quo SMS')
+  }
+
   const settings = await getBillingIntegrations(db)
   const hasCredentials = body.provider === 'vultr'
     ? settings.hasVultrUsername || settings.hasVultrPassword

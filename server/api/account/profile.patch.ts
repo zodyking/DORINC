@@ -22,12 +22,12 @@ export default defineEventHandler(async (event) => {
       entityId: user.id,
       action: 'account.profile.update',
       beforeData: { name: auth.user.name, email: auth.user.email },
-      afterData: { name: user.name, email: user.email },
-      changedFields: ['name', 'email'],
+      afterData: { name: user.name, email: user.email, phone: user.phone },
+      changedFields: ['name', 'email', ...(body.phone !== undefined ? ['phone'] : [])],
     })
 
     return {
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, phone: user.phone },
     }
   }
   catch (err) {

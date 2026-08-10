@@ -31,9 +31,13 @@ const loginPass = ref('')
 const signupFirstName = ref('')
 const signupLastName = ref('')
 const signupEmail = ref('')
+const signupPhone = ref('')
 const signupPass = ref('')
 const signupConfirm = ref('')
 const signupType = ref('Mechanic')
+
+const { data: quoPublic } = useClientFetch<{ enabled: boolean }>('/api/public/quo')
+const quoSmsEnabled = computed(() => quoPublic.value?.enabled === true)
 
 const reveal = reactive({
   portal: false,
@@ -171,6 +175,7 @@ async function submitSignup() {
         email: signupEmail.value,
         password: signupPass.value,
         accountType: signupType.value.toLowerCase(),
+        ...(quoSmsEnabled.value ? { phone: signupPhone.value.trim() } : {}),
       },
     })
     notice.value = res.message
@@ -344,6 +349,17 @@ async function submitSignup() {
             <div class="fld">
               <label for="signup-email">Email</label>
               <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@gmail.com" autocomplete="email" required>
+            </div>
+            <div v-if="quoSmsEnabled" class="fld">
+              <label for="signup-phone">Phone number</label>
+              <input
+                id="signup-phone"
+                v-model="signupPhone"
+                type="tel"
+                placeholder="+15551234567"
+                autocomplete="tel"
+                required
+              >
             </div>
             <div class="fld">
               <label for="signup-password">Password</label>

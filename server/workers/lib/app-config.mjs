@@ -4,6 +4,7 @@ const APP_CONFIG_KEYS = {
   masterKey: 'security.master_key',
   smtp: 'smtp.config',
   imap: 'imap.config',
+  quo: 'quo.config',
 }
 
 function masterKeyFromEnvOrRow(masterHex) {
@@ -127,4 +128,36 @@ export async function loadImapConfig(pool) {
   }
 
   return envImapConfig()
+}
+
+/**
+ * Load Quo SMS config from encrypted app_settings.
+ * @param {import('pg').Pool} pool
+ * @returns {Promise<{ enabled: boolean, apiKey: string, fromNumber: string } | null>}
+ */
+export async function loadQuoConfig(pool) {
+  const { rows } = await pool.query(
+    `SELECT key, value, encrypted_value FROM app_settings WHERE key = ANY($1)`,
+    [[APP_CONFIG_KEYS.masterKey, APP_CONFIG_KEYS.quo]],
+  )
+
+  const byKey = new Map(rows.map(r => [r.key, r]))
+  const masterHex = byKey.get(APP_CONFIG_KEYS.masterKey)?.value?.hex
+  const quoRow = byKey.get(APP_CONFIG_KEYS.quo)
+  if (!quoRow?.encrypted_value) return null
+
+  const decrypted = decryptSetting(quoRow.encrypted_value, masterHex)
+  if (!decrypted) return null
+
+  try {
+    const json = JSON.parse(decrypted.toString('utf8'))
+    return {
+      enabled: Boolean(json.enabled),
+      apiKey: typeof json.apiKey === 'string' ? json.apiKey : '',
+      fromNumber: typeof json.fromNumber === 'string' ? json.fromNumber : '',
+    }
+  }
+  catch {
+    return null
+  }
 }

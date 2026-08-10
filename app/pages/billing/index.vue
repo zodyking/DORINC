@@ -60,6 +60,7 @@ watch(dashboard, (d) => {
   if (d.vultr.configured) detailTab.value = 'vultr'
   else if (d.cloudflare.configured) detailTab.value = 'cloudflare'
   else if (d.openrouter.configured) detailTab.value = 'openrouter'
+  else if (d.quo.configured) detailTab.value = 'quo'
 }, { immediate: true })
 
 const breakdownTotal = computed(() => {
@@ -139,7 +140,8 @@ function providerHasCredentials(provider: BillingProviderKey): boolean {
   if (!d) return false
   if (provider === 'vultr') return d.vultr.hasPortalCredentials
   if (provider === 'cloudflare') return d.cloudflare.hasPortalCredentials
-  return d.openrouter.hasPortalCredentials
+  if (provider === 'openrouter') return d.openrouter.hasPortalCredentials
+  return false
 }
 
 function openReveal(provider: BillingProviderKey) {
@@ -529,6 +531,57 @@ function selectProvider(provider: BillingProviderKey) {
               </button>
             </footer>
           </article>
+
+          <article
+            class="card billing-summary-card"
+            :class="{ active: detailTab === 'quo' }"
+            role="button"
+            tabindex="0"
+            @click="selectProvider('quo')"
+            @keyup.enter="selectProvider('quo')"
+          >
+            <div class="chead">
+              <div>
+                <h3>{{ labels.quo.name }}</h3>
+                <span class="billing-cat">{{ labels.quo.category }}</span>
+              </div>
+              <span class="pill" :class="billingProviderStatus(dashboard.quo.configured, !!dashboard.quo.error).class">
+                {{ billingProviderStatus(dashboard.quo.configured, !!dashboard.quo.error).label }}
+              </span>
+            </div>
+            <div class="cbody billing-summary-body">
+              <p v-if="dashboard.quo.error" class="billing-err">{{ dashboard.quo.error }}</p>
+              <template v-else-if="dashboard.quo.configured">
+                <dl class="billing-metric-grid">
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{{ dashboard.quo.enabled ? 'Enabled' : 'Saved (off)' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Numbers</dt>
+                    <dd>{{ dashboard.quo.phoneCount }}</dd>
+                  </div>
+                  <div>
+                    <dt>From</dt>
+                    <dd>{{ dashboard.quo.fromNumber || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Credits</dt>
+                    <dd>Prepaid in Quo</dd>
+                  </div>
+                </dl>
+              </template>
+              <p v-else class="billing-muted">Connect Quo in Control Panel → Quo SMS.</p>
+            </div>
+            <footer class="billing-card-footer" @click.stop>
+              <NuxtLink to="/admin?tab=quo" class="btn sm">
+                Control Panel
+              </NuxtLink>
+              <button type="button" class="btn sm" @click="openProviderAccount('quo')">
+                {{ billingProviderManageLabel('quo') }}
+              </button>
+            </footer>
+          </article>
         </div>
 
         <!-- Tabbed detail panel -->
@@ -563,6 +616,16 @@ function selectProvider(provider: BillingProviderKey) {
               @click="detailTab = 'openrouter'"
             >
               {{ labels.openrouter.name }}
+            </button>
+            <button
+              type="button"
+              class="billing-tab"
+              role="tab"
+              :aria-selected="detailTab === 'quo'"
+              :class="{ active: detailTab === 'quo' }"
+              @click="detailTab = 'quo'"
+            >
+              {{ labels.quo.name }}
             </button>
           </div>
 
@@ -720,7 +783,7 @@ function selectProvider(provider: BillingProviderKey) {
               <p v-else class="billing-muted">Connect Cloudflare in Control Panel → Billing.</p>
             </template>
 
-            <template v-else>
+            <template v-else-if="detailTab === 'openrouter'">
               <p v-if="dashboard.openrouter.error" class="billing-err">{{ dashboard.openrouter.error }}</p>
               <template v-else-if="dashboard.openrouter.configured">
                 <p v-if="dashboard.openrouter.creditsNote" class="billing-note">{{ dashboard.openrouter.creditsNote }}</p>
@@ -753,6 +816,46 @@ function selectProvider(provider: BillingProviderKey) {
                 <p v-else class="billing-muted">No recent API usage recorded.</p>
               </template>
               <p v-else class="billing-muted">Enable OpenRouter in Control Panel → Billing.</p>
+            </template>
+
+            <template v-else-if="detailTab === 'quo'">
+              <template v-if="dashboard.quo.configured">
+                <p class="billing-muted" style="margin-top:0;">
+                  {{ dashboard.quo.creditsNote }}
+                </p>
+                <dl class="billing-metric-grid" style="margin-bottom:16px;">
+                  <div>
+                    <dt>Enabled in app</dt>
+                    <dd>{{ dashboard.quo.enabled ? 'Yes' : 'No' }}</dd>
+                  </div>
+                  <div>
+                    <dt>From number</dt>
+                    <dd>{{ dashboard.quo.fromNumber || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Workspace numbers</dt>
+                    <dd>{{ dashboard.quo.phoneCount }}</dd>
+                  </div>
+                </dl>
+                <div v-if="dashboard.quo.phoneNumbers.length" class="billing-table-wrap">
+                  <table class="billing-table">
+                    <thead>
+                      <tr>
+                        <th>Number</th>
+                        <th>Label</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in dashboard.quo.phoneNumbers" :key="row.id || row.number">
+                        <td>{{ row.formattedNumber || row.number }}</td>
+                        <td>{{ row.name || '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p v-else class="billing-muted">No phone numbers returned for this Quo workspace yet.</p>
+              </template>
+              <p v-else class="billing-muted">Connect Quo in Control Panel → Quo SMS.</p>
             </template>
           </div>
         </div>

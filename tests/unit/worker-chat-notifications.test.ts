@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { notifyChatMessageReceivedWorker } from '../../server/workers/lib/chat-notifications.mjs'
 
-function createPool(state) {
+function createPool(state: {
+  jobs?: Array<Record<string, unknown>>
+  quoEnabled?: boolean
+  recipients?: Array<Record<string, unknown>>
+}) {
   return {
-    query: vi.fn(async (sql, params = []) => {
+    query: vi.fn(async (sql: string, params: unknown[] = []) => {
       const text = String(sql)
 
       if (text.includes('FROM conversations WHERE id')) {
@@ -18,12 +22,15 @@ function createPool(state) {
         return { rows: [{ user_id: 'staff-2' }] }
       }
 
-      if (text.includes('message_email_notify = true')) {
+      if (text.includes('message_notify_channel') || text.includes('message_email_notify')) {
         return {
-          rows: [{
+          rows: state.recipients ?? [{
             id: 'staff-2',
             name: 'Pat Staff',
             email: 'pat@example.com',
+            phone: '+15551234567',
+            message_notify_channel: 'email',
+            message_email_notify: true,
           }],
         }
       }
@@ -32,8 +39,25 @@ function createPool(state) {
         return { rows: [{ value: { businessName: 'Acme Shop' } }] }
       }
 
+      if (text.includes('FROM app_settings WHERE key = ANY') && text.includes('encrypted_value')) {
+        if (!state.quoEnabled) return { rows: [] }
+        return {
+          rows: [
+            { key: 'security.master_key', value: { hex: 'a'.repeat(64) }, encrypted_value: null },
+            // Intentionally no decryptable quo row — worker treats missing decrypt as disabled
+          ],
+        }
+      }
+
+      if (text.includes('FROM sms_templates')) {
+        return { rows: [] }
+      }
+
       if (text.startsWith('INSERT INTO worker_jobs')) {
-        state.jobs = [...(state.jobs ?? []), JSON.parse(String(params[0]))]
+        const payload = typeof params[0] === 'string' ? JSON.parse(params[0]) : params[0]
+        // INSERT uses job_type as literal in SQL for our worker; recover from SQL string
+        const jobType = text.includes("'sms_send'") ? 'sms_send' : 'email_send'
+        state.jobs = [...(state.jobs ?? []), { jobType, ...(payload as object) }]
         return { rowCount: 1 }
       }
 
@@ -57,9 +81,9 @@ describe('worker chat notifications', () => {
 
     expect(result).toEqual({ queued: 1 })
     expect(state.jobs).toHaveLength(1)
-    expect(state.jobs[0].to).toBe('pat@example.com')
-    expect(state.jobs[0].notificationKind).toBe('chat_message_received')
-    expect(state.jobs[0].subject).toContain('Team Message')
-    expect(state.jobs[0].text).toContain('INV-000711 has been resent to Fleet Co')
+    expect(state.jobs![0]!.to).toBe('pat@example.com')
+    expect(state.jobs![0]!.notificationKind).toBe('chat_message_received')
+    expect(state.jobs![0]!.subject).toContain('Team Message')
+    expect(state.jobs![0]!.text).toContain('INV-000711 has been resent to Fleet Co')
   })
 })

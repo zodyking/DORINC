@@ -8,6 +8,7 @@ export type ControlPanelSectionId
     | 'chat'
     | 'notifications'
     | 'email'
+    | 'quo'
     | 'billing'
     | 'ai'
     | 'import'
@@ -83,6 +84,12 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         title: 'Email',
         icon: '✉️',
         subtitle: 'Outbound SMTP, inbound IMAP, and test delivery',
+      },
+      {
+        id: 'quo',
+        title: 'Quo SMS',
+        icon: '💬',
+        subtitle: 'Quo API credentials, enable flag, and SMS templates',
       },
     ],
   },

@@ -53,7 +53,10 @@ interface AccountDetail {
   knownDevices: AccountKnownDevice[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
+  phone: string | null
+  messageNotifyChannel: 'email' | 'sms'
   silentDeveloperMode: boolean
+  quoSmsEnabled: boolean
 }
 
 const { data, refresh, error } = useClientFetch<{ account: AccountDetail }>('/api/account')
@@ -63,6 +66,7 @@ const account = computed(() => data.value?.account)
 const profileFirstName = ref('')
 const profileLastName = ref('')
 const profileEmail = ref('')
+const profilePhone = ref('')
 const profileBusy = ref(false)
 const profileMessage = ref('')
 const profileError = ref('')
@@ -73,6 +77,7 @@ watch(account, (a) => {
   profileFirstName.value = firstName
   profileLastName.value = lastName
   profileEmail.value = a.email
+  profilePhone.value = a.phone ?? ''
 }, { immediate: true })
 
 const currentPassword = ref('')
@@ -86,15 +91,18 @@ const revokeAllBusy = ref(false)
 
 const teamChatEnabled = ref(true)
 const messageEmailNotify = ref(true)
+const messageNotifyChannel = ref<'email' | 'sms'>('email')
 const silentDeveloperMode = ref(false)
 const notifyBusy = ref(false)
 const notifyMessage = ref('')
 const notifyError = ref('')
+const quoSmsEnabled = computed(() => account.value?.quoSmsEnabled === true)
 
 watch(account, (a) => {
   if (!a) return
   teamChatEnabled.value = a.teamChatEnabled
   messageEmailNotify.value = a.messageEmailNotify
+  messageNotifyChannel.value = a.messageNotifyChannel === 'sms' ? 'sms' : 'email'
   silentDeveloperMode.value = a.silentDeveloperMode
 }, { immediate: true })
 
@@ -113,6 +121,7 @@ async function saveProfile() {
         firstName,
         lastName,
         email: profileEmail.value.trim(),
+        phone: profilePhone.value.trim() || null,
       },
     })
     profileMessage.value = 'Profile saved'
@@ -207,7 +216,9 @@ async function saveNotificationPrefs() {
       method: 'PATCH',
       body: {
         ...(canManageTeamChat.value ? { teamChatEnabled: teamChatEnabled.value } : {}),
-        messageEmailNotify: messageEmailNotify.value,
+        ...(quoSmsEnabled.value
+          ? { messageNotifyChannel: messageNotifyChannel.value }
+          : { messageEmailNotify: messageEmailNotify.value }),
         ...(canManageTeamChat.value ? { silentDeveloperMode: silentDeveloperMode.value } : {}),
       },
     })
@@ -294,6 +305,16 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                 Email
                 <input v-model="profileEmail" type="email" autocomplete="email">
               </label>
+              <label class="fld">
+                Phone number
+                <input
+                  v-model="profilePhone"
+                  type="tel"
+                  autocomplete="tel"
+                  placeholder="+15551234567"
+                >
+                <span class="help">Used for text alerts when Quo SMS is enabled. Include country code.</span>
+              </label>
               <p v-if="profileMessage" style="color:#059669; font-size:13px;">{{ profileMessage }}</p>
               <p v-if="profileError" style="color:#dc2626; font-size:13px;">{{ profileError }}</p>
               <button class="btn primary" :disabled="profileBusy" @click="saveProfile">
@@ -343,7 +364,36 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   :disabled="!canManageTeamChat || notifyBusy"
                 >
               </label>
-              <label class="msg-pref-row">
+              <div v-if="quoSmsEnabled" class="msg-pref-row msg-pref-row--channel">
+                <span class="msg-pref-text">
+                  <b>Security &amp; chat notifications</b>
+                  <small>
+                    Choose how we reach you for sign-in alerts, verification codes, and new chat messages.
+                    Text requires a phone number on your profile.
+                  </small>
+                </span>
+                <div class="notify-channel" role="group" aria-label="Notification channel">
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: messageNotifyChannel === 'email' }"
+                    :disabled="notifyBusy"
+                    @click="messageNotifyChannel = 'email'"
+                  >
+                    Email
+                  </button>
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: messageNotifyChannel === 'sms' }"
+                    :disabled="notifyBusy"
+                    @click="messageNotifyChannel = 'sms'"
+                  >
+                    Text
+                  </button>
+                </div>
+              </div>
+              <label v-else class="msg-pref-row">
                 <span class="msg-pref-text">
                   <b>Email me for new chat messages</b>
                   <small>
@@ -498,6 +548,37 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
 .msg-pref-row--disabled {
   cursor: not-allowed;
   opacity: 0.78;
+}
+.msg-pref-row--channel {
+  cursor: default;
+  align-items: center;
+}
+.notify-channel {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.notify-channel__opt {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  min-height: 36px;
+}
+.notify-channel__opt.on {
+  background: #0f172a;
+  color: #fff;
+}
+.notify-channel__opt:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 .msg-pref-row:first-child {
   padding-top: 0;

@@ -11,6 +11,10 @@ export const BILLING_PROVIDER_LABELS = {
     name: 'Susan',
     category: 'AI assistant (OpenRouter)',
   },
+  quo: {
+    name: 'Quo',
+    category: 'SMS messaging',
+  },
 } as const
 
 export type BillingProviderKey = keyof typeof BILLING_PROVIDER_LABELS
@@ -19,6 +23,7 @@ export const BILLING_PROVIDER_ACCOUNT_URLS: Record<BillingProviderKey, string> =
   vultr: 'https://my.vultr.com/',
   cloudflare: 'https://dash.cloudflare.com/',
   openrouter: 'https://openrouter.ai/settings/credits',
+  quo: 'https://app.quo.com/',
 }
 
 export function billingProviderManageLabel(provider: BillingProviderKey): string {

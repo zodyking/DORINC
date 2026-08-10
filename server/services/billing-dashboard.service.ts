@@ -25,6 +25,12 @@ import {
 } from './cloudflare-billing.service'
 import { buildBillingOutlook } from './billing-outlook.service'
 import { resolveOpenRouterMonthlySpend } from '../../shared/billing-openrouter-spend'
+import {
+  getQuoConfig,
+  isQuoSmsEnabled,
+  listQuoPhoneNumbers,
+} from './quo.service'
+import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
@@ -235,15 +241,41 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     })),
   })
 
+  const quoConfig = await getQuoConfig(db)
+  const quoEnabled = isQuoSmsEnabled(quoConfig)
+  const quoConfigured = Boolean(quoConfig.apiKey?.trim() && quoConfig.fromNumber?.trim())
+  const quoBlock: BillingDashboardPayload['quo'] = {
+    configured: quoConfigured,
+    enabled: quoEnabled,
+    fromNumber: normalizePhoneE164(quoConfig.fromNumber) ?? (quoConfig.fromNumber || null),
+    phoneNumbers: [],
+    phoneCount: 0,
+    creditsNote: 'Quo uses prepaid messaging credits managed in the Quo app. Usage spend is not exposed via the public API.',
+    error: null,
+    lastUpdated: nowIso,
+  }
+  if (quoConfigured && quoConfig.apiKey) {
+    try {
+      const numbers = await listQuoPhoneNumbers(quoConfig.apiKey)
+      quoBlock.phoneNumbers = numbers
+      quoBlock.phoneCount = numbers.length
+    }
+    catch (e) {
+      quoBlock.error = (e as Error).message
+    }
+  }
+
   return {
     configured: {
       vultr: settings.vultrEnabled && settings.hasVultrApiKey,
       cloudflare: cloudflareBlock.configured,
       openrouter: settings.openrouterBillingEnabled && aiSettings.hasApiKey,
+      quo: quoConfigured,
     },
     vultr: vultrBlock,
     cloudflare: cloudflareBlock,
     openrouter: openrouterBlock,
+    quo: quoBlock,
     totals: {
       currency: 'USD',
       estimatedMonthlyUsd,

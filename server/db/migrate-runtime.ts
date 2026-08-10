@@ -60,4 +60,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureAiAdministratorSchema } = await import('../lib/ensure-ai-administrator-schema.mjs')
   await ensureAiAdministratorSchema(usePool())
+
+  const { ensureQuoSchema } = await import('../lib/ensure-quo-schema.mjs')
+  await ensureQuoSchema(usePool())
 }
