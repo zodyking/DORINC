@@ -1161,6 +1161,9 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
 .hist-log .chg{ color:#475569; line-height:1.45; }
 
 /* ---------- Invoice editor ---------- */
+.ed-lines-reveal{ padding:12px 14px 16px; }
+.ed-lines-reveal .reveal-slider__panel-body{ padding:10px 4px 4px; }
+.inv-wizard-reveal{ margin:12px 0 8px; }
 .ed-lines{ width:100%; border-collapse:collapse; min-width:920px; }
 .ed-lines th{
   text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
