@@ -19,6 +19,10 @@ import {
   quietlyIssueOutsideGeoChallenge,
 } from '../services/outside-geo-verify.service'
 import { apiError } from '../utils/api-error'
+import {
+  OUTSIDE_GEO_SESSION_HEADER,
+  isOutsideGeoSessionFlag,
+} from '../../shared/outside-geo-session'
 
 /** Paths that must always stay reachable so admins can never be locked out. */
 const EXEMPT_PREFIXES = ['/_nuxt/', '/setup', '/__nuxt', '/favicon']
@@ -37,6 +41,8 @@ const GATE_PAGES = [
   '/auth/access-restricted',
   '/upload/service-log',
 ]
+/** Login may load with a fresh bypass cookie after verify (before tab session is armed). */
+const LOGIN_PATHS = ['/auth/login', '/auth/portal-login']
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
 /** Throttle visit capture so a single client can't flood the table. */
@@ -85,6 +91,14 @@ function isApiExempt(path: string): boolean {
 
 function isGatePage(path: string): boolean {
   return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+}
+
+function isLoginPage(path: string): boolean {
+  return LOGIN_PATHS.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+}
+
+function tabSessionFromEvent(event: Parameters<typeof getHeader>[0]): boolean {
+  return isOutsideGeoSessionFlag(getHeader(event, OUTSIDE_GEO_SESSION_HEADER))
 }
 
 async function resolveViewer(event: Parameters<typeof getHeader>[0]) {
@@ -143,8 +157,15 @@ export default defineEventHandler(async (event) => {
     const decision = evaluateAccessDecision(settings, { ip, coords })
     if (!decision.blocked) return
 
+    // API: cookie alone is not enough — tab session header required (new tab = re-verify).
     const outsideGeoBypass = decision.reason === 'geo_outside'
-      ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
+      ? hasValidOutsideGeoBypass(event, {
+          ipAddress: ip,
+          userAgent,
+          deviceId,
+          requireTabSession: true,
+          tabSessionConfirmed: tabSessionFromEvent(event),
+        })
       : null
     if (outsideGeoBypass) return
 
@@ -211,9 +232,22 @@ export default defineEventHandler(async (event) => {
     ? { blocked: false as const, reason: null }
     : evaluateAccessDecision(settings, { ip, coords })
 
-  // Known users who already verified a suspicious-location challenge may proceed.
+  // HTML document loads: never trust the bypass cookie alone (new tabs would skip
+  // the fence). Only login + gate pages may use the cookie without a tab session.
+  // SPA browsing after verify relies on the visit beacon + tab sessionStorage.
+  const tabSession = tabSessionFromEvent(event)
   const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
-    ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
+    ? (
+        isLoginPage(path)
+          ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
+          : hasValidOutsideGeoBypass(event, {
+              ipAddress: ip,
+              userAgent,
+              deviceId,
+              requireTabSession: true,
+              tabSessionConfirmed: tabSession,
+            })
+      )
     : null
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
 

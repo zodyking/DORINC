@@ -31,6 +31,7 @@ describe('outside geo bypass token', () => {
     const tampered = `${token.slice(0, -4)}aaaa`
     expect(verifyOutsideGeoBypassToken(tampered)).toBeNull()
   })
+
 })
 
 describe('outside geo code helpers', () => {

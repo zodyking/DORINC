@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm'
+import { and, desc, eq, gte, lt } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { accessEvents } from '../db/schema/access-gate'
@@ -232,10 +232,26 @@ export interface AccessEventView {
 
 export async function listAccessEvents(
   db: Db,
-  filter: { eventType?: 'visit' | 'login', limit?: number } = {},
+  filter: {
+    eventType?: 'visit' | 'login'
+    limit?: number
+    /** Inclusive start (ISO). */
+    from?: string | Date | null
+    /** Exclusive end (ISO). */
+    to?: string | Date | null
+  } = {},
 ): Promise<AccessEventView[]> {
   const limit = Math.min(Math.max(filter.limit ?? 1000, 1), 5000)
-  const conditions = filter.eventType ? [eq(accessEvents.eventType, filter.eventType)] : []
+  const conditions = []
+  if (filter.eventType) conditions.push(eq(accessEvents.eventType, filter.eventType))
+  if (filter.from) {
+    const from = filter.from instanceof Date ? filter.from : new Date(filter.from)
+    if (Number.isFinite(from.getTime())) conditions.push(gte(accessEvents.createdAt, from))
+  }
+  if (filter.to) {
+    const to = filter.to instanceof Date ? filter.to : new Date(filter.to)
+    if (Number.isFinite(to.getTime())) conditions.push(lt(accessEvents.createdAt, to))
+  }
 
   const rows = await db.select()
     .from(accessEvents)

@@ -39,7 +39,8 @@ export default defineEventHandler(async (event) => {
     const deviceId = ensureDeviceId(event)
 
     if (hasValidOutsideGeoBypass(event, { ipAddress, userAgent, deviceId })) {
-      return sendRedirect(event, '/auth/login', 303)
+      // Re-arm tab session on the login landing page via geo_ok query.
+      return sendRedirect(event, '/auth/login?geo_ok=1', 303)
     }
 
     const body = await readBody(event).catch(() => null)
@@ -66,7 +67,8 @@ export default defineEventHandler(async (event) => {
     })
     setOutsideGeoBypassCookie(event, token)
 
-    return sendRedirect(event, '/auth/login', 303)
+    // geo_ok arms tab-scoped sessionStorage so a new tab cannot reuse the cookie alone.
+    return sendRedirect(event, '/auth/login?geo_ok=1', 303)
   }
   catch {
     return sendRedirect(event, '/auth/verify-location?err=1', 303)

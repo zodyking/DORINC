@@ -446,7 +446,7 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
                     </table>
                   </div>
                   <p v-else class="cbody" style="font-size:13px; color:#64748b; margin:0;">
-                    No open alerts — basic rules monitor failed login bursts, off-hours admin actions, high-risk bursts, and restore attempts.
+                    No open alerts.
                   </p>
                 </div>
 
