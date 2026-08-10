@@ -176,7 +176,7 @@ const customerId = ref('')
 const vehicleId = ref('')
 const serviceLogId = ref('')
 const serviceLogPhotoFiles = ref<ServiceLogPhotoFile[]>([])
-const linesPhotoReveal = ref(40)
+const linesPhotoReveal = ref(50)
 const hasWizardServiceLogPhotos = computed(() =>
   Boolean(serviceLogId.value) && serviceLogPhotoFiles.value.length > 0,
 )
@@ -660,15 +660,6 @@ function addLineAndFocusDescription() {
 function onLineRateTabNext(line: DraftLine) {
   onLineFieldBlur(line)
   addLineAndFocusDescription()
-}
-
-function focusCatalogSearch() {
-  const target = lines.value.find(l => !l.description.trim()) ?? lines.value[lines.value.length - 1]
-  if (!target) {
-    addLineAndFocusDescription()
-    return
-  }
-  focusVisibleLineDescription(target.localId)
 }
 
 function nextStep() {
@@ -1180,8 +1171,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
           </div>
 
           <div v-else class="inv-line-editor inv-line-editor--reveal">
-            <div class="inv-line-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-              <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+            <div class="inv-line-actions" style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:12px; justify-content:flex-end;">
               <AddPackageModal @applied="applyPackageLines" />
               <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
             </div>
@@ -1319,7 +1309,6 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         <div class="card inv-line-editor">
           <div class="chead inv-line-editor-head">
             <div class="right inv-line-actions">
-              <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
               <AddPackageModal @applied="applyPackageLines" />
               <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
             </div>

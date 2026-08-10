@@ -1164,6 +1164,43 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
 .ed-lines-reveal{ padding:12px 14px 16px; }
 .ed-lines-reveal .reveal-slider__panel-body{ padding:10px 4px 4px; }
 .inv-wizard-reveal{ margin:12px 0 8px; }
+.ed-lines-chead{
+  align-items:center;
+  gap:10px;
+}
+.ed-lines-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+  margin-left:auto;
+}
+.ed-lines-actions .btn,
+.ed-lines-actions .add-pkg{
+  flex:none;
+  white-space:nowrap;
+}
+@media (max-width:720px){
+  .ed-lines-chead{
+    flex-wrap:nowrap;
+    align-items:center;
+  }
+  .ed-lines-chead h3{
+    flex:1 1 auto;
+    min-width:0;
+    font-size:13.5px;
+    line-height:1.25;
+  }
+  .ed-lines-actions{
+    flex:none;
+    justify-content:flex-end;
+  }
+  .ed-lines-actions .btn.sm,
+  .ed-lines-actions .add-pkg-trigger{
+    padding-left:10px;
+    padding-right:10px;
+  }
+}
 .ed-lines{ width:100%; border-collapse:collapse; min-width:920px; }
 .ed-lines th{
   text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;

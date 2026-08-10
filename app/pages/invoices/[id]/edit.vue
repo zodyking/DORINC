@@ -402,7 +402,7 @@ const serviceLogImages = computed(() =>
 )
 const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
 /** Reveal slider mix for photos vs line items on the invoice tab (0 = lines only). */
-const linesPhotoReveal = ref(40)
+const linesPhotoReveal = ref(50)
 
 /** Oldest-first page order for mapping sourcePageIndex → file when sourceFileId is absent. */
 const serviceLogImagesOldestFirst = computed(() => {
@@ -996,7 +996,7 @@ if (import.meta.client) {
         </div>
         <p v-if="invoice.serviceLogId" class="ed-tab-hint">
           {{ hasServiceLogPhotos
-            ? 'Drag the reveal bar on Line items to compare field photos while editing charges. Service log tab has notes and metadata.'
+            ? 'Use the slider above Line items to peek field photos while editing. Service log tab has notes and metadata.'
             : 'Field photos and mechanic notes from the linked service log — reference while building line items.' }}
         </p>
       </div>
@@ -1075,9 +1075,9 @@ if (import.meta.client) {
           </div>
 
           <div class="card ed-lines-card">
-            <div class="chead">
+            <div class="chead ed-lines-chead">
               <h3>{{ hasServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
-              <div class="right">
+              <div class="right ed-lines-actions">
                 <button
                   type="button"
                   class="btn sm ai-btn"
@@ -1087,7 +1087,6 @@ if (import.meta.client) {
                 >
                   <span class="dot">✦</span> AI
                 </button>
-                <NuxtLink to="/catalog" class="btn sm">From catalog</NuxtLink>
                 <AddPackageModal :disabled="!editable || busy" @applied="applyPackageLines" />
                 <button
                   type="button"
