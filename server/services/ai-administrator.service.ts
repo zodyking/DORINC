@@ -9,7 +9,11 @@ import { serviceLogs } from '../db/schema/service-logs'
 import { customers } from '../db/schema/customers'
 import { vehicles } from '../db/schema/vehicles'
 import { conversations } from '../db/schema/messages'
-import { AI_ADMINISTRATOR_DISPLAY_NAME, AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
+import {
+  AI_ADMINISTRATOR_DISPLAY_NAME,
+  AI_ASSISTANT_NAME,
+  SUSAN_SYSTEM_EMAIL,
+} from '../../shared/ai-assistant'
 import { BRAND_NAME } from '../../shared/brand'
 import { signatureAccountTypeLabel } from '../../shared/format/account-type-label'
 import { parseOpenRouterJson, openRouterChat } from './ai-openrouter.service'
@@ -33,12 +37,12 @@ import { writeAudit } from './audit.service'
 export const DELETION_REASON_WEAK_MESSAGE
   = 'Explain why this record should be deleted — a short phrase like "test system" is not enough'
 
+export { SUSAN_SYSTEM_EMAIL }
+
 export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
 
 /** How far back Susan loads prior requests as review context (not an auto-reject window). */
 export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 60 * 60 * 1000
-
-export const SUSAN_SYSTEM_EMAIL = 'susan.ai@dorinc.system'
 
 export class AiAdministratorServiceError extends Error {
   constructor(

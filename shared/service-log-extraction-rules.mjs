@@ -187,18 +187,17 @@ function lineConfidence(item) {
 
 /**
  * Whether this page should lock checklist matching to the active sheet catalog.
- * Front printed form (page 1) uses the editor active list.
+ * Based on the AI page-type step: any printed/template page (not handwritten).
  */
-export function isSheetLockedPage(pageType, pageIndex) {
-  return normalizePageType(pageType) === 'printed_form' && Number(pageIndex) === 1
+export function isSheetLockedPage(pageType) {
+  return normalizePageType(pageType) === 'printed_form'
 }
 
 /**
- * Rear page / non-template pages require high per-line certainty.
+ * Handwritten / non-template pages require high per-line certainty.
  */
-export function requiresHighCertaintyLines(pageType, pageIndex) {
-  if (isSheetLockedPage(pageType, pageIndex)) return false
-  return true
+export function requiresHighCertaintyLines(pageType) {
+  return !isSheetLockedPage(pageType)
 }
 
 export function buildExtractionSystemPrompt(rules, pageType, options = {}) {
@@ -227,7 +226,7 @@ export function buildExtractionSystemPrompt(rules, pageType, options = {}) {
 
   if (sheetLocked && catalog) {
     lines.push(
-      'FRONT PRINTED CHECKLIST MODE (locked to active sheet editor list):',
+      'PRINTED TEMPLATE CHECKLIST MODE (locked to active sheet editor list):',
       '- Only extract items that are clearly CHECKED/marked on the form.',
       '- Match each checked item to ONE id from the ACTIVE SHEET LIST below.',
       '- Set description to the exact sheet item name; use the sheet price as rate when no handwritten override is visible.',
@@ -241,7 +240,7 @@ export function buildExtractionSystemPrompt(rules, pageType, options = {}) {
 
   if (highCertainty) {
     lines.push(
-      'HIGH-CERTAINTY MODE (rear page / non-template handwriting):',
+      'HIGH-CERTAINTY MODE (handwritten / non-template page):',
       `- Only include a draft line when you are highly certain it is real billable writing (confidence >= ${SERVICE_LOG_HIGH_CERTAINTY_THRESHOLD}).`,
       '- If text is ambiguous, smudged, crossed out, or guessed, SKIP that line entirely.',
       '- Do not invent prices; leave rate/amount null when not clearly written.',
@@ -261,13 +260,13 @@ export function buildExtractionSystemPrompt(rules, pageType, options = {}) {
 }
 
 export function buildExtractionUserPrompt(pageIndex, pageCount, pageType, context = {}) {
-  const sheetLocked = isSheetLockedPage(pageType, pageIndex) && Boolean(context.activeSheetItems?.length)
-  const highCertainty = requiresHighCertaintyLines(pageType, pageIndex)
+  const sheetLocked = isSheetLockedPage(pageType) && Boolean(context.activeSheetItems?.length)
+  const highCertainty = requiresHighCertaintyLines(pageType)
 
   return [
     `Extract billable fields from page ${pageIndex} of ${pageCount}.`,
     `Page type: ${normalizePageType(pageType)}.`,
-    sheetLocked ? 'Mode: front checklist locked to active sheet list — checked items only.' : '',
+    sheetLocked ? 'Mode: printed template checklist locked to active sheet list — checked items only.' : '',
     highCertainty ? `Mode: high-certainty only — skip any line below confidence ${SERVICE_LOG_HIGH_CERTAINTY_THRESHOLD}.` : '',
     context.complaint ? `Existing complaint (may refine): ${context.complaint}` : '',
     context.internalNotes ? `Existing internal notes (may refine): ${context.internalNotes}` : '',
@@ -293,8 +292,8 @@ function normalizeDraftLine(raw, meta, activeItems) {
   if (!raw || typeof raw !== 'object') return null
   const pageType = normalizePageType(meta.pageType)
   const pageIndex = Number(meta.pageIndex) || 1
-  const sheetLocked = isSheetLockedPage(pageType, pageIndex) && Array.isArray(activeItems) && activeItems.length > 0
-  const highCertainty = requiresHighCertaintyLines(pageType, pageIndex)
+  const sheetLocked = isSheetLockedPage(pageType) && Array.isArray(activeItems) && activeItems.length > 0
+  const highCertainty = requiresHighCertaintyLines(pageType)
 
   let confidence = lineConfidence(raw)
   let description = String(raw.description ?? '').trim()

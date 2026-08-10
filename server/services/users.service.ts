@@ -2,12 +2,14 @@ import { and, asc, count, eq, ilike, isNull, notInArray, or, sql } from 'drizzle
 import type { Db } from '../db/client'
 import { accountTypes, sessions, users } from '../db/schema/auth'
 import type { AccountType } from '../../shared/permissions/keys'
+import { isSusanSystemEmail } from '../../shared/ai-assistant'
 
 export type UsersServiceErrorCode
   = | 'NOT_FOUND'
     | 'NOT_PENDING'
     | 'INVALID_ACCOUNT_TYPE'
     | 'SUPER_ADMIN_PROTECTED'
+    | 'SUSAN_PROTECTED'
 
 export class UsersServiceError extends Error {
   constructor(public readonly code: UsersServiceErrorCode) {
@@ -142,6 +144,10 @@ export interface UpdateUserInput {
 export async function updateUser(db: Db, input: UpdateUserInput) {
   const row = await getUserWithType(db, input.userId)
   if (!row) throw new UsersServiceError('NOT_FOUND')
+
+  if (isSusanSystemEmail(row.user.email)) {
+    throw new UsersServiceError('SUSAN_PROTECTED')
+  }
 
   const targetIsSuperAdmin = row.accountTypeKey === 'super_admin'
   if (targetIsSuperAdmin && input.actor.accountType !== 'super_admin') {

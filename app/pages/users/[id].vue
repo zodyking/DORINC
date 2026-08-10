@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { isSusanSystemEmail } from '#shared/ai-assistant'
 
 definePageMeta({ layout: 'staff', permission: 'users.read.all' })
 
@@ -67,6 +68,8 @@ const errorMsg = ref('')
 const canManage = computed(() => auth.can('users.manage.all'))
 const canEditPerms = computed(() => auth.can('users.permissions.all'))
 const isSuperAdminRecord = computed(() => user.value?.accountType === 'super_admin')
+const isSusanRecord = computed(() => isSusanSystemEmail(user.value?.email))
+const isLockedSystemRecord = computed(() => isSuperAdminRecord.value || isSusanRecord.value)
 const typeDirty = computed(() => !!user.value && selectedType.value !== user.value.accountType)
 
 // Permission override state: 'inherit' | 'allow' | 'deny'
@@ -112,7 +115,7 @@ function getOverrideState(key: string): OverrideState {
 }
 
 function setOverrideState(key: string, state: OverrideState) {
-  if (!canEditPerms.value || isSuperAdminRecord.value) return
+  if (!canEditPerms.value || isLockedSystemRecord.value) return
   if (state === 'inherit') {
     const { [key]: _, ...rest } = overrideStates.value
     overrideStates.value = rest
@@ -225,6 +228,7 @@ const sendPasswordReset = () => run(
 const canResendVerification = computed(() =>
   canManage.value
   && user.value
+  && !isSusanRecord.value
   && !user.value.emailVerified
   && user.value.accountType !== 'customer'
   && user.value.isActive
@@ -234,6 +238,7 @@ const canResendVerification = computed(() =>
 const canCredentialAction = computed(() =>
   canManage.value
   && user.value
+  && !isSusanRecord.value
   && user.value.accountType !== 'customer'
   && user.value.accountType !== 'super_admin'
   && user.value.isActive
@@ -247,6 +252,7 @@ const canPasswordReset = computed(() => canCredentialAction.value && Boolean(use
 const canDelete = computed(() =>
   canManage.value
   && user.value
+  && !isSusanRecord.value
   && user.value.accountType !== 'super_admin'
 )
 
@@ -357,7 +363,10 @@ const showPermissionsModal = ref(false)
           <NuxtLink to="/users">Users</NuxtLink> / {{ user.email }} · joined {{ joinedLabel(user.createdAt) }}
         </template>
         <template #actions>
-          <template v-if="user.status === 'pending' && canManage">
+          <template v-if="isSusanRecord">
+            <span class="pill gray">System account · locked</span>
+          </template>
+          <template v-else-if="user.status === 'pending' && canManage">
             <button class="btn" :disabled="busy" @click="rejectUser">Reject</button>
             <button class="btn primary" :disabled="busy" @click="approve">Approve</button>
           </template>
@@ -387,7 +396,7 @@ const showPermissionsModal = ref(false)
               Resend verification
             </button>
             <button
-              v-if="canManage && !isSuperAdminRecord"
+              v-if="canManage && !isLockedSystemRecord"
               class="btn"
               :disabled="busy"
               @click="toggleActive"
@@ -395,7 +404,7 @@ const showPermissionsModal = ref(false)
               {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
             </button>
             <button
-              v-if="canManage && !isSuperAdminRecord"
+              v-if="canManage && !isLockedSystemRecord"
               class="btn primary"
               :disabled="busy || !typeDirty"
               @click="saveChanges"
@@ -414,6 +423,9 @@ const showPermissionsModal = ref(false)
         </template>
       </StaffPageHead>
 
+      <p v-if="isSusanRecord" class="flash warn">
+        Susan’s system account cannot be edited, deactivated, or deleted — not even by an admin.
+      </p>
       <p v-if="errorMsg" class="flash err">{{ errorMsg }}</p>
       <p v-if="notice" class="flash ok">{{ notice }}</p>
 
@@ -440,7 +452,7 @@ const showPermissionsModal = ref(false)
             <div class="chead">
               <h3>Permissions</h3>
               <div class="right">
-                <button v-if="canEditPerms && !isSuperAdminRecord" class="btn sm" @click="showPermissionsModal = true">
+                <button v-if="canEditPerms && !isLockedSystemRecord" class="btn sm" @click="showPermissionsModal = true">
                   Edit overrides
                 </button>
               </div>
@@ -473,10 +485,11 @@ const showPermissionsModal = ref(false)
               <dd>
                 <select
                   v-model="selectedType"
-                  :disabled="!canManage || isSuperAdminRecord || busy"
+                  :disabled="!canManage || isLockedSystemRecord || busy"
                   style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;font:inherit"
                 >
                   <option v-if="isSuperAdminRecord" value="super_admin">Super Admin</option>
+                  <option v-if="isSusanRecord" :value="user.accountType">{{ accountTypeLabel(user.accountType) }}</option>
                   <option value="mechanic">Mechanic</option>
                   <option value="accountant">Accountant</option>
                   <option value="viewer">Viewer</option>
@@ -495,7 +508,7 @@ const showPermissionsModal = ref(false)
               <dd>{{ new Date(user.createdAt).toLocaleDateString() }}</dd>
             </dl>
           </div>
-          <div v-if="canManage && user && user.accountType !== 'customer'" class="card">
+          <div v-if="canManage && user && !isSusanRecord && user.accountType !== 'customer'" class="card">
             <div class="chead"><h3>Training</h3></div>
             <div class="cbody" style="padding-top:14px;">
               <TrainingAssignPanel

@@ -11,6 +11,7 @@ import {
   isAssignableAccountType,
 } from './users.service'
 import { TEMP_PASSWORD_TTL_MS } from './portal-access.service'
+import { isSusanSystemEmail } from '../../shared/ai-assistant'
 
 export type StaffInviteServiceErrorCode
   = | 'EMAIL_IN_USE'
@@ -18,6 +19,7 @@ export type StaffInviteServiceErrorCode
     | 'NOT_FOUND'
     | 'NOT_STAFF'
     | 'CUSTOMER_ACCOUNT'
+    | 'SUSAN_PROTECTED'
 
 export class StaffInviteServiceError extends Error {
   constructor(public readonly code: StaffInviteServiceErrorCode) {
@@ -84,6 +86,7 @@ export async function listAssignableStaffAccountTypes(db: Db): Promise<string[]>
 export async function inviteStaffUser(db: Db, input: InviteStaffUserInput) {
   const email = input.email.trim().toLowerCase()
   const name = input.name.trim()
+  if (isSusanSystemEmail(email)) throw new StaffInviteServiceError('SUSAN_PROTECTED')
   await assertStaffEmailAvailable(db, email)
   const accountTypeId = await getAccountTypeId(db, input.accountTypeKey)
 
@@ -123,6 +126,7 @@ export async function resendStaffInvite(db: Db, userId: string, invitedBy: strin
     .where(eq(users.id, userId))
 
   if (!row) throw new StaffInviteServiceError('NOT_FOUND')
+  if (isSusanSystemEmail(row.user.email)) throw new StaffInviteServiceError('SUSAN_PROTECTED')
   if (row.accountTypeKey === 'customer') throw new StaffInviteServiceError('CUSTOMER_ACCOUNT')
   if (row.accountTypeKey === 'super_admin') throw new StaffInviteServiceError('NOT_STAFF')
 
@@ -191,6 +195,7 @@ export async function resetStaffPassword(db: Db, userId: string, _actorId: strin
     .where(eq(users.id, userId))
 
   if (!row) throw new StaffInviteServiceError('NOT_FOUND')
+  if (isSusanSystemEmail(row.user.email)) throw new StaffInviteServiceError('SUSAN_PROTECTED')
   if (row.accountTypeKey === 'customer') throw new StaffInviteServiceError('CUSTOMER_ACCOUNT')
   if (row.accountTypeKey === 'super_admin') throw new StaffInviteServiceError('NOT_STAFF')
 

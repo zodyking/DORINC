@@ -64,6 +64,9 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'SUPER_ADMIN_PROTECTED') {
         throw apiError(event, 'FORBIDDEN', 'Super Admin accounts cannot be modified this way')
       }
+      if (err.code === 'SUSAN_PROTECTED') {
+        throw apiError(event, 'FORBIDDEN', 'Susan’s system account cannot be edited, deactivated, or changed')
+      }
     }
     throw err
   }
