@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Before/after reveal for two panels (e.g. field photos vs line items).
+ * Before/after reveal for two panels (e.g. Service Log vs line items).
  * Primary control is a top track with a ball thumb; edge-snaps on release.
  */
 const props = withDefaults(defineProps<{

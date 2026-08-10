@@ -803,7 +803,7 @@ const summaryRows = computed(() => {
     <div v-if="viewTab === 'photos' && hasServiceLogPhotos" class="invoice-photos-tab">
       <div class="card ed-log-photos-card">
         <div class="chead">
-          <h3>Field photos · {{ serviceLogImages.length }}</h3>
+          <h3>Service Log · {{ serviceLogImages.length }}</h3>
           <div class="right">
             <NuxtLink
               v-if="invoice.serviceLogId"
