@@ -24,6 +24,8 @@ export type DeviceSignals = z.infer<typeof deviceSignalsSchema>
 export const visitBeaconBodySchema = z.object({
   path: z.string().trim().min(1).max(2000),
   signals: deviceSignalsSchema.default({}),
+  /** Tab-scoped outside-geofence session (sessionStorage). Required with bypass cookie. */
+  outsideGeoSession: z.boolean().optional().default(false),
 })
 
 export type VisitBeaconBody = z.infer<typeof visitBeaconBodySchema>

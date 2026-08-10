@@ -100,7 +100,13 @@ export default defineEventHandler(async (event) => {
     : evaluateAccessDecision(settings, { ip, coords })
 
   const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
-    ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
+    ? hasValidOutsideGeoBypass(event, {
+        ipAddress: ip,
+        userAgent,
+        deviceId,
+        requireTabSession: true,
+        tabSessionConfirmed: body.outsideGeoSession === true,
+      })
     : null
 
   const effectivelyBlocked = Boolean(

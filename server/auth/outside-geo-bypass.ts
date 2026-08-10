@@ -6,7 +6,10 @@ import { normalizeClientIp } from '../utils/client-ip'
 import { normalizeDeviceId } from '../utils/device-id'
 
 export const OUTSIDE_GEO_BYPASS_COOKIE = 'dorinc_outside_geo'
-/** Allow login outside the geofence for the rest of the travel day. */
+/**
+ * Signed cookie TTL. Actual browsing outside the fence also requires a
+ * tab-scoped sessionStorage flag — closing/reopening a tab forces re-verify.
+ */
 const BYPASS_TTL_MS = 12 * 60 * 60 * 1000
 const PART_SEP = '|'
 
@@ -116,6 +119,9 @@ export function clearOutsideGeoBypassCookie(event: H3Event) {
 /**
  * True when the request carries a valid outside-geofence bypass for this
  * IP/device, optionally restricted to a specific user id (login path).
+ *
+ * Set `requireTabSession: true` for visit/API gates so a leftover cookie
+ * alone cannot skip the geofence in a new tab (sessionStorage is tab-scoped).
  */
 export function hasValidOutsideGeoBypass(
   event: H3Event,
@@ -124,12 +130,17 @@ export function hasValidOutsideGeoBypass(
     userAgent?: string | null
     deviceId?: string | null
     userId?: string | null
+    /** When true, client must also send the tab session header/flag. */
+    requireTabSession?: boolean
+    tabSessionConfirmed?: boolean
   } = {},
 ): OutsideGeoBypass | null {
   const raw = getOutsideGeoBypassCookie(event)
   if (!raw) return null
   const bypass = verifyOutsideGeoBypassToken(raw)
   if (!bypass) return null
+
+  if (input.requireTabSession && !input.tabSessionConfirmed) return null
 
   if (input.userId && bypass.userId !== input.userId) return null
 

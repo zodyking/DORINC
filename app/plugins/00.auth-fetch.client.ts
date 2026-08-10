@@ -1,16 +1,20 @@
 import { DEVICE_ID_HEADER } from '#shared/device-id'
+import { OUTSIDE_GEO_SESSION_HEADER } from '#shared/outside-geo-session'
 import { peekDeviceId } from '~/utils/device-id'
+import { hasOutsideGeoTabSession } from '~/utils/outside-geo-session'
 
 export default defineNuxtPlugin(() => {
   const auth = useAuthStore()
 
   const patched = $fetch.create({
     onRequest({ options }) {
-      const id = peekDeviceId()
-      if (!id) return
       const headers = new Headers(options.headers as HeadersInit | undefined)
-      if (!headers.has(DEVICE_ID_HEADER)) {
+      const id = peekDeviceId()
+      if (id && !headers.has(DEVICE_ID_HEADER)) {
         headers.set(DEVICE_ID_HEADER, id)
+      }
+      if (hasOutsideGeoTabSession() && !headers.has(OUTSIDE_GEO_SESSION_HEADER)) {
+        headers.set(OUTSIDE_GEO_SESSION_HEADER, '1')
       }
       options.headers = headers
     },

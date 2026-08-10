@@ -1,4 +1,8 @@
 import { collectDeviceSignals } from '~/utils/device-signals'
+import {
+  consumeOutsideGeoOkQuery,
+  hasOutsideGeoTabSession,
+} from '~/utils/outside-geo-session'
 
 /**
  * On every client navigation / first load: send a visit beacon with device
@@ -13,6 +17,7 @@ export default defineNuxtPlugin(() => {
   async function beacon(path: string) {
     if (!import.meta.client) return
     if (!path || path.startsWith('/_nuxt') || path.startsWith('/__nuxt')) return
+    consumeOutsideGeoOkQuery(path)
     if (path === lastPath && inFlight) return
     lastPath = path
     inFlight = true
@@ -23,7 +28,11 @@ export default defineNuxtPlugin(() => {
         redirectTo: string | null
       }>('/api/security/visit-beacon', {
         method: 'POST',
-        body: { path, signals },
+        body: {
+          path: path.split('?')[0] || '/',
+          signals,
+          outsideGeoSession: hasOutsideGeoTabSession(),
+        },
       })
 
       if (res?.blocked && res.redirectTo && res.redirectTo.startsWith('/')) {
