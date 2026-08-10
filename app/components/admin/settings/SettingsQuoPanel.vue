@@ -10,6 +10,13 @@ interface QuoView {
   configured: boolean
 }
 
+interface QuoPhoneOption {
+  id: string
+  number: string
+  formattedNumber?: string | null
+  name?: string | null
+}
+
 interface SmsTemplateListItem {
   typeKey: string
   name: string
@@ -38,6 +45,39 @@ const form = reactive({
   fromNumber: '',
 })
 
+const phoneOptions = ref<QuoPhoneOption[]>([])
+const numbersLoaded = ref(false)
+
+function normalizeOptionNumber(raw: string | null | undefined): string {
+  return String(raw ?? '').trim()
+}
+
+function optionLabel(row: QuoPhoneOption): string {
+  const number = row.formattedNumber?.trim() || row.number
+  const name = row.name?.trim()
+  return name ? `${number} — ${name}` : number
+}
+
+function applyPhoneOptions(rows: QuoPhoneOption[]) {
+  phoneOptions.value = rows
+    .map(row => ({
+      ...row,
+      number: normalizeOptionNumber(row.number),
+    }))
+    .filter(row => row.number)
+  numbersLoaded.value = true
+
+  const current = form.fromNumber.trim()
+  const match = phoneOptions.value.find(row => row.number === current)
+  if (match) {
+    form.fromNumber = match.number
+    return
+  }
+  if (!current && phoneOptions.value.length === 1) {
+    form.fromNumber = phoneOptions.value[0]!.number
+  }
+}
+
 watch(() => quoData.value, (q) => {
   if (!q) return
   form.enabled = q.enabled
@@ -45,11 +85,21 @@ watch(() => quoData.value, (q) => {
   form.apiKey = q.hasApiKey ? SAVED_PASSWORD_MASK : ''
 }, { immediate: true })
 
-const auth = useAuthStore()
+const fromNumberSelectOptions = computed(() => {
+  const options = [...phoneOptions.value]
+  const current = form.fromNumber.trim()
+  if (current && !options.some(row => row.number === current)) {
+    options.unshift({
+      id: 'saved',
+      number: current,
+      formattedNumber: current,
+      name: numbersLoaded.value ? 'Saved (not in latest Quo list)' : 'Saved',
+    })
+  }
+  return options
+})
+
 const testTo = ref('')
-watch(() => auth.user?.email, () => {
-  // phone preferred; leave blank so API falls back to account phone
-}, { immediate: true })
 
 const saveBusy = ref(false)
 const testBusy = ref(false)
@@ -122,10 +172,25 @@ async function runTest() {
   message.value = ''
   error.value = ''
   try {
-    const res = await $fetch<{ ok: boolean, message: string }>('/api/admin/system/quo-test', {
+    const body: Record<string, string> = {}
+    if (form.apiKey.trim() && !isSavedPasswordMask(form.apiKey)) {
+      body.apiKey = form.apiKey.trim()
+    }
+    const res = await $fetch<{
+      ok: boolean
+      message: string
+      phoneNumbers?: QuoPhoneOption[]
+    }>('/api/admin/system/quo-test', {
       method: 'POST',
+      body,
     })
     message.value = res.message
+    if (res.ok) {
+      applyPhoneOptions(res.phoneNumbers ?? [])
+      if (!phoneOptions.value.length) {
+        form.fromNumber = ''
+      }
+    }
   }
   catch (e: unknown) {
     error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Quo connection test failed'
@@ -245,7 +310,7 @@ const variableHelp = computed(() => {
         <label class="msg-pref-row quo-enable-row">
           <span class="msg-pref-text">
             <b>Enable Quo SMS</b>
-            <small>When on, signup asks for a phone number and users can choose text vs email for security notifications.</small>
+            <small>When on, signup asks for a phone number and users can choose text vs email for security notifications. Account phone is always available.</small>
           </span>
           <input v-model="form.enabled" type="checkbox" class="msg-pref-check">
         </label>
@@ -265,15 +330,29 @@ const variableHelp = computed(() => {
         </label>
 
         <label class="fld">
-          From number (E.164)
-          <input
+          From number
+          <select
             v-model="form.fromNumber"
-            type="tel"
-            maxlength="32"
-            placeholder="+15551234567"
-            autocomplete="tel"
+            :disabled="!fromNumberSelectOptions.length"
           >
-          <span class="help">Must be a number on your Quo workspace.</span>
+            <option disabled value="">
+              {{
+                numbersLoaded
+                  ? (fromNumberSelectOptions.length ? 'Select a Quo number' : 'No Quo numbers found — check workspace')
+                  : 'Save API key, then Test connection to load numbers'
+              }}
+            </option>
+            <option
+              v-for="row in fromNumberSelectOptions"
+              :key="row.id || row.number"
+              :value="row.number"
+            >
+              {{ optionLabel(row) }}
+            </option>
+          </select>
+          <span class="help">
+            Numbers load from Quo after a successful connection test. Pick the line used to send SMS.
+          </span>
         </label>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
@@ -283,7 +362,12 @@ const variableHelp = computed(() => {
           <button type="submit" class="btn primary" :disabled="saveBusy">
             {{ saveBusy ? 'Saving…' : 'Save Quo settings' }}
           </button>
-          <button type="button" class="btn" :disabled="testBusy" @click="runTest">
+          <button
+            type="button"
+            class="btn"
+            :disabled="testBusy || !(quoData?.hasApiKey || (form.apiKey.trim() && !isSavedPasswordMask(form.apiKey)))"
+            @click="runTest"
+          >
             {{ testBusy ? 'Testing…' : 'Test connection' }}
           </button>
         </div>

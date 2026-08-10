@@ -226,18 +226,27 @@ export async function testQuoConnection(db: Db): Promise<{
   ok: boolean
   phoneCount: number
   fromNumber: string | null
+  phoneNumbers: QuoPhoneNumber[]
   message: string
 }> {
   const config = await getQuoConfig(db)
+  const fromNumber = normalizePhoneE164(config.fromNumber) ?? (config.fromNumber || null)
   if (!config.apiKey) {
-    return { ok: false, phoneCount: 0, fromNumber: null, message: 'API key is not saved' }
+    return {
+      ok: false,
+      phoneCount: 0,
+      fromNumber,
+      phoneNumbers: [],
+      message: 'API key is not saved',
+    }
   }
   try {
     const numbers = await listQuoPhoneNumbers(config.apiKey)
     return {
       ok: true,
       phoneCount: numbers.length,
-      fromNumber: normalizePhoneE164(config.fromNumber) ?? (config.fromNumber || null),
+      fromNumber,
+      phoneNumbers: numbers,
       message: numbers.length
         ? `Connected — ${numbers.length} Quo number${numbers.length === 1 ? '' : 's'} found`
         : 'Connected — no phone numbers on this workspace yet',
@@ -247,7 +256,8 @@ export async function testQuoConnection(db: Db): Promise<{
     return {
       ok: false,
       phoneCount: 0,
-      fromNumber: normalizePhoneE164(config.fromNumber) ?? (config.fromNumber || null),
+      fromNumber,
+      phoneNumbers: [],
       message: err instanceof Error ? err.message : 'Quo connection failed',
     }
   }
