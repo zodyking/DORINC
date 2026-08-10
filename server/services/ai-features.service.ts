@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appFiles } from '../db/schema/files'
 import { USER_UPLOAD_FILE_KINDS } from '../../shared/files'
@@ -32,16 +32,19 @@ import { enqueueJob } from './jobs.service'
 import { getFileWithData } from './files.service'
 import { getServiceLog, updateServiceLog } from './service-logs.service'
 import { getInvoiceDetail, INVOICE_EDITABLE_STATUSES, updateInvoiceLineItem } from './invoices.service'
-import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
+import { getInvoiceWorkspaceSettings, getServiceLogSheetSettings } from './workspace-settings.service'
 import { normalizeInvoiceLineAiRules } from '../../shared/invoice-line-ai-rules'
 import {
   buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
   buildPageTypeSystemPrompt,
   buildPageTypeUserPrompt,
+  flattenActiveSheetItems,
+  isSheetLockedPage,
   mergeServiceLogPageExtractions,
   normalizePageType,
   normalizeServiceLogExtractionRules,
+  requiresHighCertaintyLines,
 } from '../../shared/service-log-extraction-rules'
 import {
   buildLineAuditSystemPrompt,
@@ -163,17 +166,20 @@ export async function enqueueServiceLogExtraction(
     eq(appFiles.ownerEntityId, serviceLogId),
     inArray(appFiles.fileKind, [...USER_UPLOAD_FILE_KINDS]),
     isNull(appFiles.archivedAt),
-  ))
+  )).orderBy(asc(appFiles.createdAt))
 
   const imageFiles = images.filter(f => f.mimeType.startsWith('image/'))
   if (!imageFiles.length) throw new AiFeaturesServiceError('NO_IMAGES', 'No images to extract from')
 
+  // Oldest first so page 1 = front (uploaded first), page 2 = back.
   const fileIds = fileId && imageFiles.some(f => f.id === fileId)
     ? [fileId]
     : imageFiles.map(f => f.id)
 
   const invoiceSettings = await getInvoiceWorkspaceSettings(db)
   const rules = normalizeServiceLogExtractionRules(invoiceSettings.serviceLogExtractionRules)
+  const sheetDocument = await getServiceLogSheetSettings(db)
+  const activeSheetItems = flattenActiveSheetItems(sheetDocument)
 
   const aiJob = await createAiJob(db, {
     jobType: 'service_log_extraction',
@@ -185,6 +191,7 @@ export async function enqueueServiceLogExtraction(
       rules,
       complaint: log.complaint,
       internalNotes: log.internalNotes,
+      activeSheetItems,
     },
     createdBy: actorId,
   })
@@ -339,6 +346,15 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
   if (!fileIds.length) throw new AiFeaturesServiceError('NO_IMAGES', 'No images to extract from')
 
   const rules = normalizeServiceLogExtractionRules(String(input.rules ?? ''))
+  const activeSheetItems = Array.isArray(input.activeSheetItems)
+    ? input.activeSheetItems as Array<{
+      id: string
+      name: string
+      subtext?: string
+      price?: string
+      sectionTitle?: string
+    }>
+    : flattenActiveSheetItems(await getServiceLogSheetSettings(db))
   const pageCount = fileIds.length
   const pageExtractions: Array<Record<string, unknown>> = []
   const pageProgress = fileIds.map((id, index) => ({
@@ -401,6 +417,9 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
     totalTokens += classifyResult.totalTokens
     totalCost += Number(classifyResult.estimatedCostUsd || 0)
 
+    const sheetLocked = isSheetLockedPage(pageType, pageIndex) && activeSheetItems.length > 0
+    const highCertainty = requiresHighCertaintyLines(pageType, pageIndex)
+
     pageProgress[i] = {
       ...pageProgress[i]!,
       pageType,
@@ -419,7 +438,14 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
     })
 
     const extractResult = await openRouterChat(apiKey, model, [
-      { role: 'system', content: buildExtractionSystemPrompt(rules, pageType) },
+      {
+        role: 'system',
+        content: buildExtractionSystemPrompt(rules, pageType, {
+          sheetLocked,
+          highCertainty,
+          activeSheetItems,
+        }),
+      },
       {
         role: 'user',
         content: [
@@ -428,6 +454,7 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
             text: buildExtractionUserPrompt(pageIndex, pageCount, pageType, {
               complaint: input.complaint,
               internalNotes: input.internalNotes,
+              activeSheetItems,
             }),
           },
           { type: 'image_url', image_url: { url: dataUrl } },
@@ -445,6 +472,7 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
     pageExtractions.push({
       ...extractParsed,
       fileId,
+      pageIndex,
       pageType,
       confidence: Number.isFinite(confidence) ? confidence : null,
     })
@@ -468,7 +496,7 @@ export async function runServiceLogExtractionJob(db: Db, aiJobId: string) {
     })
   }
 
-  const merged = mergeServiceLogPageExtractions(pageExtractions, fileIds[0])
+  const merged = mergeServiceLogPageExtractions(pageExtractions, fileIds[0], { activeSheetItems })
   const parsed = serviceLogExtractionContentSchema.parse(merged)
 
   await logAiUsage(db, {

@@ -88,6 +88,24 @@ export const serviceLogExtractionContentSchema = z.object({
     qty: z.string().max(30).nullish(),
     rate: z.string().max(30).nullish(),
     amount: z.string().max(30).nullish(),
+    confidence: z.number().min(0).max(1).nullish(),
+    matchedSheetItemId: z.string().max(120).nullish(),
+    sourcePageIndex: z.number().int().min(1).max(20).nullish(),
+    sourceFileId: z.string().uuid().nullish(),
+    pageType: z.string().max(40).nullish(),
+    checkMark: z.object({
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+    }).nullish(),
+  })).optional(),
+  /** Flattened checkmark overlays for invoice/service-log photo viewers. */
+  checkMarks: z.array(z.object({
+    fileId: z.string().uuid(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    description: z.string().max(500).optional(),
+    matchedSheetItemId: z.string().max(120).nullish(),
+    confidence: z.number().min(0).max(1).nullish(),
   })).optional(),
   fileId: z.string().uuid().optional(),
   pageResults: z.array(z.object({

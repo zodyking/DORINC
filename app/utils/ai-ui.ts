@@ -14,13 +14,60 @@ export interface DraftLineExtract {
   qty?: string | null
   rate?: string | null
   amount?: string | null
+  confidence?: number | null
+  matchedSheetItemId?: string | null
+  sourcePageIndex?: number | null
+  sourceFileId?: string | null
+  pageType?: string | null
+  checkMark?: { x: number, y: number } | null
+}
+
+export interface ExtractionCheckMark {
+  fileId: string
+  x: number
+  y: number
+  description?: string
+  matchedSheetItemId?: string | null
+  confidence?: number | null
 }
 
 export interface ExtractionSuggestionContent {
   complaint?: string | null
   internalNotes?: string | null
   draftLineItems?: DraftLineExtract[]
+  checkMarks?: ExtractionCheckMark[]
   fileId?: string
+}
+
+/** Build photo overlay marks from accepted draft lines (and optional checkMarks array). */
+export function extractionCheckMarksForFile(
+  fileId: string | null | undefined,
+  draftLineItems?: DraftLineExtract[] | null,
+  checkMarks?: ExtractionCheckMark[] | null,
+  pageIndex?: number | null,
+): ExtractionCheckMark[] {
+  if (!fileId) return []
+  const fromArray = (checkMarks ?? []).filter(mark => mark.fileId === fileId && Number.isFinite(mark.x) && Number.isFinite(mark.y))
+  if (fromArray.length) return fromArray
+
+  const fromLines: ExtractionCheckMark[] = []
+  for (const line of draftLineItems ?? []) {
+    const mark = line.checkMark
+    if (!mark || !Number.isFinite(mark.x) || !Number.isFinite(mark.y)) continue
+    const matchesFile = line.sourceFileId
+      ? line.sourceFileId === fileId
+      : pageIndex != null && line.sourcePageIndex === pageIndex
+    if (!matchesFile) continue
+    fromLines.push({
+      fileId,
+      x: mark.x,
+      y: mark.y,
+      description: line.description,
+      matchedSheetItemId: line.matchedSheetItemId,
+      confidence: line.confidence,
+    })
+  }
+  return fromLines
 }
 
 export function pendingExtractionSuggestion(

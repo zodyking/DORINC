@@ -382,8 +382,20 @@ const { data: serviceLogData } = useClientFetch<{
     submitterName: string | null
     createdAt: string
     vehicle: VehicleDisplay
+    draftLineItems?: Array<{
+      description: string
+      qty?: string | null
+      rate?: string | null
+      amount?: string | null
+      confidence?: number | null
+      matchedSheetItemId?: string | null
+      sourcePageIndex?: number | null
+      sourceFileId?: string | null
+      pageType?: string | null
+      checkMark?: { x: number, y: number } | null
+    }> | null
   }
-  files: { id: string, originalFilename: string, mimeType: string, fileKind: string }[]
+  files: { id: string, originalFilename: string, mimeType: string, fileKind: string, createdAt?: string }[]
 }>(
   () => (serviceLogId.value ? `/api/service-logs/${serviceLogId.value}` : null),
   { watch: [serviceLogId] },
@@ -393,6 +405,46 @@ const serviceLogImages = computed(() =>
   (serviceLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
 )
 const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
+
+/** Oldest-first page order for mapping sourcePageIndex → file when sourceFileId is absent. */
+const serviceLogImagesOldestFirst = computed(() => {
+  const files = [...serviceLogImages.value]
+  return files.sort((a, b) => {
+    const aAt = a.createdAt ? Date.parse(a.createdAt) : 0
+    const bAt = b.createdAt ? Date.parse(b.createdAt) : 0
+    return aAt - bAt
+  })
+})
+
+const serviceLogParsedCheckMarks = computed(() => {
+  const lines = serviceLogData.value?.log?.draftLineItems ?? []
+  const marks: Array<{
+    fileId: string
+    x: number
+    y: number
+    description?: string
+    matchedSheetItemId?: string | null
+    confidence?: number | null
+  }> = []
+  for (const line of lines) {
+    const mark = line.checkMark
+    if (!mark || !Number.isFinite(mark.x) || !Number.isFinite(mark.y)) continue
+    let fileId = line.sourceFileId || ''
+    if (!fileId && line.sourcePageIndex) {
+      fileId = serviceLogImagesOldestFirst.value[line.sourcePageIndex - 1]?.id || ''
+    }
+    if (!fileId) continue
+    marks.push({
+      fileId,
+      x: mark.x,
+      y: mark.y,
+      description: line.description,
+      matchedSheetItemId: line.matchedSheetItemId,
+      confidence: line.confidence,
+    })
+  }
+  return marks
+})
 
 const hydratingFromServer = ref(false)
 const savedFormSnapshot = ref<string | null>(null)
@@ -1182,7 +1234,11 @@ if (import.meta.client) {
             <ServiceLogPhotoManager
               :service-log-id="invoice.serviceLogId"
               :files="serviceLogImages"
+              :check-marks="serviceLogParsedCheckMarks"
             />
+            <p v-if="serviceLogParsedCheckMarks.length" class="help" style="margin-top:10px;">
+              Green checkmarks overlay items parsed from the uploaded photos.
+            </p>
           </div>
         </div>
 

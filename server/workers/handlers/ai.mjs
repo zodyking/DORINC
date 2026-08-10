@@ -10,9 +10,12 @@ import {
   buildExtractionUserPrompt,
   buildPageTypeSystemPrompt,
   buildPageTypeUserPrompt,
+  flattenActiveSheetItems,
+  isSheetLockedPage,
   mergeServiceLogPageExtractions,
   normalizePageType,
   normalizeServiceLogExtractionRules,
+  requiresHighCertaintyLines,
 } from '../../../shared/service-log-extraction-rules.mjs'
 
 const DESCRIPTION_SYSTEM = `You rewrite mechanic line-item notes into clear, professional customer-facing invoice descriptions.
@@ -198,6 +201,21 @@ async function processExtraction(pool, aiJobId, settings) {
   if (!fileIds.length) throw new Error('No images to extract from')
 
   const rules = normalizeServiceLogExtractionRules(input.rules ?? '')
+  let activeSheetItems = Array.isArray(input.activeSheetItems) ? input.activeSheetItems : []
+  if (!activeSheetItems.length) {
+    try {
+      const { rows: sheetRows } = await pool.query(
+        `SELECT value FROM app_settings WHERE key = 'workspace.service_log_sheet' LIMIT 1`,
+      )
+      const raw = sheetRows[0]?.value
+      if (raw && Number(raw.version) === 2) {
+        activeSheetItems = flattenActiveSheetItems(raw)
+      }
+    }
+    catch {
+      activeSheetItems = []
+    }
+  }
   const model = modelFor(settings, 'service_log_extraction')
   const pageCount = fileIds.length
   const pageExtractions = []
@@ -259,6 +277,9 @@ async function processExtraction(pool, aiJobId, settings) {
     totalTokens += classifyResult.totalTokens
     totalCost += Number(classifyResult.estimatedCostUsd || 0)
 
+    const sheetLocked = isSheetLockedPage(pageType, pageIndex) && activeSheetItems.length > 0
+    const highCertainty = requiresHighCertaintyLines(pageType, pageIndex)
+
     pageProgress[i] = {
       ...pageProgress[i],
       pageType,
@@ -275,7 +296,14 @@ async function processExtraction(pool, aiJobId, settings) {
     })
 
     const extractResult = await openRouterChat(settings.apiKey, model, [
-      { role: 'system', content: buildExtractionSystemPrompt(rules, pageType) },
+      {
+        role: 'system',
+        content: buildExtractionSystemPrompt(rules, pageType, {
+          sheetLocked,
+          highCertainty,
+          activeSheetItems,
+        }),
+      },
       {
         role: 'user',
         content: [
@@ -284,6 +312,7 @@ async function processExtraction(pool, aiJobId, settings) {
             text: buildExtractionUserPrompt(pageIndex, pageCount, pageType, {
               complaint: input.complaint,
               internalNotes: input.internalNotes,
+              activeSheetItems,
             }),
           },
           { type: 'image_url', image_url: { url: dataUrl } },
@@ -301,6 +330,7 @@ async function processExtraction(pool, aiJobId, settings) {
     pageExtractions.push({
       ...extractParsed,
       fileId,
+      pageIndex,
       pageType,
       confidence: Number.isFinite(confidence) ? confidence : null,
     })
@@ -322,7 +352,7 @@ async function processExtraction(pool, aiJobId, settings) {
     })
   }
 
-  const parsed = mergeServiceLogPageExtractions(pageExtractions, fileIds[0])
+  const parsed = mergeServiceLogPageExtractions(pageExtractions, fileIds[0], { activeSheetItems })
 
   const { rows: logRows } = await pool.query(
     `SELECT complaint, internal_notes, draft_line_items FROM service_logs WHERE id = $1`,
