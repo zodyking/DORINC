@@ -3,7 +3,7 @@ import { emailSchema, nonEmptyString } from './common'
 import { messageNotifyChannelSchema, phoneE164Schema } from './quo'
 
 /** Empty string / null clears the saved phone. */
-const accountPhoneSchema = z.preprocess((value) => {
+export const accountPhoneSchema = z.preprocess((value) => {
   if (value === '' || value === null || value === undefined) return null
   return value
 }, phoneE164Schema.nullable())

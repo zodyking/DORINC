@@ -8,6 +8,7 @@ interface UserDetail {
   id: string
   name: string
   email: string
+  phone: string | null
   accountType: string
   status: string
   emailVerified: boolean
@@ -57,8 +58,12 @@ const userPerms = computed(() => permData.value)
 const roleGrants = computed(() => userPerms.value?.roleGrants ?? [])
 
 const selectedType = ref('')
+const editPhone = ref('')
 watchEffect(() => {
-  if (user.value) selectedType.value = user.value.accountType
+  if (user.value) {
+    selectedType.value = user.value.accountType
+    editPhone.value = user.value.phone ?? ''
+  }
 })
 
 const busy = ref(false)
@@ -71,6 +76,11 @@ const isSuperAdminRecord = computed(() => user.value?.accountType === 'super_adm
 const isSusanRecord = computed(() => isSusanSystemEmail(user.value?.email))
 const isLockedSystemRecord = computed(() => isSuperAdminRecord.value || isSusanRecord.value)
 const typeDirty = computed(() => !!user.value && selectedType.value !== user.value.accountType)
+const phoneDirty = computed(() => {
+  if (!user.value) return false
+  return editPhone.value.trim() !== (user.value.phone ?? '').trim()
+})
+const profileDirty = computed(() => typeDirty.value || phoneDirty.value)
 
 // Permission override state: 'inherit' | 'allow' | 'deny'
 type OverrideState = 'inherit' | 'allow' | 'deny'
@@ -155,9 +165,16 @@ async function run(action: () => Promise<unknown>, successNote: string) {
 const saveChanges = () => run(
   () => $fetch(`/api/admin/users/${route.params.id}`, {
     method: 'PATCH',
-    body: { accountType: selectedType.value },
+    body: {
+      ...(typeDirty.value ? { accountType: selectedType.value } : {}),
+      ...(phoneDirty.value ? { phone: editPhone.value.trim() || null } : {}),
+    },
   }),
-  'Account type updated',
+  phoneDirty.value && !typeDirty.value
+    ? 'Phone number updated'
+    : typeDirty.value && !phoneDirty.value
+      ? 'Account type updated'
+      : 'User updated',
 )
 
 function toggleActive() {
@@ -404,9 +421,9 @@ const showPermissionsModal = ref(false)
               {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
             </button>
             <button
-              v-if="canManage && !isLockedSystemRecord"
+              v-if="canManage && !isSusanRecord"
               class="btn primary"
-              :disabled="busy || !typeDirty"
+              :disabled="busy || !profileDirty"
               @click="saveChanges"
             >
               Save changes
@@ -442,6 +459,18 @@ const showPermissionsModal = ref(false)
               <div style="flex:1; min-width:220px;">
                 <label class="fld">Full name <input type="text" :value="user.name" readonly></label>
                 <label class="fld">Email <input type="email" :value="user.email" readonly></label>
+                <label class="fld">
+                  Phone number
+                  <input
+                    v-model="editPhone"
+                    type="tel"
+                    autocomplete="tel"
+                    placeholder="+15551234567"
+                    :readonly="!canManage || isSusanRecord"
+                    :disabled="busy || isSusanRecord"
+                  >
+                  <span class="help">Always available for admins to set. Used for text alerts when Quo SMS is enabled.</span>
+                </label>
                 <label class="fld">Email verified
                   <input type="text" :value="user.emailVerified ? 'Yes' : 'No'" readonly>
                 </label>
