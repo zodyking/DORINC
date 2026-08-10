@@ -1010,8 +1010,8 @@ if (import.meta.client) {
         </div>
         <p v-if="invoice.serviceLogId" class="ed-tab-hint">
           {{ hasServiceLogPhotos
-            ? 'Use the slider above Line items to peek field photos while editing. Service log tab has notes and metadata.'
-            : 'Field photos and mechanic notes from the linked service log — reference while building line items.' }}
+            ? 'Use the slider above Line items to peek the Service Log while editing. Service log tab has notes and metadata.'
+            : 'Service Log photos and mechanic notes from the linked log — reference while building line items.' }}
         </p>
       </div>
 
@@ -1090,7 +1090,7 @@ if (import.meta.client) {
 
           <div class="card ed-lines-card">
             <div class="chead ed-lines-chead">
-              <h3>{{ hasServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
+              <h3>{{ hasServiceLogPhotos ? 'Line items · Service Log' : 'Line items' }}</h3>
               <div class="right ed-lines-actions">
                 <div class="ed-lines-actions-btns">
                   <button
@@ -1164,7 +1164,7 @@ if (import.meta.client) {
             <PanelRevealSlider
               v-if="hasServiceLogPhotos && invoice.serviceLogId"
               v-model="linesPhotoReveal"
-              reveal-label="Field photos"
+              reveal-label="Service Log"
               base-label="Line items"
               min-height="520px"
               class="ed-lines-reveal"
@@ -1256,7 +1256,7 @@ if (import.meta.client) {
       <div v-show="activeTab === 'servicelog' && serviceLogData?.log" class="ed-pane" :class="{ active: activeTab === 'servicelog' }">
         <div v-if="hasServiceLogPhotos && invoice.serviceLogId" class="card ed-log-photos-card">
           <div class="chead">
-            <h3>Field photos · {{ serviceLogImages.length }}</h3>
+            <h3>Service Log · {{ serviceLogImages.length }}</h3>
             <div class="right">
               <NuxtLink
                 :to="`/service-logs/${invoice.serviceLogId}`"

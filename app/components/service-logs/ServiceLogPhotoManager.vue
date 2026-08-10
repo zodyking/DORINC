@@ -92,7 +92,7 @@ async function deleteActivePhoto() {
     />
 
     <div v-else-if="editable" class="sl-photo-empty">
-      <p>No photos yet — add field photos below.</p>
+      <p>No photos yet — add Service Log photos below.</p>
     </div>
 
     <label v-if="editable" class="sl-photo-zone">

@@ -1111,7 +1111,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
 
     <!-- Step: Line items -->
     <div v-show="stepKey === 'lines'" class="sl-panel active">
-      <h3>{{ hasWizardServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
+      <h3>{{ hasWizardServiceLogPhotos ? 'Line items · Service Log' : 'Line items' }}</h3>
 
       <label class="fld inv-wizard-complaint">
         <span>Customer complaint / symptoms</span>
@@ -1150,7 +1150,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
       <PanelRevealSlider
         v-else-if="hasWizardServiceLogPhotos && lineEntryMode"
         v-model="linesPhotoReveal"
-        reveal-label="Field photos"
+        reveal-label="Service Log"
         base-label="Line items"
         min-height="520px"
         class="inv-wizard-reveal"

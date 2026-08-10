@@ -349,7 +349,7 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
           <div class="chead"><h3>Messages</h3></div>
           <div class="cbody">
             <div class="msg-prefs">
-              <label class="msg-pref-row" :class="{ 'msg-pref-row--disabled': !canManageTeamChat }">
+              <div class="msg-pref-row msg-pref-row--channel" :class="{ 'msg-pref-row--disabled': !canManageTeamChat }">
                 <span class="msg-pref-text">
                   <b>Team group chat</b>
                   <small>
@@ -357,13 +357,27 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                     <template v-if="!canManageTeamChat"> Only an admin can change this setting.</template>
                   </small>
                 </span>
-                <input
-                  v-model="teamChatEnabled"
-                  type="checkbox"
-                  class="msg-pref-check"
-                  :disabled="!canManageTeamChat || notifyBusy"
-                >
-              </label>
+                <div class="notify-channel" role="group" aria-label="Team group chat">
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: teamChatEnabled }"
+                    :disabled="!canManageTeamChat || notifyBusy"
+                    @click="teamChatEnabled = true"
+                  >
+                    On
+                  </button>
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: !teamChatEnabled }"
+                    :disabled="!canManageTeamChat || notifyBusy"
+                    @click="teamChatEnabled = false"
+                  >
+                    Off
+                  </button>
+                </div>
+              </div>
               <div v-if="quoSmsEnabled" class="msg-pref-row msg-pref-row--channel">
                 <span class="msg-pref-text">
                   <b>Security &amp; chat notifications</b>
@@ -393,18 +407,37 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   </button>
                 </div>
               </div>
-              <label v-else class="msg-pref-row">
+              <div v-else class="msg-pref-row msg-pref-row--channel">
                 <span class="msg-pref-text">
                   <b>Email me for new chat messages</b>
                   <small>
                     Send an email when you receive a direct message or a team chat message.
                   </small>
                 </span>
-                <input v-model="messageEmailNotify" type="checkbox" class="msg-pref-check">
-              </label>
-              <label
+                <div class="notify-channel" role="group" aria-label="Email me for new chat messages">
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: messageEmailNotify }"
+                    :disabled="notifyBusy"
+                    @click="messageEmailNotify = true"
+                  >
+                    On
+                  </button>
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: !messageEmailNotify }"
+                    :disabled="notifyBusy"
+                    @click="messageEmailNotify = false"
+                  >
+                    Off
+                  </button>
+                </div>
+              </div>
+              <div
                 v-if="canManageTeamChat"
-                class="msg-pref-row msg-pref-row--dev"
+                class="msg-pref-row msg-pref-row--channel msg-pref-row--dev"
               >
                 <span class="msg-pref-text">
                   <b>Silent developer mode</b>
@@ -412,13 +445,27 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                     When enabled, workflow notifications you trigger — team chat updates and staff emails for invoices, service logs, deletion requests, and similar actions — are not sent to other users. Your manual chat messages still work. Other users&apos; notifications are unaffected.
                   </small>
                 </span>
-                <input
-                  v-model="silentDeveloperMode"
-                  type="checkbox"
-                  class="msg-pref-check"
-                  :disabled="notifyBusy"
-                >
-              </label>
+                <div class="notify-channel" role="group" aria-label="Silent developer mode">
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: silentDeveloperMode }"
+                    :disabled="notifyBusy"
+                    @click="silentDeveloperMode = true"
+                  >
+                    On
+                  </button>
+                  <button
+                    type="button"
+                    class="notify-channel__opt"
+                    :class="{ on: !silentDeveloperMode }"
+                    :disabled="notifyBusy"
+                    @click="silentDeveloperMode = false"
+                  >
+                    Off
+                  </button>
+                </div>
+              </div>
             </div>
             <p v-if="notifyMessage" class="msg-pref-ok">{{ notifyMessage }}</p>
             <p v-if="notifyError" class="msg-pref-err">{{ notifyError }}</p>
@@ -602,8 +649,6 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
   font-size: 12.5px;
   line-height: 1.45;
 }
-/* Explicit sizing beats the global `label.fld input { width:100% }` rule and
-   keeps the checkbox compact + aligned on every viewport. */
 .msg-pref-row--dev {
   background: #fafafa;
   margin: 0 -16px;
@@ -612,19 +657,6 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
 }
 .msg-pref-row--dev:last-child {
   border-bottom: none;
-}
-.msg-pref-check {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  margin: 2px 0 0;
-  flex-shrink: 0;
-  cursor: pointer;
-  accent-color: #4f46e5;
-}
-.msg-pref-check:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 .msg-pref-ok {
   margin: 12px 0 0;
