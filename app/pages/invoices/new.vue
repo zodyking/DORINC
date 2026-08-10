@@ -49,7 +49,10 @@ import {
 import { isVoiceEntryDevice } from '~/utils/voice-entry-device'
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import InvoiceWizardServiceLogStep from '~/components/invoices/InvoiceWizardServiceLogStep.vue'
+import PanelRevealSlider from '~/components/common/PanelRevealSlider.vue'
+import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
+import type { ServiceLogPhotoFile } from '~/composables/useServiceLogPhotoPreviews'
 import type { InvoiceLineAuditContent } from '#shared/validators/ai'
 import {
   buildLineAuditPassSuggestion,
@@ -172,6 +175,31 @@ let editingHeartbeatTimer: ReturnType<typeof setInterval> | null = null
 const customerId = ref('')
 const vehicleId = ref('')
 const serviceLogId = ref('')
+const serviceLogPhotoFiles = ref<ServiceLogPhotoFile[]>([])
+const linesPhotoReveal = ref(40)
+const hasWizardServiceLogPhotos = computed(() =>
+  Boolean(serviceLogId.value) && serviceLogPhotoFiles.value.length > 0,
+)
+
+async function loadServiceLogPhotos(logId: string) {
+  if (!logId) {
+    serviceLogPhotoFiles.value = []
+    return
+  }
+  try {
+    const res = await $fetch<{
+      files: Array<{ id: string, originalFilename: string, mimeType: string, fileKind: string }>
+    }>(`/api/service-logs/${logId}`)
+    serviceLogPhotoFiles.value = (res.files ?? []).filter(f => f.mimeType.startsWith('image/'))
+  }
+  catch {
+    serviceLogPhotoFiles.value = []
+  }
+}
+
+watch(serviceLogId, (id) => {
+  void loadServiceLogPhotos(id)
+}, { immediate: true })
 const invoiceDate = ref(new Date().toISOString().slice(0, 10))
 const dueDate = ref(dueDateFromTerms(new Date().toISOString().slice(0, 10), 'net_30'))
 const dueDateManual = ref(false)
@@ -1092,7 +1120,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
 
     <!-- Step: Line items -->
     <div v-show="stepKey === 'lines'" class="sl-panel active">
-      <h3>Line items</h3>
+      <h3>{{ hasWizardServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
 
       <label class="fld inv-wizard-complaint">
         <span>Customer complaint / symptoms</span>
@@ -1127,6 +1155,155 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
           <span class="chk" />
         </button>
       </div>
+
+      <PanelRevealSlider
+        v-else-if="hasWizardServiceLogPhotos && lineEntryMode"
+        v-model="linesPhotoReveal"
+        reveal-label="Field photos"
+        base-label="Line items"
+        min-height="520px"
+        class="inv-wizard-reveal"
+      >
+        <template #reveal>
+          <ServiceLogPhotoManager
+            :service-log-id="serviceLogId"
+            :files="serviceLogPhotoFiles"
+          />
+        </template>
+        <template #base>
+          <div v-if="lineEntryMode === 'guided'" class="inv-guided-lines">
+            <CommonLineItemWizard
+              ref="lineWizardRef"
+              v-model:lines="wizardLines"
+            />
+            <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          </div>
+
+          <div v-else class="inv-line-editor inv-line-editor--reveal">
+            <div class="inv-line-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+              <button type="button" class="btn sm" title="Search catalog in the description field (↑↓ Enter)" @click="focusCatalogSearch">From catalog</button>
+              <AddPackageModal @applied="applyPackageLines" />
+              <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
+            </div>
+            <div class="tscroll inv-line-table inv-line-table--desktop">
+              <table class="ed-lines">
+                <thead>
+                  <tr>
+                    <th style="width:110px">Type</th>
+                    <th>Description</th>
+                    <th style="width:110px">Qty / Hrs</th>
+                    <th style="width:150px">Rate</th>
+                    <th style="width:130px; text-align:right">Amount</th>
+                    <th style="width:36px" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="line in lines" :key="line.localId">
+                    <td>
+                      <select v-model="line.lineType">
+                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <CatalogLineAutocomplete
+                        v-model="line.description"
+                        v-model:line-type="line.lineType"
+                        :line-id="line.localId"
+                        @typed="onLineDescriptionTyped(line)"
+                        @blur="onLineFieldBlur(line)"
+                        @tab-next="focusLineQty(line.localId)"
+                        @select="applyCatalogToLine(line, $event)"
+                      />
+                    </td>
+                    <td>
+                      <LineQuantityInput
+                        v-model="line.quantity"
+                        :line-id="line.localId"
+                        @blur="onLineFieldBlur(line)"
+                        @tab-next="focusLineRate(line.localId)"
+                      />
+                    </td>
+                    <td>
+                      <LineCurrencyInput
+                        v-model="line.unitPrice"
+                        :line-id="line.localId"
+                        @blur="onLineFieldBlur(line)"
+                        @tab-next="onLineRateTabNext(line)"
+                      />
+                    </td>
+                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
+                    <td>
+                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="inv-line-cards inv-line-table--mobile">
+              <article v-for="line in lines" :key="`card-reveal-${line.localId}`" class="inv-line-card">
+                <div class="inv-line-card-head">
+                  <label class="fld inv-line-card-type">
+                    <span>Type</span>
+                    <select v-model="line.lineType">
+                      <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </label>
+                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
+                </div>
+                <label class="fld">
+                  <span>Description</span>
+                  <CatalogLineAutocomplete
+                    v-model="line.description"
+                    v-model:line-type="line.lineType"
+                    :line-id="line.localId"
+                    @typed="onLineDescriptionTyped(line)"
+                    @blur="onLineFieldBlur(line)"
+                    @tab-next="focusLineQty(line.localId)"
+                    @select="applyCatalogToLine(line, $event)"
+                  />
+                </label>
+                <div class="inv-line-card-nums">
+                  <label class="fld">
+                    <span>Qty / Hrs</span>
+                    <LineQuantityInput
+                      v-model="line.quantity"
+                      :line-id="line.localId"
+                      @blur="onLineFieldBlur(line)"
+                      @tab-next="focusLineRate(line.localId)"
+                    />
+                  </label>
+                  <label class="fld">
+                    <span>Rate</span>
+                    <LineCurrencyInput
+                      v-model="line.unitPrice"
+                      :line-id="line.localId"
+                      @blur="onLineFieldBlur(line)"
+                      @tab-next="onLineRateTabNext(line)"
+                    />
+                  </label>
+                  <div class="inv-line-card-amt">
+                    <span class="k">Amount</span>
+                    <span class="v">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+            <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
+          </div>
+
+          <div class="ed-sums inv-wizard-sums">
+            <div
+              v-for="(row, i) in summaryRows"
+              :key="i"
+              class="row"
+              :class="{ grand: row.grand }"
+            >
+              <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
+              <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
+            </div>
+          </div>
+        </template>
+      </PanelRevealSlider>
 
       <div v-else-if="lineEntryMode === 'guided'" class="card inv-line-editor">
         <div class="cbody inv-guided-lines">
@@ -1256,7 +1433,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         </div>
       </template>
 
-      <div v-if="lineEntryMode" class="ed-sums inv-wizard-sums">
+      <div v-if="lineEntryMode && !hasWizardServiceLogPhotos" class="ed-sums inv-wizard-sums">
         <div
           v-for="(row, i) in summaryRows"
           :key="i"

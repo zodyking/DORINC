@@ -1,9 +1,6 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
-import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
-import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
-import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
 import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   applyCatalogItemToLineFields,
@@ -19,8 +16,6 @@ import {
   formatQuantityField,
   formatUnitPriceField,
   isDraftLineValid,
-  LINE_TYPE_OPTIONS,
-  previewLineAmount,
   previewLineTypeBreakdown,
 } from '~/utils/invoice-creator-ui'
 import {
@@ -28,7 +23,6 @@ import {
   invoiceDateDisplay,
   invoiceStatusPill,
   isInvoiceEditable,
-  moneyDisplay,
   type InvoiceLineType,
   type InvoiceStatus,
 } from '~/utils/invoices-ui'
@@ -42,6 +36,8 @@ import {
   unregisterSessionSaveHandler,
 } from '~/composables/useSessionLogoutHandlers'
 import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
+import PanelRevealSlider from '~/components/common/PanelRevealSlider.vue'
+import InvoiceEditorLinesBlock from '~/components/invoices/InvoiceEditorLinesBlock.vue'
 import InvoiceLineAuditModal from '~/components/invoices/InvoiceLineAuditModal.vue'
 import type { AiSuggestionRow } from '~/utils/ai-ui'
 import type { InvoiceLineAuditContent } from '#shared/validators/ai'
@@ -405,6 +401,8 @@ const serviceLogImages = computed(() =>
   (serviceLogData.value?.files ?? []).filter(f => f.mimeType.startsWith('image/')),
 )
 const hasServiceLogPhotos = computed(() => !!serviceLogId.value && serviceLogImages.value.length > 0)
+/** Reveal slider mix for photos vs line items on the invoice tab (0 = lines only). */
+const linesPhotoReveal = ref(40)
 
 /** Oldest-first page order for mapping sourcePageIndex → file when sourceFileId is absent. */
 const serviceLogImagesOldestFirst = computed(() => {
@@ -996,7 +994,11 @@ if (import.meta.client) {
             PDF preview
           </button>
         </div>
-        <p v-if="invoice.serviceLogId" class="ed-tab-hint">Field photos and mechanic notes from the linked service log — reference while building line items.</p>
+        <p v-if="invoice.serviceLogId" class="ed-tab-hint">
+          {{ hasServiceLogPhotos
+            ? 'Drag the reveal bar on Line items to compare field photos while editing charges. Service log tab has notes and metadata.'
+            : 'Field photos and mechanic notes from the linked service log — reference while building line items.' }}
+        </p>
       </div>
 
       <div v-show="activeTab === 'invoice'" class="ed-pane" :class="{ active: activeTab === 'invoice' }">
@@ -1072,9 +1074,9 @@ if (import.meta.client) {
             </div>
           </div>
 
-          <div class="card">
+          <div class="card ed-lines-card">
             <div class="chead">
-              <h3>Line items</h3>
+              <h3>{{ hasServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
               <div class="right">
                 <button
                   type="button"
@@ -1098,82 +1100,56 @@ if (import.meta.client) {
                 </button>
               </div>
             </div>
-            <div class="tscroll">
-              <table class="ed-lines">
-                <thead>
-                  <tr>
-                    <th style="width:110px">Type</th>
-                    <th>Description</th>
-                    <th style="width:110px">Qty / Hrs</th>
-                    <th style="width:150px">Rate</th>
-                    <th style="width:130px; text-align:right">Amount</th>
-                    <th style="width:36px" />
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in lines" :key="line.id">
-                    <td>
-                      <select v-model="line.lineType" :disabled="!editable" @change="patchLine(line)">
-                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                      </select>
-                    </td>
-                    <td>
-                      <CatalogLineAutocomplete
-                        v-model="line.description"
-                        v-model:line-type="line.lineType"
-                        :line-id="line.id"
-                        :disabled="!editable"
-                        @focus="selectedLineId = line.id"
-                        @blur="patchLine(line)"
-                        @tab-next="focusLineQty(line.id)"
-                        @select="applyCatalogToExistingLine(line, $event)"
-                      />
-                    </td>
-                    <td>
-                      <LineQuantityInput
-                        v-model="line.quantity"
-                        :line-id="line.id"
-                        :disabled="!editable"
-                        @blur="patchLine(line)"
-                        @tab-next="focusLineRate(line.id)"
-                      />
-                    </td>
-                    <td>
-                      <LineCurrencyInput
-                        v-model="line.unitPrice"
-                        :line-id="line.id"
-                        :disabled="!editable"
-                        @blur="patchLine(line)"
-                        @tab-next="onLineRateTabNext(line)"
-                      />
-                    </td>
-                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount) }}</td>
-                    <td>
-                      <button
-                        type="button"
-                        class="rm"
-                        aria-label="Remove line"
-                        :disabled="!editable || lines.length <= 1 || busy"
-                        @click="removeLine(line.id)"
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="ed-sums">
-              <div
-                v-for="(row, i) in summaryRows"
-                :key="i"
-                class="row"
-                :class="{ grand: row.grand }"
-              >
-                <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
-                <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-              </div>
-            </div>
+
+            <PanelRevealSlider
+              v-if="hasServiceLogPhotos && invoice.serviceLogId"
+              v-model="linesPhotoReveal"
+              reveal-label="Field photos"
+              base-label="Line items"
+              min-height="520px"
+              class="ed-lines-reveal"
+            >
+              <template #reveal>
+                <ServiceLogPhotoManager
+                  :service-log-id="invoice.serviceLogId"
+                  :files="serviceLogImages"
+                  :check-marks="serviceLogParsedCheckMarks"
+                />
+                <p v-if="serviceLogParsedCheckMarks.length" class="help" style="margin-top:10px;">
+                  Green checkmarks overlay items parsed from the uploaded photos.
+                </p>
+              </template>
+              <template #base>
+                <InvoiceEditorLinesBlock
+                  :lines="lines"
+                  :editable="editable"
+                  :busy="busy"
+                  :summary-rows="summaryRows"
+                  @focus="selectedLineId = $event"
+                  @patch="patchLine"
+                  @remove="removeLine"
+                  @focus-qty="focusLineQty"
+                  @focus-rate="focusLineRate"
+                  @rate-tab-next="onLineRateTabNext"
+                  @catalog-select="applyCatalogToExistingLine"
+                />
+              </template>
+            </PanelRevealSlider>
+
+            <InvoiceEditorLinesBlock
+              v-else
+              :lines="lines"
+              :editable="editable"
+              :busy="busy"
+              :summary-rows="summaryRows"
+              @focus="selectedLineId = $event"
+              @patch="patchLine"
+              @remove="removeLine"
+              @focus-qty="focusLineQty"
+              @focus-rate="focusLineRate"
+              @rate-tab-next="onLineRateTabNext"
+              @catalog-select="applyCatalogToExistingLine"
+            />
           </div>
 
           <div class="card">
