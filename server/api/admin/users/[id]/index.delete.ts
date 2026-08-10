@@ -62,6 +62,9 @@ export default defineEventHandler(async (event) => {
       if (err.code === 'SUPER_ADMIN_PROTECTED') {
         throw apiError(event, 'FORBIDDEN', 'Super Admin accounts cannot be deleted')
       }
+      if (err.code === 'SUSAN_PROTECTED') {
+        throw apiError(event, 'FORBIDDEN', 'Susan’s system account cannot be deleted')
+      }
       if (err.code === 'SELF_DELETE') {
         throw apiError(event, 'FORBIDDEN', 'You cannot delete your own account')
       }

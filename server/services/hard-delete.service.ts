@@ -32,8 +32,14 @@ import { getInvoice, InvoicesServiceError } from './invoices.service'
 import { getConversationDeletionLabel } from './messages.service'
 import { getServiceLog, ServiceLogsServiceError } from './service-logs.service'
 import { getVehicle, VehiclesServiceError } from './vehicles.service'
+import { isSusanSystemEmail } from '../../shared/ai-assistant'
 
-export type HardDeleteUserError = 'NOT_FOUND' | 'SUPER_ADMIN_PROTECTED' | 'SELF_DELETE' | 'HAS_DEPENDENTS'
+export type HardDeleteUserError
+  = | 'NOT_FOUND'
+    | 'SUPER_ADMIN_PROTECTED'
+    | 'SUSAN_PROTECTED'
+    | 'SELF_DELETE'
+    | 'HAS_DEPENDENTS'
 
 export class HardDeleteUserServiceError extends Error {
   constructor(public readonly code: HardDeleteUserError, public readonly details?: string[]) {
@@ -406,6 +412,11 @@ export async function hardDeleteUser(
   // Cannot delete super_admin
   if (row.accountTypeKey === 'super_admin') {
     throw new HardDeleteUserServiceError('SUPER_ADMIN_PROTECTED')
+  }
+
+  // Susan system account is immutable — never hard-delete.
+  if (isSusanSystemEmail(row.user.email)) {
+    throw new HardDeleteUserServiceError('SUSAN_PROTECTED')
   }
 
   // Cannot delete yourself

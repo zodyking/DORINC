@@ -277,8 +277,8 @@ async function processExtraction(pool, aiJobId, settings) {
     totalTokens += classifyResult.totalTokens
     totalCost += Number(classifyResult.estimatedCostUsd || 0)
 
-    const sheetLocked = isSheetLockedPage(pageType, pageIndex) && activeSheetItems.length > 0
-    const highCertainty = requiresHighCertaintyLines(pageType, pageIndex)
+    const sheetLocked = isSheetLockedPage(pageType) && activeSheetItems.length > 0
+    const highCertainty = requiresHighCertaintyLines(pageType)
 
     pageProgress[i] = {
       ...pageProgress[i],

@@ -29,28 +29,28 @@ describe('service log extraction rules', () => {
     expect(prompt).toContain('draftLineItems')
   })
 
-  it('locks front printed prompts to the active sheet list', () => {
+  it('locks printed template prompts to the active sheet list', () => {
     const items = flattenActiveSheetItems(defaultServiceLogSheetDocument())
     const prompt = buildExtractionSystemPrompt(DEFAULT_SERVICE_LOG_EXTRACTION_RULES, 'printed_form', {
       sheetLocked: true,
       activeSheetItems: items,
     })
-    expect(prompt).toContain('FRONT PRINTED CHECKLIST MODE')
+    expect(prompt).toContain('PRINTED TEMPLATE CHECKLIST MODE')
     expect(prompt).toContain('item-oil-filter')
     expect(prompt).toContain('Replace Oil and Oil Filter')
 
     const user = buildExtractionUserPrompt(1, 2, 'printed_form', { activeSheetItems: items })
-    expect(user).toContain('front checklist locked')
+    expect(user).toContain('printed template checklist locked')
   })
 
-  it('requires high certainty on rear / non-template prompts', () => {
+  it('requires high certainty on handwritten / non-template prompts', () => {
     const prompt = buildExtractionSystemPrompt(DEFAULT_SERVICE_LOG_EXTRACTION_RULES, 'handwritten', {
       highCertainty: true,
     })
     expect(prompt).toContain('HIGH-CERTAINTY MODE')
     expect(prompt).toContain(String(SERVICE_LOG_HIGH_CERTAINTY_THRESHOLD))
 
-    const user = buildExtractionUserPrompt(2, 2, 'handwritten')
+    const user = buildExtractionUserPrompt(1, 2, 'handwritten')
     expect(user).toContain('high-certainty')
   })
 
@@ -59,12 +59,10 @@ describe('service log extraction rules', () => {
     expect(normalizePageType('form')).toBe('printed_form')
     expect(normalizePageType('handwritten')).toBe('handwritten')
     expect(normalizePageType('weird')).toBe('handwritten')
-    expect(isSheetLockedPage('printed_form', 1)).toBe(true)
-    expect(isSheetLockedPage('printed_form', 2)).toBe(false)
-    expect(isSheetLockedPage('handwritten', 1)).toBe(false)
-    expect(requiresHighCertaintyLines('handwritten', 1)).toBe(true)
-    expect(requiresHighCertaintyLines('printed_form', 2)).toBe(true)
-    expect(requiresHighCertaintyLines('printed_form', 1)).toBe(false)
+    expect(isSheetLockedPage('printed_form')).toBe(true)
+    expect(isSheetLockedPage('handwritten')).toBe(false)
+    expect(requiresHighCertaintyLines('handwritten')).toBe(true)
+    expect(requiresHighCertaintyLines('printed_form')).toBe(false)
   })
 
   it('flattens and matches active sheet items', () => {
@@ -123,13 +121,13 @@ describe('service log extraction rules', () => {
     expect(merged.pageResults).toHaveLength(2)
   })
 
-  it('locks front printed lines to the active sheet catalog', () => {
+  it('locks any printed_form page to the active sheet catalog', () => {
     const items = flattenActiveSheetItems(defaultServiceLogSheetDocument())
-    const frontFile = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    const templateFile = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
     const merged = mergeServiceLogPageExtractions([
       {
-        fileId: frontFile,
-        pageIndex: 1,
+        fileId: templateFile,
+        pageIndex: 2,
         pageType: 'printed_form',
         draftLineItems: [
           {
@@ -144,22 +142,22 @@ describe('service log extraction rules', () => {
           },
         ],
       },
-    ], frontFile, { activeSheetItems: items })
+    ], templateFile, { activeSheetItems: items })
 
     expect(merged.draftLineItems).toHaveLength(1)
     expect(merged.draftLineItems?.[0]?.matchedSheetItemId).toBe('item-oil-filter')
     expect(merged.draftLineItems?.[0]?.description).toBe('Replace Oil and Oil Filter')
     expect(merged.draftLineItems?.[0]?.rate).toBe('250')
     expect(merged.checkMarks).toHaveLength(1)
-    expect(merged.checkMarks?.[0]?.fileId).toBe(frontFile)
+    expect(merged.checkMarks?.[0]?.fileId).toBe(templateFile)
   })
 
-  it('skips low-certainty rear / handwritten lines', () => {
-    const rearFile = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  it('skips low-certainty handwritten lines even on page 1', () => {
+    const fileId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
     const merged = mergeServiceLogPageExtractions([
       {
-        fileId: rearFile,
-        pageIndex: 2,
+        fileId,
+        pageIndex: 1,
         pageType: 'handwritten',
         draftLineItems: [
           { description: 'Custom weld bracket', qty: '1', rate: '85', confidence: 0.91 },
@@ -167,7 +165,7 @@ describe('service log extraction rules', () => {
           { description: 'no confidence field' },
         ],
       },
-    ], rearFile)
+    ], fileId)
 
     expect(merged.draftLineItems).toHaveLength(1)
     expect(merged.draftLineItems?.[0]?.description).toBe('Custom weld bracket')

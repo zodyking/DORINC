@@ -36,6 +36,8 @@ export default defineEventHandler(async (event) => {
           throw apiError(event, 'VALIDATION_ERROR', 'Portal customer accounts cannot use staff password reset')
         case 'NOT_STAFF':
           throw apiError(event, 'VALIDATION_ERROR', 'Super admin accounts cannot use this password reset')
+        case 'SUSAN_PROTECTED':
+          throw apiError(event, 'FORBIDDEN', 'Susan’s system account cannot be edited')
         default:
           throw err
       }

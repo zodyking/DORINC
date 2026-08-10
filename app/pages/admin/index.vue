@@ -116,7 +116,7 @@ const router = useRouter()
 const cpGroups = CONTROL_PANEL_GROUPS
 
 onMounted(() => {
-  // Keep first paint light on phones — jump chips surface config first.
+  // Keep first paint light on phones — collapse overview by default.
   if (window.matchMedia('(max-width: 720px)').matches) {
     overviewOpen.value = false
   }
@@ -136,22 +136,6 @@ function setSectionOpen(id: ControlPanelSectionId, open: boolean) {
   if (route.query.tab === id) {
     const { tab: _tab, ...rest } = route.query
     router.replace({ query: rest })
-  }
-}
-
-function jumpToSection(id: ControlPanelSectionId) {
-  setSectionOpen(id, true)
-  nextTick(() => {
-    document.getElementById(`cp-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  })
-}
-
-function toggleOverview() {
-  overviewOpen.value = !overviewOpen.value
-  if (overviewOpen.value) {
-    nextTick(() => {
-      document.getElementById('cp-overview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
   }
 }
 
@@ -230,32 +214,6 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
     </div>
 
     <template v-else-if="status">
-      <nav class="cp-jump" aria-label="Control Panel sections">
-        <div class="cp-jump-scroll">
-          <button
-            type="button"
-            class="cp-jump-chip"
-            :class="{ on: overviewOpen }"
-            @click="toggleOverview"
-          >
-            Overview
-          </button>
-          <template v-for="group in cpGroups" :key="group.id">
-            <span class="cp-jump-group" aria-hidden="true">{{ group.label }}</span>
-            <button
-              v-for="section in group.sections"
-              :key="section.id"
-              type="button"
-              class="cp-jump-chip"
-              :class="{ on: openSections[section.id] }"
-              @click="jumpToSection(section.id)"
-            >
-              {{ section.title }}
-            </button>
-          </template>
-        </div>
-      </nav>
-
       <div id="cp-overview" class="admin-overview">
         <details class="cp-overview-panel" :open="overviewOpen" @toggle="overviewOpen = ($event.target as HTMLDetailsElement).open">
           <summary class="cp-overview-summary">

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { useDb } from '../../../../db/client'
 import { accountTypes, permissions, userPermissionOverrides, users } from '../../../../db/schema/auth'
 import { writeAudit } from '../../../../services/audit.service'
@@ -9,6 +9,7 @@ import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
 import type { PermissionKey } from '../../../../../shared/permissions/keys'
 import { ALL_PERMISSION_KEYS } from '../../../../../shared/permissions/keys'
+import { isSusanSystemEmail } from '../../../../../shared/ai-assistant'
 
 const overrideSchema = z.object({
   allow: z.array(z.string()).default([]),
@@ -31,6 +32,10 @@ export default defineEventHandler(async (event) => {
 
   if (!userRow) {
     throw apiError(event, 'NOT_FOUND', 'User not found')
+  }
+
+  if (isSusanSystemEmail(userRow.user.email)) {
+    throw apiError(event, 'FORBIDDEN', 'Susan’s system account permissions cannot be edited')
   }
 
   // Cannot modify super_admin overrides unless you are super_admin
