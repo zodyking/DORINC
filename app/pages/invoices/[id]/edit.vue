@@ -996,7 +996,7 @@ if (import.meta.client) {
         </div>
         <p v-if="invoice.serviceLogId" class="ed-tab-hint">
           {{ hasServiceLogPhotos
-            ? 'Drag the reveal bar on Line items to compare field photos while editing charges. Service log tab has notes and metadata.'
+            ? 'Use the slider above Line items to peek field photos while editing. Service log tab has notes and metadata.'
             : 'Field photos and mechanic notes from the linked service log — reference while building line items.' }}
         </p>
       </div>
