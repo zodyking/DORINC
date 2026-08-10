@@ -313,7 +313,7 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   autocomplete="tel"
                   placeholder="+15551234567"
                 >
-                <span class="help">Used for text alerts when Quo SMS is enabled. Include country code.</span>
+                <span class="help">Always available on your account. Include country code (E.164). Used for text alerts when Quo SMS is enabled.</span>
               </label>
               <p v-if="profileMessage" style="color:#059669; font-size:13px;">{{ profileMessage }}</p>
               <p v-if="profileError" style="color:#dc2626; font-size:13px;">{{ profileError }}</p>
