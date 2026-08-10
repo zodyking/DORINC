@@ -50,6 +50,8 @@ export default defineEventHandler(async (event) => {
           throw apiError(event, 'CONFLICT', 'A user with that email already exists')
         case 'INVALID_ACCOUNT_TYPE':
           throw apiError(event, 'VALIDATION_ERROR', 'Invalid account type for staff invite')
+        case 'SUSAN_PROTECTED':
+          throw apiError(event, 'FORBIDDEN', 'Susan’s system email cannot be used for staff invites')
         default:
           throw err
       }
