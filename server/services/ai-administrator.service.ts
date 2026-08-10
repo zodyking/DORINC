@@ -20,6 +20,8 @@ import { parseOpenRouterJson, openRouterChat } from './ai-openrouter.service'
 import {
   AiSpendCapExceededError,
   assertSpendCapAllowsRequest,
+  clampAiAdminReviewWaitMinutes,
+  DEFAULT_AI_ADMIN_REVIEW_WAIT_MINUTES,
   getAiProviderSettings,
   getDecryptedApiKey,
   modelForFeature,
@@ -39,10 +41,28 @@ export const DELETION_REASON_WEAK_MESSAGE
 
 export { SUSAN_SYSTEM_EMAIL }
 
-export const AI_ADMIN_REVIEW_DELAY_MS = 10_000
+/** @deprecated Use configured `aiAdministratorReviewWaitMinutes` (default 5). */
+export const AI_ADMIN_REVIEW_DELAY_MS = DEFAULT_AI_ADMIN_REVIEW_WAIT_MINUTES * 60_000
 
 /** How far back Susan loads prior requests as review context (not an auto-reject window). */
 export const SIMILAR_DELETION_REQUEST_LOOKBACK_MS = 60 * 60 * 1000
+
+/** Earliest time Susan may review a request opened at `createdAt`. */
+export function aiAdminReviewRunAfter(
+  createdAt: Date | string | number,
+  waitMinutes: number,
+  now: Date = new Date(),
+): Date {
+  const opened = new Date(createdAt)
+  const waitMs = clampAiAdminReviewWaitMinutes(waitMinutes) * 60_000
+  const target = new Date(opened.getTime() + waitMs)
+  return target.getTime() > now.getTime() ? target : now
+}
+
+export async function getAiAdministratorReviewWaitMinutes(db: Db): Promise<number> {
+  const settings = await getAiProviderSettings(db)
+  return clampAiAdminReviewWaitMinutes(settings.aiAdministratorReviewWaitMinutes)
+}
 
 export class AiAdministratorServiceError extends Error {
   constructor(
@@ -596,13 +616,24 @@ export async function enqueueDeletionRequestAiReview(
     })
     return null
   }
-  const runAfter = opts.runAfter ?? new Date(Date.now() + AI_ADMIN_REVIEW_DELAY_MS)
+  let runAfter = opts.runAfter
+  let waitMinutes: number | null = null
+  if (!runAfter) {
+    waitMinutes = await getAiAdministratorReviewWaitMinutes(db)
+    const [request] = await db.select({ createdAt: entityDeletionRequests.createdAt })
+      .from(entityDeletionRequests)
+      .where(eq(entityDeletionRequests.id, requestId))
+      .limit(1)
+    runAfter = aiAdminReviewRunAfter(request?.createdAt ?? new Date(), waitMinutes)
+  }
   const job = await enqueueJob(db, 'deletion_request_ai_review', { requestId }, 3, { runAfter })
   console.info(
     '[ai-administrator] enqueued deletion review',
     requestId,
     'runAfter=',
     runAfter.toISOString(),
+    'waitMinutes=',
+    waitMinutes,
     'job=',
     job.id,
   )
@@ -614,6 +645,7 @@ export async function enqueueDeletionRequestAiReview(
       requestId,
       jobId: job.id,
       runAfter: runAfter.toISOString(),
+      waitMinutes,
     },
   })
   return job
@@ -653,7 +685,10 @@ export async function catchUpPendingDeletionRequestAiReviews(
     return { enqueued: 0, skipped: 0, pending: 0 }
   }
 
-  const pending = await db.select({ id: entityDeletionRequests.id })
+  const pending = await db.select({
+    id: entityDeletionRequests.id,
+    createdAt: entityDeletionRequests.createdAt,
+  })
     .from(entityDeletionRequests)
     .where(eq(entityDeletionRequests.status, 'pending'))
     .orderBy(asc(entityDeletionRequests.createdAt))
@@ -678,11 +713,14 @@ export async function catchUpPendingDeletionRequestAiReviews(
     pending.map(row => row.id),
     blockedIds,
   )
+  const waitMinutes = await getAiAdministratorReviewWaitMinutes(db)
+  const byId = new Map(pending.map(row => [row.id, row.createdAt]))
 
   let enqueued = 0
   for (const requestId of needing) {
-    // Catch-up runs immediately — these requests already missed (or never got) the delay window.
-    const job = await enqueueDeletionRequestAiReview(db, requestId, { runAfter: new Date() })
+    // Respect platform wait from when the request was opened so humans can act first.
+    const runAfter = aiAdminReviewRunAfter(byId.get(requestId) ?? new Date(), waitMinutes)
+    const job = await enqueueDeletionRequestAiReview(db, requestId, { runAfter })
     if (job) enqueued += 1
   }
 

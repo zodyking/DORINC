@@ -32,7 +32,7 @@ export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
   void opts.ignoreCooldown
 
   const enabled = await pool.query(
-    `SELECT 1
+    `SELECT ai_administrator_review_wait_minutes
      FROM ai_provider_settings
      WHERE enabled = true
        AND ai_administrator_enabled = true
@@ -41,8 +41,13 @@ export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
   )
   if (!enabled.rowCount) return { enqueued: 0, pending: 0 }
 
+  const rawWait = Number(enabled.rows[0]?.ai_administrator_review_wait_minutes)
+  const waitMinutes = Number.isFinite(rawWait)
+    ? Math.min(1440, Math.max(0, Math.round(rawWait)))
+    : 5
+
   const pending = await pool.query(
-    `SELECT id
+    `SELECT id, created_at
      FROM entity_deletion_requests
      WHERE status = 'pending'
      ORDER BY created_at ASC
@@ -66,10 +71,17 @@ export async function catchUpPendingDeletionAiReviewJobs(pool, opts = {}) {
   for (const row of pending.rows) {
     const requestId = String(row.id || '')
     if (!requestId || blockedIds.has(requestId)) continue
+    // Wait from when the request was opened so a real admin can respond first.
     await pool.query(
       `INSERT INTO worker_jobs (job_type, payload, max_attempts, status, run_after)
-       VALUES ('deletion_request_ai_review', $1::jsonb, 3, 'queued', now())`,
-      [JSON.stringify({ requestId })],
+       VALUES (
+         'deletion_request_ai_review',
+         $1::jsonb,
+         3,
+         'queued',
+         GREATEST(now(), $2::timestamptz + make_interval(mins => $3::int))
+       )`,
+      [JSON.stringify({ requestId }), row.created_at, waitMinutes],
     )
     blockedIds.add(requestId)
     enqueued += 1

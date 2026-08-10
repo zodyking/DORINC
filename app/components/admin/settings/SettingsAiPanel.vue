@@ -24,6 +24,7 @@ interface AiSettingsView {
   invoiceDescriptionEnabled: boolean
   platformHelpEnabled: boolean
   aiAdministratorEnabled: boolean
+  aiAdministratorReviewWaitMinutes: number
   dailySpendCapUsd: string | null
   monthlySpendCapUsd: string | null
   updatedAt: string
@@ -95,7 +96,7 @@ const AI_TASKS = [
     enabledKey: 'aiAdministratorEnabled' as const,
     modelKey: 'aiAdministratorModel' as const,
     title: 'AI Administrator',
-    description: 'Susan reviews deletion requests (~10s after open) on the merits of the reason and record state (declines sent/paid/billing-linked records). Saving these settings (and app start) re-queues any open pending reviews.',
+    description: 'Susan reviews deletion requests after the platform wait below, so a real admin can respond first. She decides from the reason and record state (declines sent/paid/billing-linked records). Saving these settings (and app start) re-queues any open pending reviews.',
     modelHint: 'Prefer a careful text model — Susan can approve or reject deletions.',
   },
 ]
@@ -134,6 +135,7 @@ const form = reactive({
   invoiceDescriptionEnabled: true,
   platformHelpEnabled: true,
   aiAdministratorEnabled: true,
+  aiAdministratorReviewWaitMinutes: 5 as string | number,
   dailySpendCapUsd: '' as string | number,
   monthlySpendCapUsd: '' as string | number,
 })
@@ -151,6 +153,7 @@ function hydrate(s: AiSettingsView) {
   form.invoiceDescriptionEnabled = s.invoiceDescriptionEnabled
   form.platformHelpEnabled = s.platformHelpEnabled
   form.aiAdministratorEnabled = s.aiAdministratorEnabled
+  form.aiAdministratorReviewWaitMinutes = s.aiAdministratorReviewWaitMinutes ?? 5
   form.dailySpendCapUsd = s.dailySpendCapUsd ?? ''
   form.monthlySpendCapUsd = s.monthlySpendCapUsd ?? ''
   form.apiKey = ''
@@ -207,6 +210,10 @@ async function save() {
       invoiceDescriptionEnabled: form.invoiceDescriptionEnabled,
       platformHelpEnabled: form.platformHelpEnabled,
       aiAdministratorEnabled: form.aiAdministratorEnabled,
+      aiAdministratorReviewWaitMinutes: Math.min(
+        1440,
+        Math.max(0, Math.round(Number(form.aiAdministratorReviewWaitMinutes) || 0)),
+      ),
       dailySpendCapUsd: parseOptionalSpendCap(form.dailySpendCapUsd),
       monthlySpendCapUsd: parseOptionalSpendCap(form.monthlySpendCapUsd),
     }
@@ -390,6 +397,24 @@ function applyFallbackToEmptyTasks() {
               :hint="task.modelHint"
               @update:model-value="setTaskModel(task, $event)"
             />
+            <label
+              v-if="task.key === 'ai_administrator'"
+              class="fld"
+              style="margin-top:12px;"
+            >
+              Platform wait before Susan reviews (minutes)
+              <input
+                v-model="form.aiAdministratorReviewWaitMinutes"
+                type="number"
+                min="0"
+                max="1440"
+                step="1"
+                :disabled="!form.enabled || !taskEnabled(task)"
+              >
+              <span class="help">
+                Give real admins time to act first. 0 = immediate; default 5; max 1440 (24 hours).
+              </span>
+            </label>
           </article>
           <p class="settings-help">
             Turning a task off blocks that workflow for everyone. Model changes apply after you save.

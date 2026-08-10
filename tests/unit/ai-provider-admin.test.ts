@@ -20,6 +20,7 @@ describe('ai-provider admin helpers', () => {
       aiAdministratorModel: null,
       platformHelpEnabled: true,
       aiAdministratorEnabled: true,
+      aiAdministratorReviewWaitMinutes: 5,
       dailySpendCapUsd: '2.0000',
       monthlySpendCapUsd: '30.0000',
       updatedAt: new Date('2026-08-03T12:00:00.000Z'),

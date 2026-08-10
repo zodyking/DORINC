@@ -53,6 +53,7 @@ export interface AiProviderSettingsView {
   invoiceDescriptionEnabled: boolean
   platformHelpEnabled: boolean
   aiAdministratorEnabled: boolean
+  aiAdministratorReviewWaitMinutes: number
   dailySpendCapUsd: string | null
   monthlySpendCapUsd: string | null
   updatedAt: Date
@@ -83,10 +84,22 @@ function toView(row: typeof aiProviderSettings.$inferSelect): AiProviderSettings
     platformHelpEnabled: row.platformHelpEnabled,
     // Treat null/undefined as enabled so a partial migrate cannot silently disable Susan.
     aiAdministratorEnabled: row.aiAdministratorEnabled !== false,
+    aiAdministratorReviewWaitMinutes: clampAiAdminReviewWaitMinutes(
+      row.aiAdministratorReviewWaitMinutes,
+    ),
     dailySpendCapUsd: row.dailySpendCapUsd,
     monthlySpendCapUsd: row.monthlySpendCapUsd,
     updatedAt: row.updatedAt,
   }
+}
+
+export const DEFAULT_AI_ADMIN_REVIEW_WAIT_MINUTES = 5
+
+/** Clamp platform wait minutes for Susan deletion reviews (0 = immediate, max 24h). */
+export function clampAiAdminReviewWaitMinutes(value: unknown): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return DEFAULT_AI_ADMIN_REVIEW_WAIT_MINUTES
+  return Math.min(1440, Math.max(0, Math.round(n)))
 }
 
 /** JSON-safe snapshot for audit rows (Dates → ISO strings). */
@@ -117,12 +130,24 @@ export async function updateAiProviderSettings(
   actorId: string,
 ): Promise<AiProviderSettingsView> {
   const current = await ensureAiProviderSettings(db)
-  const { apiKey, dailySpendCapUsd, monthlySpendCapUsd, ...rest } = patch
+  const {
+    apiKey,
+    dailySpendCapUsd,
+    monthlySpendCapUsd,
+    aiAdministratorReviewWaitMinutes,
+    ...rest
+  } = patch
 
   const update: Partial<typeof aiProviderSettings.$inferInsert> = {
     ...rest,
     updatedBy: actorId,
     updatedAt: new Date(),
+  }
+
+  if (aiAdministratorReviewWaitMinutes !== undefined) {
+    update.aiAdministratorReviewWaitMinutes = clampAiAdminReviewWaitMinutes(
+      aiAdministratorReviewWaitMinutes,
+    )
   }
 
   if (apiKey !== undefined) {
