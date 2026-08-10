@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
- * Before/after style reveal slider for two interactive panels
- * (e.g. service-log photos vs invoice line items).
- * Left/reveal panel is clipped over the base panel; drag the handle to mix.
+ * Before/after reveal for two panels (e.g. field photos vs line items).
+ * Primary control is a top track with a ball thumb; edge-snaps on release.
  */
 const props = withDefaults(defineProps<{
   /** Percent of the reveal (left) panel visible, 0–100. */
@@ -11,7 +10,7 @@ const props = withDefaults(defineProps<{
   baseLabel?: string
   minHeight?: string
 }>(), {
-  modelValue: 40,
+  modelValue: 50,
   revealLabel: 'Photos',
   baseLabel: 'Line items',
   minHeight: '440px',
@@ -21,7 +20,10 @@ const emit = defineEmits<{
   'update:modelValue': [value: number]
 }>()
 
+const EDGE_SNAP = 12
+
 const rootRef = ref<HTMLElement | null>(null)
+const trackRef = ref<HTMLElement | null>(null)
 const dragging = ref(false)
 
 const percent = computed({
@@ -35,31 +37,37 @@ function measure() {
   rootWidth.value = rootRef.value?.getBoundingClientRect().width ?? 0
 }
 
-function setFromClientX(clientX: number) {
-  const el = rootRef.value
+function setFromClientX(clientX: number, el: HTMLElement | null) {
   if (!el) return
   const rect = el.getBoundingClientRect()
   if (rect.width <= 0) return
   percent.value = ((clientX - rect.left) / rect.width) * 100
 }
 
-function onHandlePointerDown(event: PointerEvent) {
+function snapEdges(value: number) {
+  if (value <= EDGE_SNAP) return 0
+  if (value >= 100 - EDGE_SNAP) return 100
+  return value
+}
+
+function onTrackPointerDown(event: PointerEvent) {
   const target = event.currentTarget as HTMLElement
   target.setPointerCapture(event.pointerId)
   dragging.value = true
   measure()
-  setFromClientX(event.clientX)
+  setFromClientX(event.clientX, trackRef.value)
   event.preventDefault()
 }
 
-function onHandlePointerMove(event: PointerEvent) {
+function onTrackPointerMove(event: PointerEvent) {
   if (!dragging.value) return
-  setFromClientX(event.clientX)
+  setFromClientX(event.clientX, trackRef.value)
 }
 
-function onHandlePointerUp(event: PointerEvent) {
+function onTrackPointerUp(event: PointerEvent) {
   if (!dragging.value) return
   dragging.value = false
+  percent.value = snapEdges(percent.value)
   try {
     (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId)
   }
@@ -68,19 +76,15 @@ function onHandlePointerUp(event: PointerEvent) {
   }
 }
 
-function snap(value: number) {
-  percent.value = value
-}
-
 function onKeydown(event: KeyboardEvent) {
   const step = event.shiftKey ? 10 : 4
   if (event.key === 'ArrowLeft') {
     event.preventDefault()
-    percent.value = percent.value - step
+    percent.value = snapEdges(percent.value - step)
   }
   else if (event.key === 'ArrowRight') {
     event.preventDefault()
-    percent.value = percent.value + step
+    percent.value = snapEdges(percent.value + step)
   }
   else if (event.key === 'Home') {
     event.preventDefault()
@@ -114,32 +118,31 @@ onBeforeUnmount(() => {
     :class="{ 'reveal-slider--dragging': dragging }"
     :style="{ minHeight }"
   >
-    <div class="reveal-slider__toolbar">
-      <button
-        type="button"
-        class="reveal-slider__chip"
-        :class="{ on: percent >= 85 }"
-        @click="snap(100)"
+    <div class="reveal-slider__control">
+      <span class="reveal-slider__end-label">{{ revealLabel }}</span>
+      <div
+        ref="trackRef"
+        class="reveal-slider__track"
+        role="slider"
+        tabindex="0"
+        :aria-valuemin="0"
+        :aria-valuemax="100"
+        :aria-valuenow="Math.round(percent)"
+        :aria-label="`Reveal ${revealLabel} over ${baseLabel}`"
+        @pointerdown="onTrackPointerDown"
+        @pointermove="onTrackPointerMove"
+        @pointerup="onTrackPointerUp"
+        @pointercancel="onTrackPointerUp"
+        @keydown="onKeydown"
       >
-        {{ revealLabel }}
-      </button>
-      <button
-        type="button"
-        class="reveal-slider__chip"
-        :class="{ on: percent > 20 && percent < 80 }"
-        @click="snap(45)"
-      >
-        Split
-      </button>
-      <button
-        type="button"
-        class="reveal-slider__chip"
-        :class="{ on: percent <= 15 }"
-        @click="snap(0)"
-      >
-        {{ baseLabel }}
-      </button>
-      <span class="reveal-slider__hint">Drag the bar to compare</span>
+        <div class="reveal-slider__track-fill" :style="{ width: `${percent}%` }" />
+        <div
+          class="reveal-slider__thumb"
+          :style="{ left: `${percent}%` }"
+          aria-hidden="true"
+        />
+      </div>
+      <span class="reveal-slider__end-label">{{ baseLabel }}</span>
     </div>
 
     <div class="reveal-slider__stage">
@@ -167,23 +170,10 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        class="reveal-slider__handle"
-        role="slider"
-        tabindex="0"
-        :aria-valuemin="0"
-        :aria-valuemax="100"
-        :aria-valuenow="Math.round(percent)"
-        :aria-label="`Reveal ${revealLabel} over ${baseLabel}`"
+        class="reveal-slider__divider"
         :style="{ left: `${percent}%` }"
-        @pointerdown="onHandlePointerDown"
-        @pointermove="onHandlePointerMove"
-        @pointerup="onHandlePointerUp"
-        @pointercancel="onHandlePointerUp"
-        @keydown="onKeydown"
-        @dblclick="snap(45)"
-      >
-        <span class="reveal-slider__grip" aria-hidden="true" />
-      </div>
+        aria-hidden="true"
+      />
     </div>
   </div>
 </template>
@@ -192,46 +182,77 @@ onBeforeUnmount(() => {
 .reveal-slider {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
-.reveal-slider__toolbar {
+.reveal-slider__control {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 0;
+}
+
+.reveal-slider__end-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.reveal-slider__track {
+  position: relative;
+  height: 28px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.reveal-slider__chip {
-  appearance: none;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #334155;
-  border-radius: 8px;
-  padding: 6px 12px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 650;
   cursor: pointer;
-  min-height: 36px;
+  touch-action: none;
+  outline: none;
+  border-radius: 999px;
 }
 
-.reveal-slider__chip:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+.reveal-slider__track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
 }
 
-.reveal-slider__chip.on {
-  border-color: #94a3b8;
-  background: #f1f5f9;
-  color: #0f172a;
+.reveal-slider__track:focus-visible .reveal-slider__thumb {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 2px 8px rgba(15, 23, 42, 0.2);
 }
 
-.reveal-slider__hint {
-  margin-left: auto;
-  font-size: 11.5px;
-  color: #94a3b8;
+.reveal-slider__track-fill {
+  position: absolute;
+  left: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #818cf8, #6366f1);
+  pointer-events: none;
+}
+
+.reveal-slider__thumb {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #6366f1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.reveal-slider--dragging .reveal-slider__thumb {
+  transform: translateY(-50%) scale(1.08);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 3px 10px rgba(15, 23, 42, 0.22);
 }
 
 .reveal-slider__stage {
@@ -242,7 +263,6 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
-  touch-action: none;
 }
 
 .reveal-slider__base,
@@ -263,9 +283,20 @@ onBeforeUnmount(() => {
   inset: 0 auto 0 0;
   overflow: hidden;
   z-index: 2;
-  border-right: 1px solid rgba(15, 23, 42, 0.12);
   background: #fff;
   pointer-events: auto;
+}
+
+.reveal-slider__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  z-index: 3;
+  background: #6366f1;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
 .reveal-slider__panel-label {
@@ -286,40 +317,6 @@ onBeforeUnmount(() => {
   padding: 12px;
 }
 
-.reveal-slider__handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 28px;
-  margin-left: -14px;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: col-resize;
-  touch-action: none;
-  outline: none;
-}
-
-.reveal-slider__handle:focus-visible .reveal-slider__grip {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
-}
-
-.reveal-slider__grip {
-  width: 4px;
-  height: min(48%, 120px);
-  border-radius: 999px;
-  background: #64748b;
-  box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(15, 23, 42, 0.2);
-}
-
-.reveal-slider__handle::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: transparent;
-}
-
 .reveal-slider--dragging {
   user-select: none;
 }
@@ -329,8 +326,15 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .reveal-slider__hint {
-    display: none;
+  .reveal-slider__control {
+    gap: 8px;
+  }
+
+  .reveal-slider__end-label {
+    font-size: 11px;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .reveal-slider__stage {

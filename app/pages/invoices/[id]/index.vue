@@ -29,6 +29,7 @@ import { invoiceDetailSummaryRows } from '~/utils/invoice-editor-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { fetchInvoicePreviewPdf } from '~/utils/invoice-pdf'
 import { printPdfBlob } from '~/utils/print-pdf'
+import ServiceLogPhotoManager from '~/components/service-logs/ServiceLogPhotoManager.vue'
 
 definePageMeta({ layout: 'staff' })
 
@@ -448,7 +449,7 @@ const summaryRows = computed(() => {
     </div>
   </section>
 
-  <section v-else-if="invoice" class="page active" :class="{ 'page--invoice-pdf': (viewTab === 'pdf' && canGeneratePdf) || viewTab === 'photos' }">
+  <section v-else-if="invoice" class="page active" :class="{ 'page--invoice-pdf': viewTab === 'pdf' && canGeneratePdf }">
     <StaffPageHead>
       <template #title>
         {{ invoice.invoiceNumberFormatted }}
@@ -800,9 +801,9 @@ const summaryRows = computed(() => {
     </div>
 
     <div v-if="viewTab === 'photos' && hasServiceLogPhotos" class="invoice-photos-tab">
-      <div class="card">
+      <div class="card ed-log-photos-card">
         <div class="chead">
-          <h3>Service log photos</h3>
+          <h3>Field photos · {{ serviceLogImages.length }}</h3>
           <div class="right">
             <NuxtLink
               v-if="invoice.serviceLogId"
@@ -814,9 +815,6 @@ const summaryRows = computed(() => {
           </div>
         </div>
         <div class="cbody">
-          <p class="help" style="margin:0 0 14px;">
-            Photos from {{ logNumberDisplay(linkedLogData?.log?.logNumber ?? 0) }} — use arrow keys or buttons to browse.
-          </p>
           <ServiceLogPhotoManager
             v-if="invoice.serviceLogId"
             :service-log-id="invoice.serviceLogId"
@@ -910,11 +908,25 @@ const summaryRows = computed(() => {
   font-weight: 700;
 }
 
-.invoice-pdf-tab,
-.invoice-photos-tab {
+.invoice-pdf-tab {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.invoice-photos-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.invoice-photos-tab .ed-log-photos-card {
+  min-width: 0;
+}
+
+.invoice-photos-tab .ed-log-photos-card .cbody {
+  padding-top: 14px;
 }
 </style>

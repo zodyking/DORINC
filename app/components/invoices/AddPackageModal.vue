@@ -13,7 +13,7 @@ const emit = defineEmits<{
   applied: [lines: ReturnType<typeof expandPackageItemToLineFields>[]]
 }>()
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   disabled?: boolean
 }>(), {
   disabled: false,
@@ -93,7 +93,7 @@ defineExpose({ showModal })
 
 <template>
   <div class="add-pkg">
-    <button type="button" class="btn sm" :disabled="disabled" @click="showModal">
+    <button type="button" class="btn sm add-pkg-trigger" :disabled="disabled" @click="showModal">
       + Add Package
     </button>
 
@@ -147,6 +147,11 @@ defineExpose({ showModal })
 </template>
 
 <style scoped>
+.add-pkg-trigger {
+  white-space: nowrap;
+  flex: none;
+}
+
 .add-pkg-list {
   display: flex;
   flex-direction: column;
