@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
 import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
+import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
 import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   applyCatalogItemToLineFields,
@@ -227,6 +228,19 @@ async function onLineRateTabNext(line: LineItem) {
 }
 
 const busy = ref(false)
+const addPkgRef = ref<{ showModal: () => void } | null>(null)
+
+function openAddPackage() {
+  addPkgRef.value?.showModal()
+}
+
+const addLineTitle = computed(() => {
+  if (!editable.value && lockedByOther.value) return 'Another user is editing this invoice'
+  if (!editable.value && sessionLoading.value) return 'Opening editor…'
+  if (!editable.value) return 'This invoice cannot be edited'
+  if (busy.value) return 'Saving…'
+  return undefined
+})
 const saveError = ref('')
 const lastSavedAt = ref<Date | null>(null)
 const autosaveTick = ref(0)
@@ -1078,25 +1092,72 @@ if (import.meta.client) {
             <div class="chead ed-lines-chead">
               <h3>{{ hasServiceLogPhotos ? 'Line items · field photos' : 'Line items' }}</h3>
               <div class="right ed-lines-actions">
-                <button
-                  type="button"
-                  class="btn sm ai-btn"
-                  :disabled="!editable || !canDescribe || auditBusy"
-                  title="View line audit report (Ctrl+Shift+D)"
-                  @click="openAuditReport"
-                >
-                  <span class="dot">✦</span> AI
-                </button>
-                <AddPackageModal :disabled="!editable || busy" @applied="applyPackageLines" />
-                <button
-                  type="button"
-                  class="btn sm primary"
+                <div class="ed-lines-actions-btns">
+                  <button
+                    type="button"
+                    class="btn sm ai-btn"
+                    :disabled="!editable || !canDescribe || auditBusy"
+                    title="View line audit report (Ctrl+Shift+D)"
+                    @click="openAuditReport"
+                  >
+                    <span class="dot">✦</span> AI
+                  </button>
+                  <button
+                    type="button"
+                    class="btn sm"
+                    :disabled="!editable || busy"
+                    :title="addLineTitle"
+                    @click="openAddPackage"
+                  >
+                    + Add Package
+                  </button>
+                  <button
+                    type="button"
+                    class="btn sm primary"
+                    :disabled="!editable || busy"
+                    :title="addLineTitle"
+                    @click="addEmptyLine"
+                  >
+                    + Add line
+                  </button>
+                </div>
+                <div class="ed-lines-actions-menu">
+                  <PageActionsMenu>
+                    <button
+                      type="button"
+                      class="btn"
+                      :disabled="!editable || !canDescribe || auditBusy"
+                      title="View line audit report (Ctrl+Shift+D)"
+                      @click="openAuditReport"
+                    >
+                      <span class="dot">✦</span> AI
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      :disabled="!editable || busy"
+                      :title="addLineTitle"
+                      @click="openAddPackage"
+                    >
+                      + Add Package
+                    </button>
+                    <button
+                      type="button"
+                      class="btn primary"
+                      :disabled="!editable || busy"
+                      :title="addLineTitle"
+                      @click="addEmptyLine"
+                    >
+                      + Add line
+                    </button>
+                  </PageActionsMenu>
+                </div>
+                <AddPackageModal
+                  ref="addPkgRef"
+                  hide-trigger
                   :disabled="!editable || busy"
-                  :title="!editable && lockedByOther ? 'Another user is editing this invoice' : !editable && sessionLoading ? 'Opening editor…' : !editable ? 'This invoice cannot be edited' : busy ? 'Saving…' : undefined"
-                  @click="addEmptyLine"
-                >
-                  + Add line
-                </button>
+                  @applied="applyPackageLines"
+                />
               </div>
             </div>
 

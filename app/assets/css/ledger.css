@@ -1175,6 +1175,15 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
   flex-wrap:nowrap;
   margin-left:auto;
 }
+.ed-lines-actions-btns{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+}
+.ed-lines-actions-menu{
+  display:none;
+}
 .ed-lines-actions .btn,
 .ed-lines-actions .add-pkg{
   flex:none;
@@ -1195,10 +1204,11 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
     flex:none;
     justify-content:flex-end;
   }
-  .ed-lines-actions .btn.sm,
-  .ed-lines-actions .add-pkg-trigger{
-    padding-left:10px;
-    padding-right:10px;
+  .ed-lines-actions-btns{
+    display:none;
+  }
+  .ed-lines-actions-menu{
+    display:block;
   }
 }
 .ed-lines{ width:100%; border-collapse:collapse; min-width:920px; }
