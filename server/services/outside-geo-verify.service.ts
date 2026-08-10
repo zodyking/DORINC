@@ -288,7 +288,7 @@ export async function enqueueOutsideGeoVerification(
 
   if (delivery?.channel === 'sms') {
     const { enqueueTemplatedSms } = await import('./sms-notifications.service')
-    return enqueueTemplatedSms(db, {
+    const smsResult = await enqueueTemplatedSms(db, {
       to: delivery.phone,
       typeKey: 'outside_geofence_verification',
       vars: {
@@ -298,6 +298,7 @@ export async function enqueueOutsideGeoVerification(
       },
       meta: { userId: input.identity.userId },
     })
+    if (smsResult.queued) return smsResult
   }
 
   return enqueueOutsideGeoVerificationEmail(db, {

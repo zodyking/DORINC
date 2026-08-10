@@ -1,6 +1,10 @@
 // Notify all team members when a customer email is synced into Messages (worker path).
 import { buildCustomerEmailReceivedStaffEmail } from '../../mail/templates/system.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
+import {
+  enqueueRecipientNotification,
+  isQuoSmsEnabled,
+} from './sms-notify.mjs'
 
 const NOTIFICATION_SETTINGS_KEY = 'workspace.notification_settings'
 
@@ -56,7 +60,7 @@ export async function isCustomerEmailStaffNotifyEnabled(pool) {
 
 export async function listTeamMembersForStaffEmail(pool) {
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.email
+    `SELECT u.id, u.name, u.email, u.phone, u.message_notify_channel
      FROM users u
      INNER JOIN account_types at ON at.id = u.account_type_id
      WHERE u.is_active = true
@@ -95,6 +99,7 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
   }
 
   const templateOverride = await loadActiveEmailTemplateContent(pool, 'customer_email_received_staff')
+  const quoOn = await isQuoSmsEnabled(pool)
   let queued = 0
   for (const recipient of recipients) {
     const mail = buildCustomerEmailReceivedStaffEmail({
@@ -109,19 +114,24 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
       templateOverride,
     })
 
-    await pool.query(
-      `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
-       VALUES ('email_send', $1, 'queued', 0, 3, now())`,
-      [JSON.stringify({
-        to: recipient.email,
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        notificationKind: 'customer_email_received',
+    await enqueueRecipientNotification(pool, {
+      recipient,
+      quoOn,
+      smsTypeKey: 'customer_email_received_staff',
+      smsVars: {
+        brandName: brand.brandName,
+        appUrl: brand.appUrl,
+        recipientName: recipient.name || 'Team member',
+        customerName: opts.customerName,
+        customerEmail: opts.customerEmail,
+        subject: opts.subject,
+        messagesUrl,
+      },
+      email: mail,
+      meta: {
         conversationId: opts.conversationId,
-        recipientUserId: recipient.id,
-      })],
-    )
+      },
+    })
     queued++
   }
 

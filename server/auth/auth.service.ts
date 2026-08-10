@@ -75,12 +75,15 @@ export async function signup(db: Db, input: SignupInput) {
 
   const passwordHash = await hashPassword(input.password)
 
+  const phone = input.phone ?? null
   const [user] = await db.insert(users).values({
     name: input.name.trim(),
     email,
     passwordHash,
     accountTypeId: typeRow.id,
-    phone: input.phone ?? null,
+    phone,
+    // Prefer Text for verification/security when signup collected a phone (Quo-enabled).
+    messageNotifyChannel: phone ? 'sms' : 'email',
     // Pending state: not verified, not approved
   }).returning()
 

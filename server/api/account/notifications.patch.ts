@@ -72,6 +72,13 @@ export default defineEventHandler(async (event) => {
     if (err instanceof AccountServiceError && err.code === 'SESSION_NOT_FOUND') {
       throw apiError(event, 'NOT_FOUND', 'Account not found')
     }
+    if (err instanceof AccountServiceError && err.code === 'PHONE_REQUIRED') {
+      throw apiError(
+        event,
+        'VALIDATION_ERROR',
+        'Add a phone number on your profile before choosing Text notifications',
+      )
+    }
     throw err
   }
 })

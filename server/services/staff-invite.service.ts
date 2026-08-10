@@ -5,7 +5,6 @@ import type { Db } from '../db/client'
 import { accountTypes, sessions, users } from '../db/schema/auth'
 import { buildStaffInviteEmail, buildStaffPasswordResetEmail } from '../mail/templates/system'
 import { getAppUrl } from './app-config.service'
-import { enqueueJob } from './jobs.service'
 import {
   getAssignableAccountTypes,
   isAssignableAccountType,
@@ -57,25 +56,41 @@ async function sendInviteEmail(db: Db, input: {
   name: string
   email: string
   tempPassword: string
+  phone?: string | null
+  messageNotifyChannel?: string | null
 }) {
   const { resolveEmailBrand } = await import('./email-branding.service')
   const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const { deliverUserNotification } = await import('./notify-delivery.service')
   const brand = await resolveEmailBrand(db)
   const templateOverride = await getActiveEmailTemplateContent(db, 'staff_invite')
+  const appUrl = brand?.appUrl || getAppUrl()
+  const loginUrl = `${appUrl.replace(/\/$/, '')}/auth/login`
   const mail = buildStaffInviteEmail({
     name: input.name,
     email: input.email,
     tempPassword: input.tempPassword,
-    appUrl: brand?.appUrl || getAppUrl(),
+    appUrl,
     brand,
     templateOverride,
   })
 
-  await enqueueJob(db, 'email_send', {
-    to: input.email,
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
+  await deliverUserNotification(db, {
+    email: input.email,
+    phone: input.phone,
+    messageNotifyChannel: input.messageNotifyChannel,
+  }, {
+    sms: {
+      typeKey: 'staff_invite',
+      vars: {
+        name: input.name,
+        email: input.email,
+        loginUrl,
+        tempPassword: input.tempPassword,
+      },
+    },
+    email: mail,
+    meta: { notificationKind: 'staff_invite' },
   })
 }
 
@@ -151,7 +166,13 @@ export async function resendStaffInvite(db: Db, userId: string, invitedBy: strin
     })
     .where(eq(users.id, userId))
 
-  await sendInviteEmail(db, { name: row.user.name, email, tempPassword })
+  await sendInviteEmail(db, {
+    name: row.user.name,
+    email,
+    tempPassword,
+    phone: row.user.phone,
+    messageNotifyChannel: row.user.messageNotifyChannel,
+  })
 
   return {
     userId,
@@ -164,25 +185,40 @@ async function sendPasswordResetEmail(db: Db, input: {
   name: string
   email: string
   tempPassword: string
+  phone?: string | null
+  messageNotifyChannel?: string | null
 }) {
   const { resolveEmailBrand } = await import('./email-branding.service')
   const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const { deliverUserNotification } = await import('./notify-delivery.service')
   const brand = await resolveEmailBrand(db)
   const templateOverride = await getActiveEmailTemplateContent(db, 'staff_password_reset')
+  const appUrl = brand?.appUrl || getAppUrl()
+  const loginUrl = `${appUrl.replace(/\/$/, '')}/auth/login`
   const mail = buildStaffPasswordResetEmail({
     name: input.name,
     email: input.email,
     tempPassword: input.tempPassword,
-    appUrl: brand?.appUrl || getAppUrl(),
+    appUrl,
     brand,
     templateOverride,
   })
 
-  await enqueueJob(db, 'email_send', {
-    to: input.email,
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
+  await deliverUserNotification(db, {
+    email: input.email,
+    phone: input.phone,
+    messageNotifyChannel: input.messageNotifyChannel,
+  }, {
+    sms: {
+      typeKey: 'staff_password_reset',
+      vars: {
+        name: input.name,
+        loginUrl,
+        tempPassword: input.tempPassword,
+      },
+    },
+    email: mail,
+    meta: { notificationKind: 'staff_password_reset' },
   })
 }
 
@@ -217,7 +253,13 @@ export async function resetStaffPassword(db: Db, userId: string, _actorId: strin
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
 
-  await sendPasswordResetEmail(db, { name: row.user.name, email, tempPassword })
+  await sendPasswordResetEmail(db, {
+    name: row.user.name,
+    email,
+    tempPassword,
+    phone: row.user.phone,
+    messageNotifyChannel: row.user.messageNotifyChannel,
+  })
 
   return {
     userId,

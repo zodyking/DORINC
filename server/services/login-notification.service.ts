@@ -84,7 +84,9 @@ export async function sendLoginNotificationEmail(
       },
       meta: { userId: opts.userId, portal: opts.portal },
     })
-    return { delivered: result.queued, reason: result.queued ? 'sms_queued' as const : result.reason }
+    if (result.queued) {
+      return { delivered: true, reason: 'sms_queued' as const }
+    }
   }
 
   const templateOverride = await getActiveEmailTemplateContent(db, 'login_notification')

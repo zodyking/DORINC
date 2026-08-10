@@ -382,7 +382,7 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                 <span class="msg-pref-text">
                   <b>Security &amp; chat notifications</b>
                   <small>
-                    Choose how we reach you for sign-in alerts, verification codes, and new chat messages.
+                    Choose Email or Text for sign-in alerts, verification codes, password resets, team chat, deletion requests, and other staff notifications.
                     Text requires a phone number on your profile.
                   </small>
                 </span>

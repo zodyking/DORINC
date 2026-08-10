@@ -34,10 +34,12 @@ export default defineEventHandler(async (event) => {
       phone: body.phone ?? null,
     })
 
-    await enqueueVerificationEmail(db, {
+    const delivery = await enqueueVerificationEmail(db, {
       to: user.email,
       name: user.name,
       verificationToken,
+      phone: user.phone,
+      messageNotifyChannel: user.messageNotifyChannel,
     })
 
     void writeAudit(event, {
@@ -49,6 +51,7 @@ export default defineEventHandler(async (event) => {
         name: user.name,
         requestedAccountType: body.accountType,
         hasPhone: Boolean(user.phone),
+        notifyChannel: delivery.channel,
       },
       riskLevel: 'sensitive',
     }).catch((err) => {
@@ -57,7 +60,9 @@ export default defineEventHandler(async (event) => {
 
     return {
       status: 'pending_verification',
-      message: 'Check your email to verify your account. An admin will then review your request.',
+      message: delivery.channel === 'sms'
+        ? 'Check your phone for a verification text. An admin will then review your request.'
+        : 'Check your email to verify your account. An admin will then review your request.',
     }
   }
   catch (err) {

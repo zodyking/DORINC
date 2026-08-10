@@ -23,6 +23,7 @@ import { getDatabaseSizeMetrics } from './database-size.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getActiveEmailTemplateContent } from './email-templates.service'
 import { enqueueJob } from './jobs.service'
+import { deliverUserNotification } from './notify-delivery.service'
 import {
   listManagersAndAdmins,
   type StaffNotifyRecipient,
@@ -1020,7 +1021,7 @@ async function writeLastSentDate(db: Db, date: string): Promise<void> {
 
 function mergeRecipients(
   primary: StaffNotifyRecipient[],
-  extra?: { id: string, name: string, email: string } | null,
+  extra?: StaffNotifyRecipient | null,
 ): StaffNotifyRecipient[] {
   const byId = new Map<string, StaffNotifyRecipient>()
   for (const row of primary) byId.set(row.id, row)
@@ -1029,6 +1030,8 @@ function mergeRecipients(
       id: extra.id,
       name: extra.name,
       email: extra.email.trim(),
+      phone: extra.phone ?? null,
+      messageNotifyChannel: extra.messageNotifyChannel === 'sms' ? 'sms' : 'email',
     })
   }
   return [...byId.values()]
@@ -1047,14 +1050,23 @@ export async function deliverDailySummaryReport(
   const delivery = opts.delivery ?? (opts.force ? 'direct' : 'queue')
   const recipientsMode = opts.recipientsMode ?? (opts.force ? 'actor' : 'managers')
 
+  let actorRecipient: StaffNotifyRecipient | null = null
+  if (recipientsMode === 'actor' && opts.actor?.email?.trim()) {
+    const [profile] = await db.select({
+      phone: users.phone,
+      messageNotifyChannel: users.messageNotifyChannel,
+    }).from(users).where(eq(users.id, opts.actor.id)).limit(1)
+    actorRecipient = {
+      id: opts.actor.id,
+      name: opts.actor.name,
+      email: opts.actor.email.trim(),
+      phone: profile?.phone ?? null,
+      messageNotifyChannel: profile?.messageNotifyChannel === 'sms' ? 'sms' : 'email',
+    }
+  }
+
   const recipients: StaffNotifyRecipient[] = recipientsMode === 'actor'
-    ? (opts.actor?.email?.trim()
-        ? [{
-            id: opts.actor.id,
-            name: opts.actor.name,
-            email: opts.actor.email.trim(),
-          }]
-        : [])
+    ? (actorRecipient ? [actorRecipient] : [])
     : mergeRecipients(await listManagersAndAdmins(db), null)
 
   if (recipientsMode === 'actor' && !recipients.length) {
@@ -1146,6 +1158,22 @@ export async function deliverDailySummaryReport(
         const message = err instanceof Error ? err.message : 'Send failed'
         errors.push(`${email}: ${message}`)
       }
+    }
+    else if (recipient) {
+      const summaryUrl = `${appUrl.replace(/\/$/, '')}/dashboard`
+      const result = await deliverUserNotification(db, recipient, {
+        sms: {
+          typeKey: 'daily_summary_report',
+          vars: {
+            reportDateLabel: report.reportDateLabel,
+            summaryUrl,
+            recipientName: recipient.name,
+          },
+        },
+        email: mail,
+        meta: { notificationKind: 'daily_summary_report' },
+      })
+      if (result.channel !== 'none') sent += 1
     }
     else {
       await enqueueJob(db, 'email_send', {
