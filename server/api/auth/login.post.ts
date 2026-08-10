@@ -71,8 +71,27 @@ export default defineEventHandler(async (event) => {
         : null,
     })
 
+    // Staff complete sign-in after granting device location. Defer geofence until
+    // complete-login so GPS can be collected (fail closed there).
+    if (body.portal === 'staff' && !body.geo) {
+      const sessionSecret = await resolveSessionSecret(useDb())
+      if (!sessionSecret) {
+        console.error('[auth] staff login blocked: SESSION_SECRET is not configured')
+        throw apiError(
+          event,
+          'SERVICE_UNAVAILABLE',
+          'Server security is not configured. Set SESSION_SECRET in the environment or complete Security setup, then restart the app.',
+        )
+      }
+      return {
+        needsLocation: true,
+        loginToken: createPendingLoginToken(result.sessionToken),
+      }
+    }
+
     // Access gate: block non-super-admin logins from banned IPs / outside the
     // allowed geofence. Super admins are always exempt to prevent lockout.
+    // Geofence fails closed when coordinates are unknown (no more fail-open).
     // Known users who completed suspicious-location verification may sign in
     // outside the geofence with a short-lived bypass cookie.
     const gate = getCachedAccessGateSettings()
@@ -81,7 +100,6 @@ export default defineEventHandler(async (event) => {
       const decision = evaluateAccessDecision(
         gate,
         { ip: ipAddress, coords: loginCoords },
-        { strictGeo: loginCoords != null },
       )
       if (decision.blocked) {
         const bypass = decision.reason === 'geo_outside'
@@ -135,23 +153,6 @@ export default defineEventHandler(async (event) => {
             redirectTo,
           })
         }
-      }
-    }
-
-    // Staff complete sign-in after granting device location (geofence exempt for super admin).
-    if (body.portal === 'staff' && !body.geo) {
-      const sessionSecret = await resolveSessionSecret(useDb())
-      if (!sessionSecret) {
-        console.error('[auth] staff login blocked: SESSION_SECRET is not configured')
-        throw apiError(
-          event,
-          'SERVICE_UNAVAILABLE',
-          'Server security is not configured. Set SESSION_SECRET in the environment or complete Security setup, then restart the app.',
-        )
-      }
-      return {
-        needsLocation: true,
-        loginToken: createPendingLoginToken(result.sessionToken),
       }
     }
 

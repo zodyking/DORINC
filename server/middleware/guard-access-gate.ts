@@ -6,6 +6,8 @@ import { hasDatabaseConfigured, useDb } from '../db/client'
 import {
   evaluateAccessDecision,
   getCachedAccessGateSettings,
+  isAccessGateEnforcing,
+  isAccessGateGeoActive,
   recordAccessEvent,
 } from '../services/access-gate.service'
 import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent, resolveIpLocation } from '../services/ip-geolocation.service'
@@ -16,9 +18,19 @@ import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
 } from '../services/outside-geo-verify.service'
+import { apiError } from '../utils/api-error'
 
 /** Paths that must always stay reachable so admins can never be locked out. */
-const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
+const EXEMPT_PREFIXES = ['/_nuxt/', '/setup', '/__nuxt', '/favicon']
+/** API routes that must remain reachable for login/challenge/beacon/public flows. */
+const API_EXEMPT_PREFIXES = [
+  '/api/security/visit-beacon',
+  '/api/auth/',
+  '/api/public/',
+  '/api/setup/',
+  '/api/health',
+  '/api/internal/',
+]
 /** Internal gate pages — never bounce these through the gate again. */
 const GATE_PAGES = [
   '/auth/verify-location',
@@ -56,30 +68,26 @@ function shouldIssueChallenge(key: string): boolean {
 
 function isPageNavigation(event: Parameters<typeof getHeader>[0], path: string): boolean {
   if (event.method !== 'GET') return false
+  if (path.startsWith('/api/')) return false
   if (EXEMPT_PREFIXES.some(prefix => path.startsWith(prefix))) return false
   if (ASSET_EXT.test(path)) return false
   const accept = getHeader(event, 'accept') ?? ''
   return accept.includes('text/html')
 }
 
+function isApiRequest(path: string): boolean {
+  return path.startsWith('/api/')
+}
+
+function isApiExempt(path: string): boolean {
+  return API_EXEMPT_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix))
+}
+
 function isGatePage(path: string): boolean {
   return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
 }
 
-export default defineEventHandler(async (event) => {
-  const settings = getCachedAccessGateSettings()
-  if (!settings.enabled) return
-  if (!hasDatabaseConfig() || !hasDatabaseConfigured()) return
-
-  const url = getRequestURL(event)
-  const path = url.pathname
-  if (!isPageNavigation(event, path)) return
-
-  const ip = getClientIp(event)
-  const userAgent = getHeader(event, 'user-agent') ?? null
-  const deviceId = ensureDeviceId(event)
-
-  // Resolve the viewer so super admins are never geo/IP blocked (anti-lockout).
+async function resolveViewer(event: Parameters<typeof getHeader>[0]) {
   let isSuperAdmin = false
   let viewer: { id: string, name: string, email: string } | null = null
   try {
@@ -95,9 +103,92 @@ export default defineEventHandler(async (event) => {
   catch {
     // Ignore — treat as anonymous visitor.
   }
+  return { isSuperAdmin, viewer }
+}
 
-  const checksGeo = settings.blockMode === 'geo' || settings.blockMode === 'both'
-  const geoActive = checksGeo && settings.allowedPolygon.length >= 3
+export default defineEventHandler(async (event) => {
+  const settings = getCachedAccessGateSettings()
+  if (!settings.enabled) return
+  if (!hasDatabaseConfig() || !hasDatabaseConfigured()) return
+
+  const url = getRequestURL(event)
+  const path = url.pathname
+
+  // API enforcement: close the SPA bypass so authenticated/app API calls
+  // cannot continue after leaving the geofence.
+  if (isApiRequest(path)) {
+    if (!isAccessGateEnforcing(settings) || isApiExempt(path)) return
+
+    const ip = getClientIp(event)
+    const userAgent = getHeader(event, 'user-agent') ?? null
+    const deviceId = ensureDeviceId(event)
+    const { isSuperAdmin } = await resolveViewer(event)
+    if (isSuperAdmin) return
+
+    let cachedGeo = peekIpGeo(ip)
+    if (isAccessGateGeoActive(settings) && ip) {
+      try {
+        const resolved = await resolveIpGeoForEvent(event, ip)
+        if (resolved) cachedGeo = resolved
+      }
+      catch {
+        // keep peek/null — fail closed below when coords missing
+      }
+    }
+
+    const coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
+      ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
+      : null
+
+    const decision = evaluateAccessDecision(settings, { ip, coords })
+    if (!decision.blocked) return
+
+    const outsideGeoBypass = decision.reason === 'geo_outside'
+      ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
+      : null
+    if (outsideGeoBypass) return
+
+    let redirectTo = '/auth/access-restricted'
+    if (decision.reason === 'geo_outside') {
+      try {
+        const known = await findKnownOutsideGeoIdentity(useDb(), {
+          ipAddress: ip,
+          userAgent,
+          deviceId,
+        })
+        if (known) {
+          if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
+            const locationLabel = cachedGeo?.label
+              ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
+            await quietlyIssueOutsideGeoChallenge(useDb(), {
+              ipAddress: ip,
+              userAgent,
+              deviceId,
+              locationLabel,
+            })
+          }
+          redirectTo = '/auth/verify-location?sent=1'
+        }
+      }
+      catch {
+        // keep restricted
+      }
+    }
+
+    throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
+      reason: 'access_blocked',
+      redirectTo,
+    })
+  }
+
+  if (!isPageNavigation(event, path)) return
+
+  const ip = getClientIp(event)
+  const userAgent = getHeader(event, 'user-agent') ?? null
+  const deviceId = ensureDeviceId(event)
+  const { isSuperAdmin, viewer } = await resolveViewer(event)
+
+  const geoActive = isAccessGateGeoActive(settings)
 
   let cachedGeo = peekIpGeo(ip)
   // Visit gate stays IP-based (browser GPS remains login-only). Always resolve
@@ -127,6 +218,7 @@ export default defineEventHandler(async (event) => {
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
 
   // Capture the visit (best-effort, off the response path). Prefer device_id over IP.
+  // Device-signal-rich rows come from the client visit beacon; this is a fallback.
   if (shouldCapture(`${deviceId}|${path}`)) {
     void captureVisit({
       ip,
@@ -134,7 +226,7 @@ export default defineEventHandler(async (event) => {
       userAgent,
       deviceId,
       viewer,
-      blocked: effectivelyBlocked,
+      blocked: Boolean(effectivelyBlocked),
       cachedGeo: cachedGeo ?? null,
     }).catch(() => {})
   }

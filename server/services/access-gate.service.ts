@@ -131,7 +131,25 @@ export function evaluateAccessDecision(
   return ALLOWED
 }
 
-export interface RecordAccessEventInput {
+export interface AccessEventDeviceFields {
+  userAgent?: string | null
+  deviceId?: string | null
+  os?: string | null
+  deviceType?: string | null
+  screenResolution?: string | null
+  devicePixelRatio?: number | null
+  cpuCores?: number | null
+  deviceMemoryGb?: number | null
+  gpuRenderer?: string | null
+  canvasFingerprint?: string | null
+  webglFingerprint?: string | null
+  audioFingerprint?: string | null
+  timezone?: string | null
+  language?: string | null
+  maxTouchPoints?: number | null
+}
+
+export interface RecordAccessEventInput extends AccessEventDeviceFields {
   eventType: 'visit' | 'login'
   outcome?: 'allowed' | 'blocked' | 'login_success' | 'login_failed'
   ipAddress?: string | null
@@ -139,12 +157,15 @@ export interface RecordAccessEventInput {
   userName?: string | null
   userEmail?: string | null
   path?: string | null
-  userAgent?: string | null
-  deviceId?: string | null
   latitude?: number | null
   longitude?: number | null
   locationLabel?: string | null
   country?: string | null
+}
+
+function clip(value: string | null | undefined, max: number): string | null {
+  if (!value) return null
+  return value.length > max ? value.slice(0, max) : value
 }
 
 export async function recordAccessEvent(db: Db, input: RecordAccessEventInput): Promise<void> {
@@ -156,8 +177,21 @@ export async function recordAccessEvent(db: Db, input: RecordAccessEventInput): 
     userName: input.userName ?? null,
     userEmail: input.userEmail ?? null,
     path: input.path ?? null,
-    userAgent: input.userAgent ? input.userAgent.slice(0, 500) : null,
-    deviceId: input.deviceId ?? null,
+    userAgent: clip(input.userAgent, 500),
+    deviceId: clip(input.deviceId, 64),
+    os: clip(input.os, 120),
+    deviceType: clip(input.deviceType, 32),
+    screenResolution: clip(input.screenResolution, 40),
+    devicePixelRatio: input.devicePixelRatio ?? null,
+    cpuCores: input.cpuCores ?? null,
+    deviceMemoryGb: input.deviceMemoryGb ?? null,
+    gpuRenderer: clip(input.gpuRenderer, 300),
+    canvasFingerprint: clip(input.canvasFingerprint, 128),
+    webglFingerprint: clip(input.webglFingerprint, 128),
+    audioFingerprint: clip(input.audioFingerprint, 128),
+    timezone: clip(input.timezone, 80),
+    language: clip(input.language, 80),
+    maxTouchPoints: input.maxTouchPoints ?? null,
     latitude: input.latitude ?? null,
     longitude: input.longitude ?? null,
     locationLabel: input.locationLabel ?? null,
@@ -174,6 +208,21 @@ export interface AccessEventView {
   userName: string | null
   userEmail: string | null
   path: string | null
+  userAgent: string | null
+  deviceId: string | null
+  os: string | null
+  deviceType: string | null
+  screenResolution: string | null
+  devicePixelRatio: number | null
+  cpuCores: number | null
+  deviceMemoryGb: number | null
+  gpuRenderer: string | null
+  canvasFingerprint: string | null
+  webglFingerprint: string | null
+  audioFingerprint: string | null
+  timezone: string | null
+  language: string | null
+  maxTouchPoints: number | null
   latitude: number | null
   longitude: number | null
   locationLabel: string | null
@@ -203,12 +252,39 @@ export async function listAccessEvents(
     userName: r.userName,
     userEmail: r.userEmail,
     path: r.path,
+    userAgent: r.userAgent,
+    deviceId: r.deviceId,
+    os: r.os,
+    deviceType: r.deviceType,
+    screenResolution: r.screenResolution,
+    devicePixelRatio: r.devicePixelRatio,
+    cpuCores: r.cpuCores,
+    deviceMemoryGb: r.deviceMemoryGb,
+    gpuRenderer: r.gpuRenderer,
+    canvasFingerprint: r.canvasFingerprint,
+    webglFingerprint: r.webglFingerprint,
+    audioFingerprint: r.audioFingerprint,
+    timezone: r.timezone,
+    language: r.language,
+    maxTouchPoints: r.maxTouchPoints,
     latitude: r.latitude,
     longitude: r.longitude,
     locationLabel: r.locationLabel,
     country: r.country,
     createdAt: r.createdAt.toISOString(),
   }))
+}
+
+/** Whether geofence mode is active (enabled + geo/both + polygon). */
+export function isAccessGateGeoActive(settings: AccessGateSettings): boolean {
+  if (!settings.enabled) return false
+  if (settings.blockMode !== 'geo' && settings.blockMode !== 'both') return false
+  return settings.allowedPolygon.length >= 3
+}
+
+/** Whether any blocking mode is active. */
+export function isAccessGateEnforcing(settings: AccessGateSettings): boolean {
+  return settings.enabled && settings.blockMode !== 'off'
 }
 
 /** Best-effort retention: drop events older than the given number of days. */

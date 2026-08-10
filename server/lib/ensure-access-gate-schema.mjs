@@ -14,6 +14,19 @@ CREATE TABLE IF NOT EXISTS "access_events" (
   "path" text,
   "user_agent" text,
   "device_id" text,
+  "os" text,
+  "device_type" text,
+  "screen_resolution" text,
+  "device_pixel_ratio" double precision,
+  "cpu_cores" integer,
+  "device_memory_gb" double precision,
+  "gpu_renderer" text,
+  "canvas_fingerprint" text,
+  "webgl_fingerprint" text,
+  "audio_fingerprint" text,
+  "timezone" text,
+  "language" text,
+  "max_touch_points" integer,
   "latitude" double precision,
   "longitude" double precision,
   "location_label" text,
@@ -27,8 +40,21 @@ CREATE INDEX IF NOT EXISTS "access_events_ip_idx" ON "access_events" USING btree
 CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
 `.trim()
 
-const ACCESS_EVENTS_DEVICE_ID_SQL = `
+const ACCESS_EVENTS_DEVICE_COLUMNS_SQL = `
 ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "device_id" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "os" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "device_type" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "screen_resolution" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "device_pixel_ratio" double precision;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "cpu_cores" integer;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "device_memory_gb" double precision;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "gpu_renderer" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "canvas_fingerprint" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "webgl_fingerprint" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "audio_fingerprint" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "timezone" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "language" text;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "max_touch_points" integer;
 CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
 `.trim()
 
@@ -45,6 +71,6 @@ export async function ensureAccessGateSchema(pool) {
     console.log('[migrate] ensured access-gate table (access_events)')
     return true
   }
-  await pool.query(ACCESS_EVENTS_DEVICE_ID_SQL)
+  await pool.query(ACCESS_EVENTS_DEVICE_COLUMNS_SQL)
   return false
 }

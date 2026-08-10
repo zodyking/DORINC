@@ -1,11 +1,14 @@
 import { getHeader } from 'h3'
+import { eq } from 'drizzle-orm'
 import { getClientIp } from '../../utils/client-ip'
 import { ensureDeviceId } from '../../utils/device-id'
 import { logout, resolveSession } from '../../auth/auth.service'
 import { verifyPendingLoginToken } from '../../auth/pending-login'
 import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
 import { setSessionCookie } from '../../auth/session-cookie'
+import { hashToken } from '../../auth/tokens'
 import { useDb } from '../../db/client'
+import { sessions } from '../../db/schema/auth'
 import { writeAudit } from '../../services/audit.service'
 import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
 import {
@@ -105,6 +108,17 @@ export default defineEventHandler(async (event) => {
   }
 
   setSessionCookie(event, sessionToken)
+
+  // Persist GPS onto the session created in step 1 (was missing before).
+  await useDb().update(sessions).set({
+    geoLatitude: body.geo.latitude,
+    geoLongitude: body.geo.longitude,
+    geoAccuracyM: body.geo.accuracyM ?? null,
+    locationLabel,
+    ...(deviceId ? { deviceId } : {}),
+    ...(ipAddress ? { ipAddress } : {}),
+    ...(userAgent ? { userAgent } : {}),
+  }).where(eq(sessions.tokenHash, hashToken(sessionToken))).catch(() => {})
 
   await recordAccessEvent(useDb(), {
     eventType: 'login',

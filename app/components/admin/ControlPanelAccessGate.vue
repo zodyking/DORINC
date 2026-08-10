@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AccessMapEvent } from '~/utils/access-gate-map'
+import { accessEventWhen, shortFingerprint } from '~/utils/access-gate-map'
 import type { AccessGateSettings } from '#shared/validators/access-gate'
 import { DEFAULT_ACCESS_GATE_SETTINGS } from '#shared/validators/access-gate'
 
@@ -206,6 +207,70 @@ async function save() {
           {{ visitCount }} visits · {{ loginCount }} logins · {{ mappedCount }} mapped
         </div>
 
+        <div class="ag-table-wrap">
+          <div class="ag-label">Visit &amp; login device capture</div>
+          <p class="ag-desc">
+            Every site visit records IP, browser, OS, device type, screen, fingerprints, and more.
+          </p>
+          <div class="ag-table-scroll">
+            <table class="ag-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Type</th>
+                  <th>Outcome</th>
+                  <th>IP</th>
+                  <th>User-Agent</th>
+                  <th>OS</th>
+                  <th>Device</th>
+                  <th>Screen</th>
+                  <th>DPR</th>
+                  <th>CPU</th>
+                  <th>RAM</th>
+                  <th>GPU</th>
+                  <th>Canvas</th>
+                  <th>WebGL</th>
+                  <th>Audio</th>
+                  <th>TZ</th>
+                  <th>Lang</th>
+                  <th>Touch</th>
+                  <th>Device ID</th>
+                  <th>Path</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!events.length">
+                  <td colspan="20" class="ag-table-empty">
+                    {{ eventsLoading ? 'Loading…' : 'No captured events yet.' }}
+                  </td>
+                </tr>
+                <tr v-for="ev in events.slice(0, 100)" :key="ev.id">
+                  <td>{{ accessEventWhen(ev.createdAt) }}</td>
+                  <td>{{ ev.eventType }}</td>
+                  <td>{{ ev.outcome }}</td>
+                  <td class="mono">{{ ev.ipAddress || '—' }}</td>
+                  <td class="ag-ua" :title="ev.userAgent || ''">{{ shortFingerprint(ev.userAgent, 28) }}</td>
+                  <td>{{ ev.os || '—' }}</td>
+                  <td>{{ ev.deviceType || '—' }}</td>
+                  <td class="mono">{{ ev.screenResolution || '—' }}</td>
+                  <td class="mono">{{ ev.devicePixelRatio ?? '—' }}</td>
+                  <td class="mono">{{ ev.cpuCores ?? '—' }}</td>
+                  <td class="mono">{{ ev.deviceMemoryGb != null ? `${ev.deviceMemoryGb} GB` : '—' }}</td>
+                  <td class="ag-ua" :title="ev.gpuRenderer || ''">{{ shortFingerprint(ev.gpuRenderer, 18) }}</td>
+                  <td class="mono" :title="ev.canvasFingerprint || ''">{{ shortFingerprint(ev.canvasFingerprint) }}</td>
+                  <td class="mono" :title="ev.webglFingerprint || ''">{{ shortFingerprint(ev.webglFingerprint) }}</td>
+                  <td class="mono" :title="ev.audioFingerprint || ''">{{ shortFingerprint(ev.audioFingerprint) }}</td>
+                  <td>{{ ev.timezone || '—' }}</td>
+                  <td>{{ ev.language || '—' }}</td>
+                  <td class="mono">{{ ev.maxTouchPoints ?? '—' }}</td>
+                  <td class="mono" :title="ev.deviceId || ''">{{ shortFingerprint(ev.deviceId, 12) }}</td>
+                  <td class="ag-ua" :title="ev.path || ''">{{ shortFingerprint(ev.path, 24) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="ag-bans">
           <div class="ag-label">Banned IP addresses</div>
           <div class="ag-ban-add">
@@ -255,6 +320,37 @@ async function save() {
 .ag-hint { margin: 0; font-size: 12.5px; color: #4f46e5; line-height: 1.5; }
 .ag-hint--muted { color: #64748b; }
 .ag-stats { font-size: 12px; color: #94a3b8; }
+.ag-table-wrap { display: flex; flex-direction: column; gap: 6px; }
+.ag-table-scroll {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+.ag-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.ag-table th, .ag-table td {
+  padding: 7px 9px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.ag-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  z-index: 1;
+}
+.ag-table-empty { text-align: center; color: #94a3b8; padding: 18px !important; }
+.ag-ua { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .ag-bans { display: flex; flex-direction: column; gap: 8px; }
 .ag-ban-add { display: flex; gap: 8px; }
 .ag-ban-add input { flex: 1; min-width: 0; border: 1px solid #e2e8f0; border-radius: 9px; padding: 8px 12px; font-size: 14px; }
