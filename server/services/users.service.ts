@@ -134,6 +134,8 @@ export interface UpdateUserInput {
   isActive?: boolean
   /** Reason for deactivation (suspension). Only used when isActive=false. */
   disabledReason?: string
+  /** E.164 phone or null to clear. Always editable by admins (independent of Quo). */
+  phone?: string | null
 }
 
 /**
@@ -181,6 +183,15 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
     changedFields.push('isActive', 'disabledAt')
     if (!input.isActive && input.disabledReason) {
       changedFields.push('disabledReason')
+    }
+  }
+
+  if (input.phone !== undefined) {
+    const nextPhone = input.phone ?? null
+    const prevPhone = row.user.phone ?? null
+    if (nextPhone !== prevPhone) {
+      changes.phone = nextPhone
+      changedFields.push('phone')
     }
   }
 
@@ -293,6 +304,7 @@ export async function getUserDetail(db: Db, userId: string) {
     id: row.user.id,
     name: row.user.name,
     email: row.user.email,
+    phone: row.user.phone ?? null,
     accountType: row.accountTypeKey,
     status: userStatus(row.user),
     emailVerified: !!row.user.emailVerifiedAt,

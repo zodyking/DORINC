@@ -6,12 +6,14 @@ import { apiError } from '../../../../utils/api-error'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateBody, validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
+import { accountPhoneSchema } from '../../../../../shared/validators/account'
 
 const updateSchema = z.object({
   // Accept any string - DB validation happens in the service layer
   accountType: z.string().trim().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
   disabledReason: z.string().trim().max(500).optional(),
+  phone: accountPhoneSchema.optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -27,6 +29,7 @@ export default defineEventHandler(async (event) => {
       accountTypeKey: body.accountType,
       isActive: body.isActive,
       disabledReason: body.disabledReason,
+      phone: body.phone,
     })
 
     if (result.changedFields.length) {
@@ -37,10 +40,12 @@ export default defineEventHandler(async (event) => {
         beforeData: {
           accountType: result.previous.accountTypeKey,
           isActive: result.previous.user.isActive,
+          phone: result.previous.user.phone ?? null,
         },
         afterData: {
           accountType: result.accountTypeKey,
           isActive: result.user.isActive,
+          phone: result.user.phone ?? null,
         },
         changedFields: result.changedFields,
         permissionKey: 'users.manage.all',
@@ -54,6 +59,7 @@ export default defineEventHandler(async (event) => {
         id: result.user.id,
         accountType: result.accountTypeKey,
         isActive: result.user.isActive,
+        phone: result.user.phone ?? null,
       },
     }
   }
