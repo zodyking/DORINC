@@ -22,6 +22,8 @@ export const aiProviderSettingsPatchSchema = z.object({
   invoiceDescriptionEnabled: z.boolean().optional(),
   platformHelpEnabled: z.boolean().optional(),
   aiAdministratorEnabled: z.boolean().optional(),
+  /** Minutes to wait after a deletion request opens before Susan reviews (0–1440). */
+  aiAdministratorReviewWaitMinutes: z.number().int().min(0).max(1440).optional(),
   dailySpendCapUsd: z.number().min(0).max(1_000_000).nullable().optional(),
   monthlySpendCapUsd: z.number().min(0).max(1_000_000).nullable().optional(),
 })

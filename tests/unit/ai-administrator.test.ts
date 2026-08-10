@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DELETION_REASON_WEAK_MESSAGE,
   SIMILAR_DELETION_REQUEST_LOOKBACK_MS,
+  aiAdminReviewRunAfter,
   deletionReasonsLookSimilar,
   findSimilarDeletionRequest,
   hardDeclineDeletionContext,
@@ -10,7 +11,10 @@ import {
   normalizeDeletionReasonForCompare,
   pendingDeletionIdsNeedingReview,
 } from '../../server/services/ai-administrator.service'
-import { modelForFeature } from '../../server/services/ai-provider.service'
+import {
+  clampAiAdminReviewWaitMinutes,
+  modelForFeature,
+} from '../../server/services/ai-provider.service'
 import type { AiProviderSettingsView } from '../../server/services/ai-provider.service'
 import { aiFeatureLabel } from '../../app/utils/admin-panel-ui'
 
@@ -29,6 +33,7 @@ function baseSettings(overrides: Partial<AiProviderSettingsView> = {}): AiProvid
     invoiceDescriptionEnabled: true,
     platformHelpEnabled: true,
     aiAdministratorEnabled: true,
+    aiAdministratorReviewWaitMinutes: 5,
     dailySpendCapUsd: null,
     monthlySpendCapUsd: null,
     updatedAt: new Date(),
@@ -147,6 +152,20 @@ describe('ai administrator helpers', () => {
 
   it('looks back one hour for similar deletion requests', () => {
     expect(SIMILAR_DELETION_REQUEST_LOOKBACK_MS).toBe(60 * 60 * 1000)
+  })
+
+  it('clamps platform wait minutes and schedules Susan after the wait window', () => {
+    expect(clampAiAdminReviewWaitMinutes(-3)).toBe(0)
+    expect(clampAiAdminReviewWaitMinutes(5)).toBe(5)
+    expect(clampAiAdminReviewWaitMinutes(9999)).toBe(1440)
+    expect(clampAiAdminReviewWaitMinutes('nope')).toBe(5)
+
+    const opened = new Date('2026-08-10T12:00:00.000Z')
+    const early = new Date('2026-08-10T12:02:00.000Z')
+    const late = new Date('2026-08-10T12:10:00.000Z')
+    expect(aiAdminReviewRunAfter(opened, 5, early).toISOString()).toBe('2026-08-10T12:05:00.000Z')
+    expect(aiAdminReviewRunAfter(opened, 5, late).toISOString()).toBe(late.toISOString())
+    expect(aiAdminReviewRunAfter(opened, 0, early).toISOString()).toBe(early.toISOString())
   })
 
   it('catch-up picks oldest pending requests that lack an active review job', () => {

@@ -42,6 +42,8 @@ export const aiProviderSettings = pgTable('ai_provider_settings', {
   invoiceDescriptionEnabled: boolean('invoice_description_enabled').notNull().default(true),
   platformHelpEnabled: boolean('platform_help_enabled').notNull().default(true),
   aiAdministratorEnabled: boolean('ai_administrator_enabled').notNull().default(true),
+  /** Minutes after a deletion request is opened before Susan may auto-review. */
+  aiAdministratorReviewWaitMinutes: integer('ai_administrator_review_wait_minutes').notNull().default(5),
   dailySpendCapUsd: numeric('daily_spend_cap_usd', { precision: 12, scale: 4 }),
   monthlySpendCapUsd: numeric('monthly_spend_cap_usd', { precision: 12, scale: 4 }),
   updatedBy: uuid('updated_by').references(() => users.id),

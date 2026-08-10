@@ -133,6 +133,7 @@ describe('daily summary + Susan', () => {
       invoiceDescriptionEnabled: true,
       platformHelpEnabled: true,
       aiAdministratorEnabled: true,
+      aiAdministratorReviewWaitMinutes: 5,
       dailySpendCapUsd: null,
       monthlySpendCapUsd: null,
       updatedAt: new Date(),
