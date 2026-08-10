@@ -3,11 +3,8 @@ import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 import type { QuoSettingsPatch, QuoSettingsView } from '../../shared/validators/quo'
-import {
-  ensureEncryptionReadyForSettings,
-  encryptBuffer,
-  decryptBuffer,
-} from './encryption.service'
+import { encryptBuffer, decryptBuffer } from './encryption.service'
+import { ensureEncryptionReadyForSettings } from './app-config.service'
 
 export const QUO_SETTINGS_KEY = 'quo.config'
 
