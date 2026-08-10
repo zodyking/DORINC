@@ -4,28 +4,11 @@ import { users } from '../db/schema/auth'
 import { conversationParticipants, conversations } from '../db/schema/messages'
 import { buildChatMessageReceivedEmail } from '../mail/templates/system.mjs'
 import { getAppUrl } from './app-config.service'
-import { enqueueJob } from './jobs.service'
 import { messagePreview } from './messages.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { TEAM_CHAT_TITLE } from './team-chat.service'
 import { isQuoEnabled } from './quo.service'
-import { resolveUserNotifyDelivery } from './user-notify-channel.service'
-import { enqueueTemplatedSms } from './sms-notifications.service'
-
-async function enqueueHtmlMail(
-  db: Db,
-  to: string,
-  mail: { subject: string, text: string, html: string },
-  meta: Record<string, unknown> = {},
-) {
-  return enqueueJob(db, 'email_send', {
-    to,
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
-    ...meta,
-  })
-}
+import { deliverUserNotification } from './notify-delivery.service'
 
 export async function notifyChatMessageReceived(
   db: Db,
@@ -95,32 +78,6 @@ export async function notifyChatMessageReceived(
 
   let queued = 0
   for (const recipient of recipients) {
-    const delivery = await resolveUserNotifyDelivery(db, recipient, {
-      requireChatOptIn: !quoOn,
-    })
-    if (!delivery) continue
-
-    if (delivery.channel === 'sms') {
-      const result = await enqueueTemplatedSms(db, {
-        to: delivery.phone,
-        typeKey: 'chat_message_received',
-        vars: {
-          senderName,
-          channelLabel,
-          messagePreview: preview,
-          messagesUrl,
-          recipientName: recipient.name,
-        },
-        meta: {
-          conversationId: opts.conversationId,
-          messageId: opts.messageId,
-          recipientUserId: recipient.id,
-        },
-      })
-      if (result.queued) queued++
-      continue
-    }
-
     const mail = buildChatMessageReceivedEmail({
       recipientName: recipient.name,
       senderName,
@@ -132,13 +89,26 @@ export async function notifyChatMessageReceived(
       isTeamChat: opts.isTeamChat || conversation.type === 'team',
       templateOverride,
     })
-    await enqueueHtmlMail(db, delivery.email, mail, {
-      notificationKind: 'chat_message_received',
-      conversationId: opts.conversationId,
-      messageId: opts.messageId,
-      recipientUserId: recipient.id,
+    const result = await deliverUserNotification(db, recipient, {
+      requireChatOptIn: !quoOn,
+      sms: {
+        typeKey: 'chat_message_received',
+        vars: {
+          senderName,
+          channelLabel,
+          messagePreview: preview,
+          messagesUrl,
+          recipientName: recipient.name,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'chat_message_received',
+        conversationId: opts.conversationId,
+        messageId: opts.messageId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued }

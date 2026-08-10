@@ -13,6 +13,33 @@ export interface StaffNotifyRecipient {
   id: string
   name: string
   email: string
+  phone: string | null
+  messageNotifyChannel: string
+}
+
+const recipientColumns = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  phone: users.phone,
+  messageNotifyChannel: users.messageNotifyChannel,
+}
+
+function asRecipient(row: {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  messageNotifyChannel: string | null
+}): StaffNotifyRecipient | null {
+  if (!row.email?.trim()) return null
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone ?? null,
+    messageNotifyChannel: row.messageNotifyChannel === 'sms' ? 'sms' : 'email',
+  }
 }
 
 /**
@@ -30,11 +57,7 @@ export async function listUsersWithPermission(
 
   if (!perm) return []
 
-  const viaBundle = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const viaBundle = await db.select(recipientColumns)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .innerJoin(accountTypePermissions, eq(accountTypePermissions.accountTypeId, accountTypes.id))
@@ -50,11 +73,7 @@ export async function listUsersWithPermission(
       )`,
     ))
 
-  const viaOverride = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const viaOverride = await db.select(recipientColumns)
     .from(users)
     .innerJoin(userPermissionOverrides, eq(userPermissionOverrides.userId, users.id))
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
@@ -67,8 +86,8 @@ export async function listUsersWithPermission(
 
   const byId = new Map<string, StaffNotifyRecipient>()
   for (const row of [...viaBundle, ...viaOverride]) {
-    if (!row.email?.trim()) continue
-    byId.set(row.id, row)
+    const recipient = asRecipient(row)
+    if (recipient) byId.set(recipient.id, recipient)
   }
   return [...byId.values()]
 }
@@ -102,11 +121,7 @@ export async function listAllTeamMembers(
   db: Db,
   excludeUserId?: string | null,
 ): Promise<StaffNotifyRecipient[]> {
-  const rows = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const rows = await db.select(recipientColumns)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
@@ -115,8 +130,9 @@ export async function listAllTeamMembers(
       ne(accountTypes.key, 'customer'),
     ))
 
-  if (!excludeUserId) return rows.filter(r => r.email?.trim())
-  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+  const mapped = rows.map(asRecipient).filter((r): r is StaffNotifyRecipient => !!r)
+  if (!excludeUserId) return mapped
+  return mapped.filter(r => r.id !== excludeUserId)
 }
 
 /** Active admin / manager / super_admin accounts (daily summary recipients). */
@@ -125,11 +141,7 @@ export async function listManagersAndAdmins(
   excludeUserId?: string | null,
 ): Promise<StaffNotifyRecipient[]> {
   // Include active accounts even if approvedAt is null (bootstrap super_admin edge cases).
-  const rows = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const rows = await db.select(recipientColumns)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
@@ -137,8 +149,9 @@ export async function listManagersAndAdmins(
       inArray(accountTypes.key, ['super_admin', 'admin', 'manager']),
     ))
 
-  if (!excludeUserId) return rows.filter(r => r.email?.trim())
-  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+  const mapped = rows.map(asRecipient).filter((r): r is StaffNotifyRecipient => !!r)
+  if (!excludeUserId) return mapped
+  return mapped.filter(r => r.id !== excludeUserId)
 }
 
 /** Active approved users with the accountant account type. */
@@ -146,11 +159,7 @@ export async function listAccountants(
   db: Db,
   excludeUserId?: string | null,
 ): Promise<StaffNotifyRecipient[]> {
-  const rows = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const rows = await db.select(recipientColumns)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
@@ -159,8 +168,9 @@ export async function listAccountants(
       eq(accountTypes.key, 'accountant'),
     ))
 
-  if (!excludeUserId) return rows.filter(r => r.email?.trim())
-  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+  const mapped = rows.map(asRecipient).filter((r): r is StaffNotifyRecipient => !!r)
+  if (!excludeUserId) return mapped
+  return mapped.filter(r => r.id !== excludeUserId)
 }
 
 /** Active approved staff with accountant or admin account types. */
@@ -168,11 +178,7 @@ export async function listAccountingStaff(
   db: Db,
   excludeUserId?: string | null,
 ): Promise<StaffNotifyRecipient[]> {
-  const rows = await db.select({
-    id: users.id,
-    name: users.name,
-    email: users.email,
-  })
+  const rows = await db.select(recipientColumns)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
@@ -181,6 +187,7 @@ export async function listAccountingStaff(
       inArray(accountTypes.key, ['accountant', 'admin']),
     ))
 
-  if (!excludeUserId) return rows.filter(r => r.email?.trim())
-  return rows.filter(r => r.id !== excludeUserId && r.email?.trim())
+  const mapped = rows.map(asRecipient).filter((r): r is StaffNotifyRecipient => !!r)
+  if (!excludeUserId) return mapped
+  return mapped.filter(r => r.id !== excludeUserId)
 }

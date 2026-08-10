@@ -22,17 +22,19 @@ export default defineEventHandler(async (event) => {
     const db = useDb()
     const { user, verificationToken } = await resendVerificationEmail(db, body.email, body.password)
 
-    await enqueueVerificationEmail(db, {
+    const delivery = await enqueueVerificationEmail(db, {
       to: user.email,
       name: user.name,
       verificationToken,
+      phone: user.phone,
+      messageNotifyChannel: user.messageNotifyChannel,
     })
 
     void writeAudit(event, {
       entityType: 'user',
       entityId: user.id,
       action: 'auth.resend_verification',
-      afterData: { email: user.email },
+      afterData: { email: user.email, notifyChannel: delivery.channel },
       riskLevel: 'sensitive',
     }).catch((err) => {
       console.warn('[audit] resend verification event failed:', (err as Error).message)
@@ -40,7 +42,9 @@ export default defineEventHandler(async (event) => {
 
     return {
       status: 'sent',
-      message: 'Verification email sent. Check your inbox and spam folder — the link expires in 24 hours.',
+      message: delivery.channel === 'sms'
+        ? 'Verification text sent. The link expires in 24 hours.'
+        : 'Verification email sent. Check your inbox and spam folder — the link expires in 24 hours.',
     }
   }
   catch (err) {

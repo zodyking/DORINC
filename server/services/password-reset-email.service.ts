@@ -28,7 +28,7 @@ export async function sendPasswordResetEmail(
   })
 
   if (delivery?.channel === 'sms') {
-    await enqueueTemplatedSms(db, {
+    const result = await enqueueTemplatedSms(db, {
       to: delivery.phone,
       typeKey: 'password_reset',
       vars: {
@@ -36,7 +36,7 @@ export async function sendPasswordResetEmail(
         resetUrl,
       },
     })
-    return { channel: 'sms' as const }
+    if (result.queued) return { channel: 'sms' as const }
   }
 
   const templateOverride = await getActiveEmailTemplateContent(db, 'password_reset')

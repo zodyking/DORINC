@@ -2,25 +2,16 @@
 import { buildChatMessageReceivedEmail } from '../../mail/templates/system.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 import { TEAM_CHAT_TITLE } from './team-chat.mjs'
-import { loadQuoConfig } from './app-config.mjs'
+import {
+  enqueueRecipientNotification,
+  isQuoSmsEnabled,
+} from './sms-notify.mjs'
 
 const ENTITY_REF_TOKEN_RE = /\[\[ref:([a-z_]+):([0-9a-f-]{36}):([^\]]+)\]\]/gi
 
 function messagePreview(body) {
   const stripped = String(body ?? '').replace(ENTITY_REF_TOKEN_RE, (_match, _type, _id, label) => label)
   return stripped.length > 120 ? `${stripped.slice(0, 117)}…` : stripped
-}
-
-function normalizePhoneE164(value) {
-  if (value == null) return null
-  const trimmed = String(value).trim()
-  if (!trimmed) return null
-  if (/^\+[1-9]\d{7,14}$/.test(trimmed)) return trimmed
-  const digits = trimmed.replace(/\D/g, '')
-  if (digits.length === 10) return `+1${digits}`
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
-  if (digits.length >= 8 && digits.length <= 15) return `+${digits}`
-  return null
 }
 
 async function loadEmailBrand(pool) {
@@ -42,33 +33,6 @@ async function loadEmailBrand(pool) {
     helpUrl: `${appUrl}/help`,
     signInUrl: `${appUrl}/auth/login`,
   }
-}
-
-async function isQuoSmsEnabled(pool) {
-  const config = await loadQuoConfig(pool)
-  if (!config?.enabled || !config.apiKey || !config.fromNumber) return false
-  return true
-}
-
-async function resolveSmsBody(pool, typeKey, vars) {
-  const { rows } = await pool.query(
-    `SELECT content, is_active FROM sms_templates WHERE type_key = $1 LIMIT 1`,
-    [typeKey],
-  )
-  let body = null
-  if (rows[0]?.is_active && rows[0]?.content?.body) {
-    body = String(rows[0].content.body)
-  }
-  if (!body) {
-    const defaults = {
-      chat_message_received: '{{brandName}}: {{senderName}} in {{channelLabel}}: "{{messagePreview}}" — {{messagesUrl}}',
-    }
-    body = defaults[typeKey] || ''
-  }
-  return String(body).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
-    const value = vars[key]
-    return value == null ? '' : String(value)
-  }).trim()
 }
 
 /**
@@ -129,37 +93,6 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
   const templateOverride = await loadActiveEmailTemplateContent(pool, 'chat_message_received')
   let queued = 0
   for (const recipient of recipients) {
-    const preferSms = quoOn && recipient.message_notify_channel === 'sms'
-    const phone = preferSms ? normalizePhoneE164(recipient.phone) : null
-
-    if (phone) {
-      const body = await resolveSmsBody(pool, 'chat_message_received', {
-        brandName: brand.brandName,
-        appUrl: brand.appUrl,
-        senderName,
-        channelLabel,
-        messagePreview: preview,
-        messagesUrl,
-        recipientName: recipient.name || 'Team member',
-      })
-      if (body) {
-        await pool.query(
-          `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
-           VALUES ('sms_send', $1, 'queued', 0, 3, now())`,
-          [JSON.stringify({
-            to: phone,
-            body,
-            notificationKind: 'chat_message_received',
-            conversationId: opts.conversationId,
-            messageId: opts.messageId,
-            recipientUserId: recipient.id,
-          })],
-        )
-        queued++
-        continue
-      }
-    }
-
     const mail = buildChatMessageReceivedEmail({
       recipientName: recipient.name || 'Team member',
       senderName,
@@ -172,20 +105,25 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
       templateOverride,
     })
 
-    await pool.query(
-      `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
-       VALUES ('email_send', $1, 'queued', 0, 3, now())`,
-      [JSON.stringify({
-        to: recipient.email,
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        notificationKind: 'chat_message_received',
+    await enqueueRecipientNotification(pool, {
+      recipient,
+      quoOn,
+      smsTypeKey: 'chat_message_received',
+      smsVars: {
+        brandName: brand.brandName,
+        appUrl: brand.appUrl,
+        senderName,
+        channelLabel,
+        messagePreview: preview,
+        messagesUrl,
+        recipientName: recipient.name || 'Team member',
+      },
+      email: mail,
+      meta: {
         conversationId: opts.conversationId,
         messageId: opts.messageId,
-        recipientUserId: recipient.id,
-      })],
-    )
+      },
+    })
     queued++
   }
 

@@ -17,6 +17,15 @@ describe('sms template catalog', () => {
     expect(keys).toContain('chat_message_received')
     expect(keys).toContain('password_reset')
     expect(keys).toContain('staff_invite')
+    expect(keys).toContain('staff_password_reset')
+    expect(keys).toContain('deletion_request_submitted')
+    expect(keys).toContain('deletion_request_result')
+    expect(keys).toContain('user_signup_pending')
+    expect(keys).toContain('invoice_pending_approval')
+    expect(keys).toContain('customer_service_request_staff')
+    expect(keys).toContain('customer_change_request_staff')
+    expect(keys).toContain('customer_email_received_staff')
+    expect(keys).toContain('daily_summary_report')
     expect(keys).toContain('quo_test')
 
     for (const def of SMS_TEMPLATE_CATALOG) {

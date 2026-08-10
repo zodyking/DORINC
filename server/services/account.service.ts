@@ -8,6 +8,7 @@ export type AccountServiceError
   = | 'EMAIL_TAKEN'
     | 'INVALID_PASSWORD'
     | 'SESSION_NOT_FOUND'
+    | 'PHONE_REQUIRED'
 
 export class AccountServiceError extends Error {
   constructor(public readonly code: AccountServiceError) {
@@ -197,6 +198,8 @@ export async function updateAccountProfile(
   }
   if (input.phone !== undefined) {
     changes.phone = input.phone ?? null
+    // Clearing the phone must drop Text preference so alerts don't silently email.
+    if (!input.phone) changes.messageNotifyChannel = 'email'
   }
 
   const [user] = await db.update(users)
@@ -226,6 +229,16 @@ export async function updateAccountNotificationPrefs(
     const [user] = await db.select().from(users).where(eq(users.id, userId))
     if (!user) throw new AccountServiceError('SESSION_NOT_FOUND')
     return user
+  }
+
+  const [existing] = await db.select().from(users).where(eq(users.id, userId))
+  if (!existing) throw new AccountServiceError('SESSION_NOT_FOUND')
+
+  if (input.messageNotifyChannel === 'sms') {
+    const { normalizePhoneE164 } = await import('../../shared/format/phone-e164')
+    if (!normalizePhoneE164(existing.phone)) {
+      throw new AccountServiceError('PHONE_REQUIRED')
+    }
   }
 
   const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }

@@ -10,7 +10,6 @@ import {
   buildInvoicePendingApprovalEmail,
   buildUserSignupPendingEmail,
 } from '../mail/templates/system'
-import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import {
   listAccountants,
@@ -27,6 +26,8 @@ import {
   formatPdfVehicleYearMakeModel,
 } from '../../shared/document-pdf-payload'
 import { cleanPlainEmailText, stripHtmlToText } from '../../shared/email-display'
+import { deliverUserNotification } from './notify-delivery.service'
+import { loadUserNotifyProfile } from './user-notify-channel.service'
 
 const ENTITY_TYPE_LABELS: Record<DeletionEntityType, string> = {
   customer: 'Customer',
@@ -34,21 +35,6 @@ const ENTITY_TYPE_LABELS: Record<DeletionEntityType, string> = {
   service_log: 'Service log',
   invoice: 'Invoice',
   conversation: 'Conversation',
-}
-
-async function enqueueHtmlMail(
-  db: Db,
-  to: string,
-  mail: { subject: string, text: string, html: string },
-  meta: Record<string, unknown> = {},
-) {
-  return enqueueJob(db, 'email_send', {
-    to,
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
-    ...meta,
-  })
 }
 
 export async function notifyDeletionRequestSubmitted(
@@ -94,12 +80,24 @@ export async function notifyDeletionRequestSubmitted(
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, reviewer.email, mail, {
-      notificationKind: 'deletion_request_submitted',
-      requestId: opts.requestId,
-      recipientUserId: reviewer.id,
+    const result = await deliverUserNotification(db, reviewer, {
+      sms: {
+        typeKey: 'deletion_request_submitted',
+        vars: {
+          reviewerName: reviewer.name,
+          submitterName: opts.submitterName,
+          entityTypeLabel: ENTITY_TYPE_LABELS[opts.entityType],
+          entityLabel: opts.entityLabel,
+          reviewUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'deletion_request_submitted',
+        requestId: opts.requestId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
@@ -143,14 +141,35 @@ export async function notifyDeletionRequestResult(
     templateOverride,
   })
 
-  await enqueueHtmlMail(db, to, mail, {
-    notificationKind: 'deletion_request_result',
-    requestId: opts.requestId,
-    requestStatus: opts.status,
-    recipientUserId: opts.requestorId,
+  const profile = await loadUserNotifyProfile(db, opts.requestorId)
+  const detailLine = opts.reviewedByName
+    ? `Reviewed by ${opts.reviewedByName}.`
+    : (opts.reviewReason?.trim() ? opts.reviewReason.trim() : '')
+  const result = await deliverUserNotification(db, {
+    id: opts.requestorId,
+    email: to,
+    phone: profile?.phone,
+    messageNotifyChannel: profile?.messageNotifyChannel,
+  }, {
+    sms: {
+      typeKey: 'deletion_request_result',
+      vars: {
+        requestorName: opts.requestorName || 'there',
+        entityTypeLabel: ENTITY_TYPE_LABELS[opts.entityType],
+        entityLabel: opts.entityLabel,
+        status: opts.status,
+        detailLine,
+      },
+    },
+    email: mail,
+    meta: {
+      notificationKind: 'deletion_request_result',
+      requestId: opts.requestId,
+      requestStatus: opts.status,
+    },
   })
 
-  return { queued: true as const }
+  return { queued: result.channel !== 'none' }
 }
 
 export async function notifyUserSignupPendingApproval(
@@ -179,12 +198,23 @@ export async function notifyUserSignupPendingApproval(
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, admin.email, mail, {
-      notificationKind: 'user_signup_pending',
-      userId: opts.userId,
-      recipientUserId: admin.id,
+    const result = await deliverUserNotification(db, admin, {
+      sms: {
+        typeKey: 'user_signup_pending',
+        vars: {
+          adminName: admin.name,
+          userName: opts.userName,
+          userEmail: opts.userEmail,
+          usersUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'user_signup_pending',
+        userId: opts.userId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
@@ -221,12 +251,24 @@ export async function notifyInvoicePendingApproval(db: Db, invoiceId: string, ac
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, approver.email, mail, {
-      notificationKind: 'invoice_pending_approval',
-      invoiceId: invoice.id,
-      recipientUserId: approver.id,
+    const result = await deliverUserNotification(db, approver, {
+      sms: {
+        typeKey: 'invoice_pending_approval',
+        vars: {
+          approverName: approver.name,
+          invoiceNumber,
+          customerName: customer.displayName,
+          total: String(invoice.total),
+          invoiceUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'invoice_pending_approval',
+        invoiceId: invoice.id,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
@@ -276,13 +318,25 @@ export async function notifyCustomerServiceRequestSubmitted(
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, recipient.email, mail, {
-      notificationKind: 'customer_service_request_submitted',
-      serviceLogId: opts.logId,
-      customerId: opts.customerId,
-      recipientUserId: recipient.id,
+    const result = await deliverUserNotification(db, recipient, {
+      sms: {
+        typeKey: 'customer_service_request_staff',
+        vars: {
+          recipientName: recipient.name,
+          customerName: opts.customerName,
+          vehicleUnit,
+          urgency: opts.urgency,
+          detailUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'customer_service_request_submitted',
+        serviceLogId: opts.logId,
+        customerId: opts.customerId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
@@ -330,14 +384,26 @@ export async function notifyCustomerChangeRequestSubmitted(
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, recipient.email, mail, {
-      notificationKind: 'customer_change_request_submitted',
-      requestId: opts.requestId,
-      requestKind: opts.requestKind,
-      customerId: opts.customerId,
-      recipientUserId: recipient.id,
+    const result = await deliverUserNotification(db, recipient, {
+      sms: {
+        typeKey: 'customer_change_request_staff',
+        vars: {
+          recipientName: recipient.name,
+          customerName: opts.customerName,
+          requestKindLabel,
+          topic: opts.topic,
+          detailUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'customer_change_request_submitted',
+        requestId: opts.requestId,
+        requestKind: opts.requestKind,
+        customerId: opts.customerId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
@@ -384,12 +450,24 @@ export async function notifyCustomerEmailReceived(
       brand,
       templateOverride,
     })
-    await enqueueHtmlMail(db, recipient.email, mail, {
-      notificationKind: 'customer_email_received',
-      conversationId: opts.conversationId,
-      recipientUserId: recipient.id,
+    const result = await deliverUserNotification(db, recipient, {
+      sms: {
+        typeKey: 'customer_email_received_staff',
+        vars: {
+          recipientName: recipient.name,
+          customerName: opts.customerName,
+          customerEmail: opts.customerEmail,
+          subject: opts.subject,
+          messagesUrl,
+        },
+      },
+      email: mail,
+      meta: {
+        notificationKind: 'customer_email_received',
+        conversationId: opts.conversationId,
+      },
     })
-    queued++
+    if (result.channel !== 'none') queued++
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
