@@ -315,7 +315,6 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   placeholder="(212) 203 7378"
                   @blur="profilePhone = formatPhoneDisplay(profilePhone)"
                 >
-                <span class="help">Always available on your account. Format like (212) 203 7378. Used for text alerts when Quo SMS is enabled.</span>
               </label>
               <p v-if="profileMessage" style="color:#059669; font-size:13px;">{{ profileMessage }}</p>
               <p v-if="profileError" style="color:#dc2626; font-size:13px;">{{ profileError }}</p>

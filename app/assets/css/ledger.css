@@ -37,8 +37,9 @@ a{ color:#4f46e5; }
   gap:10px; padding:22px 24px 18px; border-bottom:1px solid #f1f5f9;
 }
 .auth-head .sq{
-  width:40px; height:40px; flex:none;
+  width:64px; height:64px; flex:none;
   display:block; object-fit:contain;
+  border-radius:14px;
 }
 .auth-head__text{ min-width:0; text-align:center; }
 .auth-head b{ display:block; font-size:17px; font-weight:800; letter-spacing:-.02em; line-height:1.2; }

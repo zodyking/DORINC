@@ -27,7 +27,7 @@ async function submit() {
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="auth-head">
-          <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
+          <img class="sq" :src="BRAND_ICON" alt="" width="64" height="64">
           <div class="auth-head__text">
             <b>Resend verification</b>
             <small>DORINC staff account</small>
