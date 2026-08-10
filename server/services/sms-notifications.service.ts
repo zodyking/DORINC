@@ -29,6 +29,9 @@ export async function enqueueTemplatedSms(
     meta?: Record<string, unknown>
   },
 ) {
+  // Refresh before gating — avoids a stale "disabled" cache after Quo is enabled.
+  const { refreshQuoConfigCache } = await import('./quo.service')
+  await refreshQuoConfigCache(db)
   if (!(await isQuoEnabled(db))) {
     return { queued: false as const, reason: 'quo_disabled' as const }
   }
