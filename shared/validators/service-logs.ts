@@ -23,6 +23,11 @@ export const serviceLogStatusSchema = z.enum([
   'archived',
 ])
 
+export const serviceLogCheckMarkSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+})
+
 export const serviceLogDraftLineSchema = z.object({
   lineType: z.preprocess(
     v => v == null || v === '' ? undefined : normalizeLineType(String(v)),
@@ -32,7 +37,17 @@ export const serviceLogDraftLineSchema = z.object({
   qty: z.string().max(30).nullish(),
   rate: z.string().max(30).nullish(),
   amount: z.string().max(30).nullish(),
+  /** 0–1 model certainty for freeform / rear-page lines. */
+  confidence: z.number().min(0).max(1).nullish(),
+  /** Matched id from the active service-log sheet editor catalog. */
+  matchedSheetItemId: z.string().max(120).nullish(),
+  sourcePageIndex: z.number().int().min(1).max(20).nullish(),
+  sourceFileId: z.string().uuid().nullish(),
+  pageType: z.string().max(40).nullish(),
+  /** Normalized checkbox mark on the source photo (for invoice edit overlays). */
+  checkMark: serviceLogCheckMarkSchema.nullish(),
 })
+
 
 export const serviceLogCreateSchema = z.object({
   customerId: uuidSchema,

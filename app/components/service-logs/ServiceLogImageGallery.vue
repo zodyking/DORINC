@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ServiceLogPhotoFile } from '~/composables/useServiceLogPhotoPreviews'
 import { useImageZoomPan } from '~/composables/useImageZoomPan'
+import type { ExtractionCheckMark } from '~/utils/ai-ui'
 
 const props = withDefaults(defineProps<{
   serviceLogId: string
@@ -10,12 +11,14 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   deleteBusy?: boolean
   zoomable?: boolean
+  checkMarks?: ExtractionCheckMark[]
 }>(), {
   modelValue: 0,
   compact: false,
   editable: false,
   deleteBusy: false,
   zoomable: true,
+  checkMarks: () => [],
 })
 
 const emit = defineEmits<{
@@ -46,6 +49,17 @@ watch(imageFiles, (imgs) => {
 const activeFile = computed(() => imageFiles.value[activeIndex.value] ?? null)
 const activePreview = computed(() => (activeFile.value ? previewUrl(activeFile.value.id) : ''))
 const hasMultiple = computed(() => imageFiles.value.length > 1)
+const activeCheckMarks = computed(() => {
+  const fileId = activeFile.value?.id
+  if (!fileId) return [] as ExtractionCheckMark[]
+  return (props.checkMarks ?? []).filter(mark =>
+    mark.fileId === fileId
+    && Number.isFinite(mark.x)
+    && Number.isFinite(mark.y)
+    && mark.x >= 0 && mark.x <= 1
+    && mark.y >= 0 && mark.y <= 1,
+  )
+})
 
 const displayErrors = ref(new Set<string>())
 const stageRef = ref<HTMLElement | null>(null)
@@ -186,16 +200,34 @@ function onKeydown(event: KeyboardEvent) {
           :class="{ 'sl-gallery__zoom-wrap--active': zoomEnabled }"
           :style="zoomEnabled ? transformStyle : undefined"
         >
-          <img
-            ref="imageRef"
-            :key="activeFile.id"
-            :src="activePreview"
-            :alt="activeFile.originalFilename"
-            class="sl-gallery__img"
-            :class="{ 'sl-gallery__img--zoomable': zoomEnabled }"
-            draggable="false"
-            @error="onImageError(activeFile.id)"
-          >
+          <div class="sl-gallery__img-stack">
+            <img
+              ref="imageRef"
+              :key="activeFile.id"
+              :src="activePreview"
+              :alt="activeFile.originalFilename"
+              class="sl-gallery__img"
+              :class="{ 'sl-gallery__img--zoomable': zoomEnabled }"
+              draggable="false"
+              @error="onImageError(activeFile.id)"
+            >
+            <div
+              v-if="activeCheckMarks.length"
+              class="sl-gallery__marks"
+              aria-label="Parsed checklist marks from AI extraction"
+            >
+              <span
+                v-for="(mark, markIndex) in activeCheckMarks"
+                :key="`${mark.fileId}-${markIndex}-${mark.matchedSheetItemId || mark.description || ''}`"
+                class="sl-gallery__mark"
+                :style="{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }"
+                :title="mark.description || 'Parsed check'"
+              >
+                <span class="sl-gallery__mark-icon" aria-hidden="true">✓</span>
+                <span class="sr-only">{{ mark.description || 'Parsed check' }}</span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -381,11 +413,58 @@ function onKeydown(event: KeyboardEvent) {
   height: 100%;
 }
 
+.sl-gallery__img-stack {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+}
+
 .sl-gallery__img {
   display: block;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   pointer-events: none;
+}
+
+.sl-gallery__marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sl-gallery__mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.92);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 2px 8px rgba(15, 23, 42, 0.28);
+}
+
+.sl-gallery__mark-icon {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .sl-gallery__img--zoomable {

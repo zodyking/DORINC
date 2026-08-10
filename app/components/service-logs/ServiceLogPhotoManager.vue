@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import ServiceLogImageGallery from '~/components/service-logs/ServiceLogImageGallery.vue'
 import type { ServiceLogPhotoFile } from '~/composables/useServiceLogPhotoPreviews'
+import type { ExtractionCheckMark } from '~/utils/ai-ui'
 
 const props = defineProps<{
   serviceLogId: string
   files: ServiceLogPhotoFile[]
   editable?: boolean
+  /** Parsed checkmarks from AI extraction to overlay on original uploads. */
+  checkMarks?: ExtractionCheckMark[]
 }>()
 
 const emit = defineEmits<{
@@ -84,6 +87,7 @@ async function deleteActivePhoto() {
       :files="imageFiles"
       :editable="editable"
       :delete-busy="deleteBusy"
+      :check-marks="checkMarks"
       @delete="deleteActivePhoto"
     />
 
