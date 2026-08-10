@@ -1,6 +1,11 @@
 import type { Db } from '../db/client'
 import { enqueueJob } from './jobs.service'
-import { isQuoEnabled } from './quo.service'
+import {
+  getQuoConfig,
+  isQuoSmsEnabled,
+  refreshQuoConfigCache,
+  sendQuoSms,
+} from './quo.service'
 import { resolveSmsBody } from './sms-templates.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getAppUrl } from './app-config.service'
@@ -20,6 +25,10 @@ export async function enqueueSmsSend(
   })
 }
 
+/**
+ * Deliver a templated SMS the same way Control Panel "Send test SMS" does:
+ * call Quo immediately from Nitro. Only queue a retry job if the direct send fails.
+ */
 export async function enqueueTemplatedSms(
   db: Db,
   input: {
@@ -29,10 +38,9 @@ export async function enqueueTemplatedSms(
     meta?: Record<string, unknown>
   },
 ) {
-  // Refresh before gating — avoids a stale "disabled" cache after Quo is enabled.
-  const { refreshQuoConfigCache } = await import('./quo.service')
   await refreshQuoConfigCache(db)
-  if (!(await isQuoEnabled(db))) {
+  const config = await getQuoConfig(db)
+  if (!isQuoSmsEnabled(config)) {
     return { queued: false as const, reason: 'quo_disabled' as const }
   }
 
@@ -44,13 +52,30 @@ export async function enqueueTemplatedSms(
   })
   if (!body) return { queued: false as const, reason: 'empty_body' as const }
 
-  await enqueueSmsSend(db, {
-    to: input.to,
-    body,
-    meta: {
-      notificationKind: input.typeKey,
-      ...(input.meta ?? {}),
-    },
-  })
-  return { queued: true as const }
+  const meta = {
+    notificationKind: input.typeKey,
+    ...(input.meta ?? {}),
+  }
+
+  try {
+    await sendQuoSms({
+      apiKey: config.apiKey,
+      from: config.fromNumber,
+      to: input.to,
+      content: body,
+    })
+    return { queued: true as const, mode: 'direct' as const }
+  }
+  catch (err) {
+    console.warn(
+      `[sms] direct Quo send failed for ${input.typeKey}; queueing retry:`,
+      err instanceof Error ? err.message : err,
+    )
+    await enqueueSmsSend(db, {
+      to: input.to,
+      body,
+      meta,
+    })
+    return { queued: true as const, mode: 'queued' as const }
+  }
 }

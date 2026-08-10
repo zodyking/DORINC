@@ -32,6 +32,7 @@ export async function resolveUserNotifyDelivery(
     if (channel === 'sms') {
       const phone = normalizePhoneE164(user.phone)
       if (phone) return { channel: 'sms', phone, email }
+      console.warn('[notify] SMS preferred but phone missing/invalid; falling back to email for', email)
     }
     return { channel: 'email', email }
   }

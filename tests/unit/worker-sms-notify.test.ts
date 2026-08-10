@@ -1,8 +1,20 @@
-import { describe, expect, it, vi } from 'vitest'
-import { enqueueRecipientNotification, resolveSmsBody } from '../../server/workers/lib/sms-notify.mjs'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const loadQuoConfig = vi.fn()
+
+vi.mock('../../server/workers/lib/app-config.mjs', () => ({
+  loadQuoConfig: (...args: unknown[]) => loadQuoConfig(...args),
+}))
 
 describe('worker sms-notify', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    loadQuoConfig.mockReset()
+    vi.unstubAllGlobals()
+  })
+
   it('resolves catalog defaults when template row is inactive', async () => {
+    const { resolveSmsBody } = await import('../../server/workers/lib/sms-notify.mjs')
     const pool = {
       query: vi.fn(async () => ({ rows: [{ is_active: false, content: { body: 'ignored' } }] })),
     }
@@ -18,24 +30,32 @@ describe('worker sms-notify', () => {
     expect(body).toContain('INV-1')
   })
 
-  it('queues sms_send when Quo is on and recipient prefers Text', async () => {
-    const jobs: Array<{ jobType: string, payload: Record<string, unknown> }> = []
+  it('sends SMS directly via Quo when recipient prefers Text', async () => {
+    loadQuoConfig.mockResolvedValue({
+      enabled: true,
+      apiKey: 'sk_test',
+      fromNumber: '+15165184847',
+    })
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => JSON.stringify({ id: 'm1' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const jobs: string[] = []
     const pool = {
-      query: vi.fn(async (sql: string, params: unknown[] = []) => {
+      query: vi.fn(async (sql: string) => {
         const text = String(sql)
-        if (text.includes('FROM sms_templates')) {
-          return { rows: [] }
-        }
+        if (text.includes('FROM sms_templates')) return { rows: [] }
         if (text.startsWith('INSERT INTO worker_jobs')) {
-          const payload = typeof params[0] === 'string' ? JSON.parse(params[0]) : params[0]
-          const jobType = text.includes("'sms_send'") ? 'sms_send' : 'email_send'
-          jobs.push({ jobType, payload: payload as Record<string, unknown> })
+          jobs.push(text.includes("'sms_send'") ? 'sms_send' : 'email_send')
           return { rowCount: 1 }
         }
         throw new Error(`Unhandled: ${text}`)
       }),
     }
 
+    const { enqueueRecipientNotification } = await import('../../server/workers/lib/sms-notify.mjs')
     const channel = await enqueueRecipientNotification(pool, {
       recipient: {
         id: 'u1',
@@ -57,25 +77,25 @@ describe('worker sms-notify', () => {
     })
 
     expect(channel).toBe('sms')
-    expect(jobs).toHaveLength(1)
-    expect(jobs[0]!.jobType).toBe('sms_send')
-    expect(jobs[0]!.payload.to).toBe('+15551234567')
-    expect(String(jobs[0]!.payload.body)).toContain('Alex')
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/messages')
+    expect(jobs).toEqual([])
   })
 
   it('queues email_send when recipient prefers Email', async () => {
-    const jobs: Array<{ jobType: string }> = []
+    const jobs: string[] = []
     const pool = {
       query: vi.fn(async (sql: string) => {
         const text = String(sql)
         if (text.startsWith('INSERT INTO worker_jobs')) {
-          jobs.push({ jobType: text.includes("'sms_send'") ? 'sms_send' : 'email_send' })
+          jobs.push(text.includes("'sms_send'") ? 'sms_send' : 'email_send')
           return { rowCount: 1 }
         }
         throw new Error(`Unhandled: ${text}`)
       }),
     }
 
+    const { enqueueRecipientNotification } = await import('../../server/workers/lib/sms-notify.mjs')
     const channel = await enqueueRecipientNotification(pool, {
       recipient: {
         id: 'u1',
@@ -90,6 +110,6 @@ describe('worker sms-notify', () => {
     })
 
     expect(channel).toBe('email')
-    expect(jobs).toEqual([{ jobType: 'email_send' }])
+    expect(jobs).toEqual(['email_send'])
   })
 })

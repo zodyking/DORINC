@@ -1,6 +1,8 @@
 /** Shared Quo SMS helpers for worker/automation notification paths. */
 import { loadQuoConfig } from './app-config.mjs'
 
+const QUO_API_BASE = 'https://api.quo.com'
+
 /** Catalog defaults — keep in sync with shared/sms-template-catalog.ts */
 export const SMS_DEFAULT_BODIES = {
   login_notification: '{{brandName}}: New sign-in for {{name}}. {{locationLine}} If this wasn\'t you, reset your password in the app.',
@@ -55,9 +57,61 @@ export async function resolveSmsBody(pool, typeKey, vars) {
   }).trim()
 }
 
+/** Send via Quo immediately (same API shape as Control Panel test SMS). */
+export async function sendQuoSmsDirect(pool, input) {
+  const config = await loadQuoConfig(pool)
+  if (!config?.enabled || !config.apiKey || !config.fromNumber) {
+    throw new Error('Quo SMS is not enabled')
+  }
+
+  const to = normalizePhoneE164(input?.to)
+  const from = normalizePhoneE164(config.fromNumber) ?? String(config.fromNumber).trim()
+  const content = String(input?.body ?? '').trim()
+  if (!to) throw new Error('Invalid destination phone number')
+  if (!from) throw new Error('Quo from number is not configured')
+  if (!content) throw new Error('SMS body is empty')
+
+  const res = await fetch(`${QUO_API_BASE}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: config.apiKey,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      content: content.slice(0, 1600),
+      from,
+      to: [to],
+    }),
+  })
+
+  const text = await res.text()
+  if (!res.ok) {
+    let message = `Quo API error (${res.status})`
+    try {
+      const body = text ? JSON.parse(text) : null
+      if (body?.message) message = String(body.message)
+    }
+    catch {
+      if (text) message = text.slice(0, 200)
+    }
+    throw new Error(message)
+  }
+  return true
+}
+
+async function queueSmsJob(pool, payload) {
+  await pool.query(
+    `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
+     VALUES ('sms_send', $1, 'queued', 0, 3, now())`,
+    [JSON.stringify(payload)],
+  )
+}
+
 /**
  * Prefer SMS when Quo is on, user channel is sms, and phone is valid.
- * Falls back to email_send when SMS cannot be queued.
+ * Sends to Quo immediately (like test SMS); queues a retry only if direct send fails.
+ * Falls back to email_send when SMS cannot be delivered.
  */
 export async function enqueueRecipientNotification(pool, opts) {
   const {
@@ -75,18 +129,25 @@ export async function enqueueRecipientNotification(pool, opts) {
   if (phone && smsTypeKey) {
     const body = await resolveSmsBody(pool, smsTypeKey, smsVars)
     if (body) {
-      await pool.query(
-        `INSERT INTO worker_jobs (job_type, payload, status, attempts, max_attempts, run_after)
-         VALUES ('sms_send', $1, 'queued', 0, 3, now())`,
-        [JSON.stringify({
-          to: phone,
-          body,
-          notificationKind: smsTypeKey,
-          recipientUserId: recipient.id,
-          ...meta,
-        })],
-      )
-      return 'sms'
+      const payload = {
+        to: phone,
+        body,
+        notificationKind: smsTypeKey,
+        recipientUserId: recipient.id,
+        ...meta,
+      }
+      try {
+        await sendQuoSmsDirect(pool, payload)
+        return 'sms'
+      }
+      catch (err) {
+        console.warn(
+          `[sms-notify] direct Quo send failed for ${smsTypeKey}; queueing retry:`,
+          err instanceof Error ? err.message : err,
+        )
+        await queueSmsJob(pool, payload)
+        return 'sms'
+      }
     }
   }
 
