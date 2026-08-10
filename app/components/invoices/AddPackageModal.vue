@@ -15,8 +15,11 @@ const emit = defineEmits<{
 
 withDefaults(defineProps<{
   disabled?: boolean
+  /** Hide the built-in trigger when opening from a parent menu/button. */
+  hideTrigger?: boolean
 }>(), {
   disabled: false,
+  hideTrigger: false,
 })
 
 const open = ref(false)
@@ -93,7 +96,13 @@ defineExpose({ showModal })
 
 <template>
   <div class="add-pkg">
-    <button type="button" class="btn sm add-pkg-trigger" :disabled="disabled" @click="showModal">
+    <button
+      v-if="!hideTrigger"
+      type="button"
+      class="btn sm add-pkg-trigger"
+      :disabled="disabled"
+      @click="showModal"
+    >
       + Add Package
     </button>
 
