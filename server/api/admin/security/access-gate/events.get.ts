@@ -8,9 +8,9 @@ const querySchema = z.object({
   type: z.enum(['visit', 'login']).optional(),
   limit: z.coerce.number().int().min(1).max(5000).optional(),
   /** Inclusive start ISO timestamp. */
-  from: z.string().datetime({ offset: true }).or(z.string().datetime()).optional(),
+  from: z.string().trim().min(10).max(40).optional(),
   /** Exclusive end ISO timestamp. */
-  to: z.string().datetime({ offset: true }).or(z.string().datetime()).optional(),
+  to: z.string().trim().min(10).max(40).optional(),
 })
 
 export default defineEventHandler(async (event) => {
