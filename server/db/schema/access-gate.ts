@@ -1,4 +1,4 @@
-import { doublePrecision, index, inet, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { doublePrecision, index, inet, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 export const ACCESS_EVENT_TYPES = ['visit', 'login'] as const
 export const ACCESS_EVENT_OUTCOMES = ['allowed', 'blocked', 'login_success', 'login_failed'] as const
@@ -20,6 +20,19 @@ export const accessEvents = pgTable('access_events', {
   path: text('path'),
   userAgent: text('user_agent'),
   deviceId: text('device_id'),
+  os: text('os'),
+  deviceType: text('device_type'),
+  screenResolution: text('screen_resolution'),
+  devicePixelRatio: doublePrecision('device_pixel_ratio'),
+  cpuCores: integer('cpu_cores'),
+  deviceMemoryGb: doublePrecision('device_memory_gb'),
+  gpuRenderer: text('gpu_renderer'),
+  canvasFingerprint: text('canvas_fingerprint'),
+  webglFingerprint: text('webgl_fingerprint'),
+  audioFingerprint: text('audio_fingerprint'),
+  timezone: text('timezone'),
+  language: text('language'),
+  maxTouchPoints: integer('max_touch_points'),
   latitude: doublePrecision('latitude'),
   longitude: doublePrecision('longitude'),
   locationLabel: text('location_label'),

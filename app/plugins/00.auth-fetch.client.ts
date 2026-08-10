@@ -15,6 +15,21 @@ export default defineNuxtPlugin(() => {
       options.headers = headers
     },
     onResponseError(ctx) {
+      // Access gate can block API calls after SPA navigation leaves the fence.
+      if (ctx.response.status === 403) {
+        const body = ctx.response._data as {
+          details?: { reason?: string, redirectTo?: string }
+          data?: { details?: { reason?: string, redirectTo?: string } }
+        } | undefined
+        const details = body?.details ?? body?.data?.details
+        if (details?.reason === 'access_blocked') {
+          const redirectTo = typeof details.redirectTo === 'string' && details.redirectTo.startsWith('/')
+            ? details.redirectTo
+            : '/auth/access-restricted'
+          void navigateTo(redirectTo)
+          return
+        }
+      }
       if (ctx.response.status !== 401) return
       if (auth.sessionExpiring) return
       if (!auth.isSignedIn) return
