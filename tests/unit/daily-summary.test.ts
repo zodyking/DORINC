@@ -19,7 +19,7 @@ import type { AiProviderSettingsView } from '../../server/services/ai-provider.s
 
 function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): BillingDashboardPayload {
   return {
-    configured: { vultr: false, cloudflare: false, openrouter: false },
+    configured: { vultr: false, cloudflare: false, openrouter: false, quo: false },
     vultr: {
       configured: false,
       currency: 'USD',
@@ -53,6 +53,16 @@ function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): Billing
       usageHistory: [],
       currency: 'USD',
       hasPortalCredentials: false,
+      error: null,
+      lastUpdated: new Date().toISOString(),
+    },
+    quo: {
+      configured: false,
+      enabled: false,
+      fromNumber: null,
+      phoneNumbers: [],
+      phoneCount: 0,
+      creditsNote: null,
       error: null,
       lastUpdated: new Date().toISOString(),
     },
@@ -133,7 +143,7 @@ describe('daily summary + Susan', () => {
 
   it('builds Susan section insights without em dashes', () => {
     const billing = emptyBilling({
-      configured: { vultr: true, cloudflare: false, openrouter: true },
+      configured: { vultr: true, cloudflare: false, openrouter: true, quo: false },
       vultr: {
         ...emptyBilling().vultr,
         configured: true,
@@ -197,7 +207,7 @@ describe('daily summary + Susan', () => {
         paidThisMonthTotal: '0',
       },
       outstandingInvoices: [],
-      billing: emptyBilling({ configured: { vultr: true, cloudflare: false, openrouter: true } }),
+      billing: emptyBilling({ configured: { vultr: true, cloudflare: false, openrouter: true, quo: false } }),
       susanEnabled: true,
       susanGenerated: 2,
       sections: [

@@ -50,11 +50,13 @@ export default defineEventHandler(async (event) => {
       afterData: {
         teamChatEnabled: user.teamChatEnabled,
         messageEmailNotify: user.messageEmailNotify,
+        messageNotifyChannel: user.messageNotifyChannel,
         silentDeveloperMode: user.silentDeveloperMode,
       },
       changedFields: [
         ...(body.teamChatEnabled !== undefined ? ['teamChatEnabled'] : []),
         ...(body.messageEmailNotify !== undefined ? ['messageEmailNotify'] : []),
+        ...(body.messageNotifyChannel !== undefined ? ['messageNotifyChannel'] : []),
         ...(body.silentDeveloperMode !== undefined ? ['silentDeveloperMode'] : []),
       ],
     })
@@ -62,6 +64,7 @@ export default defineEventHandler(async (event) => {
     return {
       teamChatEnabled: user.teamChatEnabled,
       messageEmailNotify: user.messageEmailNotify,
+      messageNotifyChannel: user.messageNotifyChannel,
       silentDeveloperMode: user.silentDeveloperMode,
     }
   }

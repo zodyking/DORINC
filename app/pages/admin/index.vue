@@ -9,6 +9,7 @@ import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMoni
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
 import SettingsImapPanel from '~/components/admin/settings/SettingsImapPanel.vue'
+import SettingsQuoPanel from '~/components/admin/settings/SettingsQuoPanel.vue'
 import SettingsNotificationsPanel from '~/components/admin/settings/SettingsNotificationsPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
@@ -322,6 +323,18 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
             >
               <SettingsEmailPanel @saved="refresh()" />
               <SettingsImapPanel @saved="refresh()" />
+            </ControlPanelSection>
+
+            <ControlPanelSection
+              v-else-if="section.id === 'quo'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.quo"
+              @update:open="setSectionOpen('quo', $event)"
+            >
+              <SettingsQuoPanel @saved="refresh()" />
             </ControlPanelSection>
 
             <ControlPanelSection

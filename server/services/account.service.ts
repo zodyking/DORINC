@@ -52,7 +52,10 @@ export interface AccountDetail {
   knownDevices: AccountKnownDeviceRow[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
+  phone: string | null
+  messageNotifyChannel: 'email' | 'sms'
   silentDeveloperMode: boolean
+  quoSmsEnabled: boolean
 }
 
 function deviceKey(deviceId: string | null | undefined, userAgent: string | null | undefined): string {
@@ -150,6 +153,9 @@ export async function getAccountDetail(
   })
 
   const lastLogin = mapped.find(s => s.isCurrent) ?? mapped[0]
+  const { isQuoEnabled } = await import('./quo.service')
+  const quoSmsEnabled = await isQuoEnabled(db)
+  const channel = user.messageNotifyChannel === 'sms' ? 'sms' : 'email'
 
   return {
     id: user.id,
@@ -163,14 +169,17 @@ export async function getAccountDetail(
     knownDevices,
     teamChatEnabled: user.teamChatEnabled,
     messageEmailNotify: user.messageEmailNotify,
+    phone: user.phone ?? null,
+    messageNotifyChannel: channel,
     silentDeveloperMode: user.silentDeveloperMode,
+    quoSmsEnabled,
   }
 }
 
 export async function updateAccountProfile(
   db: Db,
   userId: string,
-  input: { firstName: string, lastName: string, email: string },
+  input: { firstName: string, lastName: string, email: string, phone?: string | null },
 ) {
   const email = input.email.trim().toLowerCase()
   const name = formatPersonName(input.firstName, input.lastName)
@@ -181,8 +190,17 @@ export async function updateAccountProfile(
 
   if (existing) throw new AccountServiceError('EMAIL_TAKEN')
 
+  const changes: Partial<typeof users.$inferInsert> = {
+    name,
+    email,
+    updatedAt: new Date(),
+  }
+  if (input.phone !== undefined) {
+    changes.phone = input.phone ?? null
+  }
+
   const [user] = await db.update(users)
-    .set({ name, email, updatedAt: new Date() })
+    .set(changes)
     .where(eq(users.id, userId))
     .returning()
 
@@ -195,12 +213,14 @@ export async function updateAccountNotificationPrefs(
   input: {
     teamChatEnabled?: boolean
     messageEmailNotify?: boolean
+    messageNotifyChannel?: 'email' | 'sms'
     silentDeveloperMode?: boolean
   },
 ) {
   if (
     input.teamChatEnabled === undefined
     && input.messageEmailNotify === undefined
+    && input.messageNotifyChannel === undefined
     && input.silentDeveloperMode === undefined
   ) {
     const [user] = await db.select().from(users).where(eq(users.id, userId))
@@ -211,6 +231,11 @@ export async function updateAccountNotificationPrefs(
   const changes: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
   if (input.teamChatEnabled !== undefined) changes.teamChatEnabled = input.teamChatEnabled
   if (input.messageEmailNotify !== undefined) changes.messageEmailNotify = input.messageEmailNotify
+  if (input.messageNotifyChannel !== undefined) {
+    changes.messageNotifyChannel = input.messageNotifyChannel
+    // Choosing a channel implies the user wants chat/security notifications.
+    changes.messageEmailNotify = true
+  }
   if (input.silentDeveloperMode !== undefined) changes.silentDeveloperMode = input.silentDeveloperMode
 
   const [user] = await db.update(users)

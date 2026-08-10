@@ -16,6 +16,8 @@ export interface KnownOutsideGeoIdentity {
   userId: string
   userName: string
   userEmail: string
+  phone?: string | null
+  messageNotifyChannel?: string | null
   match: 'ip_and_device' | 'ip' | 'device'
 }
 
@@ -68,6 +70,8 @@ export async function findKnownOutsideGeoIdentity(
     userId: users.id,
     userName: users.name,
     userEmail: users.email,
+    phone: users.phone,
+    messageNotifyChannel: users.messageNotifyChannel,
     ipAddress: sessions.ipAddress,
     userAgent: sessions.userAgent,
     deviceId: sessions.deviceId,
@@ -106,6 +110,8 @@ export async function findKnownOutsideGeoIdentity(
         userId: row.userId,
         userName: row.userName,
         userEmail: row.userEmail,
+        phone: row.phone,
+        messageNotifyChannel: row.messageNotifyChannel,
         match: (rank >= 3 && deviceMatch && ipMatch) || rank === 5
           ? 'ip_and_device'
           : rank === 2
@@ -171,9 +177,8 @@ export async function quietlyIssueOutsideGeoChallenge(
       deviceId: input.deviceId,
       locationLabel: input.locationLabel ?? null,
     })
-    await enqueueOutsideGeoVerificationEmail(db, {
-      to: identity.userEmail,
-      name: identity.userName,
+    await enqueueOutsideGeoVerification(db, {
+      identity,
       code: challenge.code,
       locationLabel: input.locationLabel ?? null,
       ipAddress: input.ipAddress,
@@ -262,6 +267,45 @@ export async function enqueueOutsideGeoVerificationEmail(
     text: mail.text,
     html: mail.html,
     notificationKind: 'outside_geo_verification',
+  })
+}
+
+export async function enqueueOutsideGeoVerification(
+  db: Db,
+  input: {
+    identity: KnownOutsideGeoIdentity
+    code: string
+    locationLabel?: string | null
+    ipAddress?: string | null
+  },
+) {
+  const { resolveUserNotifyDelivery } = await import('./user-notify-channel.service')
+  const delivery = await resolveUserNotifyDelivery(db, {
+    email: input.identity.userEmail,
+    phone: input.identity.phone,
+    messageNotifyChannel: input.identity.messageNotifyChannel,
+  })
+
+  if (delivery?.channel === 'sms') {
+    const { enqueueTemplatedSms } = await import('./sms-notifications.service')
+    return enqueueTemplatedSms(db, {
+      to: delivery.phone,
+      typeKey: 'outside_geofence_verification',
+      vars: {
+        name: input.identity.userName,
+        code: input.code,
+        expiresMinutes: String(Math.round(OUTSIDE_GEO_CODE_TTL_MS / 60_000)),
+      },
+      meta: { userId: input.identity.userId },
+    })
+  }
+
+  return enqueueOutsideGeoVerificationEmail(db, {
+    to: input.identity.userEmail,
+    name: input.identity.userName,
+    code: input.code,
+    locationLabel: input.locationLabel,
+    ipAddress: input.ipAddress,
   })
 }
 

@@ -202,6 +202,7 @@ export default defineEventHandler(async (event) => {
         .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
           to: result.user.email,
           name: result.user.name,
+          userId: result.user.id,
           portal: body.portal,
           ipAddress,
           userAgent,
@@ -241,6 +242,7 @@ export default defineEventHandler(async (event) => {
         .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
           to: result.user.email,
           name: result.user.name,
+          userId: result.user.id,
           portal: body.portal,
           ipAddress,
           userAgent,

@@ -162,6 +162,7 @@ export default defineEventHandler(async (event) => {
     .then(({ sendLoginNotificationEmail }) => sendLoginNotificationEmail(useDb(), {
       to: resolved.user.email,
       name: resolved.user.name,
+      userId: resolved.user.id,
       portal: 'staff',
       ipAddress,
       userAgent,

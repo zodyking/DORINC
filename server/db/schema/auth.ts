@@ -57,6 +57,10 @@ export const users = pgTable('users', {
   teamChatEnabled: boolean('team_chat_enabled').notNull().default(true),
   /** Email alert when a chat message is received (DM or team). */
   messageEmailNotify: boolean('message_email_notify').notNull().default(true),
+  /** Staff mobile number (E.164). Used for Quo SMS when enabled. */
+  phone: text('phone'),
+  /** Preferred channel for security / chat notifications when Quo SMS is enabled. */
+  messageNotifyChannel: text('message_notify_channel').notNull().default('email'),
   /** Suppress workflow team chat + staff emails for actions by this user (admin testing). */
   silentDeveloperMode: boolean('silent_developer_mode').notNull().default(false),
   /**

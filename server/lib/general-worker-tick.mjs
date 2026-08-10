@@ -1,6 +1,7 @@
 // Shared general-worker tick — used by worker.mjs and embedded Nitro workers.
 import { processThumbnailJobs } from '../workers/handlers/derivatives.mjs'
 import { drainMailQueue } from '../workers/handlers/mail-drain.mjs'
+import { processSmsJobs } from '../workers/handlers/sms.mjs'
 import { processInvoiceSendJobs } from '../workers/handlers/invoice-send.mjs'
 import { processAiJobs } from '../workers/handlers/ai.mjs'
 import { processDeletionAiReviewJobs } from '../workers/handlers/deletion-ai-review.mjs'
@@ -28,6 +29,12 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   const mail = await drainMailQueue(pool, mailBatch)
   if (mail.processed || mail.failed) {
     console.log(`${logPrefix} email_send processed=${mail.processed} failed=${mail.failed}`)
+  }
+
+  const smsBatch = opts.mailBatch ?? Number(process.env.SMS_BATCH_SIZE ?? 20)
+  const sms = await processSmsJobs(pool, smsBatch)
+  if (sms.processed || sms.failed) {
+    console.log(`${logPrefix} sms_send processed=${sms.processed} failed=${sms.failed}`)
   }
 
   const thumbs = await processThumbnailJobs(pool)

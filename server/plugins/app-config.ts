@@ -8,6 +8,7 @@ import { syncTrainingCatalog } from '../services/training.service'
 import { refreshAppConfigCache } from '../services/app-config.service'
 import { refreshImapConfigCache } from '../services/imap-config.service'
 import { refreshAccessGateCache } from '../services/access-gate.service'
+import { refreshQuoConfigCache } from '../services/quo.service'
 
 export default defineNitroPlugin(async () => {
   if (!hasDatabaseConfig()) return
@@ -45,7 +46,8 @@ export default defineNitroPlugin(async () => {
     await refreshAppConfigCache(db)
     await refreshImapConfigCache(db)
     await refreshAccessGateCache(db)
-    console.log('[app-config] cache warmed (encryption/SMTP/IMAP/access-gate)')
+    await refreshQuoConfigCache(db)
+    console.log('[app-config] cache warmed (encryption/SMTP/IMAP/access-gate/Quo)')
   }
   catch (err) {
     console.warn(`[app-config] cache warm skipped: ${(err as Error).message}`)

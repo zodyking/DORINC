@@ -2,23 +2,28 @@ import { z } from 'zod'
 import { AuthError, signup } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
 import { enqueueVerificationEmail } from '../../services/verification-email.service'
+import { isQuoEnabled } from '../../services/quo.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
 import { formatPersonName } from '../../../shared/format/person-name'
 import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
-
-const signupSchema = z.object({
-  firstName: nonEmptyString.max(60),
-  lastName: nonEmptyString.max(60),
-  email: emailSchema,
-  password: z.string().min(12).max(200),
-  accountType: z.enum(['mechanic', 'accountant']),
-})
+import { optionalPhoneE164Schema, phoneE164Schema } from '../../../shared/validators/quo'
 
 export default defineEventHandler(async (event) => {
-  const body = await validateBody(event, signupSchema)
   const db = useDb()
+  const quoEnabled = await isQuoEnabled(db)
+
+  const signupSchema = z.object({
+    firstName: nonEmptyString.max(60),
+    lastName: nonEmptyString.max(60),
+    email: emailSchema,
+    password: z.string().min(12).max(200),
+    accountType: z.enum(['mechanic', 'accountant']),
+    phone: quoEnabled ? phoneE164Schema : optionalPhoneE164Schema,
+  })
+
+  const body = await validateBody(event, signupSchema)
 
   try {
     const { user, verificationToken } = await signup(db, {
@@ -26,6 +31,7 @@ export default defineEventHandler(async (event) => {
       email: body.email,
       password: body.password,
       requestedAccountType: body.accountType,
+      phone: body.phone ?? null,
     })
 
     await enqueueVerificationEmail(db, {
@@ -38,7 +44,12 @@ export default defineEventHandler(async (event) => {
       entityType: 'user',
       entityId: user.id,
       action: 'auth.signup',
-      afterData: { email: user.email, name: user.name, requestedAccountType: body.accountType },
+      afterData: {
+        email: user.email,
+        name: user.name,
+        requestedAccountType: body.accountType,
+        hasPhone: Boolean(user.phone),
+      },
       riskLevel: 'sensitive',
     }).catch((err) => {
       console.warn('[audit] signup event failed:', (err as Error).message)

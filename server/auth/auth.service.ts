@@ -53,6 +53,7 @@ export interface SignupInput {
   email: string
   password: string
   requestedAccountType: AccountType
+  phone?: string | null
 }
 
 export async function signup(db: Db, input: SignupInput) {
@@ -79,6 +80,7 @@ export async function signup(db: Db, input: SignupInput) {
     email,
     passwordHash,
     accountTypeId: typeRow.id,
+    phone: input.phone ?? null,
     // Pending state: not verified, not approved
   }).returning()
 

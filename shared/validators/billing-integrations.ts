@@ -31,7 +31,7 @@ export type DomainRenewal = z.infer<typeof domainRenewalSchema>
 /** @deprecated Use DomainRenewal */
 export type NamecheapManualDomain = DomainRenewal
 
-export const billingProviderKeySchema = z.enum(['vultr', 'cloudflare', 'openrouter'])
+export const billingProviderKeySchema = z.enum(['vultr', 'cloudflare', 'openrouter', 'quo'])
 export type BillingProviderKey = z.infer<typeof billingProviderKeySchema>
 
 export const billingIntegrationsPatchSchema = z.object({
@@ -120,11 +120,19 @@ export interface BillingSpendPoint {
   projectedUsd: number | null
 }
 
+export interface BillingQuoPhoneNumber {
+  id: string
+  number: string
+  formattedNumber: string | null
+  name: string | null
+}
+
 export interface BillingDashboardPayload {
   configured: {
     vultr: boolean
     cloudflare: boolean
     openrouter: boolean
+    quo: boolean
   }
   vultr: {
     configured: boolean
@@ -171,6 +179,17 @@ export interface BillingDashboardPayload {
     }>
     currency: string
     hasPortalCredentials: boolean
+    error: string | null
+    lastUpdated: string
+  }
+  /** Quo SMS — prepaid credits live in Quo; API exposes numbers/connection only. */
+  quo: {
+    configured: boolean
+    enabled: boolean
+    fromNumber: string | null
+    phoneNumbers: BillingQuoPhoneNumber[]
+    phoneCount: number
+    creditsNote: string | null
     error: string | null
     lastUpdated: string
   }
