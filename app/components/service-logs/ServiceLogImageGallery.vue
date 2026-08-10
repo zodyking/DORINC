@@ -169,12 +169,13 @@ function onKeydown(event: KeyboardEvent) {
         class="sl-gallery__zoombar"
         role="toolbar"
         aria-label="Photo zoom"
+        :title="zoomHint"
       >
         <div class="sl-gallery__zoom-controls">
-          <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom out" @click="zoomOut">−</button>
+          <button type="button" class="sl-gallery__tool" aria-label="Zoom out" @click="zoomOut">−</button>
           <span class="sl-gallery__zoom-pct" aria-live="polite">{{ zoomPercent }}%</span>
-          <button type="button" class="btn sm sl-gallery__zoom-btn" aria-label="Zoom in" @click="zoomIn">+</button>
-          <button type="button" class="btn sm sl-gallery__zoom-reset" @click="resetView">Reset</button>
+          <button type="button" class="sl-gallery__tool" aria-label="Zoom in" @click="zoomIn">+</button>
+          <button type="button" class="sl-gallery__tool sl-gallery__tool--text" @click="resetView">Reset</button>
         </div>
         <span class="sl-gallery__zoom-hint">{{ zoomHint }}</span>
       </div>
@@ -235,40 +236,38 @@ function onKeydown(event: KeyboardEvent) {
         <div class="sl-gallery__footer-top">
           <button
             type="button"
-            class="btn sm sl-gallery__nav sl-gallery__nav--icon"
+            class="sl-gallery__nav"
             aria-label="Previous photo"
             :disabled="!hasMultiple || anyLoading"
             @click="goPrev"
           >
-            <span class="sl-gallery__nav-glyph" aria-hidden="true">‹</span>
-            <span class="sl-gallery__nav-label">Previous</span>
+            <span aria-hidden="true">‹</span>
           </button>
 
           <div class="sl-gallery__meta">
-            <span class="sl-gallery__count">Photo {{ activeIndex + 1 }} of {{ imageFiles.length }}</span>
+            <span class="sl-gallery__count">{{ activeIndex + 1 }} / {{ imageFiles.length }}</span>
             <span v-if="activeFile" class="sl-gallery__name">{{ activeFile.originalFilename }}</span>
           </div>
 
           <button
             type="button"
-            class="btn sm sl-gallery__nav sl-gallery__nav--icon"
+            class="sl-gallery__nav"
             aria-label="Next photo"
             :disabled="!hasMultiple || anyLoading"
             @click="goNext"
           >
-            <span class="sl-gallery__nav-glyph" aria-hidden="true">›</span>
-            <span class="sl-gallery__nav-label">Next</span>
+            <span aria-hidden="true">›</span>
           </button>
         </div>
 
         <button
           v-if="editable"
           type="button"
-          class="btn sm sl-gallery__delete"
+          class="sl-gallery__delete"
           :disabled="deleteBusy || anyLoading"
           @click="emit('delete')"
         >
-          {{ deleteBusy ? 'Removing…' : 'Remove photo' }}
+          {{ deleteBusy ? 'Removing…' : 'Remove' }}
         </button>
       </div>
     </div>
@@ -307,15 +306,16 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   outline: none;
   min-height: 0;
   flex: 1;
 }
 
 .sl-gallery__frame {
+  position: relative;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
   background: #fff;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -328,39 +328,60 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery__zoombar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 6px 10px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
 }
 
 .sl-gallery__zoom-controls {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
-.sl-gallery__zoom-btn {
-  min-width: 36px;
-  min-height: 36px;
-  font-size: 18px;
+.sl-gallery__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
-  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.sl-gallery__tool:hover {
+  background: #f1f5f9;
+}
+
+.sl-gallery__tool:active {
+  background: #e2e8f0;
+}
+
+.sl-gallery__tool--text {
+  min-width: auto;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  padding: 0 9px;
+  color: #475569;
 }
 
 .sl-gallery__zoom-pct {
-  min-width: 48px;
+  min-width: 40px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #334155;
   font-variant-numeric: tabular-nums;
-}
-
-.sl-gallery__zoom-reset {
-  margin-left: 2px;
-  min-height: 36px;
 }
 
 .sl-gallery__zoom-hint {
@@ -377,7 +398,7 @@ function onKeydown(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
   overflow: hidden;
   touch-action: none;
   cursor: grab;
@@ -391,7 +412,7 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery--compact .sl-gallery__stage {
   min-height: 240px;
   height: auto;
-  padding: 12px;
+  padding: 10px;
   cursor: default;
   touch-action: auto;
 }
@@ -500,8 +521,8 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery__footer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 8px 10px;
   border-top: 1px solid #e2e8f0;
   background: #fff;
 }
@@ -509,7 +530,7 @@ function onKeydown(event: KeyboardEvent) {
 .sl-gallery__footer-top {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -520,15 +541,16 @@ function onKeydown(event: KeyboardEvent) {
 
 .sl-gallery__count {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
 .sl-gallery__name {
   display: block;
-  margin-top: 2px;
-  font-size: 11px;
+  margin-top: 1px;
+  font-size: 10px;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -536,36 +558,44 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .sl-gallery__nav {
-  white-space: nowrap;
-}
-
-.sl-gallery__nav--icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 12px;
-}
-
-.sl-gallery__nav-glyph {
-  font-size: 22px;
-  line-height: 1;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 20px;
   font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.sl-gallery__nav-label {
-  font-size: 12px;
-  font-weight: 600;
+.sl-gallery__nav:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.sl-gallery__nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .sl-gallery__delete {
   align-self: center;
-  min-height: 44px;
-  padding-inline: 18px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
   color: #dc2626;
-  border-color: #fecaca;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -574,18 +604,23 @@ function onKeydown(event: KeyboardEvent) {
   border-color: #fca5a5;
 }
 
+.sl-gallery__delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .sl-gallery__thumbs {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .sl-gallery__thumb {
-  width: 72px;
-  height: 72px;
+  width: 56px;
+  height: 56px;
   padding: 0;
   border: 2px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: #f8fafc;
   cursor: pointer;
@@ -609,88 +644,87 @@ function onKeydown(event: KeyboardEvent) {
   place-items: center;
   width: 100%;
   height: 100%;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #94a3b8;
 }
 
 @media (max-width: 640px) {
-  .sl-gallery__zoombar {
-    padding: 8px 10px;
+  .sl-gallery {
     gap: 8px;
+  }
+
+  /* Float zoom tools over the photo so chrome doesn’t steal vertical space. */
+  .sl-gallery__zoombar {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 4;
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.14);
+    backdrop-filter: blur(8px);
   }
 
   .sl-gallery__zoom-controls {
-    flex: 1;
-    justify-content: space-between;
+    width: 100%;
+    justify-content: center;
     gap: 6px;
   }
 
-  .sl-gallery__zoom-btn,
-  .sl-gallery__zoom-reset {
-    min-width: 44px;
-    min-height: 44px;
-    flex: 1;
-    padding: 8px;
+  .sl-gallery__tool {
+    min-width: 36px;
+    min-height: 36px;
   }
 
-  .sl-gallery__zoom-pct {
-    min-width: 52px;
-    font-size: 13px;
+  .sl-gallery__tool--text {
+    min-width: auto;
   }
 
   .sl-gallery__zoom-hint {
-    width: 100%;
-    margin-left: 0;
-    text-align: center;
-    font-size: 11px;
-  }
-
-  .sl-gallery__stage {
-    min-height: 240px;
-    height: min(52dvh, 480px);
-    padding: 10px;
-  }
-
-  .sl-gallery__footer {
-    padding: 10px 12px;
-    gap: 8px;
-  }
-
-  .sl-gallery__footer-top {
-    gap: 8px;
-  }
-
-  .sl-gallery__nav--icon {
-    min-width: 44px;
-    width: 44px;
-    padding: 0;
-  }
-
-  .sl-gallery__nav-label {
     display: none;
   }
 
-  .sl-gallery__nav-glyph {
-    font-size: 26px;
+  .sl-gallery__stage {
+    min-height: 280px;
+    height: min(62dvh, 560px);
+    padding: 8px;
   }
 
-  .sl-gallery__delete {
-    width: 100%;
-    justify-content: center;
+  .sl-gallery__footer {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .sl-gallery__footer-top {
+    gap: 6px;
+  }
+
+  .sl-gallery__nav {
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
   }
 
   .sl-gallery__count {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .sl-gallery__name {
     font-size: 10px;
   }
 
+  .sl-gallery__delete {
+    min-height: 34px;
+    width: 100%;
+  }
+
   .sl-gallery__thumb {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
   }
 }
 </style>

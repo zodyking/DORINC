@@ -927,6 +927,21 @@ const summaryRows = computed(() => {
 }
 
 .invoice-photos-tab .ed-log-photos-card .cbody {
-  padding-top: 14px;
+  padding-top: 10px;
+}
+
+@media (max-width: 640px) {
+  .invoice-photos-tab .ed-log-photos-card .chead {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .invoice-photos-tab .ed-log-photos-card .chead h3 {
+    font-size: 14px;
+  }
+
+  .invoice-photos-tab .ed-log-photos-card .cbody {
+    padding: 8px 10px 10px;
+  }
 }
 </style>
