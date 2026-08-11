@@ -1,16 +1,26 @@
 import type { Db } from '../db/client'
 import {
   parseEntityLookupArgs,
+  parseInvoiceLookupArgs,
   parseSearchCatalogArgs,
   type EntityLookupArgs,
   type SearchCatalogArgs,
 } from '../../shared/ai-tools'
 import {
+  extractInvoiceNumber,
+  extractServiceLogNumber,
+  inferInvoiceStatus,
+  type InvoiceLookupStatus,
+} from '../../shared/susan-entity-query'
+import {
+  findInvoiceIdByNumber,
   getInvoiceDetail,
+  getInvoiceListStats,
   listInvoices,
   InvoicesServiceError,
 } from './invoices.service'
 import {
+  findServiceLogIdByNumber,
   getServiceLog,
   listServiceLogs,
   ServiceLogsServiceError,
@@ -147,6 +157,34 @@ function formatInvoiceListItem(row: {
   ].filter(Boolean).join('\n')
 }
 
+function formatInvoiceStats(stats: Awaited<ReturnType<typeof getInvoiceListStats>>): string {
+  return [
+    'Invoice KPI summary (non-archived):',
+    `total: ${stats.total}`,
+    `draftLike: ${stats.draftCount} (includes pending_manager_approval: ${stats.pendingManagerApprovalCount})`,
+    `sent: ${stats.sentCount}`,
+    `paid: ${stats.paidCount}`,
+    `unpaid/outstanding (sent with balanceDue > 0): count=${stats.outstandingCount} balanceTotal=${money(stats.outstandingTotal)}`,
+    `overdue (sent, past due, balanceDue > 0): count=${stats.overdueCount} balanceTotal=${money(stats.overdueTotal)}`,
+    `paidThisMonthTotal: ${money(stats.paidThisMonthTotal)}`,
+  ].join('\n')
+}
+
+async function listUnpaidInvoices(db: Db, limit: number, overdueOnly: boolean) {
+  const result = await listInvoices(db, {
+    status: overdueOnly ? undefined : 'sent',
+    overdue: overdueOnly || undefined,
+    includeArchived: false,
+    page: 1,
+    pageSize: Math.max(limit, 8),
+    sort: 'due_date',
+  })
+  const items = overdueOnly
+    ? result.items
+    : result.items.filter(row => Number(row.balanceDue) > 0)
+  return { ...result, items: items.slice(0, limit), filteredTotal: overdueOnly ? result.total : undefined }
+}
+
 export async function executeLookupInvoice(
   db: Db,
   userId: string,
@@ -156,8 +194,10 @@ export async function executeLookupInvoice(
   if (!auth) return needAuth()
   if (!susanHasPermission(auth, 'invoices.read.all')) return deny('invoices.read.all')
 
-  const args = parseEntityLookupArgs(argsRaw)
+  const args = parseInvoiceLookupArgs(argsRaw)
   const limit = clampLimit(args.limit)
+  const query = String(args.query || args.id || '').trim()
+  const status: InvoiceLookupStatus | undefined = args.status || inferInvoiceStatus(query) || undefined
 
   if (isUuid(args.id)) {
     try {
@@ -172,8 +212,96 @@ export async function executeLookupInvoice(
     }
   }
 
-  const query = String(args.query || args.id || '').trim()
+  // Prefer exact INV-###### resolution before fuzzy/status search.
+  const invoiceNumber = extractInvoiceNumber(query) ?? extractInvoiceNumber(String(args.id || ''))
+  const statusIsBucket = status === 'stats'
+    || status === 'unpaid'
+    || status === 'outstanding'
+    || status === 'overdue'
+    || status === 'draft'
+    || status === 'pending_manager_approval'
+    || status === 'sent'
+    || status === 'paid'
+    || status === 'void'
+
+  if (invoiceNumber != null && !statusIsBucket) {
+    const id = await findInvoiceIdByNumber(db, invoiceNumber)
+    if (!id) {
+      return {
+        ok: true,
+        content: `No invoice found for INV-${String(invoiceNumber).padStart(6, '0')} (number ${invoiceNumber}).`,
+      }
+    }
+    const inv = await getInvoiceDetail(db, id)
+    return { ok: true, content: formatInvoiceDetail(inv) }
+  }
+
+  if (statusIsBucket && status) {
+    const stats = await getInvoiceListStats(db)
+
+    if (status === 'stats') {
+      return { ok: true, content: formatInvoiceStats(stats) }
+    }
+
+    if (status === 'unpaid' || status === 'outstanding') {
+      const listed = await listUnpaidInvoices(db, limit, false)
+      return {
+        ok: true,
+        content: [
+          formatInvoiceStats(stats),
+          '',
+          `Unpaid/outstanding examples (showing ${listed.items.length}; KPI count=${stats.outstandingCount}):`,
+          listed.items.length
+            ? listed.items.map(formatInvoiceListItem).join('\n')
+            : '(none in this sample page)',
+        ].join('\n'),
+      }
+    }
+
+    if (status === 'overdue') {
+      const listed = await listUnpaidInvoices(db, limit, true)
+      return {
+        ok: true,
+        content: [
+          formatInvoiceStats(stats),
+          '',
+          `Overdue examples (showing ${listed.items.length}; KPI count=${stats.overdueCount}):`,
+          listed.items.length
+            ? listed.items.map(formatInvoiceListItem).join('\n')
+            : '(none in this sample page)',
+        ].join('\n'),
+      }
+    }
+
+    const result = await listInvoices(db, {
+      status,
+      includeArchived: false,
+      page: 1,
+      pageSize: limit,
+    })
+    return {
+      ok: true,
+      content: [
+        formatInvoiceStats(stats),
+        '',
+        `Invoices with status=${status}: ${result.total} total (showing ${result.items.length}).`,
+        result.items.length
+          ? result.items.map(formatInvoiceListItem).join('\n')
+          : '(none)',
+      ].join('\n'),
+    }
+  }
+
   if (!query) return needQuery()
+
+  // INV number mixed with other words ("total of INV-000713").
+  if (invoiceNumber != null) {
+    const id = await findInvoiceIdByNumber(db, invoiceNumber)
+    if (id) {
+      const inv = await getInvoiceDetail(db, id)
+      return { ok: true, content: formatInvoiceDetail(inv) }
+    }
+  }
 
   const result = await listInvoices(db, {
     q: query,
@@ -183,7 +311,13 @@ export async function executeLookupInvoice(
   })
 
   if (!result.items.length) {
-    return { ok: true, content: `No invoices matched query=${JSON.stringify(query)}.` }
+    return {
+      ok: true,
+      content: [
+        `No invoices matched query=${JSON.stringify(query)}.`,
+        'Tips: use INV-000713 (or 713), a customer name, bus/unit, PO, or status=unpaid|overdue|paid|stats.',
+      ].join('\n'),
+    }
   }
 
   if (result.items.length === 1) {
@@ -272,13 +406,17 @@ export async function executeLookupServiceLog(
   const limit = clampLimit(args.limit)
   const ownOnly = !canReadAll && canReadOwn
 
+  async function detailIfAllowed(id: string) {
+    const log = await getServiceLog(db, id)
+    if (ownOnly && log.submittedBy !== auth.user.id) {
+      return deny('service_logs.read.all (this log belongs to another submitter)')
+    }
+    return { ok: true, content: formatServiceLogDetail(log) }
+  }
+
   if (isUuid(args.id)) {
     try {
-      const log = await getServiceLog(db, args.id)
-      if (ownOnly && log.submittedBy !== auth.user.id) {
-        return deny('service_logs.read.all (this log belongs to another submitter)')
-      }
-      return { ok: true, content: formatServiceLogDetail(log) }
+      return await detailIfAllowed(args.id)
     }
     catch (e) {
       if (e instanceof ServiceLogsServiceError && e.code === 'NOT_FOUND') {
@@ -291,6 +429,18 @@ export async function executeLookupServiceLog(
   const query = String(args.query || args.id || '').trim()
   if (!query) return needQuery()
 
+  const logNumber = extractServiceLogNumber(query) ?? extractServiceLogNumber(String(args.id || ''))
+  if (logNumber != null) {
+    const id = await findServiceLogIdByNumber(db, logNumber)
+    if (!id) {
+      return {
+        ok: true,
+        content: `No service log found for SL-${String(logNumber).padStart(4, '0')} (number ${logNumber}).`,
+      }
+    }
+    return detailIfAllowed(id)
+  }
+
   const result = await listServiceLogs(db, {
     q: query,
     includeArchived: false,
@@ -300,15 +450,17 @@ export async function executeLookupServiceLog(
   })
 
   if (!result.items.length) {
-    return { ok: true, content: `No service logs matched query=${JSON.stringify(query)}.` }
+    return {
+      ok: true,
+      content: [
+        `No service logs matched query=${JSON.stringify(query)}.`,
+        'Tips: use SL-0713 (or 713), a customer name, or bus/unit tag.',
+      ].join('\n'),
+    }
   }
 
   if (result.items.length === 1) {
-    const log = await getServiceLog(db, result.items[0]!.id)
-    if (ownOnly && log.submittedBy !== auth.user.id) {
-      return deny('service_logs.read.all (this log belongs to another submitter)')
-    }
-    return { ok: true, content: formatServiceLogDetail(log) }
+    return detailIfAllowed(result.items[0]!.id)
   }
 
   return {
