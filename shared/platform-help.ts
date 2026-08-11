@@ -25,6 +25,7 @@ export const HELP_SUGGESTIONS: Record<string, string[]> = {
 export const HELP_PAGE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   invoices: 'Invoices',
+  'invoice-detail': 'Invoice detail',
   create: 'New Invoice wizard',
   editor: 'Invoice Editor',
   admin: 'Control Panel',

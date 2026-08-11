@@ -2,6 +2,7 @@
 // Platform help chat — staff app (ChatGPT-style UI with vision support).
 import {
   helpContextLabel,
+  helpEntityFromRoute,
   helpPageKeyFromRoute,
   isPlatformHelpWidgetVisible,
   platformHelpPoweredByLabel,
@@ -40,6 +41,7 @@ const messages = ref<ChatMessage[]>([])
 const canUseHelp = computed(() => auth.can('ai.help.all'))
 const pageKey = computed(() => helpPageKeyFromRoute(route.path, route.query))
 const contextLabel = computed(() => helpContextLabel(pageKey.value))
+const pageEntity = computed(() => helpEntityFromRoute(route.path))
 
 const displayName = computed(() => auth.user?.name ?? 'there')
 const storageKey = computed(() => `dorinc-help-chat-${auth.user?.id ?? 'anon'}`)
@@ -312,7 +314,10 @@ async function sendMessage() {
       method: 'POST',
       body: {
         question,
+        pageKey: pageKey.value !== 'default' ? pageKey.value : undefined,
         pageContext: contextLabel.value.replace('Viewing · ', '') || undefined,
+        entityType: pageEntity.value.entityType,
+        entityId: pageEntity.value.entityId,
         imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
         history: history.length > 1 ? history.slice(0, -1) : undefined,
       },

@@ -10,6 +10,9 @@ import {
   extractInvoiceNumber,
   extractServiceLogNumber,
   inferInvoiceStatus,
+  inferServiceLogStatus,
+  refersToCurrentRecord,
+  residualInvoiceSearchQuery,
   type InvoiceLookupStatus,
 } from '../../shared/susan-entity-query'
 import {
@@ -34,16 +37,23 @@ import {
 } from './customers.service'
 import {
   getCatalogItem,
+  getPackage,
   listCatalogItems,
   listLaborRates,
   listPackages,
   CatalogServiceError,
 } from './catalog.service'
 import {
+  formatSusanPermissionDenial,
   loadSusanAuthByUserId,
-  susanHasPermission,
+  susanPermissionDecision,
   type SusanAuthContext,
 } from './susan-auth.service'
+
+export type EntityToolContext = {
+  entityType?: 'invoice' | 'service_log' | 'customer' | null
+  entityId?: string | null
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -78,10 +88,16 @@ function money(value: unknown): string | null {
   return n.toFixed(2)
 }
 
-function deny(permission: string): { ok: boolean, content: string } {
+function deny(
+  auth: SusanAuthContext,
+  permission: Parameters<typeof susanPermissionDecision>[1],
+  options?: { ownsRecord?: boolean },
+): { ok: boolean, content: string } {
+  const decision = susanPermissionDecision(auth, permission, options)
   return {
     ok: false,
-    content: `Permission denied: this staff member cannot use this lookup (needs ${permission}). Explain they lack access and how an admin can grant it in Users → permissions.`,
+    content: formatSusanPermissionDenial(permission, decision)
+      || `Permission denied: needs ${permission}.`,
   }
 }
 
@@ -98,6 +114,19 @@ function needQuery(): { ok: boolean, content: string } {
 
 async function requireAuth(db: Db, userId: string): Promise<SusanAuthContext | null> {
   return loadSusanAuthByUserId(db, userId)
+}
+
+function currentEntityId(
+  ctx: EntityToolContext | undefined,
+  expected: EntityToolContext['entityType'],
+  query: string,
+  explicitId?: string,
+): string | null {
+  if (isUuid(explicitId)) return explicitId
+  if (ctx?.entityType === expected && isUuid(ctx.entityId) && refersToCurrentRecord(query)) {
+    return ctx.entityId!
+  }
+  return null
 }
 
 function formatInvoiceDetail(inv: Awaited<ReturnType<typeof getInvoiceDetail>>): string {
@@ -170,61 +199,50 @@ function formatInvoiceStats(stats: Awaited<ReturnType<typeof getInvoiceListStats
   ].join('\n')
 }
 
-async function listUnpaidInvoices(db: Db, limit: number, overdueOnly: boolean) {
-  const result = await listInvoices(db, {
-    status: overdueOnly ? undefined : 'sent',
-    overdue: overdueOnly || undefined,
-    includeArchived: false,
-    page: 1,
-    pageSize: Math.max(limit, 8),
-    sort: 'due_date',
-  })
-  const items = overdueOnly
-    ? result.items
-    : result.items.filter(row => Number(row.balanceDue) > 0)
-  return { ...result, items: items.slice(0, limit), filteredTotal: overdueOnly ? result.total : undefined }
+async function loadInvoiceDetail(db: Db, id: string): Promise<{ ok: boolean, content: string }> {
+  try {
+    const inv = await getInvoiceDetail(db, id)
+    return { ok: true, content: formatInvoiceDetail(inv) }
+  }
+  catch (e) {
+    if (e instanceof InvoicesServiceError && e.code === 'NOT_FOUND') {
+      return { ok: true, content: `No invoice found for id=${id}.` }
+    }
+    throw e
+  }
 }
 
 export async function executeLookupInvoice(
   db: Db,
   userId: string,
   argsRaw: unknown,
+  ctx: EntityToolContext = {},
 ): Promise<{ ok: boolean, content: string }> {
   const auth = await requireAuth(db, userId)
   if (!auth) return needAuth()
-  if (!susanHasPermission(auth, 'invoices.read.all')) return deny('invoices.read.all')
+  const invoicePerm = susanPermissionDecision(auth, 'invoices.read.all')
+  if (!invoicePerm.allowed) return deny(auth, 'invoices.read.all')
 
   const args = parseInvoiceLookupArgs(argsRaw)
   const limit = clampLimit(args.limit)
-  const query = String(args.query || args.id || '').trim()
-  const status: InvoiceLookupStatus | undefined = args.status || inferInvoiceStatus(query) || undefined
+  const query = String(args.query || '').trim()
+  const invoiceNumber = extractInvoiceNumber(query) || extractInvoiceNumber(String(args.id || ''))
+  // Concrete invoice numbers always win over status buckets ("INV-000713 unpaid").
+  const status: InvoiceLookupStatus | undefined = invoiceNumber != null
+    ? undefined
+    : (args.status || inferInvoiceStatus(query) || undefined)
+  const residualQ = residualInvoiceSearchQuery(query)
 
-  if (isUuid(args.id)) {
-    try {
-      const inv = await getInvoiceDetail(db, args.id)
-      return { ok: true, content: formatInvoiceDetail(inv) }
-    }
-    catch (e) {
-      if (e instanceof InvoicesServiceError && e.code === 'NOT_FOUND') {
-        return { ok: true, content: `No invoice found for id=${args.id}.` }
-      }
-      throw e
-    }
+  const pageId = currentEntityId(ctx, 'invoice', query || 'this invoice', args.id)
+  if (pageId && !invoiceNumber && !status) {
+    return loadInvoiceDetail(db, pageId)
   }
 
-  // Prefer exact INV-###### resolution before fuzzy/status search.
-  const invoiceNumber = extractInvoiceNumber(query) ?? extractInvoiceNumber(String(args.id || ''))
-  const statusIsBucket = status === 'stats'
-    || status === 'unpaid'
-    || status === 'outstanding'
-    || status === 'overdue'
-    || status === 'draft'
-    || status === 'pending_manager_approval'
-    || status === 'sent'
-    || status === 'paid'
-    || status === 'void'
+  if (isUuid(args.id) && !invoiceNumber) {
+    return loadInvoiceDetail(db, args.id)
+  }
 
-  if (invoiceNumber != null && !statusIsBucket) {
+  if (invoiceNumber != null) {
     const id = await findInvoiceIdByNumber(db, invoiceNumber)
     if (!id) {
       return {
@@ -232,11 +250,10 @@ export async function executeLookupInvoice(
         content: `No invoice found for INV-${String(invoiceNumber).padStart(6, '0')} (number ${invoiceNumber}).`,
       }
     }
-    const inv = await getInvoiceDetail(db, id)
-    return { ok: true, content: formatInvoiceDetail(inv) }
+    return loadInvoiceDetail(db, id)
   }
 
-  if (statusIsBucket && status) {
+  if (status) {
     const stats = await getInvoiceListStats(db)
 
     if (status === 'stats') {
@@ -244,37 +261,54 @@ export async function executeLookupInvoice(
     }
 
     if (status === 'unpaid' || status === 'outstanding') {
-      const listed = await listUnpaidInvoices(db, limit, false)
+      const listed = await listInvoices(db, {
+        outstanding: true,
+        q: residualQ || undefined,
+        includeArchived: false,
+        page: 1,
+        pageSize: limit,
+        sort: 'due_date',
+      })
       return {
         ok: true,
         content: [
           formatInvoiceStats(stats),
           '',
-          `Unpaid/outstanding examples (showing ${listed.items.length}; KPI count=${stats.outstandingCount}):`,
+          residualQ ? `Filtered unpaid search q=${JSON.stringify(residualQ)}` : null,
+          `Unpaid/outstanding: KPI count=${stats.outstandingCount}, listing ${listed.items.length} of ${listed.total}.`,
           listed.items.length
             ? listed.items.map(formatInvoiceListItem).join('\n')
-            : '(none in this sample page)',
-        ].join('\n'),
+            : '(none)',
+        ].filter(Boolean).join('\n'),
       }
     }
 
     if (status === 'overdue') {
-      const listed = await listUnpaidInvoices(db, limit, true)
+      const listed = await listInvoices(db, {
+        overdue: true,
+        q: residualQ || undefined,
+        includeArchived: false,
+        page: 1,
+        pageSize: limit,
+        sort: 'due_date',
+      })
       return {
         ok: true,
         content: [
           formatInvoiceStats(stats),
           '',
-          `Overdue examples (showing ${listed.items.length}; KPI count=${stats.overdueCount}):`,
+          residualQ ? `Filtered overdue search q=${JSON.stringify(residualQ)}` : null,
+          `Overdue: KPI count=${stats.overdueCount}, listing ${listed.items.length} of ${listed.total}.`,
           listed.items.length
             ? listed.items.map(formatInvoiceListItem).join('\n')
-            : '(none in this sample page)',
-        ].join('\n'),
+            : '(none)',
+        ].filter(Boolean).join('\n'),
       }
     }
 
     const result = await listInvoices(db, {
       status,
+      q: residualQ || undefined,
       includeArchived: false,
       page: 1,
       pageSize: limit,
@@ -292,16 +326,8 @@ export async function executeLookupInvoice(
     }
   }
 
+  if (!query && pageId) return loadInvoiceDetail(db, pageId)
   if (!query) return needQuery()
-
-  // INV number mixed with other words ("total of INV-000713").
-  if (invoiceNumber != null) {
-    const id = await findInvoiceIdByNumber(db, invoiceNumber)
-    if (id) {
-      const inv = await getInvoiceDetail(db, id)
-      return { ok: true, content: formatInvoiceDetail(inv) }
-    }
-  }
 
   const result = await listInvoices(db, {
     q: query,
@@ -315,14 +341,13 @@ export async function executeLookupInvoice(
       ok: true,
       content: [
         `No invoices matched query=${JSON.stringify(query)}.`,
-        'Tips: use INV-000713 (or 713), a customer name, bus/unit, PO, or status=unpaid|overdue|paid|stats.',
+        'Tips: use INV-000713 (or invoice 713), a customer name, bus/unit, PO, or status=unpaid|overdue|paid|stats.',
       ].join('\n'),
     }
   }
 
   if (result.items.length === 1) {
-    const inv = await getInvoiceDetail(db, result.items[0]!.id)
-    return { ok: true, content: formatInvoiceDetail(inv) }
+    return loadInvoiceDetail(db, result.items[0]!.id)
   }
 
   return {
@@ -392,54 +417,84 @@ export async function executeLookupServiceLog(
   db: Db,
   userId: string,
   argsRaw: unknown,
+  ctx: EntityToolContext = {},
 ): Promise<{ ok: boolean, content: string }> {
   const auth = await requireAuth(db, userId)
   if (!auth) return needAuth()
 
-  const canReadAll = susanHasPermission(auth, 'service_logs.read.all')
-  const canReadOwn = susanHasPermission(auth, 'service_logs.read.own')
+  const allDec = susanPermissionDecision(auth, 'service_logs.read.all')
+  const ownDec = susanPermissionDecision(auth, 'service_logs.read.own')
+  const canReadAll = allDec.allowed
+  const canReadOwn = ownDec.allowed
   if (!canReadAll && !canReadOwn) {
-    return deny('service_logs.read.all or service_logs.read.own')
+    return deny(auth, 'service_logs.read.all')
   }
 
   const args = parseEntityLookupArgs(argsRaw)
   const limit = clampLimit(args.limit)
   const ownOnly = !canReadAll && canReadOwn
+  const query = String(args.query || '').trim()
+  const statusFilter = extractServiceLogNumber(query) ? null : inferServiceLogStatus(query)
 
-  async function detailIfAllowed(id: string) {
-    const log = await getServiceLog(db, id)
-    if (ownOnly && log.submittedBy !== auth.user.id) {
-      return deny('service_logs.read.all (this log belongs to another submitter)')
-    }
-    return { ok: true, content: formatServiceLogDetail(log) }
-  }
-
-  if (isUuid(args.id)) {
+  async function detailIfAllowed(id: string, notFoundLabel?: string) {
     try {
-      return await detailIfAllowed(args.id)
+      const log = await getServiceLog(db, id)
+      if (ownOnly && log.submittedBy !== auth.user.id) {
+        // Same wording as missing — do not leak that another submitter's log exists.
+        return {
+          ok: true,
+          content: notFoundLabel || `No service log found for id=${id}.`,
+        }
+      }
+      return { ok: true, content: formatServiceLogDetail(log) }
     }
     catch (e) {
       if (e instanceof ServiceLogsServiceError && e.code === 'NOT_FOUND') {
-        return { ok: true, content: `No service log found for id=${args.id}.` }
+        return { ok: true, content: notFoundLabel || `No service log found for id=${id}.` }
       }
       throw e
     }
   }
 
-  const query = String(args.query || args.id || '').trim()
-  if (!query) return needQuery()
+  const pageId = currentEntityId(ctx, 'service_log', query || 'this log', args.id)
+  if (pageId && !extractServiceLogNumber(query) && !statusFilter) {
+    return detailIfAllowed(pageId)
+  }
+
+  if (isUuid(args.id) && !extractServiceLogNumber(query)) {
+    return detailIfAllowed(args.id)
+  }
 
   const logNumber = extractServiceLogNumber(query) ?? extractServiceLogNumber(String(args.id || ''))
   if (logNumber != null) {
     const id = await findServiceLogIdByNumber(db, logNumber)
-    if (!id) {
-      return {
-        ok: true,
-        content: `No service log found for SL-${String(logNumber).padStart(4, '0')} (number ${logNumber}).`,
-      }
-    }
-    return detailIfAllowed(id)
+    const label = `No service log found for SL-${String(logNumber).padStart(4, '0')} (number ${logNumber}).`
+    if (!id) return { ok: true, content: label }
+    return detailIfAllowed(id, label)
   }
+
+  if (statusFilter) {
+    const result = await listServiceLogs(db, {
+      status: statusFilter === 'review' ? undefined : statusFilter,
+      queue: statusFilter === 'review' ? 'review' : undefined,
+      includeArchived: false,
+      submittedBy: ownOnly ? auth.user.id : undefined,
+      page: 1,
+      pageSize: limit,
+    })
+    return {
+      ok: true,
+      content: [
+        `Service logs filter=${statusFilter}: ${result.total} total (showing ${result.items.length}).`,
+        result.items.length
+          ? result.items.map(formatServiceLogListItem).join('\n')
+          : '(none)',
+      ].join('\n'),
+    }
+  }
+
+  if (!query && pageId) return detailIfAllowed(pageId)
+  if (!query) return needQuery()
 
   const result = await listServiceLogs(db, {
     q: query,
@@ -454,7 +509,7 @@ export async function executeLookupServiceLog(
       ok: true,
       content: [
         `No service logs matched query=${JSON.stringify(query)}.`,
-        'Tips: use SL-0713 (or 713), a customer name, or bus/unit tag.',
+        'Tips: use SL-0713, a customer name, bus/unit tag, or ask for the review queue.',
       ].join('\n'),
     }
   }
@@ -525,40 +580,65 @@ function formatCustomerListItem(row: {
   ].filter(Boolean).join('\n')
 }
 
+async function loadCustomerDetail(db: Db, id: string): Promise<{ ok: boolean, content: string }> {
+  try {
+    const customer = await getCustomer(db, id)
+    const [contacts, billing] = await Promise.all([
+      listContacts(db, customer.id),
+      getCustomerBillingSummary(db, customer.id),
+    ])
+    return { ok: true, content: formatCustomerDetail(customer, contacts, billing) }
+  }
+  catch (e) {
+    if (e instanceof CustomersServiceError && e.code === 'NOT_FOUND') {
+      return { ok: true, content: `No customer found for id=${id}.` }
+    }
+    throw e
+  }
+}
+
 export async function executeLookupCustomer(
   db: Db,
   userId: string,
   argsRaw: unknown,
+  ctx: EntityToolContext = {},
 ): Promise<{ ok: boolean, content: string }> {
   const auth = await requireAuth(db, userId)
   if (!auth) return needAuth()
-  if (!susanHasPermission(auth, 'customers.read.all')) return deny('customers.read.all')
+  const decision = susanPermissionDecision(auth, 'customers.read.all')
+  if (!decision.allowed) return deny(auth, 'customers.read.all')
 
   const args = parseEntityLookupArgs(argsRaw)
   const limit = clampLimit(args.limit)
+  const query = String(args.query || '').trim()
+  const qLower = query.toLowerCase()
 
-  if (isUuid(args.id)) {
-    try {
-      const customer = await getCustomer(db, args.id)
-      const [contacts, billing] = await Promise.all([
-        listContacts(db, customer.id),
-        getCustomerBillingSummary(db, customer.id),
-      ])
-      return { ok: true, content: formatCustomerDetail(customer, contacts, billing) }
-    }
-    catch (e) {
-      if (e instanceof CustomersServiceError && e.code === 'NOT_FOUND') {
-        return { ok: true, content: `No customer found for id=${args.id}.` }
-      }
-      throw e
-    }
+  const pageId = currentEntityId(ctx, 'customer', query || 'this customer', args.id)
+  if (pageId && !query) return loadCustomerDetail(db, pageId)
+  if (pageId && refersToCurrentRecord(query)) return loadCustomerDetail(db, pageId)
+
+  if (isUuid(args.id)) return loadCustomerDetail(db, args.id)
+
+  const kind = /\bfleet\b/.test(qLower) ? 'fleet' as const
+    : /\bindividual\b/.test(qLower) ? 'individual' as const
+      : undefined
+  const portal = /\bportal\s*(on|enabled|yes)\b/.test(qLower) ? true
+    : /\bportal\s*(off|disabled|no)\b/.test(qLower) ? false
+      : undefined
+  const searchQ = query
+    .replace(/\b(fleet|individual|portal\s*(on|off|enabled|disabled|yes|no))\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!searchQ && !kind && portal === undefined && pageId) {
+    return loadCustomerDetail(db, pageId)
   }
-
-  const query = String(args.query || args.id || '').trim()
-  if (!query) return needQuery()
+  if (!searchQ && !kind && portal === undefined) return needQuery()
 
   const result = await listCustomers(db, {
-    q: query,
+    q: searchQ || undefined,
+    kind,
+    portal,
     includeArchived: false,
     page: 1,
     pageSize: limit,
@@ -569,12 +649,7 @@ export async function executeLookupCustomer(
   }
 
   if (result.items.length === 1) {
-    const customer = await getCustomer(db, result.items[0]!.id)
-    const [contacts, billing] = await Promise.all([
-      listContacts(db, customer.id),
-      getCustomerBillingSummary(db, customer.id),
-    ])
-    return { ok: true, content: formatCustomerDetail(customer, contacts, billing) }
+    return loadCustomerDetail(db, result.items[0]!.id)
   }
 
   return {
@@ -620,7 +695,8 @@ export async function executeSearchCatalog(
 ): Promise<{ ok: boolean, content: string }> {
   const auth = await requireAuth(db, userId)
   if (!auth) return needAuth()
-  if (!susanHasPermission(auth, 'catalog.read.all')) return deny('catalog.read.all')
+  const decision = susanPermissionDecision(auth, 'catalog.read.all')
+  if (!decision.allowed) return deny(auth, 'catalog.read.all')
 
   const args = parseSearchCatalogArgs(argsRaw)
   const query = String(args.query || '').trim()
@@ -669,7 +745,20 @@ export async function executeSearchCatalog(
       page: 1,
       pageSize: limit,
     })
-    if (packages.items.length) {
+    if (packages.items.length === 1) {
+      const full = await getPackage(db, packages.items[0]!.id)
+      const lines = full.items.slice(0, 30).map((line, i) => (
+        `${i + 1}. [${line.itemType}] ${line.name}${line.sku ? ` (${line.sku})` : ''} qty=${line.quantity} @ ${money(line.defaultPrice)}`
+      ))
+      sections.push(
+        `Package ${full.name}${full.sku ? ` (${full.sku})` : ''} id=${full.id}`,
+        full.categoryName ? `category: ${full.categoryName}` : null,
+        full.description ? `desc: ${full.description}` : null,
+        `items (${full.items.length}):`,
+        ...lines,
+      )
+    }
+    else if (packages.items.length) {
       sections.push(
         `Packages (${packages.total} match, showing ${packages.items.length}):`,
         ...packages.items.map(pkg => formatCatalogItem({
@@ -714,7 +803,12 @@ export async function executeSearchCatalog(
     return { ok: true, content: `No catalog matches for query=${JSON.stringify(query)}.` }
   }
 
-  return { ok: true, content: sections.join('\n') }
+  const joined = sections.filter(Boolean).join('\n')
+  if (/\bcost\b|\bmarkup\b/i.test(joined)) {
+    // Safety net — catalog tools must never surface margin fields.
+    return { ok: true, content: joined.replace(/\b(cost|markupPercent|markup)\b[^\n]*/gi, '').trim() }
+  }
+  return { ok: true, content: joined }
 }
 
 /** Exported for tests — pure helpers */

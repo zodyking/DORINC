@@ -214,6 +214,13 @@ export const platformHelpAskSchema = z.object({
     (val) => (typeof val === 'string' && val.trim() ? val.trim() : undefined),
     z.string().trim().min(1).max(120).optional(),
   ),
+  /** Stable page key from the client route mapper (e.g. invoice-detail). */
+  pageKey: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() ? val.trim() : undefined),
+    z.string().trim().min(1).max(64).optional(),
+  ),
+  entityType: z.enum(['invoice', 'service_log', 'customer']).optional(),
+  entityId: z.string().uuid().optional(),
   history: platformHelpHistoryInputSchema,
   /** Base64 data URL screenshot for vision-capable platform help models. */
   imageDataUrl: platformHelpImageDataUrlSchema.optional(),
@@ -228,6 +235,9 @@ export const platformHelpAskSchema = z.object({
   return {
     question: body.question,
     pageContext: body.pageContext,
+    pageKey: body.pageKey,
+    entityType: body.entityType,
+    entityId: body.entityId,
     history: sanitizePlatformHelpHistory(body.history),
     imageDataUrls,
   }
