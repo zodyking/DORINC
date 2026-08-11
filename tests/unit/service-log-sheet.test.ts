@@ -56,6 +56,27 @@ describe('renderServiceLogSheetHtml', () => {
     catalogItems: [],
   }
 
+  it('places Bus/Unit after Customer Name and sizes it like the date fields', () => {
+    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+    const topStart = html.indexOf('<table class="top-fields">')
+    const topEnd = html.indexOf('<div class="complaint-field">', topStart)
+    expect(topStart).toBeGreaterThan(-1)
+    expect(topEnd).toBeGreaterThan(topStart)
+    const top = html.slice(topStart, topEnd)
+    const customerAt = top.indexOf('f-customer')
+    const unitAt = top.indexOf('f-unit')
+    const invoiceAt = top.indexOf('f-invoice-date')
+    const dueAt = top.indexOf('f-due-date')
+    expect(customerAt).toBeGreaterThan(-1)
+    expect(unitAt).toBeGreaterThan(customerAt)
+    expect(invoiceAt).toBeGreaterThan(unitAt)
+    expect(dueAt).toBeGreaterThan(invoiceAt)
+    expect(html).toContain('.sheet-doc .top-fields td.f-customer { width: 49%; }')
+    expect(html).toContain('.sheet-doc .top-fields td.f-unit { width: 17%; }')
+    expect(html).toContain('.sheet-doc .top-fields td.f-invoice-date { width: 17%; }')
+    expect(html).toContain('.sheet-doc .top-fields td.f-due-date { width: 17%;')
+  })
+
   it('renders Letter two-column template content', () => {
     const html = renderServiceLogSheetHtml(payload, {
       forPdf: true,
