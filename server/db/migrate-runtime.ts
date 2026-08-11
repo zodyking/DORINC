@@ -63,4 +63,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureQuoSchema } = await import('../lib/ensure-quo-schema.mjs')
   await ensureQuoSchema(usePool())
+
+  const { ensureSusanSmsSchema } = await import('../lib/ensure-susan-sms-schema.mjs')
+  await ensureSusanSmsSchema(usePool())
 }

@@ -9,6 +9,8 @@ interface QuoView {
   hasApiKey: boolean
   fromNumber: string | null
   configured: boolean
+  webhookConfigured: boolean
+  webhookUrl: string | null
 }
 
 interface QuoPhoneOption {
@@ -301,7 +303,8 @@ const variableHelp = computed(() => {
     <header class="settings-panel-head">
       <h3>Quo (SMS)</h3>
       <p>
-        Outbound text messages for sign-in alerts, verification codes, and chat notifications.
+        Outbound text messages for sign-in alerts, verification codes, and chat notifications,
+        plus inbound Susan AI SMS when staff choose Text notifications.
         Uses the <a href="https://www.quo.com/docs/mdx/api-reference/introduction" target="_blank" rel="noopener">Quo API</a>
         (formerly OpenPhone). Enable only after the API key and from-number are saved.
       </p>
@@ -354,8 +357,22 @@ const variableHelp = computed(() => {
           </select>
           <span class="help">
             Numbers load from Quo after a successful connection test. Pick the line used to send SMS.
+            This number is also used on the Dorinc contact card (phone label: Susan Ai).
           </span>
         </label>
+
+        <div v-if="quoData?.configured" class="fld">
+          <span class="msg-pref-text">
+            <b>Susan SMS webhook</b>
+            <small v-if="quoData.webhookConfigured">
+              Inbound texts to this Quo number are routed to Susan AI for staff with Text notifications enabled.
+              <template v-if="quoData.webhookUrl"><br>Endpoint: {{ quoData.webhookUrl }}</template>
+            </small>
+            <small v-else>
+              Not registered yet. Save Quo settings while enabled to create the inbound webhook automatically.
+            </small>
+          </span>
+        </div>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>

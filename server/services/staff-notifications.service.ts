@@ -485,7 +485,12 @@ export async function notifyCustomerEmailReceived(
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
 }
 
-/** Notify a staff user that an admin changed their Email vs Text preference. */
+/**
+ * Notify a staff user that their Email vs Text preference changed
+ * (self-serve My Account or admin User Control).
+ * When switching to Text: also send the Dorinc contact card SMS and schedule
+ * a Susan AI intro five minutes later.
+ */
 export async function notifyNotifyChannelChanged(
   db: Db,
   opts: {
@@ -519,7 +524,7 @@ export async function notifyNotifyChannelChanged(
     templateOverride,
   })
 
-  return deliverUserNotification(db, {
+  const delivery = await deliverUserNotification(db, {
     id: opts.userId,
     email: opts.email,
     phone: opts.phone,
@@ -541,4 +546,23 @@ export async function notifyNotifyChannelChanged(
       channel: opts.channel,
     },
   })
+
+  if (toSms && opts.phone) {
+    try {
+      const { sendDorincContactCardAndScheduleSusanIntro } = await import('./dorinc-contact-notify.service')
+      await sendDorincContactCardAndScheduleSusanIntro(db, {
+        name: opts.name,
+        phone: opts.phone,
+        userId: opts.userId,
+      })
+    }
+    catch (err) {
+      console.warn(
+        '[notify-channel] contact card / Susan intro failed:',
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+
+  return delivery
 }

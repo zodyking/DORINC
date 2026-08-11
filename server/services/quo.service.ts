@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
@@ -12,13 +13,24 @@ export interface QuoConfig {
   enabled: boolean
   apiKey: string
   fromNumber: string
+  /** Quo webhook id (numeric string) for inbound Susan SMS. */
+  webhookId: string
+  /** Signing secret `whsec_...` from Quo create-webhook response. */
+  webhookKey: string
+  /** Absolute HTTPS URL registered with Quo. */
+  webhookUrl: string
 }
 
 const DEFAULT_CONFIG: QuoConfig = {
   enabled: false,
   apiKey: '',
   fromNumber: '',
+  webhookId: '',
+  webhookKey: '',
+  webhookUrl: '',
 }
+
+export const QUO_API_VERSION = '2026-03-30'
 
 let cache: QuoConfig | null = null
 let cacheLoadedAt = 0
@@ -27,11 +39,14 @@ const CACHE_TTL_MS = 15_000
 function toView(config: QuoConfig): QuoSettingsView {
   const hasApiKey = Boolean(config.apiKey?.trim())
   const fromNumber = normalizePhoneE164(config.fromNumber) ?? (config.fromNumber?.trim() || null)
+  const webhookConfigured = Boolean(config.webhookId?.trim() && config.webhookKey?.trim())
   return {
     enabled: Boolean(config.enabled) && hasApiKey && Boolean(fromNumber),
     hasApiKey,
     fromNumber,
     configured: hasApiKey && Boolean(fromNumber),
+    webhookConfigured,
+    webhookUrl: config.webhookUrl?.trim() || null,
   }
 }
 
@@ -57,6 +72,9 @@ async function readEncryptedConfig(db: Db): Promise<QuoConfig> {
       enabled: Boolean(parsed.enabled),
       apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
       fromNumber: typeof parsed.fromNumber === 'string' ? parsed.fromNumber : '',
+      webhookId: typeof parsed.webhookId === 'string' ? parsed.webhookId : '',
+      webhookKey: typeof parsed.webhookKey === 'string' ? parsed.webhookKey : '',
+      webhookUrl: typeof parsed.webhookUrl === 'string' ? parsed.webhookUrl : '',
     }
   }
   catch {
@@ -104,6 +122,9 @@ export async function saveQuoSettings(
     fromNumber: patch.fromNumber !== undefined
       ? (normalizePhoneE164(patch.fromNumber) ?? patch.fromNumber.trim())
       : current.fromNumber,
+    webhookId: current.webhookId,
+    webhookKey: current.webhookKey,
+    webhookUrl: current.webhookUrl,
   }
 
   // Cannot enable without credentials.
@@ -111,6 +132,24 @@ export async function saveQuoSettings(
     next.enabled = false
   }
 
+  await persistQuoConfig(db, next, actorId)
+
+  if (next.enabled && next.apiKey && next.fromNumber) {
+    try {
+      await ensureQuoInboundWebhook(db, actorId)
+    }
+    catch (err) {
+      console.warn(
+        '[quo] inbound webhook ensure failed:',
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+
+  return getQuoSettingsView(db)
+}
+
+async function persistQuoConfig(db: Db, next: QuoConfig, actorId: string | null) {
   await ensureEncryptionReadyForSettings(db)
   const encryptedValue = encryptBuffer(Buffer.from(JSON.stringify(next), 'utf8')).toString('base64')
 
@@ -122,6 +161,12 @@ export async function saveQuoSettings(
   if (existing) {
     await db.update(appSettings).set({
       encryptedValue,
+      value: {
+        enabled: next.enabled,
+        fromNumber: next.fromNumber,
+        webhookId: next.webhookId || null,
+        webhookUrl: next.webhookUrl || null,
+      },
       updatedBy: actorId,
       updatedAt: new Date(),
     }).where(eq(appSettings.key, QUO_SETTINGS_KEY))
@@ -129,7 +174,12 @@ export async function saveQuoSettings(
   else {
     await db.insert(appSettings).values({
       key: QUO_SETTINGS_KEY,
-      value: { enabled: next.enabled, fromNumber: next.fromNumber },
+      value: {
+        enabled: next.enabled,
+        fromNumber: next.fromNumber,
+        webhookId: next.webhookId || null,
+        webhookUrl: next.webhookUrl || null,
+      },
       encryptedValue,
       updatedBy: actorId,
     })
@@ -137,7 +187,6 @@ export async function saveQuoSettings(
 
   cache = next
   cacheLoadedAt = Date.now()
-  return toView(next)
 }
 
 export const QUO_API_BASE = 'https://api.quo.com'
@@ -156,12 +205,14 @@ export async function quoFetch<T>(
   apiKey: string,
   path: string,
   init: RequestInit = {},
+  opts: { apiVersion?: string } = {},
 ): Promise<T> {
   const res = await fetch(`${QUO_API_BASE}${path}`, {
     ...init,
     headers: {
       Authorization: apiKey,
       Accept: 'application/json',
+      ...(opts.apiVersion ? { 'Quo-Api-Version': opts.apiVersion } : {}),
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
@@ -227,6 +278,126 @@ export async function sendQuoSms(input: {
     }),
   })
   return { id: res?.data?.id ?? res?.id ?? null }
+}
+
+/** Register (or refresh) the inbound message.received webhook used for Susan SMS chat. */
+export async function ensureQuoInboundWebhook(
+  db: Db,
+  actorId: string | null = null,
+): Promise<QuoSettingsView> {
+  const config = await getQuoConfig(db)
+  if (!config.apiKey?.trim()) {
+    throw new QuoApiError(400, 'Quo API key is not saved')
+  }
+
+  const { getAppUrl } = await import('./app-config.service')
+  const { resolveEmailBrand } = await import('./email-branding.service')
+  const brand = await resolveEmailBrand(db)
+  const appUrl = (brand.appUrl || getAppUrl()).replace(/\/$/, '')
+  const webhookUrl = `${appUrl}/api/public/quo-webhook`
+
+  if (
+    config.webhookId
+    && config.webhookKey
+    && config.webhookUrl === webhookUrl
+  ) {
+    return toView(config)
+  }
+
+  // Best-effort delete of a prior webhook when the app URL changed.
+  if (config.webhookId && config.webhookUrl && config.webhookUrl !== webhookUrl) {
+    try {
+      await quoFetch(config.apiKey, `/webhooks/${config.webhookId}`, {
+        method: 'DELETE',
+      }, { apiVersion: QUO_API_VERSION })
+    }
+    catch (err) {
+      console.warn(
+        '[quo] failed to delete stale webhook:',
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+
+  const created = await quoFetch<{
+    data?: { id?: string, key?: string, url?: string }
+  }>(config.apiKey, '/webhooks', {
+    method: 'POST',
+    body: JSON.stringify({
+      url: webhookUrl,
+      events: ['message.received'],
+      resourceIds: ['*'],
+      status: 'enabled',
+      label: 'DORINC Susan SMS',
+    }),
+  }, { apiVersion: QUO_API_VERSION })
+
+  const id = String(created?.data?.id ?? '').trim()
+  const key = String(created?.data?.key ?? '').trim()
+  if (!id || !key) {
+    throw new QuoApiError(502, 'Quo webhook create response missing id/key')
+  }
+
+  const next: QuoConfig = {
+    ...config,
+    webhookId: id,
+    webhookKey: key,
+    webhookUrl,
+  }
+  await persistQuoConfig(db, next, actorId)
+  return toView(next)
+}
+
+export function verifyQuoWebhookSignature(input: {
+  webhookKey: string
+  webhookId: string
+  webhookTimestamp: string
+  webhookSignature: string
+  rawBody: string
+  maxAgeSeconds?: number
+}): boolean {
+  const secret = input.webhookKey.trim()
+  if (!secret || !input.webhookId || !input.webhookTimestamp || !input.webhookSignature) {
+    return false
+  }
+
+  const timestamp = Number(input.webhookTimestamp)
+  const now = Math.floor(Date.now() / 1000)
+  const maxAge = input.maxAgeSeconds ?? 5 * 60
+  if (!Number.isFinite(timestamp) || Math.abs(now - timestamp) > maxAge) {
+    return false
+  }
+
+  const secretBase64 = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret
+  let secretBytes: Buffer
+  try {
+    secretBytes = Buffer.from(secretBase64, 'base64')
+  }
+  catch {
+    return false
+  }
+
+  const signedContent = `${input.webhookId}.${input.webhookTimestamp}.${input.rawBody}`
+  const expectedSignature = crypto
+    .createHmac('sha256', secretBytes)
+    .update(signedContent)
+    .digest('base64')
+
+  const provided = input.webhookSignature
+    .split(' ')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [version, signature] = entry.split(',')
+      return version === 'v1' ? signature : undefined
+    })
+    .filter((signature): signature is string => Boolean(signature))
+
+  return provided.some((signature) => {
+    const left = Buffer.from(signature)
+    const right = Buffer.from(expectedSignature)
+    return left.length === right.length && crypto.timingSafeEqual(left, right)
+  })
 }
 
 export async function testQuoConnection(db: Db): Promise<{

@@ -15,6 +15,8 @@ describe('sms template catalog', () => {
   it('includes core transactional SMS types with email-parity multi-line defaults', () => {
     const keys = SMS_TEMPLATE_CATALOG.map(t => t.typeKey)
     expect(keys).toContain('notify_channel_changed')
+    expect(keys).toContain('dorinc_contact_card')
+    expect(keys).toContain('susan_sms_ready')
     expect(keys).toContain('login_notification')
     expect(keys).toContain('outside_geofence_verification')
     expect(keys).toContain('signup_verification')

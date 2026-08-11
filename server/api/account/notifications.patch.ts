@@ -41,7 +41,28 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await updateAccountNotificationPrefs(useDb(), auth.user.id, body)
+    const db = useDb()
+    const { users } = await import('../../db/schema/auth')
+    const { eq } = await import('drizzle-orm')
+    const [before] = await db.select({
+      messageNotifyChannel: users.messageNotifyChannel,
+    }).from(users).where(eq(users.id, auth.user.id)).limit(1)
+    const previousChannel = before?.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+
+    const user = await updateAccountNotificationPrefs(db, auth.user.id, body)
+    const nextChannel = user.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+    const channelChanged = body.messageNotifyChannel !== undefined && nextChannel !== previousChannel
+
+    if (channelChanged) {
+      const { notifyNotifyChannelChanged } = await import('../../services/staff-notifications.service')
+      await notifyNotifyChannelChanged(db, {
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        channel: nextChannel,
+      })
+    }
 
     await writeAudit(event, {
       entityType: 'user',
@@ -66,6 +87,7 @@ export default defineEventHandler(async (event) => {
       messageEmailNotify: user.messageEmailNotify,
       messageNotifyChannel: user.messageNotifyChannel,
       silentDeveloperMode: user.silentDeveloperMode,
+      channelChanged,
     }
   }
   catch (err) {

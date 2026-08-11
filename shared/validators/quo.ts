@@ -52,6 +52,9 @@ export interface QuoSettingsView {
   hasApiKey: boolean
   fromNumber: string | null
   configured: boolean
+  /** True when an inbound message.received webhook is registered for Susan SMS. */
+  webhookConfigured: boolean
+  webhookUrl: string | null
 }
 
 export interface QuoPublicStatus {
