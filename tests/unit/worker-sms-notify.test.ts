@@ -22,12 +22,16 @@ describe('worker sms-notify', () => {
       brandName: 'Acme',
       entityTypeLabel: 'Invoice',
       entityLabel: 'INV-1',
-      status: 'approved',
+      statusLabel: 'Approved',
+      reviewedByName: 'Pat',
+      reviewReason: '',
       detailLine: 'Reviewed by Pat.',
+      requestorName: 'Jordan',
     })
     expect(body).toContain('Acme')
-    expect(body).toContain('approved')
+    expect(body).toContain('Approved')
     expect(body).toContain('INV-1')
+    expect(body).toContain('Deletion request')
   })
 
   it('sends SMS directly via Quo when recipient prefers Text', async () => {

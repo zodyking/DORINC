@@ -143,7 +143,7 @@ export async function saveSmsTemplate(
 
   const content = normalizeSmsTemplateContent(input.content, def.defaults)
   if (!content.body.trim()) throw new SmsTemplatesServiceError('VALIDATION')
-  if (content.body.length > 480) throw new SmsTemplatesServiceError('VALIDATION')
+  if (content.body.length > 1600) throw new SmsTemplatesServiceError('VALIDATION')
 
   await ensureSmsTemplatesSeeded(db)
   const now = new Date()

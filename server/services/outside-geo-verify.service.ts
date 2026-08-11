@@ -295,6 +295,8 @@ export async function enqueueOutsideGeoVerification(
         name: input.identity.userName,
         code: input.code,
         expiresMinutes: String(Math.round(OUTSIDE_GEO_CODE_TTL_MS / 60_000)),
+        locationLabel: input.locationLabel ?? '',
+        ipAddress: input.ipAddress ?? '',
       },
       meta: { userId: input.identity.userId },
     })

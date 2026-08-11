@@ -12,7 +12,7 @@ import { validateBody, validateParams } from '../../../utils/validate'
 const paramsSchema = z.object({ typeKey: z.string().min(1) })
 const bodySchema = z.object({
   content: z.object({
-    body: z.string().min(1).max(480),
+    body: z.string().min(1).max(1600),
   }),
   activate: z.boolean().optional(),
 })
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     if (err instanceof SmsTemplatesServiceError) {
       if (err.code === 'VALIDATION') {
-        throw apiError(event, 'VALIDATION_ERROR', 'SMS body must be 1–480 characters')
+        throw apiError(event, 'VALIDATION_ERROR', 'SMS body must be 1–1600 characters')
       }
       throw apiError(event, 'NOT_FOUND', 'SMS template not found')
     }

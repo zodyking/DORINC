@@ -72,13 +72,20 @@ export async function sendLoginNotificationEmail(
     }
   }
 
+  const when = (opts.signedInAt ?? new Date()).toLocaleString('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
   if (delivery.channel === 'sms') {
     const result = await enqueueTemplatedSms(db, {
       to: delivery.phone,
       typeKey: 'login_notification',
       vars: {
         name: opts.name,
-        locationLine,
+        when,
+        email: to,
+        locationLine: locationLine.replace(/\.$/, ''),
         ipAddress: ipAddress ?? '',
         device: deviceLabel ?? '',
       },

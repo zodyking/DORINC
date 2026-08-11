@@ -290,9 +290,9 @@ async function resetTemplate() {
 const charCount = computed(() => draftBody.value.length)
 const variableHelp = computed(() => {
   const vars = detail.value?.variables ?? []
-  if (!vars.length) return `${charCount.value} / 480 characters`
+  if (!vars.length) return `${charCount.value} / 1600 characters`
   const list = vars.map(v => `{{${v.key}}}`).join(', ')
-  return `${charCount.value} / 480 characters · variables: ${list}`
+  return `${charCount.value} / 1600 characters · variables: ${list}`
 })
 </script>
 
@@ -400,7 +400,7 @@ const variableHelp = computed(() => {
       </div>
       <div class="cbody settings-form">
         <p class="settings-help">
-          Keep copy short for mobile. Activate a template to override the built-in default at send time.
+          Defaults mirror the email notification workflow (multi-line layout). Activate a template to override the built-in default at send time. Max 1600 characters (Quo limit).
         </p>
 
         <div class="quo-template-layout">
@@ -426,8 +426,9 @@ const variableHelp = computed(() => {
               Message body
               <textarea
                 v-model="draftBody"
-                rows="5"
-                maxlength="480"
+                rows="14"
+                maxlength="1600"
+                class="quo-template-body"
                 @input="runPreview()"
               />
               <span class="help">{{ variableHelp }}</span>
@@ -435,7 +436,7 @@ const variableHelp = computed(() => {
 
             <div class="quo-preview">
               <b>Preview</b>
-              <p>{{ previewBody || '—' }}</p>
+              <pre class="quo-preview__body">{{ previewBody || '—' }}</pre>
             </div>
 
             <p v-if="templateMessage" class="settings-ok">{{ templateMessage }}</p>
@@ -549,10 +550,22 @@ const variableHelp = computed(() => {
   margin-bottom: 6px;
 }
 
-.quo-preview p {
+.quo-preview__body {
   margin: 0;
+  font: inherit;
   font-size: 14px;
   line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quo-template-body {
+  width: 100%;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
   white-space: pre-wrap;
 }
 

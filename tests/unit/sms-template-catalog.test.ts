@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SMS_BODY_MAX_CHARS,
   SMS_TEMPLATE_CATALOG,
   applySmsTemplateContent,
   interpolateSmsTemplate,
   normalizeSmsTemplateContent,
+  smsCatalogDefaultBodies,
   smsTemplateByKey,
 } from '../../shared/sms-template-catalog'
+import { SMS_DEFAULT_BODIES } from '../../server/workers/lib/sms-notify.mjs'
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 
 describe('sms template catalog', () => {
-  it('includes core transactional SMS types with short defaults', () => {
+  it('includes core transactional SMS types with email-parity multi-line defaults', () => {
     const keys = SMS_TEMPLATE_CATALOG.map(t => t.typeKey)
     expect(keys).toContain('login_notification')
     expect(keys).toContain('outside_geofence_verification')
@@ -30,9 +33,18 @@ describe('sms template catalog', () => {
 
     for (const def of SMS_TEMPLATE_CATALOG) {
       expect(def.defaults.body.length).toBeGreaterThan(10)
-      expect(def.defaults.body.length).toBeLessThanOrEqual(320)
+      expect(def.defaults.body.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
       expect(def.defaults.body).toContain('{{brandName}}')
+      expect(def.defaults.body).toContain('\n')
+      const rendered = applySmsTemplateContent(def.defaults, def.sampleVars).body
+      expect(rendered.length).toBeGreaterThan(10)
+      expect(rendered.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
+      expect(rendered).not.toMatch(/\{\{\s*[\w.]+\s*\}\}/)
     }
+  })
+
+  it('keeps worker SMS_DEFAULT_BODIES in sync with the shared catalog', () => {
+    expect(SMS_DEFAULT_BODIES).toEqual(smsCatalogDefaultBodies())
   })
 
   it('interpolates and normalizes bodies', () => {
@@ -42,8 +54,12 @@ describe('sms template catalog', () => {
       brandName: 'Acme',
       code: '123456',
       expiresMinutes: '15',
+      name: 'Pat',
+      locationLabel: 'Austin, TX',
+      ipAddress: '203.0.113.10',
     })
     expect(resolved.body).toContain('123456')
+    expect(resolved.body).toContain('Suspicious location detected')
     expect(interpolateSmsTemplate('Hi {{name}}', { name: 'Pat' })).toBe('Hi Pat')
     const normalized = normalizeSmsTemplateContent({ body: '  Custom {{code}}  ' }, def!.defaults)
     expect(normalized.body).toBe('Custom {{code}}')

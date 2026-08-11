@@ -385,7 +385,7 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                   <b>Security &amp; chat notifications</b>
                   <small>
                     Choose Email or Text for sign-in alerts, verification codes, password resets, team chat, deletion requests, and other staff notifications.
-                    Text requires a phone number on your profile.
+                    Text uses the same notification workflow as email. Text requires a phone number on your profile.
                   </small>
                 </span>
                 <div class="notify-channel" role="group" aria-label="Notification channel">
@@ -444,7 +444,7 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
                 <span class="msg-pref-text">
                   <b>Silent developer mode</b>
                   <small>
-                    When enabled, workflow notifications you trigger — team chat updates and staff emails for invoices, service logs, deletion requests, and similar actions — are not sent to other users. Your manual chat messages still work. Other users&apos; notifications are unaffected.
+                    When enabled, workflow notifications you trigger — team chat updates and staff email or text for invoices, service logs, deletion requests, and similar actions — are not sent to other users. Your manual chat messages still work. Other users&apos; notifications are unaffected.
                   </small>
                 </span>
                 <div class="notify-channel" role="group" aria-label="Silent developer mode">

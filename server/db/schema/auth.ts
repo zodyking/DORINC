@@ -61,7 +61,7 @@ export const users = pgTable('users', {
   phone: text('phone'),
   /** Preferred channel for security / chat notifications when Quo SMS is enabled. */
   messageNotifyChannel: text('message_notify_channel').notNull().default('email'),
-  /** Suppress workflow team chat + staff emails for actions by this user (admin testing). */
+  /** Suppress workflow team chat + staff email/SMS for actions by this user (admin testing). */
   silentDeveloperMode: boolean('silent_developer_mode').notNull().default(false),
   /**
    * @deprecated Replaced by the `email.send_noncustomer.all` permission

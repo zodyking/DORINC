@@ -10,7 +10,7 @@ import { validateBody, validateParams } from '../../../utils/validate'
 const paramsSchema = z.object({ typeKey: z.string().min(1) })
 const bodySchema = z.object({
   content: z.object({
-    body: z.string().max(480).optional(),
+    body: z.string().max(1600).optional(),
   }).optional(),
 })
 

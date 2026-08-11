@@ -213,6 +213,7 @@ async function sendPasswordResetEmail(db: Db, input: {
       typeKey: 'staff_password_reset',
       vars: {
         name: input.name,
+        email: input.email,
         loginUrl,
         tempPassword: input.tempPassword,
       },

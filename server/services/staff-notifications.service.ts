@@ -88,6 +88,7 @@ export async function notifyDeletionRequestSubmitted(
           submitterName: opts.submitterName,
           entityTypeLabel: ENTITY_TYPE_LABELS[opts.entityType],
           entityLabel: opts.entityLabel,
+          reason: opts.reason,
           reviewUrl,
         },
       },
@@ -142,6 +143,7 @@ export async function notifyDeletionRequestResult(
   })
 
   const profile = await loadUserNotifyProfile(db, opts.requestorId)
+  const statusLabel = opts.status === 'approved' ? 'Approved' : 'Denied'
   const detailLine = opts.reviewedByName
     ? `Reviewed by ${opts.reviewedByName}.`
     : (opts.reviewReason?.trim() ? opts.reviewReason.trim() : '')
@@ -157,7 +159,9 @@ export async function notifyDeletionRequestResult(
         requestorName: opts.requestorName || 'there',
         entityTypeLabel: ENTITY_TYPE_LABELS[opts.entityType],
         entityLabel: opts.entityLabel,
-        status: opts.status,
+        statusLabel,
+        reviewedByName: opts.reviewedByName ?? '',
+        reviewReason: opts.reviewReason?.trim() ?? '',
         detailLine,
       },
     },
@@ -325,7 +329,10 @@ export async function notifyCustomerServiceRequestSubmitted(
           recipientName: recipient.name,
           customerName: opts.customerName,
           vehicleUnit,
+          vehicleDetails: vehicleDetails ?? '',
+          serviceCategory: opts.serviceCategory,
           urgency: opts.urgency,
+          message: opts.message,
           detailUrl,
         },
       },
@@ -392,6 +399,9 @@ export async function notifyCustomerChangeRequestSubmitted(
           customerName: opts.customerName,
           requestKindLabel,
           topic: opts.topic,
+          invoiceNumber: opts.invoiceNumber ?? '',
+          vehicleLabel: opts.vehicleLabel ?? '',
+          message: opts.message,
           detailUrl,
         },
       },
@@ -458,6 +468,7 @@ export async function notifyCustomerEmailReceived(
           customerName: opts.customerName,
           customerEmail: opts.customerEmail,
           subject: opts.subject,
+          messagePreview,
           messagesUrl,
         },
       },

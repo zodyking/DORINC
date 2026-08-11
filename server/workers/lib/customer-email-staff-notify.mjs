@@ -125,6 +125,7 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
         customerName: opts.customerName,
         customerEmail: opts.customerEmail,
         subject: opts.subject,
+        messagePreview,
         messagesUrl,
       },
       email: mail,
