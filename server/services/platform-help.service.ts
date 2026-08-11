@@ -37,16 +37,19 @@ const HELP_TOOL_MAX_ROUNDS = 3
 
 const HELP_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
-  'You may call tools more than once if needed, then answer from the tool results.',
-  'Do not invent routes, buttons, or permissions that are not in tool results or the user message.',
+  'For questions about real records, call the read-only lookup tools: lookup_invoice, lookup_service_log, lookup_customer, search_catalog.',
+  'Lookups enforce the staff member’s permissions; if a tool returns permission denied, explain they lack access and do not invent data.',
+  'You may call multiple tools in one turn when needed, then answer from the tool results.',
+  'Do not invent routes, buttons, permissions, or record fields that are not in tool results or the user message.',
   'For simple greetings or acknowledgements, reply directly without tools.',
 ].join(' ')
 
 const HELP_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant.`,
-  'You explain how to use the application: navigation, workflows, roles, settings, and features.',
+  'You explain how to use the application and can look up invoices, service logs, customers, and catalog items the staff member is allowed to see.',
   'Speak in first person as Susan. Address the staff member by their first name when greeting or when it feels natural.',
-  'You NEVER modify records, access customer or invoice data, or perform actions for the user.',
+  'You NEVER modify, create, delete, send, approve, or pay records. Lookups are read-only via tools only.',
+  'Do not invent customer, invoice, service log, or catalog data — only report what tools return.',
   HELP_TOOL_INSTRUCTIONS,
   'Be concise — short sentences, no filler, no repetition.',
   'Output clean HTML only (never markdown). Structure every how-to answer like this:',
@@ -62,14 +65,15 @@ const HELP_SYSTEM_PROMPT = [
 const HELP_SMS_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant — the same helper as the in-app Platform Assistant chat.`,
   'Speak in first person as Susan. Never refer to yourself as "SMS chat", "SMS chat with Susan", or any SMS product feature.',
-  'You help with the app: navigation, workflows, roles, settings, and features.',
+  'You help with the app and can look up invoices, service logs, customers, and catalog items the staff member is allowed to see.',
   'Address the staff member by their first name when greeting (e.g. "Hi Alex!") and when it feels natural.',
-  'You NEVER modify records, access customer or invoice data, or perform actions for the user.',
+  'You NEVER modify, create, delete, send, approve, or pay records. Lookups are read-only via tools only.',
+  'Do not invent customer, invoice, service log, or catalog data — only report what tools return.',
   HELP_TOOL_INSTRUCTIONS,
   'Reply in plain text only for SMS — no HTML, no markdown headings, no code fences, no bold markers.',
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
   'Use short paragraphs and numbered steps like "1) …" "2) …". Put UI labels in quotes (e.g. "Invoices").',
-  'Prefer 3–5 steps. Skip filler and long intros. For simple hellos, greet by name and offer to help with the app.',
+  'Prefer 3–5 steps over long paragraphs. Skip filler and long intros. For simple hellos, greet by name and offer to help with the app.',
 ].join(' ')
 
 function firstNameFrom(userName?: string | null): string {
@@ -162,6 +166,7 @@ function formatHelpAnswer(raw: string, channel: PlatformHelpChannel): string {
 async function callOpenRouterHelp(
   apiKey: string,
   model: string,
+  db: Db,
   input: {
     question: string
     pageContext?: string
@@ -169,6 +174,7 @@ async function callOpenRouterHelp(
     history?: PlatformHelpHistoryMessage[]
     channel?: PlatformHelpChannel
     userName?: string | null
+    userId: string
   },
 ): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
   const channel = input.channel === 'sms' ? 'sms' : 'web'
@@ -235,7 +241,11 @@ async function callOpenRouterHelp(
         name: tc.function.name,
         arguments: tc.function.arguments,
       })),
-      { pageContext: input.pageContext },
+      {
+        pageContext: input.pageContext,
+        db,
+        userId: input.userId,
+      },
     )
 
     for (const toolResult of toolResults) {
@@ -360,7 +370,8 @@ export async function askPlatformHelp(
         const { answer, promptTokens, completionTokens } = await callOpenRouterHelp(
           apiKey,
           model,
-          { ...input, channel },
+          db,
+          { ...input, channel, userId: input.userId },
         )
         const estimatedCostUsd = estimateTokenCostUsd(promptTokens, completionTokens)
         try {
