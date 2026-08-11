@@ -41,38 +41,35 @@ export function verifyAndParseQuoWebhook(input: {
 }
 
 /**
- * Process an inbound Quo SMS for Susan. Intended to run after the webhook
- * HTTP response is already on its way (fire-and-forget).
+ * Run the simple Susan SMS pipeline after webhook detection:
+ * who sent it → active text user → AI → Quo reply.
  */
 export async function processQuoInboundSusanSms(
   db: Db,
   parsed: ReturnType<typeof parseQuoMessageReceivedPayload>,
 ) {
   const started = Date.now()
-  try {
-    const result = await handleInboundSusanSms(db, {
-      fromPhone: parsed.fromPhone ?? '',
-      toPhone: parsed.toPhone,
-      body: parsed.body,
-      messageId: parsed.messageId,
-    })
-    console.info('[quo-webhook] susan sms', {
-      handled: result.handled,
-      reason: result.reason,
-      ms: Date.now() - started,
-      from: parsed.fromPhone,
-      messageId: parsed.messageId,
-    })
-    return result
-  }
-  catch (err) {
-    console.error(
-      '[quo-webhook] susan sms failed:',
-      err instanceof Error ? err.message : err,
-      { ms: Date.now() - started, from: parsed.fromPhone, messageId: parsed.messageId },
-    )
-    throw err
-  }
+  console.info('[quo-webhook] detected sms', {
+    from: parsed.fromPhone,
+    to: parsed.toPhone,
+    messageId: parsed.messageId,
+    bodyPreview: parsed.body.slice(0, 80),
+  })
+
+  const result = await handleInboundSusanSms(db, {
+    fromPhone: parsed.fromPhone ?? '',
+    toPhone: parsed.toPhone,
+    body: parsed.body,
+    messageId: parsed.messageId,
+  })
+
+  console.info('[quo-webhook] pipeline done', {
+    ...result,
+    ms: Date.now() - started,
+    from: parsed.fromPhone,
+    messageId: parsed.messageId,
+  })
+  return result
 }
 
 export async function getQuoWebhookSigningKey(db: Db): Promise<string | null> {

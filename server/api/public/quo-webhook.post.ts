@@ -6,9 +6,8 @@ import {
 } from '../../services/quo-webhook.service'
 
 /**
- * Quo inbound webhook (message.received) → Susan AI SMS chat for text-enabled staff.
- * Responds immediately after signature verification so Quo doesn't time out while
- * OpenRouter generates Susan's reply.
+ * Quo webhook: new SMS → identify sender → active text user → Susan AI → reply SMS.
+ * Returns 200 immediately so Quo does not time out while AI runs.
  */
 export default defineEventHandler(async (event) => {
   const rawBody = await readRawBody(event, 'utf8')
@@ -18,7 +17,6 @@ export default defineEventHandler(async (event) => {
 
   const webhookKey = await getQuoWebhookSigningKey(useDb())
   if (!webhookKey) {
-    console.warn('[quo-webhook] rejected: webhook signing key not configured')
     throw createError({ statusCode: 503, statusMessage: 'Quo webhook is not configured' })
   }
 
@@ -32,7 +30,6 @@ export default defineEventHandler(async (event) => {
 
   if (!verified.ok) {
     if (verified.reason === 'invalid_signature') {
-      console.warn('[quo-webhook] rejected: invalid signature')
       throw createError({ statusCode: 401, statusMessage: 'Invalid webhook signature' })
     }
     throw createError({ statusCode: 400, statusMessage: 'Invalid JSON' })
@@ -42,16 +39,11 @@ export default defineEventHandler(async (event) => {
     return { ok: true, ignored: true, reason: verified.reason }
   }
 
+  // 1) Detected new inbound SMS — process the simple pipeline in background.
   const parsed = verified.parsed
-  // Acknowledge delivery immediately — AI reply continues in background.
-  const db = useDb()
-  void processQuoInboundSusanSms(db, parsed).catch((err) => {
-    console.error('[quo-webhook] background process failed:', err instanceof Error ? err.message : err)
+  void processQuoInboundSusanSms(useDb(), parsed).catch((err) => {
+    console.error('[quo-webhook] pipeline failed:', err instanceof Error ? err.message : err)
   })
 
-  return {
-    ok: true,
-    accepted: true,
-    messageId: parsed.messageId,
-  }
+  return { ok: true, accepted: true, messageId: parsed.messageId }
 })

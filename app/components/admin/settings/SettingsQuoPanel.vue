@@ -388,7 +388,7 @@ const variableHelp = computed(() => {
           <span class="msg-pref-text">
             <b>Susan SMS webhook</b>
             <small v-if="quoData.webhookConfigured">
-              Inbound texts to this Quo number are routed to Susan AI for staff with Text notifications enabled.
+              Flow: new SMS → match active staff phone → require Text notifications → Susan AI → reply SMS.
               <template v-if="quoData.webhookUrl"><br>Endpoint: {{ quoData.webhookUrl }}</template>
             </small>
             <small v-else>
