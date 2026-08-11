@@ -138,6 +138,15 @@ export interface UpdateUserInput {
   phone?: string | null
 }
 
+export interface UpdateUserCommunicationPrefsInput {
+  userId: string
+  actor: { id: string, accountType: string }
+  teamChatEnabled?: boolean
+  messageEmailNotify?: boolean
+  messageNotifyChannel?: 'email' | 'sms'
+  silentDeveloperMode?: boolean
+}
+
 /**
  * Update account type / active flag. Super Admin records can only be
  * modified by a Super Admin, and nobody can be promoted to super_admin
@@ -300,6 +309,10 @@ export async function getUserDetail(db: Db, userId: string) {
     .where(eq(sessions.userId, userId))
     .limit(1)
 
+  const { isQuoEnabled } = await import('./quo.service')
+  const quoSmsEnabled = await isQuoEnabled(db)
+  const channel = row.user.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+
   return {
     id: row.user.id,
     name: row.user.name,
@@ -320,7 +333,81 @@ export async function getUserDetail(db: Db, userId: string) {
     mustChangePassword: row.user.mustChangePassword,
     /** True once the user has signed in at least once (any session row). */
     hasLoggedIn: Boolean(sessionRow),
+    teamChatEnabled: row.user.teamChatEnabled,
+    messageEmailNotify: row.user.messageEmailNotify,
+    messageNotifyChannel: channel,
+    silentDeveloperMode: row.user.silentDeveloperMode,
+    quoSmsEnabled,
     createdAt: row.user.createdAt,
     updatedAt: row.user.updatedAt,
+  }
+}
+
+/**
+ * Admin update of another user’s My Account communication toggles.
+ * When Email/Text channel changes, notifies the user on the newly selected channel.
+ */
+export async function updateUserCommunicationPrefs(
+  db: Db,
+  input: UpdateUserCommunicationPrefsInput,
+) {
+  const row = await getUserWithType(db, input.userId)
+  if (!row) throw new UsersServiceError('NOT_FOUND')
+  if (isSusanSystemEmail(row.user.email)) throw new UsersServiceError('SUSAN_PROTECTED')
+  if (row.accountTypeKey === 'customer') throw new UsersServiceError('INVALID_ACCOUNT_TYPE')
+
+  const targetIsSuperAdmin = row.accountTypeKey === 'super_admin'
+  if (targetIsSuperAdmin && input.actor.accountType !== 'super_admin') {
+    throw new UsersServiceError('SUPER_ADMIN_PROTECTED')
+  }
+
+  const previousChannel = row.user.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+  const { updateAccountNotificationPrefs } = await import('./account.service')
+
+  const updated = await updateAccountNotificationPrefs(db, input.userId, {
+    teamChatEnabled: input.teamChatEnabled,
+    messageEmailNotify: input.messageEmailNotify,
+    messageNotifyChannel: input.messageNotifyChannel,
+    silentDeveloperMode: input.silentDeveloperMode,
+  })
+
+  const nextChannel = updated.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+  const channelChanged = input.messageNotifyChannel !== undefined && nextChannel !== previousChannel
+  const changedFields = [
+    ...(input.teamChatEnabled !== undefined && input.teamChatEnabled !== row.user.teamChatEnabled
+      ? ['teamChatEnabled']
+      : []),
+    ...(input.messageEmailNotify !== undefined && input.messageEmailNotify !== row.user.messageEmailNotify
+      ? ['messageEmailNotify']
+      : []),
+    ...(channelChanged ? ['messageNotifyChannel'] : []),
+    ...(input.silentDeveloperMode !== undefined
+      && input.silentDeveloperMode !== row.user.silentDeveloperMode
+      ? ['silentDeveloperMode']
+      : []),
+  ]
+
+  if (channelChanged) {
+    const { notifyNotifyChannelChanged } = await import('./staff-notifications.service')
+    await notifyNotifyChannelChanged(db, {
+      userId: updated.id,
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      channel: nextChannel,
+    })
+  }
+
+  return {
+    user: updated,
+    accountTypeKey: row.accountTypeKey,
+    changedFields,
+    previous: {
+      teamChatEnabled: row.user.teamChatEnabled,
+      messageEmailNotify: row.user.messageEmailNotify,
+      messageNotifyChannel: previousChannel,
+      silentDeveloperMode: row.user.silentDeveloperMode,
+    },
+    channelChanged,
   }
 }

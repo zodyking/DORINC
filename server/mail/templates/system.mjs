@@ -368,6 +368,64 @@ export function buildStaffPasswordResetEmail({ name, email, tempPassword, appUrl
   })
 }
 
+export function buildNotifyChannelChangedEmail({
+  name,
+  channel,
+  accountUrl,
+  brandName,
+  appUrl,
+  brand,
+  templateOverride,
+}) {
+  const resolvedBrand = brandName || brandNameFrom({ brand, brandName })
+  const toSms = channel === 'sms'
+  const channelLabel = toSms ? 'Text' : 'Email'
+  const leadMessage = toSms
+    ? 'The system has changed your notification channel to Text. Quicker, cleaner notifications without cluttering your email inbox. If you prefer emails, you can change this on the My Account page.'
+    : 'The system has changed your notification channel to Email. Alerts will arrive in your inbox so you can keep a lasting record. If you prefer text messages, you can change this on the My Account page.'
+  const subject = 'Notification channel updated'
+  const text = [
+    `Hi ${name},`,
+    '',
+    'Notification channel updated',
+    '',
+    leadMessage,
+    accountUrl ? `Open My Account: ${accountUrl}` : '',
+  ].filter(Boolean).join('\n')
+
+  return styledEmail({
+    headerBadge: '',
+    subject,
+    text,
+    eyebrow: '',
+    headline: 'Notification channel updated',
+    lead: leadMessage,
+    details: [
+      { label: 'Recipient', value: name },
+      { label: 'Channel', value: channelLabel },
+    ],
+    note: {
+      title: 'Change it anytime',
+      body: toSms
+        ? 'If you prefer emails, you can update this on the My Account page.'
+        : 'If you prefer text messages, you can update this on the My Account page.',
+    },
+    primaryAction: accountUrl
+      ? { href: accountUrl, label: 'Open My Account' }
+      : undefined,
+    appUrl,
+    brand,
+    templateOverride,
+    templateVars: {
+      name,
+      brandName: resolvedBrand,
+      channelLabel,
+      leadMessage,
+      accountUrl,
+    },
+  })
+}
+
 export function buildBackupNotificationEmail({
   success,
   filename,

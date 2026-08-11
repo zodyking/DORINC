@@ -5,6 +5,7 @@ const QUO_API_BASE = 'https://api.quo.com'
 
 /** Catalog defaults — keep in sync with shared/sms-template-catalog.ts */
 export const SMS_DEFAULT_BODIES = {
+  notify_channel_changed: "{{brandName}}\n\nHi {{name}},\n\nNotification channel updated\n\n{{leadMessage}}\n\n{{detailMessage}}\n\nOpen: {{accountUrl}}",
   login_notification: "{{brandName}}\n\nHi {{name}},\n\nNew sign-in\n\nYour staff account was used to sign in to {{brandName}}.\n\nWhen\n{{when}}\n\nEmail\n{{email}}\n\nLocation\n{{locationLine}}\n\nIP address\n{{ipAddress}}\n\nDevice\n{{device}}\n\nIf this was not you, contact your administrator immediately and change your password.\nOpen: {{appUrl}}",
   outside_geofence_verification: "{{brandName}}\n\nHi {{name}},\n\nSuspicious location detected\n\nYou're accessing {{brandName}} from a suspicious location. Enter this verification code to confirm your identity.\n\nVerification code\n{{code}}\n\nExpires\n{{expiresMinutes}} minutes\n\nLocation\n{{locationLabel}}\n\nIP address\n{{ipAddress}}\n\nIf you did not attempt to sign in, contact your administrator immediately and change your password.",
   signup_verification: "{{brandName}}\n\nHi {{name}},\n\nVerify your email\n\nConfirm your email to continue your {{brandName}} account request.\n\nOpen: {{verifyUrl}}\n\nThe link expires in 24 hours. After verification an administrator must approve your account before you can sign in.",

@@ -8,6 +8,7 @@ import {
   buildCustomerEmailReceivedStaffEmail,
   buildCustomerServiceRequestStaffEmail,
   buildInvoicePendingApprovalEmail,
+  buildNotifyChannelChangedEmail,
   buildUserSignupPendingEmail,
 } from '../mail/templates/system'
 import { resolveEmailBrand } from './email-branding.service'
@@ -482,4 +483,62 @@ export async function notifyCustomerEmailReceived(
   }
 
   return { queued, reason: queued ? undefined : 'no_recipients' as const }
+}
+
+/** Notify a staff user that an admin changed their Email vs Text preference. */
+export async function notifyNotifyChannelChanged(
+  db: Db,
+  opts: {
+    userId: string
+    name: string
+    email: string
+    phone?: string | null
+    channel: 'email' | 'sms'
+  },
+) {
+  const brand = await resolveEmailBrand(db)
+  const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const templateOverride = await getActiveEmailTemplateContent(db, 'notify_channel_changed')
+  const appUrl = brand.appUrl || getAppUrl()
+  const accountUrl = `${appUrl.replace(/\/$/, '')}/account`
+  const toSms = opts.channel === 'sms'
+  const channelLabel = toSms ? 'Text' : 'Email'
+  const leadMessage = toSms
+    ? 'The system has changed your notification channel to Text.'
+    : 'The system has changed your notification channel to Email.'
+  const detailMessage = toSms
+    ? 'Quicker, cleaner notifications without cluttering your email inbox. If you prefer emails, you can change this on the My Account page.'
+    : 'Alerts will arrive in your inbox so you can keep a lasting record. If you prefer text messages, you can change this on the My Account page.'
+
+  const mail = buildNotifyChannelChangedEmail({
+    name: opts.name,
+    channel: opts.channel,
+    accountUrl,
+    appUrl,
+    brand,
+    templateOverride,
+  })
+
+  return deliverUserNotification(db, {
+    id: opts.userId,
+    email: opts.email,
+    phone: opts.phone,
+    messageNotifyChannel: opts.channel,
+  }, {
+    sms: {
+      typeKey: 'notify_channel_changed',
+      vars: {
+        name: opts.name,
+        channelLabel,
+        leadMessage,
+        detailMessage,
+        accountUrl,
+      },
+    },
+    email: mail,
+    meta: {
+      notificationKind: 'notify_channel_changed',
+      channel: opts.channel,
+    },
+  })
 }

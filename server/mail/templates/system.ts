@@ -10,6 +10,7 @@ export {
   buildBackupNotificationEmail,
   buildDailySummaryEmail,
   buildInvoiceAttachedEmail,
+  buildNotifyChannelChangedEmail,
   buildLoginNotificationEmail,
   buildCustomerAutoResponderEmail,
   buildDeletionRequestSubmittedEmail,

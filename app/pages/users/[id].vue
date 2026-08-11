@@ -21,6 +21,11 @@ interface UserDetail {
   disabledReason: string | null
   mustChangePassword: boolean
   hasLoggedIn: boolean
+  teamChatEnabled: boolean
+  messageEmailNotify: boolean
+  messageNotifyChannel: 'email' | 'sms'
+  silentDeveloperMode: boolean
+  quoSmsEnabled: boolean
   createdAt: string
 }
 
@@ -61,14 +66,23 @@ const roleGrants = computed(() => userPerms.value?.roleGrants ?? [])
 
 const selectedType = ref('')
 const editPhone = ref('')
+const teamChatEnabled = ref(true)
+const messageEmailNotify = ref(true)
+const messageNotifyChannel = ref<'email' | 'sms'>('email')
+const silentDeveloperMode = ref(false)
 watchEffect(() => {
   if (user.value) {
     selectedType.value = user.value.accountType
     editPhone.value = formatPhoneDisplay(user.value.phone ?? '')
+    teamChatEnabled.value = user.value.teamChatEnabled !== false
+    messageEmailNotify.value = user.value.messageEmailNotify !== false
+    messageNotifyChannel.value = user.value.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+    silentDeveloperMode.value = user.value.silentDeveloperMode === true
   }
 })
 
 const busy = ref(false)
+const notifyBusy = ref(false)
 const notice = ref('')
 const errorMsg = ref('')
 
@@ -77,6 +91,13 @@ const canEditPerms = computed(() => auth.can('users.permissions.all'))
 const isSuperAdminRecord = computed(() => user.value?.accountType === 'super_admin')
 const isSusanRecord = computed(() => isSusanSystemEmail(user.value?.email))
 const isLockedSystemRecord = computed(() => isSuperAdminRecord.value || isSusanRecord.value)
+const quoSmsEnabled = computed(() => user.value?.quoSmsEnabled === true)
+const canEditCommunications = computed(() =>
+  canManage.value
+  && !!user.value
+  && !isSusanRecord.value
+  && user.value.accountType !== 'customer',
+)
 const typeDirty = computed(() => !!user.value && selectedType.value !== user.value.accountType)
 const phoneDirty = computed(() => {
   if (!user.value) return false
@@ -85,6 +106,14 @@ const phoneDirty = computed(() => {
   return next !== current
 })
 const profileDirty = computed(() => typeDirty.value || phoneDirty.value)
+const communicationsDirty = computed(() => {
+  if (!user.value) return false
+  const currentChannel = user.value.messageNotifyChannel === 'sms' ? 'sms' : 'email'
+  return teamChatEnabled.value !== (user.value.teamChatEnabled !== false)
+    || messageEmailNotify.value !== (user.value.messageEmailNotify !== false)
+    || messageNotifyChannel.value !== currentChannel
+    || silentDeveloperMode.value !== (user.value.silentDeveloperMode === true)
+})
 
 // Permission override state: 'inherit' | 'allow' | 'deny'
 type OverrideState = 'inherit' | 'allow' | 'deny'
@@ -180,6 +209,38 @@ const saveChanges = () => run(
       ? 'Account type updated'
       : 'User updated',
 )
+
+async function saveCommunications() {
+  if (!canEditCommunications.value || !user.value) return
+  notifyBusy.value = true
+  errorMsg.value = ''
+  notice.value = ''
+  try {
+    const res = await $fetch<{ channelChanged?: boolean }>(
+      `/api/admin/users/${route.params.id}/notifications`,
+      {
+        method: 'PATCH',
+        body: {
+          teamChatEnabled: teamChatEnabled.value,
+          silentDeveloperMode: silentDeveloperMode.value,
+          ...(quoSmsEnabled.value
+            ? { messageNotifyChannel: messageNotifyChannel.value }
+            : { messageEmailNotify: messageEmailNotify.value }),
+        },
+      },
+    )
+    await refresh()
+    notice.value = res.channelChanged
+      ? `Communication settings saved — user notified by ${messageNotifyChannel.value === 'sms' ? 'text' : 'email'}`
+      : 'Communication settings saved'
+  }
+  catch (err) {
+    errorMsg.value = messageFrom(err)
+  }
+  finally {
+    notifyBusy.value = false
+  }
+}
 
 function toggleActive() {
   if (user.value!.isActive) {
@@ -542,6 +603,129 @@ const showPermissionsModal = ref(false)
               <dd>{{ new Date(user.createdAt).toLocaleDateString() }}</dd>
             </dl>
           </div>
+          <div v-if="canEditCommunications" class="card">
+            <div class="chead"><h3>Messages</h3></div>
+            <div class="cbody">
+              <div class="msg-prefs">
+                <div class="msg-pref-row msg-pref-row--channel">
+                  <span class="msg-pref-text">
+                    <b>Team group chat</b>
+                    <small>Stay in the shared Team channel for internal workflow updates.</small>
+                  </span>
+                  <div class="notify-channel" role="group" aria-label="Team group chat">
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: teamChatEnabled }"
+                      :disabled="notifyBusy || busy"
+                      @click="teamChatEnabled = true"
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: !teamChatEnabled }"
+                      :disabled="notifyBusy || busy"
+                      @click="teamChatEnabled = false"
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+                <div v-if="quoSmsEnabled" class="msg-pref-row msg-pref-row--channel">
+                  <span class="msg-pref-text">
+                    <b>Security &amp; chat notifications</b>
+                    <small>
+                      Choose Email or Text for staff notifications. Changing this notifies the user on the new channel.
+                      Text requires a phone number on their profile.
+                    </small>
+                  </span>
+                  <div class="notify-channel" role="group" aria-label="Notification channel">
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: messageNotifyChannel === 'email' }"
+                      :disabled="notifyBusy || busy"
+                      @click="messageNotifyChannel = 'email'"
+                    >
+                      Email
+                    </button>
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: messageNotifyChannel === 'sms' }"
+                      :disabled="notifyBusy || busy"
+                      @click="messageNotifyChannel = 'sms'"
+                    >
+                      Text
+                    </button>
+                  </div>
+                </div>
+                <div v-else class="msg-pref-row msg-pref-row--channel">
+                  <span class="msg-pref-text">
+                    <b>Email me for new chat messages</b>
+                    <small>Send an email when they receive a direct message or a team chat message.</small>
+                  </span>
+                  <div class="notify-channel" role="group" aria-label="Email me for new chat messages">
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: messageEmailNotify }"
+                      :disabled="notifyBusy || busy"
+                      @click="messageEmailNotify = true"
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: !messageEmailNotify }"
+                      :disabled="notifyBusy || busy"
+                      @click="messageEmailNotify = false"
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+                <div class="msg-pref-row msg-pref-row--channel msg-pref-row--dev">
+                  <span class="msg-pref-text">
+                    <b>Silent developer mode</b>
+                    <small>
+                      When enabled, workflow notifications this user triggers are not sent to other users.
+                    </small>
+                  </span>
+                  <div class="notify-channel" role="group" aria-label="Silent developer mode">
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: silentDeveloperMode }"
+                      :disabled="notifyBusy || busy"
+                      @click="silentDeveloperMode = true"
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      class="notify-channel__opt"
+                      :class="{ on: !silentDeveloperMode }"
+                      :disabled="notifyBusy || busy"
+                      @click="silentDeveloperMode = false"
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <button
+                class="btn primary msg-pref-save"
+                :disabled="notifyBusy || busy || !communicationsDirty"
+                @click="saveCommunications"
+              >
+                {{ notifyBusy ? 'Saving…' : 'Save message preferences' }}
+              </button>
+            </div>
+          </div>
           <div v-if="canManage && user && !isSusanRecord && user.accountType !== 'customer'" class="card">
             <div class="chead"><h3>Training</h3></div>
             <div class="cbody" style="padding-top:14px;">
@@ -775,5 +959,82 @@ const showPermissionsModal = ref(false)
     height: 100dvh;
     border-radius: 0;
   }
+}
+
+.msg-prefs {
+  display: flex;
+  flex-direction: column;
+}
+.msg-pref-row {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.msg-pref-row--channel {
+  cursor: default;
+  align-items: center;
+}
+.notify-channel {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.notify-channel__opt {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  min-height: 36px;
+}
+.notify-channel__opt.on {
+  background: #0f172a;
+  color: #fff;
+}
+.notify-channel__opt:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.msg-pref-row:first-child {
+  padding-top: 0;
+}
+.msg-pref-row:last-child {
+  border-bottom: none;
+}
+.msg-pref-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.msg-pref-text b {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.msg-pref-text small {
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.msg-pref-row--dev {
+  background: #fafafa;
+  margin: 0 -16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.msg-pref-row--dev:last-child {
+  border-bottom: none;
+}
+.msg-pref-save {
+  margin-top: 14px;
 }
 </style>

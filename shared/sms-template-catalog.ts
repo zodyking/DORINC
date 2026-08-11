@@ -76,6 +76,45 @@ const brandVars: SmsTemplateVariable[] = [
 
 export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
   {
+    typeKey: 'notify_channel_changed',
+    name: 'Notification channel changed',
+    description: 'Sent when an administrator changes a user’s Email vs Text preference.',
+    audience: 'staff',
+    group: 'security',
+    defaults: {
+      body: [
+        '{{brandName}}',
+        '',
+        'Hi {{name}},',
+        '',
+        'Notification channel updated',
+        '',
+        '{{leadMessage}}',
+        '',
+        '{{detailMessage}}',
+        '',
+        'Open: {{accountUrl}}',
+      ].join('\n'),
+    },
+    variables: [
+      ...brandVars,
+      { key: 'name', label: 'User name' },
+      { key: 'channelLabel', label: 'Channel label' },
+      { key: 'leadMessage', label: 'Lead message' },
+      { key: 'detailMessage', label: 'Detail message' },
+      { key: 'accountUrl', label: 'My Account URL' },
+    ],
+    sampleVars: {
+      brandName: 'DORINC',
+      name: 'Alex Rivera',
+      channelLabel: 'Text',
+      leadMessage: 'The system has changed your notification channel to Text.',
+      detailMessage: 'Quicker, cleaner notifications without cluttering your email inbox. If you prefer emails, you can change this on the My Account page.',
+      accountUrl: 'https://app.example.com/account',
+      appUrl: 'https://app.example.com',
+    },
+  },
+  {
     typeKey: 'login_notification',
     name: 'Sign-in alert',
     description: 'Sent when a staff or portal account signs in.',
