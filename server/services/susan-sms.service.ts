@@ -6,7 +6,7 @@ import {
   type SusanSmsHistoryMessage,
 } from '../db/schema/susan-sms'
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
-import { stripHtmlToText } from '../../shared/email-display'
+import { formatPlatformHelpForSms } from '../../shared/platform-help'
 import { askPlatformHelp } from './platform-help.service'
 import {
   getQuoConfig,
@@ -15,13 +15,6 @@ import {
 } from './quo.service'
 
 const HISTORY_LIMIT = 20
-const SMS_REPLY_MAX = 1500
-
-function toPlainSms(htmlOrText: string): string {
-  const stripped = stripHtmlToText(htmlOrText).replace(/\s+\n/g, '\n').trim()
-  if (stripped.length <= SMS_REPLY_MAX) return stripped
-  return `${stripped.slice(0, SMS_REPLY_MAX - 1).trimEnd()}…`
-}
 
 function phoneDigits(value: string | null | undefined): string {
   return String(value ?? '').replace(/\D/g, '')
@@ -198,16 +191,17 @@ export async function handleInboundSusanSms(
     messageId: input.messageId,
   })
 
-  // 4) AI generate response
+  // 4) AI generate response (same Platform Assistant as in-app, SMS-formatted)
   const history = await loadHistory(db, user.id)
   const result = await askPlatformHelp(db, {
     question,
-    pageContext: 'SMS chat with Susan AI',
     userId: user.id,
+    userName: user.name,
+    channel: 'sms',
     history: history.map(m => ({ role: m.role, content: m.content })),
   })
-  const answerText = toPlainSms(result.answer)
-    || 'I could not generate a reply just now. Please try again in a moment.'
+  const answerText = formatPlatformHelpForSms(result.answer)
+    || `Hi — I'm Susan. I could not generate a reply just now. Please try again in a moment.`
 
   // 5) Quo API sends reply
   await sendQuoSms({

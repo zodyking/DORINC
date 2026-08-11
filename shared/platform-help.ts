@@ -308,6 +308,64 @@ export function formatPlatformHelpAnswer(raw: string): string {
   return formatPlatformHelpHtml(raw)
 }
 
+const SMS_HELP_MAX_CHARS = 1400
+
+/**
+ * Format platform-help output for SMS: plain text, short paragraphs,
+ * numbered steps — no HTML/markdown chrome.
+ */
+export function formatPlatformHelpForSms(raw: string, maxChars = SMS_HELP_MAX_CHARS): string {
+  let text = String(raw ?? '').trim()
+  if (!text) return ''
+
+  // HTML → readable plain text with list markers.
+  if (/<[a-z][\s>/]/i.test(text)) {
+    let step = 0
+    text = text
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|h[1-6]|tr)>/gi, '\n\n')
+      .replace(/<li[^>]*>/gi, () => {
+        step += 1
+        return `\n${step}) `
+      })
+      .replace(/<\/(li|ul|ol)>/gi, '\n')
+      .replace(/<\/?b>/gi, '')
+      .replace(/<\/?strong>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, '\'')
+  }
+
+  text = text
+    .replace(/\r\n/g, '\n')
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, '').trim())
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/^\s*[-*•]\s+/gm, '• ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+
+  // Soft-clean meta lines that describe the SMS channel as a feature.
+  text = text
+    .replace(/\bSMS chat with Susan AI\b/gi, 'DORINC')
+    .replace(/\bthe SMS chat\b/gi, 'the app')
+    .trim()
+
+  if (text.length <= maxChars) return text
+  const cut = text.slice(0, maxChars - 1)
+  const at = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf('. '), cut.lastIndexOf(' '))
+  return `${(at > 200 ? cut.slice(0, at) : cut).trimEnd()}…`
+}
+
 export function helpSuggestionsForPage(pageKey: string): string[] {
   return HELP_SUGGESTIONS[pageKey] ?? HELP_SUGGESTIONS.default!
 }

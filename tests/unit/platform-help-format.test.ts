@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { formatPlatformHelpHtml, matchPlatformHelpAnswer } from '../../shared/platform-help'
+import {
+  formatPlatformHelpForSms,
+  formatPlatformHelpHtml,
+  matchPlatformHelpAnswer,
+} from '../../shared/platform-help'
 
 describe('formatPlatformHelpHtml', () => {
   it('converts markdown numbered steps to an ordered list', () => {
@@ -56,5 +60,31 @@ describe('matchPlatformHelpAnswer formatting', () => {
   it('returns formatted fallback for known topics', () => {
     const answer = formatPlatformHelpHtml(matchPlatformHelpAnswer('How do I create a new invoice?'))
     expect(answer).toContain('<b>')
+  })
+})
+
+describe('formatPlatformHelpForSms', () => {
+  it('converts HTML help into short plain SMS text with numbered steps', () => {
+    const sms = formatPlatformHelpForSms(
+      '<p>Hi Alex!</p><p>I can help with DORINC.</p>'
+      + '<h4 class="help-section">What I can help with</h4>'
+      + '<ol class="help-steps"><li>Explain navigation</li><li>Walk through workflows</li></ol>',
+    )
+    expect(sms).not.toMatch(/<[^>]+>/)
+    expect(sms).toMatch(/1\) Explain navigation/)
+    expect(sms).toMatch(/2\) Walk through workflows/)
+    expect(sms).toContain('Hi Alex!')
+  })
+
+  it('does not leave SMS-chat feature wording in the reply', () => {
+    const sms = formatPlatformHelpForSms('I can help you use the SMS chat with Susan AI.')
+    expect(sms).not.toMatch(/SMS chat with Susan AI/i)
+    expect(sms).toContain('DORINC')
+  })
+
+  it('truncates very long replies', () => {
+    const sms = formatPlatformHelpForSms('A'.repeat(2000), 200)
+    expect(sms.length).toBeLessThanOrEqual(200)
+    expect(sms.endsWith('…')).toBe(true)
   })
 })
