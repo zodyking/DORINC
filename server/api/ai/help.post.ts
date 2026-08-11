@@ -12,10 +12,12 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, platformHelpAskSchema)
   const db = useDb()
 
+  const authUser = (event.context.auth as { user?: { name?: string } } | undefined)?.user
   const result = await askPlatformHelp(db, {
     question: body.question,
     pageContext: body.pageContext,
     userId: user.id,
+    userName: authUser?.name || undefined,
     imageDataUrls: body.imageDataUrls,
     history: body.history,
   })

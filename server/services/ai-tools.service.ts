@@ -1,9 +1,16 @@
+import type { Db } from '../db/client'
 import {
   formatAppKnowledgeForTool,
   listAppKnowledgeAreas,
   searchAppKnowledge,
 } from '../../shared/app-knowledge'
 import { parseGetAppKnowledgeArgs, type AiToolName } from '../../shared/ai-tools'
+import {
+  executeLookupCustomer,
+  executeLookupInvoice,
+  executeLookupServiceLog,
+  executeSearchCatalog,
+} from './ai-entity-tools.service'
 
 export type AiToolCallRequest = {
   id: string
@@ -16,6 +23,12 @@ export type AiToolExecutionResult = {
   name: string
   ok: boolean
   content: string
+}
+
+export type SusanHelpToolOpts = {
+  pageContext?: string | null
+  db?: Db
+  userId?: string | null
 }
 
 function parseArgsJson(raw: string): unknown {
@@ -54,7 +67,6 @@ function executeGetAppKnowledge(argsRaw: unknown, pageContext?: string | null): 
   })
 
   if (!docs.length || (docs.every(d => d.score === 0) && query && !area)) {
-    // searchAppKnowledge soft-falls back to overview docs with score 0; treat weak matches as miss when query given
     const strong = docs.filter(d => d.score > 0)
     if (!strong.length && query) {
       return {
@@ -77,23 +89,51 @@ function executeGetAppKnowledge(argsRaw: unknown, pageContext?: string | null): 
   }
 }
 
+function needDbUser(tool: string): { ok: boolean, content: string } {
+  return {
+    ok: false,
+    content: `${tool} requires an authenticated staff context and database access.`,
+  }
+}
+
 export async function executeSusanHelpTool(
   call: AiToolCallRequest,
-  opts: { pageContext?: string | null } = {},
+  opts: SusanHelpToolOpts = {},
 ): Promise<AiToolExecutionResult> {
   const name = String(call.name || '').trim() as AiToolName | string
   const toolCallId = String(call.id || '').trim() || 'tool_call'
   try {
+    const parsed = parseArgsJson(call.arguments)
+
     if (name === 'get_app_knowledge') {
-      const parsed = parseArgsJson(call.arguments)
       const result = executeGetAppKnowledge(parsed, opts.pageContext)
-      return {
-        toolCallId,
-        name,
-        ok: result.ok,
-        content: result.content,
-      }
+      return { toolCallId, name, ok: result.ok, content: result.content }
     }
+
+    if (name === 'lookup_invoice') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeLookupInvoice(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'lookup_service_log') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeLookupServiceLog(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'lookup_customer') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeLookupCustomer(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'search_catalog') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeSearchCatalog(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
     return {
       toolCallId,
       name,
@@ -113,7 +153,7 @@ export async function executeSusanHelpTool(
 
 export async function executeSusanHelpTools(
   calls: AiToolCallRequest[],
-  opts: { pageContext?: string | null } = {},
+  opts: SusanHelpToolOpts = {},
 ): Promise<AiToolExecutionResult[]> {
   const list = Array.isArray(calls) ? calls : []
   const out: AiToolExecutionResult[] = []

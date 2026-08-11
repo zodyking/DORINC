@@ -221,8 +221,9 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
     body: [
       'In-app: floating Platform Assistant widget (staff layout). Uses POST /api/ai/help.',
       'SMS: staff with messageNotifyChannel=sms text the Quo number; susan-sms threads keep short history and call the same askPlatformHelp pipeline with channel=sms.',
-      'Susan explains the product; she does not mutate invoices/customers/data.',
-      'Tooling: get_app_knowledge retrieves structured docs about pages and features before answering.',
+      'Susan explains the product and can read invoices, service logs, customers, and catalog via tools when the staffer has permission.',
+      'Susan does not mutate invoices/customers/data — lookups are read-only.',
+      'Tools: get_app_knowledge, lookup_invoice, lookup_service_log, lookup_customer, search_catalog.',
       'Other Susan roles: daily summary notes, AI Administrator deletion reviews — not the help chat.',
       'If AI is disabled or spend-capped, built-in keyword FAQ fallback answers are used.',
     ].join('\n'),
