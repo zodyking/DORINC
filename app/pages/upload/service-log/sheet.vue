@@ -78,6 +78,8 @@ let closeTimer: ReturnType<typeof setInterval> | null = null
 const customerId = ref('')
 const vehicleId = ref('')
 const localPreviews = ref<{ id: string, url: string, file: File }[]>([])
+const customerContinueEl = ref<HTMLElement | null>(null)
+const vehicleContinueEl = ref<HTMLElement | null>(null)
 
 const cameraPhotos = computed(() => localPreviews.value.map(p => ({ id: p.id, url: p.url })))
 const previewPhoto = computed(() =>
@@ -116,6 +118,27 @@ watch(wizardStep, (step) => {
 })
 
 const vehicleOptions = computed(() => vehiclesData.value?.items ?? [])
+const isPickerStep = computed(() => phase.value === 'wizard' && (wizardStep.value === 1 || wizardStep.value === 2))
+
+function scrollToContinue(el: HTMLElement | null) {
+  if (!import.meta.client || !el) return
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  el.scrollIntoView({
+    behavior: reduceMotion ? 'auto' : 'smooth',
+    block: 'end',
+    inline: 'nearest',
+  })
+}
+
+function pickCustomer(id: string) {
+  customerId.value = id
+  void nextTick(() => scrollToContinue(customerContinueEl.value))
+}
+
+function pickVehicle(id: string) {
+  vehicleId.value = id
+  void nextTick(() => scrollToContinue(vehicleContinueEl.value))
+}
 
 function loginHref(email?: string) {
   setStaffReturnPath(SERVICE_LOG_SHEET_UPLOAD_PATH, { autoContinue: true })
@@ -356,7 +379,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="sl-sheet-upload">
+  <div class="sl-sheet-upload" :class="{ 'sl-sheet-upload--picker': isPickerStep && !cameraOpen }">
     <div class="sl-sheet-upload__wrap">
       <header v-if="!cameraOpen" class="sl-sheet-upload__brand">
         <img class="sl-sheet-upload__logo" :src="BRAND_ICON" alt="" width="40" height="40">
@@ -430,10 +453,15 @@ onBeforeUnmount(() => {
 
         <template v-else>
           <!-- Wizard: customer → vehicle → photos -->
-          <div v-show="wizardStep === 1" class="sl-sheet-upload__card sl-sheet-upload__panel">
-            <h1>Which customer?</h1>
-            <p class="sl-sheet-upload__hint">Select the account on the paper log.</p>
-            <p v-if="customersPending" class="sl-sheet-upload__hint">Loading customers…</p>
+          <div
+            v-show="wizardStep === 1"
+            class="sl-sheet-upload__card sl-sheet-upload__panel sl-sheet-upload__panel--picker"
+          >
+            <div class="sl-sheet-upload__panel-head">
+              <h1>Which customer?</h1>
+              <p class="sl-sheet-upload__hint">Select the account on the paper log.</p>
+              <p v-if="customersPending" class="sl-sheet-upload__hint">Loading customers…</p>
+            </div>
             <div class="sl-sheet-upload__picks">
               <button
                 v-for="c in customerOptions"
@@ -441,13 +469,13 @@ onBeforeUnmount(() => {
                 type="button"
                 class="sl-sheet-upload__pick"
                 :class="{ on: customerId === c.id }"
-                @click="customerId = c.id"
+                @click="pickCustomer(c.id)"
               >
                 <b>{{ c.displayName }}</b>
                 <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
               </button>
             </div>
-            <div class="sl-sheet-upload__actions">
+            <div ref="customerContinueEl" class="sl-sheet-upload__actions">
               <button
                 type="button"
                 class="btn primary"
@@ -459,25 +487,32 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-show="wizardStep === 2" class="sl-sheet-upload__card sl-sheet-upload__panel">
-            <h1>Which vehicle?</h1>
-            <p class="sl-sheet-upload__hint">Pick the bus or unit from the paper log.</p>
-            <p v-if="vehiclesPending" class="sl-sheet-upload__hint">Loading vehicles…</p>
-            <div v-else-if="vehicleOptions.length" class="sl-sheet-upload__picks">
+          <div
+            v-show="wizardStep === 2"
+            class="sl-sheet-upload__card sl-sheet-upload__panel sl-sheet-upload__panel--picker"
+          >
+            <div class="sl-sheet-upload__panel-head">
+              <h1>Which vehicle?</h1>
+              <p class="sl-sheet-upload__hint">Pick the bus or unit from the paper log.</p>
+              <p v-if="vehiclesPending" class="sl-sheet-upload__hint">Loading vehicles…</p>
+              <p v-else-if="!vehicleOptions.length" class="sl-sheet-upload__hint">
+                No vehicles for this customer yet.
+              </p>
+            </div>
+            <div v-if="vehicleOptions.length" class="sl-sheet-upload__picks">
               <button
                 v-for="v in vehicleOptions"
                 :key="v.id"
                 type="button"
                 class="sl-sheet-upload__pick"
                 :class="{ on: vehicleId === v.id }"
-                @click="vehicleId = v.id"
+                @click="pickVehicle(v.id)"
               >
                 <b>{{ vehicleTag(v) }}</b>
                 <small>{{ vehicleSub(v) }}</small>
               </button>
             </div>
-            <p v-else class="sl-sheet-upload__hint">No vehicles for this customer yet.</p>
-            <div class="sl-sheet-upload__actions">
+            <div ref="vehicleContinueEl" class="sl-sheet-upload__actions">
               <button type="button" class="btn" @click="wizardStep = 1">Back</button>
               <button
                 type="button"
@@ -597,21 +632,48 @@ onBeforeUnmount(() => {
     linear-gradient(180deg, rgba(248, 250, 252, 0.78) 0%, rgba(241, 245, 249, 0.88) 100%),
     url('/images/auth-login-bg.png') center / cover no-repeat fixed;
 }
+.sl-sheet-upload--picker {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
 .sl-sheet-upload__wrap {
-  width: min(420px, 100%);
+  width: min(520px, 100%);
   margin: 0 auto;
-  padding: 24px 16px 20px;
+  padding: 16px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+.sl-sheet-upload--picker .sl-sheet-upload__wrap {
+  height: 100%;
+  padding-top: 12px;
 }
 .sl-sheet-upload__brand {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.sl-sheet-upload--picker .sl-sheet-upload__brand {
+  flex-direction: row;
+  justify-content: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
+}
+.sl-sheet-upload--picker .sl-sheet-upload__logo {
+  width: 32px;
+  height: 32px;
+}
+.sl-sheet-upload--picker .sl-sheet-upload__brand-text {
+  text-align: left;
+}
+.sl-sheet-upload--picker .sl-sheet-upload__brand-text b {
+  font-size: 15px;
 }
 .sl-sheet-upload__logo {
   width: 40px;
@@ -637,6 +699,9 @@ onBeforeUnmount(() => {
 .sl-sheet-upload__main {
   flex: 1;
   width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .sl-sheet-upload__card {
   background: #fff;
@@ -644,6 +709,19 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   padding: 22px 20px 24px;
   box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.15);
+}
+.sl-sheet-upload__panel--picker {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px 14px;
+}
+.sl-sheet-upload__panel-head {
+  flex-shrink: 0;
+}
+.sl-sheet-upload__panel-head .sl-sheet-upload__hint {
+  margin-bottom: 10px;
 }
 .sl-sheet-upload__state {
   text-align: center;
@@ -674,17 +752,33 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+  flex-shrink: 0;
+  scroll-margin-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.sl-sheet-upload__panel--picker .sl-sheet-upload__actions {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
 }
 .sl-sheet-upload__actions .btn.primary {
   flex: 1 1 auto;
-  min-height: 44px;
+  min-height: 48px;
 }
 .sl-sheet-upload__picks {
   display: grid;
   gap: 8px;
-  margin-bottom: 12px;
-  max-height: min(50dvh, 360px);
+  margin-bottom: 0;
+  flex: 1 1 auto;
+  min-height: min(62dvh, 520px);
+  max-height: none;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+.sl-sheet-upload__panel--picker .sl-sheet-upload__picks {
+  min-height: 0;
 }
 .sl-sheet-upload__pick {
   display: flex;
@@ -692,13 +786,14 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 2px;
   text-align: left;
-  padding: 12px 14px;
+  padding: 14px 14px;
   border: 1.5px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
   color: inherit;
   font: inherit;
   cursor: pointer;
+  min-height: 52px;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .sl-sheet-upload__pick:hover {
@@ -744,7 +839,12 @@ onBeforeUnmount(() => {
   color: #4f46e5 !important;
 }
 .sl-sheet-upload .suite-foot {
-  margin-top: 18px;
-  padding: 10px 0 0;
+  margin-top: 12px;
+  padding: 6px 0 0;
+  flex-shrink: 0;
+}
+.sl-sheet-upload--picker .suite-foot {
+  margin-top: 8px;
+  font-size: 10.5px;
 }
 </style>
