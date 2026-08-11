@@ -70,16 +70,16 @@ const pageStyle = {
             <span class="field-label">Customer Name</span>
             <div class="field-box" />
           </td>
+          <td class="f-unit">
+            <span class="field-label">Bus or Unit Number</span>
+            <div class="field-box" />
+          </td>
           <td class="f-invoice-date">
             <span class="field-label">Invoice Date</span>
             <div class="field-box" />
           </td>
           <td class="f-due-date">
             <span class="field-label">Due Date</span>
-            <div class="field-box" />
-          </td>
-          <td class="f-unit">
-            <span class="field-label">Bus or Unit Number</span>
             <div class="field-box" />
           </td>
         </tr>

@@ -110,10 +110,12 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 /* ---------- customer fields ---------- */
 .sheet-doc .top-fields { margin-top: 4pt; }
 .sheet-doc .top-fields td { vertical-align: top; padding: 0 5pt 0 0; }
-.sheet-doc .top-fields td.f-customer { width: 40%; }
+/* Customer → Bus/Unit → Invoice Date → Due Date. Bus matches date width;
+   the leftover width from the old wide unit column goes to customer. */
+.sheet-doc .top-fields td.f-customer { width: 49%; }
+.sheet-doc .top-fields td.f-unit { width: 17%; }
 .sheet-doc .top-fields td.f-invoice-date { width: 17%; }
-.sheet-doc .top-fields td.f-due-date { width: 17%; }
-.sheet-doc .top-fields td.f-unit { width: 26%; padding-right: 0; }
+.sheet-doc .top-fields td.f-due-date { width: 17%; padding-right: 0; }
 .sheet-doc .field-label {
   display: block;
   margin: 0 0 1.5pt;
