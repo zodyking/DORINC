@@ -5,7 +5,7 @@
  */
 import ServiceLogDocumentCamera from '~/components/service-logs/ServiceLogDocumentCamera.vue'
 import ServiceLogPhotoLightbox from '~/components/service-logs/ServiceLogPhotoLightbox.vue'
-import { BRAND_NAME } from '~/constants/brand'
+import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { setStaffReturnPath, consumeStaffReturnAutoContinue } from '~/utils/staff-return-path'
 import { vehicleSub, vehicleTag } from '~/utils/vehicles-ui'
@@ -15,6 +15,8 @@ import {
 } from '#shared/service-log-photos'
 import { SERVICE_LOG_SHEET_UPLOAD_PATH } from '#shared/service-log-sheet-upload'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
+
+const SUCCESS_AUTO_CLOSE_SECONDS = 10
 
 definePageMeta({
   layout: false,
@@ -69,6 +71,9 @@ const cameraOpen = ref(false)
 const previewId = ref<string | null>(null)
 const submittedLogLabel = ref('')
 const submittedInvoiceLabel = ref('')
+const closeCountdown = ref(SUCCESS_AUTO_CLOSE_SECONDS)
+const closeAttempted = ref(false)
+let closeTimer: ReturnType<typeof setInterval> | null = null
 
 const customerId = ref('')
 const vehicleId = ref('')
@@ -306,200 +311,258 @@ async function submitLog() {
   }
 }
 
+function stopCloseCountdown() {
+  if (closeTimer) {
+    clearInterval(closeTimer)
+    closeTimer = null
+  }
+}
+
+function tryCloseWindow() {
+  closeAttempted.value = true
+  if (!import.meta.client) return
+  try {
+    window.close()
+  }
+  catch {
+    // Browsers block closing tabs not opened by script — fallback copy handles this.
+  }
+}
+
+function startCloseCountdown() {
+  stopCloseCountdown()
+  closeCountdown.value = SUCCESS_AUTO_CLOSE_SECONDS
+  closeAttempted.value = false
+  if (!import.meta.client) return
+  closeTimer = setInterval(() => {
+    closeCountdown.value -= 1
+    if (closeCountdown.value <= 0) {
+      stopCloseCountdown()
+      tryCloseWindow()
+    }
+  }, 1000)
+}
+
+watch(phase, (next) => {
+  if (next === 'done') startCloseCountdown()
+  else stopCloseCountdown()
+})
+
 onMounted(() => { void bootstrap() })
-onBeforeUnmount(() => { clearPreviews() })
+onBeforeUnmount(() => {
+  stopCloseCountdown()
+  clearPreviews()
+})
 </script>
 
 <template>
   <div class="sl-sheet-upload">
-    <header v-if="!cameraOpen" class="sl-sheet-upload__head">
-      <strong>Service Log Upload</strong>
-      <small>{{ BRAND_NAME }} SUITE</small>
-    </header>
+    <div class="sl-sheet-upload__wrap">
+      <header v-if="!cameraOpen" class="sl-sheet-upload__brand">
+        <img class="sl-sheet-upload__logo" :src="BRAND_ICON" alt="" width="40" height="40">
+        <div class="sl-sheet-upload__brand-text">
+          <b>{{ BRAND_NAME }}</b>
+          <small>Service Log Upload</small>
+        </div>
+      </header>
 
-    <main v-show="!cameraOpen" class="sl-sheet-upload__main">
-      <div v-if="phase === 'boot'" class="sl-sheet-upload__state">
-        <p v-if="bootError">{{ bootError }}</p>
-        <p v-else>Loading…</p>
-        <button
-          v-if="bootError"
-          type="button"
-          class="btn primary"
-          style="margin-top:12px;"
-          @click="bootstrap"
-        >
-          Try again
-        </button>
-      </div>
-
-      <div v-else-if="phase === 'confirm'" class="sl-sheet-upload__confirm">
-        <h1>Are you {{ confirmName }}?</h1>
-        <p>
-          This phone was used with <b>{{ confirmName }}</b> before.
-          Confirm to upload a paper service log, or sign in as someone else.
-        </p>
-        <p v-if="bootError" class="sl-sheet-upload__error">{{ bootError }}</p>
-        <div class="sl-sheet-upload__actions">
+      <main v-show="!cameraOpen" class="sl-sheet-upload__main">
+        <div v-if="phase === 'boot'" class="sl-sheet-upload__card sl-sheet-upload__state">
+          <p v-if="bootError" class="sl-sheet-upload__error">{{ bootError }}</p>
+          <p v-else class="sl-sheet-upload__hint">Loading…</p>
           <button
+            v-if="bootError"
             type="button"
             class="btn primary"
-            :disabled="confirmBusy"
-            @click="onConfirmYes"
+            @click="bootstrap"
           >
-            {{ confirmBusy ? 'Continuing…' : 'Yes — continue' }}
-          </button>
-          <button type="button" class="btn" :disabled="confirmBusy" @click="onConfirmNo">
-            No — sign in
+            Try again
           </button>
         </div>
-      </div>
 
-      <div v-else-if="phase === 'done'" class="sl-sheet-upload__success">
-        <div class="inv-sl-success__burst" aria-hidden="true" />
-        <div class="inv-sl-success__check" aria-hidden="true">✓</div>
-        <h1>Service Log Sent to Invoice</h1>
-        <p>
-          <b>{{ submittedLogLabel || 'Your log' }}</b>
-          <template v-if="submittedInvoiceLabel">
-            is on <b>{{ submittedInvoiceLabel }}</b>.
-          </template>
-          <template v-else>
-            was sent to invoice.
-          </template>
-          You can close this page.
-        </p>
-      </div>
-
-      <template v-else>
-        <!-- Wizard: customer → vehicle → photos -->
-        <div v-show="wizardStep === 1" class="sl-sheet-upload__panel">
-          <h1>Which customer?</h1>
-          <p class="sl-sheet-upload__hint">Select the account on the paper log.</p>
-          <p v-if="customersPending" class="sl-sheet-upload__hint">Loading customers…</p>
-          <div class="sl-sheet-upload__picks">
-            <button
-              v-for="c in customerOptions"
-              :key="c.id"
-              type="button"
-              class="sl-sheet-upload__pick"
-              :class="{ on: customerId === c.id }"
-              @click="customerId = c.id"
-            >
-              <b>{{ c.displayName }}</b>
-              <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
-            </button>
-          </div>
-          <div class="sl-sheet-upload__actions">
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="!customerId"
-              @click="wizardStep = 2"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-
-        <div v-show="wizardStep === 2" class="sl-sheet-upload__panel">
-          <h1>Which vehicle?</h1>
-          <p class="sl-sheet-upload__hint">Pick the bus or unit from the paper log.</p>
-          <p v-if="vehiclesPending" class="sl-sheet-upload__hint">Loading vehicles…</p>
-          <div v-else-if="vehicleOptions.length" class="sl-sheet-upload__picks">
-            <button
-              v-for="v in vehicleOptions"
-              :key="v.id"
-              type="button"
-              class="sl-sheet-upload__pick"
-              :class="{ on: vehicleId === v.id }"
-              @click="vehicleId = v.id"
-            >
-              <b>{{ vehicleTag(v) }}</b>
-              <small>{{ vehicleSub(v) }}</small>
-            </button>
-          </div>
-          <p v-else class="sl-sheet-upload__hint">No vehicles for this customer yet.</p>
-          <div class="sl-sheet-upload__actions">
-            <button type="button" class="btn" @click="wizardStep = 1">Back</button>
-            <button
-              type="button"
-              class="btn primary"
-              :disabled="!vehicleId"
-              @click="goPhotoStep"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-
-        <div v-show="wizardStep === 3" class="sl-sheet-upload__panel">
-          <h1>Upload Service Log</h1>
-          <p class="sl-sheet-upload__hint">Front and back of the paper log — max 2 photos.</p>
-
-          <button
-            type="button"
-            class="inv-sl-cam-launch"
-            :disabled="busy"
-            @click="cameraOpen = true"
-          >
-            <span class="inv-sl-cam-launch__icon" aria-hidden="true">
-              <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
-                <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
-                <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
-                <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </span>
-            <span class="inv-sl-cam-launch__title">
-              {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
-            </span>
-            <span class="inv-sl-cam-launch__sub">Open camera for front &amp; back</span>
-          </button>
-
-          <div v-if="localPreviews.length" class="inv-sl-thumbs">
-            <button
-              v-for="(p, index) in localPreviews"
-              :key="p.id"
-              type="button"
-              class="inv-sl-thumb"
-              :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
-              @click="openPreview(p.id)"
-            >
-              <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
-              <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
-              <span
-                class="inv-sl-thumb__x"
-                role="button"
-                tabindex="0"
-                :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
-                @click.stop="removePreview(p.id)"
-                @keydown.enter.stop="removePreview(p.id)"
-                @keydown.space.prevent.stop="removePreview(p.id)"
-              >
-                ×
-              </span>
-            </button>
-          </div>
-
-          <p v-if="localPreviews.length" class="sl-sheet-upload__count">
-            {{ localPreviews.length }} of {{ SERVICE_LOG_MAX_PHOTOS }} photos ready
+        <div v-else-if="phase === 'confirm'" class="sl-sheet-upload__card sl-sheet-upload__confirm">
+          <h1>Are you {{ confirmName }}?</h1>
+          <p>
+            This phone was used with <b>{{ confirmName }}</b> before.
+            Confirm to upload a paper service log, or sign in as someone else.
           </p>
-
-          <p v-if="actionError" class="sl-sheet-upload__error">{{ actionError }}</p>
-
+          <p v-if="bootError" class="sl-sheet-upload__error">{{ bootError }}</p>
           <div class="sl-sheet-upload__actions">
-            <button type="button" class="btn" :disabled="busy" @click="wizardStep = 2">Back</button>
             <button
               type="button"
               class="btn primary"
-              :disabled="busy || !localPreviews.length"
-              @click="submitLog"
+              :disabled="confirmBusy"
+              @click="onConfirmYes"
             >
-              {{ busy ? 'Uploading…' : 'Submit log' }}
+              {{ confirmBusy ? 'Continuing…' : 'Yes — continue' }}
+            </button>
+            <button type="button" class="btn" :disabled="confirmBusy" @click="onConfirmNo">
+              No — sign in
             </button>
           </div>
         </div>
-      </template>
-    </main>
+
+        <div v-else-if="phase === 'done'" class="sl-sheet-upload__card sl-sheet-upload__success">
+          <div class="inv-sl-success__burst" aria-hidden="true" />
+          <div class="inv-sl-success__check" aria-hidden="true">✓</div>
+          <h1>Successfully uploaded</h1>
+          <p>
+            <b>{{ submittedLogLabel || 'Your log' }}</b>
+            <template v-if="submittedInvoiceLabel">
+              is on <b>{{ submittedInvoiceLabel }}</b>.
+            </template>
+            <template v-else>
+              was sent to invoice.
+            </template>
+          </p>
+          <p
+            class="sl-sheet-upload__close-hint"
+            :aria-live="closeAttempted ? 'polite' : 'off'"
+          >
+            <template v-if="!closeAttempted">
+              Closing this page in {{ closeCountdown }} second{{ closeCountdown === 1 ? '' : 's' }}…
+            </template>
+            <template v-else>
+              You can close this tab.
+            </template>
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Wizard: customer → vehicle → photos -->
+          <div v-show="wizardStep === 1" class="sl-sheet-upload__card sl-sheet-upload__panel">
+            <h1>Which customer?</h1>
+            <p class="sl-sheet-upload__hint">Select the account on the paper log.</p>
+            <p v-if="customersPending" class="sl-sheet-upload__hint">Loading customers…</p>
+            <div class="sl-sheet-upload__picks">
+              <button
+                v-for="c in customerOptions"
+                :key="c.id"
+                type="button"
+                class="sl-sheet-upload__pick"
+                :class="{ on: customerId === c.id }"
+                @click="customerId = c.id"
+              >
+                <b>{{ c.displayName }}</b>
+                <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
+              </button>
+            </div>
+            <div class="sl-sheet-upload__actions">
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="!customerId"
+                @click="wizardStep = 2"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+
+          <div v-show="wizardStep === 2" class="sl-sheet-upload__card sl-sheet-upload__panel">
+            <h1>Which vehicle?</h1>
+            <p class="sl-sheet-upload__hint">Pick the bus or unit from the paper log.</p>
+            <p v-if="vehiclesPending" class="sl-sheet-upload__hint">Loading vehicles…</p>
+            <div v-else-if="vehicleOptions.length" class="sl-sheet-upload__picks">
+              <button
+                v-for="v in vehicleOptions"
+                :key="v.id"
+                type="button"
+                class="sl-sheet-upload__pick"
+                :class="{ on: vehicleId === v.id }"
+                @click="vehicleId = v.id"
+              >
+                <b>{{ vehicleTag(v) }}</b>
+                <small>{{ vehicleSub(v) }}</small>
+              </button>
+            </div>
+            <p v-else class="sl-sheet-upload__hint">No vehicles for this customer yet.</p>
+            <div class="sl-sheet-upload__actions">
+              <button type="button" class="btn" @click="wizardStep = 1">Back</button>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="!vehicleId"
+                @click="goPhotoStep"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+
+          <div v-show="wizardStep === 3" class="sl-sheet-upload__card sl-sheet-upload__panel">
+            <h1>Upload Service Log</h1>
+            <p class="sl-sheet-upload__hint">Front and back of the paper log — max 2 photos.</p>
+
+            <button
+              type="button"
+              class="inv-sl-cam-launch"
+              :disabled="busy"
+              @click="cameraOpen = true"
+            >
+              <span class="inv-sl-cam-launch__icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+                  <rect x="6" y="12" width="36" height="26" rx="8" stroke="currentColor" stroke-width="2.4" />
+                  <circle cx="24" cy="25" r="8" stroke="currentColor" stroke-width="2.4" />
+                  <path d="M18 12l2.2-4h7.6L30 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="inv-sl-cam-launch__title">
+                {{ localPreviews.length ? 'Retake Photos' : 'Take Photos' }}
+              </span>
+              <span class="inv-sl-cam-launch__sub">Open camera for front &amp; back</span>
+            </button>
+
+            <div v-if="localPreviews.length" class="inv-sl-thumbs">
+              <button
+                v-for="(p, index) in localPreviews"
+                :key="p.id"
+                type="button"
+                class="inv-sl-thumb"
+                :aria-label="`View ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo full size`"
+                @click="openPreview(p.id)"
+              >
+                <img :src="p.url" :alt="`${serviceLogPhotoSlotLabel(index)} of service log`" draggable="false">
+                <span class="inv-sl-thumb__label">{{ serviceLogPhotoSlotLabel(index) }}</span>
+                <span
+                  class="inv-sl-thumb__x"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`Remove ${serviceLogPhotoSlotLabel(index).toLowerCase()} photo`"
+                  @click.stop="removePreview(p.id)"
+                  @keydown.enter.stop="removePreview(p.id)"
+                  @keydown.space.prevent.stop="removePreview(p.id)"
+                >
+                  ×
+                </span>
+              </button>
+            </div>
+
+            <p v-if="localPreviews.length" class="sl-sheet-upload__count">
+              {{ localPreviews.length }} of {{ SERVICE_LOG_MAX_PHOTOS }} photos ready
+            </p>
+
+            <p v-if="actionError" class="sl-sheet-upload__error">{{ actionError }}</p>
+
+            <div class="sl-sheet-upload__actions">
+              <button type="button" class="btn" :disabled="busy" @click="wizardStep = 2">Back</button>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="busy || !localPreviews.length"
+                @click="submitLog"
+              >
+                {{ busy ? 'Uploading…' : 'Submit log' }}
+              </button>
+            </div>
+          </div>
+        </template>
+      </main>
+
+      <footer v-if="!cameraOpen" class="suite-foot">
+        © 2015 {{ BRAND_NAME }}. All rights reserved.
+      </footer>
+    </div>
 
     <ClientOnly>
       <ServiceLogDocumentCamera
@@ -526,51 +589,84 @@ onBeforeUnmount(() => { clearPreviews() })
 <style scoped>
 .sl-sheet-upload {
   min-height: 100dvh;
-  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
   color: #0f172a;
+  font-family: "Inter", system-ui, sans-serif;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.78) 0%, rgba(241, 245, 249, 0.88) 100%),
+    url('/images/auth-login-bg.png') center / cover no-repeat fixed;
+}
+.sl-sheet-upload__wrap {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 24px 16px 20px;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
 }
-.sl-sheet-upload__head {
-  padding: 14px 16px;
-  background: #0f172a;
-  color: #fff;
+.sl-sheet-upload__brand {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  margin-bottom: 16px;
 }
-.sl-sheet-upload__head strong { font-size: 15px; }
-.sl-sheet-upload__head small { opacity: 0.75; font-size: 12px; }
+.sl-sheet-upload__logo {
+  width: 40px;
+  height: 40px;
+  display: block;
+  object-fit: contain;
+}
+.sl-sheet-upload__brand-text b {
+  display: block;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.sl-sheet-upload__brand-text small {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  line-height: 1.3;
+  font-weight: 600;
+}
 .sl-sheet-upload__main {
   flex: 1;
-  padding: 20px 16px 32px;
-  max-width: 520px;
   width: 100%;
-  margin: 0 auto;
 }
-.sl-sheet-upload__state,
-.sl-sheet-upload__confirm,
-.sl-sheet-upload__success,
-.sl-sheet-upload__panel {
+.sl-sheet-upload__card {
   background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 20px 16px;
-  box-shadow: 0 10px 30px -18px rgba(15, 23, 42, 0.35);
+  padding: 22px 20px 24px;
+  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.15);
+}
+.sl-sheet-upload__state {
+  text-align: center;
+}
+.sl-sheet-upload__state .btn {
+  margin-top: 12px;
 }
 .sl-sheet-upload__confirm h1,
 .sl-sheet-upload__success h1,
 .sl-sheet-upload__panel h1 {
   margin: 0 0 8px;
-  font-size: 1.35rem;
+  font-size: 1.25rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #0f172a;
 }
 .sl-sheet-upload__confirm p,
 .sl-sheet-upload__success p,
 .sl-sheet-upload__hint {
   margin: 0 0 14px;
-  color: #475569;
-  font-size: 14px;
+  color: #64748b;
+  font-size: 13px;
   line-height: 1.45;
 }
 .sl-sheet-upload__actions {
@@ -579,10 +675,16 @@ onBeforeUnmount(() => { clearPreviews() })
   gap: 8px;
   margin-top: 8px;
 }
+.sl-sheet-upload__actions .btn.primary {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
 .sl-sheet-upload__picks {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
+  max-height: min(50dvh, 360px);
+  overflow: auto;
 }
 .sl-sheet-upload__pick {
   display: flex;
@@ -593,19 +695,34 @@ onBeforeUnmount(() => { clearPreviews() })
   padding: 12px 14px;
   border: 1.5px solid #e2e8f0;
   border-radius: 12px;
-  background: #fff;
+  background: #f8fafc;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.sl-sheet-upload__pick:hover {
+  border-color: #c7d2fe;
+  background: #fff;
+}
+.sl-sheet-upload__pick:focus-visible {
+  outline: none;
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  background: #fff;
 }
 .sl-sheet-upload__pick.on {
   border-color: #4f46e5;
   background: #eef2ff;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
 }
-.sl-sheet-upload__pick b { font-size: 14px; }
+.sl-sheet-upload__pick b { font-size: 14px; font-weight: 700; color: #0f172a; }
 .sl-sheet-upload__pick small { color: #64748b; font-size: 12px; }
 .sl-sheet-upload__error {
   color: #dc2626;
   font-size: 13px;
   margin: 10px 0 0;
+  font-weight: 600;
 }
 .sl-sheet-upload__count {
   margin: 10px 0 0;
@@ -617,5 +734,17 @@ onBeforeUnmount(() => { clearPreviews() })
   text-align: center;
   position: relative;
   overflow: hidden;
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+.sl-sheet-upload__close-hint {
+  margin: 16px 0 0 !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
+  color: #4f46e5 !important;
+}
+.sl-sheet-upload .suite-foot {
+  margin-top: 18px;
+  padding: 10px 0 0;
 }
 </style>
