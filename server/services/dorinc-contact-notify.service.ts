@@ -1,6 +1,5 @@
 import type { Db } from '../db/client'
 import {
-  dorincContactLabels,
   getDorincContactVcardUrl,
   resolveDorincContactPhone,
 } from './dorinc-contact.service'
@@ -30,16 +29,12 @@ export async function sendDorincContactCardAndScheduleSusanIntro(
   }
 
   const contactUrl = await getDorincContactVcardUrl(db)
-  const labels = dorincContactLabels()
 
   const contact = await enqueueTemplatedSms(db, {
     to: opts.phone,
     typeKey: 'dorinc_contact_card',
     vars: {
       name: opts.name,
-      contactName: labels.displayName,
-      phoneLabel: labels.phoneLabel,
-      quoPhone,
       contactUrl,
     },
     meta: {
