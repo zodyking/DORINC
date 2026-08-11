@@ -38,9 +38,11 @@ const HELP_TOOL_MAX_ROUNDS = 3
 const HELP_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
   'For questions about real records, call the read-only lookup tools: lookup_invoice, lookup_service_log, lookup_customer, search_catalog.',
+  'Invoice examples: query "INV-000713" (or 713) for one invoice; status "unpaid" / query "unpaid invoices" for unpaid counts; status "overdue" or "stats" for KPIs.',
+  'Service log examples: query "SL-0713" for one log.',
   'Lookups enforce the staff member’s permissions; if a tool returns permission denied, explain they lack access and do not invent data.',
   'You may call multiple tools in one turn when needed, then answer from the tool results.',
-  'Do not invent routes, buttons, permissions, or record fields that are not in tool results or the user message.',
+  'Do not invent routes, buttons, permissions, invoice numbers, totals, or other record fields that are not in tool results or the user message.',
   'For simple greetings or acknowledgements, reply directly without tools.',
 ].join(' ')
 

@@ -582,6 +582,18 @@ export async function createInvoiceRevision(db: Db, sourceInvoiceId: string, act
   }, actorId)
 }
 
+/** Resolve a display number like 713 (from INV-000713) to the invoice row id. */
+export async function findInvoiceIdByNumber(db: Db, invoiceNumber: number): Promise<string | null> {
+  const n = Math.floor(Number(invoiceNumber))
+  if (!Number.isFinite(n) || n <= 0) return null
+  const [row] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(eq(invoices.invoiceNumber, n))
+    .limit(1)
+  return row?.id ?? null
+}
+
 export async function getInvoice(db: Db, id: string) {
   const [row] = await db.select().from(invoices).where(eq(invoices.id, id))
   if (!row) throw new InvoicesServiceError('NOT_FOUND')
@@ -667,14 +679,18 @@ function invoiceListBaseConditions(filter: Pick<ListInvoicesFilter, 'includeArch
   if (filter.dateTo) conditions.push(lte(invoices.invoiceDate, filter.dateTo))
 
   if (filter.q) {
-    const term = `%${filter.q}%`
+    const raw = String(filter.q).trim()
+    // INV-000713 is stored as integer 713 — strip label/leading zeros for number match.
+    const numberTerm = raw.replace(/^inv[-\s]?/i, '').replace(/^0+(\d)/, '$1')
+    const term = `%${raw}%`
+    const numLike = `%${numberTerm}%`
     conditions.push(or(
       ilike(customers.displayName, term),
       ilike(vehicles.busNumber, term),
       ilike(vehicles.unitTag, term),
       ilike(invoices.poNumber, term),
       ilike(invoices.complaint, term),
-      sql`CAST(${invoices.invoiceNumber} AS TEXT) ILIKE ${term}`,
+      sql`CAST(${invoices.invoiceNumber} AS TEXT) ILIKE ${numLike}`,
     ))
   }
 

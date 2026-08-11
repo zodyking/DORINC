@@ -3,6 +3,8 @@
  * Executors live in server/services; this module is shared schema only.
  */
 
+import { parseInvoiceLookupStatus } from './susan-entity-query'
+
 export type AiToolName =
   | 'get_app_knowledge'
   | 'lookup_invoice'
@@ -34,6 +36,20 @@ export type EntityLookupArgs = {
   id?: string
   query?: string
   limit?: number
+}
+
+export type InvoiceLookupArgs = EntityLookupArgs & {
+  /** Filter or KPI mode. unpaid/outstanding = sent with balance due; stats = KPI summary. */
+  status?:
+    | 'draft'
+    | 'pending_manager_approval'
+    | 'sent'
+    | 'paid'
+    | 'void'
+    | 'unpaid'
+    | 'outstanding'
+    | 'overdue'
+    | 'stats'
 }
 
 export type SearchCatalogArgs = {
@@ -77,7 +93,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     function: {
       name: 'lookup_invoice',
       description:
-        'Read-only lookup of invoice records the staff member is allowed to see. Use when the user asks about a specific invoice, balance, status, due date, or line items. Pass id (UUID) and/or query (invoice number, customer name, bus/unit, PO).',
+        'Read-only invoice lookup. Use for a specific invoice (e.g. INV-000713 → query "INV-000713"), totals/line items, or counts like unpaid/overdue/paid. For "how many unpaid invoices" set status to "unpaid" (or query "unpaid"). Do not invent invoice numbers or balances.',
       parameters: {
         type: 'object',
         properties: {
@@ -87,11 +103,28 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           },
           query: {
             type: 'string',
-            description: 'Search text: invoice number, customer name, bus/unit tag, or PO.',
+            description:
+              'Invoice label (INV-000713), bare number (713), customer name, bus/unit, or PO. Also accepts phrases like "unpaid invoices".',
+          },
+          status: {
+            type: 'string',
+            enum: [
+              'draft',
+              'pending_manager_approval',
+              'sent',
+              'paid',
+              'void',
+              'unpaid',
+              'outstanding',
+              'overdue',
+              'stats',
+            ],
+            description:
+              'Optional filter/KPI: unpaid/outstanding = sent with balance due; overdue = past due; stats = invoice KPI summary.',
           },
           limit: {
             type: 'integer',
-            description: 'Max search results when using query (default 5, max 8).',
+            description: 'Max search results when listing (default 5, max 8).',
           },
         },
         additionalProperties: false,
@@ -103,7 +136,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     function: {
       name: 'lookup_service_log',
       description:
-        'Read-only lookup of service log records the staff member is allowed to see. Use for status, review queue, linked invoice, or work details. Pass id (UUID) and/or query (SL number, customer, bus/unit, complaint).',
+        'Read-only service log lookup. Use for a specific log (e.g. SL-0713 → query "SL-0713"), review status, linked invoice, or work details. Do not invent log numbers.',
       parameters: {
         type: 'object',
         properties: {
@@ -113,7 +146,8 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           },
           query: {
             type: 'string',
-            description: 'Search text: log number, customer name, bus/unit, or complaint keywords.',
+            description:
+              'Log label (SL-0713), bare number, customer name, bus/unit, or complaint keywords.',
           },
           limit: {
             type: 'integer',
@@ -196,6 +230,15 @@ export function parseEntityLookupArgs(raw: unknown): EntityLookupArgs {
     id: typeof obj.id === 'string' ? obj.id.trim() : undefined,
     query: typeof obj.query === 'string' ? obj.query.trim() : undefined,
     limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+  }
+}
+
+export function parseInvoiceLookupArgs(raw: unknown): InvoiceLookupArgs {
+  const base = parseEntityLookupArgs(raw)
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  return {
+    ...base,
+    status: parseInvoiceLookupStatus(obj.status),
   }
 }
 

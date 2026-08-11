@@ -193,6 +193,18 @@ export async function reconcileServiceLogInvoiceLink(
   return updated ?? log
 }
 
+/** Resolve a display number like 713 (from SL-0713 / SL-000713) to the log id. */
+export async function findServiceLogIdByNumber(db: Db, logNumber: number): Promise<string | null> {
+  const n = Math.floor(Number(logNumber))
+  if (!Number.isFinite(n) || n <= 0) return null
+  const [row] = await db
+    .select({ id: serviceLogs.id })
+    .from(serviceLogs)
+    .where(eq(serviceLogs.logNumber, n))
+    .limit(1)
+  return row?.id ?? null
+}
+
 export async function getServiceLog(db: Db, id: string) {
   const { resolveCustomerDisplayName, resolveVehicleDisplay } = await import('./entity-snapshots')
   const [row] = await db
@@ -564,7 +576,11 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
   if (filter.dateTo) conditions.push(lte(serviceLogs.serviceDate, filter.dateTo))
 
   if (filter.q) {
-    const term = `%${filter.q}%`
+    const raw = String(filter.q).trim()
+    // SL-0713 is stored as integer 713 — strip label/leading zeros for number match.
+    const numberTerm = raw.replace(/^sl[-\s]?/i, '').replace(/^0+(\d)/, '$1')
+    const term = `%${raw}%`
+    const numLike = `%${numberTerm}%`
     conditions.push(or(
       ilike(customers.displayName, term),
       ilike(vehicles.busNumber, term),
@@ -573,7 +589,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
       ilike(vehicles.model, term),
       ilike(serviceLogs.complaint, term),
       ilike(serviceLogs.internalNotes, term),
-      sql`CAST(${serviceLogs.logNumber} AS TEXT) ILIKE ${term}`,
+      sql`CAST(${serviceLogs.logNumber} AS TEXT) ILIKE ${numLike}`,
     ))
   }
 
