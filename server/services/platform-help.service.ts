@@ -26,9 +26,12 @@ import {
   openRouterAuthRecoveryMessage,
 } from '../../shared/openrouter-auth'
 import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
-import { SUSAN_HELP_TOOLS } from '../../shared/ai-tools'
 import { BRAND_NAME } from '../../shared/brand'
 import { splitPersonName } from '../../shared/format/person-name'
+import {
+  filterSusanHelpToolsForAuth,
+  loadSusanAuthByUserId,
+} from './susan-auth.service'
 
 export type PlatformHelpChannel = 'web' | 'sms'
 
@@ -37,10 +40,11 @@ const HELP_TOOL_MAX_ROUNDS = 3
 
 const HELP_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
-  'For questions about real records, call the read-only lookup tools: lookup_invoice, lookup_service_log, lookup_customer, search_catalog.',
-  'Invoice examples: query "INV-000713" (or 713) for one invoice; status "unpaid" / query "unpaid invoices" for unpaid counts; status "overdue" or "stats" for KPIs.',
-  'Service log examples: query "SL-0713" for one log.',
-  'Lookups enforce the staff member’s permissions; if a tool returns permission denied, explain they lack access and do not invent data.',
+  'For questions about real records, call the read-only lookup tools available to you (invoice / service log / customer / catalog as permitted).',
+  'If Current record id is set and the user asks about this/the current record (balance, total, status), call the matching lookup with that id (or an empty query).',
+  'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats — never combine an INV number with status=unpaid.',
+  'Service log: query "SL-0713". Review queue → query "review queue".',
+  'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
   'You may call multiple tools in one turn when needed, then answer from the tool results.',
   'Do not invent routes, buttons, permissions, invoice numbers, totals, or other record fields that are not in tool results or the user message.',
   'For simple greetings or acknowledgements, reply directly without tools.',
@@ -54,13 +58,10 @@ const HELP_SYSTEM_PROMPT = [
   'Do not invent customer, invoice, service log, or catalog data — only report what tools return.',
   HELP_TOOL_INSTRUCTIONS,
   'Be concise — short sentences, no filler, no repetition.',
-  'Output clean HTML only (never markdown). Structure every how-to answer like this:',
-  '1) Optional one-sentence summary in <p>.',
-  '2) Section label in <h4 class="help-section"> (e.g. Steps, What I see, Tips).</h4>',
-  '3) Procedures as <ol class="help-steps"><li>…</li></ol> — one action per step, wrap UI labels in <b>.',
-  '4) Non-sequential notes as <ul class="help-tips"><li>…</li></ul> (max 3 bullets).',
-  'Prefer 3–5 steps over long paragraphs. Skip sections that add no value.',
-  'If the user attaches an image, use <h4>What I see</h4> then a brief <ul> of key elements, then answer their question with steps.',
+  'Output clean HTML only (never markdown).',
+  'For how-to answers: optional <p> summary, then <h4 class="help-section">, then <ol class="help-steps"> or <ul class="help-tips">; prefer 3–5 steps.',
+  'For record/lookup answers: short factual HTML — a <p> summary plus optional <ul> of key fields. Do not force step lists for balances/totals/status.',
+  'If the user attaches an image, use <h4>What I see</h4> then a brief <ul>, then answer.',
   'If asked to change data, say you cannot do it, then give numbered steps for the user to follow.',
 ].join(' ')
 
@@ -74,8 +75,8 @@ const HELP_SMS_SYSTEM_PROMPT = [
   HELP_TOOL_INSTRUCTIONS,
   'Reply in plain text only for SMS — no HTML, no markdown headings, no code fences, no bold markers.',
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
-  'Use short paragraphs and numbered steps like "1) …" "2) …". Put UI labels in quotes (e.g. "Invoices").',
-  'Prefer 3–5 steps over long paragraphs. Skip filler and long intros. For simple hellos, greet by name and offer to help with the app.',
+  'For how-to: numbered steps "1) …". For record lookups: 2–4 short factual lines.',
+  'Prefer 3–5 steps for procedures. Skip filler. For simple hellos, greet by name and offer to help with the app.',
 ].join(' ')
 
 function firstNameFrom(userName?: string | null): string {
@@ -132,6 +133,9 @@ function buildUserTurn(
   question: string,
   opts: {
     pageContext?: string
+    pageKey?: string
+    entityType?: 'invoice' | 'service_log' | 'customer'
+    entityId?: string
     imageDataUrls?: string[]
     channel?: PlatformHelpChannel
     userName?: string | null
@@ -143,8 +147,12 @@ function buildUserTurn(
   if (opts.channel === 'sms') {
     parts.push('Channel: SMS (same Platform Assistant help as in-app; do not mention SMS chat as a feature)')
   }
-  else if (opts.pageContext) {
-    parts.push(`Current page: ${opts.pageContext}`)
+  else {
+    if (opts.pageKey) parts.push(`Current page key: ${opts.pageKey}`)
+    if (opts.pageContext) parts.push(`Current page: ${opts.pageContext}`)
+    if (opts.entityType && opts.entityId) {
+      parts.push(`Current record: type=${opts.entityType} id=${opts.entityId}`)
+    }
   }
   parts.push('', question)
   const userText = parts.join('\n')
@@ -160,6 +168,21 @@ function buildUserTurn(
   ]
 }
 
+function synthesizeAnswerFromTools(
+  toolResults: Array<{ name: string, ok: boolean, content: string }>,
+  channel: PlatformHelpChannel,
+): string {
+  const usable = toolResults.filter(t => t.ok && t.content.trim())
+  if (!usable.length) return ''
+  const body = usable.map(t => t.content.trim()).join('\n\n').slice(0, 1200)
+  if (channel === 'sms') return body
+  const escaped = body
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return `<p>Here is what I found:</p><pre class="help-tool-result">${escaped}</pre>`
+}
+
 function formatHelpAnswer(raw: string, channel: PlatformHelpChannel): string {
   if (channel === 'sms') return formatPlatformHelpForSms(raw)
   return formatPlatformHelpHtml(raw)
@@ -172,6 +195,9 @@ async function callOpenRouterHelp(
   input: {
     question: string
     pageContext?: string
+    pageKey?: string
+    entityType?: 'invoice' | 'service_log' | 'customer'
+    entityId?: string
     imageDataUrls?: string[]
     history?: PlatformHelpHistoryMessage[]
     channel?: PlatformHelpChannel
@@ -185,6 +211,9 @@ async function callOpenRouterHelp(
     content: row.content,
   }))
 
+  const auth = await loadSusanAuthByUserId(db, input.userId)
+  const tools = filterSusanHelpToolsForAuth(auth) as unknown as Array<Record<string, unknown>>
+
   const systemPrompt = channel === 'sms' ? HELP_SMS_SYSTEM_PROMPT : HELP_SYSTEM_PROMPT
   const messages: OpenRouterChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -193,6 +222,9 @@ async function callOpenRouterHelp(
       role: 'user',
       content: buildUserTurn(input.question, {
         pageContext: input.pageContext,
+        pageKey: input.pageKey,
+        entityType: input.entityType,
+        entityId: input.entityId,
         imageDataUrls: input.imageDataUrls,
         channel,
         userName: input.userName,
@@ -203,6 +235,7 @@ async function callOpenRouterHelp(
   let promptTokens = 0
   let completionTokens = 0
   let finalContent = ''
+  let lastToolResults: Array<{ name: string, ok: boolean, content: string }> = []
 
   for (let round = 0; round < HELP_TOOL_MAX_ROUNDS; round++) {
     const result = await openRouterChat(
@@ -216,9 +249,8 @@ async function callOpenRouterHelp(
         maxTokens: channel === 'sms'
           ? 700
           : (input.imageDataUrls?.length ? 2048 : 1024),
-        tools: SUSAN_HELP_TOOLS as unknown as Array<Record<string, unknown>>,
+        tools,
         toolChoice: 'auto',
-        // Tool rounds can take longer than a single completion.
         timeoutMs: 45_000,
       },
     )
@@ -245,10 +277,14 @@ async function callOpenRouterHelp(
       })),
       {
         pageContext: input.pageContext,
+        pageKey: input.pageKey,
         db,
         userId: input.userId,
+        entityType: input.entityType,
+        entityId: input.entityId,
       },
     )
+    lastToolResults = toolResults
 
     for (const toolResult of toolResults) {
       messages.push({
@@ -269,7 +305,7 @@ async function callOpenRouterHelp(
           responseFormat: 'text',
           temperature: 0.3,
           maxTokens: channel === 'sms' ? 700 : 1024,
-          tools: SUSAN_HELP_TOOLS as unknown as Array<Record<string, unknown>>,
+          tools,
           toolChoice: 'none',
           timeoutMs: 45_000,
         },
@@ -282,6 +318,14 @@ async function callOpenRouterHelp(
   }
 
   if (!finalContent.trim()) {
+    const synthesized = synthesizeAnswerFromTools(lastToolResults, channel)
+    if (synthesized) {
+      return {
+        answer: formatHelpAnswer(synthesized, channel),
+        promptTokens,
+        completionTokens,
+      }
+    }
     throw new OpenRouterServiceError('EMPTY_RESPONSE', 'OpenRouter returned no content')
   }
 
@@ -324,6 +368,9 @@ export async function askPlatformHelp(
   input: {
     question: string
     pageContext?: string
+    pageKey?: string
+    entityType?: 'invoice' | 'service_log' | 'customer'
+    entityId?: string
     userId: string
     imageDataUrls?: string[]
     history?: PlatformHelpHistoryMessage[]

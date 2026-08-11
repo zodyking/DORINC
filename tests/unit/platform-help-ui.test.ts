@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { matchPlatformHelpAnswer } from '../../shared/platform-help'
 import {
+  helpEntityFromRoute,
   helpPageKeyFromRoute,
   isPlatformHelpWidgetVisible,
   platformHelpModelLabel,
@@ -25,6 +26,12 @@ describe('platform-help (P2-15)', () => {
     expect(helpPageKeyFromRoute('/invoices/abc-123')).toBe('invoice-detail')
     expect(helpPageKeyFromRoute('/admin')).toBe('admin')
     expect(helpPageKeyFromRoute('/admin', { tab: 'designer' })).toBe('designer')
+  })
+
+  it('binds open records for Susan entity tools', () => {
+    const id = '550e8400-e29b-41d4-a716-446655440000'
+    expect(helpEntityFromRoute(`/invoices/${id}`).entityType).toBe('invoice')
+    expect(helpEntityFromRoute('/invoices/new')).toEqual({})
   })
 
   it('hides the floating helper unless platform help is explicitly enabled', () => {

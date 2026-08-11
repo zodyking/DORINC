@@ -151,6 +151,8 @@ export interface ListInvoicesFilter {
   status?: InvoiceStatus
   statuses?: InvoiceStatus[]
   overdue?: boolean
+  /** Sent invoices with balanceDue > 0 (unpaid/outstanding). */
+  outstanding?: boolean
   customerId?: string
   vehicleId?: string
   includeArchived?: boolean
@@ -774,6 +776,10 @@ export async function listInvoices(db: Db, filter: ListInvoicesFilter) {
   if (filter.overdue) {
     conditions.push(eq(invoices.status, 'sent'))
     conditions.push(lt(invoices.dueDate, todayIsoDate()))
+    conditions.push(gt(invoices.balanceDue, '0'))
+  }
+  else if (filter.outstanding) {
+    conditions.push(eq(invoices.status, 'sent'))
     conditions.push(gt(invoices.balanceDue, '0'))
   }
   else if (filter.statuses?.length) {

@@ -10,6 +10,7 @@ import {
   executeLookupInvoice,
   executeLookupServiceLog,
   executeSearchCatalog,
+  type EntityToolContext,
 } from './ai-entity-tools.service'
 
 export type AiToolCallRequest = {
@@ -27,8 +28,11 @@ export type AiToolExecutionResult = {
 
 export type SusanHelpToolOpts = {
   pageContext?: string | null
+  pageKey?: string | null
   db?: Db
   userId?: string | null
+  entityType?: EntityToolContext['entityType']
+  entityId?: string | null
 }
 
 function parseArgsJson(raw: string): unknown {
@@ -42,13 +46,29 @@ function parseArgsJson(raw: string): unknown {
   }
 }
 
-function executeGetAppKnowledge(argsRaw: unknown, pageContext?: string | null): { ok: boolean, content: string } {
+function executeGetAppKnowledge(
+  argsRaw: unknown,
+  pageContext?: string | null,
+  pageKey?: string | null,
+): { ok: boolean, content: string } {
   const args = parseGetAppKnowledgeArgs(argsRaw)
   const query = String(args.query || '').trim()
   const area = String(args.area || '').trim()
   const detail = args.detail === 'summary' ? 'summary' : 'full'
+  const page = pageKey || pageContext || undefined
 
   if (!query && !area) {
+    if (page) {
+      const docs = searchAppKnowledge({
+        query: page,
+        pageContext: page,
+        limit: 4,
+      })
+      return {
+        ok: true,
+        content: formatAppKnowledgeForTool(docs, detail),
+      }
+    }
     return {
       ok: true,
       content: [
@@ -62,7 +82,7 @@ function executeGetAppKnowledge(argsRaw: unknown, pageContext?: string | null): 
   const docs = searchAppKnowledge({
     query: query || area,
     area: area || undefined,
-    pageContext: pageContext ?? undefined,
+    pageContext: page,
     limit: 4,
   })
 
@@ -102,29 +122,33 @@ export async function executeSusanHelpTool(
 ): Promise<AiToolExecutionResult> {
   const name = String(call.name || '').trim() as AiToolName | string
   const toolCallId = String(call.id || '').trim() || 'tool_call'
+  const entityCtx: EntityToolContext = {
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+  }
   try {
     const parsed = parseArgsJson(call.arguments)
 
     if (name === 'get_app_knowledge') {
-      const result = executeGetAppKnowledge(parsed, opts.pageContext)
+      const result = executeGetAppKnowledge(parsed, opts.pageContext, opts.pageKey)
       return { toolCallId, name, ok: result.ok, content: result.content }
     }
 
     if (name === 'lookup_invoice') {
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
-      const result = await executeLookupInvoice(opts.db, opts.userId, parsed)
+      const result = await executeLookupInvoice(opts.db, opts.userId, parsed, entityCtx)
       return { toolCallId, name, ok: result.ok, content: result.content }
     }
 
     if (name === 'lookup_service_log') {
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
-      const result = await executeLookupServiceLog(opts.db, opts.userId, parsed)
+      const result = await executeLookupServiceLog(opts.db, opts.userId, parsed, entityCtx)
       return { toolCallId, name, ok: result.ok, content: result.content }
     }
 
     if (name === 'lookup_customer') {
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
-      const result = await executeLookupCustomer(opts.db, opts.userId, parsed)
+      const result = await executeLookupCustomer(opts.db, opts.userId, parsed, entityCtx)
       return { toolCallId, name, ok: result.ok, content: result.content }
     }
 
@@ -156,9 +180,5 @@ export async function executeSusanHelpTools(
   opts: SusanHelpToolOpts = {},
 ): Promise<AiToolExecutionResult[]> {
   const list = Array.isArray(calls) ? calls : []
-  const out: AiToolExecutionResult[] = []
-  for (const call of list) {
-    out.push(await executeSusanHelpTool(call, opts))
-  }
-  return out
+  return Promise.all(list.map(call => executeSusanHelpTool(call, opts)))
 }

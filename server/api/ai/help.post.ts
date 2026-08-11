@@ -16,6 +16,9 @@ export default defineEventHandler(async (event) => {
   const result = await askPlatformHelp(db, {
     question: body.question,
     pageContext: body.pageContext,
+    pageKey: body.pageKey,
+    entityType: body.entityType,
+    entityId: body.entityId,
     userId: user.id,
     userName: authUser?.name || undefined,
     imageDataUrls: body.imageDataUrls,
@@ -29,6 +32,9 @@ export default defineEventHandler(async (event) => {
       action: 'ai.help.query',
       afterData: {
         pageContext: body.pageContext ?? null,
+        pageKey: body.pageKey ?? null,
+        entityType: body.entityType ?? null,
+        entityId: body.entityId ?? null,
         source: result.source,
         capped: result.capped,
       },

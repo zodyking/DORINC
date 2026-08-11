@@ -10,9 +10,11 @@ import {
 import type { AccountType, PermissionKey } from '../../shared/permissions/keys'
 import {
   evaluatePermission,
+  type PermissionDecision,
   type PermissionOverrides,
   type PermissionUser,
 } from '../../shared/permissions/evaluate'
+import { SUSAN_HELP_TOOLS, type AiToolName, type OpenAiToolDefinition } from '../../shared/ai-tools'
 
 export type SusanAuthContext = {
   user: PermissionUser & { name: string }
@@ -74,16 +76,66 @@ export async function loadSusanAuthByUserId(
   }
 }
 
-export function susanHasPermission(
+export function susanPermissionDecision(
   auth: SusanAuthContext,
   required: PermissionKey,
   options: { ownsRecord?: boolean } = {},
-): boolean {
+): PermissionDecision {
   return evaluatePermission({
     user: auth.user,
     roleGrants: auth.roleGrants,
     overrides: auth.overrides,
     required,
     ownsRecord: options.ownsRecord,
-  }).allowed
+  })
+}
+
+export function susanHasPermission(
+  auth: SusanAuthContext,
+  required: PermissionKey,
+  options: { ownsRecord?: boolean } = {},
+): boolean {
+  return susanPermissionDecision(auth, required, options).allowed
+}
+
+export function formatSusanPermissionDenial(
+  required: PermissionKey,
+  decision: PermissionDecision,
+): string {
+  if (decision.allowed) return ''
+  if (decision.reason === 'inactive') {
+    return 'Permission denied: this staff account is inactive.'
+  }
+  if (decision.reason === 'unverified') {
+    return 'Permission denied: this staff account email is not verified yet.'
+  }
+  if (decision.reason === 'unapproved') {
+    return 'Permission denied: this staff account is not approved yet.'
+  }
+  if (decision.reason === 'scope') {
+    return `Permission denied: this record is outside the staff member’s scope (needs ${required} on an owned record, or a broader .all grant).`
+  }
+  return `Permission denied: this staff member cannot use this lookup (needs ${required}). Explain they lack access and how an admin can grant it in Users → permissions.`
+}
+
+const TOOL_PERMISSIONS: Partial<Record<AiToolName, PermissionKey | PermissionKey[]>> = {
+  lookup_invoice: 'invoices.read.all',
+  lookup_customer: 'customers.read.all',
+  search_catalog: 'catalog.read.all',
+  lookup_service_log: ['service_logs.read.all', 'service_logs.read.own'],
+}
+
+/** Only expose tools the staffer can actually use (avoids wasted tool rounds). */
+export function filterSusanHelpToolsForAuth(auth: SusanAuthContext | null): OpenAiToolDefinition[] {
+  return SUSAN_HELP_TOOLS.filter((tool) => {
+    const name = tool.function.name
+    if (name === 'get_app_knowledge') return true
+    if (!auth) return false
+    const required = TOOL_PERMISSIONS[name]
+    if (!required) return false
+    if (Array.isArray(required)) {
+      return required.some(key => susanHasPermission(auth, key))
+    }
+    return susanHasPermission(auth, required)
+  })
 }
