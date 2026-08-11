@@ -280,10 +280,27 @@ export async function sendQuoSms(input: {
   return { id: res?.data?.id ?? res?.id ?? null }
 }
 
+async function deleteQuoWebhook(apiKey: string, webhookId: string) {
+  if (!webhookId) return
+  try {
+    await quoFetch(apiKey, `/webhooks/${webhookId}`, {
+      method: 'DELETE',
+    }, { apiVersion: QUO_API_VERSION })
+  }
+  catch (err) {
+    console.warn(
+      '[quo] failed to delete webhook:',
+      webhookId,
+      err instanceof Error ? err.message : err,
+    )
+  }
+}
+
 /** Register (or refresh) the inbound message.received webhook used for Susan SMS chat. */
 export async function ensureQuoInboundWebhook(
   db: Db,
   actorId: string | null = null,
+  opts: { force?: boolean } = {},
 ): Promise<QuoSettingsView> {
   const config = await getQuoConfig(db)
   if (!config.apiKey?.trim()) {
@@ -297,40 +314,62 @@ export async function ensureQuoInboundWebhook(
   const webhookUrl = `${appUrl}/api/public/quo-webhook`
 
   if (
-    config.webhookId
+    !opts.force
+    && config.webhookId
     && config.webhookKey
     && config.webhookUrl === webhookUrl
   ) {
     return toView(config)
   }
 
-  // Best-effort delete of a prior webhook when the app URL changed.
-  if (config.webhookId && config.webhookUrl && config.webhookUrl !== webhookUrl) {
-    try {
-      await quoFetch(config.apiKey, `/webhooks/${config.webhookId}`, {
-        method: 'DELETE',
-      }, { apiVersion: QUO_API_VERSION })
-    }
-    catch (err) {
-      console.warn(
-        '[quo] failed to delete stale webhook:',
-        err instanceof Error ? err.message : err,
-      )
-    }
+  // Recreate when forced, URL changed, or signing key was lost.
+  if (config.webhookId) {
+    await deleteQuoWebhook(config.apiKey, config.webhookId)
   }
 
-  const created = await quoFetch<{
-    data?: { id?: string, key?: string, url?: string }
-  }>(config.apiKey, '/webhooks', {
-    method: 'POST',
-    body: JSON.stringify({
-      url: webhookUrl,
-      events: ['message.received'],
-      resourceIds: ['*'],
-      status: 'enabled',
-      label: 'DORINC Susan SMS',
-    }),
-  }, { apiVersion: QUO_API_VERSION })
+  let created: { data?: { id?: string, key?: string, url?: string } }
+  try {
+    created = await quoFetch<{
+      data?: { id?: string, key?: string, url?: string }
+    }>(config.apiKey, '/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: webhookUrl,
+        events: ['message.received'],
+        resourceIds: ['*'],
+        status: 'enabled',
+        label: 'DORINC Susan SMS',
+      }),
+    }, { apiVersion: QUO_API_VERSION })
+  }
+  catch (err) {
+    // If Quo still has a webhook on this URL, list and replace it.
+    console.warn(
+      '[quo] webhook create failed, trying list/replace:',
+      err instanceof Error ? err.message : err,
+    )
+    const listed = await quoFetch<{
+      data?: Array<{ id?: string, url?: string }>
+    }>(config.apiKey, '/webhooks', {}, { apiVersion: QUO_API_VERSION })
+    const rows = Array.isArray(listed?.data) ? listed.data : []
+    for (const row of rows) {
+      if (String(row.url ?? '').replace(/\/$/, '') === webhookUrl.replace(/\/$/, '') && row.id) {
+        await deleteQuoWebhook(config.apiKey, String(row.id))
+      }
+    }
+    created = await quoFetch<{
+      data?: { id?: string, key?: string, url?: string }
+    }>(config.apiKey, '/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: webhookUrl,
+        events: ['message.received'],
+        resourceIds: ['*'],
+        status: 'enabled',
+        label: 'DORINC Susan SMS',
+      }),
+    }, { apiVersion: QUO_API_VERSION })
+  }
 
   const id = String(created?.data?.id ?? '').trim()
   const key = String(created?.data?.key ?? '').trim()
@@ -345,6 +384,7 @@ export async function ensureQuoInboundWebhook(
     webhookUrl,
   }
   await persistQuoConfig(db, next, actorId)
+  console.info('[quo] inbound webhook ready', { id, webhookUrl })
   return toView(next)
 }
 

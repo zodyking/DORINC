@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne } from 'drizzle-orm'
+import { and, eq, isNull, ne, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import {
   accountTypePermissions,
@@ -30,6 +30,10 @@ function toPlainSms(htmlOrText: string): string {
   const stripped = stripHtmlToText(htmlOrText).replace(/\s+\n/g, '\n').trim()
   if (stripped.length <= SMS_REPLY_MAX) return stripped
   return `${stripped.slice(0, SMS_REPLY_MAX - 1).trimEnd()}…`
+}
+
+function phoneDigits(value: string | null | undefined): string {
+  return String(value ?? '').replace(/\D/g, '')
 }
 
 async function staffUserCanUseSusanHelp(
@@ -84,22 +88,39 @@ async function staffUserCanUseSusanHelp(
   }).allowed
 }
 
-export async function findSmsEligibleStaffByPhone(db: Db, rawPhone: string) {
+type SmsEligibleStaff = {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  messageNotifyChannel: string | null
+  isActive: boolean
+  emailVerifiedAt: Date | null
+  approvedAt: Date | null
+  accountTypeKey: string
+}
+
+export async function findSmsEligibleStaffByPhone(db: Db, rawPhone: string): Promise<SmsEligibleStaff | null> {
   const phone = normalizePhoneE164(rawPhone)
   if (!phone) return null
+  const digits = phoneDigits(phone)
+  const last10 = digits.length >= 10 ? digits.slice(-10) : digits
 
-  const [row] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      phone: users.phone,
-      messageNotifyChannel: users.messageNotifyChannel,
-      isActive: users.isActive,
-      emailVerifiedAt: users.emailVerifiedAt,
-      approvedAt: users.approvedAt,
-      accountTypeKey: accountTypes.key,
-    })
+  const staffSelect = {
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    phone: users.phone,
+    messageNotifyChannel: users.messageNotifyChannel,
+    isActive: users.isActive,
+    emailVerifiedAt: users.emailVerifiedAt,
+    approvedAt: users.approvedAt,
+    accountTypeKey: accountTypes.key,
+  }
+
+  // Exact E.164 match first.
+  let [row] = await db
+    .select(staffSelect)
     .from(users)
     .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
     .where(and(
@@ -110,8 +131,34 @@ export async function findSmsEligibleStaffByPhone(db: Db, rawPhone: string) {
     ))
     .limit(1)
 
+  // Fallback: match on digit-only suffix (handles formatting drift in stored phones).
+  if (!row && last10.length >= 10) {
+    const candidates = await db
+      .select(staffSelect)
+      .from(users)
+      .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+      .where(and(
+        sql`regexp_replace(coalesce(${users.phone}, ''), '\\D', '', 'g') like ${`%${last10}`}`,
+        eq(users.isActive, true),
+        isNull(users.disabledAt),
+        ne(accountTypes.key, 'customer'),
+      ))
+      .limit(5)
+
+    row = candidates.find((candidate) => {
+      const normalized = normalizePhoneE164(candidate.phone)
+      return normalized === phone || phoneDigits(candidate.phone).endsWith(last10)
+    }) ?? candidates[0]
+  }
+
   if (!row) return null
-  if (row.messageNotifyChannel !== 'sms') return null
+  if (row.messageNotifyChannel !== 'sms') {
+    console.info('[susan-sms] inbound ignored: user not on text channel', {
+      userId: row.id,
+      channel: row.messageNotifyChannel,
+    })
+    return null
+  }
   return row
 }
 
@@ -189,7 +236,37 @@ export async function handleInboundSusanSms(
 
   const user = await findSmsEligibleStaffByPhone(db, from)
   if (!user) {
-    // Quietly ignore unknown / email-channel users so we don't spam.
+    // If we recognize the staff phone but they are on Email channel, tell them how to opt in.
+    const digits = phoneDigits(from)
+    const last10 = digits.length >= 10 ? digits.slice(-10) : ''
+    if (last10) {
+      const [known] = await db
+        .select({
+          id: users.id,
+          messageNotifyChannel: users.messageNotifyChannel,
+        })
+        .from(users)
+        .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+        .where(and(
+          sql`regexp_replace(coalesce(${users.phone}, ''), '\\D', '', 'g') like ${`%${last10}`}`,
+          eq(users.isActive, true),
+          isNull(users.disabledAt),
+          ne(accountTypes.key, 'customer'),
+        ))
+        .limit(1)
+
+      if (known && known.messageNotifyChannel !== 'sms') {
+        await sendQuoSms({
+          apiKey: config.apiKey,
+          from: config.fromNumber,
+          to: from,
+          content: `${AI_ASSISTANT_NAME} SMS chat is available when Text notifications are enabled. Open My Account and switch Security & chat notifications to Text, then try again.`,
+        })
+        return { handled: true, reason: 'channel_email' }
+      }
+    }
+
+    console.info('[susan-sms] inbound ignored: no matching text-enabled staff', { from })
     return { handled: false, reason: 'not_eligible' }
   }
 
@@ -215,6 +292,16 @@ export async function handleInboundSusanSms(
     return { handled: true, reason: 'no_permission' }
   }
 
+  // Immediate ack so the thread feels alive while Susan thinks.
+  const ackPromise = sendQuoSms({
+    apiKey: config.apiKey,
+    from: config.fromNumber,
+    to: from,
+    content: `${AI_ASSISTANT_NAME} here — one moment.`,
+  }).catch((err) => {
+    console.warn('[susan-sms] ack send failed:', err instanceof Error ? err.message : err)
+  })
+
   const history = await loadThreadHistory(db, user.id)
   const helpHistory = history.map(m => ({
     role: m.role,
@@ -230,6 +317,7 @@ export async function handleInboundSusanSms(
 
   const answerText = toPlainSms(result.answer) || 'I could not generate a reply just now. Please try again in a moment.'
 
+  await ackPromise
   await sendQuoSms({
     apiKey: config.apiKey,
     from: config.fromNumber,

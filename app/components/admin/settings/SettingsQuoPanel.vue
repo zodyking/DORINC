@@ -108,6 +108,7 @@ const testTo = ref('')
 const saveBusy = ref(false)
 const testBusy = ref(false)
 const testSmsBusy = ref(false)
+const webhookBusy = ref(false)
 const message = ref('')
 const error = ref('')
 
@@ -158,7 +159,9 @@ async function save() {
     form.enabled = res.enabled
     form.fromNumber = res.fromNumber ?? ''
     message.value = res.enabled
-      ? 'Quo SMS saved and enabled'
+      ? (res.webhookConfigured
+          ? 'Quo SMS saved and enabled — Susan SMS webhook ready'
+          : 'Quo SMS saved and enabled — webhook not registered yet (use Repair webhook)')
       : 'Quo settings saved (enable after credentials are complete)'
     await refresh()
     emit('saved')
@@ -168,6 +171,26 @@ async function save() {
   }
   finally {
     saveBusy.value = false
+  }
+}
+
+async function repairWebhook() {
+  webhookBusy.value = true
+  message.value = ''
+  error.value = ''
+  try {
+    const res = await $fetch<{ message: string, webhookConfigured: boolean }>(
+      '/api/admin/system/quo-webhook',
+      { method: 'POST' },
+    )
+    message.value = res.message
+    await refresh()
+  }
+  catch (e: unknown) {
+    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Webhook repair failed'
+  }
+  finally {
+    webhookBusy.value = false
   }
 }
 
@@ -369,9 +392,18 @@ const variableHelp = computed(() => {
               <template v-if="quoData.webhookUrl"><br>Endpoint: {{ quoData.webhookUrl }}</template>
             </small>
             <small v-else>
-              Not registered yet. Save Quo settings while enabled to create the inbound webhook automatically.
+              Not registered yet. Save Quo settings while enabled, or click Repair webhook.
             </small>
           </span>
+          <button
+            type="button"
+            class="btn"
+            style="margin-top:8px;"
+            :disabled="webhookBusy || !form.enabled"
+            @click="repairWebhook"
+          >
+            {{ webhookBusy ? 'Repairing…' : (quoData.webhookConfigured ? 'Re-register webhook' : 'Repair webhook') }}
+          </button>
         </div>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>

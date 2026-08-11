@@ -1,12 +1,14 @@
 import { useDb } from '../../db/client'
 import {
-  getQuoConfig,
-  verifyQuoWebhookSignature,
-} from '../../services/quo.service'
-import { handleInboundSusanSms } from '../../services/susan-sms.service'
+  getQuoWebhookSigningKey,
+  processQuoInboundSusanSms,
+  verifyAndParseQuoWebhook,
+} from '../../services/quo-webhook.service'
 
 /**
  * Quo inbound webhook (message.received) → Susan AI SMS chat for text-enabled staff.
+ * Responds immediately after signature verification so Quo doesn't time out while
+ * OpenRouter generates Susan's reply.
  */
 export default defineEventHandler(async (event) => {
   const rawBody = await readRawBody(event, 'utf8')
@@ -14,73 +16,42 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Empty webhook body' })
   }
 
-  const config = await getQuoConfig(useDb())
-  if (!config.webhookKey) {
+  const webhookKey = await getQuoWebhookSigningKey(useDb())
+  if (!webhookKey) {
+    console.warn('[quo-webhook] rejected: webhook signing key not configured')
     throw createError({ statusCode: 503, statusMessage: 'Quo webhook is not configured' })
   }
 
-  const webhookId = getHeader(event, 'webhook-id') || ''
-  const webhookTimestamp = getHeader(event, 'webhook-timestamp') || ''
-  const webhookSignature = getHeader(event, 'webhook-signature') || ''
-
-  const ok = verifyQuoWebhookSignature({
-    webhookKey: config.webhookKey,
-    webhookId,
-    webhookTimestamp,
-    webhookSignature,
+  const verified = verifyAndParseQuoWebhook({
     rawBody,
+    webhookKey,
+    webhookId: getHeader(event, 'webhook-id') || '',
+    webhookTimestamp: getHeader(event, 'webhook-timestamp') || '',
+    webhookSignature: getHeader(event, 'webhook-signature') || '',
   })
-  if (!ok) {
-    throw createError({ statusCode: 401, statusMessage: 'Invalid webhook signature' })
-  }
 
-  let payload: Record<string, unknown>
-  try {
-    payload = JSON.parse(rawBody) as Record<string, unknown>
-  }
-  catch {
+  if (!verified.ok) {
+    if (verified.reason === 'invalid_signature') {
+      console.warn('[quo-webhook] rejected: invalid signature')
+      throw createError({ statusCode: 401, statusMessage: 'Invalid webhook signature' })
+    }
     throw createError({ statusCode: 400, statusMessage: 'Invalid JSON' })
   }
 
-  const type = String(payload.type ?? payload.event ?? '')
-  if (type && type !== 'message.received') {
-    return { ok: true, ignored: true, type }
+  if (verified.ignored) {
+    return { ok: true, ignored: true, reason: verified.reason }
   }
 
-  const data = (payload.data && typeof payload.data === 'object'
-    ? payload.data as Record<string, unknown>
-    : payload) as Record<string, unknown>
-  const object = (data.object && typeof data.object === 'object'
-    ? data.object as Record<string, unknown>
-    : data)
+  const parsed = verified.parsed
+  // Acknowledge delivery immediately — AI reply continues in background.
+  const db = useDb()
+  void processQuoInboundSusanSms(db, parsed).catch((err) => {
+    console.error('[quo-webhook] background process failed:', err instanceof Error ? err.message : err)
+  })
 
-  const direction = String(object.direction ?? '').toLowerCase()
-  if (direction && direction !== 'incoming' && direction !== 'inbound') {
-    return { ok: true, ignored: true, reason: 'not_inbound' }
-  }
-
-  const from = String(object.from ?? object.fromPhoneNumber ?? '')
-  const to = String(object.to ?? object.toPhoneNumber ?? '')
-  const body = String(object.body ?? object.content ?? object.text ?? '')
-  const messageId = object.id != null ? String(object.id) : null
-
-  // Some Quo payloads nest `to` as an array.
-  const toPhone = Array.isArray(object.to)
-    ? String(object.to[0] ?? '')
-    : to
-
-  try {
-    const result = await handleInboundSusanSms(useDb(), {
-      fromPhone: from,
-      toPhone,
-      body,
-      messageId,
-    })
-    return { ok: true, ...result }
-  }
-  catch (err) {
-    console.error('[quo-webhook] Susan SMS handle failed:', err instanceof Error ? err.message : err)
-    // Acknowledge to avoid Quo retry storms; reply already may have failed.
-    return { ok: false, error: 'handler_failed' }
+  return {
+    ok: true,
+    accepted: true,
+    messageId: parsed.messageId,
   }
 })

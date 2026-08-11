@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import { useDb } from '../../../db/client'
 import {
+  ensureQuoInboundWebhook,
   getQuoConfig,
+  isQuoSmsEnabled,
   listQuoPhoneNumbers,
   refreshQuoConfigCache,
   testQuoConnection,
@@ -38,7 +40,30 @@ export default defineEventHandler(async (event) => {
 
   // Prefer the shared helper when using the saved key (includes fromNumber context).
   if (!body.apiKey?.trim() || body.apiKey.trim() === config.apiKey) {
-    return testQuoConnection(db)
+    const result = await testQuoConnection(db)
+    if (result.ok && isQuoSmsEnabled(config)) {
+      try {
+        const webhook = await ensureQuoInboundWebhook(db, null)
+        return {
+          ...result,
+          webhookConfigured: webhook.webhookConfigured,
+          webhookUrl: webhook.webhookUrl,
+          message: webhook.webhookConfigured
+            ? `${result.message}. Susan SMS webhook ready.`
+            : result.message,
+        }
+      }
+      catch (err) {
+        return {
+          ...result,
+          webhookConfigured: false,
+          message: `${result.message}. Webhook repair failed: ${
+            err instanceof Error ? err.message : 'unknown error'
+          }`,
+        }
+      }
+    }
+    return result
   }
 
   try {
