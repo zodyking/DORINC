@@ -21,6 +21,25 @@ export interface OpenRouterMessageContent {
   image_url?: { url: string }
 }
 
+export interface OpenRouterToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export type OpenRouterChatRole = 'system' | 'user' | 'assistant' | 'tool'
+
+export type OpenRouterChatMessage = {
+  role: OpenRouterChatRole
+  content?: string | OpenRouterMessageContent[] | null
+  name?: string
+  tool_call_id?: string
+  tool_calls?: OpenRouterToolCall[]
+}
+
 export interface OpenRouterChatResult {
   content: string
   model: string
@@ -28,10 +47,22 @@ export interface OpenRouterChatResult {
   completionTokens: number
   totalTokens: number
   estimatedCostUsd: number
+  toolCalls: OpenRouterToolCall[]
+  finishReason: string | null
 }
 
 interface OpenRouterResponse {
-  choices?: Array<{ message?: { content?: string } }>
+  choices?: Array<{
+    message?: {
+      content?: string | null
+      tool_calls?: Array<{
+        id?: string
+        type?: string
+        function?: { name?: string, arguments?: string }
+      }>
+    }
+    finish_reason?: string | null
+  }>
   usage?: {
     prompt_tokens?: number
     completion_tokens?: number
@@ -73,10 +104,35 @@ function parseJsonBlock(text: string): Record<string, unknown> {
   }
 }
 
+function normalizeToolCalls(
+  raw: OpenRouterResponse['choices'] extends Array<infer C>
+    ? C extends { message?: { tool_calls?: infer T } } ? T : never
+    : never,
+): OpenRouterToolCall[] {
+  if (!Array.isArray(raw)) return []
+  const out: OpenRouterToolCall[] = []
+  for (const item of raw) {
+    const id = String(item?.id || '').trim()
+    const name = String(item?.function?.name || '').trim()
+    if (!id || !name) continue
+    out.push({
+      id,
+      type: 'function',
+      function: {
+        name,
+        arguments: typeof item?.function?.arguments === 'string'
+          ? item.function.arguments
+          : JSON.stringify(item?.function?.arguments ?? {}),
+      },
+    })
+  }
+  return out
+}
+
 export async function openRouterChat(
   apiKey: string,
   model: string,
-  messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }>,
+  messages: OpenRouterChatMessage[],
   feature: AiFeatureType,
   opts: {
     responseFormat?: 'json' | 'text'
@@ -84,6 +140,9 @@ export async function openRouterChat(
     maxTokens?: number
     /** Abort hung OpenRouter calls (default 30s). */
     timeoutMs?: number
+    /** OpenAI-compatible tool definitions (function calling). */
+    tools?: Array<Record<string, unknown>>
+    toolChoice?: 'auto' | 'none' | { type: 'function', function: { name: string } }
   } = {},
 ): Promise<OpenRouterChatResult> {
   const key = normalizeOpenRouterApiKey(apiKey)
@@ -116,7 +175,12 @@ export async function openRouterChat(
   if (opts.maxTokens != null && Number.isFinite(opts.maxTokens)) {
     body.max_tokens = Math.max(1, Math.floor(opts.maxTokens))
   }
-  if (responseFormat === 'json') {
+  if (opts.tools?.length) {
+    body.tools = opts.tools
+    body.tool_choice = opts.toolChoice ?? 'auto'
+  }
+  // JSON mode conflicts with tool calling on many providers — skip when tools are present.
+  if (responseFormat === 'json' && !opts.tools?.length) {
     body.response_format = { type: 'json_object' }
   }
 
@@ -161,8 +225,12 @@ export async function openRouterChat(
     )
   }
 
-  const content = payload.choices?.[0]?.message?.content?.trim()
-  if (!content) throw new OpenRouterServiceError('EMPTY_RESPONSE', 'OpenRouter returned no content')
+  const choice = payload.choices?.[0]
+  const toolCalls = normalizeToolCalls(choice?.message?.tool_calls)
+  const content = String(choice?.message?.content ?? '').trim()
+  if (!content && !toolCalls.length) {
+    throw new OpenRouterServiceError('EMPTY_RESPONSE', 'OpenRouter returned no content')
+  }
 
   const promptTokens = payload.usage?.prompt_tokens ?? 0
   const completionTokens = payload.usage?.completion_tokens ?? 0
@@ -178,6 +246,8 @@ export async function openRouterChat(
     completionTokens,
     totalTokens,
     estimatedCostUsd,
+    toolCalls,
+    finishReason: choice?.finish_reason ?? null,
   }
 }
 
