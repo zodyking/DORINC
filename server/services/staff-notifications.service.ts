@@ -549,8 +549,8 @@ export async function notifyNotifyChannelChanged(
 
   if (toSms && opts.phone) {
     try {
-      const { sendDorincContactCardAndScheduleSusanIntro } = await import('./dorinc-contact-notify.service')
-      await sendDorincContactCardAndScheduleSusanIntro(db, {
+      const { sendDorincContactCardSms } = await import('./dorinc-contact-notify.service')
+      await sendDorincContactCardSms(db, {
         name: opts.name,
         phone: opts.phone,
         userId: opts.userId,

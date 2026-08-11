@@ -145,35 +145,6 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     },
   },
   {
-    typeKey: 'susan_sms_ready',
-    name: 'Susan SMS ready',
-    description: 'Follow-up text sent a few minutes after Text notifications are enabled.',
-    audience: 'staff',
-    group: 'security',
-    defaults: {
-      body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Text Susan AI anytime',
-        '',
-        'You can text this number anytime to chat with Susan AI, the platform assistant, for help with DORINC — the same way you chat with Susan from the dashboard.',
-        '',
-        'Reply to this thread with your question to get started.',
-      ].join('\n'),
-    },
-    variables: [
-      ...brandVars,
-      { key: 'name', label: 'User name' },
-    ],
-    sampleVars: {
-      brandName: 'DORINC',
-      name: 'Alex Rivera',
-      appUrl: 'https://app.example.com',
-    },
-  },
-  {
     typeKey: 'login_notification',
     name: 'Sign-in alert',
     description: 'Sent when a staff or portal account signs in.',

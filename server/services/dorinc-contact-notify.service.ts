@@ -3,19 +3,13 @@ import {
   getDorincContactVcardUrl,
   resolveDorincContactPhone,
 } from './dorinc-contact.service'
-import {
-  enqueueTemplatedSms,
-  enqueueTemplatedSmsLater,
-} from './sms-notifications.service'
-
-const SUSAN_INTRO_DELAY_MS = 5 * 60 * 1000
+import { enqueueTemplatedSms } from './sms-notifications.service'
 
 /**
- * After Text notifications are enabled:
- * 1) Send a Dorinc contact-card SMS (vCard download — Quo API has no MMS).
- * 2) Schedule a Susan AI intro SMS five minutes later.
+ * After Text notifications are enabled, send the Dorinc contact-card SMS
+ * (vCard download link — Quo API has no MMS).
  */
-export async function sendDorincContactCardAndScheduleSusanIntro(
+export async function sendDorincContactCardSms(
   db: Db,
   opts: {
     userId: string
@@ -25,11 +19,10 @@ export async function sendDorincContactCardAndScheduleSusanIntro(
 ) {
   const quoPhone = await resolveDorincContactPhone(db)
   if (!quoPhone) {
-    return { contactQueued: false as const, introScheduled: false as const, reason: 'quo_disabled' as const }
+    return { contactQueued: false as const, reason: 'quo_disabled' as const }
   }
 
   const contactUrl = await getDorincContactVcardUrl(db)
-
   const contact = await enqueueTemplatedSms(db, {
     to: opts.phone,
     typeKey: 'dorinc_contact_card',
@@ -43,19 +36,8 @@ export async function sendDorincContactCardAndScheduleSusanIntro(
     },
   })
 
-  const intro = await enqueueTemplatedSmsLater(db, {
-    to: opts.phone,
-    typeKey: 'susan_sms_ready',
-    vars: { name: opts.name },
-    runAfter: new Date(Date.now() + SUSAN_INTRO_DELAY_MS),
-    meta: {
-      recipientUserId: opts.userId,
-      notificationKind: 'susan_sms_ready',
-    },
-  })
-
-  return {
-    contactQueued: contact.queued,
-    introScheduled: intro.queued,
-  }
+  return { contactQueued: contact.queued }
 }
+
+/** @deprecated use sendDorincContactCardSms */
+export const sendDorincContactCardAndScheduleSusanIntro = sendDorincContactCardSms

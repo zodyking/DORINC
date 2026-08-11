@@ -31,10 +31,10 @@ describe('dorinc contact vcard', () => {
     expect(folded.split('\r\n').every(line => line.length <= 75)).toBe(true)
   })
 
-  it('includes contact card and Susan ready SMS templates', () => {
+  it('includes contact card SMS template', () => {
     const keys = SMS_TEMPLATE_CATALOG.map(t => t.typeKey)
     expect(keys).toContain('dorinc_contact_card')
-    expect(keys).toContain('susan_sms_ready')
+    expect(keys).not.toContain('susan_sms_ready')
     expect(SMS_DEFAULT_BODIES).toEqual(smsCatalogDefaultBodies())
   })
 })
