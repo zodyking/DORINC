@@ -1,5 +1,6 @@
 /** Queue chat message email/SMS notifications from worker/automation paths. */
 import { buildChatMessageReceivedEmail } from '../../mail/templates/system.mjs'
+import { escapeHtml } from '../../mail/email-layout.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
 import { TEAM_CHAT_TITLE } from './team-chat.mjs'
 import {
@@ -9,9 +10,26 @@ import {
 
 const ENTITY_REF_TOKEN_RE = /\[\[ref:([a-z_]+):([0-9a-f-]{36}):([^\]]+)\]\]/gi
 
-function messagePreview(body) {
-  const stripped = String(body ?? '').replace(ENTITY_REF_TOKEN_RE, (_match, _type, _id, label) => label)
-  return stripped.length > 120 ? `${stripped.slice(0, 117)}…` : stripped
+/** Full chat body for notifications (entity refs → labels, no truncation). */
+function formatChatNotifyBody(body) {
+  return String(body ?? '')
+    .replace(ENTITY_REF_TOKEN_RE, (_match, _type, _id, label) => label)
+    .trim()
+}
+
+function buildInlineImageHtml(images) {
+  const imageAtts = (images || []).filter(a => String(a.mime_type || a.mimeType || '').startsWith('image/'))
+  const attachmentFileIds = imageAtts.map((a, i) => ({
+    fileId: a.id,
+    cid: `chat-img-${i + 1}@dorinc`,
+    filename: a.original_filename || a.filename || `image-${i + 1}`,
+    contentType: a.mime_type || a.mimeType,
+  }))
+  const imagesHtml = attachmentFileIds.map((a) => {
+    const alt = escapeHtml(a.filename)
+    return `<img src="cid:${a.cid}" alt="${alt}" style="max-width:100%;height:auto;border-radius:8px;display:block;margin:0 0 10px 0;" />`
+  }).join('')
+  return { imagesHtml, attachmentFileIds }
 }
 
 async function loadEmailBrand(pool) {
@@ -84,7 +102,23 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
   const brand = await loadEmailBrand(pool)
   const base = brand.appUrl.replace(/\/$/, '')
   const messagesUrl = `${base}/messages?conversation=${opts.conversationId}`
-  const preview = messagePreview(opts.body)
+  const fullMessage = formatChatNotifyBody(opts.body)
+  const { rows: attachmentRows } = await pool.query(
+    `SELECT id, original_filename, mime_type
+     FROM app_files
+     WHERE owner_entity_type = 'message'
+       AND owner_entity_id = $1
+       AND file_kind = 'attachment'
+       AND archived_at IS NULL
+     ORDER BY created_at ASC`,
+    [opts.messageId],
+  )
+  const { imagesHtml, attachmentFileIds } = buildInlineImageHtml(attachmentRows)
+  const photoNote = attachmentFileIds.length
+    ? `${attachmentFileIds.length === 1
+      ? 'Photo attached — open the message to view.'
+      : `${attachmentFileIds.length} photos attached — open the message to view.`}\n\n`
+    : ''
   const isTeamChat = opts.isTeamChat === true || conversation.type === 'team'
   const channelLabel = isTeamChat
     ? (conversation.title?.trim() || TEAM_CHAT_TITLE)
@@ -97,7 +131,8 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
       recipientName: recipient.name || 'Team member',
       senderName,
       channelLabel,
-      messagePreview: preview,
+      messagePreview: fullMessage,
+      imagesHtml,
       messagesUrl,
       appUrl: brand.appUrl,
       brand,
@@ -114,11 +149,15 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
         appUrl: brand.appUrl,
         senderName,
         channelLabel,
-        messagePreview: preview,
+        messagePreview: fullMessage,
+        photoNote,
         messagesUrl,
         recipientName: recipient.name || 'Team member',
       },
-      email: mail,
+      email: {
+        ...mail,
+        attachmentFileIds,
+      },
       meta: {
         conversationId: opts.conversationId,
         messageId: opts.messageId,

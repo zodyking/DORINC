@@ -28,7 +28,18 @@ export async function deliverUserNotification(
       typeKey: string
       vars: Record<string, string | null | undefined>
     }
-    email: { subject: string, text: string, html: string }
+    email: {
+      subject: string
+      text: string
+      html: string
+      /** Inline CID attachments loaded by the mail worker from app_files. */
+      attachmentFileIds?: Array<{
+        fileId: string
+        cid: string
+        filename?: string
+        contentType?: string
+      }>
+    }
     meta?: Record<string, unknown>
     /** Default true — security/workflow should still reach the user if SMS fails. */
     emailFallback?: boolean
@@ -62,6 +73,9 @@ export async function deliverUserNotification(
     subject: opts.email.subject,
     text: opts.email.text,
     html: opts.email.html,
+    ...(opts.email.attachmentFileIds?.length
+      ? { attachmentFileIds: opts.email.attachmentFileIds }
+      : {}),
     ...meta,
   })
   return { channel: 'email' }

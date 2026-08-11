@@ -500,7 +500,7 @@ export async function sendMessage(
       conversationId,
       messageId: message!.id,
       senderUserId,
-      body: normalizedBody,
+      body: finalBody,
       isTeamChat: conversation?.type === 'team',
     }).catch(() => {})
   }
@@ -762,8 +762,16 @@ async function entityExists(db: Db, type: MessageEntityType, id: string) {
   }
 }
 
+/** Full chat body for email/SMS notifications (entity refs → labels, no truncation). */
+export function formatChatNotifyBody(body: string): string {
+  return String(body ?? '')
+    .replace(ENTITY_REF_TOKEN_RE, (_match, _type: string, _id: string, label: string) => label)
+    .trim()
+}
+
+/** Short preview for inbox list rows only. */
 function messagePreview(body: string): string {
-  const stripped = body.replace(ENTITY_REF_TOKEN_RE, (_, type: string, _id: string, label: string) => label)
+  const stripped = formatChatNotifyBody(body)
   return stripped.length > 120 ? `${stripped.slice(0, 117)}…` : stripped
 }
 

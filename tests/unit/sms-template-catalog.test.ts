@@ -36,11 +36,21 @@ describe('sms template catalog', () => {
       expect(def.defaults.body.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
       expect(def.defaults.body).toContain('{{brandName}}')
       expect(def.defaults.body).toContain('\n')
+      // Detail fields use stacked label/value (no "Label: value" colon form).
+      expect(def.defaults.body).not.toMatch(/^(When|Email|Location|IP address|Device|Verification code|Expires|Record|Type|Decision|Name|Invoice|Customer|Total|Subject|Sent at|Temporary password|Reason for deletion|Reviewed by|Reviewer note|Request type|Topic|Vehicle|Details|Category|Urgency|Customer message|Message|Report date|Status|Requested by): /m)
       const rendered = applySmsTemplateContent(def.defaults, def.sampleVars).body
       expect(rendered.length).toBeGreaterThan(10)
       expect(rendered.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
       expect(rendered).not.toMatch(/\{\{\s*[\w.]+\s*\}\}/)
     }
+
+    const login = applySmsTemplateContent(
+      smsTemplateByKey('login_notification')!.defaults,
+      smsTemplateByKey('login_notification')!.sampleVars,
+    ).body
+    expect(login).toContain('When\nAug 10, 2026, 8:15 AM')
+    expect(login).toContain('Email\nalex@example.com')
+    expect(login).toContain('Open: https://app.example.com')
   })
 
   it('keeps worker SMS_DEFAULT_BODIES in sync with the shared catalog', () => {

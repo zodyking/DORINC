@@ -114,12 +114,39 @@ export async function processMailJobs(pool, batch = 20) {
  * @param {import('pg').Pool} pool
  * @param {Record<string, unknown>} payload
  */
+async function loadInlineAttachments(pool, specs) {
+  const list = Array.isArray(specs) ? specs : []
+  const attachments = []
+  for (const spec of list) {
+    const fileId = String(spec?.fileId ?? '').trim()
+    if (!fileId) continue
+    const { rows } = await pool.query(
+      `SELECT original_filename, mime_type, binary_data
+       FROM app_files
+       WHERE id = $1 AND archived_at IS NULL
+       LIMIT 1`,
+      [fileId],
+    )
+    const row = rows[0]
+    if (!row?.binary_data) continue
+    attachments.push({
+      filename: String(spec.filename || row.original_filename || 'image'),
+      content: row.binary_data,
+      contentType: String(spec.contentType || row.mime_type || 'application/octet-stream'),
+      cid: String(spec.cid || '').trim() || undefined,
+      contentDisposition: 'inline',
+    })
+  }
+  return attachments
+}
+
 async function deliverEmail(pool, payload) {
   const to = String(payload.to ?? '')
   const subject = String(payload.subject ?? '')
   const text = String(payload.text ?? '')
   const html = payload.html ? String(payload.html) : undefined
   const credentialLogId = payload.credentialLogId ? String(payload.credentialLogId) : null
+  const attachments = await loadInlineAttachments(pool, payload.attachmentFileIds)
 
   if (!to || !subject) throw new Error('email_send payload missing to/subject')
 
@@ -132,6 +159,7 @@ async function deliverEmail(pool, payload) {
       subject,
       text,
       html,
+      attachments,
       debugLabel: payload.notificationKind ? String(payload.notificationKind) : 'email-send',
     })
   }

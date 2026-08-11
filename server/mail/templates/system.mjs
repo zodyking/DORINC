@@ -1268,6 +1268,7 @@ export function buildChatMessageReceivedEmail({
   senderName,
   channelLabel,
   messagePreview,
+  imagesHtml,
   messagesUrl,
   appUrl,
   brand,
@@ -1277,15 +1278,16 @@ export function buildChatMessageReceivedEmail({
   const subject = isTeamChat
     ? `${senderFirstName(senderName)} Sent A Team Message`
     : `${senderName} — ${channelLabel}`
+  const fullMessage = String(messagePreview ?? '').trim()
   const text = [
     `Hi ${recipientName},`,
     '',
     `${senderName} sent a message in ${channelLabel}:`,
     '',
-    messagePreview,
+    fullMessage,
     '',
     `Open message: ${messagesUrl}`,
-  ].join('\n')
+  ].filter((line, index, arr) => !(line === '' && arr[index - 1] === '')).join('\n')
 
   return styledEmail({
     subject,
@@ -1296,10 +1298,11 @@ export function buildChatMessageReceivedEmail({
     lead: isTeamChat
       ? `You received a new message in the ${channelLabel} channel.`
       : `You received a new message from ${senderName}.`,
-    bodyHtml: messagePreview
-      ? emailQuotedMessage(String(messagePreview), {
+    bodyHtml: (fullMessage || imagesHtml)
+      ? emailQuotedMessage(fullMessage, {
           title: senderName,
           subtitle: channelLabel,
+          imagesHtml,
         })
       : undefined,
     details: [
@@ -1310,7 +1313,7 @@ export function buildChatMessageReceivedEmail({
     appUrl,
     brand,
     templateOverride,
-    templateVars: { recipientName, senderName, channelLabel, messagePreview },
+    templateVars: { recipientName, senderName, channelLabel, messagePreview: fullMessage },
   })
 }
 

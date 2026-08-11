@@ -267,7 +267,8 @@ describe('system email templates', () => {
       recipientName: 'Pat',
       senderName: 'Brandon K.',
       channelLabel: 'Team',
-      messagePreview: 'Invoice INV-000711 has been created for Fleet Co',
+      messagePreview: 'Invoice INV-000711 has been created for Fleet Co\nSecond line',
+      imagesHtml: '<img src="cid:chat-img-1@dorinc" alt="photo.jpg" />',
       messagesUrl: `${appUrl}/messages?conversation=abc`,
       appUrl,
       brand,
@@ -280,6 +281,10 @@ describe('system email templates', () => {
     expect(mail.html).toContain('Sent To')
     expect(mail.html).toContain('Brandon K.')
     expect(mail.html).toContain('display:block;width:100%')
+    expect(mail.html).toContain('Second line')
+    expect(mail.html).toContain('<br>')
+    expect(mail.html).toContain('cid:chat-img-1@dorinc')
+    expect(mail.text).toContain('Second line')
     expect(mail.html).not.toContain('Accounting workspace')
   })
 

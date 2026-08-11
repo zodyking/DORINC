@@ -288,7 +288,10 @@ export function emailDetails(rows) {
 export function emailQuotedMessage(text, meta = {}) {
   const t = EMAIL_TOKENS
   const body = escapeHtml(String(text ?? '').trim())
-  if (!body && !meta.title) return ''
+    .replace(/\r\n/g, '\n')
+    .replace(/\n/g, '<br>')
+  const imagesHtml = typeof meta.imagesHtml === 'string' ? meta.imagesHtml.trim() : ''
+  if (!body && !meta.title && !imagesHtml) return ''
   const title = meta.title ? escapeHtml(meta.title) : ''
   const subtitle = meta.subtitle ? escapeHtml(meta.subtitle) : ''
 
@@ -300,6 +303,9 @@ export function emailQuotedMessage(text, meta = {}) {
     subtitle ? `<div style="padding-top:2px;font-size:12px;line-height:18px;color:${t.muted};font-family:${t.font};">${subtitle}</div>` : '',
     body
       ? `<div style="padding-top:${title || subtitle ? '14' : '0'}px;font-size:15px;line-height:24px;color:#374151;font-family:${t.font};">${body}</div>`
+      : '',
+    imagesHtml
+      ? `<div style="padding-top:${body || title || subtitle ? '14' : '0'}px;">${imagesHtml}</div>`
       : '',
     `</td>`,
     `</tr>`,

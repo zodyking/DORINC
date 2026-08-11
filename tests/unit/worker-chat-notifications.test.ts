@@ -53,6 +53,10 @@ function createPool(state: {
         return { rows: [] }
       }
 
+      if (text.includes('FROM app_files') && text.includes("owner_entity_type = 'message'")) {
+        return { rows: [] }
+      }
+
       if (text.startsWith('INSERT INTO worker_jobs')) {
         const payload = typeof params[0] === 'string' ? JSON.parse(params[0]) : params[0]
         // INSERT uses job_type as literal in SQL for our worker; recover from SQL string
