@@ -11,8 +11,10 @@ import {
 import {
   openRouterChat,
   OpenRouterServiceError,
+  type OpenRouterChatMessage,
   type OpenRouterMessageContent,
 } from './ai-openrouter.service'
+import { executeSusanHelpTools } from './ai-tools.service'
 import { logAiUsage } from './ai-jobs.service'
 import {
   formatPlatformHelpForSms,
@@ -24,16 +26,28 @@ import {
   openRouterAuthRecoveryMessage,
 } from '../../shared/openrouter-auth'
 import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
+import { SUSAN_HELP_TOOLS } from '../../shared/ai-tools'
 import { BRAND_NAME } from '../../shared/brand'
 import { splitPersonName } from '../../shared/format/person-name'
 
 export type PlatformHelpChannel = 'web' | 'sms'
+
+/** Max tool → model rounds per help turn (keeps latency/cost bounded). */
+const HELP_TOOL_MAX_ROUNDS = 3
+
+const HELP_TOOL_INSTRUCTIONS = [
+  'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
+  'You may call tools more than once if needed, then answer from the tool results.',
+  'Do not invent routes, buttons, or permissions that are not in tool results or the user message.',
+  'For simple greetings or acknowledgements, reply directly without tools.',
+].join(' ')
 
 const HELP_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant.`,
   'You explain how to use the application: navigation, workflows, roles, settings, and features.',
   'Speak in first person as Susan. Address the staff member by their first name when greeting or when it feels natural.',
   'You NEVER modify records, access customer or invoice data, or perform actions for the user.',
+  HELP_TOOL_INSTRUCTIONS,
   'Be concise — short sentences, no filler, no repetition.',
   'Output clean HTML only (never markdown). Structure every how-to answer like this:',
   '1) Optional one-sentence summary in <p>.',
@@ -51,6 +65,7 @@ const HELP_SMS_SYSTEM_PROMPT = [
   'You help with the app: navigation, workflows, roles, settings, and features.',
   'Address the staff member by their first name when greeting (e.g. "Hi Alex!") and when it feels natural.',
   'You NEVER modify records, access customer or invoice data, or perform actions for the user.',
+  HELP_TOOL_INSTRUCTIONS,
   'Reply in plain text only for SMS — no HTML, no markdown headings, no code fences, no bold markers.',
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
   'Use short paragraphs and numbered steps like "1) …" "2) …". Put UI labels in quotes (e.g. "Invoices").',
@@ -163,7 +178,7 @@ async function callOpenRouterHelp(
   }))
 
   const systemPrompt = channel === 'sms' ? HELP_SMS_SYSTEM_PROMPT : HELP_SYSTEM_PROMPT
-  const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string | OpenRouterMessageContent[] }> = [
+  const messages: OpenRouterChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...historyMessages,
     {
@@ -177,24 +192,91 @@ async function callOpenRouterHelp(
     },
   ]
 
-  const result = await openRouterChat(
-    apiKey,
-    model,
-    messages,
-    'platform_help',
-    {
-      responseFormat: 'text',
-      temperature: 0.3,
-      maxTokens: channel === 'sms'
-        ? 700
-        : (input.imageDataUrls?.length ? 2048 : 1024),
-    },
-  )
+  let promptTokens = 0
+  let completionTokens = 0
+  let finalContent = ''
+
+  for (let round = 0; round < HELP_TOOL_MAX_ROUNDS; round++) {
+    const result = await openRouterChat(
+      apiKey,
+      model,
+      messages,
+      'platform_help',
+      {
+        responseFormat: 'text',
+        temperature: 0.3,
+        maxTokens: channel === 'sms'
+          ? 700
+          : (input.imageDataUrls?.length ? 2048 : 1024),
+        tools: SUSAN_HELP_TOOLS as unknown as Array<Record<string, unknown>>,
+        toolChoice: 'auto',
+        // Tool rounds can take longer than a single completion.
+        timeoutMs: 45_000,
+      },
+    )
+
+    promptTokens += result.promptTokens
+    completionTokens += result.completionTokens
+
+    if (!result.toolCalls.length) {
+      finalContent = result.content
+      break
+    }
+
+    messages.push({
+      role: 'assistant',
+      content: result.content || null,
+      tool_calls: result.toolCalls,
+    })
+
+    const toolResults = await executeSusanHelpTools(
+      result.toolCalls.map(tc => ({
+        id: tc.id,
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+      })),
+      { pageContext: input.pageContext },
+    )
+
+    for (const toolResult of toolResults) {
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolResult.toolCallId,
+        content: toolResult.content,
+      })
+    }
+
+    // Last round: force a final answer without further tools.
+    if (round === HELP_TOOL_MAX_ROUNDS - 1) {
+      const closing = await openRouterChat(
+        apiKey,
+        model,
+        messages,
+        'platform_help',
+        {
+          responseFormat: 'text',
+          temperature: 0.3,
+          maxTokens: channel === 'sms' ? 700 : 1024,
+          tools: SUSAN_HELP_TOOLS as unknown as Array<Record<string, unknown>>,
+          toolChoice: 'none',
+          timeoutMs: 45_000,
+        },
+      )
+      promptTokens += closing.promptTokens
+      completionTokens += closing.completionTokens
+      finalContent = closing.content
+      break
+    }
+  }
+
+  if (!finalContent.trim()) {
+    throw new OpenRouterServiceError('EMPTY_RESPONSE', 'OpenRouter returned no content')
+  }
 
   return {
-    answer: formatHelpAnswer(result.content, channel),
-    promptTokens: result.promptTokens,
-    completionTokens: result.completionTokens,
+    answer: formatHelpAnswer(finalContent, channel),
+    promptTokens,
+    completionTokens,
   }
 }
 
