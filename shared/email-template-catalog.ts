@@ -701,7 +701,7 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
   {
     typeKey: 'deletion_request_result',
     name: 'Deletion request result',
-    description: 'Notify the requestor when a deletion request is decided.',
+    description: 'Notify the requestor when a deletion request is approved, rejected, or left for human review.',
     audience: 'staff',
     group: 'workflow',
     defaults: {

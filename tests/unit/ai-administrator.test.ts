@@ -42,14 +42,15 @@ function baseSettings(overrides: Partial<AiProviderSettingsView> = {}): AiProvid
 }
 
 describe('ai administrator helpers', () => {
-  it('flags filler deletion reasons', () => {
+  it('flags filler deletion reasons under or at spam thresholds', () => {
     expect(looksLikeWeakDeletionReason('asdfasdfas')).toBe(true)
     expect(looksLikeWeakDeletionReason('test test test')).toBe(true)
     expect(looksLikeWeakDeletionReason('delete please')).toBe(true)
     expect(looksLikeWeakDeletionReason('xxxxxxxxxx')).toBe(true)
     expect(looksLikeWeakDeletionReason('test system')).toBe(true)
     expect(looksLikeWeakDeletionReason('testing the system')).toBe(true)
-    expect(looksLikeWeakDeletionReason('just testing features')).toBe(true)
+    expect(looksLikeWeakDeletionReason('please delete please delete')).toBe(true)
+    expect(looksLikeWeakDeletionReason('asdfasdfasdfasdfasdf')).toBe(true)
   })
 
   it('allows concise real deletion reasons that explain why', () => {
@@ -58,6 +59,7 @@ describe('ai administrator helpers', () => {
     expect(looksLikeWeakDeletionReason(
       'Was testing the system to ensure all features worked properly.',
     )).toBe(false)
+    expect(looksLikeWeakDeletionReason('just testing features')).toBe(false)
   })
 
   it('detects similar deletion reasons', () => {
@@ -147,7 +149,7 @@ describe('ai administrator helpers', () => {
   it('labels the administrator feature in the control panel usage list', () => {
     expect(aiFeatureLabel('ai_administrator')).toBe('Administrator')
     expect(aiFeatureLabel('deletion_request_ai_review')).toBe('Deletion review')
-    expect(DELETION_REASON_WEAK_MESSAGE).toMatch(/explain why/i)
+    expect(DELETION_REASON_WEAK_MESSAGE).toMatch(/clearer reason|20 characters/i)
   })
 
   it('looks back one hour for similar deletion requests', () => {
@@ -187,7 +189,9 @@ describe('ai administrator helpers', () => {
     expect(isRetryableSusanSkip('skipped', 'AI Administrator unavailable')).toBe(true)
     expect(isRetryableSusanSkip('skipped', 'AI review failed')).toBe(true)
     expect(isRetryableSusanSkip('skipped', 'Already decided')).toBe(false)
+    expect(isRetryableSusanSkip('skipped', 'Already AI-reviewed')).toBe(false)
     expect(isRetryableSusanSkip('skipped', 'Request not found')).toBe(false)
     expect(isRetryableSusanSkip('reject', 'nope')).toBe(false)
+    expect(isRetryableSusanSkip('defer', 'Left for human')).toBe(false)
   })
 })

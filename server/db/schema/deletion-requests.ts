@@ -20,6 +20,10 @@ export const entityDeletionRequests = pgTable('entity_deletion_requests', {
   reviewedBy: uuid('reviewed_by').references(() => users.id),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   reviewReason: text('review_reason'),
+  /** When Susan finished an AI pass (approve/reject/defer). Prevents re-queue loops on defer. */
+  aiReviewedAt: timestamp('ai_reviewed_at', { withTimezone: true }),
+  /** Susan’s note when she defers to a human administrator. */
+  aiReviewNote: text('ai_review_note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

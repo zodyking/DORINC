@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, ne } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, ne } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { useDb, usePool, type Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
@@ -30,6 +30,7 @@ import { logAiUsage } from './ai-jobs.service'
 import { enqueueJob } from './jobs.service'
 import {
   approveDeletionRequest,
+  deferDeletionRequestToHuman,
   DeletionRequestsServiceError,
   rejectDeletionRequest,
 } from './deletion-requests.service'
@@ -37,7 +38,7 @@ import { hashPassword } from '../auth/password'
 import { writeAudit } from './audit.service'
 
 export const DELETION_REASON_WEAK_MESSAGE
-  = 'Explain why this record should be deleted — a short phrase like "test system" is not enough'
+  = 'Enter a clearer reason for your request (at least 20 characters explaining why this should be removed)'
 
 export { SUSAN_SYSTEM_EMAIL }
 
@@ -113,39 +114,29 @@ export function deletionReasonsLookSimilar(a: string, b: string): boolean {
   return union > 0 && inter / union >= 0.72
 }
 
-/** Cheap local filter before spending tokens. */
+/** Cheap local filter before spending tokens. Min length is enforced at 20 chars. */
 export function looksLikeWeakDeletionReason(reason: string): boolean {
   const text = reason.trim().toLowerCase()
-  if (text.length < 12) return true
+  if (text.length < 20) return true
 
   const compact = text.replace(/\s+/g, '')
-  if (compact.length < 10) return true
+  if (compact.length < 16) return true
 
-  // Keyboard spam / filler
-  if (/^(.)\1{7,}$/.test(compact)) return true
-  if (/^(..)\1{4,}$/.test(compact)) return true
-  if (/^(asdf+|qwer+|zxcv+|test+|abc+|xxx+|yyy+|zzz+|1234+|0000+)/.test(compact)) return true
+  // Keyboard spam / nonsense runs
+  if (/^(.)\1{9,}$/.test(compact)) return true
+  if (/^(..)\1{5,}$/.test(compact)) return true
+  if (/^(asdf+|qwer+|zxcv+|xxx+|yyy+|zzz+|1234+|0000+)/.test(compact)) return true
 
   const words = text.split(/[^a-z0-9]+/).filter(Boolean)
-  if (words.length <= 2 && text.length < 36) return true
-
   const filler = new Set([
     'test', 'testing', 'tests', 'tested', 'asdf', 'qwer', 'delete', 'deleted', 'deletion',
     'remove', 'removed', 'please', 'pls', 'thanks', 'thank', 'you', 'need', 'want', 'just',
     'because', 'reason', 'blah', 'stuff', 'thing', 'things', 'idk', 'whatever', 'none',
-    'n/a', 'na', 'system', 'systems', 'app', 'application', 'feature', 'features', 'software',
-    'platform', 'portal', 'site', 'check', 'checking', 'try', 'trying', 'demo', 'sample',
+    'n/a', 'na',
   ])
   const meaningful = words.filter(w => !filler.has(w) && w.length > 2)
+  // Only reject pure filler after the 20-char minimum (e.g. "please delete this please").
   if (meaningful.length === 0) return true
-  if (words.length >= 2 && meaningful.length <= 1 && text.length < 48) return true
-
-  // "test system" / "testing the app" without explaining the purpose.
-  const mentionsTesting = /\b(test|tests|testing|tested|demo|sample)\b/.test(text)
-  if (mentionsTesting) {
-    const explainsPurpose = /\b(ensur(e|ed|ing)|verif(y|ied|ying)|confirm(ed|ing)?|because|so that|in order|mistake|mistaken|accident|accidental|wrong|duplicate|training|practice|sandbox|cleanup|clean up|created by|should not|shouldn'?t|no longer|obsolete|invalid)\b/.test(text)
-    if (!explainsPurpose && text.length < 80) return true
-  }
 
   return false
 }
@@ -342,11 +333,10 @@ export async function assertDeletionReasonAcceptable(
 
   const system = [
     `You are ${AI_ASSISTANT_NAME}, AI Administrator for ${BRAND_NAME}.`,
-    'Decide if a staff deletion-request reason shows a real understanding of why the record should be deleted.',
-    'Reject keyboard spam, nonsense, jokes, and vague filler such as "delete please", "test test test", or "test system".',
-    'Require the why: what went wrong / why it exists / what cleanup goal is — not just that they were testing.',
-    'Accept clear reasons even when concise (duplicate draft, wrong customer, created by mistake, training leftover that should be removed, etc.).',
-    'Weigh the submitter account type with the reason (e.g. mechanic training mistakes vs admin cleanup vs accountant billing records).',
+    'Decide if a staff deletion-request reason is usable (already at least 20 characters).',
+    'Reject only clear spam, nonsense, keyboard mashing, or jokes with no cleanup intent.',
+    'Accept ordinary staff reasons, including concise ones (duplicate draft, wrong customer, training leftover, created by mistake, etc.).',
+    'Do not demand essays — if the reason is understandable, ok=true.',
     'Return JSON only: { "ok": boolean, "reason": "short note" }.',
   ].join(' ')
 
@@ -560,12 +550,18 @@ async function loadEntityContext(db: Db, entityType: DeletionEntityType, entityI
 
 /** Retryable soft-skips must not be marked done (they left the request pending). */
 export function isRetryableSusanSkip(
-  decision: 'approve' | 'reject' | 'skipped',
+  decision: 'approve' | 'reject' | 'defer' | 'skipped',
   note: string | null | undefined,
 ): boolean {
   if (decision !== 'skipped') return false
   const n = String(note || '').toLowerCase()
-  if (n.includes('already decided') || n.includes('not found')) return false
+  if (
+    n.includes('already decided')
+    || n.includes('not found')
+    || n.includes('already ai-reviewed')
+  ) {
+    return false
+  }
   return true
 }
 
@@ -690,7 +686,10 @@ export async function catchUpPendingDeletionRequestAiReviews(
     createdAt: entityDeletionRequests.createdAt,
   })
     .from(entityDeletionRequests)
-    .where(eq(entityDeletionRequests.status, 'pending'))
+    .where(and(
+      eq(entityDeletionRequests.status, 'pending'),
+      isNull(entityDeletionRequests.aiReviewedAt),
+    ))
     .orderBy(asc(entityDeletionRequests.createdAt))
     .limit(limit)
 
@@ -734,7 +733,7 @@ export async function catchUpPendingDeletionRequestAiReviews(
 }
 
 export async function reviewDeletionRequestWithSusan(db: Db, requestId: string): Promise<{
-  decision: 'approve' | 'reject' | 'skipped'
+  decision: 'approve' | 'reject' | 'defer' | 'skipped'
   note: string | null
 }> {
   const client = await prepareAdministratorClient(db)
@@ -759,6 +758,15 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
       afterData: { requestId, reason: 'Request not found' },
     })
     return { decision: 'skipped', note: 'Request not found' }
+  }
+  if (req.aiReviewedAt) {
+    await logSusanDeletionAudit({
+      action: 'deletion_requests.ai_review.skip',
+      entityType: req.entityType,
+      entityId: req.entityId,
+      afterData: { requestId, reason: 'Already AI-reviewed', aiReviewedAt: req.aiReviewedAt.toISOString() },
+    })
+    return { decision: 'skipped', note: 'Already AI-reviewed' }
   }
   if (req.status !== 'pending') {
     await logSusanDeletionAudit({
@@ -860,17 +868,15 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
 
   const system = [
     `You are ${AI_ASSISTANT_NAME}, AI Administrator for ${BRAND_NAME}.`,
-    'Review staff deletion requests on the merits of the reason and the record state.',
-    'Do NOT reject solely because the same user asked before — admins and developers often resubmit legitimate cleanup requests.',
-    'Judge whether the reason sounds truthful and specific (why this record exists / why deletion is the right cleanup).',
-    'Reject vague filler (e.g. "test system") that does not explain the purpose.',
-    'Accept clear reasons such as testing features and now removing a leftover draft, duplicate draft, wrong customer, training leftover, etc.',
-    'Weigh the submitter account type with the reason (mechanic/training, admin/dev cleanup, accountant/billing caution).',
-    'REJECT when the invoice was already sent to a customer, has payment activity, or a service log is linked to billing — tell them to edit or void instead.',
-    'Prefer REJECT when a simple edit can fix the problem (wrong field, typo, wrong notes).',
-    'APPROVE unsent drafts / junk / duplicate leftovers when the reason is truthful and deletion is appropriate cleanup.',
-    'Write a concise review note (1–2 short sentences, no fluff). Explain the record-state or reason issue — never "because you asked before".',
-    'Return JSON only: { "decision": "approve" | "reject", "note": "..." }.',
+    'Decide deletion requests carefully using three outcomes:',
+    'APPROVE — safe cleanup only: unsent draft invoices, obvious duplicates, training leftovers, clearly mistaken records with no customer/billing exposure. The reason must make sense.',
+    'REJECT — deletion is clearly wrong: sent/paid invoices, service logs tied to billing, or a simple edit/void would fix it (typo, wrong notes, wrong field). Explain what they should do instead.',
+    'DEFER — leave the request OPEN for a human administrator when you are unsure, the record looks consequential (active customer, vehicle with history, non-draft invoice, conversation with history), the reason is plausible but incomplete, or policy judgment is needed.',
+    'Do NOT reject only because the same user asked before.',
+    'Prefer DEFER over REJECT when the reason is honest but risk is unclear.',
+    'Prefer DEFER over APPROVE when deleting could hurt operations or remove useful history.',
+    'Write a concise note (1–2 short sentences) for the staff member / human reviewer.',
+    'Return JSON only: { "decision": "approve" | "reject" | "defer", "note": "..." }.',
   ].join(' ')
 
   const user = [
@@ -888,8 +894,8 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
     `Entity context JSON: ${JSON.stringify(entityContext)}`,
   ].filter(Boolean).join('\n')
 
-  let decision: 'approve' | 'reject' = 'reject'
-  let note = 'Rejected — please edit the record instead of deleting it.'
+  let decision: 'approve' | 'reject' | 'defer' = 'defer'
+  let note = 'Left open for a human administrator to review.'
 
   try {
     const result = await openRouterChat(client.apiKey, client.model, [
@@ -916,7 +922,11 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
       decision?: unknown
       note?: unknown
     }
-    if (parsed.decision === 'approve' || parsed.decision === 'reject') {
+    if (
+      parsed.decision === 'approve'
+      || parsed.decision === 'reject'
+      || parsed.decision === 'defer'
+    ) {
       decision = parsed.decision
     }
     if (typeof parsed.note === 'string' && parsed.note.trim()) {
@@ -951,12 +961,29 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
   try {
     if (decision === 'approve') {
       await approveDeletionRequest(db, requestId, susanId, note)
+      await db.update(entityDeletionRequests).set({
+        aiReviewedAt: new Date(),
+        aiReviewNote: note,
+        updatedAt: new Date(),
+      }).where(eq(entityDeletionRequests.id, requestId))
+    }
+    else if (decision === 'reject') {
+      await rejectDeletionRequest(db, requestId, susanId, note)
+      await db.update(entityDeletionRequests).set({
+        aiReviewedAt: new Date(),
+        aiReviewNote: note,
+        updatedAt: new Date(),
+      }).where(eq(entityDeletionRequests.id, requestId))
     }
     else {
-      await rejectDeletionRequest(db, requestId, susanId, note)
+      await deferDeletionRequestToHuman(db, requestId, susanId, note)
     }
     await logSusanDeletionAudit({
-      action: decision === 'approve' ? 'deletion_requests.approve' : 'deletion_requests.reject',
+      action: decision === 'approve'
+        ? 'deletion_requests.approve'
+        : decision === 'reject'
+          ? 'deletion_requests.reject'
+          : 'deletion_requests.ai_review.defer',
       entityType: req.entityType,
       entityId: req.entityId,
       susanId,
@@ -965,6 +992,7 @@ export async function reviewDeletionRequestWithSusan(db: Db, requestId: string):
         entityType: req.entityType,
         entityLabel: req.entityLabel,
         reviewReason: note,
+        decision,
       },
     })
   }

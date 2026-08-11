@@ -3,10 +3,15 @@ import { paginationSchema, uuidSchema } from './common'
 
 export const deletionEntityTypeSchema = z.enum(['customer', 'vehicle', 'service_log', 'invoice', 'conversation'])
 
+export const DELETION_REASON_MIN_CHARS = 20
+export const DELETION_REASON_MAX_CHARS = 2000
+
 export const deletionRequestCreateSchema = z.object({
   entityType: deletionEntityTypeSchema,
   entityId: uuidSchema,
-  reason: z.string().trim().min(10, 'Explain why this record should be removed (min 10 characters)').max(2000),
+  reason: z.string().trim()
+    .min(DELETION_REASON_MIN_CHARS, `Explain why this record should be removed (min ${DELETION_REASON_MIN_CHARS} characters)`)
+    .max(DELETION_REASON_MAX_CHARS),
 })
 
 export const directDeleteSchema = z.object({

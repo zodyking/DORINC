@@ -9,6 +9,7 @@ import { ensureEmailInboxSchema } from './ensure-email-inbox-schema.mjs'
 import { ensureStaplesPrintJobsSchema } from './ensure-staples-print-jobs-schema.mjs'
 import { ensureAiAdministratorSchema } from './ensure-ai-administrator-schema.mjs'
 import { ensureSusanSmsSchema } from './ensure-susan-sms-schema.mjs'
+import { ensureDeletionAiSchema } from './ensure-deletion-ai-schema.mjs'
 
 async function resolveMigrationsFolder() {
   const candidates = [
@@ -43,6 +44,7 @@ export async function applyPendingMigrationsOnBoot() {
     await ensureStaplesPrintJobsSchema(pool)
     await ensureAiAdministratorSchema(pool)
     await ensureSusanSmsSchema(pool)
+    await ensureDeletionAiSchema(pool)
     console.log('[migrate] pending migrations applied on boot')
   }
   finally {

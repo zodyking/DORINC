@@ -478,7 +478,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
   {
     typeKey: 'deletion_request_result',
     name: 'Deletion request result',
-    description: 'Requestor is notified when a deletion request is approved or rejected.',
+    description: 'Requestor is notified when a deletion request is approved, rejected, or left for human review.',
     audience: 'staff',
     group: 'workflow',
     defaults: {
@@ -489,7 +489,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         'Deletion request',
         '',
-        'Your deletion request for {{entityTypeLabel}} "{{entityLabel}}" has been reviewed.',
+        'Your deletion request for {{entityTypeLabel}} "{{entityLabel}}" was updated.',
         '',
         ...smsStackedFields([
           ['Record', '{{entityLabel}}'],

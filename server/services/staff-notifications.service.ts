@@ -111,7 +111,7 @@ export async function notifyDeletionRequestResult(
     requestorEmail: string | null
     requestorName: string | null
     requestorId: string
-    status: 'approved' | 'rejected'
+    status: 'approved' | 'rejected' | 'deferred'
     entityType: DeletionEntityType
     entityLabel: string
     reason?: string | null
@@ -144,10 +144,16 @@ export async function notifyDeletionRequestResult(
   })
 
   const profile = await loadUserNotifyProfile(db, opts.requestorId)
-  const statusLabel = opts.status === 'approved' ? 'Approved' : 'Denied'
-  const detailLine = opts.reviewedByName
-    ? `Reviewed by ${opts.reviewedByName}.`
-    : (opts.reviewReason?.trim() ? opts.reviewReason.trim() : '')
+  const statusLabel = opts.status === 'approved'
+    ? 'Approved'
+    : opts.status === 'deferred'
+      ? 'Awaiting human review'
+      : 'Denied'
+  const detailLine = opts.status === 'deferred'
+    ? (opts.reviewReason?.trim() || 'Susan left this open for a human administrator.')
+    : (opts.reviewedByName
+        ? `Reviewed by ${opts.reviewedByName}.`
+        : (opts.reviewReason?.trim() ? opts.reviewReason.trim() : ''))
   const result = await deliverUserNotification(db, {
     id: opts.requestorId,
     email: to,

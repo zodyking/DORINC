@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import type { DeletionEntityType } from '~/server/db/schema/deletion-requests'
+import {
+  DELETION_REASON_MAX_CHARS,
+  DELETION_REASON_MIN_CHARS,
+} from '#shared/validators/deletion-requests'
 import { deletionPreservationNote } from '~/utils/deletion-requests-ui'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 
@@ -48,31 +52,25 @@ const reason = ref('')
 const busy = ref(false)
 const error = ref('')
 
-function looksWeakLocally(raw: string): boolean {
+const reasonLen = computed(() => reason.value.trim().length)
+const reasonReady = computed(() => reasonLen.value >= DELETION_REASON_MIN_CHARS)
+
+function looksLikeSpam(raw: string): boolean {
   const text = raw.trim().toLowerCase()
-  if (text.length < 10) return true
   const compact = text.replace(/\s+/g, '')
-  if (/^(.)\1{7,}$/.test(compact)) return true
-  if (/^(asdf+|qwer+|zxcv+|test+|abc+|xxx+|1234+)/.test(compact)) return true
-  const words = text.split(/[^a-z0-9]+/).filter(Boolean)
-  const filler = new Set([
-    'test', 'testing', 'asdf', 'qwer', 'delete', 'remove', 'please', 'pls',
-    'thanks', 'thank', 'you', 'need', 'want', 'just', 'because', 'reason',
-    'blah', 'stuff', 'thing', 'things', 'idk', 'whatever', 'none', 'n/a', 'na',
-  ])
-  const meaningful = words.filter(w => !filler.has(w) && w.length > 2)
-  if (meaningful.length === 0) return true
+  if (/^(.)\1{9,}$/.test(compact)) return true
+  if (/^(asdf+|qwer+|zxcv+|xxx+|1234+)/.test(compact)) return true
   return false
 }
 
 async function submitRequest() {
   const trimmed = reason.value.trim()
-  if (trimmed.length < 10) {
-    error.value = 'Please explain why this should be removed (min 10 characters).'
+  if (trimmed.length < DELETION_REASON_MIN_CHARS) {
+    error.value = `Please explain why this should be removed (min ${DELETION_REASON_MIN_CHARS} characters).`
     return
   }
-  if (looksWeakLocally(trimmed)) {
-    error.value = 'Enter a more descriptive reason for your request'
+  if (looksLikeSpam(trimmed)) {
+    error.value = 'Enter a clearer reason for your request'
     return
   }
   busy.value = true
@@ -93,8 +91,8 @@ async function submitRequest() {
   }
   catch (e: unknown) {
     const msg = syncFetchErrorMessage(e, 'Could not submit deletion request')
-    error.value = /more descriptive reason/i.test(msg)
-      ? 'Enter a more descriptive reason for your request'
+    error.value = /more descriptive reason|clearer reason/i.test(msg)
+      ? 'Enter a clearer reason for your request'
       : msg
   }
   finally {
@@ -154,11 +152,25 @@ defineExpose({ openRequestModal })
           </p>
           <label class="fld">
             Reason for deletion
-            <textarea v-model="reason" rows="4" placeholder="Why should this record be removed?" required minlength="10" />
+            <textarea
+              v-model="reason"
+              rows="4"
+              :placeholder="`Why should this record be removed? (min ${DELETION_REASON_MIN_CHARS} characters)`"
+              required
+              :minlength="DELETION_REASON_MIN_CHARS"
+              :maxlength="DELETION_REASON_MAX_CHARS"
+            />
           </label>
+          <p
+            class="reason-counter"
+            :class="{ ready: reasonReady }"
+            aria-live="polite"
+          >
+            {{ reasonLen }}/{{ DELETION_REASON_MIN_CHARS }} min
+          </p>
           <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
           <div style="display:flex; gap:8px; margin-top:12px;">
-            <button type="submit" class="btn danger" :disabled="busy">
+            <button type="submit" class="btn danger" :disabled="busy || !reasonReady">
               {{ busy ? 'Submitting…' : 'Submit request' }}
             </button>
             <button type="button" class="btn" :disabled="busy" @click="requestModalOpen = false">Cancel</button>
@@ -168,3 +180,15 @@ defineExpose({ openRequestModal })
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.reason-counter {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: right;
+}
+.reason-counter.ready {
+  color: #64748b;
+}
+</style>

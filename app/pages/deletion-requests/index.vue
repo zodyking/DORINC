@@ -28,6 +28,8 @@ interface DeletionRequestRow {
   reviewedByName: string | null
   reviewedAt: string | null
   reviewReason: string | null
+  aiReviewedAt: string | null
+  aiReviewNote: string | null
   createdAt: string
   entityHref: string
 }
@@ -305,8 +307,12 @@ watch([items, highlightRequestId], () => {
                 · {{ deletionWhen(row.createdAt) }}
               </p>
               <div class="req-row__preview">{{ deletionRequestPreviewText(row.reason) }}</div>
+              <p v-if="row.aiReviewNote" class="req-row__meta" style="margin-top:6px;">
+                Susan note · {{ deletionRequestPreviewText(row.aiReviewNote) }}
+              </p>
               <div class="req-row__links">
                 <NuxtLink :to="row.entityHref" class="link">View record</NuxtLink>
+                <span v-if="row.aiReviewedAt" class="pill" style="margin-left:8px;">Awaiting human</span>
               </div>
             </div>
             <div class="req-row__acts">

@@ -981,10 +981,16 @@ export function buildDeletionRequestResultEmail({
   brand,
   templateOverride,
 }) {
+  const deferred = status === 'deferred'
   const approved = status === 'approved'
-  const statusLabel = approved ? 'approved' : 'denied'
-  const statusLabelTitle = titleCaseStatus(statusLabel)
-  const subject = `Deletion Request — ${entityLabel}`
+  const statusLabel = deferred ? 'awaiting human review' : (approved ? 'approved' : 'denied')
+  const statusLabelTitle = deferred ? 'Awaiting human review' : titleCaseStatus(statusLabel)
+  const decisionValue = deferred ? 'Awaiting human review' : (approved ? 'Approved' : 'Denied')
+  const decisionTone = deferred ? 'warn' : (approved ? 'ok' : 'error')
+  const decisionStatus = deferred ? 'Pending' : (approved ? 'Completed' : 'Rejected')
+  const subject = deferred
+    ? `Deletion Request Needs Human Review — ${entityLabel}`
+    : `Deletion Request — ${entityLabel}`
   const requestReason = String(reason || '').trim()
   const text = [
     `Hi ${requestorName},`,
@@ -995,13 +1001,17 @@ export function buildDeletionRequestResultEmail({
     `Type: ${entityTypeLabel}`,
     requestReason ? `Reason for deletion: ${requestReason}` : '',
     '',
-    `Decision: ${statusLabelTitle}`,
+    deferred
+      ? 'Susan left this request open for a human administrator to review.'
+      : `Decision: ${statusLabelTitle}`,
     reviewedByName ? `Reviewed by: ${reviewedByName}` : '',
     reviewReason ? `Reviewer note: ${reviewReason}` : '',
   ].filter(Boolean).join('\n')
 
   const base = String(appUrl || brand?.appUrl || '').replace(/\/$/, '')
-  const lead = `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" has been reviewed.`
+  const lead = deferred
+    ? `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" was left open for a human administrator to review.`
+    : `Your deletion request for ${entityTypeLabel.toLowerCase()} "${entityLabel}" has been reviewed.`
 
   // Title → record + user reason → decision (avoid stating the decision in the headline).
   const bodyHtml = joinEmailSections([
@@ -1016,9 +1026,9 @@ export function buildDeletionRequestResultEmail({
       : '',
     emailHighlight({
       label: 'Decision',
-      value: approved ? 'Approved' : 'Denied',
-      status: approved ? 'Completed' : 'Rejected',
-      statusTone: approved ? 'ok' : 'error',
+      value: decisionValue,
+      status: decisionStatus,
+      statusTone: decisionTone,
     }),
   ])
 
@@ -1040,7 +1050,7 @@ export function buildDeletionRequestResultEmail({
     lead,
     bodyHtml,
     note: reviewReason
-      ? { title: 'Reviewer note', body: reviewReason }
+      ? { title: deferred ? 'Susan note' : 'Reviewer note', body: reviewReason }
       : undefined,
     primaryAction: base
       ? { href: `${base}/deletion-requests`, label: 'View deletion requests' }

@@ -126,6 +126,7 @@ const ACTION_LABELS: Record<string, string> = {
   'deletion_requests.ai_review.trigger': 'Susan AI Administrator review triggered',
   'deletion_requests.ai_review.trigger_skipped': 'Susan AI Administrator review not queued',
   'deletion_requests.ai_review.skip': 'Susan AI Administrator review skipped',
+  'deletion_requests.ai_review.defer': 'Susan left deletion request for human review',
 }
 
 const ENTITY_HISTORY_NOISE = new Set([

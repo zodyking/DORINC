@@ -53,6 +53,8 @@ export interface DeletionRequestRow {
   reviewedByName: string | null
   reviewedAt: string | null
   reviewReason: string | null
+  aiReviewedAt: string | null
+  aiReviewNote: string | null
   createdAt: string
   entityHref: string
 }
@@ -179,6 +181,8 @@ function mapRow(row: {
     reviewedByName: row.reviewerName,
     reviewedAt: r.reviewedAt?.toISOString() ?? null,
     reviewReason: r.reviewReason,
+    aiReviewedAt: r.aiReviewedAt?.toISOString() ?? null,
+    aiReviewNote: r.aiReviewNote,
     createdAt: r.createdAt.toISOString(),
     entityHref: entityHref(r.entityType, r.entityId),
   }
@@ -425,6 +429,58 @@ export async function directDeleteEntity(
   await assertEntityDeletable(db, entityType, entityId)
   await executeDeletion(db, entityType, entityId, _actorId, _reason ?? '')
   return { entityType, entityId }
+}
+
+/**
+ * Susan leaves the request open for a human administrator.
+ * Status stays pending; AI review is marked complete so it is not re-queued.
+ */
+export async function deferDeletionRequestToHuman(
+  db: Db,
+  id: string,
+  actorId: string,
+  aiReviewNote: string,
+) {
+  const row = await getRequestById(db, id)
+  if (row.request.status !== 'pending') throw new DeletionRequestsServiceError('NOT_PENDING')
+
+  const note = aiReviewNote.trim() || 'Left open for a human administrator to review.'
+  const [updated] = await db.update(entityDeletionRequests)
+    .set({
+      aiReviewedAt: new Date(),
+      aiReviewNote: note,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(entityDeletionRequests.id, id),
+      eq(entityDeletionRequests.status, 'pending'),
+    ))
+    .returning()
+
+  if (!updated) throw new DeletionRequestsServiceError('NOT_PENDING')
+
+  const mapped = mapRow(await getRequestById(db, id))
+  try {
+    const { notifyDeletionRequestResult } = await import('./staff-notifications.service')
+    await notifyDeletionRequestResult(db, {
+      requestorEmail: mapped.submittedByEmail,
+      requestorName: mapped.submittedByName,
+      requestorId: mapped.submittedBy,
+      status: 'deferred',
+      entityType: mapped.entityType,
+      entityLabel: mapped.entityLabel,
+      reason: mapped.reason,
+      reviewReason: mapped.aiReviewNote,
+      reviewedByName: 'Susan AI Administrator',
+      requestId: mapped.id,
+    })
+  }
+  catch (err) {
+    console.warn('[mail] deletion request deferred notification failed:', (err as Error).message)
+  }
+
+  void actorId
+  return { request: mapped }
 }
 
 export async function rejectDeletionRequest(db: Db, id: string, actorId: string, reviewReason: string) {
