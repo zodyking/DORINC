@@ -174,6 +174,12 @@ function removeLine(localId: string) {
   lines.value = lines.value.filter(line => line.localId !== localId)
 }
 
+function setLineQuantity(localId: string, quantity: string) {
+  lines.value = lines.value.map(line =>
+    line.localId === localId ? { ...line, quantity } : line,
+  )
+}
+
 function moveLine(localId: string, direction: -1 | 1) {
   const index = lines.value.findIndex(line => line.localId === localId)
   if (index < 0) return
@@ -183,6 +189,10 @@ function moveLine(localId: string, direction: -1 | 1) {
   const [row] = next.splice(index, 1)
   next.splice(target, 0, row!)
   lines.value = next
+}
+
+function qtyLabel(itemType: string) {
+  return itemType === 'labor' ? 'Hrs' : 'Qty'
 }
 
 function setTypeFilter(filter: ItemTypeFilter) {
@@ -271,34 +281,66 @@ function setTypeFilter(filter: ItemTypeFilter) {
       <div class="pkg-lines">
         <h4>Included items <span v-if="lines.length" class="pkg-lines-count">{{ lines.length }}</span></h4>
 
-        <div v-if="lines.length" class="tscroll">
-          <table class="tbl pkg-lines-tbl">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th style="width:110px">Qty / Hrs</th>
-                <th style="width:80px" />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in lines" :key="line.localId">
-                <td>
-                  <span :class="catalogTypePill(line.itemType)" style="margin-right:8px">{{ catalogTypeLabel(line.itemType) }}</span>
-                  {{ line.name }}
-                  <span v-if="line.sku" class="sub">{{ line.sku }}</span>
-                </td>
-                <td>
-                  <input v-model="line.quantity" type="text" inputmode="decimal" maxlength="30">
-                </td>
-                <td class="pkg-line-actions">
-                  <button type="button" class="btn ghost sm" aria-label="Move up" @click="moveLine(line.localId, -1)">↑</button>
-                  <button type="button" class="btn ghost sm" aria-label="Move down" @click="moveLine(line.localId, 1)">↓</button>
-                  <button type="button" class="rm" aria-label="Remove item" @click="removeLine(line.localId)">✕</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <ul v-if="lines.length" class="pkg-line-list" aria-label="Package included items">
+          <li
+            v-for="(line, index) in lines"
+            :key="line.localId"
+            class="pkg-line"
+          >
+            <div class="pkg-line-main">
+              <div class="pkg-line-title">
+                <span :class="catalogTypePill(line.itemType)">{{ catalogTypeLabel(line.itemType) }}</span>
+                <span class="pkg-line-name">{{ line.name }}</span>
+              </div>
+              <p v-if="line.sku || line.uom" class="pkg-line-meta">
+                <span v-if="line.sku" class="mono">{{ line.sku }}</span>
+                <span v-if="line.sku && line.uom"> · </span>
+                <span v-if="line.uom">{{ line.uom }}</span>
+              </p>
+            </div>
+
+            <label class="pkg-line-qty fld">
+              <span>{{ qtyLabel(line.itemType) }}</span>
+              <input
+                :value="line.quantity"
+                type="text"
+                inputmode="decimal"
+                maxlength="30"
+                :aria-label="`${qtyLabel(line.itemType)} for ${line.name}`"
+                @input="setLineQuantity(line.localId, ($event.target as HTMLInputElement).value)"
+              >
+            </label>
+
+            <div class="pkg-line-actions">
+              <button
+                type="button"
+                class="btn ghost sm"
+                :disabled="index === 0"
+                aria-label="Move up"
+                @click="moveLine(line.localId, -1)"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="btn ghost sm"
+                :disabled="index === lines.length - 1"
+                aria-label="Move down"
+                @click="moveLine(line.localId, 1)"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                class="pkg-line-remove"
+                aria-label="Remove item"
+                @click="removeLine(line.localId)"
+              >
+                Remove
+              </button>
+            </div>
+          </li>
+        </ul>
         <p v-else class="help pkg-lines-empty">Search above to add items — each becomes an invoice line when the package is applied.</p>
       </div>
     </div>
@@ -453,10 +495,114 @@ function setTypeFilter(filter: ItemTypeFilter) {
   margin: 0;
 }
 
+.pkg-line-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pkg-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px auto;
+  gap: 10px 12px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pkg-line-main {
+  min-width: 0;
+}
+
+.pkg-line-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pkg-line-name {
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pkg-line-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted, #64748b);
+}
+
+.pkg-line-qty {
+  margin: 0;
+}
+
+.pkg-line-qty span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pkg-line-qty input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 15px;
+  padding: 8px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
 .pkg-line-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+}
+
+.pkg-line-remove {
+  appearance: none;
+  border: 1px solid #fecaca;
+  background: #fff;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pkg-line-remove:hover {
+  background: #fef2f2;
+}
+
+@media (max-width: 640px) {
+  .pkg-line {
+    grid-template-columns: minmax(0, 1fr) 88px;
+  }
+
+  .pkg-line-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .pkg-line-actions .btn,
+  .pkg-line-remove {
+    flex: 1;
+  }
 }
 </style>

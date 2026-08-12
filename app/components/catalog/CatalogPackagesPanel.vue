@@ -100,7 +100,7 @@ async function openEditPackage(row: PackageRow) {
       sku: item.sku,
       defaultPrice: item.defaultPrice,
       uom: item.uom,
-      quantity: item.quantity,
+      quantity: String(item.quantity ?? '1'),
     }))
     modalOpen.value = true
   }
@@ -151,6 +151,10 @@ async function submitPackage() {
   }
   if (!formLines.value.length) {
     formError.value = 'Add at least one catalog item to the package'
+    return
+  }
+  if (formLines.value.some(line => !String(line.quantity || '').trim())) {
+    formError.value = 'Every included item needs a quantity'
     return
   }
   formBusy.value = true
@@ -322,5 +326,15 @@ defineExpose({ refresh, openNewPackage })
 <style scoped>
 tr.archived .lead {
   opacity: 0.65;
+}
+
+.modal--wide {
+  max-width: min(720px, calc(100vw - 24px));
+  width: 100%;
+}
+
+.modal--wide :deep(.mbody) {
+  max-height: min(70vh, 640px);
+  overflow: auto;
 }
 </style>
