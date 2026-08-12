@@ -3,6 +3,7 @@ import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
 import { loginPathForRoute, redirectToLogin } from '~/utils/auth-session'
 import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
+import { AUTH_ME_FOCUS_MIN_GAP_MS } from '#shared/auth-me-refresh'
 
 export interface AuthUser {
   id: string
@@ -31,8 +32,16 @@ export interface AnnouncementGateState {
 export type StaffLoginPending = { needsLocation: true, loginToken: string }
 export type StaffLoginResult = AuthUser | StaffLoginPending
 
+export type FetchMeOptions = {
+  /** Bypass min-gap throttle (login, logout recovery, explicit gate refresh). */
+  force?: boolean
+  /** Skip if a successful /me finished within this many ms (default: no skip). */
+  minGapMs?: number
+}
+
 /** Dedup concurrent /api/auth/me calls across middleware, plugins, and login. */
 let fetchMeInflight: Promise<boolean> | null = null
+let lastFetchMeAt = 0
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -71,7 +80,12 @@ export const useAuthStore = defineStore('auth', {
       this.announcementGate = me.announcementGate ?? null
     },
 
-    async fetchMe() {
+    async fetchMe(opts: FetchMeOptions = {}) {
+      const minGapMs = opts.force ? 0 : (opts.minGapMs ?? 0)
+      if (minGapMs > 0 && lastFetchMeAt > 0 && Date.now() - lastFetchMeAt < minGapMs) {
+        return !!this.user
+      }
+
       // Collapse concurrent callers (middleware + plugins + login) into one request.
       if (fetchMeInflight) return fetchMeInflight
 
@@ -86,6 +100,7 @@ export const useAuthStore = defineStore('auth', {
             announcementGate?: AnnouncementGateState
           }>('/api/auth/me')
           this.applyMePayload(res)
+          lastFetchMeAt = Date.now()
           return true
         }
         catch {
@@ -93,6 +108,7 @@ export const useAuthStore = defineStore('auth', {
           this.permissions = []
           this.trainingGate = null
           this.announcementGate = null
+          lastFetchMeAt = Date.now()
           return false
         }
         finally {
@@ -103,6 +119,11 @@ export const useAuthStore = defineStore('auth', {
       })
 
       return fetchMeInflight
+    },
+
+    /** Focus / visibility refresh — sooner than the 5s poll, but throttled. */
+    async fetchMeSoon() {
+      return this.fetchMe({ minGapMs: AUTH_ME_FOCUS_MIN_GAP_MS })
     },
 
     async login(identifier: string, password: string, portal: 'customer' | 'staff'): Promise<StaffLoginResult> {
@@ -145,6 +166,7 @@ export const useAuthStore = defineStore('auth', {
           announcementGate?: AnnouncementGateState
         }>('/api/auth/me')
         this.applyMePayload(me)
+        lastFetchMeAt = Date.now()
       }
       catch {
         // Cookie is set — keep the login response even if /me hiccups on first request.
@@ -185,6 +207,7 @@ export const useAuthStore = defineStore('auth', {
           announcementGate?: AnnouncementGateState
         }>('/api/auth/me')
         this.applyMePayload(me)
+        lastFetchMeAt = Date.now()
       }
       catch {
         this.permissions = []

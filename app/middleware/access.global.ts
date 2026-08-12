@@ -19,11 +19,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const auth = useAuthStore()
 
-  // Load auth once. Do NOT re-fetch /api/auth/me on every client navigation —
-  // that turns any redirect loop into a request storm and freezes login.
-  // Freshness is handled by auth-session-guard (focus / visibility / bfcache).
+  // Load auth once per app start. Ongoing freshness: client polls /api/auth/me
+  // every 5s (and sooner on focus/visibility), not on every click/navigation.
   if (!auth.loaded) {
-    await auth.fetchMe()
+    await auth.fetchMe({ force: true })
   }
 
   // Portal routes - handled by portal-auth middleware
