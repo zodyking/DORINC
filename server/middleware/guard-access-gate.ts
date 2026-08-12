@@ -6,7 +6,6 @@ import { hasDatabaseConfigured, useDb } from '../db/client'
 import {
   evaluateAccessDecision,
   getCachedAccessGateSettings,
-  isAccessGateEnforcing,
   isAccessGateGeoActive,
   recordAccessEvent,
 } from '../services/access-gate.service'
@@ -18,23 +17,18 @@ import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
 } from '../services/outside-geo-verify.service'
-import { apiError } from '../utils/api-error'
 import {
   OUTSIDE_GEO_SESSION_HEADER,
   isOutsideGeoSessionFlag,
 } from '../../shared/outside-geo-session'
 
-/** Paths that must always stay reachable so admins can never be locked out. */
-const EXEMPT_PREFIXES = ['/_nuxt/', '/setup', '/__nuxt', '/favicon']
-/** API routes that must remain reachable for login/challenge/beacon/public flows. */
-const API_EXEMPT_PREFIXES = [
-  '/api/security/visit-beacon',
-  '/api/auth/',
-  '/api/public/',
-  '/api/setup/',
-  '/api/health',
-  '/api/internal/',
-]
+/**
+ * Paths that skip the HTML access gate.
+ * `/api/` is intentionally exempt (Option A / v1.0.297 contract): once a staff
+ * session exists, data APIs must keep working even outside the geofence.
+ * Geofence still applies to HTML document navigations below.
+ */
+const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
 /** Internal gate pages — never bounce these through the gate again. */
 const GATE_PAGES = [
   '/auth/verify-location',
@@ -75,19 +69,10 @@ function shouldIssueChallenge(key: string): boolean {
 
 function isPageNavigation(event: Parameters<typeof getHeader>[0], path: string): boolean {
   if (event.method !== 'GET') return false
-  if (path.startsWith('/api/')) return false
   if (EXEMPT_PREFIXES.some(prefix => path.startsWith(prefix))) return false
   if (ASSET_EXT.test(path)) return false
   const accept = getHeader(event, 'accept') ?? ''
   return accept.includes('text/html')
-}
-
-function isApiRequest(path: string): boolean {
-  return path.startsWith('/api/')
-}
-
-function isApiExempt(path: string): boolean {
-  return API_EXEMPT_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix))
 }
 
 function isGatePage(path: string): boolean {
@@ -129,79 +114,9 @@ export default defineEventHandler(async (event) => {
   const url = getRequestURL(event)
   const path = url.pathname
 
-  // API enforcement: close the SPA bypass so authenticated/app API calls
-  // cannot continue after leaving the geofence.
-  if (isApiRequest(path)) {
-    if (!isAccessGateEnforcing(settings) || isApiExempt(path)) return
-
-    const ip = getClientIp(event)
-    const userAgent = getHeader(event, 'user-agent') ?? null
-    const deviceId = ensureDeviceId(event)
-    const { isSuperAdmin } = await resolveViewer(event)
-    if (isSuperAdmin) return
-
-    let cachedGeo = peekIpGeo(ip)
-    if (isAccessGateGeoActive(settings) && ip) {
-      try {
-        const resolved = await resolveIpGeoForEvent(event, ip)
-        if (resolved) cachedGeo = resolved
-      }
-      catch {
-        // keep peek/null — fail closed below when coords missing
-      }
-    }
-
-    const coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
-      ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
-      : null
-
-    const decision = evaluateAccessDecision(settings, { ip, coords })
-    if (!decision.blocked) return
-
-    // API: cookie alone is not enough — tab session header required (new tab = re-verify).
-    const outsideGeoBypass = decision.reason === 'geo_outside'
-      ? hasValidOutsideGeoBypass(event, {
-          ipAddress: ip,
-          userAgent,
-          deviceId,
-          requireTabSession: true,
-          tabSessionConfirmed: tabSessionFromEvent(event),
-        })
-      : null
-    if (outsideGeoBypass) return
-
-    let redirectTo = '/auth/access-restricted'
-    if (decision.reason === 'geo_outside') {
-      try {
-        const known = await findKnownOutsideGeoIdentity(useDb(), {
-          ipAddress: ip,
-          userAgent,
-          deviceId,
-        })
-        if (known) {
-          if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
-            const locationLabel = cachedGeo?.label
-              ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
-            await quietlyIssueOutsideGeoChallenge(useDb(), {
-              ipAddress: ip,
-              userAgent,
-              deviceId,
-              locationLabel,
-            })
-          }
-          redirectTo = '/auth/verify-location?sent=1'
-        }
-      }
-      catch {
-        // keep restricted
-      }
-    }
-
-    throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {
-      reason: 'access_blocked',
-      redirectTo,
-    })
-  }
+  // Data APIs are never geofenced here (Option A). Login still applies the fence
+  // in auth handlers; HTML navigations below still enforce the fence.
+  if (path.startsWith('/api/')) return
 
   if (!isPageNavigation(event, path)) return
 
