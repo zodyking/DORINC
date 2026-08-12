@@ -6,12 +6,14 @@ import type { ServiceLogSheetDocument } from '../../shared/service-log-sheet-def
 import {
   catalogMatchKey,
   catalogMatchKeyLoose,
-  groupCandidatesByCategory,
+  groupCandidatesByClassicSections,
   packSectionsIntoDocument,
   rankSheetDemandCandidates,
   scoreSheetDemandCandidate,
   selectCandidatesForSheetCapacity,
   sheetGenerationFitSummary,
+  SHEET_ALLOWED_EXTRA_TITLES,
+  SHEET_CLASSIC_SECTIONS,
   type SheetDemandCandidate,
 } from '../../shared/service-log-sheet-generate'
 import { formatSheetPrice } from './service-log-sheet.service'
@@ -145,7 +147,6 @@ async function loadDemandCandidates(db: Db): Promise<SheetDemandCandidate[]> {
   const candidates: SheetDemandCandidate[] = []
   for (const row of catalogRows) {
     const occurrenceCount = countById.get(row.id) ?? 0
-    if (occurrenceCount < 1) continue
     candidates.push({
       catalogItemId: row.id,
       name: row.name,
@@ -164,98 +165,41 @@ async function loadDemandCandidates(db: Db): Promise<SheetDemandCandidate[]> {
   return rankSheetDemandCandidates(candidates)
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
-}
+const ALLOWED_TITLES = new Set<string>([
+  ...SHEET_CLASSIC_SECTIONS.map(s => s.title),
+  ...SHEET_ALLOWED_EXTRA_TITLES,
+])
 
-async function aiProposeSectionsForBatch(
-  db: Db,
-  apiKey: string,
-  model: string,
-  batch: SheetDemandCandidate[],
-  actorId: string | null,
-): Promise<Array<{ title: string, itemIds: string[] }>> {
-  const payload = batch.map(item => ({
-    id: item.catalogItemId,
-    name: item.name,
-    category: item.categoryName,
-    type: item.itemType,
-    billed: item.occurrenceCount,
-  }))
-
-  const system = `You organize auto-repair / bus shop checklist items into simple section titles for a printed service log sheet.
-Rules:
-- Return JSON only: { "sections": [ { "title": "Lights", "itemIds": ["uuid", ...] } ] }
-- Titles must be short, logical shop words (1-3 words). Examples: Cleaning, Seats, Lights, Filters, Brakes, Electrical, Engine.
-- Do NOT copy long catalog category names if a simpler title fits.
-- Every input id must appear in exactly one section.
-- Prefer 2-8 items per section. Merge tiny leftovers into a related section.
-- No commentary.`
-
-  const user = `Group these in-demand catalog items into sections:\n${JSON.stringify(payload)}`
-
-  try {
-    const result = await openRouterChat(apiKey, model, [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ], 'platform_help')
-    await recordUsage(db, result, actorId)
-
-    const parsed = parseOpenRouterJson(result.content) as {
-      sections?: Array<{ title?: string, itemIds?: string[] }>
-    }
-    const validIds = new Set(batch.map(b => b.catalogItemId))
-    const sections: Array<{ title: string, itemIds: string[] }> = []
-    const used = new Set<string>()
-
-    for (const section of parsed.sections ?? []) {
-      const title = String(section.title ?? '').trim()
-      if (!title) continue
-      const itemIds = (section.itemIds ?? [])
-        .map(String)
-        .filter(id => validIds.has(id) && !used.has(id))
-      for (const id of itemIds) used.add(id)
-      if (itemIds.length) sections.push({ title: title.slice(0, 40), itemIds })
-    }
-
-    const missing = batch.filter(b => !used.has(b.catalogItemId))
-    if (missing.length) {
-      for (const group of groupCandidatesByCategory(missing)) sections.push(group)
-    }
-
-    return sections
-  }
-  catch (err) {
-    if (err instanceof OpenRouterServiceError) {
-      throw new SheetGenerateServiceError('AI_FAILED', err.message)
-    }
-    throw err
-  }
-}
-
+/**
+ * Optional AI polish: only rename section titles to another allowed classic /
+ * shop title. Never invent vague labels like "Body" or "Service".
+ */
 async function aiPolishSectionTitles(
   db: Db,
   apiKey: string,
   model: string,
-  sections: Array<{ title: string, itemIds: string[] }>,
+  sections: Array<{ title: string, itemIds: string[], column: 'left' | 'right' }>,
   itemsById: Map<string, SheetDemandCandidate>,
   actorId: string | null,
-): Promise<Array<{ title: string, itemIds: string[] }>> {
+): Promise<Array<{ title: string, itemIds: string[], column: 'left' | 'right' }>> {
   const summary = sections.map(section => ({
     title: section.title,
     count: section.itemIds.length,
-    sample: section.itemIds.slice(0, 3).map(id => itemsById.get(id)?.name).filter(Boolean),
+    sample: section.itemIds.slice(0, 4).map(id => itemsById.get(id)?.name).filter(Boolean),
   }))
 
-  const system = `You refine service-log checklist section titles only.
-Return JSON: { "sections": [ { "title": "...", "index": 0 } ] }
-- Keep the same number of sections and the same order (index 0..n-1).
-- Titles: short, simple shop language (Cleaning, Seats, Lights, Filters, Brakes…).
+  const allowed = [...ALLOWED_TITLES]
+
+  const system = `You refine service-log checklist section titles for a Devon Onsite / bus-shop Letter sheet.
+Return JSON only: { "sections": [ { "title": "...", "index": 0 } ] }
+Rules:
+- Keep the same number of sections and order (index 0..n-1).
+- Titles MUST be chosen from this allowed list only: ${JSON.stringify(allowed)}
+- Prefer the classic shop names already used (Cleaning, Seats, Lights, Filters, Brakes and Hub Seals, …).
+- Never use vague titles like Body, Service, Services, Parts, Labor, Misc, General.
 - Do not invent items. Do not merge/split sections.`
 
-  const user = `Improve these section titles if needed:\n${JSON.stringify(summary)}`
+  const user = `Improve these section titles only if a better allowed title fits:\n${JSON.stringify(summary)}`
 
   try {
     const result = await openRouterChat(apiKey, model, [
@@ -272,22 +216,27 @@ Return JSON: { "sections": [ { "title": "...", "index": 0 } ] }
       const index = Number(row.index)
       const title = String(row.title ?? '').trim()
       if (!Number.isInteger(index) || index < 0 || index >= next.length || !title) continue
-      next[index]!.title = title.slice(0, 40)
+      if (!ALLOWED_TITLES.has(title)) continue
+      next[index]!.title = title
     }
     return next
   }
-  catch {
+  catch (err) {
+    if (err instanceof OpenRouterServiceError) {
+      // Soft-fail polish — classic titles already applied.
+      return sections
+    }
     return sections
   }
 }
 
 /**
- * Multi-step sheet generation:
- * 1) Score catalog demand from invoices
- * 2) Select capacity-safe candidates
- * 3) Multiple AI calls to propose section titles in batches (fallback: category groups)
- * 4) Optional AI title polish
- * 5) Deterministic left/right pack with QR void reserved
+ * Multi-step sheet generation (classic DORINC taxonomy first):
+ * 1) Score catalog demand from invoices (include never-billed for backfill)
+ * 2) Select a dense capacity-safe set (~28–56 items toward 40 rows)
+ * 3) Group into classic Letter sections (Cleaning, Lights, Filters, …)
+ * 4) Optional AI title polish within the allowed shop title list
+ * 5) Pack left/right with PDF preferred columns + QR void
  */
 export async function generateServiceLogSheetProposal(
   db: Db,
@@ -296,61 +245,76 @@ export async function generateServiceLogSheetProposal(
   const steps: Array<{ step: string, detail: string }> = []
 
   const ranked = await loadDemandCandidates(db)
+  const billedCount = ranked.filter(c => c.occurrenceCount > 0).length
   steps.push({
     step: 'score',
-    detail: `Ranked ${ranked.length} catalog items by invoice demand`,
+    detail: `Ranked ${ranked.length} catalog items (${billedCount} billed) by invoice demand`,
   })
 
-  const selected = selectCandidatesForSheetCapacity(ranked)
-  if (!selected.length) {
+  if (!ranked.length) {
+    throw new SheetGenerateServiceError(
+      'NO_CANDIDATES',
+      'Catalog is empty — add catalog items before generating a sheet',
+    )
+  }
+
+  if (!billedCount) {
     throw new SheetGenerateServiceError(
       'NO_CANDIDATES',
       'No billed catalog items found yet — bill a few invoice lines from the catalog first',
     )
   }
+
+  const selected = selectCandidatesForSheetCapacity(ranked)
   steps.push({
     step: 'select',
-    detail: `Selected top ${selected.length} items to fit the Letter page with QR space`,
+    detail: `Selected ${selected.length} items to densely fill the Letter page with QR space`,
   })
 
   const itemsById = new Map(selected.map(item => [item.catalogItemId, item]))
   let usedAi = false
-  let sectionPlan: Array<{ title: string, itemIds: string[] }> = []
+
+  // Primary: classic DORINC section taxonomy (matches the shop PDF).
+  let sectionPlan = groupCandidatesByClassicSections(selected)
+  steps.push({
+    step: 'classic-sections',
+    detail: `Grouped into ${sectionPlan.length} classic shop sections (Cleaning, Lights, Filters, …)`,
+  })
 
   const ai = await resolveAi(db)
   if (ai) {
     usedAi = true
-    const batches = chunk(selected, 10)
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i]!
-      const proposed = await aiProposeSectionsForBatch(db, ai.apiKey, ai.model, batch, actorId)
-      sectionPlan.push(...proposed)
-      steps.push({
-        step: `sections-batch-${i + 1}`,
-        detail: `AI grouped ${batch.length} items into ${proposed.length} sections`,
-      })
-    }
-
-    sectionPlan = await aiPolishSectionTitles(db, ai.apiKey, ai.model, sectionPlan, itemsById, actorId)
+    sectionPlan = await aiPolishSectionTitles(
+      db,
+      ai.apiKey,
+      ai.model,
+      sectionPlan,
+      itemsById,
+      actorId,
+    )
     steps.push({
       step: 'polish-titles',
-      detail: 'AI polished section titles for short shop language',
+      detail: 'AI polished titles within the allowed classic shop list',
     })
   }
   else {
-    sectionPlan = groupCandidatesByCategory(selected)
     steps.push({
-      step: 'sections-fallback',
-      detail: 'AI unavailable — grouped by catalog category names',
+      step: 'polish-skip',
+      detail: 'AI unavailable — kept classic section titles',
     })
   }
 
-  const merged = new Map<string, { title: string, itemIds: string[] }>()
+  // Merge any duplicate titles after polish.
+  const merged = new Map<string, { title: string, itemIds: string[], column: 'left' | 'right' }>()
   for (const section of sectionPlan) {
     const key = section.title.trim().toLowerCase()
     const existing = merged.get(key)
     if (!existing) {
-      merged.set(key, { title: section.title.trim(), itemIds: [...section.itemIds] })
+      merged.set(key, {
+        title: section.title.trim(),
+        itemIds: [...section.itemIds],
+        column: section.column,
+      })
       continue
     }
     for (const id of section.itemIds) {
@@ -362,7 +326,7 @@ export async function generateServiceLogSheetProposal(
   const fit = sheetGenerationFitSummary(document)
   steps.push({
     step: 'layout',
-    detail: `Packed into left/right columns (${fit.rows}/${fit.capacity} rows, QR void ${fit.qrVoidRows})`,
+    detail: `Packed into left/right columns (${fit.rows}/${fit.targetCapacity} target rows, QR void ${fit.qrVoidRows})`,
   })
 
   return {

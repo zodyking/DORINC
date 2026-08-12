@@ -133,7 +133,8 @@ watch(open, (isOpen) => {
         <div>
           <h3 id="sl-gen-title">Generate from demand</h3>
           <p>
-            Builds a Letter checklist from frequently billed catalog items.
+            Builds a dense Letter checklist from billed catalog demand, using
+            classic shop sections (Cleaning, Lights, Filters, Brakes…).
             Review, edit, or reject before it replaces the template in the editor.
           </p>
         </div>
@@ -150,7 +151,7 @@ watch(open, (isOpen) => {
         </div>
 
         <div v-if="loading" class="empty" style="display:block;">
-          Scoring invoice demand and building sections…
+          Scoring invoice demand and packing classic shop sections…
         </div>
 
         <template v-else-if="proposal">
@@ -163,7 +164,7 @@ watch(open, (isOpen) => {
               QR void {{ liveFit?.qrVoidRows }}
               {{ liveFit?.qrFits ? '✓' : '(need 3+)' }}
             </span>
-            <span>{{ proposal.usedAi ? 'AI sections' : 'Category sections' }}</span>
+            <span>{{ proposal.usedAi ? 'Classic + AI polish' : 'Classic shop sections' }}</span>
           </div>
 
           <details class="steps">
