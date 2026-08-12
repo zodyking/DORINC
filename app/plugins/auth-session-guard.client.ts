@@ -8,12 +8,14 @@ export default defineNuxtPlugin((nuxtApp) => {
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   async function revalidateSession(opts: { soon?: boolean } = {}) {
-    if (!auth.isSignedIn || auth.sessionExpiring) return
+    if (!auth.isSignedIn || auth.sessionExpiring || auth.loginHydrating) return
     if (typeof document !== 'undefined' && document.hidden) return
 
     const hadUser = !!auth.user
     const ok = opts.soon ? await auth.fetchMeSoon() : await auth.fetchMe({ force: true })
-    if (hadUser && !ok && isProtectedAppPath(route.path)) {
+    // loginHydrating can end while this request was in flight — do not logout mid-login.
+    if (auth.loginHydrating) return
+    if (hadUser && !ok && !auth.user && isProtectedAppPath(route.path)) {
       await auth.forceLogout(true)
     }
   }

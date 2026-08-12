@@ -4,6 +4,7 @@ import {
   isPublicAppPath,
   isUnauthorizedError,
   loginPathForRoute,
+  shouldClearSessionOnFetchMeError,
 } from '../../app/utils/auth-session'
 
 describe('auth session helpers', () => {
@@ -32,5 +33,13 @@ describe('auth session helpers', () => {
     expect(isUnauthorizedError({ response: { status: 401 } })).toBe(true)
     expect(isUnauthorizedError({ data: { code: 'UNAUTHENTICATED' } })).toBe(true)
     expect(isUnauthorizedError({ statusCode: 403 })).toBe(false)
+  })
+
+  it('only clears the client session on unauthenticated /me failures', () => {
+    expect(shouldClearSessionOnFetchMeError({ statusCode: 401 })).toBe(true)
+    expect(shouldClearSessionOnFetchMeError({ data: { code: 'UNAUTHENTICATED' } })).toBe(true)
+    expect(shouldClearSessionOnFetchMeError({ statusCode: 500 })).toBe(false)
+    expect(shouldClearSessionOnFetchMeError({ statusCode: 403 })).toBe(false)
+    expect(shouldClearSessionOnFetchMeError(new Error('network'))).toBe(false)
   })
 })

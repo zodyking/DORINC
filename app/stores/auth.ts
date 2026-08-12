@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
-import { loginPathForRoute, redirectToLogin } from '~/utils/auth-session'
+import {
+  loginPathForRoute,
+  redirectToLogin,
+  shouldClearSessionOnFetchMeError,
+} from '~/utils/auth-session'
 import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
 import { AUTH_ME_FOCUS_MIN_GAP_MS } from '#shared/auth-me-refresh'
@@ -51,6 +55,8 @@ export const useAuthStore = defineStore('auth', {
     announcementGate: null as AnnouncementGateState | null,
     loaded: false,
     sessionExpiring: false,
+    /** True while login/complete-login is hydrating /me — skip session-guard logout races. */
+    loginHydrating: false,
   }),
 
   getters: {
@@ -103,13 +109,20 @@ export const useAuthStore = defineStore('auth', {
           lastFetchMeAt = Date.now()
           return true
         }
-        catch {
-          this.user = null
-          this.permissions = []
-          this.trainingGate = null
-          this.announcementGate = null
+        catch (err: unknown) {
+          // Only a real unauthenticated response may wipe the client session.
+          // 5xx/network during post-login /me used to clear `user` and bounce
+          // middleware back to the login screen (brief error flash).
+          if (shouldClearSessionOnFetchMeError(err)) {
+            this.user = null
+            this.permissions = []
+            this.trainingGate = null
+            this.announcementGate = null
+            lastFetchMeAt = Date.now()
+            return false
+          }
           lastFetchMeAt = Date.now()
-          return false
+          return !!this.user
         }
         finally {
           this.loaded = true
@@ -155,22 +168,19 @@ export const useAuthStore = defineStore('auth', {
         return { needsLocation: true as const, loginToken: res.loginToken }
       }
       if (!res.user) throw new Error('Login response missing user')
-      this.user = res.user
-      this.loaded = true
+      this.loginHydrating = true
       try {
-        const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{
-          user: AuthUser
-          permissions: string[]
-          trainingGate?: TrainingGateState
-          announcementGate?: AnnouncementGateState
-        }>('/api/auth/me')
-        this.applyMePayload(me)
-        lastFetchMeAt = Date.now()
+        this.user = res.user
+        this.loaded = true
+        // Shared fetchMe dedupes with session-guard / middleware (avoids parallel /me races).
+        const ok = await this.fetchMe({ force: true })
+        if (!ok && !this.user) {
+          // Cookie/session rejected immediately — surface as login failure.
+          throw new Error('Sign-in did not complete — please try again')
+        }
       }
-      catch {
-        // Cookie is set — keep the login response even if /me hiccups on first request.
-        this.permissions = []
+      finally {
+        this.loginHydrating = false
       }
       return res.user
     },
@@ -196,21 +206,17 @@ export const useAuthStore = defineStore('auth', {
         }
         throw err
       }
-      this.user = res.user
-      this.loaded = true
+      this.loginHydrating = true
       try {
-        const fetcher = import.meta.server ? useRequestFetch() : $fetch
-        const me = await fetcher<{
-          user: AuthUser
-          permissions: string[]
-          trainingGate?: TrainingGateState
-          announcementGate?: AnnouncementGateState
-        }>('/api/auth/me')
-        this.applyMePayload(me)
-        lastFetchMeAt = Date.now()
+        this.user = res.user
+        this.loaded = true
+        const ok = await this.fetchMe({ force: true })
+        if (!ok && !this.user) {
+          throw new Error('Sign-in did not complete — please try again')
+        }
       }
-      catch {
-        this.permissions = []
+      finally {
+        this.loginHydrating = false
       }
       return res.user
     },

@@ -35,7 +35,7 @@ export default defineNuxtPlugin(() => {
         }
       }
       if (ctx.response.status !== 401) return
-      if (auth.sessionExpiring) return
+      if (auth.sessionExpiring || auth.loginHydrating) return
       if (!auth.isSignedIn) return
       void auth.handleSessionExpired()
     },
