@@ -4,6 +4,7 @@ import { formatSheetPriceDisplay } from '~/utils/service-log-sheet-display'
 import type { ServiceLogSheetDocument } from '#shared/service-log-sheet-default'
 import type { SheetCatalogPick } from '~/composables/useServiceLogSheetEditor'
 import ServiceLogSheetLines from '~/components/service-logs/ServiceLogSheetLines.vue'
+import ServiceLogSheetGenerateModal from '~/components/service-logs/ServiceLogSheetGenerateModal.vue'
 
 interface SheetBusiness {
   businessName: string
@@ -31,6 +32,7 @@ const catalogItems = ref<SheetCatalogPick[]>([])
 const catalogQ = ref('')
 const catalogTargetSectionId = ref<string | null>(null)
 const showCatalogPicker = ref(false)
+const generateOpen = ref(false)
 
 type ViewMode = 'paper' | 'lines'
 /** Lines is the editor; Paper is the real Letter PDF preview. */
@@ -161,6 +163,12 @@ function addCatalogItem(pick: SheetCatalogPick) {
   }
 }
 
+function applyGeneratedDocument(document: ServiceLogSheetDocument) {
+  api.setDocument(document)
+  showCatalogPicker.value = false
+  if (view.value === 'paper') void refreshPaperPreview()
+}
+
 async function resetDefault() {
   if (!window.confirm('Reset to the default Letter service log sheet template?')) return
   saving.value = true
@@ -270,6 +278,14 @@ function onScrimClick(event: MouseEvent) {
           >
             + From catalog
           </button>
+          <button
+            type="button"
+            class="btn sm"
+            :disabled="saving || pending"
+            @click="generateOpen = true"
+          >
+            Generate from demand
+          </button>
           <button type="button" class="btn sm" :disabled="saving || pending" @click="resetDefault">
             Reset template
           </button>
@@ -363,6 +379,8 @@ function onScrimClick(event: MouseEvent) {
         </button>
       </footer>
     </div>
+
+    <ServiceLogSheetGenerateModal v-model:open="generateOpen" @apply="applyGeneratedDocument" />
   </div>
 </template>
 
