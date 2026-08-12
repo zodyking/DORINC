@@ -32,4 +32,10 @@ describe('auth rate limit helpers', () => {
     expect(authErrorCode(err)).toBe('RATE_LIMITED')
     expect(authErrorRetryAfterSeconds(err)).toBe(842)
   })
+
+  it('treats a zero retry-after as already elapsed', () => {
+    expect(authErrorRetryAfterSeconds({
+      data: { code: 'RATE_LIMITED', details: { retryAfterSeconds: 0 } },
+    })).toBeNull()
+  })
 })

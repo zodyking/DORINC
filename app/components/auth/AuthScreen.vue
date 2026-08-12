@@ -9,6 +9,9 @@ import AuthRateLimitNotice from '~/components/auth/AuthRateLimitNotice.vue'
 import { formatPhoneDisplay } from '~/utils/phone-ui'
 
 const loginCooldown = useAuthRateLimitCooldown('login')
+const loginRateLimited = computed(() => loginCooldown.isActive)
+const loginRateLimitMessage = computed(() => loginCooldown.message)
+const loginCountdown = computed(() => loginCooldown.countdownLabel)
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -21,6 +24,9 @@ const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 const route = useRoute()
 const auth = useAuthStore()
 const { busy: resendBusy, message: resendMessage, error: resendError, cooldown: resendCooldown, resend, reset: resetResend } = useResendVerification()
+const resendRateLimited = computed(() => resendCooldown.isActive)
+const resendRateLimitMessage = computed(() => resendCooldown.message)
+const resendCountdown = computed(() => resendCooldown.countdownLabel)
 
 const { data: publicBusiness } = useClientFetch<{ businessName: string }>('/api/public/business')
 const displayBusinessName = computed(() => {
@@ -249,9 +255,9 @@ async function submitSignup() {
               </div>
             </div>
             <AuthRateLimitNotice
-              v-if="loginCooldown.isActive"
-              :message="loginCooldown.message"
-              :countdown-label="loginCooldown.countdownLabel"
+              v-if="loginRateLimited"
+              :message="loginRateLimitMessage"
+              :countdown-label="loginCountdown"
               unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
             />
             <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
@@ -261,10 +267,10 @@ async function submitSignup() {
             <button
               type="submit"
               class="btn primary"
-              :disabled="busy || loginCooldown.isActive"
+              :disabled="busy || loginRateLimited"
               style="width:100%;justify-content:center;margin-top:14px;padding:11px;"
             >
-              {{ busy ? 'Signing in…' : loginCooldown.isActive ? 'Sign-in paused' : 'Sign in' }}
+              {{ busy ? 'Signing in…' : loginRateLimited ? 'Sign-in paused' : 'Sign in' }}
             </button>
           </form>
         </div>
@@ -305,9 +311,9 @@ async function submitSignup() {
               </div>
             </div>
             <AuthRateLimitNotice
-              v-if="loginCooldown.isActive"
-              :message="loginCooldown.message"
-              :countdown-label="loginCooldown.countdownLabel"
+              v-if="loginRateLimited"
+              :message="loginRateLimitMessage"
+              :countdown-label="loginCountdown"
               unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
             />
 
@@ -317,16 +323,16 @@ async function submitSignup() {
               <p class="auth-hint">Your account exists but email is not verified yet.</p>
               <p v-if="resendMessage" class="auth-hint auth-success" role="status">{{ resendMessage }}</p>
               <AuthRateLimitNotice
-                v-if="resendCooldown.isActive"
-                :message="resendCooldown.message"
-                :countdown-label="resendCooldown.countdownLabel"
+                v-if="resendRateLimited"
+                :message="resendRateLimitMessage"
+                :countdown-label="resendCountdown"
                 unlock-hint="The resend button will unlock automatically when the timer reaches zero."
               />
               <p v-else-if="resendError" class="auth-hint auth-error" role="alert">{{ resendError }}</p>
               <button
                 type="button"
                 class="btn sm"
-                :disabled="resendBusy || resendCooldown.isActive || !loginEmail || !loginPass"
+                :disabled="resendBusy || resendRateLimited || !loginEmail || !loginPass"
                 @click="submitResendFromLogin"
               >
                 {{ resendBusy ? 'Sending…' : 'Resend verification email' }}
@@ -354,10 +360,10 @@ async function submitSignup() {
             <button
               type="submit"
               class="btn primary"
-              :disabled="busy || loginCooldown.isActive"
+              :disabled="busy || loginRateLimited"
               style="width:100%;justify-content:center;margin-top:14px;padding:11px;"
             >
-              {{ busy ? 'Signing in…' : loginCooldown.isActive ? 'Sign-in paused' : 'Sign in' }}
+              {{ busy ? 'Signing in…' : loginRateLimited ? 'Sign-in paused' : 'Sign in' }}
             </button>
           </form>
         </div>

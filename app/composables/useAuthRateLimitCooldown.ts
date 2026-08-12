@@ -4,58 +4,72 @@ import {
   formatRateLimitCountdown,
   rateLimitMessage,
   rateLimitRemainingSeconds,
+  readRateLimitUntil,
   type AuthRateLimitScope,
 } from '~/utils/auth-rate-limit'
 
 export function useAuthRateLimitCooldown(scope: AuthRateLimitScope) {
   const remainingSeconds = ref(0)
-  let timer: ReturnType<typeof setInterval> | null = null
+  let tickTimer: ReturnType<typeof setInterval> | null = null
+  let unlockTimer: ReturnType<typeof setTimeout> | null = null
 
-  function refresh() {
-    remainingSeconds.value = rateLimitRemainingSeconds(scope)
-    if (remainingSeconds.value <= 0) {
-      clearRateLimitUntil(scope)
-      stopTimer()
+  function stopTimers() {
+    if (tickTimer) {
+      clearInterval(tickTimer)
+      tickTimer = null
+    }
+    if (unlockTimer) {
+      clearTimeout(unlockTimer)
+      unlockTimer = null
     }
   }
 
-  function stopTimer() {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
+  function refresh() {
+    const remaining = rateLimitRemainingSeconds(scope)
+    remainingSeconds.value = remaining
+    if (remaining <= 0) {
+      clearRateLimitUntil(scope)
+      stopTimers()
     }
   }
 
   function startTimer() {
-    stopTimer()
+    stopTimers()
     refresh()
-    if (remainingSeconds.value > 0) {
-      timer = setInterval(refresh, 1000)
+    if (remainingSeconds.value <= 0) return
+
+    tickTimer = setInterval(refresh, 250)
+    const until = readRateLimitUntil(scope)
+    const waitMs = until - Date.now()
+    if (waitMs > 0) {
+      unlockTimer = setTimeout(refresh, waitMs + 25)
     }
   }
 
   function applyFromError(err: unknown) {
     if (!applyRateLimitFromError(err, scope)) return false
     startTimer()
-    return true
+    return remainingSeconds.value > 0
   }
 
   onMounted(() => startTimer())
-  onUnmounted(() => stopTimer())
+  onUnmounted(() => stopTimers())
 
   const isActive = computed(() => remainingSeconds.value > 0)
   const countdownLabel = computed(() => formatRateLimitCountdown(remainingSeconds.value))
   const message = computed(() => {
-    if (!isActive.value) return ''
+    if (remainingSeconds.value <= 0) return ''
     return rateLimitMessage(scope, remainingSeconds.value)
   })
 
-  return {
+  // reactive() unwraps nested refs in templates (`cooldown.isActive` is a boolean,
+  // not a ComputedRef object that stays truthy after the timer hits 0).
+  return reactive({
     remainingSeconds,
     isActive,
     countdownLabel,
     message,
     applyFromError,
     startTimer,
-  }
+  })
 }
