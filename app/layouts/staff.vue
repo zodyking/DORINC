@@ -60,7 +60,6 @@ const avCls = computed(() => avColor(displayName.value))
 const avInitials = computed(() => initials(displayName.value))
 const isSuperAdmin = computed(() => auth.can('system.admin.all'))
 const canViewBilling = computed(() => auth.can('billing.read.all'))
-const trainingLocked = computed(() => auth.trainingGate?.locked ?? false)
 const announcementLocked = computed(() => auth.announcementGate?.locked ?? false)
 const passwordLocked = computed(() => auth.user?.mustChangePassword === true)
 
@@ -80,13 +79,6 @@ const nav = computed<NavSection[]>(() => {
     }]
   }
 
-  if (trainingLocked.value) {
-    return [{
-      label: 'Training',
-      items: [{ label: 'Training', to: '/training', icon: 'training' }],
-    }]
-  }
-
   const sections: NavSection[] = [
     {
       label: 'Workspace',
@@ -97,7 +89,6 @@ const nav = computed<NavSection[]>(() => {
         { label: 'Vehicles', to: '/vehicles', icon: 'vehicles', permission: 'vehicles.read.all' },
         { label: 'Service Logs', to: '/service-logs', icon: 'service-logs', permission: ['service_logs.read.all', 'service_logs.read.own'] },
         { label: 'Staples', to: '/staples', icon: 'staples', permission: 'staples.read.all' },
-        { label: 'Training', to: '/training', icon: 'training', permission: ['training.complete.own', 'training.read.all'] },
         { label: 'Portal Requests', to: '/portal-requests', icon: 'portal-requests', permission: 'portal_requests.review.all' },
         { label: 'Deletion Requests', to: '/deletion-requests', icon: 'deletion-requests', permission: 'deletion_requests.review.all' },
         { label: 'Catalog', to: '/catalog', icon: 'catalog', permission: 'catalog.read.all' },

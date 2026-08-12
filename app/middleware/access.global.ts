@@ -41,7 +41,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/portal')
   }
 
-  // Required login message / training / password gates (staff-auth was never attached).
+  // Required login message / password gates (staff-auth was never attached).
   const gateRedirect = await guardStaffRoute(to.path)
   if (gateRedirect) {
     if (noteMiddlewareRedirect(to.path)) {
@@ -49,16 +49,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
       // Break gate ping-pong so Sign in can finish.
       if (auth.announcementGate) {
         auth.announcementGate = { ...auth.announcementGate, locked: false, pendingCount: 0, currentId: null }
-      }
-      if (auth.trainingGate) {
-        auth.trainingGate = {
-          ...auth.trainingGate,
-          locked: false,
-          assignmentId: null,
-          moduleId: null,
-          moduleSlug: null,
-          moduleTitle: null,
-        }
       }
       if (auth.user?.mustChangePassword) {
         auth.user = { ...auth.user, mustChangePassword: false }

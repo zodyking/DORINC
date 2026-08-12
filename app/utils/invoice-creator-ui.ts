@@ -35,7 +35,7 @@ export function buildInvoiceWizardSteps(includeServiceLog = false): InvoiceWizar
   return defs.map((d, i) => ({ n: i + 1, key: d.key, label: d.label }))
 }
 
-/** Default 5-step list (training / when service-log upload is not offered). */
+/** Default 5-step list (when service-log upload is not offered). */
 export const INVOICE_WIZARD_STEPS = buildInvoiceWizardSteps(false)
 
 export const LINE_TYPE_OPTIONS: { value: InvoiceLineType, label: string }[] = [

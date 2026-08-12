@@ -20,7 +20,7 @@ describe('middleware redirect guard', () => {
   it('flags a redirect storm', () => {
     let tripped = false
     for (let i = 0; i < 10; i++) {
-      tripped = noteMiddlewareRedirect(i % 2 === 0 ? '/dashboard' : '/training/learn/x')
+      tripped = noteMiddlewareRedirect(i % 2 === 0 ? '/dashboard' : '/account')
     }
     expect(tripped).toBe(true)
   })

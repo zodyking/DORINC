@@ -726,15 +726,6 @@ const showPermissionsModal = ref(false)
               </button>
             </div>
           </div>
-          <div v-if="canManage && user && !isSusanRecord && user.accountType !== 'customer'" class="card">
-            <div class="chead"><h3>Training</h3></div>
-            <div class="cbody" style="padding-top:14px;">
-              <TrainingAssignPanel
-                :user-id="user.id"
-                :user-name="user.name"
-              />
-            </div>
-          </div>
           <div class="card">
             <div class="chead"><h3>Recent activity</h3></div>
             <div v-if="activity.length" class="timeline">

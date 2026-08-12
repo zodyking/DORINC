@@ -16,7 +16,6 @@ export type StaffNavIconName =
   | 'login-messages'
   | 'roles'
   | 'email-templates'
-  | 'training'
 
 defineProps<{
   name: StaffNavIconName
@@ -224,12 +223,6 @@ defineProps<{
         stroke-width="1.75"
         stroke-linejoin="round"
       />
-    </template>
-
-    <!-- Training -->
-    <template v-else-if="name === 'training'">
-      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
-      <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
     </template>
   </svg>
 </template>

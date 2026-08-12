@@ -74,11 +74,7 @@ export const REQUIRED_BACKUP_TABLES = Object.freeze([
   'worker_jobs',
   'pdf_render_jobs',
 
-  // training / announcements / billing
-  'training_modules',
-  'training_lessons',
-  'training_assignments',
-  'training_lesson_progress',
+  // announcements / billing
   'announcements',
   'announcement_targets',
   'announcement_acknowledgements',

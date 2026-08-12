@@ -512,6 +512,13 @@
       "when": 1786900000000,
       "tag": "0075_deletion_ai_defer",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0076_drop_training",
+      "breakpoints": true
     }
   ]
 }
