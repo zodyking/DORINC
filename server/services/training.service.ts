@@ -166,6 +166,8 @@ export async function getTrainingGate(db: Db, userId: string): Promise<TrainingG
       eq(trainingAssignments.userId, userId),
       eq(trainingAssignments.locksAccess, true),
       ne(trainingAssignments.status, 'completed'),
+      // Unpublished / draft modules must not trap users in a login gate.
+      eq(trainingModules.isPublished, true),
     ))
     .orderBy(asc(trainingAssignments.assignedAt))
     .limit(1)
