@@ -290,6 +290,9 @@ export default defineEventHandler(async (event) => {
         customerId: result.user.customerId,
         mustChangePassword: result.user.mustChangePassword,
       },
+      outsideGeofence: outsideGeofenceLogin,
+      // Staff GPS login already validated this tab — arm API bypass header support.
+      armOutsideGeoTabSession: body.portal === 'staff' && Boolean(body.geo),
     }
   }
   catch (err) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TrainingModuleCard from '~/components/training/TrainingModuleCard.vue'
 import { armTrainingSpeechFromClick } from '~/utils/training-speech'
+import { resolveNextStaffPath } from '~/utils/staff-route-guard'
 
 definePageMeta({
   layout: 'staff',
@@ -8,9 +9,10 @@ definePageMeta({
 })
 
 const auth = useAuthStore()
+const route = useRoute()
 const canManage = computed(() => auth.can('training.manage.all'))
 
-const { data: myData } = useClientFetch<{ items: Array<{
+const { data: myData, pending: myPending, error: myError } = useClientFetch<{ items: Array<{
   id: string
   status: string
   progressPercent: number
@@ -39,11 +41,21 @@ const { data: catalogData } = useClientFetch<{ items: Array<{
 }> }>('/api/training/modules')
 
 const tab = ref<'my' | 'library'>('my')
+const releasingStaleGate = ref(false)
 const gateLocked = computed(() => auth.trainingGate?.locked ?? false)
 
 const myAssignments = computed(() => myData.value?.items ?? [])
 const pendingAssignments = computed(() => myAssignments.value.filter(a => a.status !== 'completed'))
+const lockingAssignments = computed(() =>
+  pendingAssignments.value.filter(a => a.locksAccess),
+)
 const catalog = computed(() => catalogData.value?.items ?? [])
+const myLoadError = computed(() => {
+  if (!myError.value) return ''
+  return (myError.value as { data?: { message?: string }, message?: string })?.data?.message
+    || (myError.value as { message?: string })?.message
+    || 'Could not load your training'
+})
 
 /** Real progress per module so the library reflects what you have actually done. */
 const assignmentByModuleId = computed(() => {
@@ -58,6 +70,54 @@ function openModule(slug: string) {
   armTrainingSpeechFromClick()
   navigateTo(`/training/learn/${slug}`)
 }
+
+/**
+ * /me can report a training lock while /api/training/my shows none (stale lock,
+ * unpublished module, or access-gate 403 that previously looked like "empty").
+ * When the list loads successfully with no locking assignments, release the gate.
+ */
+watch(
+  [myPending, myError, lockingAssignments, gateLocked],
+  async () => {
+    if (releasingStaleGate.value) return
+    if (myPending.value || myError.value) return
+    if (!gateLocked.value) return
+    if (lockingAssignments.value.length > 0) return
+    if (!myData.value) return
+
+    releasingStaleGate.value = true
+    try {
+      auth.trainingGate = {
+        locked: false,
+        assignmentId: null,
+        moduleId: null,
+        moduleSlug: null,
+        moduleTitle: null,
+      }
+      await auth.fetchMe({ force: true })
+      if (auth.trainingGate?.locked && !auth.trainingGate.moduleSlug) {
+        auth.trainingGate = {
+          ...auth.trainingGate,
+          locked: false,
+          assignmentId: null,
+          moduleId: null,
+          moduleSlug: null,
+          moduleTitle: null,
+        }
+      }
+      if (!auth.trainingGate?.locked) {
+        const next = resolveNextStaffPath(auth, {
+          leaving: 'training',
+          fromPath: route.path,
+        })
+        if (next !== route.path) await navigateTo(next)
+      }
+    }
+    finally {
+      releasingStaleGate.value = false
+    }
+  },
+)
 </script>
 
 <template>
@@ -67,10 +127,16 @@ function openModule(slug: string) {
     </StaffPageHead>
 
     <div v-if="gateLocked" class="training-lock-banner">
-      Complete required training to unlock the rest of the app.
+      {{ releasingStaleGate
+        ? 'Checking required training…'
+        : 'Complete required training to unlock the rest of the app.' }}
     </div>
 
-    <div v-if="pendingAssignments.length" class="training-hero" :class="{ locked: gateLocked }">
+    <div v-if="myLoadError" class="cp-state" style="color:#b91c1c;">
+      {{ myLoadError }}
+    </div>
+
+    <div v-else-if="pendingAssignments.length" class="training-hero" :class="{ locked: gateLocked }">
       <h2>{{ gateLocked ? 'Required training' : 'Your assignments' }}</h2>
       <p>
         {{ pendingAssignments.length }} module{{ pendingAssignments.length === 1 ? '' : 's' }} waiting.
@@ -84,7 +150,8 @@ function openModule(slug: string) {
     </div>
 
     <div v-if="tab === 'my'">
-      <div v-if="myAssignments.length" class="training-grid">
+      <div v-if="myPending" class="cp-state">Loading your training…</div>
+      <div v-else-if="myAssignments.length" class="training-grid">
         <TrainingModuleCard
           v-for="row in myAssignments"
           :key="row.id"

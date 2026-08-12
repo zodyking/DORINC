@@ -5,6 +5,7 @@ import {
   redirectToLogin,
   shouldClearSessionOnFetchMeError,
 } from '~/utils/auth-session'
+import { clearOutsideGeoTabSession, markOutsideGeoTabSession } from '~/utils/outside-geo-session'
 import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
 import { AUTH_ME_FOCUS_MIN_GAP_MS } from '#shared/auth-me-refresh'
@@ -143,9 +144,19 @@ export const useAuthStore = defineStore('auth', {
       const body = portal === 'customer'
         ? { username: identifier, password, portal }
         : { email: identifier, password, portal }
-      let res: { user?: AuthUser, needsLocation?: boolean, loginToken?: string }
+      let res: {
+        user?: AuthUser
+        needsLocation?: boolean
+        loginToken?: string
+        armOutsideGeoTabSession?: boolean
+      }
       try {
-        res = await $fetch<{ user?: AuthUser, needsLocation?: boolean, loginToken?: string }>('/api/auth/login', {
+        res = await $fetch<{
+          user?: AuthUser
+          needsLocation?: boolean
+          loginToken?: string
+          armOutsideGeoTabSession?: boolean
+        }>('/api/auth/login', {
           method: 'POST',
           body,
         })
@@ -168,6 +179,7 @@ export const useAuthStore = defineStore('auth', {
         return { needsLocation: true as const, loginToken: res.loginToken }
       }
       if (!res.user) throw new Error('Login response missing user')
+      if (res.armOutsideGeoTabSession) markOutsideGeoTabSession()
       this.loginHydrating = true
       try {
         this.user = res.user
@@ -186,9 +198,9 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async completeStaffLogin(loginToken: string, geo: StaffLoginGeo) {
-      let res: { user: AuthUser }
+      let res: { user: AuthUser, armOutsideGeoTabSession?: boolean }
       try {
-        res = await $fetch<{ user: AuthUser }>('/api/auth/complete-login', {
+        res = await $fetch<{ user: AuthUser, armOutsideGeoTabSession?: boolean }>('/api/auth/complete-login', {
           method: 'POST',
           body: { loginToken, geo },
         })
@@ -206,6 +218,8 @@ export const useAuthStore = defineStore('auth', {
         }
         throw err
       }
+      // GPS login validated this browser tab — required for data APIs outside the fence.
+      if (res.armOutsideGeoTabSession !== false) markOutsideGeoTabSession()
       this.loginHydrating = true
       try {
         this.user = res.user
@@ -242,7 +256,10 @@ export const useAuthStore = defineStore('auth', {
       this.trainingGate = null
       this.announcementGate = null
       this.loaded = true
-      if (import.meta.client) clearPwaBannerDismissed()
+      if (import.meta.client) {
+        clearPwaBannerDismissed()
+        clearOutsideGeoTabSession()
+      }
       if (redirect) {
         const path = import.meta.client ? window.location.pathname : this.loginPath()
         await redirectToLogin(path)
