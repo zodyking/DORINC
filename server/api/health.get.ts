@@ -2,10 +2,9 @@ import { sql } from 'drizzle-orm'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { useDb } from '../db/client'
 import { getPdfWorkerHealth, getWorkerQueueHealth } from '../services/worker-health.service'
-import { healthHttpOk } from '../../shared/health-http'
 import pkg from '../../package.json'
 
-const DB_PROBE_TIMEOUT_MS = 4_000
+const DB_PROBE_TIMEOUT_MS = 2_000
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -22,20 +21,37 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
+/**
+ * Liveness probe for Docker/Traefik.
+ *
+ * Always answers 200 when the process can serve a request. A saturated or slow
+ * database used to fail this probe, which marked the container unhealthy and
+ * made the proxy drop it — turning one user's heavy request into an outage for
+ * every signed-in session. Dependency status is reported in the body instead.
+ *
+ * `?deep=1` adds database + worker probes for the admin panel.
+ */
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const buildId = config.public.buildId ?? 'dev'
+  const query = getQuery(event)
+  const deep = query.deep === '1' || query.deep === 'true'
+
+  const base = {
+    version: pkg.version ?? '0.0.0',
+    buildId,
+    requestId: (event.context.requestId as string | undefined) ?? '',
+    time: new Date().toISOString(),
+  }
 
   if (!hasDatabaseConfig()) {
     setResponseStatus(event, 200)
-    return {
-      status: 'setup_required',
-      database: 'not_configured',
-      version: pkg.version ?? '0.0.0',
-      buildId,
-      requestId: (event.context.requestId as string | undefined) ?? '',
-      time: new Date().toISOString(),
-    }
+    return { status: 'setup_required', database: 'not_configured', ...base }
+  }
+
+  if (!deep) {
+    setResponseStatus(event, 200)
+    return { status: 'ok', ...base }
   }
 
   const db = useDb()
@@ -61,20 +77,16 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const { live, ok } = healthHttpOk({ database, workers })
+  const pipelineOk = !workers
+    || (workers.pdf !== 'error' && workers.pdf !== 'unknown' && workers.queue !== 'error')
 
-  // Liveness for Docker/Traefik: only fail when the DB probe fails.
-  // Worker/pdf "unknown" or "error" used to return 503 and take the whole site
-  // offline (raw Traefik 404) for every session during deploys / stale heartbeats.
-  setResponseStatus(event, live ? 200 : 503)
+  // Deep probe still answers 200 — it reports health, it does not gate traffic.
+  setResponseStatus(event, 200)
 
   return {
-    status: ok ? 'ok' : 'degraded',
+    status: database === 'ok' && pipelineOk ? 'ok' : 'degraded',
     database,
     workers,
-    version: pkg.version ?? '0.0.0',
-    buildId,
-    requestId: (event.context.requestId as string | undefined) ?? '',
-    time: new Date().toISOString(),
+    ...base,
   }
 })
