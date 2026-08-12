@@ -109,6 +109,8 @@ async function submitLogin(identifier: string, password: string) {
     await navigateTo(resolveStaffLandingPath(auth))
   }
   catch (err) {
+    // Access gate already navigates away — do not flash a one-frame form error.
+    if (authErrorReason(err) === 'access_blocked') return
     error.value = messageFrom(err)
     loginBlockedReason.value = authErrorReason(err)
     const hintedEmail = authErrorEmail(err)
@@ -135,6 +137,7 @@ async function onLocationComplete(geo: import('#shared/validators/auth').StaffLo
   }
   catch (err) {
     showLocationPrompt.value = false
+    if (authErrorReason(err) === 'access_blocked') return
     error.value = messageFrom(err)
     loginBlockedReason.value = authErrorReason(err)
   }

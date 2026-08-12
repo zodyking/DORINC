@@ -35,6 +35,15 @@ export function isUnauthorizedError(error: unknown): boolean {
   return false
 }
 
+/**
+ * `/api/auth/me` failures must not wipe a live client session unless the server
+ * said we are unauthenticated. Transient 5xx/network blips during login used to
+ * clear `user`, bounce middleware to `/auth/login`, and flash an error.
+ */
+export function shouldClearSessionOnFetchMeError(error: unknown): boolean {
+  return isUnauthorizedError(error)
+}
+
 export async function redirectToLogin(path: string) {
   const target = loginPathForRoute(path)
   if (import.meta.client) {
