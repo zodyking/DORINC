@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import type { AccessMapEvent } from '~/utils/access-gate-map'
+import type { AccessDisplayGroup, AccessEventSort, AccessMapEvent } from '~/utils/access-gate-map'
 import {
+  ACCESS_DISPLAY_GROUP_COLORS,
+  ACCESS_DISPLAY_GROUP_LABELS,
+} from '#shared/access-event-display'
+import {
+  accessEventDisplayGroup,
+  accessEventDisplayLabel,
+  accessEventUserLabel,
   accessEventWhen,
   accessGateDayBounds,
   accessGateDayKey,
+  countAccessDisplayGroups,
   formatAccessGateDayLabel,
   shiftAccessGateDayKey,
   shortFingerprint,
@@ -34,6 +42,10 @@ watch(() => data.value?.settings, (s) => {
 
 const events = ref<AccessMapEvent[]>([])
 const eventFilter = ref<'all' | 'visit' | 'login'>('all')
+const groupFilter = ref<'all' | AccessDisplayGroup>('all')
+const sortBy = ref<AccessEventSort>('newest')
+const searchQ = ref('')
+const filtersOpen = ref(false)
 const dayMode = ref<'day' | 'all'>('day')
 const selectedDay = ref(accessGateDayKey())
 const eventsLoading = ref(false)
@@ -43,13 +55,18 @@ const busy = ref(false)
 const message = ref('')
 const error = ref('')
 
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 async function loadEvents() {
   eventsLoading.value = true
   try {
     const query: Record<string, string | number> = {
       limit: dayMode.value === 'all' ? 5000 : 2000,
+      sort: sortBy.value,
     }
     if (eventFilter.value !== 'all') query.type = eventFilter.value
+    if (groupFilter.value !== 'all') query.group = groupFilter.value
+    if (searchQ.value.trim()) query.q = searchQ.value.trim()
     if (dayMode.value === 'day') {
       const bounds = accessGateDayBounds(selectedDay.value)
       if (bounds) {
@@ -68,17 +85,36 @@ async function loadEvents() {
   }
 }
 
-watch([eventFilter, dayMode, selectedDay], () => { void loadEvents() })
+watch([eventFilter, groupFilter, sortBy, dayMode, selectedDay], () => { void loadEvents() })
+watch(searchQ, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { void loadEvents() }, 220)
+})
 onMounted(() => { void loadEvents() })
 
+const groupCounts = computed(() => countAccessDisplayGroups(events.value))
 const loginCount = computed(() => events.value.filter(e => e.eventType === 'login').length)
 const visitCount = computed(() => events.value.filter(e => e.eventType === 'visit').length)
 const mappedCount = computed(() => events.value.filter(e => e.latitude != null && e.longitude != null).length)
-const blockedCount = computed(() => events.value.filter(e => e.outcome === 'blocked' || e.outcome === 'login_failed').length)
+const tableRows = computed(() => events.value.slice(0, 100))
 
 const dayLabel = computed(() => (
   dayMode.value === 'all' ? 'All days' : formatAccessGateDayLabel(selectedDay.value)
 ))
+
+const filtersDirty = computed(() => (
+  eventFilter.value !== 'all'
+  || groupFilter.value !== 'all'
+  || sortBy.value !== 'newest'
+  || !!searchQ.value.trim()
+))
+
+function clearAdvancedFilters() {
+  eventFilter.value = 'all'
+  groupFilter.value = 'all'
+  sortBy.value = 'newest'
+  searchQ.value = ''
+}
 
 function prevDay() {
   dayMode.value = 'day'
@@ -98,6 +134,15 @@ function goToday() {
 function showAllDays() {
   dayMode.value = 'all'
 }
+
+function outcomeTone(ev: AccessMapEvent): string {
+  const group = accessEventDisplayGroup(ev)
+  if (group === 'access_granted') return 'ok'
+  if (group === 'fail') return 'warn'
+  if (group === 'geofence_blocked') return 'geo'
+  return 'bad'
+}
+
 
 function onPolygonUpdate(points: { lat: number, lng: number }[]) {
   form.allowedPolygon = points
@@ -189,7 +234,13 @@ async function save() {
               <button type="button" class="btn sm" :disabled="dayMode === 'all'" aria-label="Previous day" @click="prevDay">‹</button>
               <div class="ag-daylabel">
                 <strong>{{ dayLabel }}</strong>
-                <small>{{ visitCount }} visits · {{ loginCount }} logins · {{ blockedCount }} blocked</small>
+                <small>
+                  {{ visitCount }} visits · {{ loginCount }} logins ·
+                  {{ groupCounts.access_granted }} granted ·
+                  {{ groupCounts.fail }} fail ·
+                  {{ groupCounts.geofence_blocked }} geofence ·
+                  {{ groupCounts.blocked }} blocked
+                </small>
               </div>
               <button type="button" class="btn sm" :disabled="dayMode === 'all'" aria-label="Next day" @click="nextDay">›</button>
               <button type="button" class="btn sm" @click="goToday">Today</button>
@@ -204,11 +255,14 @@ async function save() {
             </div>
 
             <div class="ag-maptools">
-              <select v-model="eventFilter" class="ag-filter" aria-label="Event type">
-                <option value="all">All types</option>
-                <option value="login">Logins</option>
-                <option value="visit">Visits</option>
-              </select>
+              <button
+                type="button"
+                class="btn sm"
+                :class="{ primary: filtersOpen || filtersDirty }"
+                @click="filtersOpen = !filtersOpen"
+              >
+                Filters
+              </button>
               <button type="button" class="btn sm" :disabled="eventsLoading" @click="loadEvents">
                 {{ eventsLoading ? '…' : 'Refresh' }}
               </button>
@@ -221,11 +275,69 @@ async function save() {
             </div>
           </div>
 
+          <div v-if="filtersOpen" class="ag-filters">
+            <label class="fld">
+              Search
+              <input
+                v-model="searchQ"
+                type="search"
+                placeholder="User, email, IP, path, device…"
+                aria-label="Search access events"
+              >
+            </label>
+            <label class="fld">
+              Connection type
+              <select v-model="eventFilter" aria-label="Connection type">
+                <option value="all">All types</option>
+                <option value="login">Logins</option>
+                <option value="visit">Visits</option>
+              </select>
+            </label>
+            <label class="fld">
+              Outcome
+              <select v-model="groupFilter" aria-label="Outcome group">
+                <option value="all">All outcomes</option>
+                <option value="access_granted">Access granted</option>
+                <option value="fail">Fail</option>
+                <option value="geofence_blocked">Geofence blocked</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </label>
+            <label class="fld">
+              Sort
+              <select v-model="sortBy" aria-label="Sort events">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="outcome">Outcome</option>
+                <option value="type">Type</option>
+                <option value="user">User</option>
+                <option value="ip">IP</option>
+              </select>
+            </label>
+            <div class="ag-filters-actions">
+              <button type="button" class="btn sm" :disabled="!filtersDirty" @click="clearAdvancedFilters">
+                Clear filters
+              </button>
+            </div>
+          </div>
+
           <div class="ag-legend">
-            <span><i class="ag-sw" style="background:#4f46e5" /> Login</span>
-            <span><i class="ag-sw" style="background:#f59e0b" /> Failed</span>
-            <span><i class="ag-sw" style="background:#0ea5e9" /> Visit</span>
-            <span><i class="ag-sw" style="background:#dc2626" /> Blocked</span>
+            <span>
+              <i class="ag-sw" :style="{ background: ACCESS_DISPLAY_GROUP_COLORS.access_granted }" />
+              {{ ACCESS_DISPLAY_GROUP_LABELS.access_granted }}
+            </span>
+            <span>
+              <i class="ag-sw" :style="{ background: ACCESS_DISPLAY_GROUP_COLORS.fail }" />
+              {{ ACCESS_DISPLAY_GROUP_LABELS.fail }}
+            </span>
+            <span>
+              <i class="ag-sw" :style="{ background: ACCESS_DISPLAY_GROUP_COLORS.geofence_blocked }" />
+              {{ ACCESS_DISPLAY_GROUP_LABELS.geofence_blocked }}
+            </span>
+            <span>
+              <i class="ag-sw" :style="{ background: ACCESS_DISPLAY_GROUP_COLORS.blocked }" />
+              {{ ACCESS_DISPLAY_GROUP_LABELS.blocked }}
+            </span>
             <span v-if="form.allowedPolygon.length" class="ag-legend-muted">
               Fence: {{ form.allowedPolygon.length }} pts
             </span>
@@ -248,7 +360,7 @@ async function save() {
         <section class="ag-table-wrap">
           <div class="ag-section-head">
             <h4>Device capture</h4>
-            <span class="ag-muted">{{ mappedCount }} mapped · showing {{ Math.min(events.length, 100) }} of {{ events.length }}</span>
+            <span class="ag-muted">{{ mappedCount }} mapped · showing {{ tableRows.length }} of {{ events.length }}</span>
           </div>
           <div class="ag-table-scroll">
             <table class="ag-table">
@@ -257,6 +369,7 @@ async function save() {
                   <th>When</th>
                   <th>Type</th>
                   <th>Outcome</th>
+                  <th>User</th>
                   <th>IP</th>
                   <th>User-Agent</th>
                   <th>OS</th>
@@ -278,14 +391,21 @@ async function save() {
               </thead>
               <tbody>
                 <tr v-if="!events.length">
-                  <td colspan="20" class="ag-table-empty">
+                  <td colspan="21" class="ag-table-empty">
                     {{ eventsLoading ? 'Loading…' : (dayMode === 'all' ? 'No events yet.' : 'No events for this day.') }}
                   </td>
                 </tr>
-                <tr v-for="ev in events.slice(0, 100)" :key="ev.id">
+                <tr v-for="ev in tableRows" :key="ev.id">
                   <td>{{ accessEventWhen(ev.createdAt) }}</td>
                   <td>{{ ev.eventType }}</td>
-                  <td>{{ ev.outcome }}</td>
+                  <td>
+                    <span class="ag-outcome" :class="outcomeTone(ev)">
+                      {{ accessEventDisplayLabel(ev) }}
+                    </span>
+                  </td>
+                  <td class="ag-user" :title="accessEventUserLabel(ev)">
+                    {{ accessEventUserLabel(ev) }}
+                  </td>
                   <td class="mono">{{ ev.ipAddress || '—' }}</td>
                   <td class="ag-ua" :title="ev.userAgent || ''">{{ shortFingerprint(ev.userAgent, 28) }}</td>
                   <td>{{ ev.os || '—' }}</td>
@@ -390,16 +510,44 @@ async function save() {
 .ag-daylabel strong { font-size: 13.5px; color: #0f172a; }
 .ag-daylabel small { font-size: 11.5px; color: #94a3b8; }
 .ag-maptools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.ag-filter {
-  padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 8px;
-  font-size: 12.5px; background: #fff;
+.ag-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
+.ag-filters .fld { margin: 0; }
+.ag-filters-actions { display: flex; align-items: end; padding-bottom: 2px; }
 .ag-legend {
   display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #475569; margin: 8px 0 10px;
 }
 .ag-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .ag-legend-muted { color: #94a3b8; }
 .ag-sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.ag-outcome {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ag-outcome.ok { background: #dcfce7; color: #166534; }
+.ag-outcome.warn { background: #fef3c7; color: #92400e; }
+.ag-outcome.geo { background: #ffedd5; color: #9a3412; }
+.ag-outcome.bad { background: #fee2e2; color: #991b1b; }
+.ag-user {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .ag-section-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px;
@@ -454,5 +602,6 @@ async function save() {
 @media (max-width: 820px) {
   .ag-settings { grid-template-columns: 1fr; }
   .ag-daylabel { min-width: 120px; }
+  .ag-filters { grid-template-columns: 1fr 1fr; }
 }
 </style>

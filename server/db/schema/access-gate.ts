@@ -2,6 +2,7 @@ import { doublePrecision, index, inet, integer, pgTable, text, timestamp, uuid }
 
 export const ACCESS_EVENT_TYPES = ['visit', 'login'] as const
 export const ACCESS_EVENT_OUTCOMES = ['allowed', 'blocked', 'login_success', 'login_failed'] as const
+export const ACCESS_BLOCK_REASONS = ['ip_banned', 'geo_outside', 'geo_unknown'] as const
 
 /**
  * Every captured site visit and login attempt for the access-gate map.
@@ -13,6 +14,8 @@ export const accessEvents = pgTable('access_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   eventType: text('event_type', { enum: ACCESS_EVENT_TYPES }).notNull(),
   outcome: text('outcome', { enum: ACCESS_EVENT_OUTCOMES }).notNull().default('allowed'),
+  /** Why a blocked outcome happened — distinguishes IP ban vs geofence. */
+  blockReason: text('block_reason', { enum: ACCESS_BLOCK_REASONS }),
   ipAddress: inet('ip_address'),
   userId: uuid('user_id'),
   userName: text('user_name'),
@@ -43,4 +46,5 @@ export const accessEvents = pgTable('access_events', {
   index('access_events_type_idx').on(table.eventType),
   index('access_events_ip_idx').on(table.ipAddress),
   index('access_events_device_id_idx').on(table.deviceId),
+  index('access_events_block_reason_idx').on(table.blockReason),
 ])

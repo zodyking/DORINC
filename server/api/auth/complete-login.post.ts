@@ -70,6 +70,7 @@ export default defineEventHandler(async (event) => {
         await recordAccessEvent(useDb(), {
           eventType: 'login',
           outcome: 'blocked',
+          blockReason: decision.reason,
           ipAddress,
           userId: resolved.user.id,
           userName: resolved.user.name,

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS "access_events" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "event_type" text NOT NULL,
   "outcome" text DEFAULT 'allowed' NOT NULL,
+  "block_reason" text,
   "ip_address" inet,
   "user_id" uuid,
   "user_name" text,
@@ -38,6 +39,7 @@ CREATE INDEX IF NOT EXISTS "access_events_created_idx" ON "access_events" USING 
 CREATE INDEX IF NOT EXISTS "access_events_type_idx" ON "access_events" USING btree ("event_type");
 CREATE INDEX IF NOT EXISTS "access_events_ip_idx" ON "access_events" USING btree ("ip_address");
 CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
+CREATE INDEX IF NOT EXISTS "access_events_block_reason_idx" ON "access_events" USING btree ("block_reason");
 `.trim()
 
 const ACCESS_EVENTS_DEVICE_COLUMNS_SQL = `
@@ -55,7 +57,9 @@ ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "audio_fingerprint" text;
 ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "timezone" text;
 ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "language" text;
 ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "max_touch_points" integer;
+ALTER TABLE "access_events" ADD COLUMN IF NOT EXISTS "block_reason" text;
 CREATE INDEX IF NOT EXISTS "access_events_device_id_idx" ON "access_events" USING btree ("device_id");
+CREATE INDEX IF NOT EXISTS "access_events_block_reason_idx" ON "access_events" USING btree ("block_reason");
 `.trim()
 
 /**

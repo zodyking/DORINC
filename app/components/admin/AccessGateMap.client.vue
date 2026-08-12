@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { GeoPoint } from '#shared/geo/point-in-polygon'
 import type { AccessMapEvent } from '~/utils/access-gate-map'
+import {
+  accessEventDisplayColor,
+  accessEventDisplayLabel,
+  accessEventUserLabel,
+} from '~/utils/access-gate-map'
 
 const props = defineProps<{
   events: AccessMapEvent[]
@@ -36,11 +41,7 @@ function escapeHtml(value: string): string {
 }
 
 function markerColor(ev: AccessMapEvent): string {
-  if (ev.outcome === 'blocked') return '#dc2626'
-  if (ev.eventType === 'login') {
-    return ev.outcome === 'login_failed' ? '#f59e0b' : '#4f46e5'
-  }
-  return '#0ea5e9'
+  return accessEventDisplayColor(ev)
 }
 
 function formatWhen(iso: string): string {
@@ -50,10 +51,13 @@ function formatWhen(iso: string): string {
 
 function popupHtml(ev: AccessMapEvent): string {
   const rows: string[] = []
-  const who = ev.userName || ev.userEmail || (ev.eventType === 'login' ? 'Unknown user' : 'Anonymous visitor')
-  rows.push(`<b>${escapeHtml(who)}</b>`)
-  if (ev.userEmail && ev.userEmail !== who) rows.push(escapeHtml(ev.userEmail))
-  rows.push(`Type: ${escapeHtml(ev.eventType)} · ${escapeHtml(ev.outcome)}`)
+  const who = accessEventUserLabel(ev)
+  rows.push(`<b>${escapeHtml(who === '—' ? (ev.eventType === 'login' ? 'Unknown user' : 'Anonymous visitor') : who)}</b>`)
+  if (ev.userEmail && ev.userName && ev.userEmail !== ev.userName) {
+    rows.push(escapeHtml(ev.userEmail))
+  }
+  rows.push(`Type: ${escapeHtml(ev.eventType)} · ${escapeHtml(accessEventDisplayLabel(ev))}`)
+  if (ev.blockReason) rows.push(`Reason: ${escapeHtml(ev.blockReason)}`)
   if (ev.locationLabel) rows.push(`Location: ${escapeHtml(ev.locationLabel)}`)
   if (ev.ipAddress) rows.push(`IP: ${escapeHtml(ev.ipAddress)}`)
   if (ev.path) rows.push(`Path: ${escapeHtml(ev.path)}`)

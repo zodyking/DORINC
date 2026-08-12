@@ -261,6 +261,7 @@ export default defineEventHandler(async (event) => {
       deviceId,
       viewer,
       blocked: Boolean(effectivelyBlocked),
+      blockReason: effectivelyBlocked ? decision.reason : null,
       cachedGeo: cachedGeo ?? null,
     }).catch(() => {})
   }
@@ -300,6 +301,7 @@ async function captureVisit(input: {
   deviceId: string | null
   viewer: { id: string, name: string, email: string } | null
   blocked: boolean
+  blockReason?: 'ip_banned' | 'geo_outside' | 'geo_unknown' | null
   cachedGeo: { latitude: number | null, longitude: number | null, label: string | null, country: string | null } | null
 }): Promise<void> {
   // Resolve geolocation off the hot path; warms the cache for later requests.
@@ -307,6 +309,7 @@ async function captureVisit(input: {
   await recordAccessEvent(useDb(), {
     eventType: 'visit',
     outcome: input.blocked ? 'blocked' : 'allowed',
+    blockReason: input.blocked ? (input.blockReason ?? null) : null,
     ipAddress: input.ip,
     userId: input.viewer?.id ?? null,
     userName: input.viewer?.name ?? null,

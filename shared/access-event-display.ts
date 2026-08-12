@@ -1,0 +1,94 @@
+/**
+ * Display classification for access-gate security events.
+ * Raw DB outcomes stay visit/login + allowed/blocked/login_*; UI groups are clearer.
+ */
+
+export const ACCESS_BLOCK_REASONS = ['ip_banned', 'geo_outside', 'geo_unknown'] as const
+export type AccessBlockReason = (typeof ACCESS_BLOCK_REASONS)[number]
+
+export type AccessDisplayGroup
+  = 'access_granted'
+    | 'fail'
+    | 'geofence_blocked'
+    | 'blocked'
+
+export const ACCESS_DISPLAY_GROUP_LABELS: Record<AccessDisplayGroup, string> = {
+  access_granted: 'Access granted',
+  fail: 'Fail',
+  geofence_blocked: 'Geofence blocked',
+  blocked: 'Blocked',
+}
+
+/** Map/legend colors for the cleaned-up security groups. */
+export const ACCESS_DISPLAY_GROUP_COLORS: Record<AccessDisplayGroup, string> = {
+  access_granted: '#16a34a',
+  fail: '#f59e0b',
+  geofence_blocked: '#ea580c',
+  blocked: '#dc2626',
+}
+
+export type AccessEventDisplayInput = {
+  outcome: string
+  blockReason?: string | null
+}
+
+/**
+ * Classify an event into the security UI groups:
+ * - Access granted — allowed visit / successful login (no security block)
+ * - Fail — login credentials failed (or similar connection fail)
+ * - Geofence blocked — blocked for being outside / unknown geo (access-restricted path)
+ * - Blocked — IP ban or hard block from connecting
+ */
+export function accessEventDisplayGroup(ev: AccessEventDisplayInput): AccessDisplayGroup {
+  const outcome = String(ev.outcome || '').trim()
+  if (outcome === 'login_failed') return 'fail'
+  if (outcome === 'allowed' || outcome === 'login_success') return 'access_granted'
+  if (outcome === 'blocked') {
+    const reason = String(ev.blockReason || '').trim()
+    if (reason === 'geo_outside' || reason === 'geo_unknown') return 'geofence_blocked'
+    return 'blocked'
+  }
+  return 'access_granted'
+}
+
+export function accessEventDisplayLabel(ev: AccessEventDisplayInput): string {
+  return ACCESS_DISPLAY_GROUP_LABELS[accessEventDisplayGroup(ev)]
+}
+
+export function accessEventDisplayColor(ev: AccessEventDisplayInput): string {
+  return ACCESS_DISPLAY_GROUP_COLORS[accessEventDisplayGroup(ev)]
+}
+
+export function accessEventUserLabel(ev: {
+  userName?: string | null
+  userEmail?: string | null
+  userId?: string | null
+}): string {
+  const name = String(ev.userName || '').trim()
+  const email = String(ev.userEmail || '').trim()
+  if (name && email && name !== email) return `${name} · ${email}`
+  if (name) return name
+  if (email) return email
+  if (ev.userId) return 'Known user'
+  return '—'
+}
+
+export function parseAccessBlockReason(raw: unknown): AccessBlockReason | null {
+  const text = typeof raw === 'string' ? raw.trim() : ''
+  return (ACCESS_BLOCK_REASONS as readonly string[]).includes(text)
+    ? (text as AccessBlockReason)
+    : null
+}
+
+export function parseAccessDisplayGroup(raw: unknown): AccessDisplayGroup | undefined {
+  const text = typeof raw === 'string' ? raw.trim() : ''
+  if (
+    text === 'access_granted'
+    || text === 'fail'
+    || text === 'geofence_blocked'
+    || text === 'blocked'
+  ) {
+    return text
+  }
+  return undefined
+}

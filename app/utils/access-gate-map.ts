@@ -1,9 +1,30 @@
+import {
+  accessEventDisplayColor,
+  accessEventDisplayGroup,
+  accessEventDisplayLabel,
+  accessEventUserLabel,
+  type AccessDisplayGroup,
+} from '#shared/access-event-display'
+
+export type {
+  AccessDisplayGroup,
+}
+
+export {
+  accessEventDisplayColor,
+  accessEventDisplayGroup,
+  accessEventDisplayLabel,
+  accessEventUserLabel,
+}
+
 /** Shape of an access-gate event as rendered on the security map + table. */
 export interface AccessMapEvent {
   id: string
   eventType: 'visit' | 'login'
   outcome: string
+  blockReason?: string | null
   ipAddress: string | null
+  userId?: string | null
   userName: string | null
   userEmail: string | null
   path: string | null
@@ -86,4 +107,19 @@ export function accessGateDayBounds(day: string): { from: string, to: string } |
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
   return { from: start.toISOString(), to: end.toISOString() }
+}
+
+export type AccessEventSort = 'newest' | 'oldest' | 'outcome' | 'type' | 'user' | 'ip'
+
+export function countAccessDisplayGroups(events: AccessMapEvent[]): Record<AccessDisplayGroup, number> {
+  const counts: Record<AccessDisplayGroup, number> = {
+    access_granted: 0,
+    fail: 0,
+    geofence_blocked: 0,
+    blocked: 0,
+  }
+  for (const ev of events) {
+    counts[accessEventDisplayGroup(ev)] += 1
+  }
+  return counts
 }

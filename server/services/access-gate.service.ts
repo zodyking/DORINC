@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { appSettings } from '../db/schema/settings'
 import { accessEvents } from '../db/schema/access-gate'
@@ -152,6 +152,8 @@ export interface AccessEventDeviceFields {
 export interface RecordAccessEventInput extends AccessEventDeviceFields {
   eventType: 'visit' | 'login'
   outcome?: 'allowed' | 'blocked' | 'login_success' | 'login_failed'
+  /** Set when outcome is blocked — IP ban vs geofence. */
+  blockReason?: AccessBlockReason | null
   ipAddress?: string | null
   userId?: string | null
   userName?: string | null
@@ -169,9 +171,12 @@ function clip(value: string | null | undefined, max: number): string | null {
 }
 
 export async function recordAccessEvent(db: Db, input: RecordAccessEventInput): Promise<void> {
+  const outcome = input.outcome ?? 'allowed'
+  const blockReason = outcome === 'blocked' ? (input.blockReason ?? null) : null
   await db.insert(accessEvents).values({
     eventType: input.eventType,
-    outcome: input.outcome ?? 'allowed',
+    outcome,
+    blockReason,
     ipAddress: input.ipAddress ?? null,
     userId: input.userId ?? null,
     userName: input.userName ?? null,
@@ -203,6 +208,7 @@ export interface AccessEventView {
   id: string
   eventType: 'visit' | 'login'
   outcome: string
+  blockReason: AccessBlockReason | null
   ipAddress: string | null
   userId: string | null
   userName: string | null
@@ -230,10 +236,19 @@ export interface AccessEventView {
   createdAt: string
 }
 
+export type AccessEventSort
+  = 'newest' | 'oldest' | 'outcome' | 'type' | 'user' | 'ip'
+
 export async function listAccessEvents(
   db: Db,
   filter: {
     eventType?: 'visit' | 'login'
+    /** Raw outcome filter. */
+    outcome?: 'allowed' | 'blocked' | 'login_success' | 'login_failed'
+    /** Display group filter (preferred for UI). */
+    displayGroup?: 'access_granted' | 'fail' | 'geofence_blocked' | 'blocked'
+    q?: string
+    sort?: AccessEventSort
     limit?: number
     /** Inclusive start (ISO). */
     from?: string | Date | null
@@ -244,6 +259,46 @@ export async function listAccessEvents(
   const limit = Math.min(Math.max(filter.limit ?? 1000, 1), 5000)
   const conditions = []
   if (filter.eventType) conditions.push(eq(accessEvents.eventType, filter.eventType))
+  if (filter.outcome) conditions.push(eq(accessEvents.outcome, filter.outcome))
+  if (filter.displayGroup === 'access_granted') {
+    conditions.push(or(
+      eq(accessEvents.outcome, 'allowed'),
+      eq(accessEvents.outcome, 'login_success'),
+    ))
+  }
+  else if (filter.displayGroup === 'fail') {
+    conditions.push(eq(accessEvents.outcome, 'login_failed'))
+  }
+  else if (filter.displayGroup === 'geofence_blocked') {
+    conditions.push(and(
+      eq(accessEvents.outcome, 'blocked'),
+      or(
+        eq(accessEvents.blockReason, 'geo_outside'),
+        eq(accessEvents.blockReason, 'geo_unknown'),
+      ),
+    ))
+  }
+  else if (filter.displayGroup === 'blocked') {
+    conditions.push(and(
+      eq(accessEvents.outcome, 'blocked'),
+      or(
+        eq(accessEvents.blockReason, 'ip_banned'),
+        isNull(accessEvents.blockReason),
+      ),
+    ))
+  }
+  if (filter.q?.trim()) {
+    const term = `%${filter.q.trim()}%`
+    conditions.push(or(
+      ilike(accessEvents.userName, term),
+      ilike(accessEvents.userEmail, term),
+      sql`cast(${accessEvents.ipAddress} as text) ilike ${term}`,
+      ilike(accessEvents.path, term),
+      ilike(accessEvents.deviceId, term),
+      ilike(accessEvents.os, term),
+      ilike(accessEvents.locationLabel, term),
+    ))
+  }
   if (filter.from) {
     const from = filter.from instanceof Date ? filter.from : new Date(filter.from)
     if (Number.isFinite(from.getTime())) conditions.push(gte(accessEvents.createdAt, from))
@@ -253,16 +308,28 @@ export async function listAccessEvents(
     if (Number.isFinite(to.getTime())) conditions.push(lt(accessEvents.createdAt, to))
   }
 
+  const orderBy = (() => {
+    switch (filter.sort) {
+      case 'oldest': return [asc(accessEvents.createdAt)]
+      case 'outcome': return [asc(accessEvents.outcome), desc(accessEvents.createdAt)]
+      case 'type': return [asc(accessEvents.eventType), desc(accessEvents.createdAt)]
+      case 'user': return [asc(accessEvents.userName), desc(accessEvents.createdAt)]
+      case 'ip': return [asc(accessEvents.ipAddress), desc(accessEvents.createdAt)]
+      default: return [desc(accessEvents.createdAt)]
+    }
+  })()
+
   const rows = await db.select()
     .from(accessEvents)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(accessEvents.createdAt))
+    .orderBy(...orderBy)
     .limit(limit)
 
   return rows.map(r => ({
     id: r.id,
     eventType: r.eventType,
     outcome: r.outcome,
+    blockReason: (r.blockReason as AccessBlockReason | null) ?? null,
     ipAddress: r.ipAddress,
     userId: r.userId,
     userName: r.userName,

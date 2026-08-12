@@ -119,6 +119,7 @@ export default defineEventHandler(async (event) => {
   await recordAccessEvent(useDb(), {
     eventType: 'visit',
     outcome: effectivelyBlocked ? 'blocked' : 'allowed',
+    blockReason: effectivelyBlocked ? (decision.reason ?? null) : null,
     ipAddress: ip,
     userId: viewer?.id ?? null,
     userName: viewer?.name ?? null,
