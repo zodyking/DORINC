@@ -49,9 +49,14 @@ export function usePool(): Pool {
     // pool is saturated — unbounded waits hung /api/health and took Traefik offline.
     _pool = new Pool({
       connectionString,
-      max: 10,
+      max: Number(process.env.DATABASE_POOL_MAX ?? 24),
       connectionTimeoutMillis: 8_000,
       idleTimeoutMillis: 30_000,
+    })
+    // A pool-level error (dropped backend, restart) must never bubble up as an
+    // uncaught exception — that killed the process and every session with it.
+    _pool.on('error', (err) => {
+      console.error('[db] idle client error:', err.message)
     })
   }
   return _pool

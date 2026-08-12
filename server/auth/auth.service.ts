@@ -21,6 +21,8 @@ export const VERIFICATION_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 // 24h
 export const PASSWORD_RESET_TOKEN_TTL_MS = 1000 * 60 * 60 // 1h
 export const SESSION_ABSOLUTE_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 export const SESSION_INACTIVITY_TTL_MS = 1000 * 60 * 60 // 60 min
+/** Only persist session activity this often — the TTL above is 60x larger. */
+export const SESSION_ACTIVITY_WRITE_MIN_GAP_MS = 1000 * 60 // 1 min
 
 export type AuthServiceError
   = | 'EMAIL_TAKEN'
@@ -432,7 +434,12 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
     return null
   }
 
-  await db.update(sessions).set({ lastActivityAt: now }).where(eq(sessions.id, row.session.id))
+  // Throttle the activity write. Every authenticated request used to issue a
+  // row UPDATE, which saturated the connection pool once several staff were
+  // online (and then took the whole app down with it).
+  if (now.getTime() - row.session.lastActivityAt.getTime() > SESSION_ACTIVITY_WRITE_MIN_GAP_MS) {
+    await db.update(sessions).set({ lastActivityAt: now }).where(eq(sessions.id, row.session.id))
+  }
 
   // Load role grants from DB (accountTypePermissions)
   const roleGrantRows = await db
