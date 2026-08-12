@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import TrainingModuleCard from '~/components/training/TrainingModuleCard.vue'
 import { armTrainingSpeechFromClick } from '~/utils/training-speech'
-import { isTrainingPath } from '~/utils/training-ui'
 
 definePageMeta({
   layout: 'staff',
@@ -9,7 +8,6 @@ definePageMeta({
 })
 
 const auth = useAuthStore()
-const route = useRoute()
 const canManage = computed(() => auth.can('training.manage.all'))
 
 const { data: myData } = useClientFetch<{ items: Array<{
@@ -60,13 +58,6 @@ function openModule(slug: string) {
   armTrainingSpeechFromClick()
   navigateTo(`/training/learn/${slug}`)
 }
-
-onMounted(() => {
-  if (gateLocked.value && !isTrainingPath(route.path)) {
-    const slug = auth.trainingGate?.moduleSlug
-    if (slug) navigateTo(`/training/learn/${slug}`)
-  }
-})
 </script>
 
 <template>

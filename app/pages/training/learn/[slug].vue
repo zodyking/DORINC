@@ -2,6 +2,7 @@
 import type { TrainingLessonStep } from '#shared/training-catalog'
 import TrainingLessonPlayer from '~/components/training/TrainingLessonPlayer.vue'
 import { provideTrainingPracticeSession } from '~/composables/useTrainingPracticeSession'
+import { resolveNextStaffPath } from '~/utils/staff-route-guard'
 
 definePageMeta({
   layout: 'staff',
@@ -94,7 +95,7 @@ async function onLessonComplete() {
     }
     else {
       done.value = true
-      await auth.fetchMe()
+      await auth.fetchMe({ force: true })
       await refresh()
     }
   }
@@ -104,12 +105,21 @@ async function onLessonComplete() {
 }
 
 async function goHub() {
-  const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
   // Prefer post-login return (e.g. sheet QR upload) once training unlocks.
   if (!auth.trainingGate?.locked) {
-    await navigateTo(resolveStaffLandingPath(auth))
+    await navigateTo(resolveNextStaffPath(auth, {
+      leaving: 'training',
+      fromPath: route.path,
+    }))
     return
   }
+  // Still required — hub lists assignments without remounting this lesson.
+  await navigateTo('/training')
+}
+
+async function leaveBrokenModule() {
+  // Module will not load. Stay inside the training gate (hub) so middleware
+  // cannot bounce learn ↔ dashboard; do not clear a real lock here.
   await navigateTo('/training')
 }
 </script>
@@ -117,7 +127,12 @@ async function goHub() {
 <template>
   <section class="page active training-learn-page">
     <div v-if="!moduleData && !error" class="cp-state">Loading training…</div>
-    <div v-else-if="error" class="cp-state">Could not load this module.</div>
+    <div v-else-if="error" class="cp-state">
+      <p>Could not load this module.</p>
+      <button type="button" class="btn primary" style="margin-top:12px;" @click="leaveBrokenModule">
+        Back to training
+      </button>
+    </div>
 
     <template v-else-if="moduleData">
       <div v-if="!assignment" class="card" style="margin-bottom:16px;">

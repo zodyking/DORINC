@@ -1,15 +1,32 @@
 <script setup lang="ts">
 import { validateNewPassword } from '~/utils/account-ui'
-import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
+import { resolveNextStaffPath } from '~/utils/staff-route-guard'
 
 definePageMeta({ layout: 'staff' })
 
 const auth = useAuthStore()
+const route = useRoute()
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const busy = ref(false)
+const advancing = ref(false)
 const errorMsg = ref('')
+
+async function continuePastPasswordGate() {
+  if (advancing.value) return
+  advancing.value = true
+  try {
+    const next = resolveNextStaffPath(auth, {
+      leaving: 'password',
+      fromPath: route.path,
+    })
+    await navigateTo(next)
+  }
+  finally {
+    advancing.value = false
+  }
+}
 
 async function submit() {
   const validation = validateNewPassword(newPassword.value)
@@ -35,8 +52,11 @@ async function submit() {
     if (auth.user) {
       auth.user = { ...auth.user, mustChangePassword: false }
     }
-    await auth.fetchMe()
-    await navigateTo(resolveStaffLandingPath(auth))
+    await auth.fetchMe({ force: true })
+    if (auth.user?.mustChangePassword) {
+      auth.user = { ...auth.user, mustChangePassword: false }
+    }
+    await continuePastPasswordGate()
   }
   catch (e: unknown) {
     errorMsg.value = (e as { data?: { message?: string } })?.data?.message ?? 'Could not update password'
@@ -45,6 +65,13 @@ async function submit() {
     busy.value = false
   }
 }
+
+onMounted(() => {
+  // Already cleared elsewhere — do not trap on this page.
+  if (!auth.user?.mustChangePassword) {
+    void continuePastPasswordGate()
+  }
+})
 </script>
 
 <template>

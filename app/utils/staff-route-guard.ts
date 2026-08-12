@@ -2,9 +2,17 @@ import { isAnnouncementPath } from './announcements-ui'
 import { isTrainingPath } from './training-ui'
 import { consumeStaffReturnPath } from './staff-return-path'
 
+export type StaffGateKind = 'announcement' | 'password' | 'training'
+
 type AuthStoreLike = {
-  announcementGate?: { locked?: boolean } | null
-  trainingGate?: { locked?: boolean, moduleSlug?: string | null } | null
+  announcementGate?: { locked?: boolean, pendingCount?: number, currentId?: string | null } | null
+  trainingGate?: {
+    locked?: boolean
+    assignmentId?: string | null
+    moduleId?: string | null
+    moduleSlug?: string | null
+    moduleTitle?: string | null
+  } | null
   user?: { mustChangePassword?: boolean } | null
 }
 
@@ -13,9 +21,46 @@ export function isPasswordRequiredPath(path: string): boolean {
     || path.startsWith('/account/password-required/')
 }
 
+export function isStaffGatePath(path: string): boolean {
+  return isAnnouncementPath(path) || isPasswordRequiredPath(path) || isTrainingPath(path)
+}
+
 export function trainingGateDestination(auth: AuthStoreLike): string {
-  const slug = auth.trainingGate?.moduleSlug
+  const slug = auth.trainingGate?.moduleSlug?.trim()
   return slug ? `/training/learn/${slug}` : '/training'
+}
+
+/** Clear one gate locally so exit navigation cannot immediately re-enter it. */
+export function withoutStaffGate(auth: AuthStoreLike, gate: StaffGateKind): AuthStoreLike {
+  if (gate === 'announcement') {
+    return {
+      ...auth,
+      announcementGate: {
+        locked: false,
+        pendingCount: 0,
+        currentId: null,
+      },
+    }
+  }
+  if (gate === 'password') {
+    return {
+      ...auth,
+      user: {
+        ...(auth.user ?? {}),
+        mustChangePassword: false,
+      },
+    }
+  }
+  return {
+    ...auth,
+    trainingGate: {
+      locked: false,
+      assignmentId: null,
+      moduleId: null,
+      moduleSlug: null,
+      moduleTitle: null,
+    },
+  }
 }
 
 /**
@@ -28,6 +73,11 @@ export function resolvePermissionDeniedPath(
 ): string | null {
   if (auth.announcementGate?.locked && !isAnnouncementPath(toPath)) {
     return '/announcements/required'
+  }
+
+  if (auth.user?.mustChangePassword) {
+    if (isPasswordRequiredPath(toPath)) return null
+    return '/account/password-required'
   }
 
   // Training lock + missing training.complete.own used to bounce
@@ -60,6 +110,35 @@ export function resolveStaffLandingPath(auth: AuthStoreLike): string {
     return trainingGateDestination(auth)
   }
   return consumeStaffReturnPath() ?? '/dashboard'
+}
+
+/**
+ * Safe path after finishing/skipping a gate. Never returns the gate being left
+ * when that would recreate the empty/locked bounce that hung login.
+ */
+export function resolveNextStaffPath(
+  auth: AuthStoreLike,
+  opts: { leaving?: StaffGateKind | null, fromPath?: string | null } = {},
+): string {
+  const fromPath = opts.fromPath ?? null
+  let next = resolveStaffLandingPath(auth)
+
+  if (opts.leaving === 'announcement' && next === '/announcements/required') {
+    next = resolveStaffLandingPath(withoutStaffGate(auth, 'announcement'))
+  }
+  if (opts.leaving === 'password' && isPasswordRequiredPath(next)) {
+    next = resolveStaffLandingPath(withoutStaffGate(auth, 'password'))
+  }
+  // Same learn URL still locked after exit → clear local lock so we do not remount it.
+  // Do not clear when landing points at a *different* required module.
+  if (opts.leaving === 'training' && fromPath && next === fromPath) {
+    next = resolveStaffLandingPath(withoutStaffGate(auth, 'training'))
+  }
+
+  if (!next || (fromPath && next === fromPath)) {
+    return '/dashboard'
+  }
+  return next
 }
 
 /** Shared staff-route guard — used by global middleware and staff layout. */
@@ -96,7 +175,9 @@ export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof 
     && !isAnnouncementPath(routePath)
     && !isPasswordRequiredPath(routePath)
   ) {
-    return navigateTo(trainingGateDestination(auth))
+    const dest = trainingGateDestination(auth)
+    if (dest === routePath) return undefined
+    return navigateTo(dest)
   }
 
   return undefined

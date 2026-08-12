@@ -3,6 +3,7 @@ import { BRAND_ICON, BRAND_NAME } from '~/constants/brand'
 import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
 
 // Root router: first-run setup → wizard; signed in → workspace/portal; else login.
+// Staff landing uses gate order: announcements → password → training → return/dashboard.
 const { data: setupStatus } = useClientFetch<{ needsBootstrap: boolean }>('/api/setup/status')
 
 if (setupStatus.value?.needsBootstrap) {
@@ -10,7 +11,7 @@ if (setupStatus.value?.needsBootstrap) {
 }
 else {
   const auth = useAuthStore()
-  await auth.fetchMe()
+  await auth.fetchMe({ force: true })
   if (!auth.isSignedIn) {
     await navigateTo('/auth/login', { replace: true })
   }

@@ -2,6 +2,7 @@
 import AnnouncementGateCard from '~/components/announcements/AnnouncementGateCard.vue'
 import { advanceAnnouncementQueue } from '~/utils/announcement-gate-queue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { resolveNextStaffPath } from '~/utils/staff-route-guard'
 
 // Full-screen gate only — never mount the staff shell / dashboard chrome.
 definePageMeta({ layout: false })
@@ -18,9 +19,11 @@ interface PendingAnnouncement {
 }
 
 const auth = useAuthStore()
+const route = useRoute()
 const busy = ref(false)
 const error = ref('')
 const items = ref<PendingAnnouncement[]>([])
+const advancing = ref(false)
 
 const current = computed(() => items.value[0] ?? null)
 
@@ -29,29 +32,37 @@ const continueLabel = computed(() => {
   return current.value.index < current.value.total ? 'Continue' : 'Continue to dashboard'
 })
 
+async function leaveAnnouncementGate() {
+  if (advancing.value) return
+  advancing.value = true
+  try {
+    await auth.fetchMe({ force: true })
+    // Pending list is authoritative when empty — clear a stale lock before routing.
+    if (auth.announcementGate?.locked) {
+      auth.announcementGate = {
+        locked: false,
+        pendingCount: 0,
+        currentId: null,
+      }
+    }
+    const next = resolveNextStaffPath(auth, {
+      leaving: 'announcement',
+      fromPath: route.path,
+    })
+    await navigateTo(next)
+  }
+  finally {
+    advancing.value = false
+  }
+}
+
 async function loadPending() {
   error.value = ''
   try {
     const res = await $fetch<{ items: PendingAnnouncement[] }>('/api/announcements/pending')
     items.value = res.items ?? []
     if (!items.value.length) {
-      await auth.fetchMe()
-      // Pending list is authoritative. If /me still says locked, clear the local
-      // gate so we do not bounce required ↔ dashboard forever.
-      if (auth.announcementGate?.locked) {
-        auth.announcementGate = {
-          locked: false,
-          pendingCount: 0,
-          currentId: null,
-        }
-      }
-      const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
-      const next = resolveStaffLandingPath(auth)
-      if (next === '/announcements/required') {
-        await navigateTo('/account')
-        return
-      }
-      await navigateTo(next)
+      await leaveAnnouncementGate()
     }
   }
   catch (e: unknown) {
@@ -71,9 +82,7 @@ async function continueMessage() {
     auth.announcementGate = res.gate
     items.value = advanceAnnouncementQueue(items.value)
     if (!items.value.length) {
-      await auth.fetchMe()
-      const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
-      await navigateTo(resolveStaffLandingPath(auth))
+      await leaveAnnouncementGate()
       return
     }
   }
@@ -93,8 +102,8 @@ onMounted(() => {
 
 <template>
   <div class="ann-gate ann-login-bg">
-    <div v-if="!current && !error" class="ann-gate-loading">
-      Loading required message…
+    <div v-if="(!current && !error) || advancing" class="ann-gate-loading">
+      {{ advancing ? 'Continuing…' : 'Loading required message…' }}
     </div>
 
     <div v-else-if="error && !current" class="ann-gate-error card">
