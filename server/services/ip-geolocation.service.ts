@@ -394,6 +394,8 @@ interface CachedGeo {
 }
 
 const IP_GEO_CACHE = new Map<string, CachedGeo>()
+/** Coalesce concurrent cold lookups for the same IP (login + beacon + gate). */
+const IP_GEO_INFLIGHT = new Map<string, Promise<IpGeoResult | null>>()
 /** Shorter TTL so travelers are not stuck on a stale "inside" city for a full day. */
 const IP_GEO_TTL_MS = 2 * 60 * 60 * 1000
 const IP_GEO_CACHE_MAX = 5000
@@ -577,17 +579,34 @@ export async function resolveIpGeo(
   const cached = readGeoCache(normalized)
   if (cached !== undefined) return cached
 
-  const providers = await Promise.all([
-    Promise.resolve(options.cloudflare ?? null),
-    lookupGeoWithIpApi(normalized),
-    lookupGeoWithIpWho(normalized),
-    lookupGeoWithIpApiCo(normalized),
-    lookupGeoWithIpInfo(normalized),
-  ])
+  const inflight = IP_GEO_INFLIGHT.get(normalized)
+  if (inflight) return inflight
 
-  const result = pickConsensusGeo(providers.filter((p): p is ProviderGeo => !!p))
-  writeGeoCache(normalized, result)
-  return result
+  const lookup = (async (): Promise<IpGeoResult | null> => {
+    try {
+      // Prefer a warm cache written by a racing sibling before we hit the network.
+      const raced = readGeoCache(normalized)
+      if (raced !== undefined) return raced
+
+      const providers = await Promise.all([
+        Promise.resolve(options.cloudflare ?? null),
+        lookupGeoWithIpApi(normalized),
+        lookupGeoWithIpWho(normalized),
+        lookupGeoWithIpApiCo(normalized),
+        lookupGeoWithIpInfo(normalized),
+      ])
+
+      const result = pickConsensusGeo(providers.filter((p): p is ProviderGeo => !!p))
+      writeGeoCache(normalized, result)
+      return result
+    }
+    finally {
+      IP_GEO_INFLIGHT.delete(normalized)
+    }
+  })()
+
+  IP_GEO_INFLIGHT.set(normalized, lookup)
+  return lookup
 }
 
 /** Convenience wrapper: include Cloudflare edge geo when present on the request. */
