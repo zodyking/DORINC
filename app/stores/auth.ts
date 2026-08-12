@@ -3,6 +3,8 @@ import { runSessionSaveHandlers } from '~/composables/useSessionLogoutHandlers'
 import {
   loginPathForRoute,
   redirectToLogin,
+  redirectToSessionTerminated,
+  isMassSessionTerminationActive,
   shouldClearSessionOnFetchMeError,
 } from '~/utils/auth-session'
 import { clearOutsideGeoTabSession, markOutsideGeoTabSession } from '~/utils/outside-geo-session'
@@ -244,7 +246,7 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async forceLogout(redirect = true) {
+    async forceLogout(redirect = true, opts: { reason?: 'terminated' | 'default' } = {}) {
       try {
         await $fetch('/api/auth/logout', { method: 'POST' })
       }
@@ -261,6 +263,10 @@ export const useAuthStore = defineStore('auth', {
         clearOutsideGeoTabSession()
       }
       if (redirect) {
+        if (opts.reason === 'terminated') {
+          await redirectToSessionTerminated()
+          return
+        }
         const path = import.meta.client ? window.location.pathname : this.loginPath()
         await redirectToLogin(path)
       }
@@ -272,7 +278,8 @@ export const useAuthStore = defineStore('auth', {
       try {
         await runSessionSaveHandlers()
         await this.releaseEditingSessions()
-        await this.forceLogout(true)
+        const terminated = await isMassSessionTerminationActive()
+        await this.forceLogout(true, { reason: terminated ? 'terminated' : 'default' })
       }
       finally {
         this.sessionExpiring = false

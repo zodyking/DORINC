@@ -26,6 +26,7 @@ import { rateLimitKeyFromIp, requireRateLimit } from '../../utils/require-rate-l
 const GATE_PAGES = [
   '/auth/verify-location',
   '/auth/access-restricted',
+  '/auth/session-terminated',
   '/upload/service-log',
 ]
 
