@@ -3,13 +3,23 @@
  * Executors live in server/services; this module is shared schema only.
  */
 
-import { parseInvoiceLookupStatus } from './susan-entity-query'
+import {
+  parseCustomerRankMetric,
+  parseInvoiceLookupSort,
+  parseInvoiceLookupStatus,
+  type CustomerRankMetric,
+  type InvoiceLookupSort,
+} from './susan-entity-query'
 
 export type AiToolName =
   | 'get_app_knowledge'
   | 'lookup_invoice'
   | 'lookup_service_log'
   | 'lookup_customer'
+  | 'lookup_vehicle'
+  | 'rank_customers'
+  | 'ar_aging'
+  | 'revenue_summary'
   | 'search_catalog'
 
 export type OpenAiToolDefinition = {
@@ -50,6 +60,22 @@ export type InvoiceLookupArgs = EntityLookupArgs & {
     | 'outstanding'
     | 'overdue'
     | 'stats'
+  /** List ranking — oldest, newest, amount, due date. */
+  sort?: InvoiceLookupSort
+  dateFrom?: string
+  dateTo?: string
+}
+
+export type RankCustomersArgs = {
+  metric?: CustomerRankMetric
+  query?: string
+  limit?: number
+}
+
+export type RevenueSummaryArgs = {
+  from?: string
+  to?: string
+  query?: string
 }
 
 export type SearchCatalogArgs = {
@@ -93,7 +119,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     function: {
       name: 'lookup_invoice',
       description:
-        'Read-only invoice lookup. Use for a specific invoice (e.g. INV-000713 → query "INV-000713"), totals/line items, or counts like unpaid/overdue/paid. For "how many unpaid invoices" set status to "unpaid" (or query "unpaid"). Do not invent invoice numbers or balances.',
+        'Read-only invoice lookup and ranking. Use for a specific invoice (INV-000713), unpaid/overdue/stats, or ranked lists (oldest, newest, largest). Set sort to oldest|newest|amount_high for questions like "oldest invoices" or "largest invoices". Do not invent invoice numbers or balances.',
       parameters: {
         type: 'object',
         properties: {
@@ -104,7 +130,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           query: {
             type: 'string',
             description:
-              'Invoice label (INV-000713), bare number (713), customer name, bus/unit, or PO. Also accepts phrases like "unpaid invoices".',
+              'Invoice label (INV-000713), bare number (713), customer name, bus/unit, PO, or phrases like "oldest invoices", "unpaid invoices".',
           },
           status: {
             type: 'string',
@@ -121,6 +147,20 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
             ],
             description:
               'Optional filter/KPI: unpaid/outstanding = sent with balance due; overdue = past due; stats = invoice KPI summary.',
+          },
+          sort: {
+            type: 'string',
+            enum: ['newest', 'oldest', 'invoice_date', 'due_date', 'amount_high', 'amount_low'],
+            description:
+              'List ranking. Use oldest for earliest invoices, newest for recent, amount_high for largest totals.',
+          },
+          dateFrom: {
+            type: 'string',
+            description: 'Optional ISO date (YYYY-MM-DD) lower bound on invoice date.',
+          },
+          dateTo: {
+            type: 'string',
+            description: 'Optional ISO date (YYYY-MM-DD) upper bound on invoice date.',
           },
           limit: {
             type: 'integer',
@@ -163,7 +203,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     function: {
       name: 'lookup_customer',
       description:
-        'Read-only lookup of customer accounts the staff member is allowed to see. Use for account details, portal status, contacts, and open balance summary. Pass id (UUID) and/or query (name, email, phone, bus/VIN).',
+        'Read-only lookup of customer accounts. Use for account details, portal status, contacts, open balance, and lifetime billed. Pass id (UUID) and/or query (name, email, phone, bus/VIN). For "top paying customer" use rank_customers instead.',
       parameters: {
         type: 'object',
         properties: {
@@ -178,6 +218,104 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           limit: {
             type: 'integer',
             description: 'Max search results when using query (default 5, max 8).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'lookup_vehicle',
+      description:
+        'Read-only vehicle / fleet unit lookup by bus number, unit tag, VIN, plate, make/model, or customer name. Use when the user asks about a bus, unit, or vehicle record.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'Vehicle UUID when known.',
+          },
+          query: {
+            type: 'string',
+            description: 'Bus/unit number, VIN, plate, make/model, or owning customer name.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max search results (default 5, max 8).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'rank_customers',
+      description:
+        'Rank customers by billing metrics. Use for "top paying customer", "highest open balance", "most invoices", or "most paid". Returns ranked rows with lifetime billed, amount paid, open balance, and invoice counts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          metric: {
+            type: 'string',
+            enum: ['lifetime_billed', 'open_balance', 'amount_paid', 'invoice_count'],
+            description:
+              'Ranking metric. lifetime_billed = top paying / most revenue; amount_paid = collections; open_balance = most owed; invoice_count = most invoices.',
+          },
+          query: {
+            type: 'string',
+            description: 'Optional free-text such as "top paying customer" (metric is inferred when omitted).',
+          },
+          limit: {
+            type: 'integer',
+            description: 'How many ranked customers to return (default 5, max 8).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ar_aging',
+      description:
+        'Accounts-receivable aging for sent invoices with a balance due. Use for aging buckets (current, 1–30, 31–60, 61–90, 90+), overdue AR breakdown, or who owes what by age.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            description: 'Max sample invoices per aging bucket (default 3, max 8).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'revenue_summary',
+      description:
+        'Revenue / collections summary for a date range (invoiced, collected, outstanding, monthly breakdown). Use for "how much did we bill this year", "collections last month", or revenue trends.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: {
+            type: 'string',
+            description: 'Range start YYYY-MM-DD (default: 11 months ago, first of month).',
+          },
+          to: {
+            type: 'string',
+            description: 'Range end YYYY-MM-DD (default: today).',
+          },
+          query: {
+            type: 'string',
+            description: 'Optional phrase like "this year" or "last month" for soft date hints.',
           },
         },
         additionalProperties: false,
@@ -233,12 +371,41 @@ export function parseEntityLookupArgs(raw: unknown): EntityLookupArgs {
   }
 }
 
+function parseOptionalIsoDate(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const text = raw.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined
+  return text
+}
+
 export function parseInvoiceLookupArgs(raw: unknown): InvoiceLookupArgs {
   const base = parseEntityLookupArgs(raw)
   const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   return {
     ...base,
     status: parseInvoiceLookupStatus(obj.status),
+    sort: parseInvoiceLookupSort(obj.sort),
+    dateFrom: parseOptionalIsoDate(obj.dateFrom),
+    dateTo: parseOptionalIsoDate(obj.dateTo),
+  }
+}
+
+export function parseRankCustomersArgs(raw: unknown): RankCustomersArgs {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const limitRaw = Number(obj.limit)
+  return {
+    metric: parseCustomerRankMetric(obj.metric),
+    query: typeof obj.query === 'string' ? obj.query.trim() : undefined,
+    limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+  }
+}
+
+export function parseRevenueSummaryArgs(raw: unknown): RevenueSummaryArgs {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  return {
+    from: parseOptionalIsoDate(obj.from),
+    to: parseOptionalIsoDate(obj.to),
+    query: typeof obj.query === 'string' ? obj.query.trim() : undefined,
   }
 }
 

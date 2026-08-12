@@ -121,6 +121,10 @@ export function formatSusanPermissionDenial(
 const TOOL_PERMISSIONS: Partial<Record<AiToolName, PermissionKey | PermissionKey[]>> = {
   lookup_invoice: 'invoices.read.all',
   lookup_customer: 'customers.read.all',
+  lookup_vehicle: 'vehicles.read.all',
+  rank_customers: 'customers.read.all',
+  ar_aging: ['reports.read.all', 'invoices.read.all'],
+  revenue_summary: ['reports.read.all', 'invoices.read.all'],
   search_catalog: 'catalog.read.all',
   lookup_service_log: ['service_logs.read.all', 'service_logs.read.own'],
 }

@@ -2,6 +2,8 @@ import type { Db } from '../db/client'
 import {
   parseEntityLookupArgs,
   parseInvoiceLookupArgs,
+  parseRankCustomersArgs,
+  parseRevenueSummaryArgs,
   parseSearchCatalogArgs,
   type EntityLookupArgs,
   type SearchCatalogArgs,
@@ -9,10 +11,13 @@ import {
 import {
   extractInvoiceNumber,
   extractServiceLogNumber,
+  inferCustomerRankMetric,
+  inferInvoiceSort,
   inferInvoiceStatus,
   inferServiceLogStatus,
   refersToCurrentRecord,
   residualInvoiceSearchQuery,
+  type InvoiceLookupSort,
   type InvoiceLookupStatus,
 } from '../../shared/susan-entity-query'
 import {
@@ -21,6 +26,7 @@ import {
   getInvoiceListStats,
   listInvoices,
   InvoicesServiceError,
+  type InvoiceSort,
 } from './invoices.service'
 import {
   findServiceLogIdByNumber,
@@ -33,8 +39,18 @@ import {
   getCustomerBillingSummary,
   listContacts,
   listCustomers,
+  rankCustomersByBilling,
   CustomersServiceError,
 } from './customers.service'
+import {
+  getVehicle,
+  listVehicles,
+  VehiclesServiceError,
+} from './vehicles.service'
+import {
+  getAgingReport,
+  getRevenueReport,
+} from './reports.service'
 import {
   getCatalogItem,
   getPackage,
@@ -170,6 +186,7 @@ function formatInvoiceListItem(row: {
   invoiceDate: string | Date
   dueDate: string | Date
   total: string | number
+  amountPaid?: string | number | null
   balanceDue: string | number
   customerName: string
   vehicle?: { busNumber?: string | null, unitTag?: string | null, year?: number | null, make?: string | null, model?: string | null } | null
@@ -181,9 +198,25 @@ function formatInvoiceListItem(row: {
     `- ${row.invoiceNumberFormatted} [${row.status}] id=${row.id}`,
     `  customer=${row.customerName}`,
     vehicle ? `  vehicle=${vehicle}` : null,
-    `  date=${row.invoiceDate} due=${row.dueDate} total=${money(row.total)} balance=${money(row.balanceDue)}`,
+    `  invoiceDate=${row.invoiceDate} dueDate=${row.dueDate} total=${money(row.total)} paid=${money(row.amountPaid)} balance=${money(row.balanceDue)}`,
     row.serviceLogNumber != null ? `  serviceLog=SL-${String(row.serviceLogNumber).padStart(4, '0')}` : null,
   ].filter(Boolean).join('\n')
+}
+
+function toInvoiceSort(sort: InvoiceLookupSort | undefined): InvoiceSort | undefined {
+  return sort
+}
+
+function sortLabel(sort: InvoiceLookupSort | undefined): string {
+  switch (sort) {
+    case 'oldest': return 'oldest first (by created date)'
+    case 'newest': return 'newest first'
+    case 'invoice_date': return 'by invoice date (newest first)'
+    case 'due_date': return 'by due date (soonest first)'
+    case 'amount_high': return 'largest total first'
+    case 'amount_low': return 'smallest total first'
+    default: return 'default order'
+  }
 }
 
 function formatInvoiceStats(stats: Awaited<ReturnType<typeof getInvoiceListStats>>): string {
@@ -227,14 +260,19 @@ export async function executeLookupInvoice(
   const limit = clampLimit(args.limit)
   const query = String(args.query || '').trim()
   const invoiceNumber = extractInvoiceNumber(query) || extractInvoiceNumber(String(args.id || ''))
+  const sort: InvoiceLookupSort | undefined = invoiceNumber != null
+    ? undefined
+    : (args.sort || inferInvoiceSort(query) || undefined)
   // Concrete invoice numbers always win over status buckets ("INV-000713 unpaid").
   const status: InvoiceLookupStatus | undefined = invoiceNumber != null
     ? undefined
     : (args.status || inferInvoiceStatus(query) || undefined)
   const residualQ = residualInvoiceSearchQuery(query)
+  const dateFrom = args.dateFrom
+  const dateTo = args.dateTo
 
   const pageId = currentEntityId(ctx, 'invoice', query || 'this invoice', args.id)
-  if (pageId && !invoiceNumber && !status) {
+  if (pageId && !invoiceNumber && !status && !sort) {
     return loadInvoiceDetail(db, pageId)
   }
 
@@ -255,6 +293,11 @@ export async function executeLookupInvoice(
 
   if (status) {
     const stats = await getInvoiceListStats(db)
+    const listSort = toInvoiceSort(sort) || (
+      status === 'unpaid' || status === 'outstanding' || status === 'overdue'
+        ? 'due_date'
+        : undefined
+    )
 
     if (status === 'stats') {
       return { ok: true, content: formatInvoiceStats(stats) }
@@ -267,7 +310,9 @@ export async function executeLookupInvoice(
         includeArchived: false,
         page: 1,
         pageSize: limit,
-        sort: 'due_date',
+        sort: listSort,
+        dateFrom,
+        dateTo,
       })
       return {
         ok: true,
@@ -275,7 +320,7 @@ export async function executeLookupInvoice(
           formatInvoiceStats(stats),
           '',
           residualQ ? `Filtered unpaid search q=${JSON.stringify(residualQ)}` : null,
-          `Unpaid/outstanding: KPI count=${stats.outstandingCount}, listing ${listed.items.length} of ${listed.total}.`,
+          `Unpaid/outstanding: KPI count=${stats.outstandingCount}, listing ${listed.items.length} of ${listed.total} (${sortLabel(sort || 'due_date')}).`,
           listed.items.length
             ? listed.items.map(formatInvoiceListItem).join('\n')
             : '(none)',
@@ -290,7 +335,9 @@ export async function executeLookupInvoice(
         includeArchived: false,
         page: 1,
         pageSize: limit,
-        sort: 'due_date',
+        sort: listSort,
+        dateFrom,
+        dateTo,
       })
       return {
         ok: true,
@@ -298,7 +345,7 @@ export async function executeLookupInvoice(
           formatInvoiceStats(stats),
           '',
           residualQ ? `Filtered overdue search q=${JSON.stringify(residualQ)}` : null,
-          `Overdue: KPI count=${stats.overdueCount}, listing ${listed.items.length} of ${listed.total}.`,
+          `Overdue: KPI count=${stats.overdueCount}, listing ${listed.items.length} of ${listed.total} (${sortLabel(sort || 'due_date')}).`,
           listed.items.length
             ? listed.items.map(formatInvoiceListItem).join('\n')
             : '(none)',
@@ -312,17 +359,46 @@ export async function executeLookupInvoice(
       includeArchived: false,
       page: 1,
       pageSize: limit,
+      sort: listSort,
+      dateFrom,
+      dateTo,
     })
     return {
       ok: true,
       content: [
         formatInvoiceStats(stats),
         '',
-        `Invoices with status=${status}: ${result.total} total (showing ${result.items.length}).`,
+        `Invoices with status=${status}: ${result.total} total (showing ${result.items.length}, ${sortLabel(sort)}).`,
         result.items.length
           ? result.items.map(formatInvoiceListItem).join('\n')
           : '(none)',
       ].join('\n'),
+    }
+  }
+
+  // Ranked / sorted invoice lists (oldest, newest, largest, …) without a status filter.
+  if (sort) {
+    const stats = await getInvoiceListStats(db)
+    const listed = await listInvoices(db, {
+      q: residualQ || undefined,
+      includeArchived: false,
+      page: 1,
+      pageSize: limit,
+      sort: toInvoiceSort(sort),
+      dateFrom,
+      dateTo,
+    })
+    return {
+      ok: true,
+      content: [
+        formatInvoiceStats(stats),
+        '',
+        residualQ ? `Filtered search q=${JSON.stringify(residualQ)}` : null,
+        `Invoice list sorted ${sortLabel(sort)}: showing ${listed.items.length} of ${listed.total}.`,
+        listed.items.length
+          ? listed.items.map(formatInvoiceListItem).join('\n')
+          : '(none)',
+      ].filter(Boolean).join('\n'),
     }
   }
 
@@ -334,6 +410,8 @@ export async function executeLookupInvoice(
     includeArchived: false,
     page: 1,
     pageSize: limit,
+    dateFrom,
+    dateTo,
   })
 
   if (!result.items.length) {
@@ -341,7 +419,7 @@ export async function executeLookupInvoice(
       ok: true,
       content: [
         `No invoices matched query=${JSON.stringify(query)}.`,
-        'Tips: use INV-000713 (or invoice 713), a customer name, bus/unit, PO, or status=unpaid|overdue|paid|stats.',
+        'Tips: use INV-000713 (or invoice 713), a customer name, bus/unit, PO, status=unpaid|overdue|paid|stats, or sort=oldest|newest|amount_high.',
       ].join('\n'),
     }
   }
@@ -568,6 +646,8 @@ function formatCustomerListItem(row: {
   portalEnabled?: boolean
   openBalance?: string | number
   openInvoiceCount?: number
+  invoiceCount?: number
+  lifetimeBilled?: string | number
   vehicleCount?: number
   primaryContact?: { name?: string | null } | null
 }): string {
@@ -576,7 +656,8 @@ function formatCustomerListItem(row: {
     row.email ? `  email=${row.email}` : null,
     row.phone ? `  phone=${row.phone}` : null,
     row.primaryContact?.name ? `  primaryContact=${row.primaryContact.name}` : null,
-    `  portal=${row.portalEnabled ? 'on' : 'off'} vehicles=${row.vehicleCount ?? 0} openInvoices=${row.openInvoiceCount ?? 0} openBalance=${money(row.openBalance)}`,
+    `  portal=${row.portalEnabled ? 'on' : 'off'} vehicles=${row.vehicleCount ?? 0}`,
+    `  invoices=${row.invoiceCount ?? 0} openInvoices=${row.openInvoiceCount ?? 0} openBalance=${money(row.openBalance)} lifetimeBilled=${money(row.lifetimeBilled)}`,
   ].filter(Boolean).join('\n')
 }
 
@@ -658,6 +739,268 @@ export async function executeLookupCustomer(
       `Found ${result.total} customer(s) (showing ${result.items.length}). Ask which id to open for full detail.`,
       ...result.items.map(formatCustomerListItem),
     ].join('\n'),
+  }
+}
+
+function formatVehicleDetail(row: Awaited<ReturnType<typeof getVehicle>> & { customerName?: string | null }): string {
+  const label = vehicleLabel(row)
+  return [
+    `Vehicle ${label || row.id}`,
+    `id: ${row.id}`,
+    row.customerName ? `customer: ${row.customerName}` : `customerId: ${row.customerId}`,
+    `unitType: ${row.unitType}`,
+    row.busNumber ? `busNumber: ${row.busNumber}` : null,
+    row.unitTag ? `unitTag: ${row.unitTag}` : null,
+    row.vin ? `vin: ${row.vin}` : null,
+    row.plate ? `plate: ${row.plate}` : null,
+    [row.year, row.make, row.model].filter(Boolean).length
+      ? `ymm: ${[row.year, row.make, row.model].filter(Boolean).join(' ')}`
+      : null,
+    row.trim ? `trim: ${row.trim}` : null,
+    row.color ? `color: ${row.color}` : null,
+    row.odometer != null ? `odometer: ${row.odometer}${row.odometerUnit ? ` ${row.odometerUnit}` : ''}` : null,
+    `status: ${row.status}${row.archivedAt ? ' (archived)' : ''}`,
+    row.notes ? `notes: ${String(row.notes).slice(0, 200)}` : null,
+  ].filter(Boolean).join('\n')
+}
+
+function formatVehicleListItem(row: {
+  id: string
+  customerId: string
+  customerName?: string | null
+  unitType: string
+  busNumber?: string | null
+  unitTag?: string | null
+  vin?: string | null
+  plate?: string | null
+  year?: number | null
+  make?: string | null
+  model?: string | null
+  odometer?: number | null
+  odometerUnit?: string | null
+  status: string
+}): string {
+  const label = vehicleLabel(row)
+  return [
+    `- ${label || row.id} [${row.unitType}/${row.status}] id=${row.id}`,
+    row.customerName ? `  customer=${row.customerName}` : `  customerId=${row.customerId}`,
+    row.vin ? `  vin=${row.vin}` : null,
+    row.plate ? `  plate=${row.plate}` : null,
+    row.odometer != null ? `  odometer=${row.odometer}${row.odometerUnit ? ` ${row.odometerUnit}` : ''}` : null,
+  ].filter(Boolean).join('\n')
+}
+
+export async function executeLookupVehicle(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+): Promise<{ ok: boolean, content: string }> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return needAuth()
+  const decision = susanPermissionDecision(auth, 'vehicles.read.all')
+  if (!decision.allowed) return deny(auth, 'vehicles.read.all')
+
+  const args = parseEntityLookupArgs(argsRaw)
+  const limit = clampLimit(args.limit)
+  const query = String(args.query || '').trim()
+
+  if (isUuid(args.id)) {
+    try {
+      const vehicle = await getVehicle(db, args.id)
+      let customerName: string | null = null
+      try {
+        const customer = await getCustomer(db, vehicle.customerId)
+        customerName = customer.displayName
+      }
+      catch { /* ignore */ }
+      return { ok: true, content: formatVehicleDetail({ ...vehicle, customerName }) }
+    }
+    catch (e) {
+      if (e instanceof VehiclesServiceError && e.code === 'NOT_FOUND') {
+        return { ok: true, content: `No vehicle found for id=${args.id}.` }
+      }
+      throw e
+    }
+  }
+
+  if (!query) return needQuery()
+
+  const result = await listVehicles(db, {
+    q: query,
+    includeArchived: false,
+    page: 1,
+    pageSize: limit,
+  })
+
+  if (!result.items.length) {
+    return {
+      ok: true,
+      content: `No vehicles matched query=${JSON.stringify(query)}. Try bus/unit number, VIN, plate, or customer name.`,
+    }
+  }
+
+  if (result.items.length === 1) {
+    const row = result.items[0]!
+    return { ok: true, content: formatVehicleDetail(row) }
+  }
+
+  return {
+    ok: true,
+    content: [
+      `Found ${result.total} vehicle(s) (showing ${result.items.length}). Ask which id to open for full detail.`,
+      ...result.items.map(formatVehicleListItem),
+    ].join('\n'),
+  }
+}
+
+export async function executeRankCustomers(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+): Promise<{ ok: boolean, content: string }> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return needAuth()
+  const decision = susanPermissionDecision(auth, 'customers.read.all')
+  if (!decision.allowed) return deny(auth, 'customers.read.all')
+
+  const args = parseRankCustomersArgs(argsRaw)
+  const limit = clampLimit(args.limit)
+  const query = String(args.query || '').trim()
+  const metric = args.metric || inferCustomerRankMetric(query) || 'lifetime_billed'
+
+  const rows = await rankCustomersByBilling(db, { metric, limit })
+  if (!rows.length) {
+    return { ok: true, content: 'No customers available to rank.' }
+  }
+
+  const metricLabel = metric === 'lifetime_billed'
+    ? 'lifetime billed (top paying / revenue)'
+    : metric === 'amount_paid'
+      ? 'amount paid (collections)'
+      : metric === 'open_balance'
+        ? 'open balance (most owed)'
+        : 'invoice count'
+
+  return {
+    ok: true,
+    content: [
+      `Customer ranking by ${metricLabel} (top ${rows.length}):`,
+      ...rows.map((row, index) => [
+        `${index + 1}. ${row.displayName} [${row.accountKind}] id=${row.customerId}`,
+        `   lifetimeBilled=${money(row.lifetimeBilled)} amountPaid=${money(row.amountPaid)} openBalance=${money(row.openBalance)}`,
+        `   invoices=${row.invoiceCount} openInvoices=${row.openInvoiceCount}`,
+      ].join('\n')),
+    ].join('\n'),
+  }
+}
+
+export async function executeArAging(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+): Promise<{ ok: boolean, content: string }> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return needAuth()
+  const reportsOk = susanPermissionDecision(auth, 'reports.read.all')
+  const invoicesOk = susanPermissionDecision(auth, 'invoices.read.all')
+  if (!reportsOk.allowed && !invoicesOk.allowed) {
+    return deny(auth, 'reports.read.all')
+  }
+
+  const args = parseEntityLookupArgs(argsRaw)
+  const perBucket = clampLimit(args.limit, 3)
+  const report = await getAgingReport(db)
+
+  const sections = report.buckets.map((bucket) => {
+    const samples = bucket.invoices
+      .slice()
+      .sort((a, b) => b.daysPastDue - a.daysPastDue || Number(b.balanceDue) - Number(a.balanceDue))
+      .slice(0, perBucket)
+    return [
+      `${bucket.label}: count=${bucket.count} total=${money(bucket.total)}`,
+      samples.length
+        ? samples.map(inv =>
+          `  - ${inv.invoiceNumberFormatted} customer=${inv.customerName} due=${inv.dueDate} daysPastDue=${inv.daysPastDue} balance=${money(inv.balanceDue)}`,
+        ).join('\n')
+        : '  (none)',
+    ].join('\n')
+  })
+
+  return {
+    ok: true,
+    content: [
+      `AR aging as of ${report.asOf}`,
+      `grandTotal=${money(report.grandTotal)} grandCount=${report.grandCount}`,
+      '',
+      ...sections,
+    ].join('\n'),
+  }
+}
+
+function inferRevenueRange(query: string | undefined): { from?: string, to?: string } {
+  const text = String(query || '').trim().toLowerCase()
+  if (!text) return {}
+  const today = new Date()
+  const to = today.toISOString().slice(0, 10)
+  if (/\bthis\s+year\b|\bytd\b|\byear\s+to\s+date\b/.test(text)) {
+    return { from: `${today.getUTCFullYear()}-01-01`, to }
+  }
+  if (/\blast\s+year\b/.test(text)) {
+    const y = today.getUTCFullYear() - 1
+    return { from: `${y}-01-01`, to: `${y}-12-31` }
+  }
+  if (/\bthis\s+month\b/.test(text)) {
+    const from = `${to.slice(0, 7)}-01`
+    return { from, to }
+  }
+  if (/\blast\s+month\b/.test(text)) {
+    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1))
+    const from = d.toISOString().slice(0, 10)
+    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0))
+    return { from, to: end.toISOString().slice(0, 10) }
+  }
+  if (/\blast\s+90\s+days\b|\bpast\s+90\s+days\b/.test(text)) {
+    const d = new Date(today)
+    d.setUTCDate(d.getUTCDate() - 90)
+    return { from: d.toISOString().slice(0, 10), to }
+  }
+  return {}
+}
+
+export async function executeRevenueSummary(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+): Promise<{ ok: boolean, content: string }> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return needAuth()
+  const reportsOk = susanPermissionDecision(auth, 'reports.read.all')
+  const invoicesOk = susanPermissionDecision(auth, 'invoices.read.all')
+  if (!reportsOk.allowed && !invoicesOk.allowed) {
+    return deny(auth, 'reports.read.all')
+  }
+
+  const args = parseRevenueSummaryArgs(argsRaw)
+  const inferred = inferRevenueRange(args.query)
+  const report = await getRevenueReport(db, {
+    from: args.from || inferred.from,
+    to: args.to || inferred.to,
+  })
+
+  const monthly = report.monthly.slice(-6).map(row =>
+    `- ${row.period}: invoiced=${money(row.invoicedTotal)} collected=${money(row.collectedTotal)} invoices=${row.invoiceCount}`,
+  )
+
+  return {
+    ok: true,
+    content: [
+      `Revenue summary ${report.range.from} → ${report.range.to}`,
+      `invoicedTotal=${money(report.summary.invoicedTotal)}`,
+      `collectedTotal=${money(report.summary.collectedTotal)}`,
+      `outstandingTotal=${money(report.summary.outstandingTotal)}`,
+      `invoiceCount=${report.summary.invoiceCount} paidCount=${report.summary.paidCount}`,
+      monthly.length ? `Recent months:\n${monthly.join('\n')}` : null,
+    ].filter(Boolean).join('\n'),
   }
 }
 

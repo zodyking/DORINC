@@ -86,9 +86,22 @@ export function stripServiceLogNumberLabel(raw: string): string {
   return String(raw || '').trim().replace(/^sl[-\s]?/i, '').replace(/^0+(\d)/, '$1')
 }
 
+export type InvoiceLookupSort
+  = 'newest' | 'oldest' | 'invoice_date' | 'due_date' | 'amount_high' | 'amount_low'
+
+const INVOICE_SORTS = new Set<InvoiceLookupSort>([
+  'newest',
+  'oldest',
+  'invoice_date',
+  'due_date',
+  'amount_high',
+  'amount_low',
+])
+
 /**
  * Infer invoice status filter from free text ("unpaid", "how many overdue", etc.).
  * Returns null when the text looks like a normal search (customer/PO/etc.).
+ * Ranking phrases (oldest/newest/largest) are handled by inferInvoiceSort — not status.
  */
 export function inferInvoiceStatus(raw: string | undefined | null): InvoiceLookupStatus | null {
   const text = String(raw || '').trim().toLowerCase()
@@ -97,6 +110,9 @@ export function inferInvoiceStatus(raw: string | undefined | null): InvoiceLooku
   if (INVOICE_STATUSES.has(text as InvoiceLookupStatus)) {
     return text as InvoiceLookupStatus
   }
+
+  // Ranking questions are not status filters.
+  if (inferInvoiceSort(text)) return null
 
   // Count / summary phrasing (tolerate "manny" typo)
   if (/\b(how\s+man+y|count|total number|stats?|summary)\b/.test(text)
@@ -126,7 +142,87 @@ export function inferInvoiceStatus(raw: string | undefined | null): InvoiceLooku
   return null
 }
 
-/** Remove status/count filler words so remaining text can be used as customer/PO search. */
+/**
+ * Infer list sort from free text ("oldest invoices", "largest invoices", etc.).
+ */
+export function inferInvoiceSort(raw: string | undefined | null): InvoiceLookupSort | null {
+  const text = String(raw || '').trim().toLowerCase()
+  if (!text || extractInvoiceNumber(text)) return null
+
+  if (INVOICE_SORTS.has(text as InvoiceLookupSort)) return text as InvoiceLookupSort
+
+  if (/\b(oldest|earliest|first\s+created|longest\s+ago)\b/.test(text)) return 'oldest'
+  if (/\b(newest|latest|most\s+recent|recent(?:ly)?)\b/.test(text)) return 'newest'
+  if (/\b(largest|biggest|highest\s+amount|most\s+expensive|top\s+dollar)\b/.test(text)) {
+    return 'amount_high'
+  }
+  if (/\b(smallest|lowest\s+amount|cheapest)\b/.test(text)) return 'amount_low'
+  if (/\b(due\s+soon|due\s+date|upcoming\s+due)\b/.test(text)) return 'due_date'
+  if (/\binvoice\s+date\b/.test(text)) return 'invoice_date'
+  return null
+}
+
+export function parseInvoiceLookupSort(raw: unknown): InvoiceLookupSort | undefined {
+  const text = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  if (!text) return undefined
+  if (text === 'recent' || text === 'latest') return 'newest'
+  if (text === 'earliest') return 'oldest'
+  if (text === 'largest' || text === 'highest') return 'amount_high'
+  if (text === 'smallest' || text === 'lowest') return 'amount_low'
+  return INVOICE_SORTS.has(text as InvoiceLookupSort)
+    ? (text as InvoiceLookupSort)
+    : undefined
+}
+
+export type CustomerRankMetric
+  = 'lifetime_billed' | 'open_balance' | 'amount_paid' | 'invoice_count'
+
+const CUSTOMER_RANK_METRICS = new Set<CustomerRankMetric>([
+  'lifetime_billed',
+  'open_balance',
+  'amount_paid',
+  'invoice_count',
+])
+
+/** Infer customer ranking metric ("top paying customer", "highest open balance", …). */
+export function inferCustomerRankMetric(raw: string | undefined | null): CustomerRankMetric | null {
+  const text = String(raw || '').trim().toLowerCase()
+  if (!text) return null
+
+  if (CUSTOMER_RANK_METRICS.has(text as CustomerRankMetric)) {
+    return text as CustomerRankMetric
+  }
+
+  if (/\b(top\s+paying|highest\s+paying|best\s+paying|biggest\s+payer|most\s+revenue|highest\s+revenue|most\s+billed|lifetime\s+billed|top\s+customer|biggest\s+customer)\b/.test(text)) {
+    return 'lifetime_billed'
+  }
+  if (/\b(most\s+paid|highest\s+paid|amount\s+paid|collections)\b/.test(text)) {
+    return 'amount_paid'
+  }
+  if (/\b(highest\s+open\s+balance|most\s+owed|largest\s+balance|open\s+balance)\b/.test(text)) {
+    return 'open_balance'
+  }
+  if (/\b(most\s+invoices|highest\s+invoice\s+count|invoice\s+count)\b/.test(text)) {
+    return 'invoice_count'
+  }
+  return null
+}
+
+export function parseCustomerRankMetric(raw: unknown): CustomerRankMetric | undefined {
+  const text = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  if (!text) return undefined
+  if (text === 'lifetime' || text === 'billed' || text === 'revenue' || text === 'top_paying') {
+    return 'lifetime_billed'
+  }
+  if (text === 'paid' || text === 'collected') return 'amount_paid'
+  if (text === 'balance' || text === 'owed') return 'open_balance'
+  if (text === 'count' || text === 'invoices') return 'invoice_count'
+  return CUSTOMER_RANK_METRICS.has(text as CustomerRankMetric)
+    ? (text as CustomerRankMetric)
+    : undefined
+}
+
+/** Remove status/count/sort filler words so remaining text can be used as customer/PO search. */
 export function residualInvoiceSearchQuery(raw: string | undefined | null): string {
   let text = String(raw || '').trim()
   if (!text) return ''
@@ -135,8 +231,10 @@ export function residualInvoiceSearchQuery(raw: string | undefined | null): stri
     .replace(/\binv[-\s]?\d+\b/gi, ' ')
     .replace(/\binvoice\s*[#:]?\s*\d+\b/gi, ' ')
     .replace(/\bhow\s+man+y\b/gi, ' ')
+    .replace(/\b(what'?s?|whats|who'?s?|whos|show|list|find|get|our|my)\b/gi, ' ')
     .replace(/\b(count|total number|stats?|summary|are|is|the|of|for|with|invoices?|ones?)\b/gi, ' ')
     .replace(/\b(unpaid|outstanding|open balance|not paid|balance due|overdue|paid|draft|sent|void(?:ed)?|pending(?:\s+manager)?\s*approval)\b/gi, ' ')
+    .replace(/\b(oldest|earliest|newest|latest|most\s+recent|recent(?:ly)?|largest|biggest|highest\s+amount|most\s+expensive|top\s+dollar|smallest|lowest\s+amount|cheapest|due\s+soon|due\s+date|upcoming\s+due|invoice\s+date|first\s+created|longest\s+ago)\b/gi, ' ')
     .replace(/[^\w\s&.-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseEntityLookupArgs,
+  parseInvoiceLookupArgs,
+  parseRankCustomersArgs,
   parseSearchCatalogArgs,
   SUSAN_HELP_TOOLS,
 } from '../../shared/ai-tools'
@@ -9,22 +11,40 @@ import { __entityToolTestUtils } from '../../server/services/ai-entity-tools.ser
 import { susanHasPermission, type SusanAuthContext } from '../../server/services/susan-auth.service'
 
 describe('Susan entity tool schemas', () => {
-  it('registers all five help tools', () => {
+  it('registers advanced help tools', () => {
     const names = SUSAN_HELP_TOOLS.map(t => t.function.name)
     expect(names).toEqual([
       'get_app_knowledge',
       'lookup_invoice',
       'lookup_service_log',
       'lookup_customer',
+      'lookup_vehicle',
+      'rank_customers',
+      'ar_aging',
+      'revenue_summary',
       'search_catalog',
     ])
   })
 
-  it('parses entity lookup and catalog args', () => {
+  it('parses entity lookup, invoice sort, rank, and catalog args', () => {
     expect(parseEntityLookupArgs({ id: '  abc  ', query: 'INV-1', limit: 3 })).toEqual({
       id: 'abc',
       query: 'INV-1',
       limit: 3,
+    })
+    expect(parseInvoiceLookupArgs({
+      query: 'oldest invoices',
+      sort: 'oldest',
+      dateFrom: '2024-01-01',
+    })).toMatchObject({
+      query: 'oldest invoices',
+      sort: 'oldest',
+      dateFrom: '2024-01-01',
+    })
+    expect(parseRankCustomersArgs({ metric: 'lifetime_billed', limit: 5 })).toEqual({
+      metric: 'lifetime_billed',
+      query: undefined,
+      limit: 5,
     })
     expect(parseSearchCatalogArgs({ query: 'oil', itemType: 'part', limit: 2 })).toEqual({
       query: 'oil',
@@ -70,7 +90,16 @@ describe('Susan permission helper', () => {
 
 describe('executeSusanHelpTool entity dispatch', () => {
   it('requires db/userId for lookup tools', async () => {
-    for (const name of ['lookup_invoice', 'lookup_service_log', 'lookup_customer', 'search_catalog'] as const) {
+    for (const name of [
+      'lookup_invoice',
+      'lookup_service_log',
+      'lookup_customer',
+      'lookup_vehicle',
+      'rank_customers',
+      'ar_aging',
+      'revenue_summary',
+      'search_catalog',
+    ] as const) {
       const result = await executeSusanHelpTool({
         id: 'c1',
         name,

@@ -386,6 +386,84 @@ export async function getCustomerBillingSummary(db: Db, customerId: string) {
   }
 }
 
+export type CustomerRankMetric
+  = 'lifetime_billed' | 'open_balance' | 'amount_paid' | 'invoice_count'
+
+export type RankedCustomerRow = {
+  customerId: string
+  displayName: string
+  accountKind: string
+  lifetimeBilled: string
+  amountPaid: string
+  openBalance: string
+  openInvoiceCount: number
+  invoiceCount: number
+}
+
+/** Rank active customers by billing aggregates for Susan / reports helpers. */
+export async function rankCustomersByBilling(
+  db: Db,
+  opts: { metric: CustomerRankMetric, limit: number },
+): Promise<RankedCustomerRow[]> {
+  const limit = Math.min(20, Math.max(1, Math.floor(opts.limit) || 5))
+
+  const metricExpr = opts.metric === 'open_balance'
+    ? sql`coalesce(sum(${invoices.balanceDue}) filter (
+        where ${invoices.status} = 'sent' and ${invoices.balanceDue} > 0
+      ), 0)`
+    : opts.metric === 'amount_paid'
+      ? sql`coalesce(sum(${invoices.amountPaid}) filter (
+          where ${invoices.status} <> 'void'
+        ), 0)`
+      : opts.metric === 'invoice_count'
+        ? sql`count(*) filter (where ${invoices.id} is not null and ${invoices.status} <> 'void')`
+        : sql`coalesce(sum(${invoices.total}) filter (
+            where ${invoices.status} <> 'void'
+          ), 0)`
+
+  const rows = await db.select({
+    customerId: customers.id,
+    displayName: customers.displayName,
+    accountKind: customers.accountKind,
+    lifetimeBilled: sql<string>`coalesce(sum(${invoices.total}) filter (
+      where ${invoices.status} <> 'void'
+    ), 0)`,
+    amountPaid: sql<string>`coalesce(sum(${invoices.amountPaid}) filter (
+      where ${invoices.status} <> 'void'
+    ), 0)`,
+    openBalance: sql<string>`coalesce(sum(${invoices.balanceDue}) filter (
+      where ${invoices.status} = 'sent' and ${invoices.balanceDue} > 0
+    ), 0)`,
+    openInvoiceCount: sql<number>`count(*) filter (
+      where ${invoices.status} = 'sent' and ${invoices.balanceDue} > 0
+    )`,
+    invoiceCount: sql<number>`count(*) filter (
+      where ${invoices.id} is not null and ${invoices.status} <> 'void'
+    )`,
+    metricValue: metricExpr,
+  })
+    .from(customers)
+    .leftJoin(invoices, and(
+      eq(invoices.customerId, customers.id),
+      isNull(invoices.archivedAt),
+    ))
+    .where(isNull(customers.archivedAt))
+    .groupBy(customers.id, customers.displayName, customers.accountKind)
+    .orderBy(desc(metricExpr), asc(customers.displayName))
+    .limit(limit)
+
+  return rows.map(row => ({
+    customerId: row.customerId,
+    displayName: row.displayName,
+    accountKind: row.accountKind,
+    lifetimeBilled: String(row.lifetimeBilled ?? '0'),
+    amountPaid: String(row.amountPaid ?? '0'),
+    openBalance: String(row.openBalance ?? '0'),
+    openInvoiceCount: Number(row.openInvoiceCount ?? 0),
+    invoiceCount: Number(row.invoiceCount ?? 0),
+  }))
+}
+
 export async function listContacts(db: Db, customerId: string) {
   await getCustomer(db, customerId)
   return db.select().from(customerContacts)

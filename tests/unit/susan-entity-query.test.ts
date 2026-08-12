@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   extractInvoiceNumber,
   extractServiceLogNumber,
+  inferCustomerRankMetric,
+  inferInvoiceSort,
   inferInvoiceStatus,
   inferServiceLogStatus,
   parseInvoiceLookupStatus,
@@ -44,9 +46,24 @@ describe('susan entity query helpers', () => {
     expect(inferInvoiceStatus('INV-000713')).toBeNull()
   })
 
+  it('infers invoice sort for oldest/newest/largest lists', () => {
+    expect(inferInvoiceSort('Whats our oldest invoices?')).toBe('oldest')
+    expect(inferInvoiceSort('newest invoices')).toBe('newest')
+    expect(inferInvoiceSort('largest invoices')).toBe('amount_high')
+    expect(inferInvoiceSort('smallest invoices')).toBe('amount_low')
+    expect(inferInvoiceStatus('Whats our oldest invoices?')).toBeNull()
+  })
+
+  it('infers customer ranking metrics', () => {
+    expect(inferCustomerRankMetric('Whos our top paying customer?')).toBe('lifetime_billed')
+    expect(inferCustomerRankMetric('highest open balance')).toBe('open_balance')
+    expect(inferCustomerRankMetric('most paid customers')).toBe('amount_paid')
+  })
+
   it('keeps residual customer text after stripping status filler', () => {
     expect(residualInvoiceSearchQuery('unpaid invoices for Acme Transit')).toMatch(/acme transit/i)
     expect(residualInvoiceSearchQuery('how many unpaid invoices')).toBe('')
+    expect(residualInvoiceSearchQuery('Whats our oldest invoices?')).toBe('')
   })
 
   it('detects current-record phrasing', () => {
@@ -107,7 +124,27 @@ describe('permission-filtered Susan tools', () => {
     expect(names).toContain('get_app_knowledge')
     expect(names).toContain('lookup_service_log')
     expect(names).toContain('lookup_customer')
+    expect(names).toContain('rank_customers')
     expect(names).not.toContain('lookup_invoice')
+    expect(names).not.toContain('lookup_vehicle')
     expect(names).not.toContain('search_catalog')
+    expect(names).not.toContain('ar_aging')
+    expect(names).not.toContain('revenue_summary')
+  })
+
+  it('exposes ranking and report tools when invoices/reports are granted', () => {
+    const tools = filterSusanHelpToolsForAuth(auth([
+      'ai.help.all',
+      'invoices.read.all',
+      'customers.read.all',
+      'vehicles.read.all',
+      'reports.read.all',
+    ]))
+    const names = tools.map(t => t.function.name)
+    expect(names).toContain('lookup_invoice')
+    expect(names).toContain('lookup_vehicle')
+    expect(names).toContain('rank_customers')
+    expect(names).toContain('ar_aging')
+    expect(names).toContain('revenue_summary')
   })
 })

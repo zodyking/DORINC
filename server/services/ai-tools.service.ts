@@ -6,9 +6,13 @@ import {
 } from '../../shared/app-knowledge'
 import { parseGetAppKnowledgeArgs, type AiToolName } from '../../shared/ai-tools'
 import {
+  executeArAging,
   executeLookupCustomer,
   executeLookupInvoice,
   executeLookupServiceLog,
+  executeLookupVehicle,
+  executeRankCustomers,
+  executeRevenueSummary,
   executeSearchCatalog,
   type EntityToolContext,
 } from './ai-entity-tools.service'
@@ -149,6 +153,30 @@ export async function executeSusanHelpTool(
     if (name === 'lookup_customer') {
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
       const result = await executeLookupCustomer(opts.db, opts.userId, parsed, entityCtx)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'lookup_vehicle') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeLookupVehicle(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'rank_customers') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeRankCustomers(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'ar_aging') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeArAging(opts.db, opts.userId, parsed)
+      return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'revenue_summary') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const result = await executeRevenueSummary(opts.db, opts.userId, parsed)
       return { toolCallId, name, ok: result.ok, content: result.content }
     }
 
