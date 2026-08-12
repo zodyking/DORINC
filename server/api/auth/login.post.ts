@@ -3,7 +3,11 @@ import { getClientIp } from '../../utils/client-ip'
 import { ensureDeviceId } from '../../utils/device-id'
 import { AuthError, login, logout } from '../../auth/auth.service'
 import { createPendingLoginToken } from '../../auth/pending-login'
-import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
+import {
+  createOutsideGeoBypassToken,
+  hasValidOutsideGeoBypass,
+  setOutsideGeoBypassCookie,
+} from '../../auth/outside-geo-bypass'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { useDb } from '../../db/client'
 import { writeAudit } from '../../services/audit.service'
@@ -12,6 +16,7 @@ import { resolveIpGeo, resolveIpLocation } from '../../services/ip-geolocation.s
 import {
   evaluateAccessDecision,
   getCachedAccessGateSettings,
+  isAccessGateGeoActive,
   recordAccessEvent,
 } from '../../services/access-gate.service'
 import { resolveSessionSecret } from '../../services/app-config.service'
@@ -158,6 +163,38 @@ export default defineEventHandler(async (event) => {
     }
 
     setSessionCookie(event, result.sessionToken)
+
+    // Staff GPS login: if IP looks outside/unknown, mint bypass for HTML refreshes.
+    if (
+      gate.enabled
+      && body.portal === 'staff'
+      && body.geo
+      && result.accountTypeKey !== 'super_admin'
+    ) {
+      try {
+        let ipBlocked = evaluateAccessDecision(gate, { ip: ipAddress, coords: null }).blocked
+        if (isAccessGateGeoActive(gate) && ipAddress) {
+          const ipGeo = await resolveIpGeo(ipAddress)
+          const ipCoords = ipGeo?.latitude != null && ipGeo?.longitude != null
+            ? { lat: ipGeo.latitude, lng: ipGeo.longitude }
+            : null
+          ipBlocked = evaluateAccessDecision(gate, { ip: ipAddress, coords: ipCoords }).blocked
+        }
+        if (ipBlocked || outsideGeofenceLogin) {
+          const token = createOutsideGeoBypassToken({
+            userId: result.user.id,
+            ipAddress,
+            userAgent,
+            deviceId,
+          })
+          setOutsideGeoBypassCookie(event, token)
+          outsideGeofenceLogin = true
+        }
+      }
+      catch (err) {
+        console.warn('[auth] login bypass mint failed:', (err as Error).message)
+      }
+    }
 
     await recordAccessEvent(useDb(), {
       eventType: 'login',
