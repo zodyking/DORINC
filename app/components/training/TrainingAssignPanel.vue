@@ -14,7 +14,12 @@ interface ModuleRow {
 }
 
 const { data: modulesData } = useClientFetch<{ items: ModuleRow[] }>('/api/training/modules')
-const { data: assignmentsData, refresh } = useClientFetch<{ items: Array<{ id: string, moduleId: string, status: string, locksAccess: boolean, module: { title: string } }> }>(
+const {
+  data: assignmentsData,
+  refresh,
+  error: assignmentsError,
+  pending: assignmentsPending,
+} = useClientFetch<{ items: Array<{ id: string, moduleId: string, status: string, locksAccess: boolean, module: { title: string } }> }>(
   '/api/training/assignments',
   { query: { userId: props.userId } },
 )
@@ -28,6 +33,12 @@ const notice = ref('')
 
 const modules = computed(() => modulesData.value?.items ?? [])
 const assignments = computed(() => assignmentsData.value?.items ?? [])
+const assignmentsLoadError = computed(() => {
+  if (!assignmentsError.value) return ''
+  return (assignmentsError.value as { data?: { message?: string }, message?: string })?.data?.message
+    || (assignmentsError.value as { message?: string })?.message
+    || 'Could not load training assignments'
+})
 
 const availableModules = computed(() => {
   const assigned = new Set(assignments.value.filter(a => a.status !== 'completed').map(a => a.moduleId))
@@ -82,7 +93,11 @@ async function removeAssignment(id: string) {
 
 <template>
   <div class="training-assign-panel">
-    <ul v-if="assignments.length" class="training-assign-list">
+    <p v-if="assignmentsPending" class="help training-assign-empty">Loading assignments…</p>
+    <p v-else-if="assignmentsLoadError" class="help" style="color:#dc2626; margin:0 0 12px;">
+      {{ assignmentsLoadError }}
+    </p>
+    <ul v-else-if="assignments.length" class="training-assign-list">
       <li
         v-for="row in assignments"
         :key="row.id"
