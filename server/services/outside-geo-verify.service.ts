@@ -279,30 +279,8 @@ export async function enqueueOutsideGeoVerification(
     ipAddress?: string | null
   },
 ) {
-  const { resolveUserNotifyDelivery } = await import('./user-notify-channel.service')
-  const delivery = await resolveUserNotifyDelivery(db, {
-    email: input.identity.userEmail,
-    phone: input.identity.phone,
-    messageNotifyChannel: input.identity.messageNotifyChannel,
-  })
-
-  if (delivery?.channel === 'sms') {
-    const { enqueueTemplatedSms } = await import('./sms-notifications.service')
-    const smsResult = await enqueueTemplatedSms(db, {
-      to: delivery.phone,
-      typeKey: 'outside_geofence_verification',
-      vars: {
-        name: input.identity.userName,
-        code: input.code,
-        expiresMinutes: String(Math.round(OUTSIDE_GEO_CODE_TTL_MS / 60_000)),
-        locationLabel: input.locationLabel ?? '',
-        ipAddress: input.ipAddress ?? '',
-      },
-      meta: { userId: input.identity.userId },
-    })
-    if (smsResult.queued) return smsResult
-  }
-
+  // Security verification codes always go by email — never Quo SMS. A synchronous
+  // or failing SMS path here blocked HTML geofence redirects for sms-channel users.
   return enqueueOutsideGeoVerificationEmail(db, {
     to: input.identity.userEmail,
     name: input.identity.userName,

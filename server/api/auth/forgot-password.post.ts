@@ -25,8 +25,6 @@ export default defineEventHandler(async (event) => {
       to: result.user.email,
       name: result.user.name,
       resetToken: result.resetToken,
-      phone: result.user.phone,
-      messageNotifyChannel: result.user.messageNotifyChannel,
     })
 
     await writeAudit(event, {

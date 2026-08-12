@@ -37,9 +37,6 @@ const signupPass = ref('')
 const signupConfirm = ref('')
 const signupType = ref('Mechanic')
 
-const { data: quoPublic } = useClientFetch<{ enabled: boolean }>('/api/public/quo')
-const quoSmsEnabled = computed(() => quoPublic.value?.enabled === true)
-
 const reveal = reactive({
   portal: false,
   login: false,
@@ -354,7 +351,7 @@ async function submitSignup() {
               <label for="signup-email">Email</label>
               <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@gmail.com" autocomplete="email" required>
             </div>
-            <div v-if="quoSmsEnabled" class="fld">
+            <div class="fld">
               <label for="signup-phone">Phone number <span class="help">(optional)</span></label>
               <input
                 id="signup-phone"

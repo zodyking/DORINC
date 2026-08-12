@@ -4,7 +4,6 @@ import {
   getQuoConfig,
   isQuoSmsEnabled,
   refreshQuoConfigCache,
-  sendQuoSms,
 } from './quo.service'
 import { resolveSmsBody } from './sms-templates.service'
 import { resolveEmailBrand } from './email-branding.service'
@@ -66,8 +65,9 @@ export async function enqueueTemplatedSmsLater(
 }
 
 /**
- * Deliver a templated SMS the same way Control Panel "Send test SMS" does:
- * call Quo immediately from Nitro. Only queue a retry job if the direct send fails.
+ * Queue a templated SMS for the worker. Never calls Quo synchronously on the
+ * request path — a slow/failing Quo API used to block HTML geofence redirects
+ * and auth flows for users with messageNotifyChannel=sms.
  */
 export async function enqueueTemplatedSms(
   db: Db,
@@ -97,25 +97,10 @@ export async function enqueueTemplatedSms(
     ...(input.meta ?? {}),
   }
 
-  try {
-    await sendQuoSms({
-      apiKey: config.apiKey,
-      from: config.fromNumber,
-      to: input.to,
-      content: body,
-    })
-    return { queued: true as const, mode: 'direct' as const }
-  }
-  catch (err) {
-    console.warn(
-      `[sms] direct Quo send failed for ${input.typeKey}; queueing retry:`,
-      err instanceof Error ? err.message : err,
-    )
-    await enqueueSmsSend(db, {
-      to: input.to,
-      body,
-      meta,
-    })
-    return { queued: true as const, mode: 'queued' as const }
-  }
+  await enqueueSmsSend(db, {
+    to: input.to,
+    body,
+    meta,
+  })
+  return { queued: true as const, mode: 'queued' as const }
 }

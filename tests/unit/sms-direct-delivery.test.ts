@@ -32,7 +32,7 @@ vi.mock('../../server/services/jobs.service', () => ({
   enqueueJob: (...args: unknown[]) => enqueueJob(...args),
 }))
 
-describe('enqueueTemplatedSms direct delivery', () => {
+describe('enqueueTemplatedSms queue-only delivery', () => {
   beforeEach(() => {
     vi.resetModules()
     refreshQuoConfigCache.mockReset().mockResolvedValue({})
@@ -49,7 +49,7 @@ describe('enqueueTemplatedSms direct delivery', () => {
     enqueueJob.mockReset().mockResolvedValue({ id: 'job_1' })
   })
 
-  it('sends through Quo immediately like test SMS (does not require the worker)', async () => {
+  it('queues SMS for the worker and never blocks on a direct Quo API call', async () => {
     const { enqueueTemplatedSms } = await import('../../server/services/sms-notifications.service')
     const result = await enqueueTemplatedSms({} as never, {
       to: '+12122037678',
@@ -57,28 +57,9 @@ describe('enqueueTemplatedSms direct delivery', () => {
       vars: { name: 'Brandon' },
     })
 
-    expect(result).toEqual({ queued: true, mode: 'direct' })
-    expect(sendQuoSms).toHaveBeenCalledWith({
-      apiKey: 'sk_test',
-      from: '+15165184847',
-      to: '+12122037678',
-      content: 'Hello from Acme',
-    })
-    expect(enqueueJob).not.toHaveBeenCalled()
-  })
-
-  it('queues a retry when the direct Quo send fails', async () => {
-    sendQuoSms.mockRejectedValueOnce(new Error('temporary upstream error'))
-    const { enqueueTemplatedSms } = await import('../../server/services/sms-notifications.service')
-    const result = await enqueueTemplatedSms({} as never, {
-      to: '+12122037678',
-      typeKey: 'chat_message_received',
-      vars: { senderName: 'Alex' },
-    })
-
     expect(result).toEqual({ queued: true, mode: 'queued' })
+    expect(sendQuoSms).not.toHaveBeenCalled()
     expect(enqueueJob).toHaveBeenCalledOnce()
-    expect(enqueueJob.mock.calls[0]![0]).toBeDefined()
     expect(enqueueJob.mock.calls[0]![1]).toBe('sms_send')
   })
 })

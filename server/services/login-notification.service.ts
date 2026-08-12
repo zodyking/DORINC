@@ -8,12 +8,6 @@ import { getActiveEmailTemplateContent } from './email-templates.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { resolveIpLocation, normalizeClientIp } from './ip-geolocation.service'
-import {
-  loadUserNotifyProfile,
-  resolveUserNotifyDelivery,
-  type NotifyDelivery,
-} from './user-notify-channel.service'
-import { enqueueTemplatedSms } from './sms-notifications.service'
 
 function buildDeviceLabel(userAgent: string | null | undefined): string | null {
   if (!userAgent) return null
@@ -61,40 +55,6 @@ export async function sendLoginNotificationEmail(
   const ipAddress = normalizeClientIp(opts.ipAddress)
   const ipLocation = await resolveIpLocation(ipAddress)
   const location = opts.deviceLocation || ipLocation
-  const locationLine = location ? `Near ${location}.` : (ipAddress ? `IP ${ipAddress}.` : '')
-
-  let delivery: NotifyDelivery = { channel: 'email', email: to }
-  if (opts.userId) {
-    const profile = await loadUserNotifyProfile(db, opts.userId)
-    if (profile) {
-      const resolved = await resolveUserNotifyDelivery(db, profile)
-      if (resolved) delivery = resolved
-    }
-  }
-
-  const when = (opts.signedInAt ?? new Date()).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
-
-  if (delivery.channel === 'sms') {
-    const result = await enqueueTemplatedSms(db, {
-      to: delivery.phone,
-      typeKey: 'login_notification',
-      vars: {
-        name: opts.name,
-        when,
-        email: to,
-        locationLine: locationLine.replace(/\.$/, ''),
-        ipAddress: ipAddress ?? '',
-        device: deviceLabel ?? '',
-      },
-      meta: { userId: opts.userId, portal: opts.portal },
-    })
-    if (result.queued) {
-      return { delivered: true, reason: 'sms_queued' as const }
-    }
-  }
 
   const templateOverride = await getActiveEmailTemplateContent(db, 'login_notification')
   const mail = buildLoginNotificationEmail({
@@ -113,5 +73,5 @@ export async function sendLoginNotificationEmail(
     templateOverride,
   })
 
-  return sendBrandedMail(db, { to: delivery.email, ...mail }, brand)
+  return sendBrandedMail(db, { to, ...mail }, brand)
 }

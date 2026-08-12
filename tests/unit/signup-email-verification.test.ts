@@ -34,6 +34,7 @@ describe('signup UI phone field', () => {
   it('marks phone optional and does not require it on submit', () => {
     const ui = readFileSync(resolve('app/components/auth/AuthScreen.vue'), 'utf8')
     expect(ui).toContain('Phone number <span class="help">(optional)</span>')
+    expect(ui).not.toContain('quoSmsEnabled')
     const phoneBlock = ui.match(/id="signup-phone"[\s\S]*?>/)?.[0] ?? ''
     expect(phoneBlock).not.toContain('required')
   })
