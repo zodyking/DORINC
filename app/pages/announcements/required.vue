@@ -33,11 +33,25 @@ async function loadPending() {
   error.value = ''
   try {
     const res = await $fetch<{ items: PendingAnnouncement[] }>('/api/announcements/pending')
-    items.value = res.items
+    items.value = res.items ?? []
     if (!items.value.length) {
       await auth.fetchMe()
+      // Pending list is authoritative. If /me still says locked, clear the local
+      // gate so we do not bounce required ↔ dashboard forever.
+      if (auth.announcementGate?.locked) {
+        auth.announcementGate = {
+          locked: false,
+          pendingCount: 0,
+          currentId: null,
+        }
+      }
       const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
-      await navigateTo(resolveStaffLandingPath(auth))
+      const next = resolveStaffLandingPath(auth)
+      if (next === '/announcements/required') {
+        await navigateTo('/account')
+        return
+      }
+      await navigateTo(next)
     }
   }
   catch (e: unknown) {
