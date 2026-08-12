@@ -209,6 +209,7 @@ export const ACCOUNT_TYPE_BUNDLES: Record<AccountType, PermissionKey[]> = {
     'invoices.read.all',
     'reports.read.all',
     'audit.read.all',
+    'training.complete.own',
   ],
   customer: [
     'portal.read.own',

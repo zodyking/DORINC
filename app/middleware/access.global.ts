@@ -3,8 +3,11 @@
  * Enforces permissions based on route meta, handles auth redirects,
  * and blocks the workspace until required login messages are acknowledged.
  */
-import { guardStaffRoute } from '~/utils/staff-route-guard'
-import { isAnnouncementPath } from '~/utils/announcements-ui'
+import {
+  guardStaffRoute,
+  resolvePermissionDeniedPath,
+  shouldSkipPermissionCheck,
+} from '~/utils/staff-route-guard'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Skip auth pages and tokenized public upload bridges
@@ -43,16 +46,15 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Check permission requirement from route meta
   const requiredPermission = to.meta.permission as string | string[] | undefined
 
-  if (requiredPermission) {
+  if (requiredPermission && !shouldSkipPermissionCheck(to.path, auth)) {
     const keys = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission]
     const hasAccess = keys.some(key => auth.can(key))
 
     if (!hasAccess) {
-      // Never bounce locked users to the dashboard.
-      if (auth.announcementGate?.locked && !isAnnouncementPath(to.path)) {
-        return navigateTo('/announcements/required')
-      }
-      return navigateTo('/dashboard')
+      const dest = resolvePermissionDeniedPath(to.path, auth)
+      if (dest && dest !== to.path) return navigateTo(dest)
+      // Already on a safe/gate path — do not redirect again (prevents login hangs).
+      return
     }
   }
 })

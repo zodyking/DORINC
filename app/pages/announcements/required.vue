@@ -36,7 +36,8 @@ async function loadPending() {
     items.value = res.items
     if (!items.value.length) {
       await auth.fetchMe()
-      await navigateTo('/dashboard')
+      const { resolveStaffLandingPath } = await import('~/utils/staff-route-guard')
+      await navigateTo(resolveStaffLandingPath(auth))
     }
   }
   catch (e: unknown) {
