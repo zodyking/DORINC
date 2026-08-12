@@ -131,7 +131,8 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
     summary: 'Mechanic field logs with photos, AI extraction, review, and convert-to-invoice.',
     body: [
       'Pages: /service-logs, /service-logs/new, /service-logs/:id',
-      'Paper sheet: printable checklist from Control Panel service-log sheet editor; QR upload for phone photos.',
+      'Paper sheet: printable checklist from Edit Template on /service-logs (catalog.manage.all); QR upload for phone photos.',
+      'Edit Template can Generate from demand: ranks catalog items by invoice frequency, uses multiple AI calls to propose simple section titles, packs left/right under Letter capacity with QR void, then review/reject/edit before applying to the editor (Save sheet still required).',
       'Photos: max 2 (front/back). AI extraction classifies handwritten vs printed_form.',
       'Printed/template pages lock checked items to the active sheet editor list; handwritten pages require high per-line confidence.',
       'Statuses move through draft/uploaded/ai_processing/ready_for_review/converted_to_invoice etc.',
