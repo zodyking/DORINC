@@ -9,6 +9,14 @@ export interface AbbreviationEntry {
   aliases?: string[]
 }
 
+export interface AbbreviatePhrasesOptions {
+  /**
+   * When true (default), rewrite legacy shorthand (F/R, R/R, …) to the new forms.
+   * Disable during live typing so backspacing through R/Rear → R/R does not snap back.
+   */
+  migrateLegacy?: boolean
+}
+
 export const LOCATION_ABBREVIATIONS: AbbreviationEntry[] = [
   { abbr: 'R/Front', full: 'Front Right', aliases: ['F/R'] },
   { abbr: 'L/Front', full: 'Front Left', aliases: ['F/L'] },
@@ -37,7 +45,11 @@ function abbrPattern(abbr: string): RegExp {
 }
 
 /** Compress full phrases to shorthand for storage (typed or dictated). */
-export function abbreviatePhrases(value: string): string {
+export function abbreviatePhrases(
+  value: string,
+  options: AbbreviatePhrasesOptions = {},
+): string {
+  const migrateLegacy = options.migrateLegacy !== false
   let out = value
   const sorted = [...LOCATION_ABBREVIATIONS].sort((a, b) => b.full.length - a.full.length)
   for (const { abbr, full } of sorted) {
@@ -49,6 +61,7 @@ export function abbreviatePhrases(value: string): string {
   }
   for (const { abbr, aliases } of LOCATION_ABBREVIATIONS) {
     out = out.replace(abbrPattern(abbr), abbr)
+    if (!migrateLegacy) continue
     for (const alias of aliases ?? []) {
       out = out.replace(abbrPattern(alias), abbr)
     }
@@ -82,8 +95,11 @@ export function stripLocationAbbreviations(value: string): string {
       out = out.replace(phrasePattern(reversed), ' ')
     }
   }
-  for (const { abbr } of LOCATION_ABBREVIATIONS) {
+  for (const { abbr, aliases } of LOCATION_ABBREVIATIONS) {
     out = out.replace(abbrPattern(abbr), ' ')
+    for (const alias of aliases ?? []) {
+      out = out.replace(abbrPattern(alias), ' ')
+    }
   }
   return out
     .replace(/[,\-–—|/]+/g, ' ')

@@ -30,6 +30,13 @@ describe('abbreviations', () => {
     expect(abbreviatePhrases('R/L seal')).toBe('L/Rear seal')
   })
 
+  it('can skip legacy migration for live typing / backspace', () => {
+    expect(abbreviatePhrases('Replace R/R', { migrateLegacy: false })).toBe('Replace R/R')
+    expect(abbreviatePhrases('Replace R/S', { migrateLegacy: false })).toBe('Replace R/S')
+    expect(abbreviatePhrases('work on F/R', { migrateLegacy: false })).toBe('work on F/R')
+    expect(abbreviatePhrases('rear right door', { migrateLegacy: false })).toBe('R/Rear door')
+  })
+
   it('expands shorthand for speech synthesis only', () => {
     expect(expandForSpeech('work on R/Front')).toBe('work on Front Right')
     expect(expandForSpeech('R/Rear door seal')).toBe('Rear Right door seal')

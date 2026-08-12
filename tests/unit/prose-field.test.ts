@@ -9,7 +9,18 @@ describe('prose field formatting', () => {
   it('applies live title case and abbreviations while typing', () => {
     expect(formatLiveFieldText('hello world')).toBe('Hello World')
     expect(formatLiveFieldText('replace right side mirror')).toBe('Replace R/Side Mirror')
-    expect(formatLiveFieldText('replaced f/r tire')).toBe('Replaced R/Front Tire')
+    // Legacy F/R stays during live typing (title-case may leave F/r); blur migrates to R/Front.
+    expect(formatLiveFieldText('replaced f/r tire')).toBe('Replaced F/r Tire')
+  })
+
+  it('does not snap abbreviations back while backspacing through them', () => {
+    expect(formatLiveFieldText('Replace R/Rea')).toBe('Replace R/rea')
+    expect(formatLiveFieldText('Replace R/r')).toBe('Replace R/r')
+    expect(formatLiveFieldText('Replace R/R')).toBe('Replace R/r')
+    expect(formatLiveFieldText('Replace R/S')).toBe('Replace R/s')
+    expect(formatLiveFieldText('Replace L/S')).toBe('Replace L/s')
+    expect(formatLiveFieldText('Replace R/Rear')).toBe('Replace R/Rear')
+    expect(formatLiveFieldText('Replace R/r')).not.toBe('Replace R/Rear')
   })
 
   it('preserves trailing space during live formatting', () => {
@@ -19,6 +30,7 @@ describe('prose field formatting', () => {
   it('title-cases and stores location shorthand on blur', () => {
     expect(formatFieldText('replaced front right tire', 'prose')).toBe('Replaced R/Front Tire')
     expect(formatFieldText('replaced f/r tire', 'prose')).toBe('Replaced R/Front Tire')
+    expect(formatFieldText('Replace R/R tire', 'prose')).toBe('Replace R/Rear Tire')
     expect(formatFieldText('bias brocho LLC', 'prose')).toBe('Bias Brocho LLC')
   })
 

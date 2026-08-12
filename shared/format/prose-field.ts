@@ -10,7 +10,8 @@ export function formatLiveFieldText(value: string, mode: ProseFieldMode = 'prose
   const core = value.trimEnd()
   if (!core) return value
   if (mode === 'name') return toTitleCase(core) + trailing
-  return abbreviatePhrases(toTitleCase(core)) + trailing
+  // Skip legacy alias migration while typing so backspacing R/Rear → R/R does not snap back.
+  return abbreviatePhrases(toTitleCase(core), { migrateLegacy: false }) + trailing
 }
 
 export function adjustCursorAfterFormat(oldVal: string, newVal: string, cursor: number): number {
@@ -25,7 +26,7 @@ export function formatFieldText(value: string, mode: ProseFieldMode = 'prose'): 
 
   if (mode === 'name') return toTitleCase(trimmed)
 
-  return formatLiveFieldText(trimmed, 'prose')
+  return abbreviatePhrases(toTitleCase(trimmed), { migrateLegacy: true })
 }
 
 /** Format dictated or pasted text before writing to a model. */
