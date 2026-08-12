@@ -73,7 +73,7 @@ describe('announcement content helpers', () => {
   })
 
   it('normalizes safe hrefs only', () => {
-    expect(normalizeAnnouncementHref('/training')).toBe('/training')
+    expect(normalizeAnnouncementHref('/dashboard')).toBe('/dashboard')
     expect(normalizeAnnouncementHref('https://example.com/x')).toBe('https://example.com/x')
     expect(normalizeAnnouncementHref('javascript:alert(1)')).toBeNull()
     expect(normalizeAnnouncementHref('//evil.example')).toBeNull()

@@ -147,17 +147,6 @@ export const PERMISSION_AREAS: PermissionArea[] = [
     ],
   },
   {
-    id: 'training',
-    label: 'Training',
-    description: 'Staff training modules',
-    navKeys: ['training.read.all', 'training.complete.own'],
-    cells: [
-      cell('training.read.all', 'View all progress', 'view'),
-      cell('training.complete.own', 'Access training', 'view'),
-      cell('training.manage.all', 'Assign modules', 'edit'),
-    ],
-  },
-  {
     id: 'portal_requests',
     label: 'Portal Requests',
     description: 'Customer-submitted change requests',

@@ -19,7 +19,6 @@ async function terminateAllSessions() {
     // Local clear without another redirect race — go straight to the notice page.
     auth.user = null
     auth.permissions = []
-    auth.trainingGate = null
     auth.announcementGate = null
     auth.loaded = true
     await redirectToSessionTerminated()

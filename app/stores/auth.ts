@@ -22,14 +22,6 @@ export interface AuthUser {
   mustChangePassword?: boolean
 }
 
-export interface TrainingGateState {
-  locked: boolean
-  assignmentId: string | null
-  moduleId: string | null
-  moduleSlug: string | null
-  moduleTitle: string | null
-}
-
 export interface AnnouncementGateState {
   locked: boolean
   pendingCount: number
@@ -54,7 +46,6 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as AuthUser | null,
     permissions: [] as string[],
-    trainingGate: null as TrainingGateState | null,
     announcementGate: null as AnnouncementGateState | null,
     loaded: false,
     sessionExpiring: false,
@@ -80,12 +71,10 @@ export const useAuthStore = defineStore('auth', {
     applyMePayload(me: {
       user: AuthUser
       permissions: string[]
-      trainingGate?: TrainingGateState | null
       announcementGate?: AnnouncementGateState | null
     }) {
       this.user = me.user
       this.permissions = me.permissions
-      this.trainingGate = me.trainingGate ?? null
       this.announcementGate = me.announcementGate ?? null
     },
 
@@ -105,7 +94,6 @@ export const useAuthStore = defineStore('auth', {
           const res = await fetcher<{
             user: AuthUser
             permissions: string[]
-            trainingGate?: TrainingGateState
             announcementGate?: AnnouncementGateState
           }>('/api/auth/me')
           this.applyMePayload(res)
@@ -119,7 +107,6 @@ export const useAuthStore = defineStore('auth', {
           if (shouldClearSessionOnFetchMeError(err)) {
             this.user = null
             this.permissions = []
-            this.trainingGate = null
             this.announcementGate = null
             lastFetchMeAt = Date.now()
             return false
@@ -255,7 +242,6 @@ export const useAuthStore = defineStore('auth', {
       }
       this.user = null
       this.permissions = []
-      this.trainingGate = null
       this.announcementGate = null
       this.loaded = true
       if (import.meta.client) {

@@ -1,18 +1,10 @@
 import { isAnnouncementPath } from './announcements-ui'
-import { isTrainingPath } from './training-ui'
 import { consumeStaffReturnPath } from './staff-return-path'
 
-export type StaffGateKind = 'announcement' | 'password' | 'training'
+export type StaffGateKind = 'announcement' | 'password'
 
 type AuthStoreLike = {
   announcementGate?: { locked?: boolean, pendingCount?: number, currentId?: string | null } | null
-  trainingGate?: {
-    locked?: boolean
-    assignmentId?: string | null
-    moduleId?: string | null
-    moduleSlug?: string | null
-    moduleTitle?: string | null
-  } | null
   user?: { mustChangePassword?: boolean } | null
 }
 
@@ -22,12 +14,7 @@ export function isPasswordRequiredPath(path: string): boolean {
 }
 
 export function isStaffGatePath(path: string): boolean {
-  return isAnnouncementPath(path) || isPasswordRequiredPath(path) || isTrainingPath(path)
-}
-
-export function trainingGateDestination(auth: AuthStoreLike): string {
-  const slug = auth.trainingGate?.moduleSlug?.trim()
-  return slug ? `/training/learn/${slug}` : '/training'
+  return isAnnouncementPath(path) || isPasswordRequiredPath(path)
 }
 
 /** Clear one gate locally so exit navigation cannot immediately re-enter it. */
@@ -42,23 +29,11 @@ export function withoutStaffGate(auth: AuthStoreLike, gate: StaffGateKind): Auth
       },
     }
   }
-  if (gate === 'password') {
-    return {
-      ...auth,
-      user: {
-        ...(auth.user ?? {}),
-        mustChangePassword: false,
-      },
-    }
-  }
   return {
     ...auth,
-    trainingGate: {
-      locked: false,
-      assignmentId: null,
-      moduleId: null,
-      moduleSlug: null,
-      moduleTitle: null,
+    user: {
+      ...(auth.user ?? {}),
+      mustChangePassword: false,
     },
   }
 }
@@ -80,13 +55,6 @@ export function resolvePermissionDeniedPath(
     return '/account/password-required'
   }
 
-  // Training lock + missing training.complete.own used to bounce
-  // /training/learn/* ↔ /dashboard forever (login hang + /api/auth/me storm).
-  if (auth.trainingGate?.locked) {
-    if (isTrainingPath(toPath)) return null
-    return trainingGateDestination(auth)
-  }
-
   if (toPath === '/dashboard' || toPath.startsWith('/dashboard/')) {
     return '/account'
   }
@@ -97,24 +65,20 @@ export function resolvePermissionDeniedPath(
 export function shouldSkipPermissionCheck(toPath: string, auth: AuthStoreLike): boolean {
   if (auth.announcementGate?.locked && isAnnouncementPath(toPath)) return true
   if (auth.user?.mustChangePassword && isPasswordRequiredPath(toPath)) return true
-  if (auth.trainingGate?.locked && isTrainingPath(toPath)) return true
   return false
 }
 
 /** Post-login / index landing for staff after /me is hydrated. */
 export function resolveStaffLandingPath(auth: AuthStoreLike): string {
-  // Login messages → password reset → training → optional return path → dashboard
+  // Login messages → password reset → optional return path → dashboard
   if (auth.announcementGate?.locked) return '/announcements/required'
   if (auth.user?.mustChangePassword) return '/account/password-required'
-  if (auth.trainingGate?.locked) {
-    return trainingGateDestination(auth)
-  }
   return consumeStaffReturnPath() ?? '/dashboard'
 }
 
 /**
  * Safe path after finishing/skipping a gate. Never returns the gate being left
- * when that would recreate the empty/locked bounce that hung login.
+ * when that would recreate a remount loop.
  */
 export function resolveNextStaffPath(
   auth: AuthStoreLike,
@@ -128,11 +92,6 @@ export function resolveNextStaffPath(
   }
   if (opts.leaving === 'password' && isPasswordRequiredPath(next)) {
     next = resolveStaffLandingPath(withoutStaffGate(auth, 'password'))
-  }
-  // Same learn URL still locked after exit → clear local lock so we do not remount it.
-  // Do not clear when landing points at a *different* required module.
-  if (opts.leaving === 'training' && fromPath && next === fromPath) {
-    next = resolveStaffLandingPath(withoutStaffGate(auth, 'training'))
   }
 
   if (!next || (fromPath && next === fromPath)) {
@@ -161,23 +120,12 @@ export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof 
     return navigateTo('/announcements/required')
   }
 
-  // Then forced password reset — no dashboard / training until done.
+  // Then forced password reset — no dashboard until done.
   if (auth.user?.mustChangePassword) {
     if (!isPasswordRequiredPath(routePath)) {
       return navigateTo('/account/password-required')
     }
     return undefined
-  }
-
-  if (
-    auth.trainingGate?.locked
-    && !isTrainingPath(routePath)
-    && !isAnnouncementPath(routePath)
-    && !isPasswordRequiredPath(routePath)
-  ) {
-    const dest = trainingGateDestination(auth)
-    if (dest === routePath) return undefined
-    return navigateTo(dest)
   }
 
   return undefined
