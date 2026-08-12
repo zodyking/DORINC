@@ -9,6 +9,14 @@ import {
   type CommonlyBilledCandidate,
 } from '../../shared/catalog-ai'
 import {
+  buildCatalogAuditFindings,
+  type CatalogAuditApplyDuplicate,
+  type CatalogAuditApplyFix,
+  type CatalogAuditFinding,
+} from '../../shared/catalog-audit'
+import {
+  archiveCatalogItem,
+  CatalogServiceError,
   createCatalogItem,
   updateCatalogItem,
   type CatalogItemInput,
@@ -199,4 +207,99 @@ export async function addMinedItemsToCatalog(
   }
 
   return { created }
+}
+
+export async function proposeCatalogAudit(db: Db): Promise<{
+  findings: CatalogAuditFinding[]
+  scanned: number
+  summary: {
+    wording: number
+    type: number
+    uncategorized: number
+    duplicate: number
+  }
+}> {
+  const [categories, keywordMap, verbs, items] = await Promise.all([
+    db.select({
+      id: catalogCategories.id,
+      name: catalogCategories.name,
+    }).from(catalogCategories).where(isNull(catalogCategories.archivedAt))
+      .orderBy(asc(catalogCategories.sortOrder), asc(catalogCategories.name)),
+    getCatalogKeywordMap(db),
+    getLineTypeVerbs(db),
+    db.select({
+      id: catalogItems.id,
+      itemType: catalogItems.itemType,
+      name: catalogItems.name,
+      description: catalogItems.description,
+      categoryId: catalogItems.categoryId,
+      categoryName: catalogCategories.name,
+      uom: catalogItems.uom,
+    })
+      .from(catalogItems)
+      .leftJoin(catalogCategories, eq(catalogItems.categoryId, catalogCategories.id))
+      .where(isNull(catalogItems.archivedAt))
+      .orderBy(asc(catalogItems.name)),
+  ])
+
+  const findings = buildCatalogAuditFindings(items, categories, { keywordMap, verbs })
+
+  const summary = {
+    wording: findings.filter(f => f.kinds.includes('wording')).length,
+    type: findings.filter(f => f.kinds.includes('type')).length,
+    uncategorized: findings.filter(f => f.kinds.includes('uncategorized')).length,
+    duplicate: findings.filter(f => f.kinds.includes('duplicate')).length,
+  }
+
+  return { findings, scanned: items.length, summary }
+}
+
+export async function applyCatalogAudit(
+  db: Db,
+  input: {
+    fixes: CatalogAuditApplyFix[]
+    duplicates: CatalogAuditApplyDuplicate[]
+  },
+): Promise<{ updated: number, archived: number }> {
+  const fixes = input.fixes ?? []
+  const duplicates = input.duplicates ?? []
+  if (!fixes.length && !duplicates.length) {
+    throw new CatalogAiServiceError('EMPTY_SELECTION', 'Select at least one fix')
+  }
+
+  let updated = 0
+  for (const fix of fixes) {
+    const patch: Partial<CatalogItemInput> = {}
+    if (fix.name !== undefined) patch.name = fix.name
+    if (fix.description !== undefined) patch.description = fix.description
+    if (fix.itemType !== undefined) patch.itemType = fix.itemType
+    if (fix.categoryId !== undefined) patch.categoryId = fix.categoryId
+    if (fix.uom !== undefined) patch.uom = fix.uom
+
+    if (!Object.keys(patch).length) continue
+    try {
+      const result = await updateCatalogItem(db, fix.itemId, patch)
+      if (result.changedFields.length) updated += 1
+    }
+    catch {
+      throw new CatalogAiServiceError('NOT_FOUND', 'Catalog item not found')
+    }
+  }
+
+  let archived = 0
+  for (const dup of duplicates) {
+    const archiveIds = [...new Set(dup.archiveItemIds.filter(id => id !== dup.keepItemId))]
+    for (const id of archiveIds) {
+      try {
+        await archiveCatalogItem(db, id)
+        archived += 1
+      }
+      catch (err) {
+        if (err instanceof CatalogServiceError && err.code === 'ALREADY_ARCHIVED') continue
+        throw new CatalogAiServiceError('NOT_FOUND', 'Catalog item not found')
+      }
+    }
+  }
+
+  return { updated, archived }
 }

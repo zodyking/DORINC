@@ -116,3 +116,21 @@ export const catalogMineInvoicesApplySchema = z.object({
     uom: z.string().trim().max(30).optional(),
   })).min(1).max(500),
 })
+
+export const catalogAuditApplySchema = z.object({
+  fixes: z.array(z.object({
+    itemId: uuidSchema,
+    name: z.string().trim().min(1).max(200).optional(),
+    description: z.string().max(2000).nullish(),
+    itemType: catalogItemTypeSchema.optional(),
+    categoryId: uuidSchema.nullish(),
+    uom: z.string().trim().max(30).optional(),
+  })).max(500).default([]),
+  duplicates: z.array(z.object({
+    keepItemId: uuidSchema,
+    archiveItemIds: z.array(uuidSchema).min(1).max(50),
+  })).max(200).default([]),
+}).refine(
+  value => value.fixes.length > 0 || value.duplicates.length > 0,
+  { message: 'Select at least one fix' },
+)
