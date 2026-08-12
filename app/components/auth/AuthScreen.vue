@@ -5,7 +5,10 @@ import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-
 import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
 import { isAllowedStaffReturnPath, setStaffReturnPath } from '~/utils/staff-return-path'
 import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
+import AuthRateLimitNotice from '~/components/auth/AuthRateLimitNotice.vue'
 import { formatPhoneDisplay } from '~/utils/phone-ui'
+
+const loginCooldown = useAuthRateLimitCooldown('login')
 
 const props = defineProps<{
   initialCard?: 'customer' | 'staff'
@@ -17,7 +20,7 @@ const tab = ref<'login' | 'signup'>(props.initialTab ?? 'login')
 
 const route = useRoute()
 const auth = useAuthStore()
-const { busy: resendBusy, message: resendMessage, error: resendError, resend, reset: resetResend } = useResendVerification()
+const { busy: resendBusy, message: resendMessage, error: resendError, cooldown: resendCooldown, resend, reset: resetResend } = useResendVerification()
 
 const { data: publicBusiness } = useClientFetch<{ businessName: string }>('/api/public/business')
 const displayBusinessName = computed(() => {
@@ -108,6 +111,11 @@ async function submitLogin(identifier: string, password: string) {
   catch (err) {
     // Access gate already navigates away — do not flash a one-frame form error.
     if (authErrorReason(err) === 'access_blocked') return
+    if (loginCooldown.applyFromError(err)) {
+      error.value = ''
+      loginBlockedReason.value = null
+      return
+    }
     error.value = messageFrom(err)
     loginBlockedReason.value = authErrorReason(err)
     const hintedEmail = authErrorEmail(err)
@@ -135,6 +143,11 @@ async function onLocationComplete(geo: import('#shared/validators/auth').StaffLo
   catch (err) {
     showLocationPrompt.value = false
     if (authErrorReason(err) === 'access_blocked') return
+    if (loginCooldown.applyFromError(err)) {
+      error.value = ''
+      loginBlockedReason.value = null
+      return
+    }
     error.value = messageFrom(err)
     loginBlockedReason.value = authErrorReason(err)
   }
@@ -235,12 +248,23 @@ async function submitSignup() {
                 </button>
               </div>
             </div>
-            <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
+            <AuthRateLimitNotice
+              v-if="loginCooldown.isActive"
+              :message="loginCooldown.message"
+              :countdown-label="loginCooldown.countdownLabel"
+              unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
+            />
+            <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <div class="auth-foot">
               <NuxtLink to="/auth/forgot-password?portal=customer" class="auth-link">Forgot password?</NuxtLink>
             </div>
-            <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              {{ busy ? 'Signing in…' : 'Sign in' }}
+            <button
+              type="submit"
+              class="btn primary"
+              :disabled="busy || loginCooldown.isActive"
+              style="width:100%;justify-content:center;margin-top:14px;padding:11px;"
+            >
+              {{ busy ? 'Signing in…' : loginCooldown.isActive ? 'Sign-in paused' : 'Sign in' }}
             </button>
           </form>
         </div>
@@ -280,16 +304,29 @@ async function submitSignup() {
                 </button>
               </div>
             </div>
-            <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
+            <AuthRateLimitNotice
+              v-if="loginCooldown.isActive"
+              :message="loginCooldown.message"
+              :countdown-label="loginCooldown.countdownLabel"
+              unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
+            />
+
+            <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
 
             <div v-if="loginBlockedReason === 'not_verified'" class="auth-callout">
               <p class="auth-hint">Your account exists but email is not verified yet.</p>
               <p v-if="resendMessage" class="auth-hint auth-success" role="status">{{ resendMessage }}</p>
-              <p v-if="resendError" class="auth-hint auth-error" role="alert">{{ resendError }}</p>
+              <AuthRateLimitNotice
+                v-if="resendCooldown.isActive"
+                :message="resendCooldown.message"
+                :countdown-label="resendCooldown.countdownLabel"
+                unlock-hint="The resend button will unlock automatically when the timer reaches zero."
+              />
+              <p v-else-if="resendError" class="auth-hint auth-error" role="alert">{{ resendError }}</p>
               <button
                 type="button"
                 class="btn sm"
-                :disabled="resendBusy || !loginEmail || !loginPass"
+                :disabled="resendBusy || resendCooldown.isActive || !loginEmail || !loginPass"
                 @click="submitResendFromLogin"
               >
                 {{ resendBusy ? 'Sending…' : 'Resend verification email' }}
@@ -314,8 +351,13 @@ async function submitSignup() {
             <div class="auth-foot">
               <NuxtLink :to="staffForgotPasswordLink" class="auth-link">Forgot password?</NuxtLink>
             </div>
-            <button type="submit" class="btn primary" :disabled="busy" style="width:100%;justify-content:center;margin-top:14px;padding:11px;">
-              {{ busy ? 'Signing in…' : 'Sign in' }}
+            <button
+              type="submit"
+              class="btn primary"
+              :disabled="busy || loginCooldown.isActive"
+              style="width:100%;justify-content:center;margin-top:14px;padding:11px;"
+            >
+              {{ busy ? 'Signing in…' : loginCooldown.isActive ? 'Sign-in paused' : 'Sign in' }}
             </button>
           </form>
         </div>

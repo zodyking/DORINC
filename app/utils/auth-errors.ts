@@ -32,6 +32,10 @@ function friendlyValidationMessage(issue: ValidationIssue): string {
 }
 
 export function authErrorMessage(err: unknown, fallback = 'Something went wrong — try again'): string {
+  if (authErrorCode(err) === 'RATE_LIMITED') {
+    return 'Too many requests — please wait before trying again.'
+  }
+
   const issues = validationIssues(err)
   if (issues.length) {
     return issues.map(friendlyValidationMessage).join(' ')
@@ -59,4 +63,30 @@ export function authErrorEmail(err: unknown): string | null {
   const fe = err as { data?: AuthApiErrorBody & { details?: Record<string, unknown> } }
   const email = fe.data?.details?.email ?? fe.data?.data?.details?.email
   return typeof email === 'string' ? email : null
+}
+
+function authErrorPayload(err: unknown): { code?: string, details?: Record<string, unknown> } | null {
+  const fe = err as {
+    data?: { code?: string, details?: Record<string, unknown>, data?: { code?: string, details?: Record<string, unknown> } }
+  }
+  const body = fe.data?.data ?? fe.data
+  if (!body || typeof body !== 'object') return null
+  return body
+}
+
+export function authErrorCode(err: unknown): string | null {
+  const code = authErrorPayload(err)?.code
+  return typeof code === 'string' ? code : null
+}
+
+export function authErrorRetryAfterSeconds(err: unknown): number | null {
+  const details = authErrorPayload(err)?.details
+  const value = details?.retryAfterSeconds
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.ceil(value)
+  }
+  if (typeof value === 'string' && Number.isFinite(Number(value)) && Number(value) > 0) {
+    return Math.ceil(Number(value))
+  }
+  return null
 }

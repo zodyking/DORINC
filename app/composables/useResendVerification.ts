@@ -4,6 +4,7 @@ export function useResendVerification() {
   const busy = ref(false)
   const message = ref('')
   const error = ref('')
+  const cooldown = useAuthRateLimitCooldown('verify_email')
 
   async function resend(email: string, password: string) {
     busy.value = true
@@ -18,6 +19,10 @@ export function useResendVerification() {
       return true
     }
     catch (err) {
+      if (cooldown.applyFromError(err)) {
+        error.value = ''
+        return false
+      }
       error.value = authErrorMessage(err, 'Could not send verification email')
       return false
     }
@@ -32,5 +37,5 @@ export function useResendVerification() {
     error.value = ''
   }
 
-  return { busy, message, error, resend, reset }
+  return { busy, message, error, cooldown, resend, reset }
 }

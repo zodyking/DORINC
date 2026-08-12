@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BRAND_ICON } from '~/constants/brand'
+import AuthRateLimitNotice from '~/components/auth/AuthRateLimitNotice.vue'
 import { authErrorMessage } from '~/utils/auth-errors'
 
 definePageMeta({ layout: false })
@@ -12,6 +13,7 @@ const email = ref('')
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
+const cooldown = useAuthRateLimitCooldown('password_reset')
 
 onMounted(() => {
   const fromQuery = typeof route.query.email === 'string' ? route.query.email.trim() : ''
@@ -30,6 +32,10 @@ async function submit() {
     message.value = res.message
   }
   catch (err) {
+    if (cooldown.applyFromError(err)) {
+      error.value = ''
+      return
+    }
     error.value = authErrorMessage(err, 'Could not send password reset email')
   }
   finally {
@@ -79,15 +85,21 @@ async function submit() {
                 >
               </div>
 
-              <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
+              <AuthRateLimitNotice
+                v-if="cooldown.isActive"
+                :message="cooldown.message"
+                :countdown-label="cooldown.countdownLabel"
+                unlock-hint="The send button will unlock automatically when the timer reaches zero."
+              />
+              <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
               <p v-if="message" class="auth-hint auth-success" role="status">{{ message }}</p>
 
               <button
                 type="submit"
                 class="btn primary forgot-btn"
-                :disabled="busy"
+                :disabled="busy || cooldown.isActive"
               >
-                {{ busy ? 'Sending…' : 'Send reset link' }}
+                {{ busy ? 'Sending…' : cooldown.isActive ? 'Please wait…' : 'Send reset link' }}
               </button>
             </form>
 

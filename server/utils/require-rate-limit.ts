@@ -1,5 +1,6 @@
 import { getClientIp } from './client-ip'
 import type { H3Event } from 'h3'
+import { setResponseHeader } from 'h3'
 import { useDb } from '../db/client'
 import { RateLimitError, consumeRateLimit } from '../services/rate-limit.service'
 import type { RateLimitScope } from '../db/schema/rate-limits'
@@ -17,6 +18,7 @@ export async function requireRateLimit(
   }
   catch (err) {
     if (err instanceof RateLimitError) {
+      setResponseHeader(event, 'Retry-After', String(err.retryAfterSeconds))
       throw apiError(event, 'RATE_LIMITED', 'Too many requests — try again later', {
         scope: err.scope,
         retryAfterSeconds: err.retryAfterSeconds,

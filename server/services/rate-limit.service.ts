@@ -1,4 +1,4 @@
-import { and, count, eq, gte, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { rateLimitEvents, type RateLimitScope } from '../db/schema/rate-limits'
 
@@ -53,6 +53,32 @@ export async function countRateLimitEvents(
   return Number(row?.value ?? 0)
 }
 
+async function oldestRateLimitEventAt(
+  db: Db,
+  scope: RateLimitScope,
+  key: string,
+  windowMs: number,
+): Promise<Date | null> {
+  const since = new Date(Date.now() - windowMs)
+  const [row] = await db
+    .select({ createdAt: rateLimitEvents.createdAt })
+    .from(rateLimitEvents)
+    .where(and(
+      eq(rateLimitEvents.scope, scope),
+      eq(rateLimitEvents.key, key),
+      gte(rateLimitEvents.createdAt, since),
+    ))
+    .orderBy(asc(rateLimitEvents.createdAt))
+    .limit(1)
+  return row?.createdAt ?? null
+}
+
+function retryAfterSecondsForWindow(oldestAt: Date | null, windowMs: number): number {
+  if (!oldestAt) return Math.max(1, Math.ceil(windowMs / 1000))
+  const unlockAt = oldestAt.getTime() + windowMs
+  return Math.max(1, Math.ceil((unlockAt - Date.now()) / 1000))
+}
+
 export async function consumeRateLimit(
   db: Db,
   scope: RateLimitScope,
@@ -63,7 +89,8 @@ export async function consumeRateLimit(
   const used = await countRateLimitEvents(db, scope, key, policy.windowMs)
 
   if (used >= policy.maxAttempts) {
-    const retryAfterSeconds = Math.max(1, Math.ceil(policy.windowMs / 1000))
+    const oldestAt = await oldestRateLimitEventAt(db, scope, key, policy.windowMs)
+    const retryAfterSeconds = retryAfterSecondsForWindow(oldestAt, policy.windowMs)
     throw new RateLimitError(scope, retryAfterSeconds)
   }
 

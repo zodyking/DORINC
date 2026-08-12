@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BRAND_ICON } from '~/constants/brand'
+import AuthRateLimitNotice from '~/components/auth/AuthRateLimitNotice.vue'
 
 definePageMeta({ layout: false })
 
@@ -9,7 +10,7 @@ const email = ref('')
 const password = ref('')
 const reveal = ref(false)
 
-const { busy, message, error, resend, reset } = useResendVerification()
+const { busy, message, error, cooldown, resend, reset } = useResendVerification()
 
 onMounted(() => {
   const fromQuery = typeof route.query.email === 'string' ? route.query.email.trim() : ''
@@ -66,15 +67,21 @@ async function submit() {
               </div>
             </div>
 
-            <p v-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
+            <AuthRateLimitNotice
+              v-if="cooldown.isActive"
+              :message="cooldown.message"
+              :countdown-label="cooldown.countdownLabel"
+              unlock-hint="The resend button will unlock automatically when the timer reaches zero."
+            />
+            <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <p v-if="message" class="auth-hint auth-success" role="status">{{ message }}</p>
 
             <button
               type="submit"
               class="btn primary resend-btn"
-              :disabled="busy"
+              :disabled="busy || cooldown.isActive"
             >
-              {{ busy ? 'Sending…' : 'Resend verification email' }}
+              {{ busy ? 'Sending…' : cooldown.isActive ? 'Please wait…' : 'Resend verification email' }}
             </button>
           </form>
 
