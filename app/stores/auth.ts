@@ -31,6 +31,9 @@ export interface AnnouncementGateState {
 export type StaffLoginPending = { needsLocation: true, loginToken: string }
 export type StaffLoginResult = AuthUser | StaffLoginPending
 
+/** Dedup concurrent /api/auth/me calls across middleware, plugins, and login. */
+let fetchMeInflight: Promise<boolean> | null = null
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null as AuthUser | null,
@@ -69,28 +72,37 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async fetchMe() {
-      // On SSR, plain $fetch does not forward the incoming request's cookies
-      const fetcher = import.meta.server ? useRequestFetch() : $fetch
-      try {
-        const res = await fetcher<{
-          user: AuthUser
-          permissions: string[]
-          trainingGate?: TrainingGateState
-          announcementGate?: AnnouncementGateState
-        }>('/api/auth/me')
-        this.applyMePayload(res)
-        return true
-      }
-      catch {
-        this.user = null
-        this.permissions = []
-        this.trainingGate = null
-        this.announcementGate = null
-        return false
-      }
-      finally {
-        this.loaded = true
-      }
+      // Collapse concurrent callers (middleware + plugins + login) into one request.
+      if (fetchMeInflight) return fetchMeInflight
+
+      fetchMeInflight = (async () => {
+        // On SSR, plain $fetch does not forward the incoming request's cookies
+        const fetcher = import.meta.server ? useRequestFetch() : $fetch
+        try {
+          const res = await fetcher<{
+            user: AuthUser
+            permissions: string[]
+            trainingGate?: TrainingGateState
+            announcementGate?: AnnouncementGateState
+          }>('/api/auth/me')
+          this.applyMePayload(res)
+          return true
+        }
+        catch {
+          this.user = null
+          this.permissions = []
+          this.trainingGate = null
+          this.announcementGate = null
+          return false
+        }
+        finally {
+          this.loaded = true
+        }
+      })().finally(() => {
+        fetchMeInflight = null
+      })
+
+      return fetchMeInflight
     },
 
     async login(identifier: string, password: string, portal: 'customer' | 'staff'): Promise<StaffLoginResult> {
