@@ -102,7 +102,10 @@ const auth = useAuthStore()
 const canCreateInvoice = computed(() => auth.can('invoices.create.all'))
 const canCreateLog = computed(() => auth.can('service_logs.upload.own'))
 
-const { data: dash, error, pending } = useClientFetch<DashboardPayload>('/api/dashboard')
+const { data: dash, error, pending } = useClientFetch<DashboardPayload>('/api/dashboard', {
+  // Avoid infinite "Loading dashboard…" when the upstream is dead / hung.
+  timeout: 20_000,
+})
 
 const showBilling = computed(() => dash.value?.view === 'billing' && dash.value.billing)
 const showMechanic = computed(() => dash.value?.view === 'mechanic' && dash.value.mechanic)

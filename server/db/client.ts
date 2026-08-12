@@ -45,7 +45,14 @@ export function usePool(): Pool {
       throw new Error('DATABASE_NOT_CONFIGURED')
     }
     const connectionString = normalizeDatabaseUrl(raw)
-    _pool = new Pool({ connectionString, max: 10 })
+    // Fail fast instead of queuing forever when Postgres is unreachable or the
+    // pool is saturated — unbounded waits hung /api/health and took Traefik offline.
+    _pool = new Pool({
+      connectionString,
+      max: 10,
+      connectionTimeoutMillis: 8_000,
+      idleTimeoutMillis: 30_000,
+    })
   }
   return _pool
 }
