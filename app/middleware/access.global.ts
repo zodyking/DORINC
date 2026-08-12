@@ -60,6 +60,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
           moduleTitle: null,
         }
       }
+      if (auth.user?.mustChangePassword) {
+        auth.user = { ...auth.user, mustChangePassword: false }
+      }
       if (to.path !== '/account') return navigateTo('/account')
       return
     }
