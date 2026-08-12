@@ -74,6 +74,90 @@ export function catalogMatchKey(text: string): string {
     .trim()
 }
 
+/** Filler words ignored when comparing invoice text to existing catalog names. */
+const MATCH_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'all', 'and', 'or', 'to', 'for', 'of', 'on', 'in', 'at', 'by',
+  'with', 'from', 'into', 'onto', 'over', 'under', 'inside', 'outside', 'both',
+])
+
+/** Match key with filler words removed — "Install All Belts…" ≈ "Install Belts…". */
+export function catalogMatchKeyLoose(text: string): string {
+  return catalogMatchKey(text)
+    .split(' ')
+    .filter(token => token && !MATCH_STOP_WORDS.has(token))
+    .join(' ')
+}
+
+function significantTokens(text: string): string[] {
+  const loose = catalogMatchKeyLoose(text)
+  if (!loose) return []
+  return loose.split(' ').filter(Boolean)
+}
+
+/**
+ * True when invoice text already corresponds to a catalog item name/description/SKU.
+ * Uses exact keys, filler-stripped keys, token containment, and high Jaccard overlap.
+ */
+export function matchesExistingCatalogItem(
+  text: string,
+  catalogKeys: Set<string>,
+  catalogLooseKeys: Set<string>,
+  catalogTokenSets: string[][],
+): boolean {
+  const exact = catalogMatchKey(text)
+  if (!exact) return false
+  if (catalogKeys.has(exact)) return true
+
+  const loose = catalogMatchKeyLoose(text)
+  if (loose && catalogLooseKeys.has(loose)) return true
+
+  const tokens = significantTokens(text)
+  if (tokens.length < 2) return false
+  const tokenSet = new Set(tokens)
+
+  for (const catalogTokens of catalogTokenSets) {
+    if (catalogTokens.length < 2) continue
+
+    // One token set fully contains the other (near-duplicate phrasing).
+    const shorter = catalogTokens.length <= tokens.length ? catalogTokens : tokens
+    const longerSet = catalogTokens.length <= tokens.length ? tokenSet : new Set(catalogTokens)
+    if (shorter.length >= 2 && shorter.every(t => longerSet.has(t))) {
+      const longerLen = Math.max(catalogTokens.length, tokens.length)
+      if (shorter.length / longerLen >= 0.7) return true
+    }
+
+    // High token overlap.
+    let overlap = 0
+    for (const t of catalogTokens) {
+      if (tokenSet.has(t)) overlap += 1
+    }
+    const union = new Set([...catalogTokens, ...tokens]).size
+    if (union > 0 && overlap / union >= 0.85) return true
+  }
+
+  return false
+}
+
+function buildCatalogMatchIndexes(catalogItems: CatalogItemForMatch[]) {
+  const catalogKeys = new Set<string>()
+  const catalogLooseKeys = new Set<string>()
+  const catalogTokenSets: string[][] = []
+
+  for (const item of catalogItems) {
+    const fields = [item.name, item.description, item.sku].filter(Boolean).map(String)
+    for (const field of fields) {
+      const exact = catalogMatchKey(field)
+      if (exact) catalogKeys.add(exact)
+      const loose = catalogMatchKeyLoose(field)
+      if (loose) catalogLooseKeys.add(loose)
+      const tokens = significantTokens(field)
+      if (tokens.length >= 2) catalogTokenSets.push(tokens)
+    }
+  }
+
+  return { catalogKeys, catalogLooseKeys, catalogTokenSets }
+}
+
 /** Clean invoice description into a catalog item name. */
 export function catalogNameFromInvoiceDescription(description: string): string {
   const stripped = stripLocationAbbreviations(description)
@@ -161,7 +245,7 @@ export function buildCategorySortProposals(
 /**
  * Aggregate invoice line descriptions into commonly billed catalog candidates.
  * Side abbreviations are stripped before grouping. Lines that already match a
- * catalog item (by id or by name key) are excluded.
+ * catalog item (exact, filler-stripped, or near-duplicate name) are excluded.
  */
 export function buildCommonlyBilledCandidates(
   lines: InvoiceLineForMining[],
@@ -175,19 +259,12 @@ export function buildCommonlyBilledCandidates(
     /** When true, only mine lines that were not linked to a catalog item. */
     unlinkedOnly?: boolean
   } = {},
-): CommonlyBilledCandidate[] {
+): { candidates: CommonlyBilledCandidate[], totalMatched: number } {
   const minOccurrences = opts.minOccurrences ?? 2
-  const limit = opts.limit ?? 50
+  const limit = opts.limit ?? 200
   const unlinkedOnly = opts.unlinkedOnly !== false
 
-  const catalogKeys = new Set<string>()
-  for (const item of catalogItems) {
-    const keys = [item.name, item.description, item.sku]
-      .filter(Boolean)
-      .map(v => catalogMatchKey(String(v)))
-      .filter(Boolean)
-    for (const key of keys) catalogKeys.add(key)
-  }
+  const { catalogKeys, catalogLooseKeys, catalogTokenSets } = buildCatalogMatchIndexes(catalogItems)
 
   type Bucket = {
     matchKey: string
@@ -204,9 +281,12 @@ export function buildCommonlyBilledCandidates(
     const description = line.description?.trim()
     if (!description) continue
 
+    if (matchesExistingCatalogItem(description, catalogKeys, catalogLooseKeys, catalogTokenSets)) {
+      continue
+    }
+
     const matchKey = catalogMatchKey(description)
     if (!matchKey || matchKey.length < 3) continue
-    if (catalogKeys.has(matchKey)) continue
 
     let bucket = buckets.get(matchKey)
     if (!bucket) {
@@ -235,6 +315,11 @@ export function buildCommonlyBilledCandidates(
   for (const bucket of buckets.values()) {
     if (bucket.occurrenceCount < minOccurrences) continue
 
+    // Re-check after grouping in case the cleaned name matches catalog more closely.
+    if (matchesExistingCatalogItem(bucket.matchKey, catalogKeys, catalogLooseKeys, catalogTokenSets)) {
+      continue
+    }
+
     let sampleDescription = ''
     let sampleCount = 0
     for (const [sample, count] of bucket.samples) {
@@ -245,6 +330,10 @@ export function buildCommonlyBilledCandidates(
     }
 
     const name = catalogNameFromInvoiceDescription(sampleDescription)
+    if (matchesExistingCatalogItem(name, catalogKeys, catalogLooseKeys, catalogTokenSets)) {
+      continue
+    }
+
     const suggestedItemType = dominantLineType(bucket.lineTypeCounts, name, opts.verbs)
     const inferred = inferCatalogCategory(
       stripLocationAbbreviations(name) || name,
@@ -267,5 +356,8 @@ export function buildCommonlyBilledCandidates(
   }
 
   candidates.sort((a, b) => b.occurrenceCount - a.occurrenceCount || a.name.localeCompare(b.name))
-  return candidates.slice(0, limit)
+  return {
+    candidates: candidates.slice(0, limit),
+    totalMatched: candidates.length,
+  }
 }

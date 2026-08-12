@@ -101,7 +101,7 @@ export const catalogAutoSortApplySchema = z.object({
 
 export const catalogMineInvoicesSchema = z.object({
   minOccurrences: z.number().int().min(1).max(100).optional().default(2),
-  limit: z.number().int().min(1).max(100).optional().default(50),
+  limit: z.number().int().min(1).max(500).optional().default(200),
   unlinkedOnly: z.boolean().optional().default(true),
 }).default({})
 
@@ -114,5 +114,5 @@ export const catalogMineInvoicesApplySchema = z.object({
     defaultPrice: z.string().trim().max(30).nullish(),
     taxable: z.boolean().optional(),
     uom: z.string().trim().max(30).optional(),
-  })).min(1).max(100),
+  })).min(1).max(500),
 })
