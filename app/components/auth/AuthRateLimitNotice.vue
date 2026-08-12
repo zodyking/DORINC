@@ -11,7 +11,7 @@ defineProps<{
     <p class="auth-hint auth-error">{{ message }}</p>
     <p class="auth-rate-limit__timer" aria-hidden="true">{{ countdownLabel }}</p>
     <p class="auth-hint">
-      {{ unlockHint ?? 'The button will unlock automatically when the timer reaches zero.' }}
+      {{ unlockHint ?? 'Please wait until the timer reaches zero.' }}
     </p>
   </div>
 </template>

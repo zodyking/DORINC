@@ -15,8 +15,7 @@ describe('auth rate limit helpers', () => {
   })
 
   it('builds scope-specific paused messages', () => {
-    expect(rateLimitMessage('login', 90)).toContain('1:30')
-    expect(rateLimitMessage('login', 90)).toContain('sign-in')
+    expect(rateLimitMessage('login', 90)).toBe('Too many sign-in attempts. Please wait.')
     expect(rateLimitMessage('verify_email', 30)).toContain('verification email')
     expect(rateLimitMessage('password_reset', 30)).toContain('password reset')
   })

@@ -56,11 +56,11 @@ export function rateLimitMessage(
   const countdown = formatRateLimitCountdown(remainingSeconds)
   switch (scope) {
     case 'verify_email':
-      return `Too many verification email requests. Please wait ${countdown} before trying again.`
+      return `Too many verification email requests. Please wait ${countdown}.`
     case 'password_reset':
-      return `Too many password reset requests. Please wait ${countdown} before trying again.`
+      return `Too many password reset requests. Please wait ${countdown}.`
     default:
-      return `Too many sign-in attempts from your network. For security, sign-in is paused. You can try again in ${countdown}.`
+      return 'Too many sign-in attempts. Please wait.'
   }
 }
 

@@ -258,7 +258,7 @@ async function submitSignup() {
               v-if="loginRateLimited"
               :message="loginRateLimitMessage"
               :countdown-label="loginCountdown"
-              unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
+              unlock-hint="Please wait."
             />
             <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
             <div class="auth-foot">
@@ -314,7 +314,7 @@ async function submitSignup() {
               v-if="loginRateLimited"
               :message="loginRateLimitMessage"
               :countdown-label="loginCountdown"
-              unlock-hint="The sign-in button will unlock automatically when the timer reaches zero."
+              unlock-hint="Please wait."
             />
 
             <p v-else-if="error" class="auth-hint auth-error" role="alert">{{ error }}</p>
