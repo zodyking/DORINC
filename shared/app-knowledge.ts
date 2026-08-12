@@ -172,13 +172,15 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
     title: 'Catalog',
     area: 'catalog',
     pageKeys: ['catalog'],
-    tags: ['catalog', 'parts', 'labor', 'fees', 'packages', 'rates'],
+    tags: ['catalog', 'parts', 'labor', 'fees', 'packages', 'rates', 'auto-sort', 'billed items'],
     summary: 'Billable catalog items, packages, and labor rates used when building invoice lines.',
     body: [
       'Page: /catalog',
       'Line types: part, labor, fee. Packages expand into multiple lines in invoice editor/wizard.',
       'Invoice description autocomplete searches catalog; keyword/verb rules in Control Panel help detect line types.',
       'Service-log sheet items can link to catalog ids but are sheet-local by default.',
+      'Page actions (⋮ menu, managers): Auto-sort categories — propose categories for uncategorized items via Catalog Detection keywords; review then apply.',
+      'Find billed items — scan invoice lines for common free-text charges (side marks like R/S and L/S are stripped first), audit the list, and add selected rows to the catalog.',
     ].join('\n'),
   },
   {

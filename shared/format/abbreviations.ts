@@ -67,3 +67,26 @@ export function expandForSpeech(value: string): string {
   }
   return out
 }
+
+/**
+ * Strip vehicle side/location abbreviations (and their full phrases) so catalog
+ * matching treats "Replace Air Filter R/S" the same as "Replace Air Filter".
+ */
+export function stripLocationAbbreviations(value: string): string {
+  let out = value
+  const sorted = [...LOCATION_ABBREVIATIONS].sort((a, b) => b.full.length - a.full.length)
+  for (const { full } of sorted) {
+    out = out.replace(phrasePattern(full), ' ')
+    const reversed = reversedPhrase(full)
+    if (reversed !== full) {
+      out = out.replace(phrasePattern(reversed), ' ')
+    }
+  }
+  for (const { abbr } of LOCATION_ABBREVIATIONS) {
+    out = out.replace(abbrPattern(abbr), ' ')
+  }
+  return out
+    .replace(/[,\-–—|/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

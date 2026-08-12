@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { abbreviatePhrases, expandForSpeech } from '../../shared/format/abbreviations'
+import {
+  abbreviatePhrases,
+  expandForSpeech,
+  stripLocationAbbreviations,
+} from '../../shared/format/abbreviations'
 
 describe('abbreviations', () => {
   it('stores shorthand when full phrase is typed or spoken', () => {
@@ -30,5 +34,13 @@ describe('abbreviations', () => {
     expect(expandForSpeech('work on R/Front')).toBe('work on Front Right')
     expect(expandForSpeech('R/Rear door seal')).toBe('Rear Right door seal')
     expect(expandForSpeech('work on F/R')).toBe('work on Front Right')
+  })
+
+  it('strips side abbreviations for catalog matching', () => {
+    expect(stripLocationAbbreviations('Replace Air Filter R/S')).toBe('Replace Air Filter')
+    expect(stripLocationAbbreviations('Repair L/S door seal')).toBe('Repair door seal')
+    expect(stripLocationAbbreviations('Marker light F/R and F/L')).toBe('Marker light and')
+    expect(stripLocationAbbreviations('Front Right headlight')).toBe('headlight')
+    expect(stripLocationAbbreviations('Right Side mirror')).toBe('mirror')
   })
 })
