@@ -6,6 +6,7 @@ import ControlPanelDatabaseChart from '~/components/admin/ControlPanelDatabaseCh
 import ControlPanelImportExport from '~/components/admin/ControlPanelImportExport.vue'
 import ControlPanelSection from '~/components/admin/ControlPanelSection.vue'
 import ControlPanelSystemMonitor from '~/components/admin/ControlPanelSystemMonitor.vue'
+import ControlPanelTerminateSessions from '~/components/admin/ControlPanelTerminateSessions.vue'
 import SettingsBusinessPanel from '~/components/admin/settings/SettingsBusinessPanel.vue'
 import SettingsEmailPanel from '~/components/admin/settings/SettingsEmailPanel.vue'
 import SettingsImapPanel from '~/components/admin/settings/SettingsImapPanel.vue'
@@ -409,6 +410,7 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
             >
               <div class="stack">
                 <ControlPanelAccessGate />
+                <ControlPanelTerminateSessions />
 
                 <div class="card">
                   <div class="chead">

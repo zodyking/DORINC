@@ -1,4 +1,4 @@
-import { isProtectedAppPath } from '~/utils/auth-session'
+import { isMassSessionTerminationActive, isProtectedAppPath } from '~/utils/auth-session'
 import { AUTH_ME_POLL_MS } from '#shared/auth-me-refresh'
 
 export default defineNuxtPlugin((nuxtApp) => {
@@ -16,7 +16,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     // loginHydrating can end while this request was in flight — do not logout mid-login.
     if (auth.loginHydrating) return
     if (hadUser && !ok && !auth.user && isProtectedAppPath(route.path)) {
-      await auth.forceLogout(true)
+      const terminated = await isMassSessionTerminationActive()
+      await auth.forceLogout(true, { reason: terminated ? 'terminated' : 'default' })
     }
   }
 

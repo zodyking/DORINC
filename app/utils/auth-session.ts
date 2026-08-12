@@ -52,3 +52,23 @@ export async function redirectToLogin(path: string) {
   }
   await navigateTo(target, { replace: true })
 }
+
+export async function redirectToSessionTerminated() {
+  if (import.meta.client) {
+    window.location.replace('/auth/session-terminated')
+    return
+  }
+  await navigateTo('/auth/session-terminated', { replace: true })
+}
+
+/** True when a recent admin mass-termination should explain a 401 logout. */
+export async function isMassSessionTerminationActive(): Promise<boolean> {
+  if (!import.meta.client) return false
+  try {
+    const res = await $fetch<{ active?: boolean }>('/api/public/session-termination')
+    return res?.active === true
+  }
+  catch {
+    return false
+  }
+}

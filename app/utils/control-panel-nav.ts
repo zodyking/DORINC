@@ -125,7 +125,7 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         id: 'security',
         title: 'Security',
         icon: '🔒',
-        subtitle: 'Access gate, alerts, and worker queue',
+        subtitle: 'Access gate, session termination, alerts, and worker queue',
       },
     ],
   },

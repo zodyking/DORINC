@@ -39,10 +39,11 @@ const API_EXEMPT_PREFIXES = [
 const GATE_PAGES = [
   '/auth/verify-location',
   '/auth/access-restricted',
+  '/auth/session-terminated',
   '/upload/service-log',
 ]
 /** Login may load with a fresh bypass cookie after verify (before tab session is armed). */
-const LOGIN_PATHS = ['/auth/login', '/auth/portal-login']
+const LOGIN_PATHS = ['/auth/login', '/auth/portal-login', '/auth/session-terminated']
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
 /** Throttle visit capture so a single client can't flood the table. */
