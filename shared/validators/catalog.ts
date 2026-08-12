@@ -87,3 +87,32 @@ export const catalogPackageListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })
+
+export const catalogAutoSortProposeSchema = z.object({
+  uncategorizedOnly: z.boolean().optional().default(true),
+}).default({})
+
+export const catalogAutoSortApplySchema = z.object({
+  assignments: z.array(z.object({
+    itemId: uuidSchema,
+    categoryId: uuidSchema,
+  })).min(1).max(500),
+})
+
+export const catalogMineInvoicesSchema = z.object({
+  minOccurrences: z.number().int().min(1).max(100).optional().default(2),
+  limit: z.number().int().min(1).max(100).optional().default(50),
+  unlinkedOnly: z.boolean().optional().default(true),
+}).default({})
+
+export const catalogMineInvoicesApplySchema = z.object({
+  items: z.array(z.object({
+    name: z.string().trim().min(1).max(200),
+    itemType: catalogItemTypeSchema,
+    description: z.string().max(2000).nullish(),
+    categoryId: uuidSchema.nullish(),
+    defaultPrice: z.string().trim().max(30).nullish(),
+    taxable: z.boolean().optional(),
+    uom: z.string().trim().max(30).optional(),
+  })).min(1).max(100),
+})

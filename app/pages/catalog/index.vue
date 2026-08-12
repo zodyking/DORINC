@@ -3,6 +3,8 @@
 import CatalogItemForm, { type CatalogItemFormValue } from '~/components/catalog/CatalogItemForm.vue'
 import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import CatalogPackagesPanel from '~/components/catalog/CatalogPackagesPanel.vue'
+import CatalogAutoSortModal from '~/components/catalog/CatalogAutoSortModal.vue'
+import CatalogMineInvoicesModal from '~/components/catalog/CatalogMineInvoicesModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 import { normalizeCatalogItemType } from '~/utils/catalog-ui'
 import { windowedPagerPages } from '~/utils/pager-ui'
@@ -109,6 +111,8 @@ const rangeLabel = computed(() => {
 
 // ---- Modals ----
 const categoriesOpen = ref(false)
+const autoSortOpen = ref(false)
+const mineInvoicesOpen = ref(false)
 const itemModalOpen = ref(false)
 const editingId = ref<string | null>(null)
 const formBusy = ref(false)
@@ -242,6 +246,10 @@ async function onCategoriesChanged() {
   await refreshCategories()
 }
 
+async function onAiApplied() {
+  await Promise.all([refresh(), refreshCategories(), refreshCounts()])
+}
+
 function onRowClick(row: CatalogItemRow) {
   if (canManage.value) openEditItem(row)
 }
@@ -252,6 +260,22 @@ function onRowClick(row: CatalogItemRow) {
     <StaffPageHead subtitle="Parts, labor, fees, and packages for invoice lines">
       <template #title>Catalog</template>
       <template v-if="canManage" #actions>
+        <button
+          v-if="activeTab === 'items'"
+          type="button"
+          class="btn"
+          @click="autoSortOpen = true"
+        >
+          Auto-sort categories
+        </button>
+        <button
+          v-if="activeTab === 'items'"
+          type="button"
+          class="btn"
+          @click="mineInvoicesOpen = true"
+        >
+          Find billed items
+        </button>
         <button
           v-if="activeTab === 'items'"
           type="button"
@@ -405,6 +429,12 @@ function onRowClick(row: CatalogItemRow) {
     <CatalogPackagesPanel v-else ref="packagesPanelRef" />
 
     <CatalogCategoriesModal v-model:open="categoriesOpen" @changed="onCategoriesChanged" />
+    <CatalogAutoSortModal v-model:open="autoSortOpen" @applied="onAiApplied" />
+    <CatalogMineInvoicesModal
+      v-model:open="mineInvoicesOpen"
+      :categories="categories"
+      @applied="onAiApplied"
+    />
 
     <div
       id="cat-item-scrim"
