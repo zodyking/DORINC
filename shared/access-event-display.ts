@@ -13,17 +13,17 @@ export type AccessDisplayGroup
     | 'blocked'
 
 export const ACCESS_DISPLAY_GROUP_LABELS: Record<AccessDisplayGroup, string> = {
-  access_granted: 'Access granted',
+  access_granted: 'Access Granted',
   fail: 'Fail',
-  geofence_blocked: 'Geofence blocked',
+  geofence_blocked: 'Geo Blocked',
   blocked: 'Blocked',
 }
 
 /** Map/legend colors for the cleaned-up security groups. */
 export const ACCESS_DISPLAY_GROUP_COLORS: Record<AccessDisplayGroup, string> = {
-  access_granted: '#4f46e5',
+  access_granted: '#16a34a',
   fail: '#f59e0b',
-  geofence_blocked: '#ea580c',
+  geofence_blocked: '#4f46e5',
   blocked: '#dc2626',
 }
 
@@ -44,9 +44,9 @@ export function isSecurityRestrictionPath(path: string | null | undefined): bool
 
 /**
  * Classify an event into the security UI groups:
- * - Access granted — allowed visit / successful login (no security block)
+ * - Access Granted — allowed visit / successful login (no security block)
  * - Fail — login credentials failed (or similar connection fail)
- * - Geofence blocked — blocked for being outside / unknown geo, or landed on
+ * - Geo Blocked — blocked for being outside / unknown geo, or landed on
  *   /auth/access-restricted / verify-location
  * - Blocked — IP ban or hard block from connecting
  */
@@ -65,7 +65,7 @@ export function accessEventDisplayGroup(ev: AccessEventDisplayInput): AccessDisp
   }
 
   // Gate pages used to be recorded as "allowed" because redirects are exempt —
-  // still show them as Geofence blocked when the visitor landed on the restriction page.
+  // still show them as Geo Blocked when the visitor landed on the restriction page.
   if (
     (outcome === 'allowed' || outcome === 'login_success')
     && isSecurityRestrictionPath(ev.path)

@@ -238,7 +238,7 @@ async function save() {
                   {{ visitCount }} visits · {{ loginCount }} logins ·
                   {{ groupCounts.access_granted }} granted ·
                   {{ groupCounts.fail }} fail ·
-                  {{ groupCounts.geofence_blocked }} geofence ·
+                  {{ groupCounts.geofence_blocked }} geo ·
                   {{ groupCounts.blocked }} blocked
                 </small>
               </div>
@@ -297,9 +297,9 @@ async function save() {
               Outcome
               <select v-model="groupFilter" aria-label="Outcome group">
                 <option value="all">All outcomes</option>
-                <option value="access_granted">Access granted</option>
+                <option value="access_granted">Access Granted</option>
                 <option value="fail">Fail</option>
-                <option value="geofence_blocked">Geofence blocked</option>
+                <option value="geofence_blocked">Geo Blocked</option>
                 <option value="blocked">Blocked</option>
               </select>
             </label>
@@ -538,9 +538,9 @@ async function save() {
   font-weight: 700;
   white-space: nowrap;
 }
-.ag-outcome.ok { background: #eef2ff; color: #3730a3; }
+.ag-outcome.ok { background: #dcfce7; color: #166534; }
 .ag-outcome.warn { background: #fef3c7; color: #92400e; }
-.ag-outcome.geo { background: #ffedd5; color: #9a3412; }
+.ag-outcome.geo { background: #eef2ff; color: #3730a3; }
 .ag-outcome.bad { background: #fee2e2; color: #991b1b; }
 .ag-user {
   max-width: 180px;

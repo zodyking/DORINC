@@ -12,7 +12,8 @@ describe('access event display groups', () => {
   it('maps granted outcomes', () => {
     expect(accessEventDisplayGroup({ outcome: 'allowed' })).toBe('access_granted')
     expect(accessEventDisplayGroup({ outcome: 'login_success' })).toBe('access_granted')
-    expect(accessEventDisplayLabel({ outcome: 'allowed' })).toBe('Access granted')
+    expect(accessEventDisplayLabel({ outcome: 'allowed' })).toBe('Access Granted')
+    expect(accessEventDisplayLabel({ outcome: 'login_failed' })).toBe('Fail')
   })
 
   it('maps credential failures to Fail', () => {
@@ -40,10 +41,14 @@ describe('access event display groups', () => {
     expect(accessEventDisplayLabel({
       outcome: 'blocked',
       blockReason: 'geo_outside',
-    })).toBe('Geofence blocked')
+    })).toBe('Geo Blocked')
+    expect(accessEventDisplayLabel({
+      outcome: 'blocked',
+      blockReason: 'ip_banned',
+    })).toBe('Blocked')
   })
 
-  it('treats /auth/access-restricted visits as Geofence blocked even if recorded allowed', () => {
+  it('treats /auth/access-restricted visits as Geo Blocked even if recorded allowed', () => {
     expect(accessEventDisplayGroup({
       outcome: 'allowed',
       path: '/auth/access-restricted',
@@ -60,24 +65,27 @@ describe('access event display groups', () => {
     expect(accessEventDisplayLabel({
       outcome: 'allowed',
       path: '/auth/access-restricted',
-    })).toBe('Geofence blocked')
+    })).toBe('Geo Blocked')
   })
 
-  it('keeps normal allowed visits as Access granted', () => {
+  it('keeps normal allowed visits as Access Granted', () => {
     expect(accessEventDisplayGroup({
       outcome: 'allowed',
       path: '/dashboard',
     })).toBe('access_granted')
   })
 
-  it('uses distinct colors per group', () => {
-    const colors = new Set([
-      accessEventDisplayColor({ outcome: 'allowed' }),
-      accessEventDisplayColor({ outcome: 'login_failed' }),
-      accessEventDisplayColor({ outcome: 'blocked', blockReason: 'geo_outside' }),
-      accessEventDisplayColor({ outcome: 'blocked', blockReason: 'ip_banned' }),
-    ])
-    expect(colors.size).toBe(4)
+  it('uses Access Granted green and Geo Blocked purple', () => {
+    expect(accessEventDisplayColor({ outcome: 'allowed' })).toBe('#16a34a')
+    expect(accessEventDisplayColor({ outcome: 'login_failed' })).toBe('#f59e0b')
+    expect(accessEventDisplayColor({
+      outcome: 'blocked',
+      blockReason: 'geo_outside',
+    })).toBe('#4f46e5')
+    expect(accessEventDisplayColor({
+      outcome: 'blocked',
+      blockReason: 'ip_banned',
+    })).toBe('#dc2626')
   })
 
   it('formats known users', () => {
