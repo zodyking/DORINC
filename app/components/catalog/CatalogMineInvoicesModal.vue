@@ -33,8 +33,14 @@ const candidates = ref<MinedCandidateRow[]>([])
 const loading = ref(false)
 const applying = ref(false)
 const error = ref('')
-const meta = ref<{ scannedLines: number, minOccurrences: number } | null>(null)
+const meta = ref<{
+  scannedLines: number
+  minOccurrences: number
+  totalMatched: number
+  limit: number
+} | null>(null)
 const minOccurrences = ref(2)
+const resultLimit = ref(200)
 
 const selectedCount = computed(() => candidates.value.filter(c => c.selected).length)
 const allSelected = computed(() =>
@@ -65,10 +71,13 @@ async function runMine() {
       candidates: MinedCandidateRow[]
       scannedLines: number
       minOccurrences: number
+      totalMatched: number
+      limit: number
     }>('/api/catalog/ai/mine-invoices', {
       method: 'POST',
       body: {
         minOccurrences: minOccurrences.value,
+        limit: resultLimit.value,
         unlinkedOnly: true,
       },
     })
@@ -80,6 +89,8 @@ async function runMine() {
     meta.value = {
       scannedLines: result.scannedLines,
       minOccurrences: result.minOccurrences,
+      totalMatched: result.totalMatched,
+      limit: result.limit,
     }
   }
   catch (err) {
@@ -185,6 +196,15 @@ watch(open, (isOpen) => {
               <option :value="10">10+</option>
             </select>
           </label>
+          <label class="fld min-fld">
+            Show up to
+            <select v-model.number="resultLimit" :disabled="loading || applying" aria-label="Result limit">
+              <option :value="100">100</option>
+              <option :value="200">200</option>
+              <option :value="350">350</option>
+              <option :value="500">500</option>
+            </select>
+          </label>
           <button type="button" class="btn sm" :disabled="loading || applying" @click="runMine">
             {{ loading ? 'Scanning…' : 'Rescan' }}
           </button>
@@ -192,7 +212,9 @@ watch(open, (isOpen) => {
 
         <p v-if="meta && !loading" class="meta">
           Scanned {{ meta.scannedLines }} invoice line{{ meta.scannedLines === 1 ? '' : 's' }}
-          · showing items billed {{ meta.minOccurrences }}+ times
+          · {{ meta.totalMatched }} not already in catalog
+          · showing {{ candidates.length }}{{ meta.totalMatched > candidates.length ? ` of ${meta.totalMatched}` : '' }}
+          (billed {{ meta.minOccurrences }}+ times)
         </p>
 
         <div v-if="loading" class="empty" style="display:block;">Scanning invoices…</div>
@@ -310,14 +332,17 @@ watch(open, (isOpen) => {
 .toolbar {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
 .min-fld {
   margin: 0;
-  min-width: 140px;
+  min-width: 120px;
+}
+.toolbar .btn.sm {
+  margin-left: auto;
 }
 .chk {
   display: inline-flex;

@@ -115,9 +115,11 @@ export async function mineCommonlyBilledFromInvoices(
   candidates: CommonlyBilledCandidate[]
   scannedLines: number
   minOccurrences: number
+  totalMatched: number
+  limit: number
 }> {
   const minOccurrences = Math.max(1, opts.minOccurrences ?? 2)
-  const limit = Math.min(100, Math.max(1, opts.limit ?? 50))
+  const limit = Math.min(500, Math.max(1, opts.limit ?? 200))
   const unlinkedOnly = opts.unlinkedOnly !== false
 
   const [categories, keywordMap, verbs, catalogRows, lineRows] = await Promise.all([
@@ -142,7 +144,7 @@ export async function mineCommonlyBilledFromInvoices(
     }).from(invoiceLineItems),
   ])
 
-  const candidates = buildCommonlyBilledCandidates(
+  const { candidates, totalMatched } = buildCommonlyBilledCandidates(
     lineRows,
     catalogRows,
     categories,
@@ -159,6 +161,8 @@ export async function mineCommonlyBilledFromInvoices(
     candidates,
     scannedLines: lineRows.length,
     minOccurrences,
+    totalMatched,
+    limit,
   }
 }
 
