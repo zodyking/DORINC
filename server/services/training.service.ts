@@ -255,6 +255,40 @@ export async function unassignTrainingModule(db: Db, assignmentId: string) {
   return row
 }
 
+/** Remove every training assignment for a user (progress cascades). */
+export async function clearUserTrainingAssignments(db: Db, userId: string) {
+  const rows = await db.delete(trainingAssignments)
+    .where(eq(trainingAssignments.userId, userId))
+    .returning()
+  return rows
+}
+
+/** Keep assignments, but clear login locks so the user can use the app again. */
+export async function clearUserTrainingLocks(db: Db, userId: string) {
+  const rows = await db.update(trainingAssignments)
+    .set({ locksAccess: false })
+    .where(and(
+      eq(trainingAssignments.userId, userId),
+      eq(trainingAssignments.locksAccess, true),
+      ne(trainingAssignments.status, 'completed'),
+    ))
+    .returning()
+  return rows
+}
+
+export async function setTrainingAssignmentLock(
+  db: Db,
+  assignmentId: string,
+  locksAccess: boolean,
+) {
+  const [row] = await db.update(trainingAssignments)
+    .set({ locksAccess })
+    .where(eq(trainingAssignments.id, assignmentId))
+    .returning()
+  if (!row) throw new TrainingServiceError('NOT_FOUND')
+  return row
+}
+
 export async function saveLessonProgress(
   db: Db,
   input: {
