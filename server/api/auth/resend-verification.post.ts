@@ -26,8 +26,6 @@ export default defineEventHandler(async (event) => {
       to: user.email,
       name: user.name,
       verificationToken,
-      phone: user.phone,
-      messageNotifyChannel: user.messageNotifyChannel,
     })
 
     void writeAudit(event, {
@@ -42,9 +40,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       status: 'sent',
-      message: delivery.channel === 'sms'
-        ? 'Verification text sent. The link expires in 24 hours.'
-        : 'Verification email sent. Check your inbox and spam folder — the link expires in 24 hours.',
+      message: 'Verification email sent. Check your inbox and spam folder — the link expires in 24 hours.',
     }
   }
   catch (err) {

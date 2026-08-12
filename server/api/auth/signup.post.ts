@@ -2,17 +2,15 @@ import { z } from 'zod'
 import { AuthError, signup } from '../../auth/auth.service'
 import { useDb } from '../../db/client'
 import { enqueueVerificationEmail } from '../../services/verification-email.service'
-import { isQuoEnabled } from '../../services/quo.service'
 import { writeAudit } from '../../services/audit.service'
 import { apiError } from '../../utils/api-error'
 import { validateBody } from '../../utils/validate'
 import { formatPersonName } from '../../../shared/format/person-name'
 import { emailSchema, nonEmptyString } from '../../../shared/validators/common'
-import { optionalPhoneE164Schema, phoneE164Schema } from '../../../shared/validators/quo'
+import { optionalPhoneE164Schema } from '../../../shared/validators/quo'
 
 export default defineEventHandler(async (event) => {
   const db = useDb()
-  const quoEnabled = await isQuoEnabled(db)
 
   const signupSchema = z.object({
     firstName: nonEmptyString.max(60),
@@ -20,7 +18,7 @@ export default defineEventHandler(async (event) => {
     email: emailSchema,
     password: z.string().min(12).max(200),
     accountType: z.enum(['mechanic', 'accountant']),
-    phone: quoEnabled ? phoneE164Schema : optionalPhoneE164Schema,
+    phone: optionalPhoneE164Schema,
   })
 
   const body = await validateBody(event, signupSchema)
@@ -38,8 +36,6 @@ export default defineEventHandler(async (event) => {
       to: user.email,
       name: user.name,
       verificationToken,
-      phone: user.phone,
-      messageNotifyChannel: user.messageNotifyChannel,
     })
 
     void writeAudit(event, {
@@ -60,9 +56,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       status: 'pending_verification',
-      message: delivery.channel === 'sms'
-        ? 'Check your phone for a verification text. An admin will then review your request.'
-        : 'Check your email to verify your account. An admin will then review your request.',
+      message: 'Check your email to verify your account. An admin will then review your request.',
     }
   }
   catch (err) {

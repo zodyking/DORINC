@@ -51,8 +51,6 @@ export default defineEventHandler(async (event) => {
     to: row.user.email,
     name: row.user.name,
     verificationToken,
-    phone: row.user.phone,
-    messageNotifyChannel: row.user.messageNotifyChannel,
   })
 
   await writeAudit(event, {

@@ -84,8 +84,7 @@ export async function signup(db: Db, input: SignupInput) {
     passwordHash,
     accountTypeId: typeRow.id,
     phone,
-    // Prefer Text for verification/security when signup collected a phone (Quo-enabled).
-    messageNotifyChannel: phone ? 'sms' : 'email',
+    messageNotifyChannel: 'email',
     // Pending state: not verified, not approved
   }).returning()
 

@@ -179,7 +179,7 @@ async function submitSignup() {
         email: signupEmail.value,
         password: signupPass.value,
         accountType: signupType.value.toLowerCase(),
-        ...(quoSmsEnabled.value ? { phone: signupPhone.value.trim() } : {}),
+        ...(signupPhone.value.trim() ? { phone: signupPhone.value.trim() } : {}),
       },
     })
     notice.value = res.message
@@ -355,14 +355,13 @@ async function submitSignup() {
               <input id="signup-email" v-model="signupEmail" type="email" placeholder="you@gmail.com" autocomplete="email" required>
             </div>
             <div v-if="quoSmsEnabled" class="fld">
-              <label for="signup-phone">Phone number</label>
+              <label for="signup-phone">Phone number <span class="help">(optional)</span></label>
               <input
                 id="signup-phone"
                 v-model="signupPhone"
                 type="tel"
                 placeholder="(212) 203 7378"
                 autocomplete="tel"
-                required
                 @blur="signupPhone = formatPhoneDisplay(signupPhone)"
               >
             </div>
