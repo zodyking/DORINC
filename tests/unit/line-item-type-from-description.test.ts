@@ -6,7 +6,7 @@ import {
 
 describe('inferLineTypeFromDescription', () => {
   it('reads the first word only', () => {
-    expect(firstDescriptionWord('  Replace R/S mirror')).toBe('Replace')
+    expect(firstDescriptionWord('  Replace R/Side mirror')).toBe('Replace')
     expect(firstDescriptionWord('"Install" new filter')).toBe('Install')
   })
 

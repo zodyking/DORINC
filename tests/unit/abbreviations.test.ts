@@ -3,22 +3,32 @@ import { abbreviatePhrases, expandForSpeech } from '../../shared/format/abbrevia
 
 describe('abbreviations', () => {
   it('stores shorthand when full phrase is typed or spoken', () => {
-    expect(abbreviatePhrases('replaced tire front right')).toBe('replaced tire F/R')
-    expect(abbreviatePhrases('brake Front Left and right side')).toBe('brake F/L and R/S')
-    expect(abbreviatePhrases('rear right door')).toBe('R/R door')
-    expect(abbreviatePhrases('rear left mirror')).toBe('R/L mirror')
-    expect(abbreviatePhrases('Replace Right Front headlight')).toBe('Replace F/R headlight')
-    expect(abbreviatePhrases('Right Front headlight')).toBe('F/R headlight')
+    expect(abbreviatePhrases('replaced tire front right')).toBe('replaced tire R/Front')
+    expect(abbreviatePhrases('brake Front Left and right side')).toBe('brake L/Front and R/Side')
+    expect(abbreviatePhrases('rear right door')).toBe('R/Rear door')
+    expect(abbreviatePhrases('rear left mirror')).toBe('L/Rear mirror')
+    expect(abbreviatePhrases('Replace Right Front headlight')).toBe('Replace R/Front headlight')
+    expect(abbreviatePhrases('Right Front headlight')).toBe('R/Front headlight')
   })
 
   it('normalizes typed shorthand to canonical form', () => {
-    expect(abbreviatePhrases('work on F/R')).toBe('work on F/R')
-    expect(abbreviatePhrases('brake F-L')).toBe('brake F/L')
-    expect(abbreviatePhrases('r/r door')).toBe('R/R door')
+    expect(abbreviatePhrases('work on R/Front')).toBe('work on R/Front')
+    expect(abbreviatePhrases('brake L-Front')).toBe('brake L/Front')
+    expect(abbreviatePhrases('r/rear door')).toBe('R/Rear door')
+  })
+
+  it('migrates legacy shorthand to the new canonical forms', () => {
+    expect(abbreviatePhrases('work on F/R')).toBe('work on R/Front')
+    expect(abbreviatePhrases('brake F-L')).toBe('brake L/Front')
+    expect(abbreviatePhrases('r/r door')).toBe('R/Rear door')
+    expect(abbreviatePhrases('R/S mirror')).toBe('R/Side mirror')
+    expect(abbreviatePhrases('L/S door')).toBe('L/Side door')
+    expect(abbreviatePhrases('R/L seal')).toBe('L/Rear seal')
   })
 
   it('expands shorthand for speech synthesis only', () => {
+    expect(expandForSpeech('work on R/Front')).toBe('work on Front Right')
+    expect(expandForSpeech('R/Rear door seal')).toBe('Rear Right door seal')
     expect(expandForSpeech('work on F/R')).toBe('work on Front Right')
-    expect(expandForSpeech('R/R door seal')).toBe('Rear Right door seal')
   })
 })

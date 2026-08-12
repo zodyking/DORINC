@@ -27,8 +27,8 @@ describe('audit-messages', () => {
   it('formats added and removed line items', () => {
     expect(formatAuditChangeMessage({
       action: 'invoices.line_items.create',
-      afterData: { description: 'Replace R/S Tire', lineAmount: '325.00' },
-    })).toBe('Added line "Replace R/S Tire" ($325.00)')
+      afterData: { description: 'Replace R/Side Tire', lineAmount: '325.00' },
+    })).toBe('Added line "Replace R/Side Tire" ($325.00)')
 
     expect(formatAuditChangeMessage({
       action: 'invoices.line_items.delete',
