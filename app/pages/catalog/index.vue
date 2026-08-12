@@ -5,6 +5,7 @@ import CatalogCategoriesModal from '~/components/catalog/CategoriesModal.vue'
 import CatalogPackagesPanel from '~/components/catalog/CatalogPackagesPanel.vue'
 import CatalogAutoSortModal from '~/components/catalog/CatalogAutoSortModal.vue'
 import CatalogMineInvoicesModal from '~/components/catalog/CatalogMineInvoicesModal.vue'
+import CatalogAuditModal from '~/components/catalog/CatalogAuditModal.vue'
 import type { CatalogItemType } from '~/utils/catalog-ui'
 import { normalizeCatalogItemType } from '~/utils/catalog-ui'
 import { windowedPagerPages } from '~/utils/pager-ui'
@@ -113,6 +114,7 @@ const rangeLabel = computed(() => {
 const categoriesOpen = ref(false)
 const autoSortOpen = ref(false)
 const mineInvoicesOpen = ref(false)
+const auditOpen = ref(false)
 const itemModalOpen = ref(false)
 const editingId = ref<string | null>(null)
 const formBusy = ref(false)
@@ -260,6 +262,14 @@ function onRowClick(row: CatalogItemRow) {
     <StaffPageHead subtitle="Parts, labor, fees, and packages for invoice lines">
       <template #title>Catalog</template>
       <template v-if="canManage" #actions>
+        <button
+          v-if="activeTab === 'items'"
+          type="button"
+          class="btn"
+          @click="auditOpen = true"
+        >
+          Audit catalog
+        </button>
         <button
           v-if="activeTab === 'items'"
           type="button"
@@ -429,6 +439,11 @@ function onRowClick(row: CatalogItemRow) {
     <CatalogPackagesPanel v-else ref="packagesPanelRef" />
 
     <CatalogCategoriesModal v-model:open="categoriesOpen" @changed="onCategoriesChanged" />
+    <CatalogAuditModal
+      v-model:open="auditOpen"
+      :categories="categories"
+      @applied="onAiApplied"
+    />
     <CatalogAutoSortModal v-model:open="autoSortOpen" @applied="onAiApplied" />
     <CatalogMineInvoicesModal
       v-model:open="mineInvoicesOpen"
