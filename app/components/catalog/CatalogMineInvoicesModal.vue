@@ -50,7 +50,8 @@ function toggleAll(checked: boolean) {
   candidates.value = candidates.value.map(c => ({ ...c, selected: checked }))
 }
 
-function priceLabel(value: string | null) {
+function priceLabel(value: string | null | undefined) {
+  if (!value?.trim()) return '—'
   return formatMoneyForDisplay(value) ?? '—'
 }
 
@@ -73,6 +74,7 @@ async function runMine() {
     })
     candidates.value = result.candidates.map(c => ({
       ...c,
+      suggestedPrice: c.suggestedPrice ?? '',
       selected: c.selected !== false,
     }))
     meta.value = {
