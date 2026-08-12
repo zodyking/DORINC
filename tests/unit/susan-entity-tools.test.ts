@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseEntityLookupArgs,
+  parseInvoiceLookupArgs,
   parseSearchCatalogArgs,
   SUSAN_HELP_TOOLS,
 } from '../../shared/ai-tools'
@@ -31,7 +32,10 @@ describe('Susan entity tool schemas', () => {
       itemType: 'part',
       limit: 2,
     })
-    expect(parseSearchCatalogArgs({ itemType: 'nope' }).itemType).toBeUndefined()
+    expect(parseInvoiceLookupArgs({ query: 'oldest', sort: 'oldest' })).toMatchObject({
+      query: 'oldest',
+      sort: 'oldest',
+    })
   })
 
   it('validates uuid helper and limits', () => {

@@ -10,6 +10,7 @@ import {
   extractInvoiceNumber,
   extractServiceLogNumber,
   inferInvoiceStatus,
+  inferInvoiceSort,
   inferServiceLogStatus,
   refersToCurrentRecord,
   residualInvoiceSearchQuery,
@@ -232,9 +233,12 @@ export async function executeLookupInvoice(
     ? undefined
     : (args.status || inferInvoiceStatus(query) || undefined)
   const residualQ = residualInvoiceSearchQuery(query)
+  const sort = args.sort === 'oldest' || args.sort === 'newest'
+    ? args.sort
+    : (inferInvoiceSort(query) ?? undefined)
 
   const pageId = currentEntityId(ctx, 'invoice', query || 'this invoice', args.id)
-  if (pageId && !invoiceNumber && !status) {
+  if (pageId && !invoiceNumber && !status && !sort) {
     return loadInvoiceDetail(db, pageId)
   }
 
@@ -327,6 +331,26 @@ export async function executeLookupInvoice(
   }
 
   if (!query && pageId) return loadInvoiceDetail(db, pageId)
+
+  if (sort === 'oldest' || sort === 'newest') {
+    const listed = await listInvoices(db, {
+      q: residualQ || undefined,
+      includeArchived: false,
+      page: 1,
+      pageSize: 1,
+      sort,
+    })
+    if (!listed.items.length) {
+      return { ok: true, content: 'No invoices found.' }
+    }
+    const label = sort === 'oldest' ? 'Oldest invoice' : 'Newest invoice'
+    const detail = await loadInvoiceDetail(db, listed.items[0]!.id)
+    return {
+      ok: true,
+      content: `${label} (${listed.total} total).\n${detail.content}`,
+    }
+  }
+
   if (!query) return needQuery()
 
   const result = await listInvoices(db, {

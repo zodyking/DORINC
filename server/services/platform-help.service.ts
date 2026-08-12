@@ -20,6 +20,7 @@ import {
   formatPlatformHelpForSms,
   formatPlatformHelpHtml,
   matchPlatformHelpAnswer,
+  susanTemporarilyUnavailableHtml,
 } from '../../shared/platform-help'
 import {
   isOpenRouterAuthErrorMessage,
@@ -42,7 +43,7 @@ const HELP_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
   'For questions about real records, call the read-only lookup tools available to you (invoice / service log / customer / catalog as permitted).',
   'If Current record id is set and the user asks about this/the current record (balance, total, status), call the matching lookup with that id (or an empty query).',
-  'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats — never combine an INV number with status=unpaid.',
+  'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats. For "oldest invoice" / "newest invoice" set sort oldest|newest — never combine an INV number with status=unpaid.',
   'Service log: query "SL-0713". Review queue → query "review queue".',
   'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
   'You may call multiple tools in one turn when needed, then answer from the tool results.',
@@ -416,12 +417,27 @@ export async function askPlatformHelp(
           }
         }
 
-        const { answer, promptTokens, completionTokens } = await callOpenRouterHelp(
-          apiKey,
-          model,
-          db,
-          { ...input, channel, userId: input.userId },
-        )
+        let helpResult: Awaited<ReturnType<typeof callOpenRouterHelp>> | null = null
+        let lastHelpErr: unknown
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            helpResult = await callOpenRouterHelp(
+              apiKey,
+              model,
+              db,
+              { ...input, channel, userId: input.userId },
+            )
+            break
+          }
+          catch (err) {
+            lastHelpErr = err
+            const empty = err instanceof OpenRouterServiceError && err.code === 'EMPTY_RESPONSE'
+            if (!empty || attempt === 1) throw err
+            console.warn('[platform-help] empty OpenRouter reply; retrying once')
+          }
+        }
+        if (!helpResult) throw lastHelpErr
+        const { answer, promptTokens, completionTokens } = helpResult
         const estimatedCostUsd = estimateTokenCostUsd(promptTokens, completionTokens)
         try {
           await logAiUsage(db, {
@@ -462,14 +478,8 @@ export async function askPlatformHelp(
             capped: false,
           }
         }
-        const first = firstNameFrom(input.userName)
-        const hi = first ? `Hi ${first} — ` : ''
         return {
-          answer: format(
-            `<p>${hi}Susan could not reach OpenRouter just now (${message}).</p>`
-            + '<p>Showing built-in help instead — try again in a moment, or check <b>Control Panel → AI</b>.</p>'
-            + matchPlatformHelpAnswer(input.question),
-          ),
+          answer: format(susanTemporarilyUnavailableHtml(input.userName)),
           source: 'fallback',
           capped: false,
         }

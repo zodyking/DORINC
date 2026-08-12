@@ -50,6 +50,7 @@ export type InvoiceLookupArgs = EntityLookupArgs & {
     | 'outstanding'
     | 'overdue'
     | 'stats'
+  sort?: 'newest' | 'oldest'
 }
 
 export type SearchCatalogArgs = {
@@ -92,8 +93,8 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     type: 'function',
     function: {
       name: 'lookup_invoice',
-      description:
-        'Read-only invoice lookup. Use for a specific invoice (e.g. INV-000713 → query "INV-000713"), totals/line items, or counts like unpaid/overdue/paid. For "how many unpaid invoices" set status to "unpaid" (or query "unpaid"). Do not invent invoice numbers or balances.',
+        description:
+          'Read-only invoice lookup. Use for a specific invoice (e.g. INV-000713 → query "INV-000713"), totals/line items, counts like unpaid/overdue/paid, or the oldest/newest invoice. Do not invent invoice numbers or balances.',
       parameters: {
         type: 'object',
         properties: {
@@ -125,6 +126,11 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           limit: {
             type: 'integer',
             description: 'Max search results when listing (default 5, max 8).',
+          },
+          sort: {
+            type: 'string',
+            enum: ['newest', 'oldest'],
+            description: 'Use oldest for "oldest invoice" / first invoice; newest for latest.',
           },
         },
         additionalProperties: false,
@@ -236,9 +242,11 @@ export function parseEntityLookupArgs(raw: unknown): EntityLookupArgs {
 export function parseInvoiceLookupArgs(raw: unknown): InvoiceLookupArgs {
   const base = parseEntityLookupArgs(raw)
   const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const sortRaw = typeof obj.sort === 'string' ? obj.sort.trim().toLowerCase() : ''
   return {
     ...base,
     status: parseInvoiceLookupStatus(obj.status),
+    sort: sortRaw === 'oldest' || sortRaw === 'newest' ? sortRaw : undefined,
   }
 }
 

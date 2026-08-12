@@ -3,6 +3,7 @@ import {
   extractInvoiceNumber,
   extractServiceLogNumber,
   inferInvoiceStatus,
+  inferInvoiceSort,
   inferServiceLogStatus,
   parseInvoiceLookupStatus,
   refersToCurrentRecord,
@@ -47,6 +48,13 @@ describe('susan entity query helpers', () => {
   it('keeps residual customer text after stripping status filler', () => {
     expect(residualInvoiceSearchQuery('unpaid invoices for Acme Transit')).toMatch(/acme transit/i)
     expect(residualInvoiceSearchQuery('how many unpaid invoices')).toBe('')
+    expect(residualInvoiceSearchQuery('whats our oldest invoice')).toBe('')
+  })
+
+  it('infers oldest/newest invoice sort', () => {
+    expect(inferInvoiceSort('whats our oldest invoice')).toBe('oldest')
+    expect(inferInvoiceSort('newest invoice')).toBe('newest')
+    expect(inferInvoiceSort('INV-000713')).toBeNull()
   })
 
   it('detects current-record phrasing', () => {

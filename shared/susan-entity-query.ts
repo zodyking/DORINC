@@ -126,6 +126,15 @@ export function inferInvoiceStatus(raw: string | undefined | null): InvoiceLooku
   return null
 }
 
+/** Infer oldest/newest listing from phrases like "oldest invoice". */
+export function inferInvoiceSort(raw: string | undefined | null): 'oldest' | 'newest' | null {
+  const text = String(raw || '').trim().toLowerCase()
+  if (!text) return null
+  if (/\b(oldest|earliest)\b/.test(text)) return 'oldest'
+  if (/\b(newest|latest|most recent)\b/.test(text)) return 'newest'
+  return null
+}
+
 /** Remove status/count filler words so remaining text can be used as customer/PO search. */
 export function residualInvoiceSearchQuery(raw: string | undefined | null): string {
   let text = String(raw || '').trim()
@@ -136,6 +145,7 @@ export function residualInvoiceSearchQuery(raw: string | undefined | null): stri
     .replace(/\binvoice\s*[#:]?\s*\d+\b/gi, ' ')
     .replace(/\bhow\s+man+y\b/gi, ' ')
     .replace(/\b(count|total number|stats?|summary|are|is|the|of|for|with|invoices?|ones?)\b/gi, ' ')
+    .replace(/\b(whats?|what is|our|oldest|newest|earliest|latest|most recent|first|last|please)\b/gi, ' ')
     .replace(/\b(unpaid|outstanding|open balance|not paid|balance due|overdue|paid|draft|sent|void(?:ed)?|pending(?:\s+manager)?\s*approval)\b/gi, ' ')
     .replace(/[^\w\s&.-]+/g, ' ')
     .replace(/\s+/g, ' ')

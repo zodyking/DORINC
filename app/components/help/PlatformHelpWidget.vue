@@ -328,7 +328,10 @@ async function sendMessage() {
       if (res.capped) {
         answer += '<p><small>AI spend cap reached — showing built-in help where possible.</small></p>'
       }
-      else if (!answer.includes('Control Panel → AI') && !answer.includes('OpenRouter')) {
+      else if (
+        !answer.includes('Control Panel → AI')
+        && !answer.includes('Please wait a moment and try again')
+      ) {
         answer += '<p><small>Using built-in help — live Susan AI was unavailable for this reply.</small></p>'
       }
     }

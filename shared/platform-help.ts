@@ -61,6 +61,17 @@ export const HELP_ANSWERS: HelpAnswer[] = [
 
 const DEFAULT_FALLBACK = 'I can help with invoices, service logs, roles, PDFs, the customer portal, and system setup. Ask about a specific page or workflow you are working on.'
 
+/** Complete, non-technical reply when live AI is down — never dump provider errors. */
+export function susanTemporarilyUnavailableHtml(userName?: string | null): string {
+  const raw = String(userName ?? '').trim()
+  const first = raw.split(/\s+/)[0] || ''
+  const named = first
+    ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+    : ''
+  const hi = named ? `Hi ${named}. ` : ''
+  return `<p>${hi}Susan could not finish that answer just now. Please wait a moment and try again.</p>`
+}
+
 const ALLOWED_HELP_TAG_NAMES = new Set(['b', 'strong', 'ol', 'ul', 'li', 'p', 'br', 'small', 'h4', 'h3', 'em'])
 
 const HELP_SECTION_TITLE = /^(Steps|Tips|What I see|Quick answer|Notes)$/i

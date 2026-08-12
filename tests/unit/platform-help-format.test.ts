@@ -3,6 +3,7 @@ import {
   formatPlatformHelpForSms,
   formatPlatformHelpHtml,
   matchPlatformHelpAnswer,
+  susanTemporarilyUnavailableHtml,
 } from '../../shared/platform-help'
 
 describe('formatPlatformHelpHtml', () => {
@@ -86,5 +87,16 @@ describe('formatPlatformHelpForSms', () => {
     const sms = formatPlatformHelpForSms('A'.repeat(2000), 200)
     expect(sms.length).toBeLessThanOrEqual(200)
     expect(sms.endsWith('…')).toBe(true)
+  })
+})
+
+describe('susanTemporarilyUnavailableHtml', () => {
+  it('is a complete retry message without provider internals', () => {
+    const html = susanTemporarilyUnavailableHtml('Brandon King')
+    expect(html).toContain('Hi Brandon.')
+    expect(html).toContain('Please wait a moment and try again.')
+    expect(html).not.toContain('OpenRouter')
+    expect(html).not.toContain('no content')
+    expect(html.endsWith('</p>')).toBe(true)
   })
 })
