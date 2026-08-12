@@ -28,6 +28,7 @@ export const REQUIRED_BACKUP_TABLES = Object.freeze([
   'customer_credential_email_logs',
   'vehicles',
   'service_logs',
+  'service_log_upload_sessions',
   'invoices',
   'invoice_line_items',
   'invoice_files',
@@ -65,6 +66,8 @@ export const REQUIRED_BACKUP_TABLES = Object.freeze([
   'imap_sync_state',
   'email_ingest_suppressions',
   'email_templates',
+  'sms_templates',
+  'susan_sms_threads',
 
   // AI / jobs / pdf
   'ai_provider_settings',
@@ -73,6 +76,7 @@ export const REQUIRED_BACKUP_TABLES = Object.freeze([
   'ai_usage_logs',
   'worker_jobs',
   'pdf_render_jobs',
+  'staples_print_jobs',
 
   // announcements / billing
   'announcements',
