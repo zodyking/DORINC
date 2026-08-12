@@ -261,29 +261,63 @@ export async function listAccessEvents(
   if (filter.eventType) conditions.push(eq(accessEvents.eventType, filter.eventType))
   if (filter.outcome) conditions.push(eq(accessEvents.outcome, filter.outcome))
   if (filter.displayGroup === 'access_granted') {
-    conditions.push(or(
-      eq(accessEvents.outcome, 'allowed'),
-      eq(accessEvents.outcome, 'login_success'),
+    conditions.push(and(
+      or(
+        eq(accessEvents.outcome, 'allowed'),
+        eq(accessEvents.outcome, 'login_success'),
+      ),
+      sql`coalesce(${accessEvents.path}, '') not like '/auth/access-restricted%'`,
+      sql`coalesce(${accessEvents.path}, '') not like '/auth/verify-location%'`,
     ))
   }
   else if (filter.displayGroup === 'fail') {
     conditions.push(eq(accessEvents.outcome, 'login_failed'))
   }
   else if (filter.displayGroup === 'geofence_blocked') {
-    conditions.push(and(
-      eq(accessEvents.outcome, 'blocked'),
-      or(
-        eq(accessEvents.blockReason, 'geo_outside'),
-        eq(accessEvents.blockReason, 'geo_unknown'),
+    conditions.push(or(
+      and(
+        eq(accessEvents.outcome, 'blocked'),
+        or(
+          eq(accessEvents.blockReason, 'geo_outside'),
+          eq(accessEvents.blockReason, 'geo_unknown'),
+        ),
+      ),
+      and(
+        or(
+          eq(accessEvents.outcome, 'allowed'),
+          eq(accessEvents.outcome, 'blocked'),
+        ),
+        or(
+          sql`${accessEvents.path} like '/auth/access-restricted%'`,
+          sql`${accessEvents.path} like '/auth/verify-location%'`,
+        ),
+        or(
+          isNull(accessEvents.blockReason),
+          eq(accessEvents.blockReason, 'geo_outside'),
+          eq(accessEvents.blockReason, 'geo_unknown'),
+        ),
       ),
     ))
   }
   else if (filter.displayGroup === 'blocked') {
-    conditions.push(and(
-      eq(accessEvents.outcome, 'blocked'),
-      or(
+    conditions.push(or(
+      and(
+        eq(accessEvents.outcome, 'blocked'),
+        or(
+          eq(accessEvents.blockReason, 'ip_banned'),
+          and(
+            isNull(accessEvents.blockReason),
+            sql`coalesce(${accessEvents.path}, '') not like '/auth/access-restricted%'`,
+            sql`coalesce(${accessEvents.path}, '') not like '/auth/verify-location%'`,
+          ),
+        ),
+      ),
+      and(
         eq(accessEvents.blockReason, 'ip_banned'),
-        isNull(accessEvents.blockReason),
+        or(
+          sql`${accessEvents.path} like '/auth/access-restricted%'`,
+          sql`${accessEvents.path} like '/auth/verify-location%'`,
+        ),
       ),
     ))
   }

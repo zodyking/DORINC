@@ -250,6 +250,9 @@ export default defineEventHandler(async (event) => {
       )
     : null
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
+  // Gate pages must stay reachable, but visits to them still count as security blocks
+  // (e.g. /auth/access-restricted should show as Geofence blocked, not Access granted).
+  const recordBlocked = Boolean(decision.blocked && !outsideGeoBypass)
 
   // Capture the visit (best-effort, off the response path). Prefer device_id over IP.
   // Device-signal-rich rows come from the client visit beacon; this is a fallback.
@@ -260,8 +263,8 @@ export default defineEventHandler(async (event) => {
       userAgent,
       deviceId,
       viewer,
-      blocked: Boolean(effectivelyBlocked),
-      blockReason: effectivelyBlocked ? decision.reason : null,
+      blocked: recordBlocked,
+      blockReason: recordBlocked ? decision.reason : null,
       cachedGeo: cachedGeo ?? null,
     }).catch(() => {})
   }

@@ -43,6 +43,33 @@ describe('access event display groups', () => {
     })).toBe('Geofence blocked')
   })
 
+  it('treats /auth/access-restricted visits as Geofence blocked even if recorded allowed', () => {
+    expect(accessEventDisplayGroup({
+      outcome: 'allowed',
+      path: '/auth/access-restricted',
+    })).toBe('geofence_blocked')
+    expect(accessEventDisplayGroup({
+      outcome: 'allowed',
+      path: '/auth/verify-location?sent=1',
+    })).toBe('geofence_blocked')
+    expect(accessEventDisplayGroup({
+      outcome: 'allowed',
+      path: '/auth/access-restricted',
+      blockReason: 'ip_banned',
+    })).toBe('blocked')
+    expect(accessEventDisplayLabel({
+      outcome: 'allowed',
+      path: '/auth/access-restricted',
+    })).toBe('Geofence blocked')
+  })
+
+  it('keeps normal allowed visits as Access granted', () => {
+    expect(accessEventDisplayGroup({
+      outcome: 'allowed',
+      path: '/dashboard',
+    })).toBe('access_granted')
+  })
+
   it('uses distinct colors per group', () => {
     const colors = new Set([
       accessEventDisplayColor({ outcome: 'allowed' }),

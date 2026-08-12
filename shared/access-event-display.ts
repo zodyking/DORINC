@@ -21,7 +21,7 @@ export const ACCESS_DISPLAY_GROUP_LABELS: Record<AccessDisplayGroup, string> = {
 
 /** Map/legend colors for the cleaned-up security groups. */
 export const ACCESS_DISPLAY_GROUP_COLORS: Record<AccessDisplayGroup, string> = {
-  access_granted: '#16a34a',
+  access_granted: '#4f46e5',
   fail: '#f59e0b',
   geofence_blocked: '#ea580c',
   blocked: '#dc2626',
@@ -30,24 +30,51 @@ export const ACCESS_DISPLAY_GROUP_COLORS: Record<AccessDisplayGroup, string> = {
 export type AccessEventDisplayInput = {
   outcome: string
   blockReason?: string | null
+  path?: string | null
+}
+
+/** Paths that mean the visitor was sent to a security restriction page. */
+export function isSecurityRestrictionPath(path: string | null | undefined): boolean {
+  const raw = String(path || '').trim().split('?')[0] || ''
+  return raw === '/auth/access-restricted'
+    || raw.startsWith('/auth/access-restricted/')
+    || raw === '/auth/verify-location'
+    || raw.startsWith('/auth/verify-location/')
 }
 
 /**
  * Classify an event into the security UI groups:
  * - Access granted — allowed visit / successful login (no security block)
  * - Fail — login credentials failed (or similar connection fail)
- * - Geofence blocked — blocked for being outside / unknown geo (access-restricted path)
+ * - Geofence blocked — blocked for being outside / unknown geo, or landed on
+ *   /auth/access-restricted / verify-location
  * - Blocked — IP ban or hard block from connecting
  */
 export function accessEventDisplayGroup(ev: AccessEventDisplayInput): AccessDisplayGroup {
   const outcome = String(ev.outcome || '').trim()
+  const reason = String(ev.blockReason || '').trim()
+
   if (outcome === 'login_failed') return 'fail'
-  if (outcome === 'allowed' || outcome === 'login_success') return 'access_granted'
+
   if (outcome === 'blocked') {
-    const reason = String(ev.blockReason || '').trim()
+    if (reason === 'ip_banned') return 'blocked'
     if (reason === 'geo_outside' || reason === 'geo_unknown') return 'geofence_blocked'
+    // Legacy blocked rows without reason: restriction pages are geofence; else hard block.
+    if (isSecurityRestrictionPath(ev.path)) return 'geofence_blocked'
     return 'blocked'
   }
+
+  // Gate pages used to be recorded as "allowed" because redirects are exempt —
+  // still show them as Geofence blocked when the visitor landed on the restriction page.
+  if (
+    (outcome === 'allowed' || outcome === 'login_success')
+    && isSecurityRestrictionPath(ev.path)
+  ) {
+    if (reason === 'ip_banned') return 'blocked'
+    return 'geofence_blocked'
+  }
+
+  if (outcome === 'allowed' || outcome === 'login_success') return 'access_granted'
   return 'access_granted'
 }
 

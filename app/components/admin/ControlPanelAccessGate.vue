@@ -538,7 +538,7 @@ async function save() {
   font-weight: 700;
   white-space: nowrap;
 }
-.ag-outcome.ok { background: #dcfce7; color: #166534; }
+.ag-outcome.ok { background: #eef2ff; color: #3730a3; }
 .ag-outcome.warn { background: #fef3c7; color: #92400e; }
 .ag-outcome.geo { background: #ffedd5; color: #9a3412; }
 .ag-outcome.bad { background: #fee2e2; color: #991b1b; }

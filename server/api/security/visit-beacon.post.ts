@@ -115,11 +115,19 @@ export default defineEventHandler(async (event) => {
     && !outsideGeoBypass
     && !isGatePage(body.path),
   )
+  // Record the underlying security decision even on gate pages so
+  // /auth/access-restricted is Geofence blocked (or Blocked for IP bans),
+  // not "Access granted".
+  const recordBlocked = Boolean(
+    isAccessGateEnforcing(settings)
+    && decision.blocked
+    && !outsideGeoBypass,
+  )
 
   await recordAccessEvent(useDb(), {
     eventType: 'visit',
-    outcome: effectivelyBlocked ? 'blocked' : 'allowed',
-    blockReason: effectivelyBlocked ? (decision.reason ?? null) : null,
+    outcome: recordBlocked ? 'blocked' : 'allowed',
+    blockReason: recordBlocked ? (decision.reason ?? null) : null,
     ipAddress: ip,
     userId: viewer?.id ?? null,
     userName: viewer?.name ?? null,
