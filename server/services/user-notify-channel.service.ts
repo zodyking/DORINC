@@ -26,7 +26,15 @@ export async function resolveUserNotifyDelivery(
   const email = user.email?.trim()
   if (!email) return null
 
-  const quoOn = await isQuoEnabled(db)
+  // Never let a settings/Quo read failure cancel the notification — email is
+  // the safe default, and security mail must not depend on SMS config health.
+  let quoOn = false
+  try {
+    quoOn = await isQuoEnabled(db)
+  }
+  catch (err) {
+    console.warn('[notify] Quo lookup failed; delivering by email:', (err as Error).message)
+  }
   if (quoOn) {
     const channel = (user.messageNotifyChannel === 'sms' ? 'sms' : 'email') as MessageNotifyChannel
     if (channel === 'sms') {

@@ -103,16 +103,28 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
   const base = brand.appUrl.replace(/\/$/, '')
   const messagesUrl = `${base}/messages?conversation=${opts.conversationId}`
   const fullMessage = formatChatNotifyBody(opts.body)
-  const { rows: attachmentRows } = await pool.query(
-    `SELECT id, original_filename, mime_type
-     FROM app_files
-     WHERE owner_entity_type = 'message'
-       AND owner_entity_id = $1
-       AND file_kind = 'attachment'
-       AND archived_at IS NULL
-     ORDER BY created_at ASC`,
-    [opts.messageId],
-  )
+  // Attachments are decoration — a failed lookup must not cancel the whole
+  // notification, which previously dropped the chat email entirely.
+  let attachmentRows = []
+  try {
+    const attachments = await pool.query(
+      `SELECT id, original_filename, mime_type
+       FROM app_files
+       WHERE owner_entity_type = 'message'
+         AND owner_entity_id = $1
+         AND file_kind = 'attachment'
+         AND archived_at IS NULL
+       ORDER BY created_at ASC`,
+      [opts.messageId],
+    )
+    attachmentRows = attachments.rows ?? []
+  }
+  catch (err) {
+    console.warn(
+      '[chat-notify] attachment lookup failed; sending without photos:',
+      err instanceof Error ? err.message : err,
+    )
+  }
   const { imagesHtml, attachmentFileIds } = buildInlineImageHtml(attachmentRows)
   const photoNote = attachmentFileIds.length
     ? `${attachmentFileIds.length === 1

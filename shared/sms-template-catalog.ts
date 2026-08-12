@@ -100,7 +100,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
       ...brandVars,
       { key: 'name', label: 'User name' },
       { key: 'channelLabel', label: 'Channel label' },
-      { key: 'leadMessage', label: 'Lead message' },
+      { key: 'leadMessage', label: 'Lead Message' },
       { key: 'detailMessage', label: 'Detail message' },
       { key: 'accountUrl', label: 'My Account URL' },
     ],

@@ -38,9 +38,20 @@ export function normalizePhoneE164(value) {
 }
 
 export async function isQuoSmsEnabled(pool) {
-  const config = await loadQuoConfig(pool)
-  if (!config?.enabled || !config.apiKey || !config.fromNumber) return false
-  return true
+  try {
+    const config = await loadQuoConfig(pool)
+    if (!config?.enabled || !config.apiKey || !config.fromNumber) return false
+    return true
+  }
+  catch (err) {
+    // A settings read failure must not cancel the notification — without this
+    // a transient database problem silently dropped chat/staff emails.
+    console.warn(
+      '[sms-notify] Quo config unavailable; sending by email:',
+      err instanceof Error ? err.message : err,
+    )
+    return false
+  }
 }
 
 export async function resolveSmsBody(pool, typeKey, vars) {
@@ -164,7 +175,7 @@ export async function enqueueRecipientNotification(pool, opts) {
       ...(Array.isArray(email.attachmentFileIds) && email.attachmentFileIds.length
         ? { attachmentFileIds: email.attachmentFileIds }
         : {}),
-      notificationKind: smsTypeKey || meta.notificationKind || 'staff_notification',
+      notificationKind: meta.notificationKind || smsTypeKey || 'staff_notification',
       recipientUserId: recipient.id,
       ...meta,
     })],

@@ -593,8 +593,8 @@ export const EMAIL_TEMPLATE_CATALOG: EmailTemplateDefinition[] = [
     variables: [
       v('name', 'Name'),
       v('brandName', 'Business Name'),
-      v('channelLabel', 'Channel label'),
-      v('leadMessage', 'Lead message'),
+      v('channelLabel', 'Channel Label'),
+      v('leadMessage', 'Lead Message'),
       v('accountUrl', 'My Account URL'),
     ],
     sampleVars: {

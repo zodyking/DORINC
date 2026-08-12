@@ -131,6 +131,9 @@ export async function notifyCustomerEmailReceivedStaff(pool, opts) {
       email: mail,
       meta: {
         conversationId: opts.conversationId,
+        // Match the server-side kind (staff-notifications.service.ts) so email
+        // preferences and logs agree across the API and worker paths.
+        notificationKind: 'customer_email_received',
       },
     })
     queued++
