@@ -7,7 +7,7 @@ import {
   readPwaInstalledFlag,
 } from '~/utils/pwa-install-state'
 
-const SW_VERSION = 'v5'
+const SW_VERSION = 'v6'
 
 export default defineNuxtPlugin(() => {
   pwaInstallState.installed = readPwaInstalledFlag() || isPwaStandaloneMode()

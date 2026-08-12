@@ -8,8 +8,12 @@ import { refreshAppConfigCache } from '../services/app-config.service'
 import { refreshImapConfigCache } from '../services/imap-config.service'
 import { refreshAccessGateCache } from '../services/access-gate.service'
 import { refreshQuoConfigCache } from '../services/quo.service'
+import pkg from '../../package.json'
 
 export default defineNitroPlugin(async () => {
+  const config = useRuntimeConfig()
+  console.log(`[boot] DORINC ${pkg.version ?? '0.0.0'} build=${config.public.buildId ?? 'dev'}`)
+
   if (!hasDatabaseConfig()) return
 
   const db = useDb()

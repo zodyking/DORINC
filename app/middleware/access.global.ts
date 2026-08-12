@@ -20,7 +20,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const auth = useAuthStore()
 
   // Load auth once per app start. Ongoing freshness: client polls /api/auth/me
-  // every 5s (and sooner on focus/visibility), not on every click/navigation.
+  // every 30s (and sooner on focus/visibility), not on every click/navigation.
   if (!auth.loaded) {
     await auth.fetchMe({ force: true })
   }

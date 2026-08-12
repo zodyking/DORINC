@@ -64,7 +64,19 @@ export default defineEventHandler(async (event) => {
   }
 
   let workers: { pdf: string, queue: string } | undefined
+  let schema: { usersSilentDeveloperMode: 'ok' | 'missing' } | undefined
   if (database === 'ok') {
+    try {
+      await withTimeout(
+        db.execute(sql`select "silent_developer_mode" from "users" limit 0`),
+        DB_PROBE_TIMEOUT_MS,
+      )
+      schema = { usersSilentDeveloperMode: 'ok' }
+    }
+    catch {
+      schema = { usersSilentDeveloperMode: 'missing' }
+    }
+
     try {
       const [pdf, queue] = await withTimeout(Promise.all([
         getPdfWorkerHealth(db),
@@ -79,13 +91,15 @@ export default defineEventHandler(async (event) => {
 
   const pipelineOk = !workers
     || (workers.pdf !== 'error' && workers.pdf !== 'unknown' && workers.queue !== 'error')
+  const schemaOk = !schema || schema.usersSilentDeveloperMode === 'ok'
 
   // Deep probe still answers 200 — it reports health, it does not gate traffic.
   setResponseStatus(event, 200)
 
   return {
-    status: database === 'ok' && pipelineOk ? 'ok' : 'degraded',
+    status: database === 'ok' && pipelineOk && schemaOk ? 'ok' : 'degraded',
     database,
+    schema,
     workers,
     ...base,
   }

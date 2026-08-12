@@ -14,6 +14,10 @@ describe('health endpoint is a liveness probe', () => {
     expect(src).toContain('deep')
     expect(src).toMatch(/if \(!deep\)/)
   })
+
+  it('reports critical schema columns on deep probes', () => {
+    expect(src).toContain('usersSilentDeveloperMode')
+  })
 })
 
 describe('load protections against pool starvation', () => {

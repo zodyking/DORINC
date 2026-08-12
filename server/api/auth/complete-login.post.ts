@@ -224,8 +224,6 @@ export default defineEventHandler(async (event) => {
       mustChangePassword: resolved.user.mustChangePassword,
       nonCustomerEmailEnabled: resolved.user.nonCustomerEmailEnabled,
     },
-    // Client must arm tab sessionStorage so non-/api/auth data APIs are not
-    // 403'd by the access gate after an outside-geofence (or GPS) staff login.
     outsideGeofence: outsideGeofenceLogin,
     armOutsideGeoTabSession: true,
   }
