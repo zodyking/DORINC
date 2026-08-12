@@ -17,10 +17,6 @@ import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
 } from '../services/outside-geo-verify.service'
-import {
-  OUTSIDE_GEO_SESSION_HEADER,
-  isOutsideGeoSessionFlag,
-} from '../../shared/outside-geo-session'
 
 /**
  * Paths that skip the HTML access gate.
@@ -36,8 +32,6 @@ const GATE_PAGES = [
   '/auth/session-terminated',
   '/upload/service-log',
 ]
-/** Login may load with a fresh bypass cookie after verify (before tab session is armed). */
-const LOGIN_PATHS = ['/auth/login', '/auth/portal-login', '/auth/session-terminated']
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
 /** Throttle visit capture so a single client can't flood the table. */
@@ -77,14 +71,6 @@ function isPageNavigation(event: Parameters<typeof getHeader>[0], path: string):
 
 function isGatePage(path: string): boolean {
   return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
-}
-
-function isLoginPage(path: string): boolean {
-  return LOGIN_PATHS.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
-}
-
-function tabSessionFromEvent(event: Parameters<typeof getHeader>[0]): boolean {
-  return isOutsideGeoSessionFlag(getHeader(event, OUTSIDE_GEO_SESSION_HEADER))
 }
 
 async function resolveViewer(event: Parameters<typeof getHeader>[0]) {
@@ -148,22 +134,18 @@ export default defineEventHandler(async (event) => {
     ? { blocked: false as const, reason: null }
     : evaluateAccessDecision(settings, { ip, coords })
 
-  // HTML document loads: never trust the bypass cookie alone (new tabs would skip
-  // the fence). Only login + gate pages may use the cookie without a tab session.
-  // SPA browsing after verify relies on the visit beacon + tab sessionStorage.
-  const tabSession = tabSessionFromEvent(event)
-  const outsideGeoBypass = (!isSuperAdmin && decision.blocked && decision.reason === 'geo_outside')
-    ? (
-        isLoginPage(path)
-          ? hasValidOutsideGeoBypass(event, { ipAddress: ip, userAgent, deviceId })
-          : hasValidOutsideGeoBypass(event, {
-              ipAddress: ip,
-              userAgent,
-              deviceId,
-              requireTabSession: true,
-              tabSessionConfirmed: tabSession,
-            })
-      )
+  // HTML document loads: accept a valid bypass cookie (no tab-session header —
+  // browsers cannot send custom headers on document navigations). Covers both
+  // geo_outside and geo_unknown so GPS-validated logins with CGNAT/unknown IP
+  // can refresh without bouncing to access-restricted.
+  const outsideGeoBypass = (!isSuperAdmin && decision.blocked
+    && (decision.reason === 'geo_outside' || decision.reason === 'geo_unknown'))
+    ? hasValidOutsideGeoBypass(event, {
+        ipAddress: ip,
+        userAgent,
+        deviceId,
+        requireTabSession: false,
+      })
     : null
   const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
   // Gate pages must stay reachable, but visits to them still count as security blocks

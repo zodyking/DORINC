@@ -6,8 +6,8 @@ import {
 
 /**
  * On every client navigation / first load: send a visit beacon with device
- * signals so the access gate captures SPA visits and can enforce the geofence
- * even when the HTML middleware did not run.
+ * signals so the access gate can log SPA visits. Does not redirect — the
+ * HTML document middleware owns geofence enforcement for full page loads.
  */
 export default defineNuxtPlugin(() => {
   const router = useRouter()
@@ -23,10 +23,7 @@ export default defineNuxtPlugin(() => {
     inFlight = true
     try {
       const signals = await collectDeviceSignals()
-      const res = await $fetch<{
-        blocked: boolean
-        redirectTo: string | null
-      }>('/api/security/visit-beacon', {
+      await $fetch('/api/security/visit-beacon', {
         method: 'POST',
         body: {
           path: path.split('?')[0] || '/',
@@ -34,12 +31,6 @@ export default defineNuxtPlugin(() => {
           outsideGeoSession: hasOutsideGeoTabSession(),
         },
       })
-
-      if (res?.blocked && res.redirectTo && res.redirectTo.startsWith('/')) {
-        if (router.currentRoute.value.path !== res.redirectTo.split('?')[0]) {
-          await navigateTo(res.redirectTo)
-        }
-      }
     }
     catch {
       // Best-effort — never break navigation if beacon fails.
@@ -49,7 +40,7 @@ export default defineNuxtPlugin(() => {
     }
   }
 
-  // Initial load + every client navigation (avoid double-firing page:finish + afterEach).
+  // Initial load + every client navigation.
   void beacon(router.currentRoute.value.fullPath || '/')
   router.afterEach((to) => {
     void beacon(to.fullPath || '/')

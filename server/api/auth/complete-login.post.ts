@@ -4,18 +4,24 @@ import { getClientIp } from '../../utils/client-ip'
 import { ensureDeviceId } from '../../utils/device-id'
 import { logout, resolveSession } from '../../auth/auth.service'
 import { verifyPendingLoginToken } from '../../auth/pending-login'
-import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
+import {
+  createOutsideGeoBypassToken,
+  hasValidOutsideGeoBypass,
+  setOutsideGeoBypassCookie,
+} from '../../auth/outside-geo-bypass'
 import { setSessionCookie } from '../../auth/session-cookie'
 import { hashToken } from '../../auth/tokens'
 import { useDb } from '../../db/client'
 import { sessions } from '../../db/schema/auth'
 import { writeAudit } from '../../services/audit.service'
-import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
 import {
   evaluateAccessDecision,
   getCachedAccessGateSettings,
+  isAccessGateGeoActive,
   recordAccessEvent,
 } from '../../services/access-gate.service'
+import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
+import { resolveIpGeo } from '../../services/ip-geolocation.service'
 import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
@@ -109,6 +115,39 @@ export default defineEventHandler(async (event) => {
   }
 
   setSessionCookie(event, sessionToken)
+
+  // GPS already validated this login. If the *IP* looks outside/unknown (CGNAT,
+  // travel, provider lag), mint a bypass so HTML refreshes are not bounced.
+  if (gate.enabled && resolved.user.accountType !== 'super_admin') {
+    try {
+      let ipBlocked = false
+      if (isAccessGateGeoActive(gate) && ipAddress) {
+        const ipGeo = await resolveIpGeo(ipAddress)
+        const ipCoords = ipGeo?.latitude != null && ipGeo?.longitude != null
+          ? { lat: ipGeo.latitude, lng: ipGeo.longitude }
+          : null
+        const ipDecision = evaluateAccessDecision(gate, { ip: ipAddress, coords: ipCoords })
+        ipBlocked = ipDecision.blocked
+      }
+      else {
+        const ipDecision = evaluateAccessDecision(gate, { ip: ipAddress, coords: null })
+        ipBlocked = ipDecision.blocked
+      }
+      if (ipBlocked || outsideGeofenceLogin) {
+        const token = createOutsideGeoBypassToken({
+          userId: resolved.user.id,
+          ipAddress,
+          userAgent,
+          deviceId,
+        })
+        setOutsideGeoBypassCookie(event, token)
+        outsideGeofenceLogin = true
+      }
+    }
+    catch (err) {
+      console.warn('[auth] complete-login bypass mint failed:', (err as Error).message)
+    }
+  }
 
   // Persist GPS onto the session created in step 1 (was missing before).
   await useDb().update(sessions).set({

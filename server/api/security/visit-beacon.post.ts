@@ -10,14 +10,10 @@ import {
   isAccessGateGeoActive,
   recordAccessEvent,
 } from '../../services/access-gate.service'
-import { resolveIpGeoForEvent, resolveIpLocation } from '../../services/ip-geolocation.service'
+import { resolveIpGeoForEvent } from '../../services/ip-geolocation.service'
 import { resolveSession } from '../../auth/auth.service'
 import { getSessionCookie } from '../../auth/session-cookie'
 import { hasValidOutsideGeoBypass } from '../../auth/outside-geo-bypass'
-import {
-  findKnownOutsideGeoIdentity,
-  quietlyIssueOutsideGeoChallenge,
-} from '../../services/outside-geo-verify.service'
 import { normalizeDeviceId } from '../../../shared/device-id'
 import { visitBeaconBodySchema } from '../../../shared/validators/device-signals'
 import { validateBody } from '../../utils/validate'
@@ -36,8 +32,9 @@ function isGatePage(path: string): boolean {
 
 /**
  * Client beacon on every SPA/full visit while the access gate is enabled.
- * Records device signals and re-enforces the geofence for client navigations
- * that would otherwise skip the HTML middleware.
+ * Records device signals for the security log. Does NOT bounce the SPA —
+ * geofence redirects belong to HTML document loads only (Option A: after
+ * sign-in, the workspace must keep working).
  */
 export default defineEventHandler(async (event) => {
   await requireRateLimit(event, 'login', rateLimitKeyFromIp(event, 'visit-beacon'), {
@@ -105,24 +102,15 @@ export default defineEventHandler(async (event) => {
         ipAddress: ip,
         userAgent,
         deviceId,
-        requireTabSession: true,
-        tabSessionConfirmed: body.outsideGeoSession === true,
+        requireTabSession: false,
       })
     : null
 
-  const effectivelyBlocked = Boolean(
+  const recordBlocked = Boolean(
     isAccessGateEnforcing(settings)
     && decision.blocked
     && !outsideGeoBypass
     && !isGatePage(body.path),
-  )
-  // Record the underlying security decision even on gate pages so
-  // /auth/access-restricted is Geofence blocked (or Blocked for IP bans),
-  // not "Access granted".
-  const recordBlocked = Boolean(
-    isAccessGateEnforcing(settings)
-    && decision.blocked
-    && !outsideGeoBypass,
   )
 
   await recordAccessEvent(useDb(), {
@@ -155,34 +143,7 @@ export default defineEventHandler(async (event) => {
     country: cachedGeo?.country ?? null,
   }).catch(() => {})
 
-  if (!effectivelyBlocked) {
-    return { ok: true, blocked: false, redirectTo: null as string | null, captured: true }
-  }
-
-  let redirectTo = '/auth/access-restricted'
-  if (decision.reason === 'geo_outside') {
-    try {
-      const known = await findKnownOutsideGeoIdentity(useDb(), {
-        ipAddress: ip,
-        userAgent,
-        deviceId,
-      })
-      if (known) {
-        const locationLabel = cachedGeo?.label
-          ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
-        void quietlyIssueOutsideGeoChallenge(useDb(), {
-          ipAddress: ip,
-          userAgent,
-          deviceId,
-          locationLabel,
-        }).catch(() => {})
-        redirectTo = '/auth/verify-location?sent=1'
-      }
-    }
-    catch {
-      // keep restricted
-    }
-  }
-
-  return { ok: true, blocked: true, redirectTo, captured: true }
+  // Never instruct the SPA to navigate away — that undid Option A / GPS login.
+  // HTML document middleware still enforces the fence on full page loads.
+  return { ok: true, blocked: false, redirectTo: null as string | null, captured: true }
 })
