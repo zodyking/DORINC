@@ -54,14 +54,14 @@ describe('detectDeterministicLineIssue', () => {
 
   it('flags common headlight spelling issues without changing qty', () => {
     const issue = detectDeterministicLineIssue({
-      description: 'Replace R/S Head Lite L.E.D',
+      description: 'Replace R/Side Head Lite L.E.D',
       quantity: '1',
       unitPrice: '275.00',
       lineAmount: '275.00',
     })
 
     expect(issue?.status).toBe('needs_fix')
-    expect(issue?.suggested?.description).toBe('Replace R/S Head Light LED')
+    expect(issue?.suggested?.description).toBe('Replace R/Side Head Light LED')
     expect(issue?.suggested?.quantity).toBe('1')
     expect(issue?.suggested?.unitPrice).toBe('275.00')
   })
@@ -82,7 +82,7 @@ describe('applyConservativeAuditFilter', () => {
   it('downgrades cosmetic description-only rewrites when qty and price are unchanged', () => {
     const inputLines = [{
       lineItemId,
-      description: 'Replace Tire F/R',
+      description: 'Replace Tire R/Front',
       quantity: '1',
       unitPrice: '125.00',
       lineAmount: '125.00',
@@ -91,8 +91,8 @@ describe('applyConservativeAuditFilter', () => {
       lineItemId,
       status: 'needs_fix',
       issues: ['Use customer-facing wording'],
-      original: { description: 'Replace Tire F/R', quantity: '1', unitPrice: '125.00' },
-      suggested: { description: 'Tire Replacement F/R', quantity: '1', unitPrice: '125.00' },
+      original: { description: 'Replace Tire R/Front', quantity: '1', unitPrice: '125.00' },
+      suggested: { description: 'Tire Replacement R/Front', quantity: '1', unitPrice: '125.00' },
     }]
 
     const filtered = applyConservativeAuditFilter(inputLines, auditLines)
@@ -103,7 +103,7 @@ describe('applyConservativeAuditFilter', () => {
   it('keeps spelling fixes when qty and price are unchanged', () => {
     const inputLines = [{
       lineItemId,
-      description: 'Replace R/S Head Lite L.E.D',
+      description: 'Replace R/Side Head Lite L.E.D',
       quantity: '1',
       unitPrice: '275.00',
       lineAmount: '275.00',
@@ -112,8 +112,8 @@ describe('applyConservativeAuditFilter', () => {
       lineItemId,
       status: 'needs_fix',
       issues: ['Misspelling'],
-      original: { description: 'Replace R/S Head Lite L.E.D', quantity: '1', unitPrice: '275.00' },
-      suggested: { description: 'Replace R/S Head Light LED', quantity: '1', unitPrice: '275.00' },
+      original: { description: 'Replace R/Side Head Lite L.E.D', quantity: '1', unitPrice: '275.00' },
+      suggested: { description: 'Replace R/Side Head Light LED', quantity: '1', unitPrice: '275.00' },
     }]
 
     const filtered = applyConservativeAuditFilter(inputLines, auditLines)
@@ -123,7 +123,7 @@ describe('applyConservativeAuditFilter', () => {
   it('keeps fixes when quantity or unit price must change', () => {
     const inputLines = [{
       lineItemId,
-      description: '2 tires F/R',
+      description: '2 tires R/Front',
       quantity: '1',
       unitPrice: '350.00',
       lineAmount: '350.00',
@@ -132,8 +132,8 @@ describe('applyConservativeAuditFilter', () => {
       lineItemId,
       status: 'needs_fix',
       issues: ['Qty mismatch'],
-      original: { description: '2 tires F/R', quantity: '1', unitPrice: '350.00' },
-      suggested: { description: 'Tires F/R', quantity: '2', unitPrice: '175.00' },
+      original: { description: '2 tires R/Front', quantity: '1', unitPrice: '350.00' },
+      suggested: { description: 'Tires R/Front', quantity: '2', unitPrice: '175.00' },
     }]
 
     const filtered = applyConservativeAuditFilter(inputLines, auditLines)
@@ -165,7 +165,7 @@ describe('normalizeLineAuditResults', () => {
       {
         lineItemId: line3,
         lineType: 'part',
-        description: 'Replace R/S Head Lite L.E.D',
+        description: 'Replace R/Side Head Lite L.E.D',
         quantity: '1',
         unitPrice: '275.00',
         lineAmount: '275.00',
@@ -185,6 +185,6 @@ describe('normalizeLineAuditResults', () => {
 
     expect(results.filter(line => line.status === 'needs_fix')).toHaveLength(2)
     expect(results.find(line => line.lineItemId === line3)?.suggested?.description)
-      .toBe('Replace R/S Head Light LED')
+      .toBe('Replace R/Side Head Light LED')
   })
 })

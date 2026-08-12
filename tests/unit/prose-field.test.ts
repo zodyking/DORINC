@@ -8,8 +8,8 @@ import {
 describe('prose field formatting', () => {
   it('applies live title case and abbreviations while typing', () => {
     expect(formatLiveFieldText('hello world')).toBe('Hello World')
-    expect(formatLiveFieldText('replace right side mirror')).toBe('Replace R/S Mirror')
-    expect(formatLiveFieldText('replaced f/r tire')).toBe('Replaced F/R Tire')
+    expect(formatLiveFieldText('replace right side mirror')).toBe('Replace R/Side Mirror')
+    expect(formatLiveFieldText('replaced f/r tire')).toBe('Replaced R/Front Tire')
   })
 
   it('preserves trailing space during live formatting', () => {
@@ -17,8 +17,8 @@ describe('prose field formatting', () => {
   })
 
   it('title-cases and stores location shorthand on blur', () => {
-    expect(formatFieldText('replaced front right tire', 'prose')).toBe('Replaced F/R Tire')
-    expect(formatFieldText('replaced f/r tire', 'prose')).toBe('Replaced F/R Tire')
+    expect(formatFieldText('replaced front right tire', 'prose')).toBe('Replaced R/Front Tire')
+    expect(formatFieldText('replaced f/r tire', 'prose')).toBe('Replaced R/Front Tire')
     expect(formatFieldText('bias brocho LLC', 'prose')).toBe('Bias Brocho LLC')
   })
 
@@ -31,8 +31,8 @@ describe('prose field formatting', () => {
   })
 
   it('compresses voice dictation to shorthand like blur', () => {
-    expect(formatVoiceText('install stop arm rear right', 'prose')).toBe('Install Stop Arm R/R')
-    expect(formatVoiceText('replace right front headlight', 'prose')).toBe('Replace F/R Headlight')
+    expect(formatVoiceText('install stop arm rear right', 'prose')).toBe('Install Stop Arm R/Rear')
+    expect(formatVoiceText('replace right front headlight', 'prose')).toBe('Replace R/Front Headlight')
   })
 
   it('capitalizes letters after periods while typing', () => {

@@ -12,7 +12,7 @@ const categories = [
 
 describe('inferCatalogCategory', () => {
   it('matches marker lights to Lighting', () => {
-    const result = inferCatalogCategory('Replace F/R Marker Light', categories)
+    const result = inferCatalogCategory('Replace R/Front Marker Light', categories)
     expect(result?.categoryId).toBe('cat-lighting')
     expect(result?.categoryName).toBe('Lighting')
   })

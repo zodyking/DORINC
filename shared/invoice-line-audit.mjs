@@ -42,7 +42,7 @@ export const DEFAULT_INVOICE_LINE_AI_RULE_CARDS = [
   }),
   createAiRuleCard({
     title: 'Abbreviations',
-    rule: 'Ignore abbreviations such as F/R, F/L, R/R, R/L, R/S, L/S, and combinations — they are correct for this platform.',
+    rule: 'Ignore abbreviations such as R/Front, L/Front, R/Side, L/Side, R/Rear, L/Rear (and legacy F/R, F/L, R/R, R/L, R/S, L/S) — they are correct for this platform.',
   }),
   createAiRuleCard({
     title: 'Correction style',
@@ -62,7 +62,7 @@ export const LINE_AUDIT_SYSTEM_INSTRUCTIONS = [
   'Default to status "ok" with suggested null when a line already satisfies the rules.',
   'Mark "needs_fix" for clear violations: qty/price math mismatch, quantity duplicated in or conflicting with the description, spelling errors, grammar errors, or title-case problems.',
   'Do not rewrite acceptable shop phrasing into customer-facing wording (example: keep "Replace Tire", not "Tire Replacement").',
-  'Shop/mechanic phrasing and platform abbreviations (F/R, F/L, R/R, R/L, R/S, L/S, and combinations) are intentional — do not change them when already correct.',
+  'Shop/mechanic phrasing and platform abbreviations (R/Front, L/Front, R/Side, L/Side, R/Rear, L/Rear, and legacy F/R, F/L, R/R, R/L, R/S, L/S) are intentional — do not change them when already correct.',
   'When fixing, change only fields required by the violation and preserve original wording everywhere else.',
   'Rules to enforce:',
 ].join(' ')
