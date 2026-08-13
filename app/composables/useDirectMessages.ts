@@ -83,6 +83,11 @@ function normalizeMessageChannel(value: string): MessageChannel {
   return value === 'email' ? 'email' : 'dm'
 }
 
+/** One timer for staff layout + messages page — two intervals were overlapping. */
+let sharedPollTimer: ReturnType<typeof setInterval> | null = null
+let sharedPollSubscribers = 0
+let pollInFlight = false
+
 export function useDirectMessages() {
   const auth = useAuthStore()
   const route = useRoute()
@@ -98,10 +103,8 @@ export function useDirectMessages() {
   const messageChannel = useState<string>('dm-message-channel', () => 'dm')
   const emailShowAll = useState('dm-email-show-all', () => false)
   const fetchError = useState<string | null>('dm-fetch-error', () => null)
-
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let lastMessageId: string | null = null
-  let pollingStarted = false
+  const lastMessageId = useState<string | null>('dm-last-message-id', () => null)
+  let subscribed = false
 
   function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
     if (!incoming.length) return existing
@@ -121,7 +124,7 @@ export function useDirectMessages() {
     conversations.value.find(c => c.id === activeConversationId.value) ?? null,
   )
   const activeIsEmail = computed(() => activeConversation.value?.type === 'email')
-const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
+  const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
 
   async function fetchUnreadCount() {
     if (!canUseMessages.value) return
@@ -182,7 +185,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
         messages.value = res.items
       }
       const last = messages.value[messages.value.length - 1]
-      lastMessageId = last?.id ?? null
+      lastMessageId.value = last?.id ?? null
     }
     finally {
       if (!afterId && !silent) loadingMessages.value = false
@@ -192,7 +195,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
   async function openConversation(conversationId: string) {
     activeConversationId.value = conversationId
     messages.value = []
-    lastMessageId = null
+    lastMessageId.value = null
     await Promise.all([
       fetchMessages(conversationId),
       markRead(conversationId),
@@ -264,7 +267,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
         body: payload,
       })
       messages.value = mergeMessages(messages.value, [msg])
-      lastMessageId = msg.id
+      lastMessageId.value = msg.id
       await fetchConversations({ silent: true })
       await fetchUnreadCount()
     }
@@ -292,6 +295,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
     messageChannel.value = next
     activeConversationId.value = null
     messages.value = []
+    lastMessageId.value = null
     await fetchConversations()
   }
 
@@ -300,39 +304,49 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
     emailShowAll.value = showAll
     activeConversationId.value = null
     messages.value = []
+    lastMessageId.value = null
     await fetchConversations()
   }
 
   async function pollActive() {
-    if (!canUseMessages.value) return
-    await fetchUnreadCount()
-    if (route.path.startsWith('/messages')) {
-      await fetchConversations({ silent: true })
-      if (activeConversationId.value) {
-        if (!messages.value.length) {
-          await fetchMessages(activeConversationId.value, undefined, { silent: true })
-        }
-        else if (lastMessageId) {
-          await fetchMessages(activeConversationId.value, lastMessageId, { silent: true })
+    if (pollInFlight || !canUseMessages.value) return
+    pollInFlight = true
+    try {
+      await fetchUnreadCount()
+      if (route.path.startsWith('/messages')) {
+        await fetchConversations({ silent: true })
+        if (activeConversationId.value) {
+          if (!messages.value.length) {
+            await fetchMessages(activeConversationId.value, undefined, { silent: true })
+          }
+          else if (lastMessageId.value) {
+            await fetchMessages(activeConversationId.value, lastMessageId.value, { silent: true })
+          }
         }
       }
+    }
+    finally {
+      pollInFlight = false
     }
   }
 
   function startPolling() {
-    if (pollingStarted) return
-    stopPolling()
-    if (!canUseMessages.value) return
-    pollingStarted = true
+    if (!canUseMessages.value || subscribed) return
+    subscribed = true
+    sharedPollSubscribers++
+    if (sharedPollTimer) return
     void fetchUnreadCount()
-    pollTimer = setInterval(() => { void pollActive() }, DM_POLL_MS)
+    sharedPollTimer = setInterval(() => { void pollActive() }, DM_POLL_MS)
   }
 
   function stopPolling() {
-    pollingStarted = false
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
+    if (!subscribed) return
+    subscribed = false
+    if (sharedPollSubscribers > 0) sharedPollSubscribers--
+    if (sharedPollSubscribers > 0) return
+    if (sharedPollTimer) {
+      clearInterval(sharedPollTimer)
+      sharedPollTimer = null
     }
   }
 
@@ -366,6 +380,7 @@ const activeIsTeam = computed(() => activeConversation.value?.type === 'team')
     activeConversationId,
     activeConversation,
     activeIsEmail,
+    activeIsTeam,
     messages,
     unreadTotal,
     loadingConversations,

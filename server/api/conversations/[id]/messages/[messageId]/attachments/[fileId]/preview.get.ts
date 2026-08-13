@@ -38,6 +38,9 @@ export default defineEventHandler(async (event) => {
     if (err instanceof FilesServiceError && err.code === 'NOT_FOUND') {
       throw apiError(event, 'NOT_FOUND', 'Attachment not found')
     }
+    if (err instanceof FilesServiceError && err.code === 'FILE_TOO_LARGE') {
+      throw apiError(event, 'VALIDATION_ERROR', err.message || 'File is too large to preview')
+    }
     throw err
   }
 })

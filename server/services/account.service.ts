@@ -84,6 +84,7 @@ export async function getAccountDetail(
       gt(sessions.expiresAt, now),
     ))
     .orderBy(desc(sessions.lastActivityAt))
+    .limit(50)
 
   const mapped = sessionRows.map(s => ({
     id: s.id,

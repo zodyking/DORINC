@@ -39,6 +39,18 @@ export function maxUploadBytes(): number {
   return getMaxUploadMb() * 1024 * 1024
 }
 
+/** Inline previews (announcements, chat, email CID) must not load giant originals into the web heap. */
+export const MAX_INLINE_PREVIEW_BYTES = 16 * 1024 * 1024
+
+export function assertInlinePreviewSize(fileSizeBytes: number): void {
+  if (fileSizeBytes > MAX_INLINE_PREVIEW_BYTES) {
+    throw new FilesServiceError(
+      'FILE_TOO_LARGE',
+      `File exceeds the ${Math.floor(MAX_INLINE_PREVIEW_BYTES / 1024 / 1024)} MB preview limit`,
+    )
+  }
+}
+
 /** Magic-number sniff for the formats we accept — declared MIME must match the bytes. */
 export function sniffMime(data: Buffer): string | null {
   if (data.length >= 3 && data[0] === 0xFF && data[1] === 0xD8 && data[2] === 0xFF) return 'image/jpeg'
@@ -215,14 +227,15 @@ const BROWSER_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 
 /** Returns bytes suitable for inline browser display — prefers webp preview derivatives / converts HEIC. */
 export async function resolveImageDisplayPreview(db: Db, fileId: string) {
-  const original = await getFileWithData(db, fileId)
+  const originalMeta = await getFileMeta(db, fileId)
 
   // Paper service-log photos must stay readable — serve the original capture when
   // the browser can display it (do not downscale to the 1600px preview derivative).
   if (
-    original.ownerEntityType === 'service_log'
-    && BROWSER_IMAGE_MIMES.has(original.mimeType)
+    originalMeta.ownerEntityType === 'service_log'
+    && BROWSER_IMAGE_MIMES.has(originalMeta.mimeType)
   ) {
+    const original = await getFileWithData(db, fileId)
     return {
       binaryData: original.binaryData,
       mimeType: original.mimeType,
@@ -247,6 +260,9 @@ export async function resolveImageDisplayPreview(db: Db, fileId: string) {
       fileSizeBytes: preview.fileSizeBytes,
     }
   }
+
+  assertInlinePreviewSize(originalMeta.fileSizeBytes)
+  const original = await getFileWithData(db, fileId)
 
   if (BROWSER_IMAGE_MIMES.has(original.mimeType)) {
     return {

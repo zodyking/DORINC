@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, users } from '../db/schema/auth'
 import { customerContacts, customers } from '../db/schema/customers'
@@ -624,7 +624,7 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
     createdAt: messages.createdAt,
     direction: emailMessageMeta.direction,
     fromAddress: emailMessageMeta.fromAddress,
-    htmlBody: emailMessageMeta.htmlBody,
+    hasHtmlBody: sql<boolean>`coalesce(length(btrim(${emailMessageMeta.htmlBody})), 0) > 0`,
   })
     .from(messages)
     .leftJoin(emailMessageMeta, eq(emailMessageMeta.messageId, messages.id))
@@ -669,7 +669,7 @@ export async function listEmailMessages(db: Db, conversationId: string, filter: 
       createdAt: r.createdAt.toISOString(),
       channel: 'email' as const,
       direction: (r.direction ?? 'outbound') as 'inbound' | 'outbound',
-      hasHtmlBody: !!r.htmlBody?.trim(),
+      hasHtmlBody: !!r.hasHtmlBody,
       fromAddress: r.fromAddress,
       entityRefs: [],
       attachments: attachments.map(file => ({
@@ -1232,23 +1232,15 @@ export async function listCustomerEmailRecipients(db: Db, q?: string) {
 export async function countEmailUnread(db: Db, userId: string): Promise<number> {
   if (!(await isEmailInboxReady(db))) return 0
 
-  const threads = await db.select({ conversationId: emailThreads.conversationId }).from(emailThreads)
-  let total = 0
-  for (const thread of threads) {
-    const [readRow] = await db.select({ lastReadAt: emailConversationReads.lastReadAt })
-      .from(emailConversationReads)
-      .where(and(
-        eq(emailConversationReads.conversationId, thread.conversationId),
-        eq(emailConversationReads.userId, userId),
-      ))
-      .limit(1)
-    const [{ value }] = await db.select({ value: count() })
-      .from(messages)
-      .where(and(
-        eq(messages.conversationId, thread.conversationId),
-        readRow?.lastReadAt ? gt(messages.createdAt, readRow.lastReadAt) : sql`true`,
-      ))
-    total += Number(value)
-  }
-  return total
+  // One aggregate — the previous per-thread loop issued 2N queries on every
+  // 4s unread poll and could stall the web pool until Node OOMed.
+  const result = await db.execute<{ value: string }>(sql`
+    SELECT COUNT(*)::text AS value
+    FROM ${emailThreads} t
+    INNER JOIN ${messages} m ON m.conversation_id = t.conversation_id
+    LEFT JOIN ${emailConversationReads} r
+      ON r.conversation_id = t.conversation_id AND r.user_id = ${userId}
+    WHERE r.last_read_at IS NULL OR m.created_at > r.last_read_at
+  `)
+  return Number(result.rows[0]?.value ?? 0)
 }

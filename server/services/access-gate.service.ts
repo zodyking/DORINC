@@ -256,7 +256,7 @@ export async function listAccessEvents(
     to?: string | Date | null
   } = {},
 ): Promise<AccessEventView[]> {
-  const limit = Math.min(Math.max(filter.limit ?? 1000, 1), 5000)
+  const limit = Math.min(Math.max(filter.limit ?? 400, 1), 1000)
   const conditions = []
   if (filter.eventType) conditions.push(eq(accessEvents.eventType, filter.eventType))
   if (filter.outcome) conditions.push(eq(accessEvents.outcome, filter.outcome))

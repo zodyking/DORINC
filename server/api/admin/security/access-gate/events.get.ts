@@ -9,7 +9,7 @@ const querySchema = z.object({
   group: z.enum(['access_granted', 'fail', 'geofence_blocked', 'blocked']).optional(),
   q: z.string().trim().max(120).optional(),
   sort: z.enum(['newest', 'oldest', 'outcome', 'type', 'user', 'ip']).optional(),
-  limit: z.coerce.number().int().min(1).max(5000).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
   /** Inclusive start ISO timestamp. */
   from: z.string().trim().min(10).max(40).optional(),
   /** Exclusive end ISO timestamp. */

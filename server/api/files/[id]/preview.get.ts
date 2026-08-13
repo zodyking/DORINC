@@ -1,6 +1,6 @@
 import { setHeaders } from 'h3'
 import { useDb } from '../../../db/client'
-import { FilesServiceError, getFileWithData } from '../../../services/files.service'
+import { FilesServiceError, assertInlinePreviewSize, getFileMeta, getFileWithData } from '../../../services/files.service'
 import { assertCanReadFile } from '../../../services/file-access.service'
 import { apiError } from '../../../utils/api-error'
 import { validateParams } from '../../../utils/validate'
@@ -16,8 +16,10 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   try {
+    const meta = await getFileMeta(db, id)
+    await assertCanReadFile(event, db, meta)
+    assertInlinePreviewSize(meta.fileSizeBytes)
     const file = await getFileWithData(db, id)
-    await assertCanReadFile(event, db, file)
 
     setHeaders(event, {
       'Content-Type': file.mimeType,
@@ -31,6 +33,9 @@ export default defineEventHandler(async (event) => {
   catch (err) {
     if (err instanceof FilesServiceError && err.code === 'NOT_FOUND') {
       throw apiError(event, 'NOT_FOUND', 'File not found')
+    }
+    if (err instanceof FilesServiceError && err.code === 'FILE_TOO_LARGE') {
+      throw apiError(event, 'VALIDATION_ERROR', err.message || 'File is too large to preview')
     }
     throw err
   }
