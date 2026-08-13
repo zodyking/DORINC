@@ -317,7 +317,7 @@ async function loadBillingForSummary(db: Db): Promise<BillingDashboardPayload> {
     console.warn('[daily-summary] billing snapshot unavailable:', err instanceof Error ? err.message : err)
     const nowIso = new Date().toISOString()
     return {
-      configured: { vultr: false, cloudflare: false, openrouter: false },
+      configured: { vultr: false, cloudflare: false, openrouter: false, quo: false },
       vultr: {
         configured: false,
         currency: 'USD',
@@ -354,12 +354,25 @@ async function loadBillingForSummary(db: Db): Promise<BillingDashboardPayload> {
         error: null,
         lastUpdated: nowIso,
       },
+      quo: {
+        configured: false,
+        enabled: false,
+        fromNumber: null,
+        phoneNumbers: [],
+        phoneCount: 0,
+        paymentDate: null,
+        paymentAmountUsd: null,
+        daysUntilPayment: null,
+        creditsNote: null,
+        error: null,
+        lastUpdated: nowIso,
+      },
       totals: {
         currency: 'USD',
         estimatedMonthlyUsd: 0,
         estimatedYearlyUsd: 0,
-        breakdown: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0 },
-        breakdownYearly: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0 },
+        breakdown: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0, quoUsd: 0 },
+        breakdownYearly: { vultrUsd: 0, cloudflareUsd: 0, openrouterUsd: 0, quoUsd: 0 },
       },
       outlook: { currency: 'USD', points: [] },
       lastRefreshed: nowIso,
@@ -766,7 +779,10 @@ function buildSections(input: {
   })
 
   // 7. Ops billing (when configured)
-  const hasBilling = billing.configured.vultr || billing.configured.cloudflare || billing.configured.openrouter
+  const hasBilling = billing.configured.vultr
+    || billing.configured.cloudflare
+    || billing.configured.openrouter
+    || billing.configured.quo
   if (hasBilling) {
     const billingStats: DailySummaryStat[] = [
       { label: 'Est. monthly', value: moneyLabel(billing.totals.estimatedMonthlyUsd) },
@@ -785,10 +801,39 @@ function buildSections(input: {
         { label: 'Renewals ≤30d', value: String(dueSoon) },
       )
     }
+    if (billing.configured.quo && billing.quo.paymentAmountUsd != null && billing.quo.paymentAmountUsd > 0) {
+      billingStats.push(
+        { label: 'Quo prepaid', value: moneyLabel(billing.quo.paymentAmountUsd) },
+        {
+          label: 'Quo due',
+          value: billing.quo.daysUntilPayment == null
+            ? (billing.quo.paymentDate || 'n/a')
+            : billing.quo.daysUntilPayment < 0
+              ? `${Math.abs(billing.quo.daysUntilPayment)}d overdue`
+              : billing.quo.daysUntilPayment === 0
+                ? 'Today'
+                : `${billing.quo.daysUntilPayment}d`,
+        },
+      )
+    }
 
     let billingInsight = `Ops spend looks like about ${moneyLabel(billing.totals.estimatedYearlyUsd)} for the year across the connected providers.`
     if (billing.configured.vultr && billing.vultr.accountBalance != null && billing.vultr.accountBalance < 0) {
       billingInsight = `Vultr balance is ${moneyLabel(billing.vultr.accountBalance)}. Top that up soon so hosting stays online.`
+    }
+    else if (
+      billing.configured.quo
+      && billing.quo.paymentAmountUsd != null
+      && billing.quo.paymentAmountUsd > 0
+      && billing.quo.daysUntilPayment != null
+      && billing.quo.daysUntilPayment <= 30
+    ) {
+      const when = billing.quo.daysUntilPayment < 0
+        ? `${Math.abs(billing.quo.daysUntilPayment)} day${Math.abs(billing.quo.daysUntilPayment) === 1 ? '' : 's'} overdue`
+        : billing.quo.daysUntilPayment === 0
+          ? 'due today'
+          : `due in ${billing.quo.daysUntilPayment} day${billing.quo.daysUntilPayment === 1 ? '' : 's'}`
+      billingInsight = `Quo prepaid payment of ${moneyLabel(billing.quo.paymentAmountUsd)} is ${when}. Top up credits in Quo so SMS stays online.`
     }
     else if (billing.configured.cloudflare) {
       const dueSoon = billing.cloudflare.domains.filter(d => d.daysUntilRenewal >= 0 && d.daysUntilRenewal <= 30)

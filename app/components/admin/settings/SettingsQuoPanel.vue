@@ -11,6 +11,8 @@ interface QuoView {
   configured: boolean
   webhookConfigured: boolean
   webhookUrl: string | null
+  paymentDate: string | null
+  paymentAmountUsd: number | null
 }
 
 interface QuoPhoneOption {
@@ -46,6 +48,8 @@ const form = reactive({
   enabled: false,
   apiKey: '',
   fromNumber: '',
+  paymentDate: '',
+  paymentAmountUsd: '' as string,
 })
 
 const phoneOptions = ref<QuoPhoneOption[]>([])
@@ -87,6 +91,8 @@ watch(() => quoData.value, (q) => {
   form.enabled = q.enabled
   form.fromNumber = q.fromNumber ?? ''
   form.apiKey = q.hasApiKey ? SAVED_PASSWORD_MASK : ''
+  form.paymentDate = q.paymentDate ?? ''
+  form.paymentAmountUsd = q.paymentAmountUsd != null ? String(q.paymentAmountUsd) : ''
 }, { immediate: true })
 
 const fromNumberSelectOptions = computed(() => {
@@ -147,9 +153,12 @@ async function save() {
   message.value = ''
   error.value = ''
   try {
+    const amountRaw = form.paymentAmountUsd.trim()
     const body: Record<string, unknown> = {
       enabled: form.enabled,
       fromNumber: form.fromNumber.trim() || undefined,
+      paymentDate: form.paymentDate.trim() || null,
+      paymentAmountUsd: amountRaw === '' ? null : Number(amountRaw),
     }
     const nextKey = passwordForSave(form.apiKey, !!quoData.value?.hasApiKey)
     if (nextKey !== undefined) body.apiKey = nextKey
@@ -158,6 +167,8 @@ async function save() {
     else form.apiKey = ''
     form.enabled = res.enabled
     form.fromNumber = res.fromNumber ?? ''
+    form.paymentDate = res.paymentDate ?? ''
+    form.paymentAmountUsd = res.paymentAmountUsd != null ? String(res.paymentAmountUsd) : ''
     message.value = res.enabled
       ? (res.webhookConfigured
           ? 'Quo SMS saved and enabled — Susan SMS webhook ready'
@@ -406,6 +417,36 @@ const variableHelp = computed(() => {
           </button>
         </div>
 
+        <fieldset class="quo-billing-fields">
+          <legend>Billing (prepaid)</legend>
+          <p class="settings-help">
+            Quo does not expose credit spend via API. Set the next payment date and amount so the Billing page can include Quo cost in monthly/yearly totals.
+          </p>
+          <div class="quo-billing-grid">
+            <label class="fld">
+              Next payment date
+              <input
+                v-model="form.paymentDate"
+                type="date"
+              >
+            </label>
+            <label class="fld">
+              Payment amount (USD)
+              <input
+                v-model="form.paymentAmountUsd"
+                type="number"
+                min="0"
+                max="999999"
+                step="0.01"
+                placeholder="0.00"
+              >
+            </label>
+          </div>
+          <span class="help">
+            Clear either field and save to remove Quo from billing totals. Amount due within 30 days counts toward estimated monthly spend; the full amount counts toward yearly.
+          </span>
+        </fieldset>
+
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>
 
@@ -541,6 +582,29 @@ const variableHelp = computed(() => {
 .msg-pref-text b { font-size: 14px; }
 .msg-pref-text small { color: var(--muted, #6b7280); font-size: 12px; line-height: 1.4; }
 .msg-pref-check { width: 18px; height: 18px; margin-top: 2px; }
+
+.quo-billing-fields {
+  margin: 4px 0 12px;
+  padding: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.quo-billing-fields legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quo-billing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .quo-billing-grid { grid-template-columns: 1fr; }
+}
 
 .quo-template-layout {
   display: grid;

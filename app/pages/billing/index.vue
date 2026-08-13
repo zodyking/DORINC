@@ -67,13 +67,13 @@ watch(dashboard, (d) => {
 const breakdownTotal = computed(() => {
   const b = dashboard.value?.totals.breakdown
   if (!b) return 0
-  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd
+  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd + b.quoUsd
 })
 
 const yearlyBreakdownTotal = computed(() => {
   const b = dashboard.value?.totals.breakdownYearly
   if (!b) return 0
-  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd
+  return b.vultrUsd + b.cloudflareUsd + b.openrouterUsd + b.quoUsd
 })
 
 function breakdownShare(amount: number): number {
@@ -352,6 +352,15 @@ function selectProvider(provider: BillingProviderKey) {
                     <span class="billing-share-fill ai" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.openrouterUsd)}%` }" />
                   </div>
                 </li>
+                <li>
+                  <div class="billing-share-row">
+                    <span>{{ labels.quo.category }}</span>
+                    <strong>{{ billingMoney(dashboard.totals.breakdownYearly.quoUsd) }}</strong>
+                  </div>
+                  <div class="billing-share-track" aria-hidden="true">
+                    <span class="billing-share-fill sms" :style="{ width: `${yearlyBreakdownShare(dashboard.totals.breakdownYearly.quoUsd)}%` }" />
+                  </div>
+                </li>
               </ul>
             </aside>
           </div>
@@ -559,16 +568,16 @@ function selectProvider(provider: BillingProviderKey) {
                     <dd>{{ dashboard.quo.enabled ? 'Enabled' : 'Saved (off)' }}</dd>
                   </div>
                   <div>
-                    <dt>Numbers</dt>
-                    <dd>{{ dashboard.quo.phoneCount }}</dd>
+                    <dt>This month</dt>
+                    <dd>{{ billingMoney(dashboard.totals.breakdown.quoUsd) }}</dd>
                   </div>
                   <div>
-                    <dt>From</dt>
-                    <dd>{{ phoneDisplay(dashboard.quo.fromNumber) }}</dd>
+                    <dt>Next payment</dt>
+                    <dd>{{ billingDate(dashboard.quo.paymentDate) }}</dd>
                   </div>
                   <div>
-                    <dt>Credits</dt>
-                    <dd>Prepaid in Quo</dd>
+                    <dt>Amount</dt>
+                    <dd>{{ billingMoney(dashboard.quo.paymentAmountUsd) }}</dd>
                   </div>
                 </dl>
               </template>
@@ -836,6 +845,36 @@ function selectProvider(provider: BillingProviderKey) {
                   <div>
                     <dt>Workspace numbers</dt>
                     <dd>{{ dashboard.quo.phoneCount }}</dd>
+                  </div>
+                  <div>
+                    <dt>Next payment</dt>
+                    <dd>
+                      {{ billingDate(dashboard.quo.paymentDate) }}
+                      <span
+                        v-if="dashboard.quo.daysUntilPayment != null"
+                        class="pill sm"
+                        :class="billingDaysBadgeClass(dashboard.quo.daysUntilPayment)"
+                        style="margin-left:6px;"
+                      >
+                        {{ dashboard.quo.daysUntilPayment < 0
+                          ? `${Math.abs(dashboard.quo.daysUntilPayment)}d overdue`
+                          : dashboard.quo.daysUntilPayment === 0
+                            ? 'Due today'
+                            : `${dashboard.quo.daysUntilPayment}d` }}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Payment amount</dt>
+                    <dd>{{ billingMoney(dashboard.quo.paymentAmountUsd) }}</dd>
+                  </div>
+                  <div>
+                    <dt>In monthly total</dt>
+                    <dd>{{ billingMoney(dashboard.totals.breakdown.quoUsd) }}</dd>
+                  </div>
+                  <div>
+                    <dt>In yearly total</dt>
+                    <dd>{{ billingMoney(dashboard.totals.breakdownYearly.quoUsd) }}</dd>
                   </div>
                 </dl>
                 <div v-if="dashboard.quo.phoneNumbers.length" class="billing-table-wrap">
@@ -1140,6 +1179,10 @@ section.page.active.billing-page {
 
 .billing-share-fill.ai {
   background: #4338ca;
+}
+
+.billing-share-fill.sms {
+  background: #b45309;
 }
 
 .billing-updated {

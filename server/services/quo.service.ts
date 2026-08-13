@@ -19,6 +19,10 @@ export interface QuoConfig {
   webhookKey: string
   /** Absolute HTTPS URL registered with Quo. */
   webhookUrl: string
+  /** Next prepaid payment / renewal date (YYYY-MM-DD). */
+  paymentDate: string | null
+  /** Expected prepaid payment amount in USD. */
+  paymentAmountUsd: number | null
 }
 
 const DEFAULT_CONFIG: QuoConfig = {
@@ -28,6 +32,21 @@ const DEFAULT_CONFIG: QuoConfig = {
   webhookId: '',
   webhookKey: '',
   webhookUrl: '',
+  paymentDate: null,
+  paymentAmountUsd: null,
+}
+
+function normalizePaymentDate(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
+}
+
+function normalizePaymentAmountUsd(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(n * 100) / 100
 }
 
 export const QUO_API_VERSION = '2026-03-30'
@@ -47,6 +66,8 @@ function toView(config: QuoConfig): QuoSettingsView {
     configured: hasApiKey && Boolean(fromNumber),
     webhookConfigured,
     webhookUrl: config.webhookUrl?.trim() || null,
+    paymentDate: config.paymentDate,
+    paymentAmountUsd: config.paymentAmountUsd,
   }
 }
 
@@ -75,6 +96,8 @@ async function readEncryptedConfig(db: Db): Promise<QuoConfig> {
       webhookId: typeof parsed.webhookId === 'string' ? parsed.webhookId : '',
       webhookKey: typeof parsed.webhookKey === 'string' ? parsed.webhookKey : '',
       webhookUrl: typeof parsed.webhookUrl === 'string' ? parsed.webhookUrl : '',
+      paymentDate: normalizePaymentDate(parsed.paymentDate),
+      paymentAmountUsd: normalizePaymentAmountUsd(parsed.paymentAmountUsd),
     }
   }
   catch {
@@ -125,6 +148,12 @@ export async function saveQuoSettings(
     webhookId: current.webhookId,
     webhookKey: current.webhookKey,
     webhookUrl: current.webhookUrl,
+    paymentDate: patch.paymentDate !== undefined
+      ? normalizePaymentDate(patch.paymentDate)
+      : current.paymentDate,
+    paymentAmountUsd: patch.paymentAmountUsd !== undefined
+      ? normalizePaymentAmountUsd(patch.paymentAmountUsd)
+      : current.paymentAmountUsd,
   }
 
   // Cannot enable without credentials.
@@ -166,6 +195,8 @@ async function persistQuoConfig(db: Db, next: QuoConfig, actorId: string | null)
         fromNumber: next.fromNumber,
         webhookId: next.webhookId || null,
         webhookUrl: next.webhookUrl || null,
+        paymentDate: next.paymentDate,
+        paymentAmountUsd: next.paymentAmountUsd,
       },
       updatedBy: actorId,
       updatedAt: new Date(),
@@ -178,6 +209,8 @@ async function persistQuoConfig(db: Db, next: QuoConfig, actorId: string | null)
         enabled: next.enabled,
         fromNumber: next.fromNumber,
         webhookId: next.webhookId || null,
+        paymentDate: next.paymentDate,
+        paymentAmountUsd: next.paymentAmountUsd,
         webhookUrl: next.webhookUrl || null,
       },
       encryptedValue,

@@ -53,4 +53,22 @@ describe('buildBillingOutlook', () => {
     expect(points.find(p => p.key === '2026-04')?.projectedUsd).toBe(22)
     expect(points.find(p => p.key === '2027-01')?.projectedUsd).toBe(28)
   })
+
+  it('includes Quo prepaid payments in the month they fall due', () => {
+    const now = new Date('2026-08-15T12:00:00.000Z')
+    const points = buildBillingOutlook({
+      vultrPlanMonthly: 10,
+      openrouterMonthly: 0,
+      vultrInvoices: [],
+      openrouterUsage: [],
+      domainRenewals: [],
+      quoPayments: [
+        { paymentDate: '2026-10-01', paymentAmountUsd: 25 },
+      ],
+      now,
+    })
+
+    expect(points.find(p => p.key === '2026-09')?.projectedUsd).toBe(10)
+    expect(points.find(p => p.key === '2026-10')?.projectedUsd).toBe(35)
+  })
 })

@@ -30,6 +30,26 @@ export const optionalPhoneE164Schema = z.preprocess(
   phoneE164Schema.optional().nullable(),
 )
 
+/** Empty / null clears the stored payment date. */
+const optionalPaymentDate = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined
+    if (value === '' || value === null) return null
+    return value
+  },
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional(),
+)
+
+/** Empty / null clears the stored payment amount. */
+const optionalPaymentAmountUsd = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined
+    if (value === '' || value === null) return null
+    return value
+  },
+  z.coerce.number().min(0).max(999999).nullable().optional(),
+)
+
 export const quoSettingsPatchSchema = z.object({
   enabled: z.boolean().optional(),
   apiKey: optionalApiKey,
@@ -37,6 +57,10 @@ export const quoSettingsPatchSchema = z.object({
     emptyToUndefined,
     z.string().trim().min(1).max(32).optional(),
   ),
+  /** Next Quo prepaid payment / renewal date (UTC calendar day). */
+  paymentDate: optionalPaymentDate,
+  /** Expected Quo prepaid cost in USD for that payment. */
+  paymentAmountUsd: optionalPaymentAmountUsd,
 })
 
 export type QuoSettingsPatch = z.infer<typeof quoSettingsPatchSchema>
@@ -55,6 +79,10 @@ export interface QuoSettingsView {
   /** True when an inbound message.received webhook is registered for Susan SMS. */
   webhookConfigured: boolean
   webhookUrl: string | null
+  /** Next prepaid payment date (YYYY-MM-DD), when set in Control Panel. */
+  paymentDate: string | null
+  /** Expected prepaid payment amount in USD. */
+  paymentAmountUsd: number | null
 }
 
 export interface QuoPublicStatus {

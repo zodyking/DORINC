@@ -205,6 +205,15 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     }
   }
 
+  const quoConfig = await getQuoConfig(db)
+  const quoEnabled = isQuoSmsEnabled(quoConfig)
+  const quoConfigured = Boolean(quoConfig.apiKey?.trim() && quoConfig.fromNumber?.trim())
+  const quoPaymentDate = quoConfig.paymentDate
+  const quoPaymentAmountUsd = quoConfig.paymentAmountUsd
+  const quoDaysUntilPayment = quoPaymentDate
+    ? daysUntilIso(`${quoPaymentDate}T00:00:00.000Z`)
+    : null
+
   const vultrUsd = vultrBlock.planCostMonthly ?? 0
   // Do not use ?? alone — OpenRouter often reports usage_monthly: 0 while
   // internal logs still have spend (would freeze AI yearly at $0).
@@ -225,8 +234,24 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     cloudflareBlock.domains.map(d => ({ renewalCost: d.renewalCost })),
   )
 
-  const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd)
-  const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd)
+  // Quo prepaid: count in this month when due within ~30 days; yearly = configured amount.
+  const quoMonthlyUsd = (
+    quoPaymentAmountUsd != null
+    && quoPaymentAmountUsd > 0
+    && quoDaysUntilPayment != null
+    && quoDaysUntilPayment >= 0
+    && quoDaysUntilPayment <= 30
+  )
+    ? roundMoney(quoPaymentAmountUsd)
+    : 0
+  const quoYearlyUsd = (
+    quoPaymentAmountUsd != null && quoPaymentAmountUsd > 0
+  )
+    ? roundMoney(quoPaymentAmountUsd)
+    : 0
+
+  const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd + quoMonthlyUsd)
+  const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd + quoYearlyUsd)
   const yearlyVultrUsd = roundMoney(vultrUsd * 12)
   const yearlyOpenrouterUsd = roundMoney(openrouterUsd * 12)
 
@@ -239,18 +264,38 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
       expiresAt: d.renewalDate !== '—' ? `${d.renewalDate}T00:00:00.000Z` : null,
       renewalCost: d.renewalCost,
     })),
+    quoPayments: [{
+      paymentDate: quoPaymentDate,
+      paymentAmountUsd: quoPaymentAmountUsd,
+    }],
   })
 
-  const quoConfig = await getQuoConfig(db)
-  const quoEnabled = isQuoSmsEnabled(quoConfig)
-  const quoConfigured = Boolean(quoConfig.apiKey?.trim() && quoConfig.fromNumber?.trim())
+  let creditsNote = 'Quo uses prepaid messaging credits managed in the Quo app. Usage spend is not exposed via the public API.'
+  if (quoPaymentDate && quoPaymentAmountUsd != null && quoPaymentAmountUsd > 0) {
+    const amountLabel = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(quoPaymentAmountUsd)
+    const dayHint = quoDaysUntilPayment == null
+      ? ''
+      : quoDaysUntilPayment < 0
+        ? ` (${Math.abs(quoDaysUntilPayment)} day${Math.abs(quoDaysUntilPayment) === 1 ? '' : 's'} overdue)`
+        : quoDaysUntilPayment === 0
+          ? ' (due today)'
+          : ` (in ${quoDaysUntilPayment} day${quoDaysUntilPayment === 1 ? '' : 's'})`
+    creditsNote = `Next Quo prepaid payment ${amountLabel} on ${quoPaymentDate}${dayHint}. Usage spend is not exposed via the public API.`
+  }
+  else {
+    creditsNote += ' Set payment date and amount in Control Panel → Quo SMS to include Quo in billing totals.'
+  }
+
   const quoBlock: BillingDashboardPayload['quo'] = {
     configured: quoConfigured,
     enabled: quoEnabled,
     fromNumber: normalizePhoneE164(quoConfig.fromNumber) ?? (quoConfig.fromNumber || null),
     phoneNumbers: [],
     phoneCount: 0,
-    creditsNote: 'Quo uses prepaid messaging credits managed in the Quo app. Usage spend is not exposed via the public API.',
+    paymentDate: quoPaymentDate,
+    paymentAmountUsd: quoPaymentAmountUsd,
+    daysUntilPayment: quoDaysUntilPayment,
+    creditsNote,
     error: null,
     lastUpdated: nowIso,
   }
@@ -284,11 +329,13 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
         vultrUsd: roundMoney(vultrUsd),
         cloudflareUsd: roundMoney(cloudflareMonthlyUsd),
         openrouterUsd: roundMoney(openrouterUsd),
+        quoUsd: roundMoney(quoMonthlyUsd),
       },
       breakdownYearly: {
         vultrUsd: yearlyVultrUsd,
         cloudflareUsd: roundMoney(cloudflareYearlyUsd),
         openrouterUsd: yearlyOpenrouterUsd,
+        quoUsd: roundMoney(quoYearlyUsd),
       },
     },
     outlook: {
