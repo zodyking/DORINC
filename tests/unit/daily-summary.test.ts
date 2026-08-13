@@ -65,6 +65,7 @@ function emptyBilling(overrides: Partial<BillingDashboardPayload> = {}): Billing
       paymentDate: null,
       paymentAmountUsd: null,
       daysUntilPayment: null,
+      hasPortalCredentials: false,
       creditsNote: null,
       error: null,
       lastUpdated: new Date().toISOString(),

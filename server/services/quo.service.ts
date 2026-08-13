@@ -23,6 +23,10 @@ export interface QuoConfig {
   paymentDate: string | null
   /** Expected prepaid payment amount in USD. */
   paymentAmountUsd: number | null
+  /** Quo app portal username / email (for Billing page reveal). */
+  portalUsername: string
+  /** Quo app portal password (for Billing page reveal). */
+  portalPassword: string
 }
 
 const DEFAULT_CONFIG: QuoConfig = {
@@ -34,6 +38,8 @@ const DEFAULT_CONFIG: QuoConfig = {
   webhookUrl: '',
   paymentDate: null,
   paymentAmountUsd: null,
+  portalUsername: '',
+  portalPassword: '',
 }
 
 function normalizePaymentDate(raw: unknown): string | null {
@@ -68,6 +74,8 @@ function toView(config: QuoConfig): QuoSettingsView {
     webhookUrl: config.webhookUrl?.trim() || null,
     paymentDate: config.paymentDate,
     paymentAmountUsd: config.paymentAmountUsd,
+    hasPortalUsername: Boolean(config.portalUsername?.trim()),
+    hasPortalPassword: Boolean(config.portalPassword?.trim()),
   }
 }
 
@@ -98,6 +106,8 @@ async function readEncryptedConfig(db: Db): Promise<QuoConfig> {
       webhookUrl: typeof parsed.webhookUrl === 'string' ? parsed.webhookUrl : '',
       paymentDate: normalizePaymentDate(parsed.paymentDate),
       paymentAmountUsd: normalizePaymentAmountUsd(parsed.paymentAmountUsd),
+      portalUsername: typeof parsed.portalUsername === 'string' ? parsed.portalUsername : '',
+      portalPassword: typeof parsed.portalPassword === 'string' ? parsed.portalPassword : '',
     }
   }
   catch {
@@ -127,6 +137,16 @@ export async function getQuoSettingsView(db: Db): Promise<QuoSettingsView> {
   return toView(config)
 }
 
+/** Portal login credentials for Billing page reveal (not the API key). */
+export async function revealQuoPortalCredentials(
+  db: Db,
+): Promise<{ username: string | null, password: string | null }> {
+  const config = await getQuoConfig(db)
+  const username = config.portalUsername?.trim() || null
+  const password = config.portalPassword?.trim() || null
+  return { username, password }
+}
+
 export async function isQuoEnabled(db: Db): Promise<boolean> {
   // Prefer a fresh read when cache is empty; settings saves refresh the cache explicitly.
   const view = await getQuoSettingsView(db)
@@ -154,6 +174,12 @@ export async function saveQuoSettings(
     paymentAmountUsd: patch.paymentAmountUsd !== undefined
       ? normalizePaymentAmountUsd(patch.paymentAmountUsd)
       : current.paymentAmountUsd,
+    portalUsername: patch.portalUsername !== undefined
+      ? patch.portalUsername.trim()
+      : current.portalUsername,
+    portalPassword: patch.portalPassword !== undefined
+      ? patch.portalPassword.trim()
+      : current.portalPassword,
   }
 
   // Cannot enable without credentials.
@@ -197,6 +223,8 @@ async function persistQuoConfig(db: Db, next: QuoConfig, actorId: string | null)
         webhookUrl: next.webhookUrl || null,
         paymentDate: next.paymentDate,
         paymentAmountUsd: next.paymentAmountUsd,
+        hasPortalUsername: Boolean(next.portalUsername?.trim()),
+        hasPortalPassword: Boolean(next.portalPassword?.trim()),
       },
       updatedBy: actorId,
       updatedAt: new Date(),
@@ -212,6 +240,8 @@ async function persistQuoConfig(db: Db, next: QuoConfig, actorId: string | null)
         paymentDate: next.paymentDate,
         paymentAmountUsd: next.paymentAmountUsd,
         webhookUrl: next.webhookUrl || null,
+        hasPortalUsername: Boolean(next.portalUsername?.trim()),
+        hasPortalPassword: Boolean(next.portalPassword?.trim()),
       },
       encryptedValue,
       updatedBy: actorId,

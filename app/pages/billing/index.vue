@@ -142,6 +142,7 @@ function providerHasCredentials(provider: BillingProviderKey): boolean {
   if (provider === 'vultr') return d.vultr.hasPortalCredentials
   if (provider === 'cloudflare') return d.cloudflare.hasPortalCredentials
   if (provider === 'openrouter') return d.openrouter.hasPortalCredentials
+  if (provider === 'quo') return d.quo.hasPortalCredentials
   return false
 }
 
@@ -584,6 +585,14 @@ function selectProvider(provider: BillingProviderKey) {
               <p v-else class="billing-muted">Connect Quo in Control Panel → Quo SMS.</p>
             </div>
             <footer class="billing-card-footer" @click.stop>
+              <button
+                v-if="dashboard.quo.hasPortalCredentials"
+                type="button"
+                class="btn sm"
+                @click="openReveal('quo')"
+              >
+                Credentials
+              </button>
               <NuxtLink to="/admin?tab=quo" class="btn sm">
                 Control Panel
               </NuxtLink>

@@ -363,6 +363,7 @@ async function loadBillingForSummary(db: Db): Promise<BillingDashboardPayload> {
         paymentDate: null,
         paymentAmountUsd: null,
         daysUntilPayment: null,
+        hasPortalCredentials: false,
         creditsNote: null,
         error: null,
         lastUpdated: nowIso,

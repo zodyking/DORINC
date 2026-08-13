@@ -13,6 +13,8 @@ interface QuoView {
   webhookUrl: string | null
   paymentDate: string | null
   paymentAmountUsd: number | null
+  hasPortalUsername: boolean
+  hasPortalPassword: boolean
 }
 
 interface QuoPhoneOption {
@@ -50,6 +52,8 @@ const form = reactive({
   fromNumber: '',
   paymentDate: '',
   paymentAmountUsd: '' as string,
+  portalUsername: '',
+  portalPassword: '',
 })
 
 const phoneOptions = ref<QuoPhoneOption[]>([])
@@ -93,6 +97,8 @@ watch(() => quoData.value, (q) => {
   form.apiKey = q.hasApiKey ? SAVED_PASSWORD_MASK : ''
   form.paymentDate = q.paymentDate ?? ''
   form.paymentAmountUsd = q.paymentAmountUsd != null ? String(q.paymentAmountUsd) : ''
+  form.portalUsername = q.hasPortalUsername ? SAVED_PASSWORD_MASK : ''
+  form.portalPassword = q.hasPortalPassword ? SAVED_PASSWORD_MASK : ''
 }, { immediate: true })
 
 const fromNumberSelectOptions = computed(() => {
@@ -154,6 +160,10 @@ async function save() {
   error.value = ''
   try {
     const amountRaw = form.paymentAmountUsd.trim()
+    if (amountRaw !== '' && !Number.isFinite(Number(amountRaw))) {
+      error.value = 'Payment amount must be a number'
+      return
+    }
     const body: Record<string, unknown> = {
       enabled: form.enabled,
       fromNumber: form.fromNumber.trim() || undefined,
@@ -162,6 +172,11 @@ async function save() {
     }
     const nextKey = passwordForSave(form.apiKey, !!quoData.value?.hasApiKey)
     if (nextKey !== undefined) body.apiKey = nextKey
+    const nextUsername = passwordForSave(form.portalUsername, !!quoData.value?.hasPortalUsername)
+    if (nextUsername !== undefined) body.portalUsername = nextUsername
+    const nextPassword = passwordForSave(form.portalPassword, !!quoData.value?.hasPortalPassword)
+    if (nextPassword !== undefined) body.portalPassword = nextPassword
+
     const res = await $fetch<QuoView>('/api/admin/system/quo-settings', { method: 'PATCH', body })
     if (quoData.value?.hasApiKey || nextKey) form.apiKey = SAVED_PASSWORD_MASK
     else form.apiKey = ''
@@ -169,6 +184,8 @@ async function save() {
     form.fromNumber = res.fromNumber ?? ''
     form.paymentDate = res.paymentDate ?? ''
     form.paymentAmountUsd = res.paymentAmountUsd != null ? String(res.paymentAmountUsd) : ''
+    form.portalUsername = res.hasPortalUsername ? SAVED_PASSWORD_MASK : ''
+    form.portalPassword = res.hasPortalPassword ? SAVED_PASSWORD_MASK : ''
     message.value = res.enabled
       ? (res.webhookConfigured
           ? 'Quo SMS saved and enabled — Susan SMS webhook ready'
@@ -178,7 +195,8 @@ async function save() {
     emit('saved')
   }
   catch (e: unknown) {
-    error.value = (e as { data?: { message?: string } })?.data?.message ?? 'Save failed'
+    const err = e as { data?: { message?: string, statusMessage?: string }, message?: string }
+    error.value = err?.data?.message || err?.data?.statusMessage || err?.message || 'Save failed'
   }
   finally {
     saveBusy.value = false
@@ -445,6 +463,33 @@ const variableHelp = computed(() => {
           <span class="help">
             Clear either field and save to remove Quo from billing totals. Amount due within 30 days counts toward estimated monthly spend; the full amount counts toward yearly.
           </span>
+
+          <div class="quo-portal-login">
+            <div class="notif-label">Portal login (optional)</div>
+            <div class="notif-desc">Stored for quick lookup on the Billing page behind your account password.</div>
+            <div class="quo-billing-grid">
+              <label class="fld">
+                Username
+                <input
+                  v-model="form.portalUsername"
+                  type="text"
+                  maxlength="512"
+                  autocomplete="off"
+                  placeholder="Account username / email"
+                >
+              </label>
+              <label class="fld">
+                Password
+                <input
+                  v-model="form.portalPassword"
+                  type="password"
+                  maxlength="512"
+                  autocomplete="off"
+                  placeholder="Account password"
+                >
+              </label>
+            </div>
+          </div>
         </fieldset>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
@@ -600,6 +645,25 @@ const variableHelp = computed(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.quo-portal-login {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.quo-portal-login .notif-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.quo-portal-login .notif-desc {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 10px;
+  line-height: 1.4;
 }
 
 @media (max-width: 640px) {

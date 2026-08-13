@@ -195,6 +195,7 @@ export interface BillingDashboardPayload {
     paymentAmountUsd: number | null
     /** Days until paymentDate (negative when overdue). */
     daysUntilPayment: number | null
+    hasPortalCredentials: boolean
     creditsNote: string | null
     error: string | null
     lastUpdated: string

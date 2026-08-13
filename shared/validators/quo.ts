@@ -11,6 +11,11 @@ const optionalApiKey = z.preprocess(
   z.string().trim().min(8).max(512).optional(),
 )
 
+const optionalPortalCredential = z.preprocess(
+  emptyToUndefined,
+  z.string().trim().min(1).max(512).optional(),
+)
+
 export const MESSAGE_NOTIFY_CHANNELS = ['email', 'sms'] as const
 export type MessageNotifyChannel = (typeof MESSAGE_NOTIFY_CHANNELS)[number]
 
@@ -61,6 +66,10 @@ export const quoSettingsPatchSchema = z.object({
   paymentDate: optionalPaymentDate,
   /** Expected Quo prepaid cost in USD for that payment. */
   paymentAmountUsd: optionalPaymentAmountUsd,
+  /** Quo app portal username / email (optional; revealable on Billing). */
+  portalUsername: optionalPortalCredential,
+  /** Quo app portal password (optional; revealable on Billing). */
+  portalPassword: optionalPortalCredential,
 })
 
 export type QuoSettingsPatch = z.infer<typeof quoSettingsPatchSchema>
@@ -83,6 +92,8 @@ export interface QuoSettingsView {
   paymentDate: string | null
   /** Expected prepaid payment amount in USD. */
   paymentAmountUsd: number | null
+  hasPortalUsername: boolean
+  hasPortalPassword: boolean
 }
 
 export interface QuoPublicStatus {

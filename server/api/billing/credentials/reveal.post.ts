@@ -3,6 +3,7 @@ import {
   getBillingIntegrations,
   revealBillingPortalCredentials,
 } from '../../../services/billing-integrations.service'
+import { getQuoConfig, revealQuoPortalCredentials } from '../../../services/quo.service'
 import { StepUpError, verifyStepUp } from '../../../services/step-up.service'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateBody } from '../../../utils/validate'
@@ -18,16 +19,20 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
-  if (body.provider === 'quo') {
-    throw apiError(event, 'NOT_FOUND', 'Quo credentials are managed in Control Panel → Quo SMS')
-  }
 
-  const settings = await getBillingIntegrations(db)
-  const hasCredentials = body.provider === 'vultr'
-    ? settings.hasVultrUsername || settings.hasVultrPassword
-    : body.provider === 'cloudflare'
-      ? settings.hasCloudflareUsername || settings.hasCloudflarePassword
-      : settings.hasOpenrouterUsername || settings.hasOpenrouterPassword
+  let hasCredentials: boolean
+  if (body.provider === 'quo') {
+    const quo = await getQuoConfig(db)
+    hasCredentials = Boolean(quo.portalUsername?.trim() || quo.portalPassword?.trim())
+  }
+  else {
+    const settings = await getBillingIntegrations(db)
+    hasCredentials = body.provider === 'vultr'
+      ? settings.hasVultrUsername || settings.hasVultrPassword
+      : body.provider === 'cloudflare'
+        ? settings.hasCloudflareUsername || settings.hasCloudflarePassword
+        : settings.hasOpenrouterUsername || settings.hasOpenrouterPassword
+  }
 
   if (!hasCredentials) {
     throw apiError(event, 'NOT_FOUND', 'No portal credentials saved for this provider')
@@ -44,7 +49,10 @@ export default defineEventHandler(async (event) => {
     throw apiError(event, 'FORBIDDEN', 'Could not verify account password')
   }
 
-  const credentials = await revealBillingPortalCredentials(db, body.provider)
+  const credentials = body.provider === 'quo'
+    ? await revealQuoPortalCredentials(db)
+    : await revealBillingPortalCredentials(db, body.provider)
+
   return {
     provider: body.provider,
     username: credentials.username,

@@ -295,6 +295,7 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     paymentDate: quoPaymentDate,
     paymentAmountUsd: quoPaymentAmountUsd,
     daysUntilPayment: quoDaysUntilPayment,
+    hasPortalCredentials: Boolean(quoConfig.portalUsername?.trim() || quoConfig.portalPassword?.trim()),
     creditsNote,
     error: null,
     lastUpdated: nowIso,
