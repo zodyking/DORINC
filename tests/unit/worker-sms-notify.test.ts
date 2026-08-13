@@ -34,16 +34,8 @@ describe('worker sms-notify', () => {
     expect(body).toContain('Deletion request')
   })
 
-  it('sends SMS directly via Quo when recipient prefers Text', async () => {
-    loadQuoConfig.mockResolvedValue({
-      enabled: true,
-      apiKey: 'sk_test',
-      fromNumber: '+15165184847',
-    })
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      text: async () => JSON.stringify({ id: 'm1' }),
-    }))
+  it('queues sms_send instead of calling Quo when recipient prefers Text', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
     const jobs: string[] = []
@@ -81,9 +73,31 @@ describe('worker sms-notify', () => {
     })
 
     expect(channel).toBe('sms')
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/messages')
-    expect(jobs).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(jobs).toEqual(['sms_send'])
+  })
+
+  it('times out hung Quo sends from the sms_send handler', async () => {
+    loadQuoConfig.mockResolvedValue({
+      enabled: true,
+      apiKey: 'sk_test',
+      fromNumber: '+15165184847',
+    })
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => JSON.stringify({ id: 'm1' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { sendQuoSmsDirect, QUO_FETCH_TIMEOUT_MS } = await import('../../server/workers/lib/sms-notify.mjs')
+    await sendQuoSmsDirect({ query: vi.fn() }, {
+      to: '+15551234567',
+      body: 'Hello',
+    })
+
+    expect(QUO_FETCH_TIMEOUT_MS).toBe(8_000)
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('queues email_send when recipient prefers Email', async () => {

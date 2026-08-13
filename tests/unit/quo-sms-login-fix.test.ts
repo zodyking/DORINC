@@ -27,6 +27,25 @@ describe('sms channel must not block auth flows', () => {
     expect(src).not.toContain('resolveUserNotifyDelivery')
     expect(src).not.toContain('enqueueTemplatedSms')
   })
+
+  it('does not await geofence challenge delivery on HTML navigations', () => {
+    const src = readFileSync(resolve('server/middleware/guard-access-gate.ts'), 'utf8')
+    expect(src).toContain('void quietlyIssueOutsideGeoChallenge')
+    expect(src).not.toMatch(/await quietlyIssueOutsideGeoChallenge/)
+  })
+
+  it('does not send Quo SMS from the embedded Nitro worker', () => {
+    const plugin = readFileSync(resolve('server/plugins/background-workers.ts'), 'utf8')
+    const tick = readFileSync(resolve('server/lib/general-worker-tick.mjs'), 'utf8')
+    expect(plugin).toContain('skipSms: true')
+    expect(tick).toContain('opts.skipSms')
+  })
+
+  it('queues worker recipient SMS instead of calling Quo inline', () => {
+    const src = readFileSync(resolve('server/workers/lib/sms-notify.mjs'), 'utf8')
+    expect(src).toContain('await queueSmsJob(pool, {')
+    expect(src).not.toMatch(/enqueueRecipientNotification[\s\S]*sendQuoSmsDirect/)
+  })
 })
 
 describe('signup phone field', () => {

@@ -39,7 +39,11 @@ export default defineNitroPlugin(() => {
     generalTickRunning = true
     try {
       const { runGeneralWorkerTick } = await import('../lib/general-worker-tick.mjs')
-      await runGeneralWorkerTick(pool, { mailBatch, logPrefix: '[embedded-worker]' })
+      await runGeneralWorkerTick(pool, {
+        mailBatch,
+        logPrefix: '[embedded-worker]',
+        skipSms: true,
+      })
 
       // Daily summary uses the TS service graph — keep it out of the plain Node
       // worker tick (tsx/tsImport there overflowed the module resolve stack).

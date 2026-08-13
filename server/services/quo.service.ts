@@ -201,6 +201,8 @@ export class QuoApiError extends Error {
   }
 }
 
+export const QUO_FETCH_TIMEOUT_MS = 8_000
+
 export async function quoFetch<T>(
   apiKey: string,
   path: string,
@@ -209,6 +211,7 @@ export async function quoFetch<T>(
 ): Promise<T> {
   const res = await fetch(`${QUO_API_BASE}${path}`, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(QUO_FETCH_TIMEOUT_MS),
     headers: {
       Authorization: apiKey,
       Accept: 'application/json',

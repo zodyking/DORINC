@@ -13,7 +13,7 @@ import { reclaimStaleWorkerJobs } from './reclaim-stale-jobs.mjs'
 
 /**
  * @param {import('pg').Pool} pool
- * @param {{ mailBatch?: number, logPrefix?: string }} [opts]
+ * @param {{ mailBatch?: number, logPrefix?: string, skipSms?: boolean }} [opts]
  */
 export async function runGeneralWorkerTick(pool, opts = {}) {
   const mailBatch = opts.mailBatch ?? Number(process.env.MAIL_BATCH_SIZE ?? 20)
@@ -31,10 +31,16 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
     console.log(`${logPrefix} email_send processed=${mail.processed} failed=${mail.failed}`)
   }
 
-  const smsBatch = opts.mailBatch ?? Number(process.env.SMS_BATCH_SIZE ?? 20)
-  const sms = await processSmsJobs(pool, smsBatch)
-  if (sms.processed || sms.failed) {
-    console.log(`${logPrefix} sms_send processed=${sms.processed} failed=${sms.failed}`)
+  // The Nitro app's embedded worker shares the request Postgres pool. Sending
+  // Quo SMS from that process is what made messageNotifyChannel=sms look like
+  // a login outage (hung api.quo.com held the tick + pool). Dedicated worker
+  // (worker.mjs) still processes sms_send.
+  if (!opts.skipSms) {
+    const smsBatch = opts.mailBatch ?? Number(process.env.SMS_BATCH_SIZE ?? 20)
+    const sms = await processSmsJobs(pool, smsBatch)
+    if (sms.processed || sms.failed) {
+      console.log(`${logPrefix} sms_send processed=${sms.processed} failed=${sms.failed}`)
+    }
   }
 
   const thumbs = await processThumbnailJobs(pool)

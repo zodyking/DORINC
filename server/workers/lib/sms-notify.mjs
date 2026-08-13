@@ -70,7 +70,10 @@ export async function resolveSmsBody(pool, typeKey, vars) {
   }).trim()
 }
 
-/** Send via Quo immediately (same API shape as Control Panel test SMS). */
+/** Fail fast so a hung Quo API cannot stall the worker tick or the app pool. */
+export const QUO_FETCH_TIMEOUT_MS = 8_000
+
+/** Send via Quo (sms_send handler only). Never call this on an HTTP request path. */
 export async function sendQuoSmsDirect(pool, input) {
   const config = await loadQuoConfig(pool)
   if (!config?.enabled || !config.apiKey || !config.fromNumber) {
@@ -96,6 +99,7 @@ export async function sendQuoSmsDirect(pool, input) {
       from,
       to: [to],
     }),
+    signal: AbortSignal.timeout(QUO_FETCH_TIMEOUT_MS),
   })
 
   const text = await res.text()
@@ -123,8 +127,10 @@ async function queueSmsJob(pool, payload) {
 
 /**
  * Prefer SMS when Quo is on, user channel is sms, and phone is valid.
- * Sends to Quo immediately (like test SMS); queues a retry only if direct send fails.
- * Falls back to email_send when SMS cannot be delivered.
+ * Always queue sms_send — never call Quo inline. Direct Quo from the worker
+ * tick (and from the embedded Nitro worker that shares the app DB pool)
+ * stalled login/dashboard when api.quo.com hung for SMS-channel users.
+ * Falls back to email_send when SMS cannot be queued.
  */
 export async function enqueueRecipientNotification(pool, opts) {
   const {
@@ -142,25 +148,14 @@ export async function enqueueRecipientNotification(pool, opts) {
   if (phone && smsTypeKey) {
     const body = await resolveSmsBody(pool, smsTypeKey, smsVars)
     if (body) {
-      const payload = {
+      await queueSmsJob(pool, {
         to: phone,
         body,
         notificationKind: smsTypeKey,
         recipientUserId: recipient.id,
         ...meta,
-      }
-      try {
-        await sendQuoSmsDirect(pool, payload)
-        return 'sms'
-      }
-      catch (err) {
-        console.warn(
-          `[sms-notify] direct Quo send failed for ${smsTypeKey}; queueing retry:`,
-          err instanceof Error ? err.message : err,
-        )
-        await queueSmsJob(pool, payload)
-        return 'sms'
-      }
+      })
+      return 'sms'
     }
   }
 

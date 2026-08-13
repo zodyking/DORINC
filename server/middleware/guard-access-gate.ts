@@ -177,12 +177,14 @@ export default defineEventHandler(async (event) => {
         if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
           const locationLabel = cachedGeo?.label
             ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
-          await quietlyIssueOutsideGeoChallenge(useDb(), {
+          // Never await delivery here — a slow mail/SMS path used to hang the
+          // HTML document (login/dashboard) for the known user.
+          void quietlyIssueOutsideGeoChallenge(useDb(), {
             ipAddress: ip,
             userAgent,
             deviceId,
             locationLabel,
-          })
+          }).catch(() => {})
         }
         return sendRedirect(event, '/auth/verify-location?sent=1', 302)
       }
