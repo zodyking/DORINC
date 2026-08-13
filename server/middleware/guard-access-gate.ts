@@ -9,7 +9,7 @@ import {
   isAccessGateGeoActive,
   recordAccessEvent,
 } from '../services/access-gate.service'
-import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent, resolveIpLocation } from '../services/ip-geolocation.service'
+import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
 import { hasValidOutsideGeoBypass } from '../auth/outside-geo-bypass'
@@ -175,15 +175,12 @@ export default defineEventHandler(async (event) => {
       const known = await findKnownOutsideGeoIdentity(useDb(), { ipAddress: ip, userAgent, deviceId })
       if (known) {
         if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
-          const locationLabel = cachedGeo?.label
-            ?? (ip ? await resolveIpLocation(ip).catch(() => null) : null)
-          // Never await delivery here — a slow mail/SMS path used to hang the
-          // HTML document (login/dashboard) for the known user.
+          // Use cached geo only — never await an IP lookup on this HTML path.
           void quietlyIssueOutsideGeoChallenge(useDb(), {
             ipAddress: ip,
             userAgent,
             deviceId,
-            locationLabel,
+            locationLabel: cachedGeo?.label ?? null,
           }).catch(() => {})
         }
         return sendRedirect(event, '/auth/verify-location?sent=1', 302)

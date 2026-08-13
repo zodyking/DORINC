@@ -2,12 +2,12 @@ import { UAParser } from 'ua-parser-js'
 import type { LoginPortal } from '../auth/auth.service'
 import type { Db } from '../db/client'
 import { buildLoginNotificationEmail } from '../mail/templates/system'
-import { sendBrandedMail } from '../mail/branded-mail'
 import { resolveEmailBrand } from './email-branding.service'
 import { getActiveEmailTemplateContent } from './email-templates.service'
 import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { resolveIpLocation, normalizeClientIp } from './ip-geolocation.service'
+import { enqueueJob } from './jobs.service'
 
 function buildDeviceLabel(userAgent: string | null | undefined): string | null {
   if (!userAgent) return null
@@ -73,5 +73,12 @@ export async function sendLoginNotificationEmail(
     templateOverride,
   })
 
-  return sendBrandedMail(db, { to, ...mail }, brand)
+  return enqueueJob(db, 'email_send', {
+    to,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    notificationKind: 'login_notification',
+    ...(opts.userId ? { recipientUserId: opts.userId } : {}),
+  }).then(() => ({ delivered: true as const, reason: 'queued' as const }))
 }

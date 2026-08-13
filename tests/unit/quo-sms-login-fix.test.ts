@@ -34,11 +34,23 @@ describe('sms channel must not block auth flows', () => {
     expect(src).not.toMatch(/await quietlyIssueOutsideGeoChallenge/)
   })
 
-  it('does not send Quo SMS from the embedded Nitro worker', () => {
+  it('does not run IMAP/PDF/SMS/AI jobs from the web login process', () => {
     const plugin = readFileSync(resolve('server/plugins/background-workers.ts'), 'utf8')
-    const tick = readFileSync(resolve('server/lib/general-worker-tick.mjs'), 'utf8')
-    expect(plugin).toContain('skipSms: true')
-    expect(tick).toContain('opts.skipSms')
+    expect(plugin).toContain('daily summary only')
+    expect(plugin).not.toContain('runGeneralWorkerTick')
+    expect(plugin).not.toContain('runPdfWorkerTick')
+    expect(plugin).not.toContain('skipSms: true')
+  })
+
+  it('does not poll Susan AI Administrator from the web process unless explicitly enabled', () => {
+    const src = readFileSync(resolve('server/plugins/ai-administrator-worker.ts'), 'utf8')
+    expect(src).toContain("process.env.AI_ADMINISTRATOR_WORKER !== 'true'")
+  })
+
+  it('queues login-alert email instead of sending SMTP on the login process', () => {
+    const src = readFileSync(resolve('server/services/login-notification.service.ts'), 'utf8')
+    expect(src).toContain("enqueueJob(db, 'email_send'")
+    expect(src).not.toContain('sendBrandedMail')
   })
 
   it('queues worker recipient SMS instead of calling Quo inline', () => {

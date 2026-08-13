@@ -8,77 +8,45 @@ function embeddedWorkersEnabled(): boolean {
   return process.env.EMBEDDED_WORKERS === 'true' || process.env.NODE_ENV === 'production'
 }
 
+/**
+ * Nitro must not drain IMAP/PDF/AI/SMS/mail/backups on the login Postgres pool.
+ * Production already has dedicated pdf + queue workers (see /api/health).
+ * This plugin only sends the daily summary, which the plain Node worker cannot
+ * load (tsx stack overflow).
+ */
 export default defineNitroPlugin(() => {
   if (!embeddedWorkersEnabled() || !hasDatabaseConfig()) return
 
   const pool = usePool()
-  const pdfPollMs = Number(process.env.PDF_WORKER_POLL_MS ?? 3000)
-  const generalPollMs = Number(process.env.WORKER_POLL_MS ?? 1500)
-  const mailBatch = Number(process.env.MAIL_BATCH_SIZE ?? 20)
+  const summaryPollMs = Number(process.env.DAILY_SUMMARY_POLL_MS ?? 60_000)
+  let summaryTickRunning = false
 
-  let pdfTickRunning = false
-  let generalTickRunning = false
-
-  const pdfInterval = setInterval(async () => {
-    if (pdfTickRunning) return
-    pdfTickRunning = true
+  const summaryInterval = setInterval(async () => {
+    if (summaryTickRunning) return
+    summaryTickRunning = true
     try {
-      const { runPdfWorkerTick } = await import('../lib/pdf-worker-tick.mjs')
-      await runPdfWorkerTick(pool, { logPrefix: '[embedded-pdf-worker]' })
+      const { isDailySummaryDue } = await import('../workers/handlers/daily-summary.mjs')
+      if (!(await isDailySummaryDue(pool))) return
+      const { maybeSendScheduledDailySummaryFromPool } = await import('../services/daily-summary.service')
+      const result = await maybeSendScheduledDailySummaryFromPool(pool)
+      if (result?.sent) {
+        console.log(
+          `[embedded-worker] daily_summary_report sent=${result.sent} delivered=${result.delivered} failed=${result.failed}`,
+        )
+      }
     }
     catch (err) {
-      console.error('[embedded-pdf-worker] tick failed', err)
+      console.error('[embedded-worker] daily_summary_report failed', err)
     }
     finally {
-      pdfTickRunning = false
+      summaryTickRunning = false
     }
-  }, pdfPollMs)
+  }, summaryPollMs)
 
-  const generalInterval = setInterval(async () => {
-    if (generalTickRunning) return
-    generalTickRunning = true
-    try {
-      const { runGeneralWorkerTick } = await import('../lib/general-worker-tick.mjs')
-      await runGeneralWorkerTick(pool, {
-        mailBatch,
-        logPrefix: '[embedded-worker]',
-        skipSms: true,
-      })
-
-      // Daily summary uses the TS service graph — keep it out of the plain Node
-      // worker tick (tsx/tsImport there overflowed the module resolve stack).
-      try {
-        const { isDailySummaryDue } = await import('../workers/handlers/daily-summary.mjs')
-        if (await isDailySummaryDue(pool)) {
-          const { maybeSendScheduledDailySummaryFromPool } = await import('../services/daily-summary.service')
-          const result = await maybeSendScheduledDailySummaryFromPool(pool)
-          if (result?.sent) {
-            console.log(
-              `[embedded-worker] daily_summary_report sent=${result.sent} delivered=${result.delivered} failed=${result.failed}`,
-            )
-          }
-        }
-      }
-      catch (dailyErr) {
-        console.error('[embedded-worker] daily_summary_report failed', dailyErr)
-      }
-
-      // Susan AI Administrator reviews run in server/plugins/ai-administrator-worker.ts
-      // (always-on) and in the general worker via deletion-ai-review.mjs.
-    }
-    catch (err) {
-      console.error('[embedded-worker] tick failed', err)
-    }
-    finally {
-      generalTickRunning = false
-    }
-  }, generalPollMs)
-
-  console.log(`[embedded-workers] started (pdf ${pdfPollMs}ms, general ${generalPollMs}ms)`)
+  console.log(`[embedded-workers] daily summary only (poll ${summaryPollMs}ms)`)
 
   const stop = () => {
-    clearInterval(pdfInterval)
-    clearInterval(generalInterval)
+    clearInterval(summaryInterval)
   }
   process.on('SIGTERM', stop)
   process.on('SIGINT', stop)

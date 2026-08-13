@@ -2,18 +2,16 @@ import { defineNitroPlugin } from 'nitropack/runtime'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 
 /**
- * Always poll Susan AI Administrator deletion reviews from the Nitro process.
- * Dedicated workers also process these jobs via deletion-ai-review.mjs; this
- * path covers deploys where EMBEDDED_WORKERS is off or WORKER_KIND is set only
- * on the web service.
+ * Dedicated workers already process deletion_request_ai_review via
+ * deletion-ai-review.mjs → POST /api/internal/ai-administrator/review.
  *
- * On start (and each tick) Susan also catch-up-enqueues any open pending
- * deletion requests that lack an active review job — so reviews survive
- * restarts and Control Panel setting changes.
+ * Do NOT poll from the web process by default. OpenRouter reviews (25s each)
+ * on the login Postgres pool made sign-in/dashboard look down for everyone.
+ * Set AI_ADMINISTRATOR_WORKER=true only on a host that is not serving /api/auth.
  */
 export default defineNitroPlugin(() => {
   if (!hasDatabaseConfig()) return
-  if (process.env.AI_ADMINISTRATOR_WORKER === 'false') return
+  if (process.env.AI_ADMINISTRATOR_WORKER !== 'true') return
 
   const pollMs = Number(process.env.AI_ADMINISTRATOR_POLL_MS ?? 5000)
   let tickRunning = false
