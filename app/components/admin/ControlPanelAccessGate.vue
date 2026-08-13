@@ -61,7 +61,7 @@ async function loadEvents() {
   eventsLoading.value = true
   try {
     const query: Record<string, string | number> = {
-      limit: dayMode.value === 'all' ? 5000 : 2000,
+      limit: dayMode.value === 'all' ? 1000 : 400,
       sort: sortBy.value,
     }
     if (eventFilter.value !== 'all') query.type = eventFilter.value

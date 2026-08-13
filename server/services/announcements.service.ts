@@ -134,21 +134,19 @@ async function loadTargetsForAnnouncements(db: Db, announcementIds: string[]) {
  * Acknowledgements only suppress a message for the current session — login clears
  * them so active, in-window messages show again on every sign-in.
  */
-export async function listPendingAnnouncementsForUser(
+async function loadPendingAnnouncementMatches<T extends {
+  id: string
+  startsAt: Date | null
+  endsAt: Date | null
+}>(
   db: Db,
   userId: string,
   accountTypeKey: string,
-): Promise<Array<typeof announcements.$inferSelect>> {
-  if (accountTypeKey === 'customer') return []
+  rows: T[],
+): Promise<T[]> {
+  if (!rows.length) return []
 
-  const active = await db.select().from(announcements)
-    .where(eq(announcements.isActive, true))
-    // Lower priority number shows first (1 before 2), then oldest first.
-    .orderBy(asc(announcements.priority), asc(announcements.createdAt))
-
-  if (!active.length) return []
-
-  const ids = active.map(row => row.id)
+  const ids = rows.map(row => row.id)
   const [targetsById, acks] = await Promise.all([
     loadTargetsForAnnouncements(db, ids),
     db.select({ announcementId: announcementAcknowledgements.announcementId })
@@ -162,7 +160,7 @@ export async function listPendingAnnouncementsForUser(
   const ackSet = new Set(acks.map(row => row.announcementId))
   const now = new Date()
 
-  return active.filter((row) => {
+  return rows.filter((row) => {
     if (ackSet.has(row.id)) return false
     if (!isAnnouncementInWindow({ startsAt: row.startsAt, endsAt: row.endsAt }, now)) return false
     const targets = targetsById.get(row.id) ?? []
@@ -170,12 +168,43 @@ export async function listPendingAnnouncementsForUser(
   })
 }
 
+export async function listPendingAnnouncementsForUser(
+  db: Db,
+  userId: string,
+  accountTypeKey: string,
+): Promise<Array<typeof announcements.$inferSelect>> {
+  if (accountTypeKey === 'customer') return []
+
+  const active = await db.select().from(announcements)
+    .where(eq(announcements.isActive, true))
+    // Lower priority number shows first (1 before 2), then oldest first.
+    .orderBy(asc(announcements.priority), asc(announcements.createdAt))
+
+  return loadPendingAnnouncementMatches(db, userId, accountTypeKey, active)
+}
+
 export async function getAnnouncementGate(
   db: Db,
   userId: string,
   accountTypeKey: string,
 ): Promise<AnnouncementGateResult> {
-  const pending = await listPendingAnnouncementsForUser(db, userId, accountTypeKey)
+  if (accountTypeKey === 'customer') {
+    return { locked: false, pendingCount: 0, currentId: null }
+  }
+
+  // /api/auth/me polls this — never pull body_html (can be huge) just to count.
+  const active = await db.select({
+    id: announcements.id,
+    startsAt: announcements.startsAt,
+    endsAt: announcements.endsAt,
+    priority: announcements.priority,
+    createdAt: announcements.createdAt,
+  })
+    .from(announcements)
+    .where(eq(announcements.isActive, true))
+    .orderBy(asc(announcements.priority), asc(announcements.createdAt))
+
+  const pending = await loadPendingAnnouncementMatches(db, userId, accountTypeKey, active)
   const current = pending[0] ?? null
   return {
     locked: pending.length > 0,

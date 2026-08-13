@@ -177,7 +177,6 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
 
   const participantRows = await db.select({
     conversationId: conversationParticipants.conversationId,
-    lastReadAt: conversationParticipants.lastReadAt,
   })
     .from(conversationParticipants)
     .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversationId))
@@ -185,8 +184,6 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
       eq(conversationParticipants.userId, filter.userId),
       eq(conversations.type, 'dm'),
     ))
-
-  const dmItems: Array<Record<string, unknown>> = []
 
   if (!participantRows.length) {
     const merged = teamItem ? [teamItem] : []
@@ -196,7 +193,6 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
   }
 
   const conversationIds = participantRows.map(r => r.conversationId)
-  const lastReadMap = new Map(participantRows.map(r => [r.conversationId, r.lastReadAt]))
 
   const latestMessageSubquery = db
     .select({
@@ -220,39 +216,112 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
     ))
     .orderBy(desc(sql`coalesce(${latestMessageSubquery.lastMessageAt}, ${conversations.updatedAt})`))
 
-  for (const row of rows) {
-    const other = await getOtherParticipant(db, row.conversation.id, filter.userId)
-    if (!other) continue
+  const otherRows = await db.select({
+    conversationId: conversationParticipants.conversationId,
+    userId: conversationParticipants.userId,
+    name: users.name,
+    email: users.email,
+  })
+    .from(conversationParticipants)
+    .innerJoin(users, eq(conversationParticipants.userId, users.id))
+    .where(and(
+      inArray(conversationParticipants.conversationId, conversationIds),
+      ne(conversationParticipants.userId, filter.userId),
+    ))
+  const otherByConv = new Map(otherRows.map(r => [r.conversationId, r]))
 
+  type RankedDm = {
+    id: string
+    type: (typeof rows)[number]['conversation']['type']
+    updatedAt: Date
+    other: { userId: string, name: string, email: string }
+  }
+  const ranked: RankedDm[] = []
+  for (const row of rows) {
+    const other = otherByConv.get(row.conversation.id)
+    if (!other) continue
     if (filter.q) {
       const term = filter.q.toLowerCase()
       const hay = `${other.name} ${other.email}`.toLowerCase()
       if (!hay.includes(term)) continue
     }
-
-    const [lastMessage] = await db.select({
-      id: messages.id,
-      body: messages.body,
-      senderUserId: messages.senderUserId,
-      createdAt: messages.createdAt,
-    })
-      .from(messages)
-      .where(eq(messages.conversationId, row.conversation.id))
-      .orderBy(desc(messages.createdAt))
-      .limit(1)
-
-    const lastReadAt = lastReadMap.get(row.conversation.id)
-    const unreadCount = lastMessage && (!lastReadAt || lastMessage.createdAt > lastReadAt)
-      ? await countUnreadSince(db, row.conversation.id, filter.userId, lastReadAt)
-      : 0
-
-    dmItems.push({
+    ranked.push({
       id: row.conversation.id,
       type: row.conversation.type,
+      updatedAt: row.lastMessageAt ?? row.conversation.updatedAt,
+      other: { userId: other.userId, name: other.name, email: other.email },
+    })
+  }
+
+  type MergedMeta
+    = | { kind: 'team' }
+      | { kind: 'dm', row: RankedDm }
+  const mergedMeta: MergedMeta[] = teamItem
+    ? [{ kind: 'team' }, ...ranked.map(row => ({ kind: 'dm' as const, row }))]
+    : ranked.map(row => ({ kind: 'dm' as const, row }))
+  const start = (filter.page - 1) * filter.pageSize
+  const pagedMeta = mergedMeta.slice(start, start + filter.pageSize)
+  const pageDmIds = pagedMeta.flatMap(item => item.kind === 'dm' ? [item.row.id] : [])
+
+  const lastByConv = new Map<string, {
+    id: string
+    body: string
+    senderUserId: string | null
+    createdAt: Date
+  }>()
+  const unreadByConv = new Map<string, number>()
+  if (pageDmIds.length) {
+    const lastMessageResult = await db.execute<{
+      conversation_id: string
+      id: string
+      body: string
+      sender_user_id: string | null
+      created_at: Date
+    }>(sql`
+      SELECT DISTINCT ON (m.conversation_id)
+        m.conversation_id,
+        m.id,
+        m.body,
+        m.sender_user_id,
+        m.created_at
+      FROM ${messages} m
+      WHERE m.conversation_id IN (${sql.join(pageDmIds.map(id => sql`${id}`), sql`, `)})
+      ORDER BY m.conversation_id, m.created_at DESC
+    `)
+    for (const row of lastMessageResult.rows) {
+      lastByConv.set(row.conversation_id, {
+        id: row.id,
+        body: row.body,
+        senderUserId: row.sender_user_id,
+        createdAt: row.created_at,
+      })
+    }
+
+    const unreadResult = await db.execute<{ conversation_id: string, unread_count: string }>(sql`
+      SELECT m.conversation_id, COUNT(*)::text AS unread_count
+      FROM ${messages} m
+      INNER JOIN ${conversationParticipants} cp
+        ON cp.conversation_id = m.conversation_id AND cp.user_id = ${filter.userId}
+      WHERE m.conversation_id IN (${sql.join(pageDmIds.map(id => sql`${id}`), sql`, `)})
+        AND m.sender_user_id <> ${filter.userId}
+        AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+      GROUP BY m.conversation_id
+    `)
+    for (const row of unreadResult.rows) {
+      unreadByConv.set(row.conversation_id, Number(row.unread_count))
+    }
+  }
+
+  const items = pagedMeta.map((item) => {
+    if (item.kind === 'team') return teamItem
+    const lastMessage = lastByConv.get(item.row.id) ?? null
+    return {
+      id: item.row.id,
+      type: item.row.type,
       participant: {
-        id: other.userId,
-        name: other.name,
-        email: other.email,
+        id: item.row.other.userId,
+        name: item.row.other.name,
+        email: item.row.other.email,
       },
       lastMessage: lastMessage
         ? {
@@ -263,41 +332,17 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
             preview: messagePreview(lastMessage.body),
           }
         : null,
-      unreadCount,
-      updatedAt: row.lastMessageAt ?? row.conversation.updatedAt,
-    })
-  }
-
-  dmItems.sort((a, b) => new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime())
-  const merged = teamItem ? [teamItem, ...dmItems] : dmItems
-
-  const start = (filter.page - 1) * filter.pageSize
-  const paged = merged.slice(start, start + filter.pageSize)
+      unreadCount: unreadByConv.get(item.row.id) ?? 0,
+      updatedAt: item.row.updatedAt,
+    }
+  })
 
   return {
-    items: paged,
-    total: merged.length,
+    items,
+    total: mergedMeta.length,
     page: filter.page,
     pageSize: filter.pageSize,
   }
-}
-
-async function countUnreadSince(
-  db: Db,
-  conversationId: string,
-  userId: string,
-  lastReadAt: Date | null,
-) {
-  const conditions = [
-    eq(messages.conversationId, conversationId),
-    ne(messages.senderUserId, userId),
-  ]
-  if (lastReadAt) conditions.push(gt(messages.createdAt, lastReadAt))
-
-  const [row] = await db.select({ value: count() })
-    .from(messages)
-    .where(and(...conditions))
-  return row?.value ?? 0
 }
 
 export async function getConversationDeletionLabel(db: Db, conversationId: string): Promise<string> {
@@ -530,25 +575,20 @@ export async function markConversationRead(db: Db, conversationId: string, userI
 }
 
 export async function getUnreadCount(db: Db, userId: string) {
-  await syncTeamChatParticipants(db)
-  const teamSummary = await getTeamConversationSummary(db, userId)
-  let total = teamSummary?.unreadCount ?? 0
-
-  const participantRows = await db.select({
-    conversationId: conversationParticipants.conversationId,
-    lastReadAt: conversationParticipants.lastReadAt,
-  })
-    .from(conversationParticipants)
-    .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversationId))
-    .where(and(
-      eq(conversationParticipants.userId, userId),
-      eq(conversations.type, 'dm'),
-    ))
-
-  for (const row of participantRows) {
-    total += await countUnreadSince(db, row.conversationId, userId, row.lastReadAt)
-  }
-  return total
+  // Single aggregate across DM + team threads. Do not sync team membership or
+  // walk conversations one-by-one — that ran on every 4s badge poll and could
+  // exhaust the web pool (then the Node heap) when one staff member signed in.
+  const result = await db.execute<{ value: string }>(sql`
+    SELECT COUNT(*)::text AS value
+    FROM ${conversationParticipants} cp
+    INNER JOIN ${conversations} c ON c.id = cp.conversation_id
+    INNER JOIN ${messages} m ON m.conversation_id = cp.conversation_id
+    WHERE cp.user_id = ${userId}
+      AND c.type IN ('dm', 'team')
+      AND m.sender_user_id <> ${userId}
+      AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+  `)
+  return Number(result.rows[0]?.value ?? 0)
 }
 
 export async function listStaffUsers(db: Db, currentUserId: string, filter: { q?: string, page: number, pageSize: number }) {
