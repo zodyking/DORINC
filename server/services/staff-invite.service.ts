@@ -109,12 +109,13 @@ export async function inviteStaffUser(db: Db, input: InviteStaffUserInput) {
   const now = new Date()
   const expiresAt = new Date(Date.now() + TEMP_PASSWORD_TTL_MS)
 
+  // A new identity on a reused (deleted) email must not inherit verification.
+  // First sign-in with this still-valid temp password stamps emailVerifiedAt.
   const [created] = await db.insert(users).values({
     name,
     email,
     passwordHash: await hashPassword(tempPassword),
     accountTypeId,
-    emailVerifiedAt: now,
     approvedAt: now,
     approvedBy: input.invitedBy,
     mustChangePassword: true,
@@ -154,7 +155,6 @@ export async function resendStaffInvite(db: Db, userId: string, invitedBy: strin
       passwordHash: await hashPassword(tempPassword),
       mustChangePassword: true,
       tempPasswordExpiresAt: expiresAt,
-      emailVerifiedAt: row.user.emailVerifiedAt ?? new Date(),
       approvedAt: row.user.approvedAt ?? new Date(),
       approvedBy: row.user.approvedBy ?? invitedBy,
       isActive: true,
@@ -266,5 +266,52 @@ export async function resetStaffPassword(db: Db, userId: string, _actorId: strin
     userId,
     email,
     accountTypeKey: row.accountTypeKey,
+  }
+}
+
+export interface SetStaffPasswordInput {
+  password: string
+  mustChangePassword: boolean
+}
+
+/**
+ * Admin sets a known password so they can sign in as this staff user for testing.
+ * Does not email the password. Revokes existing sessions.
+ * If the account is still unverified (e.g. recreated invite), admin-attests verification
+ * for this identity only — never copied from a deleted account on the same email.
+ */
+export async function setStaffPassword(db: Db, userId: string, input: SetStaffPasswordInput) {
+  const [row] = await db
+    .select({ user: users, accountTypeKey: accountTypes.key })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(users.id, userId))
+
+  if (!row) throw new StaffInviteServiceError('NOT_FOUND')
+  if (isSusanSystemEmail(row.user.email)) throw new StaffInviteServiceError('SUSAN_PROTECTED')
+  if (row.accountTypeKey === 'customer') throw new StaffInviteServiceError('CUSTOMER_ACCOUNT')
+  if (row.accountTypeKey === 'super_admin') throw new StaffInviteServiceError('NOT_STAFF')
+
+  const now = new Date()
+  await db.update(users)
+    .set({
+      passwordHash: await hashPassword(input.password),
+      mustChangePassword: input.mustChangePassword,
+      tempPasswordExpiresAt: null,
+      emailVerifiedAt: row.user.emailVerifiedAt ?? now,
+      updatedAt: now,
+    })
+    .where(eq(users.id, userId))
+
+  await db.update(sessions)
+    .set({ revokedAt: now })
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+
+  return {
+    userId,
+    email: row.user.email.trim().toLowerCase(),
+    accountTypeKey: row.accountTypeKey,
+    mustChangePassword: input.mustChangePassword,
+    emailVerified: true,
   }
 }

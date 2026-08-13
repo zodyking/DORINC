@@ -17,6 +17,8 @@ export function useClientFetch<T>(
     server: false,
     lazy: true,
     ...opts,
+    // Never reuse SSR/payload cache — admin lists go stale after delete/recreate.
+    getCachedData: opts.getCachedData ?? (() => undefined),
     onResponseError(ctx) {
       handleClientFetchAuthError(ctx.response.status, ctx.error)
       if (typeof userOnResponseError === 'function') {

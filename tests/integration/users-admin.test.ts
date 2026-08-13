@@ -1,6 +1,6 @@
 // Integration tests for admin approve/reject (P1-05) against the dev PostgreSQL.
 import { config } from 'dotenv'
-import { like } from 'drizzle-orm'
+import { eq, like } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -11,6 +11,8 @@ import {
   updateUser,
   UsersServiceError,
 } from '../../server/services/users.service'
+import { inviteStaffUser, setStaffPassword } from '../../server/services/staff-invite.service'
+import { hardDeleteUser } from '../../server/services/hard-delete.service'
 import { users } from '../../server/db/schema/auth'
 import { ACCOUNT_TYPE_BUNDLES } from '../../shared/permissions/keys'
 
@@ -124,6 +126,10 @@ describe('P1-05 admin approve/reject', () => {
     expect(result.changedFields).toEqual(expect.arrayContaining(['name', 'email']))
     expect(result.user.name).toBe('Meliyah King')
     expect(result.user.email).toBe(nextEmail)
+    expect(result.user.emailVerifiedAt).toBeNull()
+    expect(result.changedFields).toEqual(expect.arrayContaining(['emailVerifiedAt']))
+
+    await expect(login(db, nextEmail, PASSWORD, { portal: 'staff' })).rejects.toThrow('NOT_VERIFIED')
   })
 
   it('updateUser rejects duplicate emails', async () => {
@@ -137,5 +143,68 @@ describe('P1-05 admin approve/reject', () => {
       actor: { id: FAKE_ADMIN_ID, accountType: 'admin' },
       email: a.email,
     })).rejects.toThrow('EMAIL_TAKEN')
+  })
+})
+
+describe('staff invite recreate + admin set password', () => {
+  it('does not mark a recreated email as verified, and admin can set a password to sign in', async () => {
+    const email = emailFor('recreate')
+    const first = await inviteStaffUser(db, {
+      name: 'Meliyah King',
+      email,
+      accountTypeKey: 'accountant',
+      invitedBy: FAKE_ADMIN_ID,
+    })
+    expect(first.user.emailVerifiedAt).toBeNull()
+    expect(first.user.approvedAt).not.toBeNull()
+
+    await hardDeleteUser(db, first.user.id, FAKE_ADMIN_ID, 'recreate for testing')
+
+    const second = await inviteStaffUser(db, {
+      name: 'Meliyah King',
+      email,
+      accountTypeKey: 'accountant',
+      invitedBy: FAKE_ADMIN_ID,
+    })
+    expect(second.user.id).not.toBe(first.user.id)
+    expect(second.user.emailVerifiedAt).toBeNull()
+
+    const [listed] = await db.select().from(users).where(eq(users.email, email))
+    expect(listed?.emailVerifiedAt).toBeNull()
+
+    await expect(login(db, email, 'not-the-invite-password', { portal: 'staff' }))
+      .rejects.toThrow('INVALID_CREDENTIALS')
+
+    await setStaffPassword(db, second.user.id, {
+      password: 'admin-test-pass-1',
+      mustChangePassword: false,
+    })
+
+    const session = await login(db, email, 'admin-test-pass-1', { portal: 'staff' })
+    expect(session.accountTypeKey).toBe('accountant')
+
+    const [verified] = await db.select().from(users).where(eq(users.id, second.user.id))
+    expect(verified?.emailVerifiedAt).not.toBeNull()
+    expect(verified?.mustChangePassword).toBe(false)
+  })
+
+  it('first login with a valid invite temp password verifies this identity', async () => {
+    const email = emailFor('invite-login')
+    const invited = await inviteStaffUser(db, {
+      name: 'Invite Login',
+      email,
+      accountTypeKey: 'mechanic',
+      invitedBy: FAKE_ADMIN_ID,
+    })
+    expect(invited.user.emailVerifiedAt).toBeNull()
+
+    const { hashPassword } = await import('../../server/auth/password')
+    await db.update(users)
+      .set({ passwordHash: await hashPassword('invite-temp-ok1') })
+      .where(eq(users.id, invited.user.id))
+
+    await login(db, email, 'invite-temp-ok1', { portal: 'staff' })
+    const [after] = await db.select().from(users).where(eq(users.id, invited.user.id))
+    expect(after?.emailVerifiedAt).not.toBeNull()
   })
 })

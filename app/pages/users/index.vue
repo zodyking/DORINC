@@ -13,7 +13,7 @@ interface UserRow {
 
 const { data, refresh } = useClientFetch<{ items: UserRow[], total: number }>(
   '/api/admin/users',
-  { query: { pageSize: 100 } },
+  { query: { pageSize: 100 }, key: ADMIN_USERS_LIST_KEY },
 )
 
 const users = computed(() => data.value?.items ?? [])
@@ -133,6 +133,7 @@ async function submitInvite() {
       },
     })
     inviteNotice.value = `Invite sent to ${res.user.email}`
+    bustAdminUsersCache()
     await refresh()
     setTimeout(() => closeInvite(), 1200)
   }
@@ -152,6 +153,7 @@ async function approve(u: UserRow) {
       method: 'POST',
       body: accountType && accountType !== u.accountType ? { accountType } : {},
     })
+    bustAdminUsersCache()
     await refresh()
   }
   finally {
@@ -165,12 +167,17 @@ async function reject(u: UserRow) {
   busyId.value = u.id
   try {
     await $fetch(`/api/admin/users/${u.id}/reject`, { method: 'POST', body: { reason } })
+    bustAdminUsersCache()
     await refresh()
   }
   finally {
     busyId.value = ''
   }
 }
+
+onMounted(() => {
+  void refresh()
+})
 </script>
 
 <template>
@@ -313,49 +320,51 @@ async function reject(u: UserRow) {
         </table>
       </div>
     </div>
-  </section>
 
-  <div v-if="inviteOpen" class="modal-scrim open" @click.self="closeInvite">
-    <div class="card modal-card invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
-      <div class="chead">
-        <h3 id="invite-title">Invite staff user</h3>
-      </div>
-      <div class="cbody invite-modal__body">
-        <p class="invite-modal__intro">
-          Preset their account details. They will receive an email with a temporary password and must choose a new password on first sign-in.
-        </p>
-        <label class="fld">
-          Full name
-          <input v-model="inviteName" type="text" autocomplete="name" placeholder="Jordan Taylor">
-        </label>
-        <label class="fld">
-          Email
-          <input v-model="inviteEmail" type="email" autocomplete="email" placeholder="name@company.com">
-        </label>
-        <label class="fld">
-          Account type
-          <select v-model="inviteAccountType">
-            <option v-for="type in assignableTypes" :key="type" :value="type">
-              {{ accountTypeLabel(type) }}
-            </option>
-          </select>
-        </label>
-        <p v-if="inviteNotice" class="invite-modal__ok">{{ inviteNotice }}</p>
-        <p v-if="inviteError" class="invite-modal__err">{{ inviteError }}</p>
-        <div class="invite-modal__actions">
-          <button type="button" class="btn" :disabled="inviteBusy" @click="closeInvite">Cancel</button>
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="inviteBusy || !inviteName.trim() || !inviteEmail.trim()"
-            @click="submitInvite"
-          >
-            {{ inviteBusy ? 'Sending…' : 'Send invite' }}
-          </button>
+    <Teleport to="body">
+      <div v-if="inviteOpen" class="modal-scrim open" @click.self="closeInvite">
+        <div class="card modal-card invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+          <div class="chead">
+            <h3 id="invite-title">Invite staff user</h3>
+          </div>
+          <div class="cbody invite-modal__body">
+            <p class="invite-modal__intro">
+              Preset their account details. They will receive an email with a temporary password and must choose a new password on first sign-in.
+            </p>
+            <label class="fld">
+              Full name
+              <input v-model="inviteName" type="text" autocomplete="name" placeholder="Jordan Taylor">
+            </label>
+            <label class="fld">
+              Email
+              <input v-model="inviteEmail" type="email" autocomplete="email" placeholder="name@company.com">
+            </label>
+            <label class="fld">
+              Account type
+              <select v-model="inviteAccountType">
+                <option v-for="type in assignableTypes" :key="type" :value="type">
+                  {{ accountTypeLabel(type) }}
+                </option>
+              </select>
+            </label>
+            <p v-if="inviteNotice" class="invite-modal__ok">{{ inviteNotice }}</p>
+            <p v-if="inviteError" class="invite-modal__err">{{ inviteError }}</p>
+            <div class="invite-modal__actions">
+              <button type="button" class="btn" :disabled="inviteBusy" @click="closeInvite">Cancel</button>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="inviteBusy || !inviteName.trim() || !inviteEmail.trim()"
+                @click="submitInvite"
+              >
+                {{ inviteBusy ? 'Sending…' : 'Send invite' }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+    </Teleport>
+  </section>
 </template>
 
 <style scoped>

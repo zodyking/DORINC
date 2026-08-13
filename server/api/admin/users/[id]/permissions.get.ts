@@ -6,9 +6,11 @@ import { requirePermission } from '../../../../utils/require-permission'
 import { validateParams } from '../../../../utils/validate'
 import { idParamSchema } from '../../../../../shared/validators/common'
 import type { PermissionKey } from '../../../../../shared/permissions/keys'
+import { setPrivateNoStore } from '../../../../utils/private-no-store'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'users.permissions.all')
+  setPrivateNoStore(event)
   const { id } = validateParams(event, idParamSchema)
   const db = useDb()
 

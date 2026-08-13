@@ -51,13 +51,22 @@ interface UserPermissions {
 
 const route = useRoute()
 const auth = useAuthStore()
+const userId = computed(() => String(route.params.id || ''))
 
 const { data, refresh, error } = useClientFetch<{ user: UserDetail, activity: ActivityRow[] }>(
-  `/api/admin/users/${route.params.id}`,
+  () => userId.value ? `/api/admin/users/${userId.value}` : null,
+  {
+    key: computed(() => adminUserDetailKey(userId.value)),
+    watch: [userId],
+  },
 )
 
 const { data: permData, refresh: refreshPerms } = useClientFetch<UserPermissions>(
-  `/api/admin/users/${route.params.id}/permissions`,
+  () => userId.value ? `/api/admin/users/${userId.value}/permissions` : null,
+  {
+    key: computed(() => adminUserPermissionsKey(userId.value)),
+    watch: [userId],
+  },
 )
 
 const user = computed(() => data.value?.user)
@@ -204,6 +213,7 @@ async function run(action: () => Promise<unknown>, successNote: string) {
   notice.value = ''
   try {
     await action()
+    bustAdminUsersCache()
     await refresh()
     await refreshPerms()
     notice.value = successNote
@@ -266,6 +276,7 @@ async function saveCommunications() {
         },
       },
     )
+    bustAdminUsersCache()
     await refresh()
     notice.value = res.channelChanged
       ? `Communication settings saved — user notified by ${messageNotifyChannel.value === 'sms' ? 'text' : 'email'}`
@@ -344,6 +355,52 @@ const sendPasswordReset = () => run(
   'Temporary password emailed — user must set a new password on next sign-in',
 )
 
+const showSetPasswordModal = ref(false)
+const setPasswordValue = ref('')
+const setPasswordConfirm = ref('')
+const setPasswordMustChange = ref(true)
+const setPasswordError = ref('')
+
+function openSetPassword() {
+  setPasswordValue.value = ''
+  setPasswordConfirm.value = ''
+  setPasswordMustChange.value = true
+  setPasswordError.value = ''
+  showSetPasswordModal.value = true
+}
+
+function closeSetPassword() {
+  showSetPasswordModal.value = false
+  setPasswordValue.value = ''
+  setPasswordConfirm.value = ''
+  setPasswordError.value = ''
+}
+
+async function submitSetPassword() {
+  const password = setPasswordValue.value
+  if (password.length < 12) {
+    setPasswordError.value = 'Password must be at least 12 characters'
+    return
+  }
+  if (password !== setPasswordConfirm.value) {
+    setPasswordError.value = 'Passwords do not match'
+    return
+  }
+  await run(
+    () => $fetch(`/api/admin/users/${route.params.id}/set-password`, {
+      method: 'POST',
+      body: {
+        password,
+        mustChangePassword: setPasswordMustChange.value,
+      },
+    }),
+    setPasswordMustChange.value
+      ? 'Password set — sign in as this user, then they must choose a new password'
+      : 'Password set — you can sign in as this user now',
+  )
+  if (!errorMsg.value) closeSetPassword()
+}
+
 const canResendVerification = computed(() =>
   canManage.value
   && user.value
@@ -364,9 +421,10 @@ const canCredentialAction = computed(() =>
   && user.value.status !== 'rejected'
 )
 
-/** Never signed in yet → resend invite. Already logged in → password reset. */
+/** Never signed in yet → resend invite. Password reset and set-password work even before first login. */
 const canResendInvite = computed(() => canCredentialAction.value && !user.value?.hasLoggedIn)
-const canPasswordReset = computed(() => canCredentialAction.value && Boolean(user.value?.hasLoggedIn))
+const canPasswordReset = computed(() => canCredentialAction.value)
+const canSetPassword = computed(() => canCredentialAction.value)
 
 const canDelete = computed(() =>
   canManage.value
@@ -398,6 +456,7 @@ async function deleteUser() {
         reason: deleteReason.value || undefined,
       },
     })
+    bustAdminUsersCache()
     await navigateTo('/users')
   }
   catch (err) {
@@ -459,6 +518,10 @@ function activityTitle(a: ActivityRow): string {
     'users.reject': 'Rejected a user',
     'users.update': 'Updated a user',
     'users.permissions.update': 'Updated permissions',
+    'users.password_reset': 'Password reset emailed',
+    'users.password_set': 'Password set by admin',
+    'users.invite': 'Invited',
+    'users.invite_resend': 'Invite resent',
   }
   return map[a.action] ?? a.action
 }
@@ -497,6 +560,14 @@ const showPermissionsModal = ref(false)
               @click="resendInvite"
             >
               Resend invite
+            </button>
+            <button
+              v-if="canSetPassword"
+              class="btn"
+              :disabled="busy"
+              @click="openSetPassword"
+            >
+              Set password
             </button>
             <button
               v-if="canPasswordReset"
@@ -608,6 +679,7 @@ const showPermissionsModal = ref(false)
                 </label>
                 <label class="fld">Email verified
                   <input type="text" :value="user.emailVerified ? 'Yes' : 'No'" readonly>
+                  <span class="help">Verified only after this account confirms the mailbox — not reused from a deleted account on the same email.</span>
                 </label>
               </div>
             </div>
@@ -811,6 +883,59 @@ const showPermissionsModal = ref(false)
       </div>
     </template>
 
+    <!-- Set Password Modal -->
+    <Teleport to="body">
+      <div v-if="showSetPasswordModal" class="modal-backdrop" @click.self="closeSetPassword">
+        <div class="modal set-password-modal" role="dialog" aria-labelledby="set-password-title">
+          <div class="modal-header">
+            <h2 id="set-password-title">Set password</h2>
+            <button class="close-btn" type="button" aria-label="Close" @click="closeSetPassword">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="set-password-lead">
+              Set a known password so you can sign in as {{ user?.name || 'this user' }} for testing.
+              Their other sessions will be signed out.
+            </p>
+            <p v-if="setPasswordError" class="flash err">{{ setPasswordError }}</p>
+            <label class="fld">
+              New password
+              <input
+                v-model="setPasswordValue"
+                type="password"
+                autocomplete="new-password"
+                minlength="12"
+                maxlength="200"
+                :disabled="busy"
+              >
+              <span class="help">At least 12 characters.</span>
+            </label>
+            <label class="fld">
+              Confirm password
+              <input
+                v-model="setPasswordConfirm"
+                type="password"
+                autocomplete="new-password"
+                minlength="12"
+                maxlength="200"
+                :disabled="busy"
+                @keyup.enter="submitSetPassword"
+              >
+            </label>
+            <label class="set-password-check">
+              <input v-model="setPasswordMustChange" type="checkbox" :disabled="busy">
+              Require a new password after they sign in
+            </label>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" type="button" :disabled="busy" @click="closeSetPassword">Cancel</button>
+            <button class="btn primary" type="button" :disabled="busy" @click="submitSetPassword">
+              {{ busy ? 'Saving…' : 'Set password' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Delete User Modal -->
     <Teleport to="body">
       <div v-if="showDeleteModal" class="modal-backdrop" @click.self="showDeleteModal = false">
@@ -1004,6 +1129,36 @@ const showPermissionsModal = ref(false)
   color: #991b1b;
   font-size: 13px;
   margin-bottom: 16px;
+}
+
+.set-password-modal {
+  width: 100%;
+  max-width: 440px;
+}
+
+.set-password-modal .modal-body {
+  padding: 16px 20px;
+}
+
+.set-password-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.set-password-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.set-password-check input {
+  margin-top: 2px;
 }
 
 @media (max-width: 720px) {
