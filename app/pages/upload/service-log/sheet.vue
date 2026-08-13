@@ -472,7 +472,6 @@ onBeforeUnmount(() => {
                 @click="pickCustomer(c.id)"
               >
                 <b>{{ c.displayName }}</b>
-                <small>{{ c.accountKind === 'fleet' ? 'Fleet' : 'Individual' }}</small>
               </button>
             </div>
             <div ref="customerContinueEl" class="sl-sheet-upload__actions">
@@ -776,6 +775,8 @@ onBeforeUnmount(() => {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding-right: 2px;
+  align-content: start;
+  grid-auto-rows: min-content;
 }
 .sl-sheet-upload__panel--picker .sl-sheet-upload__picks {
   min-height: 0;
@@ -783,17 +784,21 @@ onBeforeUnmount(() => {
 .sl-sheet-upload__pick {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
-  text-align: left;
-  padding: 14px 14px;
+  text-align: center;
+  padding: 12px 14px;
   border: 1.5px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
   color: inherit;
   font: inherit;
   cursor: pointer;
-  min-height: 52px;
+  min-height: 56px;
+  height: auto;
+  width: 100%;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .sl-sheet-upload__pick:hover {
@@ -811,8 +816,17 @@ onBeforeUnmount(() => {
   background: #eef2ff;
   box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
 }
-.sl-sheet-upload__pick b { font-size: 14px; font-weight: 700; color: #0f172a; }
-.sl-sheet-upload__pick small { color: #64748b; font-size: 12px; }
+.sl-sheet-upload__pick b {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+.sl-sheet-upload__pick small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
 .sl-sheet-upload__error {
   color: #dc2626;
   font-size: 13px;

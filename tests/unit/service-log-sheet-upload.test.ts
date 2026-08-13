@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   SERVICE_LOG_SHEET_UPLOAD_HELP,
@@ -45,5 +47,26 @@ describe('service log sheet upload QR landing', () => {
     const mod = await import('../../server/services/service-log-sheet-upload.service')
     expect(typeof mod.confirmSheetUploadDeviceUser).toBe('function')
     expect(typeof mod.findStaffUserForDevice).toBe('function')
+  })
+})
+
+describe('service log sheet upload picker cards', () => {
+  const page = readFileSync(resolve('app/pages/upload/service-log/sheet.vue'), 'utf8')
+
+  it('shows only the customer name on picker cards', () => {
+    expect(page).toContain('c.displayName')
+    expect(page).not.toContain("c.accountKind === 'fleet' ? 'Fleet' : 'Individual'")
+    expect(page).toContain('align-items: center')
+    expect(page).toContain('text-align: center')
+    expect(page).toContain('justify-content: center')
+  })
+
+  it('keeps vehicle and customer pick cards compact instead of stretching', () => {
+    expect(page).toContain('grid-auto-rows: min-content')
+    expect(page).toContain('align-content: start')
+    expect(page).toContain('min-height: 56px')
+    expect(page).toContain('height: auto')
+    expect(page).toContain('vehicleTag(v)')
+    expect(page).toContain('vehicleSub(v)')
   })
 })
