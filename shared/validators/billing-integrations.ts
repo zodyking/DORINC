@@ -189,12 +189,13 @@ export interface BillingDashboardPayload {
     fromNumber: string | null
     phoneNumbers: BillingQuoPhoneNumber[]
     phoneCount: number
-    /** Next prepaid payment date (YYYY-MM-DD) from Control Panel Quo settings. */
-    paymentDate: string | null
-    /** Expected prepaid payment amount in USD. */
-    paymentAmountUsd: number | null
-    /** Days until paymentDate (negative when overdue). */
-    daysUntilPayment: number | null
+  /** Next Quo prepaid payment / billing-day anchor (YYYY-MM-DD) from Control Panel Quo settings.
+   *  Billing rolls past anchors forward to the next monthly due date. */
+  paymentDate: string | null
+  /** Monthly Quo prepaid amount in USD (recurring). */
+  paymentAmountUsd: number | null
+  /** Days until the next monthly payment date (always >= 0 when a date is set). */
+  daysUntilPayment: number | null
     hasPortalCredentials: boolean
     creditsNote: string | null
     error: string | null
@@ -204,20 +205,20 @@ export interface BillingDashboardPayload {
     currency: string
     estimatedMonthlyUsd: number
     estimatedYearlyUsd: number
-    /** Monthly run-rate shares (hosting/AI) plus domains/Quo due within ~30 days. */
-    breakdown: {
-      vultrUsd: number
-      cloudflareUsd: number
-      openrouterUsd: number
-      quoUsd: number
-    }
-    /** Full-year outlook shares — hosting/AI annualized + domain renewals + Quo prepaid. */
-    breakdownYearly: {
-      vultrUsd: number
-      cloudflareUsd: number
-      openrouterUsd: number
-      quoUsd: number
-    }
+  /** Quo monthly prepaid run-rate (always included when amount is set). */
+  breakdown: {
+    vultrUsd: number
+    cloudflareUsd: number
+    openrouterUsd: number
+    quoUsd: number
+  }
+  /** Full-year outlook shares — hosting/AI/Quo annualized + domain renewals. */
+  breakdownYearly: {
+    vultrUsd: number
+    cloudflareUsd: number
+    openrouterUsd: number
+    quoUsd: number
+  }
   }
   outlook: {
     currency: string

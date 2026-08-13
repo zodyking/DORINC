@@ -603,7 +603,7 @@ function selectProvider(provider: BillingProviderKey) {
                     <dd>{{ billingDate(dashboard.quo.paymentDate) }}</dd>
                   </div>
                   <div>
-                    <dt>Amount</dt>
+                    <dt>Monthly</dt>
                     <dd>{{ billingMoney(dashboard.quo.paymentAmountUsd) }}</dd>
                   </div>
                 </dl>
@@ -911,7 +911,7 @@ function selectProvider(provider: BillingProviderKey) {
                   </div>
                   <div>
                     <dt>Payment amount</dt>
-                    <dd>{{ billingMoney(dashboard.quo.paymentAmountUsd) }}</dd>
+                    <dd>{{ billingMoney(dashboard.quo.paymentAmountUsd) }}/mo</dd>
                   </div>
                   <div>
                     <dt>In monthly total</dt>

@@ -26,6 +26,12 @@ import {
 import { buildBillingOutlook } from './billing-outlook.service'
 import { resolveOpenRouterMonthlySpend } from '../../shared/billing-openrouter-spend'
 import {
+  daysUntilQuoPaymentDate,
+  nextQuoPaymentDate,
+  quoMonthlyRecurringUsd,
+  quoYearlyRecurringUsd,
+} from '../../shared/billing-quo'
+import {
   getQuoConfig,
   isQuoSmsEnabled,
   listQuoPhoneNumbers,
@@ -208,11 +214,10 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   const quoConfig = await getQuoConfig(db)
   const quoEnabled = isQuoSmsEnabled(quoConfig)
   const quoConfigured = Boolean(quoConfig.apiKey?.trim() && quoConfig.fromNumber?.trim())
-  const quoPaymentDate = quoConfig.paymentDate
   const quoPaymentAmountUsd = quoConfig.paymentAmountUsd
-  const quoDaysUntilPayment = quoPaymentDate
-    ? daysUntilIso(`${quoPaymentDate}T00:00:00.000Z`)
-    : null
+  // Stored date is the billing-day anchor; roll past dates forward to the next monthly due date.
+  const quoPaymentDate = nextQuoPaymentDate(quoConfig.paymentDate)
+  const quoDaysUntilPayment = daysUntilQuoPaymentDate(quoPaymentDate)
 
   const vultrUsd = vultrBlock.planCostMonthly ?? 0
   // Do not use ?? alone — OpenRouter often reports usage_monthly: 0 while
@@ -234,21 +239,9 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
     cloudflareBlock.domains.map(d => ({ renewalCost: d.renewalCost })),
   )
 
-  // Quo prepaid: count in this month when due within ~30 days; yearly = configured amount.
-  const quoMonthlyUsd = (
-    quoPaymentAmountUsd != null
-    && quoPaymentAmountUsd > 0
-    && quoDaysUntilPayment != null
-    && quoDaysUntilPayment >= 0
-    && quoDaysUntilPayment <= 30
-  )
-    ? roundMoney(quoPaymentAmountUsd)
-    : 0
-  const quoYearlyUsd = (
-    quoPaymentAmountUsd != null && quoPaymentAmountUsd > 0
-  )
-    ? roundMoney(quoPaymentAmountUsd)
-    : 0
+  // Quo prepaid is a monthly recurring cost (same treatment as hosting run-rate).
+  const quoMonthlyUsd = quoMonthlyRecurringUsd(quoPaymentAmountUsd)
+  const quoYearlyUsd = quoYearlyRecurringUsd(quoPaymentAmountUsd)
 
   const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd + quoMonthlyUsd)
   const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd + quoYearlyUsd)
@@ -258,32 +251,32 @@ export async function buildBillingDashboard(db: Db): Promise<BillingDashboardPay
   const outlook = buildBillingOutlook({
     vultrPlanMonthly: vultrUsd,
     openrouterMonthly: openrouterUsd,
+    quoMonthly: quoMonthlyUsd,
     vultrInvoices: vultrBlock.invoices,
     openrouterUsage: openrouterBlock.usageHistory,
     domainRenewals: cloudflareBlock.domains.map(d => ({
       expiresAt: d.renewalDate !== '—' ? `${d.renewalDate}T00:00:00.000Z` : null,
       renewalCost: d.renewalCost,
     })),
-    quoPayments: [{
-      paymentDate: quoPaymentDate,
-      paymentAmountUsd: quoPaymentAmountUsd,
-    }],
   })
 
   let creditsNote = 'Quo uses prepaid messaging credits managed in the Quo app. Usage spend is not exposed via the public API.'
-  if (quoPaymentDate && quoPaymentAmountUsd != null && quoPaymentAmountUsd > 0) {
+  if (quoPaymentAmountUsd != null && quoPaymentAmountUsd > 0) {
     const amountLabel = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(quoPaymentAmountUsd)
-    const dayHint = quoDaysUntilPayment == null
-      ? ''
-      : quoDaysUntilPayment < 0
-        ? ` (${Math.abs(quoDaysUntilPayment)} day${Math.abs(quoDaysUntilPayment) === 1 ? '' : 's'} overdue)`
+    if (quoPaymentDate) {
+      const dayHint = quoDaysUntilPayment == null
+        ? ''
         : quoDaysUntilPayment === 0
           ? ' (due today)'
           : ` (in ${quoDaysUntilPayment} day${quoDaysUntilPayment === 1 ? '' : 's'})`
-    creditsNote = `Next Quo prepaid payment ${amountLabel} on ${quoPaymentDate}${dayHint}. Usage spend is not exposed via the public API.`
+      creditsNote = `Quo is billed about ${amountLabel}/month. Next payment ${quoPaymentDate}${dayHint}. Usage spend is not exposed via the public API.`
+    }
+    else {
+      creditsNote = `Quo is billed about ${amountLabel}/month. Set a payment date in Control Panel → Quo SMS for the next due day. Usage spend is not exposed via the public API.`
+    }
   }
   else {
-    creditsNote += ' Set payment date and amount in Control Panel → Quo SMS to include Quo in billing totals.'
+    creditsNote += ' Set monthly payment date and amount in Control Panel → Quo SMS to include Quo in billing totals.'
   }
 
   const quoBlock: BillingDashboardPayload['quo'] = {

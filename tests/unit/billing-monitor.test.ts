@@ -17,14 +17,14 @@ describe('billing dashboard totals', () => {
     const cloudflareMonthlyUsd = 15.88
     const cloudflareYearlyUsd = 31.76
     const quoMonthlyUsd = 12
-    const quoYearlyUsd = 12
+    const quoYearlyUsd = 12 * 12
 
     const roundMoney = (value: number) => Math.round(value * 100) / 100
     const estimatedMonthlyUsd = roundMoney(vultrUsd + openrouterUsd + cloudflareMonthlyUsd + quoMonthlyUsd)
     const estimatedYearlyUsd = roundMoney((vultrUsd * 12) + (openrouterUsd * 12) + cloudflareYearlyUsd + quoYearlyUsd)
 
     expect(estimatedMonthlyUsd).toBe(47.97)
-    expect(estimatedYearlyUsd).toBe(284.84)
+    expect(estimatedYearlyUsd).toBe(416.84)
   })
 
   it('uses internal AI usage when OpenRouter reports usage_monthly as 0', () => {

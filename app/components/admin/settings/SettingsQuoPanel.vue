@@ -438,18 +438,20 @@ const variableHelp = computed(() => {
         <fieldset class="quo-billing-fields">
           <legend>Billing (prepaid)</legend>
           <p class="settings-help">
-            Quo does not expose credit spend via API. Set the next payment date and amount so the Billing page can include Quo cost in monthly/yearly totals.
+            Quo does not expose credit spend via API. Set the monthly payment amount and a billing day
+            so the Billing page can include Quo as a recurring monthly cost. If the date is in the past,
+            Billing advances it to the next monthly due date automatically.
           </p>
           <div class="quo-billing-grid">
             <label class="fld">
-              Next payment date
+              Payment day
               <input
                 v-model="form.paymentDate"
                 type="date"
               >
             </label>
             <label class="fld">
-              Payment amount (USD)
+              Monthly amount (USD)
               <input
                 v-model="form.paymentAmountUsd"
                 type="text"
@@ -461,7 +463,7 @@ const variableHelp = computed(() => {
             </label>
           </div>
           <span class="help">
-            Clear either field and save to remove Quo from billing totals. Amount due within 30 days counts toward estimated monthly spend; the full amount counts toward yearly.
+            Clear either field and save to remove Quo from billing totals. Amount counts every month; yearly is amount × 12.
           </span>
 
           <div class="quo-portal-login">

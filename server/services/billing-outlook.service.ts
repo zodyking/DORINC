@@ -19,24 +19,28 @@ function addUtcMonths(base: Date, offset: number): Date {
 export interface BillingOutlookInput {
   vultrPlanMonthly: number
   openrouterMonthly: number
+  /** Quo monthly recurring prepaid cost (included every month). */
+  quoMonthly?: number
   vultrInvoices: Array<{ date: string, amount: number }>
   openrouterUsage: Array<{ date: string, amount: number }>
   domainRenewals: Array<{ expiresAt: string | null, renewalCost: number | null }>
-  /** Quo prepaid payments scheduled by date (same treatment as domain renewals). */
-  quoPayments?: Array<{ paymentDate: string | null, paymentAmountUsd: number | null }>
   now?: Date
 }
 
 /**
  * Builds a 12-month spend outlook:
- * - projectedUsd is the expected monthly total for every month (hosting + AI run-rate
- *   plus any domain renewals / Quo payments falling in that month)
+ * - projectedUsd is the expected monthly total for every month (hosting + AI + Quo
+ *   run-rate plus any domain renewals falling in that month)
  * - actualUsd is observed charges for past/current months when invoice/usage data exists
  */
 export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoint[] {
   const now = input.now ?? new Date()
   const current = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  const recurring = roundMoney(Math.max(0, input.vultrPlanMonthly) + Math.max(0, input.openrouterMonthly))
+  const recurring = roundMoney(
+    Math.max(0, input.vultrPlanMonthly)
+    + Math.max(0, input.openrouterMonthly)
+    + Math.max(0, input.quoMonthly ?? 0),
+  )
 
   const actualByMonth = new Map<string, number>()
   for (const row of [...input.vultrInvoices, ...input.openrouterUsage]) {
@@ -47,19 +51,9 @@ export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoi
   }
 
   const renewalByMonth = new Map<string, number>()
-  const scheduledPayments = [
-    ...input.domainRenewals.map(domain => ({
-      at: domain.expiresAt,
-      amount: domain.renewalCost,
-    })),
-    ...(input.quoPayments ?? []).map(row => ({
-      at: row.paymentDate ? `${row.paymentDate}T00:00:00.000Z` : null,
-      amount: row.paymentAmountUsd,
-    })),
-  ]
-  for (const payment of scheduledPayments) {
-    if (!payment.at || payment.amount == null || payment.amount <= 0) continue
-    const expires = new Date(payment.at)
+  for (const domain of input.domainRenewals) {
+    if (!domain.expiresAt || domain.renewalCost == null || domain.renewalCost <= 0) continue
+    const expires = new Date(domain.expiresAt)
     if (Number.isNaN(expires.getTime())) continue
     for (let offset = -5; offset <= 6; offset += 1) {
       const month = addUtcMonths(current, offset)
@@ -68,7 +62,7 @@ export function buildBillingOutlook(input: BillingOutlookInput): BillingSpendPoi
         && expires.getUTCMonth() === month.getUTCMonth()
       ) {
         const key = monthKey(month)
-        renewalByMonth.set(key, roundMoney((renewalByMonth.get(key) ?? 0) + payment.amount))
+        renewalByMonth.set(key, roundMoney((renewalByMonth.get(key) ?? 0) + domain.renewalCost))
       }
     }
   }

@@ -59,16 +59,14 @@ describe('buildBillingOutlook', () => {
     const points = buildBillingOutlook({
       vultrPlanMonthly: 10,
       openrouterMonthly: 0,
+      quoMonthly: 25,
       vultrInvoices: [],
       openrouterUsage: [],
       domainRenewals: [],
-      quoPayments: [
-        { paymentDate: '2026-10-01', paymentAmountUsd: 25 },
-      ],
       now,
     })
 
-    expect(points.find(p => p.key === '2026-09')?.projectedUsd).toBe(10)
+    expect(points.find(p => p.key === '2026-09')?.projectedUsd).toBe(35)
     expect(points.find(p => p.key === '2026-10')?.projectedUsd).toBe(35)
   })
 })
