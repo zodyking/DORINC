@@ -3,6 +3,7 @@ import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { isSusanSystemEmail } from '#shared/ai-assistant'
 import { formatPhoneDisplay } from '~/utils/phone-ui'
 import { normalizePhoneE164 } from '#shared/format/phone-e164'
+import { splitPersonName, toTitleCase } from '#shared/format/person-name'
 
 definePageMeta({ layout: 'staff', permission: 'users.read.all' })
 
@@ -65,6 +66,9 @@ const userPerms = computed(() => permData.value)
 const roleGrants = computed(() => userPerms.value?.roleGrants ?? [])
 
 const selectedType = ref('')
+const editFirstName = ref('')
+const editLastName = ref('')
+const editEmail = ref('')
 const editPhone = ref('')
 const teamChatEnabled = ref(true)
 const messageEmailNotify = ref(true)
@@ -73,6 +77,10 @@ const silentDeveloperMode = ref(false)
 watchEffect(() => {
   if (user.value) {
     selectedType.value = user.value.accountType
+    const { firstName, lastName } = splitPersonName(user.value.name)
+    editFirstName.value = firstName
+    editLastName.value = lastName
+    editEmail.value = user.value.email
     editPhone.value = formatPhoneDisplay(user.value.phone ?? '')
     teamChatEnabled.value = user.value.teamChatEnabled !== false
     messageEmailNotify.value = user.value.messageEmailNotify !== false
@@ -99,13 +107,26 @@ const canEditCommunications = computed(() =>
   && user.value.accountType !== 'customer',
 )
 const typeDirty = computed(() => !!user.value && selectedType.value !== user.value.accountType)
+const nameDirty = computed(() => {
+  if (!user.value) return false
+  const current = splitPersonName(user.value.name)
+  return toTitleCase(editFirstName.value) !== toTitleCase(current.firstName)
+    || toTitleCase(editLastName.value) !== toTitleCase(current.lastName)
+})
+const emailDirty = computed(() => {
+  if (!user.value) return false
+  return editEmail.value.trim().toLowerCase() !== user.value.email.trim().toLowerCase()
+})
 const phoneDirty = computed(() => {
   if (!user.value) return false
   const next = normalizePhoneE164(editPhone.value) ?? (editPhone.value.trim() || null)
   const current = normalizePhoneE164(user.value.phone) ?? (user.value.phone?.trim() || null)
   return next !== current
 })
-const profileDirty = computed(() => typeDirty.value || phoneDirty.value)
+const profileDirty = computed(() =>
+  typeDirty.value || nameDirty.value || emailDirty.value || phoneDirty.value,
+)
+const canEditProfileFields = computed(() => canManage.value && !isSusanRecord.value)
 const communicationsDirty = computed(() => {
   if (!user.value) return false
   const currentChannel = user.value.messageNotifyChannel === 'sms' ? 'sms' : 'email'
@@ -196,18 +217,34 @@ async function run(action: () => Promise<unknown>, successNote: string) {
 }
 
 const saveChanges = () => run(
-  () => $fetch(`/api/admin/users/${route.params.id}`, {
-    method: 'PATCH',
-    body: {
-      ...(typeDirty.value ? { accountType: selectedType.value } : {}),
-      ...(phoneDirty.value ? { phone: editPhone.value.trim() || null } : {}),
-    },
-  }),
-  phoneDirty.value && !typeDirty.value
-    ? 'Phone number updated'
-    : typeDirty.value && !phoneDirty.value
-      ? 'Account type updated'
-      : 'User updated',
+  async () => {
+    const firstName = toTitleCase(editFirstName.value)
+    const lastName = toTitleCase(editLastName.value)
+    if (nameDirty.value) {
+      editFirstName.value = firstName
+      editLastName.value = lastName
+    }
+    await $fetch(`/api/admin/users/${route.params.id}`, {
+      method: 'PATCH',
+      body: {
+        ...(typeDirty.value ? { accountType: selectedType.value } : {}),
+        ...(nameDirty.value ? { firstName, lastName } : {}),
+        ...(emailDirty.value ? { email: editEmail.value.trim() } : {}),
+        ...(phoneDirty.value ? { phone: editPhone.value.trim() || null } : {}),
+      },
+    })
+  },
+  (() => {
+    const onlyPhone = phoneDirty.value && !typeDirty.value && !nameDirty.value && !emailDirty.value
+    const onlyType = typeDirty.value && !phoneDirty.value && !nameDirty.value && !emailDirty.value
+    const onlyName = nameDirty.value && !typeDirty.value && !phoneDirty.value && !emailDirty.value
+    const onlyEmail = emailDirty.value && !typeDirty.value && !phoneDirty.value && !nameDirty.value
+    if (onlyPhone) return 'Phone number updated'
+    if (onlyType) return 'Account type updated'
+    if (onlyName) return 'Name updated'
+    if (onlyEmail) return 'Email updated'
+    return 'User updated'
+  })(),
 )
 
 async function saveCommunications() {
@@ -522,8 +559,40 @@ const showPermissionsModal = ref(false)
                 style="width:64px; height:64px; border-radius:16px; font-size:20px; flex:none;"
               >{{ initials(user.name) }}</span>
               <div style="flex:1; min-width:220px;">
-                <label class="fld">Full name <input type="text" :value="user.name" readonly></label>
-                <label class="fld">Email <input type="email" :value="user.email" readonly></label>
+                <div class="row2">
+                  <label class="fld">
+                    First name
+                    <input
+                      v-model="editFirstName"
+                      type="text"
+                      autocomplete="given-name"
+                      :readonly="!canEditProfileFields"
+                      :disabled="busy || isSusanRecord"
+                      @blur="editFirstName = toTitleCase(editFirstName)"
+                    >
+                  </label>
+                  <label class="fld">
+                    Last name
+                    <input
+                      v-model="editLastName"
+                      type="text"
+                      autocomplete="family-name"
+                      :readonly="!canEditProfileFields"
+                      :disabled="busy || isSusanRecord"
+                      @blur="editLastName = toTitleCase(editLastName)"
+                    >
+                  </label>
+                </div>
+                <label class="fld">
+                  Email
+                  <input
+                    v-model="editEmail"
+                    type="email"
+                    autocomplete="email"
+                    :readonly="!canEditProfileFields"
+                    :disabled="busy || isSusanRecord"
+                  >
+                </label>
                 <label class="fld">
                   Phone number
                   <input
@@ -531,7 +600,7 @@ const showPermissionsModal = ref(false)
                     type="tel"
                     autocomplete="tel"
                     placeholder="(212) 203 7378"
-                    :readonly="!canManage || isSusanRecord"
+                    :readonly="!canEditProfileFields"
                     :disabled="busy || isSusanRecord"
                     @blur="editPhone = formatPhoneDisplay(editPhone)"
                   >

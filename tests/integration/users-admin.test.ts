@@ -5,7 +5,12 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { login, signup, verifyEmail } from '../../server/auth/auth.service'
-import { approveUser, rejectUser, UsersServiceError } from '../../server/services/users.service'
+import {
+  approveUser,
+  rejectUser,
+  updateUser,
+  UsersServiceError,
+} from '../../server/services/users.service'
 import { users } from '../../server/db/schema/auth'
 import { ACCOUNT_TYPE_BUNDLES } from '../../shared/permissions/keys'
 
@@ -101,5 +106,36 @@ describe('P1-05 admin approve/reject', () => {
 
     await expect(approveUser(db, { userId: FAKE_ADMIN_ID, approvedBy: FAKE_ADMIN_ID }))
       .rejects.toThrow(UsersServiceError)
+  })
+
+  it('updateUser edits first/last name and email', async () => {
+    const pending = await makeVerifiedPendingUser('profile')
+    await approveUser(db, { userId: pending.id, approvedBy: FAKE_ADMIN_ID })
+
+    const nextEmail = emailFor('profile-renamed')
+    const result = await updateUser(db, {
+      userId: pending.id,
+      actor: { id: FAKE_ADMIN_ID, accountType: 'admin' },
+      firstName: 'meliyah',
+      lastName: 'king',
+      email: nextEmail,
+    })
+
+    expect(result.changedFields).toEqual(expect.arrayContaining(['name', 'email']))
+    expect(result.user.name).toBe('Meliyah King')
+    expect(result.user.email).toBe(nextEmail)
+  })
+
+  it('updateUser rejects duplicate emails', async () => {
+    const a = await makeVerifiedPendingUser('email-a')
+    const b = await makeVerifiedPendingUser('email-b')
+    await approveUser(db, { userId: a.id, approvedBy: FAKE_ADMIN_ID })
+    await approveUser(db, { userId: b.id, approvedBy: FAKE_ADMIN_ID })
+
+    await expect(updateUser(db, {
+      userId: b.id,
+      actor: { id: FAKE_ADMIN_ID, accountType: 'admin' },
+      email: a.email,
+    })).rejects.toThrow('EMAIL_TAKEN')
   })
 })

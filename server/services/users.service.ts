@@ -1,8 +1,9 @@
-import { and, asc, count, eq, ilike, isNull, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, users } from '../db/schema/auth'
 import type { AccountType } from '../../shared/permissions/keys'
 import { isSusanSystemEmail } from '../../shared/ai-assistant'
+import { formatPersonName } from '../../shared/format/person-name'
 
 export type UsersServiceErrorCode
   = | 'NOT_FOUND'
@@ -10,6 +11,8 @@ export type UsersServiceErrorCode
     | 'INVALID_ACCOUNT_TYPE'
     | 'SUPER_ADMIN_PROTECTED'
     | 'SUSAN_PROTECTED'
+    | 'EMAIL_TAKEN'
+    | 'INVALID_NAME'
 
 export class UsersServiceError extends Error {
   constructor(public readonly code: UsersServiceErrorCode) {
@@ -136,6 +139,9 @@ export interface UpdateUserInput {
   disabledReason?: string
   /** E.164 phone or null to clear. Always editable by admins (independent of Quo). */
   phone?: string | null
+  firstName?: string
+  lastName?: string
+  email?: string
 }
 
 export interface UpdateUserCommunicationPrefsInput {
@@ -201,6 +207,30 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
     if (nextPhone !== prevPhone) {
       changes.phone = nextPhone
       changedFields.push('phone')
+    }
+  }
+
+  if (input.firstName !== undefined || input.lastName !== undefined) {
+    if (input.firstName === undefined || input.lastName === undefined) {
+      throw new UsersServiceError('INVALID_NAME')
+    }
+    const nextName = formatPersonName(input.firstName, input.lastName)
+    if (nextName !== row.user.name) {
+      changes.name = nextName
+      changedFields.push('name')
+    }
+  }
+
+  if (input.email !== undefined) {
+    const nextEmail = input.email.trim().toLowerCase()
+    if (nextEmail !== row.user.email) {
+      const [existing] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.email, nextEmail), ne(users.id, input.userId)))
+      if (existing) throw new UsersServiceError('EMAIL_TAKEN')
+      changes.email = nextEmail
+      changedFields.push('email')
     }
   }
 
