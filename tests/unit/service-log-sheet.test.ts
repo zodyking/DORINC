@@ -119,6 +119,25 @@ describe('renderServiceLogSheetHtml', () => {
     expect(html).not.toContain('<section')
   })
 
+  it('uses only black ink and solid black lines (no gray or shading)', () => {
+    const html = renderServiceLogSheetHtml(payload, { forPdf: true })
+    const styleStart = html.indexOf('<style')
+    const styleEnd = html.indexOf('</style>', styleStart)
+    expect(styleStart).toBeGreaterThan(-1)
+    expect(styleEnd).toBeGreaterThan(styleStart)
+    const css = html.slice(styleStart, styleEnd)
+
+    expect(css).not.toMatch(/#(111111|4b5563|6b7280|9ca3af|d7dbe0|374151|f3f4f6|fafafa)\b/i)
+    expect(css).not.toMatch(/dashed/i)
+    expect(css).toContain('color: #000000')
+    expect(css).toContain('border: 0.6pt solid #000000')
+    expect(css).toContain('border-bottom: 0.4pt solid #000000')
+    expect(css).toContain('.sheet-doc .category-title')
+    expect(css).toMatch(/\.sheet-doc \.category-title[\s\S]*?background:\s*#ffffff/)
+    expect(css).toMatch(/\.sheet-doc \.blank-work-table th[\s\S]*?background:\s*#ffffff/)
+    expect(css).toMatch(/\.sheet-doc \.sheet-upload-qr-cell[\s\S]*?background:\s*#ffffff/)
+  })
+
   it('keeps the catalog on DomPDF-safe foundations', () => {
     const html = renderServiceLogSheetHtml(payload, { forPdf: true })
     // DomPDF never reads <col> widths, and it only records a width from a cell

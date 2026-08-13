@@ -38,7 +38,7 @@ const pageStyle = {
   height: '11in',
   padding: `${SERVICE_LOG_SHEET_PAGE_MARGIN_IN}in`,
   background: '#ffffff',
-  color: '#111111',
+  color: '#000000',
   boxSizing: 'border-box' as const,
   boxShadow: '0 18px 50px -20px rgba(15, 23, 42, 0.45)',
   position: 'relative' as const,
@@ -178,7 +178,7 @@ const pageStyle = {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  color: #111111;
+  color: #000000;
   background: transparent;
 }
 .sheet-upload-qr-editor {
@@ -192,7 +192,7 @@ const pageStyle = {
   width: 56pt;
   height: 56pt;
   margin: 0 auto 4pt;
-  border: 0.8pt solid #111;
+  border: 0.8pt solid #000000;
   display: grid;
   place-items: center;
   font-size: 9pt;

@@ -54,7 +54,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   margin: 0;
   padding: 0;
   background: #ffffff;
-  color: #111111;
+  color: #000000;
   font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
   font-size: 7.4pt;
   line-height: 1.2;
@@ -72,7 +72,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 
 /* ---------- header ---------- */
 .sheet-doc .header {
-  border-bottom: 1.2pt solid #111111;
+  border-bottom: 1.2pt solid #000000;
   margin: 0 0 4pt 0;
 }
 .sheet-doc .header td { vertical-align: top; padding: 0 0 4pt 0; }
@@ -86,7 +86,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 }
 .sheet-doc .company-details {
   margin: 1.5pt 0 0;
-  color: #4b5563;
+  color: #000000;
   font-size: 7pt;
   line-height: 1.3;
 }
@@ -102,7 +102,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 }
 .sheet-doc .document-title .doc-sub {
   margin: 1.5pt 0 0;
-  color: #4b5563;
+  color: #000000;
   font-size: 6.5pt;
   line-height: 1.25;
 }
@@ -119,7 +119,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 .sheet-doc .field-label {
   display: block;
   margin: 0 0 1.5pt;
-  color: #4b5563;
+  color: #000000;
   font-size: 5.8pt;
   line-height: 1.2;
   font-weight: 700;
@@ -128,13 +128,13 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 }
 .sheet-doc .field-box {
   height: 14pt;
-  border: 0.6pt solid #6b7280;
+  border: 0.6pt solid #000000;
   background: #ffffff;
 }
 .sheet-doc .complaint-field { margin-top: 4pt; }
 .sheet-doc .complaint-box {
   height: 18pt;
-  border: 0.6pt solid #6b7280;
+  border: 0.6pt solid #000000;
   background: #ffffff;
 }
 
@@ -158,10 +158,10 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 .sheet-doc .grid-gap { width: ${SERVICE_LOG_SHEET_COLUMN_WIDTHS.gap}; }
 
 .sheet-doc .catalog-grid th {
-  border-bottom: 0.8pt solid #111111;
+  border-bottom: 0.8pt solid #000000;
   padding-top: 0;
   padding-bottom: 1.5pt;
-  color: #4b5563;
+  color: #000000;
   font-size: 5.8pt;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -173,23 +173,24 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 .sheet-doc .catalog-grid th.grid-gap { border-bottom: 0; }
 
 /* Group box: side rails on the outer cells, hairlines between lines. */
-.sheet-doc .catalog-grid td.check-cell { border-left: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid td.check-cell { border-left: 0.6pt solid #000000; }
 .sheet-doc .catalog-grid td.price-cell,
-.sheet-doc .catalog-grid td.new-price-cell { border-left: 0.6pt solid #9ca3af; }
-.sheet-doc .catalog-grid td.new-price-cell { border-right: 0.6pt solid #9ca3af; }
-.sheet-doc .catalog-grid tbody td { border-bottom: 0.4pt solid #d7dbe0; }
-.sheet-doc .catalog-grid td.group-end { border-bottom: 0.6pt solid #9ca3af; }
+.sheet-doc .catalog-grid td.new-price-cell { border-left: 0.6pt solid #000000; }
+.sheet-doc .catalog-grid td.new-price-cell { border-right: 0.6pt solid #000000; }
+.sheet-doc .catalog-grid tbody td { border-bottom: 0.4pt solid #000000; }
+.sheet-doc .catalog-grid td.group-end { border-bottom: 0.6pt solid #000000; }
 .sheet-doc .catalog-grid td.grid-gap,
 .sheet-doc .catalog-grid td.void-cell {
   border: 0;
   background: #ffffff;
 }
 .sheet-doc .category-title {
-  border-top: 0.6pt solid #9ca3af;
-  border-bottom: 0.6pt solid #9ca3af;
-  border-left: 0.6pt solid #9ca3af;
-  border-right: 0.6pt solid #9ca3af;
-  background: #f3f4f6;
+  border-top: 0.6pt solid #000000;
+  border-bottom: 0.6pt solid #000000;
+  border-left: 0.6pt solid #000000;
+  border-right: 0.6pt solid #000000;
+  background: #ffffff;
+  color: #000000;
   font-size: 7pt;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -204,14 +205,14 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   display: inline-block;
   width: 6.5pt;
   height: 6.5pt;
-  border: 0.7pt solid #374151;
+  border: 0.7pt solid #000000;
   vertical-align: middle;
 }
-.sheet-doc .service-name { color: #111111; }
+.sheet-doc .service-name { color: #000000; }
 .sheet-doc .service-subtext {
   display: block;
   margin: 0;
-  color: #6b7280;
+  color: #000000;
   font-size: 5.8pt;
   line-height: 1.05;
 }
@@ -223,16 +224,16 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 .sheet-doc .empty-sheet {
   margin-top: 10pt;
   padding: 8pt;
-  border: 0.6pt dashed #9ca3af;
-  color: #4b5563;
+  border: 0.6pt solid #000000;
+  color: #000000;
   font-size: 8pt;
   text-align: center;
 }
 
 /* ---------- sheet QR (right-column void under Inspection) ---------- */
 .sheet-doc .sheet-upload-qr-cell {
-  border: 0.6pt solid #9ca3af;
-  background: #fafafa;
+  border: 0.6pt solid #000000;
+  background: #ffffff;
   text-align: center;
   vertical-align: middle;
   padding: 5pt 6pt;
@@ -248,7 +249,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #111111;
+  color: #000000;
 }
 .sheet-doc .sheet-upload-qr-img {
   width: 56pt;
@@ -261,7 +262,7 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
   font-size: 5.9pt;
   line-height: 1.3;
   font-weight: 500;
-  color: #374151;
+  color: #000000;
   text-align: center;
 }
 
@@ -276,19 +277,19 @@ export const SERVICE_LOG_SHEET_DOCUMENT_CSS = `
 }
 .sheet-doc .back-help {
   margin: 0 0 5pt;
-  color: #4b5563;
+  color: #000000;
   font-size: 7pt;
   line-height: 1.3;
 }
 .sheet-doc .blank-work-table th,
 .sheet-doc .blank-work-table td {
-  border: 0.6pt solid #9ca3af;
+  border: 0.6pt solid #000000;
   padding: 0;
   vertical-align: middle;
 }
 .sheet-doc .blank-work-table th {
-  background: #f3f4f6;
-  color: #374151;
+  background: #ffffff;
+  color: #000000;
   font-size: 7pt;
   line-height: 1.2;
   font-weight: 700;
