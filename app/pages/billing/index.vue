@@ -10,7 +10,6 @@ import {
   billingDateTime,
   billingDaysBadgeClass,
   billingMoney,
-  billingProviderManageLabel,
   billingProviderStatus,
   billingTokens,
   buildBillingChartGeometry,
@@ -125,7 +124,7 @@ function toggleDomain(name: string) {
 }
 
 const previewInvoices = computed(() => (dashboard.value?.vultr.invoices ?? []).slice(0, PREVIEW_LIMIT))
-const previewUsage = computed(() => (dashboard.value?.openrouter.usageHistory ?? []).slice(0, PREVIEW_LIMIT))
+const monthUsage = computed(() => dashboard.value?.openrouter.usageHistory ?? [])
 const previewDomains = computed(() => (dashboard.value?.cloudflare.domains ?? []).slice(0, PREVIEW_LIMIT))
 
 const revealOpen = ref(false)
@@ -414,13 +413,22 @@ function selectProvider(provider: BillingProviderKey) {
               <button
                 v-if="dashboard.vultr.hasPortalCredentials"
                 type="button"
-                class="btn sm"
+                class="btn sm billing-cred-btn"
                 @click="openReveal('vultr')"
               >
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
                 Credentials
               </button>
-              <button type="button" class="btn sm" @click="openProviderAccount('vultr')">
-                {{ billingProviderManageLabel('vultr') }}
+              <span v-else class="billing-card-footer-spacer" aria-hidden="true" />
+              <button type="button" class="btn sm billing-manage-btn" @click="openProviderAccount('vultr')">
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Manage account
               </button>
             </footer>
           </article>
@@ -476,13 +484,22 @@ function selectProvider(provider: BillingProviderKey) {
               <button
                 v-if="dashboard.cloudflare.hasPortalCredentials"
                 type="button"
-                class="btn sm"
+                class="btn sm billing-cred-btn"
                 @click="openReveal('cloudflare')"
               >
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
                 Credentials
               </button>
-              <button type="button" class="btn sm" @click="openProviderAccount('cloudflare')">
-                {{ billingProviderManageLabel('cloudflare') }}
+              <span v-else class="billing-card-footer-spacer" aria-hidden="true" />
+              <button type="button" class="btn sm billing-manage-btn" @click="openProviderAccount('cloudflare')">
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Manage account
               </button>
             </footer>
           </article>
@@ -521,7 +538,7 @@ function selectProvider(provider: BillingProviderKey) {
                     <dd>{{ billingAiMoney(dashboard.openrouter.usageDaily) }}</dd>
                   </div>
                   <div>
-                    <dt>Recent calls</dt>
+                    <dt>Calls this month</dt>
                     <dd>{{ dashboard.openrouter.usageHistory.length }}</dd>
                   </div>
                 </dl>
@@ -532,13 +549,22 @@ function selectProvider(provider: BillingProviderKey) {
               <button
                 v-if="dashboard.openrouter.hasPortalCredentials"
                 type="button"
-                class="btn sm"
+                class="btn sm billing-cred-btn"
                 @click="openReveal('openrouter')"
               >
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
                 Credentials
               </button>
-              <button type="button" class="btn sm" @click="openProviderAccount('openrouter')">
-                {{ billingProviderManageLabel('openrouter') }}
+              <span v-else class="billing-card-footer-spacer" aria-hidden="true" />
+              <button type="button" class="btn sm billing-manage-btn" @click="openProviderAccount('openrouter')">
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Manage account
               </button>
             </footer>
           </article>
@@ -585,19 +611,29 @@ function selectProvider(provider: BillingProviderKey) {
               <p v-else class="billing-muted">Connect Quo in Control Panel → Quo SMS.</p>
             </div>
             <footer class="billing-card-footer" @click.stop>
-              <button
-                v-if="dashboard.quo.hasPortalCredentials"
-                type="button"
-                class="btn sm"
-                @click="openReveal('quo')"
-              >
-                Credentials
-              </button>
-              <NuxtLink to="/admin?tab=quo" class="btn sm">
-                Control Panel
-              </NuxtLink>
-              <button type="button" class="btn sm" @click="openProviderAccount('quo')">
-                {{ billingProviderManageLabel('quo') }}
+              <div class="billing-card-footer-left">
+                <button
+                  v-if="dashboard.quo.hasPortalCredentials"
+                  type="button"
+                  class="btn sm billing-cred-btn"
+                  @click="openReveal('quo')"
+                >
+                  <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Credentials
+                </button>
+                <NuxtLink to="/admin?tab=quo" class="btn sm">
+                  Control Panel
+                </NuxtLink>
+              </div>
+              <button type="button" class="btn sm billing-manage-btn" @click="openProviderAccount('quo')">
+                <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Manage account
               </button>
             </footer>
           </article>
@@ -806,12 +842,12 @@ function selectProvider(provider: BillingProviderKey) {
               <p v-if="dashboard.openrouter.error" class="billing-err">{{ dashboard.openrouter.error }}</p>
               <template v-else-if="dashboard.openrouter.configured">
                 <p v-if="dashboard.openrouter.creditsNote" class="billing-note">{{ dashboard.openrouter.creditsNote }}</p>
-                <div v-if="previewUsage.length" class="billing-section">
+                <div v-if="monthUsage.length" class="billing-section">
                   <div class="billing-section-head">
-                    <h4 class="billing-sub">Recent API usage</h4>
-                    <span class="billing-count">Showing {{ previewUsage.length }} of {{ dashboard.openrouter.usageHistory.length }}</span>
+                    <h4 class="billing-sub">API usage this month</h4>
+                    <span class="billing-count">{{ monthUsage.length }} call{{ monthUsage.length === 1 ? '' : 's' }}</span>
                   </div>
-                  <div class="tscroll">
+                  <div class="billing-usage-scroll">
                     <table class="tbl compact">
                       <thead>
                         <tr>
@@ -822,7 +858,7 @@ function selectProvider(provider: BillingProviderKey) {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="row in previewUsage" :key="row.id">
+                        <tr v-for="row in monthUsage" :key="row.id">
                           <td>{{ billingDateTime(row.date) }}</td>
                           <td>{{ row.description }}</td>
                           <td class="num">{{ billingTokens(row.tokens) }}</td>
@@ -832,7 +868,7 @@ function selectProvider(provider: BillingProviderKey) {
                     </table>
                   </div>
                 </div>
-                <p v-else class="billing-muted">No recent API usage recorded.</p>
+                <p v-else class="billing-muted">No API usage recorded this month.</p>
               </template>
               <p v-else class="billing-muted">Enable OpenRouter in Control Panel → Billing.</p>
             </template>
@@ -912,16 +948,22 @@ function selectProvider(provider: BillingProviderKey) {
 
       <div v-if="revealOpen" class="billing-modal-backdrop" @click.self="closeReveal">
         <div class="card billing-modal" role="dialog" aria-modal="true" aria-labelledby="billing-cred-title">
-          <div class="chead">
-            <h3 id="billing-cred-title">
-              {{ revealProvider ? `${labels[revealProvider].name} credentials` : 'Credentials' }}
-            </h3>
+          <div class="chead billing-modal-head">
+            <div class="billing-modal-title">
+              <svg class="billing-btn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <h3 id="billing-cred-title">
+                {{ revealProvider ? `${labels[revealProvider].name} login` : 'Credentials' }}
+              </h3>
+            </div>
             <button type="button" class="btn sm" @click="closeReveal">Close</button>
           </div>
-          <div class="cbody">
+          <div class="cbody billing-modal-body">
             <template v-if="!revealed">
-              <p class="billing-muted">
-                Enter your account password to see the login credentials for {{ revealProvider ? labels[revealProvider].name : 'this service' }}.
+              <p class="billing-muted billing-modal-lead">
+                Confirm with your Dorinc account password to view the saved portal login.
               </p>
               <label class="fld">
                 Account password
@@ -941,45 +983,52 @@ function selectProvider(provider: BillingProviderKey) {
                   :disabled="revealBusy || !revealPassword"
                   @click="submitReveal"
                 >
-                  {{ revealBusy ? 'Verifying…' : 'Reveal' }}
+                  {{ revealBusy ? 'Verifying…' : 'Show credentials' }}
                 </button>
               </div>
             </template>
             <template v-else>
-              <dl class="kv">
-                <dt>Username</dt>
-                <dd class="billing-cred-value">
-                  <span>{{ revealed.username || '—' }}</span>
-                  <button
-                    v-if="revealed.username"
-                    type="button"
-                    class="btn sm"
-                    @click="copyText(revealed.username)"
-                  >
-                    Copy
-                  </button>
-                </dd>
-                <dt>Password</dt>
-                <dd class="billing-cred-value">
-                  <span class="mono">{{ showRevealedPassword ? (revealed.password || '—') : (revealed.password ? '••••••••••••' : '—') }}</span>
-                  <button
-                    v-if="revealed.password"
-                    type="button"
-                    class="btn sm"
-                    @click="showRevealedPassword = !showRevealedPassword"
-                  >
-                    {{ showRevealedPassword ? 'Hide' : 'Show' }}
-                  </button>
-                  <button
-                    v-if="revealed.password"
-                    type="button"
-                    class="btn sm"
-                    @click="copyText(revealed.password)"
-                  >
-                    Copy
-                  </button>
-                </dd>
-              </dl>
+              <div class="billing-cred-list">
+                <div class="billing-cred-row">
+                  <span class="billing-cred-label">Username</span>
+                  <div class="billing-cred-value">
+                    <span class="billing-cred-text">{{ revealed.username || '—' }}</span>
+                    <button
+                      v-if="revealed.username"
+                      type="button"
+                      class="btn sm"
+                      @click="copyText(revealed.username)"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div class="billing-cred-row">
+                  <span class="billing-cred-label">Password</span>
+                  <div class="billing-cred-value">
+                    <span class="billing-cred-text mono">{{ showRevealedPassword ? (revealed.password || '—') : (revealed.password ? '••••••••••••' : '—') }}</span>
+                    <button
+                      v-if="revealed.password"
+                      type="button"
+                      class="btn sm"
+                      @click="showRevealedPassword = !showRevealedPassword"
+                    >
+                      {{ showRevealedPassword ? 'Hide' : 'Show' }}
+                    </button>
+                    <button
+                      v-if="revealed.password"
+                      type="button"
+                      class="btn sm"
+                      @click="copyText(revealed.password)"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="billing-modal-actions">
+                <button type="button" class="btn" @click="closeReveal">Done</button>
+              </div>
             </template>
           </div>
         </div>
@@ -1201,12 +1250,18 @@ section.page.active.billing-page {
 
 .billing-provider-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
   align-items: stretch;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
+  .billing-provider-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
   .billing-provider-grid {
     grid-template-columns: 1fr;
   }
@@ -1216,8 +1271,37 @@ section.page.active.billing-page {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  min-width: 0;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.billing-summary-card :deep(.chead) {
+  padding: 14px 14px 10px;
+}
+
+.billing-summary-card :deep(.chead h3) {
+  font-size: 16px;
+}
+
+.billing-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 12px;
+  flex: 1;
+}
+
+.billing-summary-card .billing-metric-grid {
+  gap: 10px 12px;
+}
+
+.billing-summary-card .billing-metric-grid dt {
+  font-size: 10px;
+}
+
+.billing-summary-card .billing-metric-grid dd {
+  font-size: 14px;
 }
 
 .billing-summary-card:hover,
@@ -1229,15 +1313,6 @@ section.page.active.billing-page {
 .billing-summary-card.active {
   border-color: #0f766e;
   box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.18);
-}
-
-.billing-summary-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
-  padding-bottom: 16px;
-  flex: 1;
 }
 
 .billing-metric-grid {
@@ -1266,11 +1341,51 @@ section.page.active.billing-page {
 
 .billing-card-footer {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 12px 18px 16px;
+  padding: 10px 14px 14px;
   margin-top: auto;
   border-top: 1px solid #e2e8f0;
+}
+
+.billing-card-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.billing-card-footer-spacer {
+  flex: 1;
+}
+
+.billing-cred-btn,
+.billing-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.billing-manage-btn {
+  margin-left: auto;
+}
+
+.billing-btn-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.billing-usage-scroll {
+  max-height: 420px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.billing-usage-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .billing-cat {
@@ -1502,15 +1617,71 @@ section.page.active.billing-page {
 }
 
 .billing-modal {
-  width: min(440px, 100%);
+  width: min(400px, 100%);
   margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.billing-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.billing-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.billing-modal-title h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.billing-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.billing-modal-lead {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .billing-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 4px;
+}
+
+.billing-cred-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billing-cred-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.billing-cred-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
 }
 
 .billing-cred-value {
@@ -1518,5 +1689,14 @@ section.page.active.billing-page {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.billing-cred-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
 }
 </style>

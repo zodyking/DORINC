@@ -199,6 +199,40 @@ export async function listAiUsageLogs(db: Db, query: AiUsageLogsQuery): Promise<
   }
 }
 
+/** All AI usage rows for the UTC calendar month (billing OpenRouter detail). */
+export async function listAiUsageLogsForMonth(
+  db: Db,
+  month = new Date(),
+  limit = 5000,
+): Promise<AiUsageLogView[]> {
+  const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1))
+  const monthEnd = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1))
+
+  const rows = await db.select({
+    id: aiUsageLogs.id,
+    featureType: aiUsageLogs.featureType,
+    model: aiUsageLogs.model,
+    promptTokens: aiUsageLogs.promptTokens,
+    completionTokens: aiUsageLogs.completionTokens,
+    totalTokens: aiUsageLogs.totalTokens,
+    estimatedCostUsd: aiUsageLogs.estimatedCostUsd,
+    provider: aiUsageLogs.provider,
+    createdAt: aiUsageLogs.createdAt,
+    createdBy: aiUsageLogs.createdBy,
+  }).from(aiUsageLogs)
+    .where(and(
+      gte(aiUsageLogs.createdAt, monthStart),
+      lt(aiUsageLogs.createdAt, monthEnd),
+    ))
+    .orderBy(desc(aiUsageLogs.createdAt))
+    .limit(limit)
+
+  return rows.map(row => ({
+    ...row,
+    estimatedCostUsd: Number(row.estimatedCostUsd),
+  }))
+}
+
 export async function updateAiJobStatus(
   db: Db,
   jobId: string,

@@ -3,6 +3,7 @@ import {
   BILLING_PROVIDER_ACCOUNT_URLS,
   BILLING_PROVIDER_LABELS,
   billingAiMoney,
+  billingDate,
   billingProviderManageLabel,
   billingTokens,
   buildBillingChartGeometry,
@@ -21,9 +22,15 @@ describe('billing-ui helpers', () => {
   })
 
   it('builds manage account button labels', () => {
-    expect(billingProviderManageLabel('vultr')).toBe('Manage Vultr account')
-    expect(billingProviderManageLabel('cloudflare')).toBe('Manage Cloudflare account')
-    expect(billingProviderManageLabel('openrouter')).toBe('Manage Susan account')
+    expect(billingProviderManageLabel('vultr')).toBe('Manage account')
+    expect(billingProviderManageLabel('cloudflare')).toBe('Manage account')
+    expect(billingProviderManageLabel('openrouter')).toBe('Manage account')
+    expect(billingProviderManageLabel('quo')).toBe('Manage account')
+  })
+
+  it('formats calendar payment dates without UTC off-by-one', () => {
+    expect(billingDate('2026-08-04')).toMatch(/8/)
+    expect(billingDate(null)).toBe('—')
   })
 
   it('keeps provider labels stable', () => {

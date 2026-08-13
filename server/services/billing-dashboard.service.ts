@@ -8,7 +8,7 @@ import {
 } from './billing-integrations.service'
 import { getAiProviderSettings } from './ai-provider.service'
 import { resolveOpenRouterBilling } from './openrouter-billing.service'
-import { listAiUsageLogs } from './ai-jobs.service'
+import { listAiUsageLogsForMonth } from './ai-jobs.service'
 import {
   attachVultrInstancePlanCosts,
   fetchVultrAccount,
@@ -84,7 +84,7 @@ function roundAiUsageMoney(value: number): number {
 }
 
 async function loadOpenRouterUsageHistory(db: Db) {
-  const { items } = await listAiUsageLogs(db, { limit: 12, offset: 0 })
+  const items = await listAiUsageLogsForMonth(db)
   return items.map(row => ({
     id: row.id,
     date: row.createdAt.toISOString(),

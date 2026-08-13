@@ -26,8 +26,8 @@ export const BILLING_PROVIDER_ACCOUNT_URLS: Record<BillingProviderKey, string> =
   quo: 'https://app.quo.com/',
 }
 
-export function billingProviderManageLabel(provider: BillingProviderKey): string {
-  return `Manage ${BILLING_PROVIDER_LABELS[provider].name} account`
+export function billingProviderManageLabel(_provider?: BillingProviderKey): string {
+  return 'Manage account'
 }
 
 export function billingMoney(value: number | null | undefined, currency = 'USD'): string {
@@ -58,6 +58,12 @@ export function billingTokens(value: number | null | undefined): string {
 
 export function billingDate(value: string | null): string {
   if (!value) return '—'
+  // Calendar dates (YYYY-MM-DD) — parse as local day to avoid UTC off-by-one.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number)
+    if (!year || !month || !day) return value
+    return new Date(year, month - 1, day).toLocaleDateString()
+  }
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString()
 }

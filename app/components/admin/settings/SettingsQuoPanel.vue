@@ -159,7 +159,7 @@ async function save() {
   message.value = ''
   error.value = ''
   try {
-    const amountRaw = form.paymentAmountUsd.trim()
+    const amountRaw = String(form.paymentAmountUsd ?? '').trim()
     if (amountRaw !== '' && !Number.isFinite(Number(amountRaw))) {
       error.value = 'Payment amount must be a number'
       return
@@ -167,7 +167,7 @@ async function save() {
     const body: Record<string, unknown> = {
       enabled: form.enabled,
       fromNumber: form.fromNumber.trim() || undefined,
-      paymentDate: form.paymentDate.trim() || null,
+      paymentDate: String(form.paymentDate ?? '').trim() || null,
       paymentAmountUsd: amountRaw === '' ? null : Number(amountRaw),
     }
     const nextKey = passwordForSave(form.apiKey, !!quoData.value?.hasApiKey)
@@ -452,11 +452,11 @@ const variableHelp = computed(() => {
               Payment amount (USD)
               <input
                 v-model="form.paymentAmountUsd"
-                type="number"
-                min="0"
-                max="999999"
-                step="0.01"
+                type="text"
+                inputmode="decimal"
+                maxlength="12"
                 placeholder="0.00"
+                autocomplete="off"
               >
             </label>
           </div>
