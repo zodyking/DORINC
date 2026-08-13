@@ -4,6 +4,7 @@ import { listUsers } from '../../../services/users.service'
 import { requirePermission } from '../../../utils/require-permission'
 import { validateQuery } from '../../../utils/validate'
 import { paginationSchema } from '../../../../shared/validators/common'
+import { setPrivateNoStore } from '../../../utils/private-no-store'
 
 const listQuerySchema = paginationSchema.extend({
   q: z.string().trim().max(200).optional(),
@@ -14,6 +15,7 @@ const listQuerySchema = paginationSchema.extend({
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'users.read.all')
+  setPrivateNoStore(event)
   const query = validateQuery(event, listQuerySchema)
 
   return listUsers(useDb(), {

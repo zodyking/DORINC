@@ -1,6 +1,6 @@
 import { and, asc, count, eq, ilike, isNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { accountTypes, sessions, users } from '../db/schema/auth'
+import { accountTypes, emailVerificationTokens, sessions, users } from '../db/schema/auth'
 import type { AccountType } from '../../shared/permissions/keys'
 import { isSusanSystemEmail } from '../../shared/ai-assistant'
 import { formatPersonName } from '../../shared/format/person-name'
@@ -231,6 +231,11 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
       if (existing) throw new UsersServiceError('EMAIL_TAKEN')
       changes.email = nextEmail
       changedFields.push('email')
+      // New mailbox is a new identity — never keep verification from the old address.
+      if (row.user.emailVerifiedAt) {
+        changes.emailVerifiedAt = null
+        changedFields.push('emailVerifiedAt')
+      }
     }
   }
 
@@ -242,6 +247,18 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
     .set(changes)
     .where(eq(users.id, input.userId))
     .returning()
+
+  if (changedFields.includes('email')) {
+    await db.update(emailVerificationTokens)
+      .set({ usedAt: new Date() })
+      .where(and(
+        eq(emailVerificationTokens.userId, input.userId),
+        isNull(emailVerificationTokens.usedAt),
+      ))
+    await db.update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, input.userId), isNull(sessions.revokedAt)))
+  }
 
   return { user: updated!, accountTypeKey, changedFields, previous: row }
 }

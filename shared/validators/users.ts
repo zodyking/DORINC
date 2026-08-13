@@ -8,3 +8,10 @@ export const inviteStaffUserSchema = z.object({
 })
 
 export type InviteStaffUserInput = z.infer<typeof inviteStaffUserSchema>
+
+export const setStaffPasswordSchema = z.object({
+  password: z.string().min(12).max(200),
+  mustChangePassword: z.boolean().optional().default(true),
+})
+
+export type SetStaffPasswordInput = z.infer<typeof setStaffPasswordSchema>

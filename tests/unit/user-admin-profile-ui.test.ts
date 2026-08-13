@@ -35,4 +35,25 @@ describe('admin user profile edit UI', () => {
     expect(service).toContain('changedFields.push(\'name\')')
     expect(service).toContain('changedFields.push(\'email\')')
   })
+
+  it('clears email verification when admin changes the address', () => {
+    expect(service).toContain('changes.emailVerifiedAt = null')
+    expect(service).toContain('changedFields.push(\'emailVerifiedAt\')')
+    expect(service).toContain('emailVerificationTokens')
+  })
+
+  it('lets admin set a password even if the user has never logged in', () => {
+    expect(page).toContain('Set password')
+    expect(page).toContain('/set-password')
+    expect(page).toContain('canSetPassword')
+    expect(page).not.toContain('canPasswordReset = computed(() => canCredentialAction.value && Boolean(user.value?.hasLoggedIn))')
+    expect(page).toContain('canPasswordReset = computed(() => canCredentialAction.value)')
+    expect(page).toContain('mustChangePassword: setPasswordMustChange.value')
+  })
+
+  it('busts admin user cache after delete and profile saves', () => {
+    expect(page).toContain('bustAdminUsersCache')
+    expect(page).toContain('adminUserDetailKey')
+    expect(page).toContain('watch: [userId]')
+  })
 })

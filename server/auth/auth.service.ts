@@ -313,7 +313,24 @@ export async function login(
     }
   }
   else {
-    if (!row.user.emailVerifiedAt) throw new AuthError('NOT_VERIFIED')
+    if (!row.user.emailVerifiedAt) {
+      // Invited staff start unverified so a recreated account on a reused email
+      // does not inherit the deleted identity's verification. The invite temp
+      // password was delivered to this mailbox — first successful sign-in
+      // attests this identity, not a previous user row.
+      const invitedTempOk = Boolean(row.user.approvedAt)
+        && row.user.mustChangePassword
+        && Boolean(row.user.tempPasswordExpiresAt)
+      if (!invitedTempOk) throw new AuthError('NOT_VERIFIED')
+      if (row.user.tempPasswordExpiresAt!.getTime() < Date.now()) {
+        throw new AuthError('TEMP_PASSWORD_EXPIRED')
+      }
+      const [verified] = await db.update(users)
+        .set({ emailVerifiedAt: now, updatedAt: now })
+        .where(eq(users.id, row.user.id))
+        .returning()
+      if (verified) row.user = verified
+    }
     if (!row.user.approvedAt) throw new AuthError('NOT_APPROVED')
     if (
       row.user.tempPasswordExpiresAt
