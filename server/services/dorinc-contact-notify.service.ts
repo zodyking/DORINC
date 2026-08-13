@@ -1,13 +1,10 @@
 import type { Db } from '../db/client'
-import {
-  getDorincContactVcardUrl,
-  resolveDorincContactPhone,
-} from './dorinc-contact.service'
+import { resolveDorincContactPhone } from './dorinc-contact.service'
 import { enqueueTemplatedSms } from './sms-notifications.service'
 
 /**
  * After Text notifications are enabled, send the Dorinc contact-card SMS
- * (vCard download link — Quo API has no MMS).
+ * with the Quo from-number (no site URL — iPhone link previews look bad).
  */
 export async function sendDorincContactCardSms(
   db: Db,
@@ -22,13 +19,12 @@ export async function sendDorincContactCardSms(
     return { contactQueued: false as const, reason: 'quo_disabled' as const }
   }
 
-  const contactUrl = await getDorincContactVcardUrl(db)
   const contact = await enqueueTemplatedSms(db, {
     to: opts.phone,
     typeKey: 'dorinc_contact_card',
     vars: {
       name: opts.name,
-      contactUrl,
+      fromNumber: quoPhone,
     },
     meta: {
       recipientUserId: opts.userId,

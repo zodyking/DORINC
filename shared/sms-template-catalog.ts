@@ -93,7 +93,6 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         '{{detailMessage}}',
         '',
-        'Open: {{accountUrl}}',
       ].join('\n'),
     },
     variables: [
@@ -117,7 +116,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
   {
     typeKey: 'dorinc_contact_card',
     name: 'DORINC contact card',
-    description: 'Sent when Text notifications are enabled so the user can save the Dorinc / Susan AI contact on iPhone.',
+    description: 'Sent when Text notifications are enabled so the user can save the Dorinc / Susan AI number on iPhone (no link preview).',
     audience: 'staff',
     group: 'security',
     defaults: {
@@ -126,8 +125,11 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         'Hi {{name}},',
         '',
-        'Save the Dorinc contact to text Susan anytime:',
-        '{{contactUrl}}',
+        'Save this number as Dorinc / Susan AI so you can text Susan anytime:',
+        '',
+        ...smsStackedFields([
+          ['Phone', '{{fromNumber}}'],
+        ]),
         '',
         'Susan AI helps with platform questions. In future updates she will also be able to send invoices, reply to customer emails, and manage basic platform duties.',
       ].join('\n'),
@@ -135,12 +137,12 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     variables: [
       ...brandVars,
       { key: 'name', label: 'User name' },
-      { key: 'contactUrl', label: 'vCard download URL' },
+      { key: 'fromNumber', label: 'Quo from number' },
     ],
     sampleVars: {
       brandName: 'DORINC',
       name: 'Alex Rivera',
-      contactUrl: 'https://app.example.com/api/public/dorinc-contact.vcf',
+      fromNumber: '+12125550199',
       appUrl: 'https://app.example.com',
     },
   },
@@ -169,7 +171,6 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         ]),
         '',
         'If this was not you, contact your administrator immediately and change your password.',
-        'Open: {{appUrl}}',
       ].join('\n'),
     },
     variables: [
@@ -252,9 +253,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         'Confirm your email to continue your {{brandName}} account request.',
         '',
-        'Open: {{verifyUrl}}',
-        '',
-        'The link expires in 24 hours. After verification an administrator must approve your account before you can sign in.',
+        'Check your email for the verification link (expires in 24 hours). After verification an administrator must approve your account before you can sign in.',
       ].join('\n'),
     },
     variables: [
@@ -287,7 +286,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         '{{messagePreview}}',
         '',
-        '{{photoNote}}Open: {{messagesUrl}}',
+        '{{photoNote}}Open Messages in the app to reply.',
       ].join('\n'),
     },
     variables: [
@@ -326,9 +325,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
         '',
         'We received a request to reset your {{brandName}} staff password.',
         '',
-        'Open: {{resetUrl}}',
-        '',
-        'The link expires in 1 hour. If you did not request this, you can ignore this message — your password will not change unless you use the link.',
+        'Check your email for the reset link (expires in 1 hour). If you did not request this, you can ignore this message.',
       ].join('\n'),
     },
     variables: [
@@ -364,7 +361,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Temporary password', '{{tempPassword}}'],
         ]),
         '',
-        'Open: {{loginUrl}}',
+        'Sign in on the website with these credentials, then choose your own password.',
         '',
         'Your email is already verified. Choose a new password when you sign in for the first time.',
         'This temporary password expires in 7 days.',
@@ -407,7 +404,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Temporary password', '{{tempPassword}}'],
         ]),
         '',
-        'Open: {{loginUrl}}',
+        'Sign in on the website with these credentials, then choose a new password.',
         '',
         'After any required login messages, you will be asked to choose a new password before continuing.',
         'This temporary password expires in 7 days.',
@@ -452,7 +449,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Reason for deletion', '{{reason}}'],
         ]),
         '',
-        'Open: {{reviewUrl}}',
+        'Review this request in Deletion requests.',
       ].join('\n'),
     },
     variables: [
@@ -544,7 +541,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Status', 'Pending approval'],
         ]),
         '',
-        'Open: {{usersUrl}}',
+        'Review and approve in Users.',
       ].join('\n'),
     },
     variables: [
@@ -585,7 +582,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Total', '{{total}}'],
         ]),
         '',
-        'Open: {{invoiceUrl}}',
+        'Review this invoice in the app.',
       ].join('\n'),
     },
     variables: [
@@ -631,7 +628,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Customer message', '{{message}}'],
         ]),
         '',
-        'Open: {{detailUrl}}',
+        'Open the request in the portal for full details.',
       ].join('\n'),
     },
     variables: [
@@ -683,7 +680,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Customer message', '{{message}}'],
         ]),
         '',
-        'Open: {{detailUrl}}',
+        'Open the request in the portal for full details.',
       ].join('\n'),
     },
     variables: [
@@ -732,8 +729,6 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Subject', '{{subject}}'],
           ['Message', '{{messagePreview}}'],
         ]),
-        '',
-        'Open: {{messagesUrl}}',
       ].join('\n'),
     },
     variables: [
@@ -776,7 +771,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
           ['Report date', '{{reportDateLabel}}'],
         ]),
         '',
-        'Open: {{summaryUrl}}',
+        'Open the dashboard for the full report.',
       ].join('\n'),
     },
     variables: [

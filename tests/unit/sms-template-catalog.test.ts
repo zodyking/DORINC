@@ -52,7 +52,13 @@ describe('sms template catalog', () => {
     ).body
     expect(login).toContain('When\nAug 10, 2026, 8:15 AM')
     expect(login).toContain('Email\nalex@example.com')
-    expect(login).toContain('Open: https://app.example.com')
+    expect(login).not.toMatch(/https?:\/\//i)
+    expect(login).not.toContain('Open:')
+
+    for (const def of SMS_TEMPLATE_CATALOG) {
+      expect(def.defaults.body).not.toMatch(/https?:\/\//i)
+      expect(def.defaults.body).not.toMatch(/Open:\s*\{\{/)
+    }
   })
 
   it('keeps worker SMS_DEFAULT_BODIES in sync with the shared catalog', () => {
