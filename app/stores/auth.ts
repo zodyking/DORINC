@@ -8,6 +8,7 @@ import {
   shouldClearSessionOnFetchMeError,
 } from '~/utils/auth-session'
 import { clearOutsideGeoTabSession, markOutsideGeoTabSession } from '~/utils/outside-geo-session'
+import { clearGateCooldown } from '~/utils/staff-gate-cooldown'
 import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
 import { AUTH_ME_FOCUS_MIN_GAP_MS } from '#shared/auth-me-refresh'
@@ -170,6 +171,8 @@ export const useAuthStore = defineStore('auth', {
       }
       if (!res.user) throw new Error('Login response missing user')
       if (res.armOutsideGeoTabSession) markOutsideGeoTabSession()
+      // A fresh login must show required gates again.
+      clearGateCooldown()
       this.loginHydrating = true
       try {
         this.user = res.user
@@ -210,6 +213,7 @@ export const useAuthStore = defineStore('auth', {
       }
       // GPS login validated this browser tab — required for data APIs outside the fence.
       if (res.armOutsideGeoTabSession !== false) markOutsideGeoTabSession()
+      clearGateCooldown()
       this.loginHydrating = true
       try {
         this.user = res.user

@@ -1,7 +1,7 @@
 import type { AuthContext } from '../../utils/require-permission'
 import { apiError } from '../../utils/api-error'
 import { useDb } from '../../db/client'
-import { getAnnouncementGate } from '../../services/announcements.service'
+import { getAnnouncementGateCached } from '../../services/announcements.service'
 import { clearStaleSessionCookie } from '../../auth/session-cookie'
 
 export default defineEventHandler(async (event) => {
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const isCustomer = auth.user.accountType === 'customer'
   const announcementGate = isCustomer
     ? { locked: false, pendingCount: 0, currentId: null }
-    : await getAnnouncementGate(db, auth.user.id, auth.user.accountType)
+    : await getAnnouncementGateCached(db, auth.user.id, auth.user.accountType)
 
   return {
     user: {

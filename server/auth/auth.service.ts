@@ -382,6 +382,8 @@ export async function issueSessionForUser(
   if (meta.resetAnnouncementAcks) {
     await db.delete(announcementAcknowledgements)
       .where(eq(announcementAcknowledgements.userId, user.id))
+    const { invalidateAnnouncementGateCache } = await import('../services/announcements.service')
+    invalidateAnnouncementGateCache(user.id)
   }
 
   const { token, tokenHash } = generateToken()

@@ -213,6 +213,35 @@ export async function getAnnouncementGate(
   }
 }
 
+/**
+ * Per-user gate cache for the /api/auth/me hot path. Every signed-in client
+ * polls /me every 5s (sooner during redirect loops) and each gate check costs
+ * 3 queries — a stuck client storming navigation could exhaust the pool and
+ * take the app down for everyone. Short TTL keeps the gate near-live.
+ */
+const GATE_CACHE_TTL_MS = 10_000
+const GATE_CACHE_MAX_ENTRIES = 2000
+const gateCache = new Map<string, { gate: AnnouncementGateResult, expiresAt: number }>()
+
+export function invalidateAnnouncementGateCache(userId?: string): void {
+  if (userId) gateCache.delete(userId)
+  else gateCache.clear()
+}
+
+export async function getAnnouncementGateCached(
+  db: Db,
+  userId: string,
+  accountTypeKey: string,
+): Promise<AnnouncementGateResult> {
+  const hit = gateCache.get(userId)
+  if (hit && hit.expiresAt > Date.now()) return hit.gate
+
+  const gate = await getAnnouncementGate(db, userId, accountTypeKey)
+  if (gateCache.size >= GATE_CACHE_MAX_ENTRIES) gateCache.clear()
+  gateCache.set(userId, { gate, expiresAt: Date.now() + GATE_CACHE_TTL_MS })
+  return gate
+}
+
 export async function getPendingAnnouncementViews(
   db: Db,
   userId: string,
@@ -240,7 +269,10 @@ export async function acknowledgeAnnouncement(
 ): Promise<AnnouncementGateResult> {
   const pending = await listPendingAnnouncementsForUser(db, userId, accountTypeKey)
   if (!pending.some(row => row.id === announcementId)) {
-    throw new AnnouncementsServiceError('NOT_FOUND', 'Announcement is not pending for this user')
+    // Idempotent: already acked, deactivated, or retargeted mid-session.
+    // Failing here made the gate page refetch + error in a loop.
+    invalidateAnnouncementGateCache(userId)
+    return getAnnouncementGate(db, userId, accountTypeKey)
   }
 
   const [existingAck] = await db.select({ id: announcementAcknowledgements.id })
@@ -254,6 +286,7 @@ export async function acknowledgeAnnouncement(
     await db.insert(announcementAcknowledgements).values({ announcementId, userId })
   }
 
+  invalidateAnnouncementGateCache(userId)
   return getAnnouncementGate(db, userId, accountTypeKey)
 }
 
@@ -377,6 +410,7 @@ export async function createAnnouncement(
 
   if (!row) throw new AnnouncementsServiceError('CONFLICT', 'Could not create announcement')
   await replaceTargets(db, row.id, input.audience)
+  invalidateAnnouncementGateCache()
   return getAnnouncementAdmin(db, row.id)
 }
 
@@ -421,6 +455,7 @@ export async function updateAnnouncement(
     await replaceTargets(db, id, input.audience)
   }
 
+  invalidateAnnouncementGateCache()
   return getAnnouncementAdmin(db, id)
 }
 
@@ -429,6 +464,7 @@ export async function deleteAnnouncement(db: Db, id: string) {
     .where(eq(announcements.id, id))
   if (!existing) throw new AnnouncementsServiceError('NOT_FOUND', 'Announcement not found')
   await db.delete(announcements).where(eq(announcements.id, id))
+  invalidateAnnouncementGateCache()
 }
 
 export async function listStaffAccountTypeOptions(db: Db) {
