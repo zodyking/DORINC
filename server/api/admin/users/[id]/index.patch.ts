@@ -17,6 +17,8 @@ const updateSchema = z.object({
   firstName: nonEmptyString.max(60).optional(),
   lastName: nonEmptyString.max(60).optional(),
   email: emailSchema.optional(),
+  /** Admins can only CLEAR a stale forced-change requirement here; arming one goes through set-password/reset. */
+  mustChangePassword: z.literal(false).optional(),
 }).refine(
   data => (data.firstName === undefined) === (data.lastName === undefined),
   { message: 'First name and last name must be provided together', path: ['firstName'] },
@@ -39,6 +41,7 @@ export default defineEventHandler(async (event) => {
       firstName: body.firstName,
       lastName: body.lastName,
       email: body.email,
+      mustChangePassword: body.mustChangePassword,
     })
 
     if (result.changedFields.length) {

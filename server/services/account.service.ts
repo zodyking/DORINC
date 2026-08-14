@@ -266,14 +266,22 @@ export async function updateAccountNotificationPrefs(
 export async function changeAccountPassword(
   db: Db,
   userId: string,
-  currentPassword: string,
+  currentPassword: string | null | undefined,
   newPassword: string,
 ) {
   const [user] = await db.select().from(users).where(eq(users.id, userId))
   if (!user) throw new AccountServiceError('INVALID_PASSWORD')
 
-  const ok = await verifyPassword(user.passwordHash, currentPassword)
-  if (!ok) throw new AccountServiceError('INVALID_PASSWORD')
+  // Forced change (temp / admin-set password): the session proves possession
+  // of the current credential — sessions are always revoked when the flag is
+  // set, so this session could only be created by signing in with it. Asking
+  // for it again let admin reset + set-password wedge the account in an
+  // unsatisfiable gate that looped the whole app.
+  if (!user.mustChangePassword) {
+    if (!currentPassword) throw new AccountServiceError('INVALID_PASSWORD')
+    const ok = await verifyPassword(user.passwordHash, currentPassword)
+    if (!ok) throw new AccountServiceError('INVALID_PASSWORD')
+  }
 
   const passwordHash = await hashPassword(newPassword)
   const [updated] = await db.update(users)

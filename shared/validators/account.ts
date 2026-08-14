@@ -16,7 +16,14 @@ export const accountProfileSchema = z.object({
 })
 
 export const accountPasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(200),
+  /**
+   * Optional during a forced change (mustChangePassword): that session was
+   * authenticated with the temp/admin-set password moments ago, and requiring
+   * it again wedged users when an admin reset AND set-password had both run —
+   * an unsatisfiable forced gate loops navigation until the app hangs.
+   * The server still requires + verifies it for normal password changes.
+   */
+  currentPassword: z.string().min(1).max(200).optional(),
   newPassword: z.string().min(12).max(200),
 })
 
