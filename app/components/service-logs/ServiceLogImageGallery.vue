@@ -64,8 +64,57 @@ const activeCheckMarks = computed(() => {
 const displayErrors = ref(new Set<string>())
 const stageRef = ref<HTMLElement | null>(null)
 const imageRef = ref<HTMLImageElement | null>(null)
+const stackRef = ref<HTMLElement | null>(null)
 const zoomEnabled = computed(() => props.zoomable && !props.compact)
 const isCoarsePointer = ref(false)
+
+/**
+ * The image fills the stage with object-fit: contain, so the element box is
+ * larger than the rendered picture. Marks use normalized (0–1) picture
+ * coordinates — overlay them on the actual contain-fitted content box.
+ */
+const naturalSize = ref<{ w: number, h: number } | null>(null)
+const stackSize = ref<{ w: number, h: number }>({ w: 0, h: 0 })
+
+function onImageLoad(event: Event) {
+  const img = event.target as HTMLImageElement
+  naturalSize.value = img.naturalWidth && img.naturalHeight
+    ? { w: img.naturalWidth, h: img.naturalHeight }
+    : null
+}
+
+const marksStyle = computed(() => {
+  const n = naturalSize.value
+  const b = stackSize.value
+  if (!n || !b.w || !b.h) return { inset: '0' }
+  const scale = Math.min(b.w / n.w, b.h / n.h)
+  const w = n.w * scale
+  const h = n.h * scale
+  return {
+    left: `${(b.w - w) / 2}px`,
+    top: `${(b.h - h) / 2}px`,
+    width: `${w}px`,
+    height: `${h}px`,
+  }
+})
+
+let stackObserver: ResizeObserver | null = null
+
+watch(stackRef, (el) => {
+  stackObserver?.disconnect()
+  stackObserver = null
+  if (!el || !import.meta.client) return
+  stackObserver = new ResizeObserver((entries) => {
+    const rect = entries[0]?.contentRect
+    if (rect) stackSize.value = { w: rect.width, h: rect.height }
+  })
+  stackObserver.observe(el)
+})
+
+onBeforeUnmount(() => {
+  stackObserver?.disconnect()
+  stackObserver = null
+})
 
 const {
   zoomPercent,
@@ -201,7 +250,7 @@ function onKeydown(event: KeyboardEvent) {
           :class="{ 'sl-gallery__zoom-wrap--active': zoomEnabled }"
           :style="zoomEnabled ? transformStyle : undefined"
         >
-          <div class="sl-gallery__img-stack">
+          <div ref="stackRef" class="sl-gallery__img-stack">
             <img
               ref="imageRef"
               :key="activeFile.id"
@@ -210,11 +259,13 @@ function onKeydown(event: KeyboardEvent) {
               class="sl-gallery__img"
               :class="{ 'sl-gallery__img--zoomable': zoomEnabled }"
               draggable="false"
+              @load="onImageLoad"
               @error="onImageError(activeFile.id)"
             >
             <div
               v-if="activeCheckMarks.length"
               class="sl-gallery__marks"
+              :style="marksStyle"
               aria-label="Parsed checklist marks from AI extraction"
             >
               <span
@@ -434,24 +485,24 @@ function onKeydown(event: KeyboardEvent) {
   height: 100%;
 }
 
+/* Full-size box with a definite height: the old inline-block shrink-wrap made
+   the image's max-height:100% resolve against an indefinite parent, so tall
+   document photos were width-fit only and never fully visible. */
 .sl-gallery__img-stack {
   position: relative;
-  display: inline-block;
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
   line-height: 0;
 }
 
 .sl-gallery__img {
   display: block;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   pointer-events: none;
 }
 
 .sl-gallery__marks {
   position: absolute;
-  inset: 0;
   pointer-events: none;
   z-index: 2;
 }
@@ -488,24 +539,25 @@ function onKeydown(event: KeyboardEvent) {
   border: 0;
 }
 
-.sl-gallery__img--zoomable {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+.sl-gallery__img--zoomable,
+.sl-gallery:not(.sl-gallery--compact) .sl-gallery__img:not(.sl-gallery__img--zoomable) {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
-.sl-gallery:not(.sl-gallery--compact) .sl-gallery__img:not(.sl-gallery__img--zoomable) {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
+.sl-gallery--compact .sl-gallery__img-stack {
   height: auto;
-  object-fit: contain;
 }
 
 .sl-gallery--compact .sl-gallery__img {
+  max-width: 100%;
   max-height: 360px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .sl-gallery__placeholder {
