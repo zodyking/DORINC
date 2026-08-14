@@ -1,5 +1,6 @@
 import { isAnnouncementPath } from './announcements-ui'
 import { consumeStaffReturnPath } from './staff-return-path'
+import { isGateCooldownActive } from './staff-gate-cooldown'
 
 export type StaffGateKind = 'announcement' | 'password'
 
@@ -114,6 +115,10 @@ export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof 
   }
 
   const routePath = path ?? useRoute().path
+
+  // A detected redirect loop suppresses forced gates for a short window so the
+  // app stays usable instead of ping-ponging every navigation into the gate.
+  if (isGateCooldownActive()) return undefined
 
   // Mandatory login messages first.
   if (auth.announcementGate?.locked && !isAnnouncementPath(routePath)) {

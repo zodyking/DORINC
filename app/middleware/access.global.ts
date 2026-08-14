@@ -12,6 +12,7 @@ import {
   clearMiddlewareRedirectLog,
   noteMiddlewareRedirect,
 } from '~/utils/middleware-redirect-guard'
+import { startGateCooldown } from '~/utils/staff-gate-cooldown'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Skip auth pages and tokenized public upload bridges
@@ -46,7 +47,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (gateRedirect) {
     if (noteMiddlewareRedirect(to.path)) {
       clearMiddlewareRedirectLog()
-      // Break gate ping-pong so Sign in can finish.
+      // Break gate ping-pong so Sign in can finish. Clearing the local gate is
+      // not enough — the next /api/auth/me poll re-locks it and every later
+      // navigation re-enters the loop. The cool-down keeps gates suppressed
+      // long enough for the app to stay usable.
+      startGateCooldown()
       if (auth.announcementGate) {
         auth.announcementGate = { ...auth.announcementGate, locked: false, pendingCount: 0, currentId: null }
       }

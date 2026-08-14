@@ -6,29 +6,41 @@ const STORAGE_KEY = 'dorinc_mw_redirect_log'
 const WINDOW_MS = 4000
 const MAX_REDIRECTS = 10
 
+/** In-memory fallback so the breaker still trips when sessionStorage fails. */
+let memoryEntries: Array<{ t: number, p: string }> = []
+
 export function noteMiddlewareRedirect(toPath: string): boolean {
-  if (typeof sessionStorage === 'undefined') return false
   const now = Date.now()
   let entries: Array<{ t: number, p: string }> = []
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (raw) entries = JSON.parse(raw) as Array<{ t: number, p: string }>
+  let storageOk = false
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY)
+      if (raw) entries = JSON.parse(raw) as Array<{ t: number, p: string }>
+      storageOk = true
+    }
+    catch {
+      entries = []
+    }
   }
-  catch {
-    entries = []
-  }
+  if (!storageOk) entries = memoryEntries
+
   entries = entries.filter(entry => now - entry.t < WINDOW_MS)
   entries.push({ t: now, p: toPath })
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
-  }
-  catch {
-    // private mode / quota — still trip based on this call batch via length
+  memoryEntries = entries
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
+    }
+    catch {
+      // private mode / quota — memoryEntries still counts this tab
+    }
   }
   return entries.length >= MAX_REDIRECTS
 }
 
 export function clearMiddlewareRedirectLog() {
+  memoryEntries = []
   if (typeof sessionStorage === 'undefined') return
   try {
     sessionStorage.removeItem(STORAGE_KEY)

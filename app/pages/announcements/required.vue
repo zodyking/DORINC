@@ -3,6 +3,7 @@ import AnnouncementGateCard from '~/components/announcements/AnnouncementGateCar
 import { advanceAnnouncementQueue } from '~/utils/announcement-gate-queue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { resolveNextStaffPath } from '~/utils/staff-route-guard'
+import { startGateCooldown } from '~/utils/staff-gate-cooldown'
 
 // Full-screen gate only — never mount the staff shell / dashboard chrome.
 definePageMeta({ layout: false })
@@ -38,7 +39,11 @@ async function leaveAnnouncementGate() {
   try {
     await auth.fetchMe({ force: true })
     // Pending list is authoritative when empty — clear a stale lock before routing.
+    // The server still reports locked, so the next /me poll would re-lock and
+    // yank navigation straight back here; suppress the gate briefly instead of
+    // looping gate → empty → dashboard → gate.
     if (auth.announcementGate?.locked) {
+      startGateCooldown()
       auth.announcementGate = {
         locked: false,
         pendingCount: 0,
