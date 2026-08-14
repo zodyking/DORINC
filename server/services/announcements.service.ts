@@ -168,14 +168,39 @@ async function loadPendingAnnouncementMatches<T extends {
   })
 }
 
+const announcementMetaSelect = {
+  id: announcements.id,
+  title: announcements.title,
+  subtitle: announcements.subtitle,
+  heroImageFileId: announcements.heroImageFileId,
+  ctaButtons: announcements.ctaButtons,
+  startsAt: announcements.startsAt,
+  endsAt: announcements.endsAt,
+  priority: announcements.priority,
+  createdAt: announcements.createdAt,
+}
+
+type AnnouncementMetaRow = {
+  id: string
+  title: string
+  subtitle: string | null
+  heroImageFileId: string | null
+  ctaButtons: AnnouncementCtaButton[]
+  startsAt: Date | null
+  endsAt: Date | null
+  priority: number
+  createdAt: Date
+}
+
+/** Pending login messages — metadata only. Never select body_html here. */
 export async function listPendingAnnouncementsForUser(
   db: Db,
   userId: string,
   accountTypeKey: string,
-): Promise<Array<typeof announcements.$inferSelect>> {
+): Promise<AnnouncementMetaRow[]> {
   if (accountTypeKey === 'customer') return []
 
-  const active = await db.select().from(announcements)
+  const active = await db.select(announcementMetaSelect).from(announcements)
     .where(eq(announcements.isActive, true))
     // Lower priority number shows first (1 before 2), then oldest first.
     .orderBy(asc(announcements.priority), asc(announcements.createdAt))
@@ -219,11 +244,26 @@ export async function getPendingAnnouncementViews(
   accountTypeKey: string,
 ): Promise<AnnouncementPublicView[]> {
   const pending = await listPendingAnnouncementsForUser(db, userId, accountTypeKey)
+  if (!pending.length) return []
+
+  // Recreated staff have zero acks, so every active all-staff message is
+  // pending. Sanitize body_html for the current card only — loading every
+  // message's HTML on /api/announcements/pending OOM'd the web process.
+  const current = pending[0]!
+  const [full] = await db.select({
+    bodyHtml: announcements.bodyHtml,
+  })
+    .from(announcements)
+    .where(eq(announcements.id, current.id))
+    .limit(1)
+
+  const currentBody = sanitizeAnnouncementHtml(full?.bodyHtml ?? '')
+
   return pending.map((row, index) => ({
     id: row.id,
     title: row.title,
     subtitle: row.subtitle,
-    bodyHtml: sanitizeAnnouncementHtml(row.bodyHtml),
+    bodyHtml: row.id === current.id ? currentBody : '',
     heroImageFileId: row.heroImageFileId,
     heroImageUrl: row.heroImageFileId ? `/api/files/${row.heroImageFileId}/preview` : null,
     ctaButtons: normalizeCtas(row.ctaButtons),

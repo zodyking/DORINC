@@ -56,6 +56,19 @@ async function leaveAnnouncementGate() {
   }
 }
 
+async function hydrateCurrentBody() {
+  const cur = items.value[0]
+  if (!cur || cur.bodyHtml) return
+  const res = await $fetch<{ items: PendingAnnouncement[] }>('/api/announcements/pending')
+  const fresh = (res.items ?? []).find(item => item.id === cur.id) ?? (res.items ?? [])[0]
+  if (!fresh || fresh.id !== cur.id || !fresh.bodyHtml) return
+  items.value = items.value.map((item, index) => (
+    index === 0
+      ? { ...item, bodyHtml: fresh.bodyHtml, heroImageUrl: fresh.heroImageUrl }
+      : item
+  ))
+}
+
 async function loadPending() {
   error.value = ''
   try {
@@ -63,7 +76,9 @@ async function loadPending() {
     items.value = res.items ?? []
     if (!items.value.length) {
       await leaveAnnouncementGate()
+      return
     }
+    await hydrateCurrentBody()
   }
   catch (e: unknown) {
     error.value = syncFetchErrorMessage(e, 'Could not load required messages')
@@ -85,6 +100,7 @@ async function continueMessage() {
       await leaveAnnouncementGate()
       return
     }
+    await hydrateCurrentBody()
   }
   catch (e: unknown) {
     error.value = syncFetchErrorMessage(e, 'Could not continue')

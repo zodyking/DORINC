@@ -16,7 +16,7 @@ import { vehicles } from '../db/schema/vehicles'
 import type { MessageEntityRefInput } from '../../shared/validators/messages'
 import { normalizeOutgoingMessage } from '../../shared/format/outgoing-message'
 import { formatVehicleUnitLabel, splitEntitySearchTokens } from '../../shared/format/vehicle-unit'
-import { getTeamConversationSummary, syncTeamChatParticipants } from './team-chat.service'
+import { getTeamConversationSummary } from './team-chat.service'
 import { isDirectMessagingEnabled } from './workspace-settings.service'
 import {
   assertValidDmAttachments,
@@ -141,9 +141,10 @@ export async function createOrGetDmConversation(db: Db, currentUserId: string, p
   if (existing) return getConversationDetail(db, existing, currentUserId)
 
   const [conversation] = await db.insert(conversations).values({ type: 'dm' }).returning()
+  const caughtUp = new Date()
   await db.insert(conversationParticipants).values([
-    { conversationId: conversation!.id, userId: currentUserId },
-    { conversationId: conversation!.id, userId: participantUserId },
+    { conversationId: conversation!.id, userId: currentUserId, lastReadAt: caughtUp },
+    { conversationId: conversation!.id, userId: participantUserId, lastReadAt: caughtUp },
   ])
 
   return getConversationDetail(db, conversation!.id, currentUserId)
@@ -157,7 +158,7 @@ export interface ListConversationsFilter {
 }
 
 export async function listConversations(db: Db, filter: ListConversationsFilter) {
-  await syncTeamChatParticipants(db)
+  // getTeamConversationSummary syncs membership once; do not sync again here.
   const teamSummary = await getTeamConversationSummary(db, filter.userId)
   const directMessagingEnabled = await isDirectMessagingEnabled(db)
 

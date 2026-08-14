@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   isPasswordRequiredPath,
   isStaffGatePath,
+  resolveGateStormFallback,
   resolveNextStaffPath,
   resolvePermissionDeniedPath,
+  resolveStaffGateRedirect,
   resolveStaffLandingPath,
   shouldSkipPermissionCheck,
   withoutStaffGate,
@@ -67,6 +69,52 @@ describe('resolveNextStaffPath (leave without remounting the same gate)', () => 
     expect(withoutStaffGate(auth, 'announcement').announcementGate?.locked).toBe(false)
     expect(withoutStaffGate(auth, 'announcement').user?.mustChangePassword).toBe(true)
     expect(withoutStaffGate(auth, 'password').user?.mustChangePassword).toBe(false)
+  })
+})
+
+describe('resolveStaffGateRedirect (dual-gate remade invites)', () => {
+  const dual = {
+    announcementGate: { locked: true, pendingCount: 2, currentId: 'a1' },
+    user: { mustChangePassword: true },
+  }
+
+  it('keeps announcement-locked users on the required-message page even when a password reset is also due', () => {
+    expect(resolveStaffGateRedirect('/announcements/required', dual)).toBeNull()
+    expect(resolveStaffGateRedirect('/account/password-required', dual)).toBe('/announcements/required')
+    expect(resolveStaffGateRedirect('/dashboard', dual)).toBe('/announcements/required')
+    expect(resolveStaffGateRedirect('/account', dual)).toBe('/announcements/required')
+  })
+
+  it('sends password-only users to the password gate, not My Account', () => {
+    const passwordOnly = {
+      announcementGate: { locked: false },
+      user: { mustChangePassword: true },
+    }
+    expect(resolveStaffGateRedirect('/account/password-required', passwordOnly)).toBeNull()
+    expect(resolveStaffGateRedirect('/dashboard', passwordOnly)).toBe('/account/password-required')
+    expect(resolveStaffGateRedirect('/account', passwordOnly)).toBe('/account/password-required')
+  })
+})
+
+describe('resolveGateStormFallback', () => {
+  it('does not dump dual-gated users onto My Account', () => {
+    const dual = {
+      announcementGate: { locked: true, pendingCount: 3, currentId: 'a1' },
+      user: { mustChangePassword: true },
+    }
+    expect(resolveGateStormFallback('/announcements/required', dual)).toBeNull()
+    expect(resolveGateStormFallback('/account/password-required', dual)).toBe('/announcements/required')
+    expect(resolveGateStormFallback('/account', dual)).toBe('/announcements/required')
+    expect(resolveGateStormFallback('/dashboard', dual)).toBe('/announcements/required')
+  })
+
+  it('keeps a password-only storm on the password gate', () => {
+    const passwordOnly = {
+      announcementGate: { locked: false },
+      user: { mustChangePassword: true },
+    }
+    expect(resolveGateStormFallback('/account/password-required', passwordOnly)).toBeNull()
+    expect(resolveGateStormFallback('/account', passwordOnly)).toBe('/account/password-required')
   })
 })
 

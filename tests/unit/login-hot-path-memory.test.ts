@@ -51,6 +51,22 @@ describe('post-login hot path must not N+1 or load blobs', () => {
     expect(fn).not.toContain('db.select().from(announcements)')
   })
 
+  it('loads announcement HTML for the current required message only', () => {
+    const src = readFileSync(resolve('server/services/announcements.service.ts'), 'utf8')
+    const listStart = src.indexOf('export async function listPendingAnnouncementsForUser')
+    const listEnd = src.indexOf('export async function getAnnouncementGate')
+    const listFn = src.slice(listStart, listEnd)
+    expect(listFn).not.toContain('bodyHtml: announcements.bodyHtml')
+    expect(listFn).not.toContain('db.select().from(announcements)')
+
+    const viewStart = src.indexOf('export async function getPendingAnnouncementViews')
+    const viewEnd = src.indexOf('export async function acknowledgeAnnouncement')
+    const viewFn = src.slice(viewStart, viewEnd)
+    expect(viewFn).toContain('Sanitize body_html for the current card only')
+    expect(viewFn).toContain('.limit(1)')
+    expect(viewFn).not.toContain('sanitizeAnnouncementHtml(row.bodyHtml)')
+  })
+
   it('shares one unread poll timer across layout and messages page', () => {
     const src = readFileSync(resolve('app/composables/useDirectMessages.ts'), 'utf8')
     expect(src).toContain('let sharedPollTimer')

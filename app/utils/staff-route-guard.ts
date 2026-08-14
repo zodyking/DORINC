@@ -100,6 +100,36 @@ export function resolveNextStaffPath(
   return next
 }
 
+/**
+ * Ordered login gates: required messages own the screen until done, then
+ * password reset. Recreated invites often have BOTH flags; sending them
+ * password-required while announcements are still locked ping-pongs
+ * required ↔ password until the circuit breaker dumps them on My Account.
+ */
+export function resolveStaffGateRedirect(path: string, auth: AuthStoreLike): string | null {
+  if (auth.announcementGate?.locked) {
+    return isAnnouncementPath(path) ? null : '/announcements/required'
+  }
+  if (auth.user?.mustChangePassword) {
+    return isPasswordRequiredPath(path) ? null : '/account/password-required'
+  }
+  return null
+}
+
+/**
+ * Redirect-storm fallback. Never locally clear server-authoritative gates,
+ * and never dump a gated user onto /account (staff chrome + unread polls).
+ * Stay on the first remaining gate, or null to stop redirecting.
+ */
+export function resolveGateStormFallback(toPath: string, auth: AuthStoreLike): string | null {
+  const landing = resolveStaffLandingPath(auth)
+  if (isStaffGatePath(landing)) {
+    return toPath === landing ? null : landing
+  }
+  if (toPath === '/account') return null
+  return '/account'
+}
+
 /** Shared staff-route guard — used by global middleware and staff layout. */
 export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof navigateTo> | undefined> {
   const auth = useAuthStore()
@@ -114,19 +144,7 @@ export async function guardStaffRoute(path?: string): Promise<ReturnType<typeof 
   }
 
   const routePath = path ?? useRoute().path
-
-  // Mandatory login messages first.
-  if (auth.announcementGate?.locked && !isAnnouncementPath(routePath)) {
-    return navigateTo('/announcements/required')
-  }
-
-  // Then forced password reset — no dashboard until done.
-  if (auth.user?.mustChangePassword) {
-    if (!isPasswordRequiredPath(routePath)) {
-      return navigateTo('/account/password-required')
-    }
-    return undefined
-  }
-
+  const dest = resolveStaffGateRedirect(routePath, auth)
+  if (dest) return navigateTo(dest)
   return undefined
 }

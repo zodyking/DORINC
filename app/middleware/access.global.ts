@@ -5,6 +5,7 @@
  */
 import {
   guardStaffRoute,
+  resolveGateStormFallback,
   resolvePermissionDeniedPath,
   shouldSkipPermissionCheck,
 } from '~/utils/staff-route-guard'
@@ -41,19 +42,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/portal')
   }
 
-  // Required login message / password gates (staff-auth was never attached).
+  // Required login message / password gates. staff-auth also runs on staff-layout
+  // pages, so this must not bounce announcement ↔ password for dual-gated invites.
   const gateRedirect = await guardStaffRoute(to.path)
   if (gateRedirect) {
     if (noteMiddlewareRedirect(to.path)) {
       clearMiddlewareRedirectLog()
-      // Break gate ping-pong so Sign in can finish.
-      if (auth.announcementGate) {
-        auth.announcementGate = { ...auth.announcementGate, locked: false, pendingCount: 0, currentId: null }
-      }
-      if (auth.user?.mustChangePassword) {
-        auth.user = { ...auth.user, mustChangePassword: false }
-      }
-      if (to.path !== '/account') return navigateTo('/account')
+      // Stay on the first remaining gate. Clearing locks here used to dump
+      // recreated invites onto My Account, which mounts staff chrome and
+      // starts unread polls before the workspace is safe.
+      const dest = resolveGateStormFallback(to.path, auth)
+      if (dest) return navigateTo(dest)
       return
     }
     return gateRedirect

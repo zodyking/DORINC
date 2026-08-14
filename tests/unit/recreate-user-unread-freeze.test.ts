@@ -21,3 +21,33 @@ describe('recreated staff unread must not scan history', () => {
     expect(layout).toContain('!announcementLocked.value')
   })
 })
+
+describe('recreated staff login must not mount workspace chrome or ping-pong gates', () => {
+  it('keeps the password gate off the staff layout', () => {
+    const page = readFileSync(resolve('app/pages/account/password-required.vue'), 'utf8')
+    expect(page).toContain('layout: false')
+    expect(page).not.toContain("layout: 'staff'")
+  })
+
+  it('does not locally clear announcement or password locks during a redirect storm', () => {
+    const mw = readFileSync(resolve('app/middleware/access.global.ts'), 'utf8')
+    expect(mw).toContain('resolveGateStormFallback')
+    expect(mw).not.toContain('mustChangePassword: false')
+    expect(mw).not.toContain('locked: false, pendingCount: 0')
+  })
+
+  it('hydrates the next required-message body after acknowledge instead of preloading every HTML blob', () => {
+    const page = readFileSync(resolve('app/pages/announcements/required.vue'), 'utf8')
+    expect(page).toContain('hydrateCurrentBody')
+    expect(page).toContain('advanceAnnouncementQueue')
+  })
+
+  it('does not sync team-chat participants twice when listing conversations', () => {
+    const src = readFileSync(resolve('server/services/messages.service.ts'), 'utf8')
+    const start = src.indexOf('export async function listConversations')
+    const end = src.indexOf('export async function getConversationDeletionLabel')
+    const fn = src.slice(start, end)
+    expect(fn).toContain('getTeamConversationSummary')
+    expect(fn).not.toContain('syncTeamChatParticipants')
+  })
+})
