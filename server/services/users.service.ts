@@ -142,6 +142,8 @@ export interface UpdateUserInput {
   firstName?: string
   lastName?: string
   email?: string
+  /** Only false is accepted — clears a stale forced password change (and its temp expiry). */
+  mustChangePassword?: false
 }
 
 export interface UpdateUserCommunicationPrefsInput {
@@ -237,6 +239,12 @@ export async function updateUser(db: Db, input: UpdateUserInput) {
         changedFields.push('emailVerifiedAt')
       }
     }
+  }
+
+  if (input.mustChangePassword === false && row.user.mustChangePassword) {
+    changes.mustChangePassword = false
+    changes.tempPasswordExpiresAt = null
+    changedFields.push('mustChangePassword')
   }
 
   if (!changedFields.length) {

@@ -355,6 +355,15 @@ const sendPasswordReset = () => run(
   'Temporary password emailed — user must set a new password on next sign-in',
 )
 
+/** Clear a stale forced password change so the account cannot get stuck at the gate. */
+const clearPasswordRequirement = () => run(
+  () => $fetch(`/api/admin/users/${route.params.id}`, {
+    method: 'PATCH',
+    body: { mustChangePassword: false },
+  }),
+  'Password change requirement cleared',
+)
+
 const showSetPasswordModal = ref(false)
 const setPasswordValue = ref('')
 const setPasswordConfirm = ref('')
@@ -681,6 +690,20 @@ const showPermissionsModal = ref(false)
                   <input type="text" :value="user.emailVerified ? 'Yes' : 'No'" readonly>
                   <span class="help">Verified only after this account confirms the mailbox — not reused from a deleted account on the same email.</span>
                 </label>
+                <div v-if="user.mustChangePassword" class="pw-requirement">
+                  <div class="pw-requirement__text">
+                    <b>Must choose a new password at next sign-in</b>
+                    <small>Set by a password reset or admin set-password. If they are stuck at the password screen, clear it here.</small>
+                  </div>
+                  <button
+                    v-if="canManage && !isSusanRecord"
+                    class="btn sm"
+                    :disabled="busy"
+                    @click="clearPasswordRequirement"
+                  >
+                    Clear requirement
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1129,6 +1152,32 @@ const showPermissionsModal = ref(false)
   color: #991b1b;
   font-size: 13px;
   margin-bottom: 16px;
+}
+
+.pw-requirement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+.pw-requirement__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pw-requirement__text b {
+  font-size: 13px;
+  color: #92400e;
+}
+.pw-requirement__text small {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #a16207;
 }
 
 .set-password-modal {
