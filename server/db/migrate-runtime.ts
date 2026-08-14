@@ -69,4 +69,7 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
 
   const { ensureDeletionAiSchema } = await import('../lib/ensure-deletion-ai-schema.mjs')
   await ensureDeletionAiSchema(usePool())
+
+  const { scrubDeletedUserIdentity } = await import('../lib/scrub-deleted-user-identity.mjs')
+  await scrubDeletedUserIdentity(usePool())
 }

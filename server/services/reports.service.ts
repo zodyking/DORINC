@@ -232,11 +232,12 @@ export async function getMechanicProductivityReport(
   const byMechanic = new Map<string, MechanicProductivityRow>()
 
   for (const row of rows) {
+    if (!row.mechanicId) continue
     let entry = byMechanic.get(row.mechanicId)
     if (!entry) {
       entry = {
         mechanicId: row.mechanicId,
-        mechanicName: row.mechanicName,
+        mechanicName: row.mechanicName ?? 'Unknown',
         logsSubmitted: 0,
         logsConverted: 0,
         logsAwaitingReview: 0,

@@ -17,7 +17,7 @@ export type NewVehicleRequestStatus = PortalRequestStatus
 export const newVehicleRequests = pgTable('new_vehicle_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
 
@@ -48,7 +48,7 @@ export type ServiceRequestUrgency = (typeof SERVICE_REQUEST_URGENCIES)[number]
 export const serviceRequests = pgTable('service_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
   vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
@@ -75,7 +75,7 @@ export const serviceRequests = pgTable('service_requests', {
 export const invoiceChangeRequests = pgTable('invoice_change_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
   invoiceId: uuid('invoice_id').references(() => invoices.id),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
@@ -100,7 +100,7 @@ export const invoiceChangeRequests = pgTable('invoice_change_requests', {
 export const vehicleChangeRequests = pgTable('vehicle_change_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
   vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
@@ -123,7 +123,7 @@ export const vehicleChangeRequests = pgTable('vehicle_change_requests', {
 export const portalGeneralRequests = pgTable('portal_general_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
 
   status: text('status', { enum: PORTAL_REQUEST_STATUSES }).notNull().default('pending'),
 
@@ -148,7 +148,7 @@ export type DocumentChangeAction = (typeof DOCUMENT_CHANGE_ACTIONS)[number]
 export const documentChangeRequests = pgTable('document_change_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
   vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
 
   documentCategory: text('document_category').$type<FileDocumentActiveCategory>().notNull(),

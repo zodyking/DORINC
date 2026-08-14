@@ -227,7 +227,7 @@ export async function getServiceLog(db: Db, id: string) {
     .from(serviceLogs)
     .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
     .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
-    .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
+    .leftJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(eq(serviceLogs.id, id))
   if (!row) throw new ServiceLogsServiceError('NOT_FOUND')
 
@@ -252,7 +252,7 @@ export async function getServiceLog(db: Db, id: string) {
   return {
     ...reconciled,
     customerName: resolveCustomerDisplayName(row.customerName, row.log.customerSnapshot),
-    submitterName: row.submitterName,
+    submitterName: row.submitterName ?? '—',
     vehicle: vehicleFromLive ?? (snapVehicle
       ? {
           id: row.log.vehicleId ?? '',
@@ -625,7 +625,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
     .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
     .leftJoin(invoices, eq(serviceLogs.invoiceId, invoices.id))
-    .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
+    .leftJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
     .orderBy(...orderBy)
     .limit(filter.pageSize)
@@ -635,7 +635,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
     .from(serviceLogs)
     .leftJoin(customers, eq(serviceLogs.customerId, customers.id))
     .leftJoin(vehicles, eq(serviceLogs.vehicleId, vehicles.id))
-    .innerJoin(users, eq(serviceLogs.submittedBy, users.id))
+    .leftJoin(users, eq(serviceLogs.submittedBy, users.id))
     .where(where)
 
   // File counts per log — metadata only, no blobs (SPEC §8)
@@ -665,7 +665,7 @@ export async function listServiceLogs(db: Db, filter: ListServiceLogsFilter) {
       return {
         ...r.log,
         customerName: resolveCustomerDisplayName(r.customerName, r.log.customerSnapshot),
-        submitterName: r.submitterName,
+        submitterName: r.submitterName ?? '—',
         vehicle: r.vehicle?.unitType || r.vehicle?.busNumber
           ? r.vehicle
           : snapVehicle
