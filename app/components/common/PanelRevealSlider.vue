@@ -1,7 +1,11 @@
 <script setup lang="ts">
 /**
- * Before/after reveal for two panels (e.g. Service Log vs line items).
- * Primary control is a top track with a ball thumb; edge-snaps on release.
+ * Resizable split view for two panels (e.g. Service Log photos vs line items).
+ * Desktop: true side-by-side columns with a draggable divider — each panel is
+ * laid out at its real column width, never clipped under the other (the old
+ * curtain reveal rendered the photo panel full-width and cropped it, which
+ * looked "zoomed in" and made both halves unusable).
+ * Mobile: full-width tabs — split columns are too cramped under ~720px.
  */
 const props = withDefaults(defineProps<{
   /** Percent of the reveal (left) panel visible, 0–100. */
@@ -21,9 +25,11 @@ const emit = defineEmits<{
 }>()
 
 const EDGE_SNAP = 12
+/** Keep both panels usable while split — never a sliver. */
+const MIN_SPLIT = 22
+const MAX_SPLIT = 78
 
-const rootRef = ref<HTMLElement | null>(null)
-const trackRef = ref<HTMLElement | null>(null)
+const stageRef = ref<HTMLElement | null>(null)
 const dragging = ref(false)
 
 const percent = computed({
@@ -31,17 +37,34 @@ const percent = computed({
   set: (value: number) => emit('update:modelValue', Math.min(100, Math.max(0, value))),
 })
 
-const rootWidth = ref(0)
+const showReveal = computed(() => percent.value > 0)
+const showBase = computed(() => percent.value < 100)
+const isSplit = computed(() => showReveal.value && showBase.value)
 
-function measure() {
-  rootWidth.value = rootRef.value?.getBoundingClientRect().width ?? 0
+/** Column width while split, clamped so neither side collapses mid-drag. */
+const splitPercent = computed(() => Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, percent.value)))
+
+type ViewMode = 'reveal' | 'split' | 'base'
+const viewMode = computed<ViewMode>(() => {
+  if (!showBase.value) return 'reveal'
+  if (!showReveal.value) return 'base'
+  return 'split'
+})
+
+function setMode(mode: ViewMode) {
+  if (mode === 'reveal') percent.value = 100
+  else if (mode === 'base') percent.value = 0
+  else percent.value = 50
 }
 
-function setFromClientX(clientX: number, el: HTMLElement | null) {
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  if (rect.width <= 0) return
-  percent.value = ((clientX - rect.left) / rect.width) * 100
+/* Narrow screens: tabs instead of split columns. */
+const isNarrow = ref(false)
+let mq: MediaQueryList | null = null
+const onMqChange = () => { isNarrow.value = mq?.matches ?? false }
+
+const mobileTab = computed<'reveal' | 'base'>(() => (percent.value >= 50 ? 'reveal' : 'base'))
+function setMobileTab(tab: 'reveal' | 'base') {
+  percent.value = tab === 'reveal' ? 100 : 0
 }
 
 function snapEdges(value: number) {
@@ -50,21 +73,24 @@ function snapEdges(value: number) {
   return value
 }
 
-function onTrackPointerDown(event: PointerEvent) {
-  const target = event.currentTarget as HTMLElement
-  target.setPointerCapture(event.pointerId)
+function setFromClientX(clientX: number) {
+  const rect = stageRef.value?.getBoundingClientRect()
+  if (!rect || rect.width <= 0) return
+  percent.value = ((clientX - rect.left) / rect.width) * 100
+}
+
+function onDividerPointerDown(event: PointerEvent) {
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
   dragging.value = true
-  measure()
-  setFromClientX(event.clientX, trackRef.value)
   event.preventDefault()
 }
 
-function onTrackPointerMove(event: PointerEvent) {
+function onDividerPointerMove(event: PointerEvent) {
   if (!dragging.value) return
-  setFromClientX(event.clientX, trackRef.value)
+  setFromClientX(event.clientX)
 }
 
-function onTrackPointerUp(event: PointerEvent) {
+function onDividerPointerUp(event: PointerEvent) {
   if (!dragging.value) return
   dragging.value = false
   percent.value = snapEdges(percent.value)
@@ -96,84 +122,118 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-let resizeObserver: ResizeObserver | null = null
-
 onMounted(() => {
-  measure()
-  if (!import.meta.client || !rootRef.value) return
-  resizeObserver = new ResizeObserver(() => measure())
-  resizeObserver.observe(rootRef.value)
+  if (!import.meta.client) return
+  mq = window.matchMedia('(max-width: 720px)')
+  onMqChange()
+  mq.addEventListener('change', onMqChange)
 })
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-  resizeObserver = null
+  mq?.removeEventListener('change', onMqChange)
+  mq = null
 })
 </script>
 
 <template>
   <div
-    ref="rootRef"
     class="reveal-slider"
-    :class="{ 'reveal-slider--dragging': dragging }"
+    :class="{ 'reveal-slider--dragging': dragging, 'reveal-slider--narrow': isNarrow }"
     :style="{ minHeight }"
   >
-    <div class="reveal-slider__control">
-      <span class="reveal-slider__end-label">{{ revealLabel }}</span>
+    <!-- Mobile: full-width tabs -->
+    <div v-if="isNarrow" class="reveal-slider__tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        class="reveal-slider__tab"
+        :class="{ on: mobileTab === 'reveal' }"
+        :aria-selected="mobileTab === 'reveal'"
+        @click="setMobileTab('reveal')"
+      >
+        {{ revealLabel }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="reveal-slider__tab"
+        :class="{ on: mobileTab === 'base' }"
+        :aria-selected="mobileTab === 'base'"
+        @click="setMobileTab('base')"
+      >
+        {{ baseLabel }}
+      </button>
+    </div>
+
+    <!-- Desktop: view snaps -->
+    <div v-else class="reveal-slider__control">
+      <div class="reveal-slider__modes" role="group" aria-label="Panel layout">
+        <button
+          type="button"
+          class="reveal-slider__mode"
+          :class="{ on: viewMode === 'reveal' }"
+          @click="setMode('reveal')"
+        >
+          {{ revealLabel }}
+        </button>
+        <button
+          type="button"
+          class="reveal-slider__mode"
+          :class="{ on: viewMode === 'split' }"
+          @click="setMode('split')"
+        >
+          Split
+        </button>
+        <button
+          type="button"
+          class="reveal-slider__mode"
+          :class="{ on: viewMode === 'base' }"
+          @click="setMode('base')"
+        >
+          {{ baseLabel }}
+        </button>
+      </div>
+      <span class="reveal-slider__hint">Drag the divider to resize</span>
+    </div>
+
+    <div ref="stageRef" class="reveal-slider__stage">
       <div
-        ref="trackRef"
-        class="reveal-slider__track"
+        v-if="showReveal && (!isNarrow || mobileTab === 'reveal')"
+        class="reveal-slider__panel reveal-slider__panel--reveal"
+        :style="!isNarrow && isSplit ? { width: `${splitPercent}%` } : undefined"
+      >
+        <div class="reveal-slider__panel-body">
+          <slot name="reveal" />
+        </div>
+      </div>
+
+      <div
+        v-if="!isNarrow && isSplit"
+        class="reveal-slider__divider"
         role="slider"
         tabindex="0"
         :aria-valuemin="0"
         :aria-valuemax="100"
         :aria-valuenow="Math.round(percent)"
-        :aria-label="`Reveal ${revealLabel} over ${baseLabel}`"
-        @pointerdown="onTrackPointerDown"
-        @pointermove="onTrackPointerMove"
-        @pointerup="onTrackPointerUp"
-        @pointercancel="onTrackPointerUp"
+        :aria-label="`Resize ${revealLabel} and ${baseLabel}`"
+        @pointerdown="onDividerPointerDown"
+        @pointermove="onDividerPointerMove"
+        @pointerup="onDividerPointerUp"
+        @pointercancel="onDividerPointerUp"
         @keydown="onKeydown"
+        @dblclick="percent = 50"
       >
-        <div class="reveal-slider__track-fill" :style="{ width: `${percent}%` }" />
-        <div
-          class="reveal-slider__thumb"
-          :style="{ left: `${percent}%` }"
-          aria-hidden="true"
-        />
+        <span class="reveal-slider__grip" aria-hidden="true" />
       </div>
-      <span class="reveal-slider__end-label">{{ baseLabel }}</span>
-    </div>
 
-    <div class="reveal-slider__stage">
-      <div class="reveal-slider__base" :aria-hidden="percent >= 98">
-        <div class="reveal-slider__panel-label">{{ baseLabel }}</div>
+      <div
+        v-if="showBase && (!isNarrow || mobileTab === 'base')"
+        class="reveal-slider__panel reveal-slider__panel--base"
+      >
         <div class="reveal-slider__panel-body">
           <slot name="base" />
         </div>
       </div>
-
-      <div
-        class="reveal-slider__reveal"
-        :style="{ width: `${percent}%` }"
-        :aria-hidden="percent <= 2"
-      >
-        <div
-          class="reveal-slider__reveal-inner"
-          :style="{ width: rootWidth ? `${rootWidth}px` : '100%' }"
-        >
-          <div class="reveal-slider__panel-label">{{ revealLabel }}</div>
-          <div class="reveal-slider__panel-body">
-            <slot name="reveal" />
-          </div>
-        </div>
-      </div>
-
-      <div
-        class="reveal-slider__divider"
-        :style="{ left: `${percent}%` }"
-        aria-hidden="true"
-      />
     </div>
   </div>
 </template>
@@ -182,132 +242,110 @@ onBeforeUnmount(() => {
 .reveal-slider {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
+/* ---------- desktop control ---------- */
 .reveal-slider__control {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 2px 2px 0;
+  flex-wrap: wrap;
 }
 
-.reveal-slider__end-label {
-  font-size: 11.5px;
-  font-weight: 700;
+.reveal-slider__modes {
+  display: inline-flex;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.reveal-slider__mode {
+  border: 0;
+  background: transparent;
+  padding: 7px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
   color: #64748b;
+  cursor: pointer;
+  min-height: 34px;
   white-space: nowrap;
 }
 
-.reveal-slider__track {
-  position: relative;
-  height: 28px;
-  display: flex;
-  align-items: center;
+.reveal-slider__mode:hover:not(.on) {
+  color: #0f172a;
+}
+
+.reveal-slider__mode.on {
+  background: #0f172a;
+  color: #fff;
+}
+
+.reveal-slider__hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* ---------- mobile tabs ---------- */
+.reveal-slider__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.reveal-slider__tab {
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #64748b;
   cursor: pointer;
-  touch-action: none;
-  outline: none;
-  border-radius: 999px;
+  min-height: 44px;
 }
 
-.reveal-slider__track::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 6px;
-  border-radius: 999px;
-  background: #e2e8f0;
+.reveal-slider__tab.on {
+  background: #0f172a;
+  color: #fff;
 }
 
-.reveal-slider__track:focus-visible .reveal-slider__thumb {
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 2px 8px rgba(15, 23, 42, 0.2);
-}
-
-.reveal-slider__track-fill {
-  position: absolute;
-  left: 0;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #818cf8, #6366f1);
-  pointer-events: none;
-}
-
-.reveal-slider__thumb {
-  position: absolute;
-  top: 50%;
-  width: 22px;
-  height: 22px;
-  margin-left: -11px;
-  transform: translateY(-50%);
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid #6366f1;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
-  pointer-events: none;
-  transition: box-shadow 0.15s ease;
-}
-
-.reveal-slider--dragging .reveal-slider__thumb {
-  transform: translateY(-50%) scale(1.08);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 3px 10px rgba(15, 23, 42, 0.22);
-}
-
+/* ---------- stage ---------- */
 .reveal-slider__stage {
   position: relative;
+  display: flex;
+  align-items: stretch;
   flex: 1 1 auto;
   min-height: inherit;
+  min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
 }
 
-.reveal-slider__base,
-.reveal-slider__reveal-inner {
-  min-height: inherit;
-  height: 100%;
+.reveal-slider__panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: inherit;
   background: #fff;
 }
 
-.reveal-slider__base {
+.reveal-slider__panel--reveal {
+  flex: none;
   width: 100%;
 }
 
-.reveal-slider__reveal {
-  position: absolute;
-  inset: 0 auto 0 0;
-  overflow: hidden;
-  z-index: 2;
-  background: #fff;
-  pointer-events: auto;
-}
-
-.reveal-slider__divider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  z-index: 3;
-  background: #6366f1;
-  pointer-events: none;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
-}
-
-.reveal-slider__panel-label {
-  flex: none;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-  letter-spacing: 0.02em;
+.reveal-slider__panel--base {
+  flex: 1 1 0;
 }
 
 .reveal-slider__panel-body {
@@ -315,6 +353,70 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+}
+
+/* ---------- divider ---------- */
+.reveal-slider__divider {
+  flex: none;
+  width: 14px;
+  margin: 0 -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+  z-index: 2;
+  background: transparent;
+}
+
+.reveal-slider__divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+  transition: background 0.15s ease;
+}
+
+.reveal-slider__grip {
+  position: relative;
+  width: 18px;
+  height: 44px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  display: grid;
+  place-items: center;
+}
+
+.reveal-slider__grip::before {
+  content: '';
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      #94a3b8 0 3px,
+      transparent 3px 6px
+    );
+}
+
+.reveal-slider__divider:hover::before,
+.reveal-slider--dragging .reveal-slider__divider::before {
+  background: #6366f1;
+}
+
+.reveal-slider__divider:hover .reveal-slider__grip,
+.reveal-slider--dragging .reveal-slider__grip {
+  border-color: #6366f1;
+}
+
+.reveal-slider__divider:focus-visible .reveal-slider__grip {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 2px 8px rgba(15, 23, 42, 0.2);
 }
 
 .reveal-slider--dragging {
@@ -326,19 +428,12 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .reveal-slider__control {
-    gap: 8px;
-  }
-
-  .reveal-slider__end-label {
-    font-size: 11px;
-    max-width: 72px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .reveal-slider__stage {
-    min-height: 360px;
+    min-height: 340px;
+  }
+
+  .reveal-slider__panel-body {
+    padding: 10px;
   }
 }
 </style>
