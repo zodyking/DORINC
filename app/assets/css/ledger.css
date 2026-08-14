@@ -25,6 +25,16 @@ a{ color:#4f46e5; }
     linear-gradient(180deg, rgba(248,250,252,.78) 0%, rgba(241,245,249,.88) 100%),
     url('/images/auth-login-bg.png') center / cover no-repeat fixed;
 }
+.auth-screen--cookie-prompt{ padding-bottom:200px; }
+.auth-cookie-reveal-enter-active,
+.auth-cookie-reveal-leave-active{
+  transition: opacity .28s ease, transform .28s cubic-bezier(.22,1,.36,1);
+}
+.auth-cookie-reveal-enter-from,
+.auth-cookie-reveal-leave-to{
+  opacity:0;
+  transform:translateY(16px);
+}
 .auth-screen.hidden{ display:none; }
 .app-shell.hidden,.portal-shell.hidden{ display:none; }
 .auth-wrap{ width:min(360px,100%); }

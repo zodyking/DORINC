@@ -36,6 +36,10 @@ export default defineEventHandler(async (event) => {
         stepUpVerifiedAt: resolved.stepUpVerifiedAt,
       }
     }
+    else {
+      // Cookie present but expired, revoked, or the user row is gone.
+      event.context.staleSessionCookie = true
+    }
   }
   catch (err) {
     // A DB outage must not turn into a silent auth bypass — requests just

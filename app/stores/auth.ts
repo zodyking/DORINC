@@ -11,6 +11,7 @@ import { clearOutsideGeoTabSession, markOutsideGeoTabSession } from '~/utils/out
 import { clearPwaBannerDismissed } from '~/utils/pwa-install-state'
 import type { StaffLoginGeo } from '#shared/validators/auth'
 import { AUTH_ME_FOCUS_MIN_GAP_MS } from '#shared/auth-me-refresh'
+import { LOGIN_COOKIE_INCOMPLETE_MESSAGE } from '~/utils/cookie-probe'
 
 export interface AuthUser {
   id: string
@@ -177,7 +178,7 @@ export const useAuthStore = defineStore('auth', {
         const ok = await this.fetchMe({ force: true })
         if (!ok && !this.user) {
           // Cookie/session rejected immediately — surface as login failure.
-          throw new Error('Sign-in did not complete — please try again')
+          throw new Error(LOGIN_COOKIE_INCOMPLETE_MESSAGE)
         }
       }
       finally {
@@ -215,7 +216,7 @@ export const useAuthStore = defineStore('auth', {
         this.loaded = true
         const ok = await this.fetchMe({ force: true })
         if (!ok && !this.user) {
-          throw new Error('Sign-in did not complete — please try again')
+          throw new Error(LOGIN_COOKIE_INCOMPLETE_MESSAGE)
         }
       }
       finally {

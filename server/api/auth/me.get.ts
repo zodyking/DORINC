@@ -2,13 +2,17 @@ import type { AuthContext } from '../../utils/require-permission'
 import { apiError } from '../../utils/api-error'
 import { useDb } from '../../db/client'
 import { getAnnouncementGate } from '../../services/announcements.service'
+import { clearStaleSessionCookie } from '../../auth/session-cookie'
 
 export default defineEventHandler(async (event) => {
   const auth = event.context.auth as (AuthContext & {
     user: { name: string, email: string, username: string | null, customerId: string | null, mustChangePassword?: boolean }
   }) | undefined
   if (!auth?.user) {
-    throw apiError(event, 'UNAUTHENTICATED', 'Not signed in')
+    const staleCookieCleared = clearStaleSessionCookie(event)
+    throw apiError(event, 'UNAUTHENTICATED', 'Not signed in', {
+      staleCookieCleared,
+    })
   }
 
   const effective = new Set([...auth.roleGrants, ...auth.overrides.allow])

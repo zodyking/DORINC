@@ -5,8 +5,14 @@ import { authErrorEmail, authErrorMessage, authErrorReason } from '~/utils/auth-
 import { resolveStaffLandingPath } from '~/utils/staff-route-guard'
 import { isAllowedStaffReturnPath, setStaffReturnPath } from '~/utils/staff-return-path'
 import StaffLocationPrompt from '~/components/auth/StaffLocationPrompt.vue'
+import AuthCookiePrompt from '~/components/auth/AuthCookiePrompt.vue'
 import AuthRateLimitNotice from '~/components/auth/AuthRateLimitNotice.vue'
 import { formatPhoneDisplay } from '~/utils/phone-ui'
+import {
+  isLoginCookieIncompleteMessage,
+  probeFirstPartyCookies,
+  requestFirstPartyCookieAccess,
+} from '~/utils/cookie-probe'
 
 const loginCooldown = useAuthRateLimitCooldown('login')
 const loginRateLimited = computed(() => loginCooldown.isActive)
@@ -70,8 +76,54 @@ function rememberReturnFromQuery() {
   if (email && card.value === 'staff') loginEmail.value = email
 }
 
+const cookiePromptMode = ref<'blocked' | 'cleared' | null>(null)
+const cookiePromptBusy = ref(false)
+const cookiePromptDismissed = ref(false)
+
+function showCookiePrompt(mode: 'blocked' | 'cleared') {
+  if (cookiePromptDismissed.value && mode === 'cleared') return
+  cookiePromptMode.value = mode
+}
+
+async function checkDeviceCookies() {
+  if (!probeFirstPartyCookies()) {
+    showCookiePrompt('blocked')
+    return
+  }
+  try {
+    const status = await $fetch<{ signedIn: boolean, staleCookieCleared: boolean }>('/api/auth/session-status')
+    if (status.staleCookieCleared) showCookiePrompt('cleared')
+  }
+  catch {
+    // Status check is best-effort — login form still works.
+  }
+}
+
+async function onAllowCookies() {
+  cookiePromptBusy.value = true
+  try {
+    const ok = await requestFirstPartyCookieAccess()
+    if (ok) {
+      cookiePromptMode.value = null
+      await checkDeviceCookies()
+      if (isLoginCookieIncompleteMessage(error.value)) error.value = ''
+      return
+    }
+    showCookiePrompt('blocked')
+  }
+  finally {
+    cookiePromptBusy.value = false
+  }
+}
+
+function dismissCookiePrompt() {
+  cookiePromptDismissed.value = true
+  cookiePromptMode.value = null
+}
+
 onMounted(() => {
   rememberReturnFromQuery()
+  void checkDeviceCookies()
 })
 
 function messageFrom(err: unknown): string {
@@ -126,6 +178,9 @@ async function submitLogin(identifier: string, password: string) {
     loginBlockedReason.value = authErrorReason(err)
     const hintedEmail = authErrorEmail(err)
     if (hintedEmail && card.value === 'staff') loginEmail.value = hintedEmail
+    if (isLoginCookieIncompleteMessage(error.value) || !probeFirstPartyCookies()) {
+      showCookiePrompt('blocked')
+    }
   }
   finally {
     busy.value = false
@@ -156,6 +211,9 @@ async function onLocationComplete(geo: import('#shared/validators/auth').StaffLo
     }
     error.value = messageFrom(err)
     loginBlockedReason.value = authErrorReason(err)
+    if (isLoginCookieIncompleteMessage(error.value) || !probeFirstPartyCookies()) {
+      showCookiePrompt('blocked')
+    }
   }
   finally {
     busy.value = false
@@ -214,7 +272,11 @@ async function submitSignup() {
 </script>
 
 <template>
-  <main id="main-content" class="auth-screen">
+  <main
+    id="main-content"
+    class="auth-screen"
+    :class="{ 'auth-screen--cookie-prompt': !!cookiePromptMode }"
+  >
     <div class="auth-wrap">
       <!-- Customer portal card -->
       <div v-if="card === 'customer'" class="auth-card">
@@ -476,5 +538,15 @@ async function submitSignup() {
       @complete="onLocationComplete"
       @cancel="onLocationCancel"
     />
+
+    <Transition name="auth-cookie-reveal">
+      <AuthCookiePrompt
+        v-if="cookiePromptMode"
+        :mode="cookiePromptMode"
+        :busy="cookiePromptBusy"
+        @allow="onAllowCookies"
+        @dismiss="dismissCookiePrompt"
+      />
+    </Transition>
   </main>
 </template>
