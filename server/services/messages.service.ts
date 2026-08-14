@@ -443,7 +443,7 @@ export async function listMessages(db: Db, filter: ListMessagesFilter) {
     senderName: users.name,
   })
     .from(messages)
-    .innerJoin(users, eq(messages.senderUserId, users.id))
+    .leftJoin(users, eq(messages.senderUserId, users.id))
     .where(and(...conditions))
     .orderBy(asc(messages.createdAt))
     .limit(filter.afterId ? 100 : filter.pageSize)
@@ -473,7 +473,7 @@ export async function listMessages(db: Db, filter: ListMessagesFilter) {
       conversationId: r.message.conversationId,
       body: r.message.body,
       senderUserId: r.message.senderUserId,
-      senderName: r.senderName,
+      senderName: r.senderName ?? 'Unknown',
       createdAt: r.message.createdAt,
       entityRefs: (refsByMessage.get(r.message.id) ?? []).map(ref => ({
         entityType: ref.entityType,

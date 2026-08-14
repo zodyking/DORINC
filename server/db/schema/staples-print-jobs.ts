@@ -27,7 +27,8 @@ export type StaplesPrintDocumentType = (typeof STAPLES_PRINT_DOCUMENT_TYPES)[num
  */
 export const staplesPrintJobs = pgTable('staples_print_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  createdBy: uuid('created_by').notNull(),
+  /** Nullable after hard-delete of the staff who queued the job. */
+  createdBy: uuid('created_by'),
   documentType: text('document_type').notNull().default('service_log_sheet'),
   documentLabel: text('document_label'),
   entityId: uuid('entity_id'),

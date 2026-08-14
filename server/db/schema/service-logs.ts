@@ -41,7 +41,8 @@ export const serviceLogs = pgTable('service_logs', {
   customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   /** Nullable after hard-delete of vehicle — display uses vehicleSnapshot. */
   vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
-  submittedBy: uuid('submitted_by').notNull().references(() => users.id),
+  /** Nullable after hard-delete of the submitter — the log itself is kept. */
+  submittedBy: uuid('submitted_by').references(() => users.id, { onDelete: 'set null' }),
 
   /** Used as the invoice date when converting this log. */
   serviceDate: date('service_date', { mode: 'string' }).notNull(),

@@ -1,4 +1,4 @@
-import { and, count, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { accountTypes, sessions, userPermissionOverrides, users } from '../db/schema/auth'
 import { customerCredentialEmailLogs, customerContacts, customers } from '../db/schema/customers'
@@ -19,12 +19,20 @@ import {
 import { serviceLogs } from '../db/schema/service-logs'
 import { backupRecoveryTests, suspiciousActivityAlerts } from '../db/schema/security'
 import { vehicles } from '../db/schema/vehicles'
-import { catalogItems, catalogLaborRates } from '../db/schema/catalog'
+import { catalogItems, catalogLaborRates, catalogPackages } from '../db/schema/catalog'
 import { appFiles } from '../db/schema/files'
 import { aiJobs, aiProviderSettings, aiSuggestions, aiUsageLogs } from '../db/schema/ai'
 import { backupIntegrations, backupRuns, backupSettings } from '../db/schema/backups'
 import { invoiceTemplateVersions, invoiceTemplates } from '../db/schema/invoice-templates'
 import { pdfRenderJobs } from '../db/schema/pdf-render-jobs'
+import { accessEvents } from '../db/schema/access-gate'
+import { outsideGeoChallenges } from '../db/schema/outside-geo'
+import { serviceLogUploadSessions } from '../db/schema/service-log-upload-sessions'
+import { staplesPrintJobs } from '../db/schema/staples-print-jobs'
+import { rateLimitEvents } from '../db/schema/rate-limits'
+import { billingIntegrations } from '../db/schema/billing-integrations'
+import { emailTemplates } from '../db/schema/email-templates'
+import { smsTemplates } from '../db/schema/sms-templates'
 import { buildCustomerSnapshot, buildVehicleSnapshot } from './entity-snapshots'
 import { CustomersServiceError, getCustomer } from './customers.service'
 import { releaseInvoiceDependents } from './invoice-dependents.service'
@@ -250,6 +258,10 @@ async function nullifyUserAttribution(db: Db, userId: string) {
     .set({ createdBy: null, updatedAt: now })
     .where(eq(catalogLaborRates.createdBy, userId))
 
+  await db.update(catalogPackages)
+    .set({ createdBy: null, updatedAt: now })
+    .where(eq(catalogPackages.createdBy, userId))
+
   await db.update(appFiles)
     .set({ createdBy: null })
     .where(eq(appFiles.createdBy, userId))
@@ -387,11 +399,186 @@ async function nullifyUserAttribution(db: Db, userId: string) {
   await db.update(backupRecoveryTests)
     .set({ testedBy: null })
     .where(eq(backupRecoveryTests.testedBy, userId))
+
+  await ignoreMissingTable('email_templates', async () => {
+    await db.update(emailTemplates)
+      .set({ updatedBy: null, updatedAt: now })
+      .where(eq(emailTemplates.updatedBy, userId))
+  })
+  await ignoreMissingTable('sms_templates', async () => {
+    await db.update(smsTemplates)
+      .set({ updatedBy: null, updatedAt: now })
+      .where(eq(smsTemplates.updatedBy, userId))
+  })
+  await ignoreMissingTable('billing_integrations', async () => {
+    await db.update(billingIntegrations)
+      .set({ updatedBy: null, updatedAt: now })
+      .where(eq(billingIntegrations.updatedBy, userId))
+  })
+
+  // Business records stay; only the person is detached.
+  await db.update(messages)
+    .set({ senderUserId: null })
+    .where(eq(messages.senderUserId, userId))
+  await db.update(serviceLogs)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(serviceLogs.submittedBy, userId))
+  await db.update(newVehicleRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(newVehicleRequests.submittedBy, userId))
+  await db.update(serviceRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(serviceRequests.submittedBy, userId))
+  await db.update(invoiceChangeRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(invoiceChangeRequests.submittedBy, userId))
+  await db.update(vehicleChangeRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(vehicleChangeRequests.submittedBy, userId))
+  await db.update(portalGeneralRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(portalGeneralRequests.submittedBy, userId))
+  await db.update(documentChangeRequests)
+    .set({ submittedBy: null, updatedAt: now })
+    .where(eq(documentChangeRequests.submittedBy, userId))
+  await ignoreMissingTable('staples_print_jobs', async () => {
+    await db.update(staplesPrintJobs)
+      .set({ createdBy: null, updatedAt: now })
+      .where(eq(staplesPrintJobs.createdBy, userId))
+  })
+
+  await db.update(users)
+    .set({ approvedBy: null, updatedAt: now })
+    .where(eq(users.approvedBy, userId))
+}
+
+function normalizeStoredDeviceId(value: string | null | undefined): string | null {
+  const id = value?.trim().toLowerCase()
+  return id || null
+}
+
+async function ignoreMissingTable(label: string, fn: () => Promise<unknown>) {
+  try {
+    await fn()
+  }
+  catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (/relation ".+" does not exist|undefined_table/i.test(msg)) {
+      console.warn(`[hard-delete] skipped ${label}: table missing`)
+      return
+    }
+    throw err
+  }
+}
+
+/** Device ids this user used, from sessions plus optional presence tables. */
+async function collectUserDeviceIds(db: Db, userId: string): Promise<string[]> {
+  const ids = new Set<string>()
+  const add = (value: string | null | undefined) => {
+    const id = normalizeStoredDeviceId(value)
+    if (id) ids.add(id)
+  }
+
+  const sessionRows = await db.select({ deviceId: sessions.deviceId })
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+  for (const row of sessionRows) add(row.deviceId)
+
+  await ignoreMissingTable('access_events device scan', async () => {
+    const rows = await db.select({ deviceId: accessEvents.deviceId })
+      .from(accessEvents)
+      .where(eq(accessEvents.userId, userId))
+    for (const row of rows) add(row.deviceId)
+  })
+
+  await ignoreMissingTable('outside_geo_challenges device scan', async () => {
+    const rows = await db.select({ deviceId: outsideGeoChallenges.deviceId })
+      .from(outsideGeoChallenges)
+      .where(eq(outsideGeoChallenges.userId, userId))
+    for (const row of rows) add(row.deviceId)
+  })
+
+  return [...ids]
 }
 
 /**
- * Hard-delete a user with preflight checks and audit snapshot.
- * Fails if the user is a super_admin, trying to delete themselves, or has NOT NULL dependent records.
+ * A device is exclusive when no other living user's session (or access event)
+ * is tied to it. Shared phones keep the other person's history.
+ */
+async function exclusiveDeviceIds(db: Db, userId: string, deviceIds: string[]): Promise<string[]> {
+  const exclusive: string[] = []
+  for (const deviceId of deviceIds) {
+    const [otherSession] = await db.select({ id: sessions.id })
+      .from(sessions)
+      .where(and(
+        sql`lower(${sessions.deviceId}) = ${deviceId}`,
+        ne(sessions.userId, userId),
+      ))
+      .limit(1)
+    if (otherSession) continue
+
+    let sharedEvent = false
+    await ignoreMissingTable('access_events exclusive check', async () => {
+      const [otherEvent] = await db.select({ id: accessEvents.id })
+        .from(accessEvents)
+        .where(and(
+          sql`lower(${accessEvents.deviceId}) = ${deviceId}`,
+          isNotNull(accessEvents.userId),
+          ne(accessEvents.userId, userId),
+        ))
+        .limit(1)
+      if (otherEvent) sharedEvent = true
+    })
+    if (sharedEvent) continue
+    exclusive.push(deviceId)
+  }
+  return exclusive
+}
+
+/** Wipe login/device presence so the person is unknown to the server. */
+async function wipeUserIdentityPresence(
+  db: Db,
+  userId: string,
+  email: string,
+  exclusiveDevices: string[],
+) {
+  await ignoreMissingTable('access_events', async () => {
+    await db.delete(accessEvents).where(eq(accessEvents.userId, userId))
+    await db.delete(accessEvents).where(sql`lower(${accessEvents.userEmail}) = ${email.toLowerCase()}`)
+    for (const deviceId of exclusiveDevices) {
+      await db.delete(accessEvents).where(sql`lower(${accessEvents.deviceId}) = ${deviceId}`)
+    }
+  })
+
+  await ignoreMissingTable('outside_geo_challenges', async () => {
+    await db.delete(outsideGeoChallenges).where(eq(outsideGeoChallenges.userId, userId))
+    await db.delete(outsideGeoChallenges).where(sql`lower(${outsideGeoChallenges.userEmail}) = ${email.toLowerCase()}`)
+    for (const deviceId of exclusiveDevices) {
+      await db.delete(outsideGeoChallenges).where(sql`lower(${outsideGeoChallenges.deviceId}) = ${deviceId}`)
+    }
+  })
+
+  await ignoreMissingTable('service_log_upload_sessions', async () => {
+    await db.delete(serviceLogUploadSessions).where(or(
+      eq(serviceLogUploadSessions.createdBy, userId),
+      eq(serviceLogUploadSessions.technicianId, userId),
+    ))
+  })
+
+  const emailNeedle = `%${email.toLowerCase()}%`
+  const userKeySuffix = `%${userId}`
+  await db.delete(rateLimitEvents).where(or(
+    eq(rateLimitEvents.key, userId),
+    sql`${rateLimitEvents.key} like ${userKeySuffix}`,
+    sql`lower(${rateLimitEvents.key}) like ${emailNeedle}`,
+  ))
+}
+
+/**
+ * Hard-delete a user as if they were never on the server.
+ * Keeps business records (invoices, messages, service logs, portal requests)
+ * with identity FKs nulled. Wipes account, sessions, and saved-device presence.
+ * Fails if the user is a super_admin, Susan, or the actor themselves.
  */
 export async function hardDeleteUser(
   db: Db,
@@ -424,47 +611,22 @@ export async function hardDeleteUser(
     throw new HardDeleteUserServiceError('SELF_DELETE')
   }
 
-  // Check for NOT NULL FK blockers
-  // These tables have NOT NULL user references that would prevent deletion
-  const blockers: string[] = []
-
-  // Check service_logs.submitted_by (NOT NULL)
-  const [serviceLogCount] = await db.select({ count: count() })
-    .from(serviceLogs)
-    .where(eq(serviceLogs.submittedBy, userId))
-  if (serviceLogCount && Number(serviceLogCount.count) > 0) {
-    blockers.push(`${serviceLogCount.count} service log(s)`)
-  }
-
-  if (blockers.length > 0) {
-    throw new HardDeleteUserServiceError('HAS_DEPENDENTS', blockers)
-  }
-
-  // Create snapshot for audit
   const snapshot = buildUserSnapshot(row.user, row.accountTypeKey)
 
-  // Remove rows that block deletion (NOT NULL FK without cascade)
-  await db.delete(messages).where(eq(messages.senderUserId, userId))
+  const deviceIds = await collectUserDeviceIds(db, userId)
+  const exclusiveDevices = await exclusiveDeviceIds(db, userId, deviceIds)
+  await wipeUserIdentityPresence(db, userId, row.user.email, exclusiveDevices)
+
+  // Ephemeral / identity-only rows — not business documents.
   await db.delete(editingSessions).where(eq(editingSessions.userId, userId))
   await db.delete(entityDeletionRequests).where(eq(entityDeletionRequests.submittedBy, userId))
   await db.delete(customerCredentialEmailLogs).where(eq(customerCredentialEmailLogs.sentBy, userId))
   await db.delete(customerCredentialEmailLogs).where(eq(customerCredentialEmailLogs.portalUserId, userId))
-  await db.delete(newVehicleRequests).where(eq(newVehicleRequests.submittedBy, userId))
-  await db.delete(serviceRequests).where(eq(serviceRequests.submittedBy, userId))
-  await db.delete(invoiceChangeRequests).where(eq(invoiceChangeRequests.submittedBy, userId))
-  await db.delete(vehicleChangeRequests).where(eq(vehicleChangeRequests.submittedBy, userId))
-  await db.delete(portalGeneralRequests).where(eq(portalGeneralRequests.submittedBy, userId))
-  await db.delete(documentChangeRequests).where(eq(documentChangeRequests.submittedBy, userId))
 
   await nullifyUserAttribution(db, userId)
 
-  // Delete user's sessions (cascade should handle this, but be explicit)
   await db.delete(sessions).where(eq(sessions.userId, userId))
-
-  // Delete user's permission overrides (cascade should handle this, but be explicit)
   await db.delete(userPermissionOverrides).where(eq(userPermissionOverrides.userId, userId))
-
-  // Finally, delete the user
   await db.delete(users).where(eq(users.id, userId))
 
   return { id: userId, snapshot }

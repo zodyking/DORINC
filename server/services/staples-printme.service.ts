@@ -45,7 +45,7 @@ export interface StaplesPrintJobView {
   readyAt: string | null
   expiresAt: string | null
   createdAt: string
-  createdBy: string
+  createdBy: string | null
   createdByName: string | null
   printMeTo: string
   delivered: boolean

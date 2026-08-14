@@ -63,4 +63,16 @@ describe('migration journal', () => {
     expect(sql).toContain('silent_developer_mode')
     expect(sql).toContain('IF NOT EXISTS')
   })
+
+  it('lets hard-delete keep service logs and messages by detaching the person', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0078_hard_delete_detach_submitter.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('service_logs')
+    expect(sql).toContain('ALTER COLUMN "submitted_by" DROP NOT NULL')
+    expect(sql).toContain('ON DELETE SET NULL')
+    expect(sql).toContain('messages_sender_user_id_users_id_fk')
+    expect(sql).toContain('staples_print_jobs')
+  })
 })
