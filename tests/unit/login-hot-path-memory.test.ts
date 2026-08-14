@@ -17,9 +17,18 @@ describe('post-login hot path must not N+1 or load blobs', () => {
     const end = src.indexOf('export async function listStaffUsers')
     const fn = src.slice(start, end)
     expect(fn).toContain('SELECT COUNT(*)::text AS value')
+    expect(fn).toContain('COALESCE(cp.last_read_at, cp.joined_at)')
+    expect(fn).not.toContain('last_read_at IS NULL')
     expect(fn).not.toContain('syncTeamChatParticipants')
     expect(fn).not.toContain('countUnreadSince')
     expect(fn).not.toContain('for (const row of participantRows)')
+  })
+
+  it('does not count the whole inbox as unread for a brand-new staff user', () => {
+    const src = readFileSync(resolve('server/services/email-inbox.service.ts'), 'utf8')
+    const fn = src.slice(src.indexOf('export async function countEmailUnread'))
+    expect(fn).toContain('COALESCE(r.last_read_at, u.created_at)')
+    expect(fn).not.toContain('r.last_read_at IS NULL')
   })
 
   it('does not select email html_body on the message list path', () => {

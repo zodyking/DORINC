@@ -72,8 +72,8 @@ export async function syncTeamChatParticipants(pool, conversationId) {
   const toAdd = eligibleIds.filter(id => !existingIds.has(id))
   for (const userId of toAdd) {
     await pool.query(
-      `INSERT INTO conversation_participants (conversation_id, user_id)
-       VALUES ($1, $2)
+      `INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
+       VALUES ($1, $2, now())
        ON CONFLICT (conversation_id, user_id) DO NOTHING`,
       [conversationId, userId],
     )

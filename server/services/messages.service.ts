@@ -304,7 +304,7 @@ export async function listConversations(db: Db, filter: ListConversationsFilter)
         ON cp.conversation_id = m.conversation_id AND cp.user_id = ${filter.userId}
       WHERE m.conversation_id IN (${sql.join(pageDmIds.map(id => sql`${id}`), sql`, `)})
         AND m.sender_user_id <> ${filter.userId}
-        AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+        AND m.created_at > COALESCE(cp.last_read_at, cp.joined_at)
       GROUP BY m.conversation_id
     `)
     for (const row of unreadResult.rows) {
@@ -586,7 +586,7 @@ export async function getUnreadCount(db: Db, userId: string) {
     WHERE cp.user_id = ${userId}
       AND c.type IN ('dm', 'team')
       AND m.sender_user_id <> ${userId}
-      AND (cp.last_read_at IS NULL OR m.created_at > cp.last_read_at)
+      AND m.created_at > COALESCE(cp.last_read_at, cp.joined_at)
   `)
   return Number(result.rows[0]?.value ?? 0)
 }

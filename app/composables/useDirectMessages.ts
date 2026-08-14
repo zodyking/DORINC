@@ -119,7 +119,11 @@ export function useDirectMessages() {
     return merged
   }
 
-  const canUseMessages = computed(() => auth.can('messages.read.own'))
+  const canUseMessages = computed(() => (
+    auth.can('messages.read.own')
+    && auth.user?.mustChangePassword !== true
+    && !auth.announcementGate?.locked
+  ))
   const activeConversation = computed(() =>
     conversations.value.find(c => c.id === activeConversationId.value) ?? null,
   )

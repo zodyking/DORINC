@@ -24,7 +24,6 @@ const menuOpen = ref(false)
 const notifOpen = ref(false)
 
 const dm = useDirectMessages()
-const canUseMessages = computed(() => auth.can('messages.read.own'))
 
 interface NavItem {
   label: string
@@ -62,6 +61,11 @@ const isSuperAdmin = computed(() => auth.can('system.admin.all'))
 const canViewBilling = computed(() => auth.can('billing.read.all'))
 const announcementLocked = computed(() => auth.announcementGate?.locked ?? false)
 const passwordLocked = computed(() => auth.user?.mustChangePassword === true)
+const canUseMessages = computed(() => (
+  auth.can('messages.read.own')
+  && !passwordLocked.value
+  && !announcementLocked.value
+))
 
 // Counts become live once list APIs land (Phase 1)
 const nav = computed<NavSection[]>(() => {

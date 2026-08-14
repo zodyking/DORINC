@@ -105,7 +105,7 @@ export async function syncTeamChatParticipants(db: Db) {
   const toAdd = eligibleIds.filter(id => !existingIds.has(id))
   if (toAdd.length) {
     await db.insert(conversationParticipants).values(
-      toAdd.map(userId => ({ conversationId, userId })),
+      toAdd.map(userId => ({ conversationId, userId, lastReadAt: new Date() })),
     )
   }
 
@@ -235,6 +235,7 @@ export async function getTeamConversationSummary(db: Db, userId: string) {
 
   const [participant] = await db.select({
     lastReadAt: conversationParticipants.lastReadAt,
+    joinedAt: conversationParticipants.joinedAt,
   })
     .from(conversationParticipants)
     .where(and(
@@ -256,7 +257,7 @@ export async function getTeamConversationSummary(db: Db, userId: string) {
     .orderBy(desc(messages.createdAt))
     .limit(1)
 
-  const lastReadAt = participant.lastReadAt
+  const lastReadAt = participant.lastReadAt ?? participant.joinedAt
   let unreadCount = 0
   if (lastMessage && lastMessage.senderUserId !== userId) {
     if (!lastReadAt || lastMessage.createdAt > lastReadAt) {

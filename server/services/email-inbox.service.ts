@@ -556,8 +556,9 @@ export async function listEmailConversations(db: Db, filter: {
     FROM ${messages} m
     LEFT JOIN ${emailConversationReads} r
       ON r.conversation_id = m.conversation_id AND r.user_id = ${filter.userId}
+    INNER JOIN ${users} u ON u.id = ${filter.userId}
     WHERE m.conversation_id IN (${sql.join(convIds.map(id => sql`${id}`), sql`, `)})
-      AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+      AND m.created_at > COALESCE(r.last_read_at, u.created_at)
     GROUP BY m.conversation_id
   `)
   const unreadByConv = new Map(
@@ -1232,15 +1233,17 @@ export async function listCustomerEmailRecipients(db: Db, q?: string) {
 export async function countEmailUnread(db: Db, userId: string): Promise<number> {
   if (!(await isEmailInboxReady(db))) return 0
 
-  // One aggregate — the previous per-thread loop issued 2N queries on every
-  // 4s unread poll and could stall the web pool until Node OOMed.
+  // Floor unread at the user's created_at so a recreated/new staff member
+  // does not count the entire historical inbox (LEFT JOIN miss → last_read_at
+  // NULL used to match every message and stall the web pool).
   const result = await db.execute<{ value: string }>(sql`
     SELECT COUNT(*)::text AS value
     FROM ${emailThreads} t
     INNER JOIN ${messages} m ON m.conversation_id = t.conversation_id
+    INNER JOIN ${users} u ON u.id = ${userId}
     LEFT JOIN ${emailConversationReads} r
-      ON r.conversation_id = t.conversation_id AND r.user_id = ${userId}
-    WHERE r.last_read_at IS NULL OR m.created_at > r.last_read_at
+      ON r.conversation_id = t.conversation_id AND r.user_id = u.id
+    WHERE m.created_at > COALESCE(r.last_read_at, u.created_at)
   `)
   return Number(result.rows[0]?.value ?? 0)
 }
