@@ -15,7 +15,8 @@ describe('login cookie prompt', () => {
     expect(screen).toContain('/api/auth/session-status')
     expect(screen).toContain('requestFirstPartyCookieAccess')
     expect(prompt).toContain('Allow cookies to stay signed in')
-    expect(prompt).toContain('Previous sign-in was cleared')
+    expect(prompt).toContain('Sign-in was cleared')
+    expect(prompt).toContain('A recent session or old account was still on this device')
     expect(prompt).toContain('role="dialog"')
   })
 
