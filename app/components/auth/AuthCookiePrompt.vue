@@ -16,13 +16,13 @@ const showHow = ref(false)
 const title = computed(() =>
   props.mode === 'blocked'
     ? 'Allow cookies to stay signed in'
-    : 'Previous sign-in was cleared',
+    : 'Sign-in was cleared',
 )
 
 const message = computed(() =>
   props.mode === 'blocked'
     ? `${BRAND_NAME} keeps you signed in with a cookie on this device. If cookies are blocked, sign-in cannot finish.`
-    : 'This phone still had a sign-in ticket from an old or expired account. It was removed. Sign in again to continue.',
+    : 'A recent session or old account was still on this device. Sign in again.',
 )
 </script>
 
