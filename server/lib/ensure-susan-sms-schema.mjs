@@ -10,9 +10,13 @@ CREATE TABLE IF NOT EXISTS "susan_sms_threads" (
   "phone" text NOT NULL,
   "messages" jsonb DEFAULT '[]'::jsonb NOT NULL,
   "last_inbound_message_id" text,
+  "pending_action" jsonb,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "susan_sms_threads_phone_idx" ON "susan_sms_threads" USING btree ("phone");
+`)
+  await pool.query(`
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "pending_action" jsonb;
 `)
 }

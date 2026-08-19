@@ -29,6 +29,7 @@ import {
 import { AI_ASSISTANT_NAME } from '../../shared/ai-assistant'
 import { BRAND_NAME } from '../../shared/brand'
 import { splitPersonName } from '../../shared/format/person-name'
+import type { SusanSmsPendingAction } from '../../shared/susan-sms-actions'
 import {
   filterSusanHelpToolsForAuth,
   loadSusanAuthByUserId,
@@ -51,6 +52,18 @@ const HELP_TOOL_INSTRUCTIONS = [
   'For simple greetings or acknowledgements, reply directly without tools.',
 ].join(' ')
 
+const HELP_SMS_TOOL_INSTRUCTIONS = [
+  'You have tools. For product/how-to questions, call get_app_knowledge before answering.',
+  'For questions about real records, call the read-only lookup tools available to you (invoice / service log / customer / catalog as permitted).',
+  'On SMS you can also prepare actions: send_invoice, send_estimate, send_email. Those tools only preview — never claim you already sent. Tell the staffer to reply YES to send or NO to cancel.',
+  'If they ask what you can do, want a menu, or say help/actions, call list_sms_actions.',
+  'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats.',
+  'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
+  'You may call multiple tools in one turn when needed, then answer from the tool results.',
+  'Do not invent routes, buttons, permissions, invoice numbers, totals, or other record fields that are not in tool results or the user message.',
+  'For simple greetings, reply directly without tools and mention they can text MENU for actions.',
+].join(' ')
+
 const HELP_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant.`,
   'You explain how to use the application and can look up invoices, service logs, customers, and catalog items the staff member is allowed to see.',
@@ -69,16 +82,17 @@ const HELP_SYSTEM_PROMPT = [
 const HELP_SMS_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant — the same helper as the in-app Platform Assistant chat.`,
   'Speak in first person as Susan. Never refer to yourself as "SMS chat", "SMS chat with Susan", or any SMS product feature.',
-  'You help with the app and can look up invoices, service logs, customers, and catalog items the staff member is allowed to see.',
+  'You help with the app, look up invoices/service logs/customers/catalog, and can prepare a few actions from SMS: send/resend an invoice, send an estimate, or email someone.',
   'Address the staff member by their first name when greeting (e.g. "Hi Alex!") and when it feels natural.',
-  'You NEVER modify, create, delete, send, approve, or pay records. Lookups are read-only via tools only.',
+  'Action tools only prepare a preview. Never say you already sent, emailed, or changed a record. The staffer confirms with YES.',
+  'You cannot record payments, void records, approve deletions, change settings, or create invoices.',
   'Do not invent customer, invoice, service log, or catalog data — only report what tools return.',
-  HELP_TOOL_INSTRUCTIONS,
+  HELP_SMS_TOOL_INSTRUCTIONS,
   'Reply in plain text only for SMS — no HTML, no markdown headings, no code fences, no bold markers.',
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
   'Lists and how-to steps: one item per block, with a blank line between items. Never pack 1) 2) 3) into one paragraph.',
   'Format each list item as "1) Short title" then a new line with one short detail. Max 5 items.',
-  'For record lookups: 2–4 short factual lines. Skip filler. For simple hellos, greet by name and offer to help with the app.',
+  'For record lookups: 2–4 short factual lines. Skip filler. For simple hellos, greet by name and mention they can text MENU.',
 ].join(' ')
 
 function firstNameFrom(userName?: string | null): string {
@@ -96,6 +110,7 @@ export interface PlatformHelpResult {
   answer: string
   source: 'ai' | 'fallback'
   capped: boolean
+  pendingAction?: SusanSmsPendingAction | null
 }
 
 export interface PlatformHelpStatus {
@@ -170,6 +185,16 @@ function buildUserTurn(
   ]
 }
 
+function pendingFromTools(
+  toolResults: Array<{ pendingAction?: SusanSmsPendingAction | null }>,
+): SusanSmsPendingAction | null {
+  for (let i = toolResults.length - 1; i >= 0; i--) {
+    const pending = toolResults[i]?.pendingAction
+    if (pending) return pending
+  }
+  return null
+}
+
 function synthesizeAnswerFromTools(
   toolResults: Array<{ name: string, ok: boolean, content: string }>,
   channel: PlatformHelpChannel,
@@ -206,7 +231,7 @@ async function callOpenRouterHelp(
     userName?: string | null
     userId: string
   },
-): Promise<{ answer: string, promptTokens: number, completionTokens: number }> {
+): Promise<{ answer: string, promptTokens: number, completionTokens: number, pendingAction?: SusanSmsPendingAction | null }> {
   const channel = input.channel === 'sms' ? 'sms' : 'web'
   const historyMessages = (input.history ?? []).slice(-40).map(row => ({
     role: row.role as 'user' | 'assistant',
@@ -214,7 +239,7 @@ async function callOpenRouterHelp(
   }))
 
   const auth = await loadSusanAuthByUserId(db, input.userId)
-  const tools = filterSusanHelpToolsForAuth(auth) as unknown as Array<Record<string, unknown>>
+  const tools = filterSusanHelpToolsForAuth(auth, { channel }) as unknown as Array<Record<string, unknown>>
 
   const systemPrompt = channel === 'sms' ? HELP_SMS_SYSTEM_PROMPT : HELP_SYSTEM_PROMPT
   const messages: OpenRouterChatMessage[] = [
@@ -237,7 +262,7 @@ async function callOpenRouterHelp(
   let promptTokens = 0
   let completionTokens = 0
   let finalContent = ''
-  let lastToolResults: Array<{ name: string, ok: boolean, content: string }> = []
+  let lastToolResults: Array<{ name: string, ok: boolean, content: string, pendingAction?: SusanSmsPendingAction | null }> = []
 
   for (let round = 0; round < HELP_TOOL_MAX_ROUNDS; round++) {
     const result = await openRouterChat(
@@ -326,6 +351,7 @@ async function callOpenRouterHelp(
         answer: formatHelpAnswer(synthesized, channel),
         promptTokens,
         completionTokens,
+        pendingAction: pendingFromTools(lastToolResults),
       }
     }
     throw new OpenRouterServiceError('EMPTY_RESPONSE', 'OpenRouter returned no content')
@@ -335,6 +361,7 @@ async function callOpenRouterHelp(
     answer: formatHelpAnswer(finalContent, channel),
     promptTokens,
     completionTokens,
+    pendingAction: pendingFromTools(lastToolResults),
   }
 }
 
@@ -438,7 +465,7 @@ export async function askPlatformHelp(
           }
         }
         if (!helpResult) throw lastHelpErr
-        const { answer, promptTokens, completionTokens } = helpResult
+        const { answer, promptTokens, completionTokens, pendingAction } = helpResult
         const estimatedCostUsd = estimateTokenCostUsd(promptTokens, completionTokens)
         try {
           await logAiUsage(db, {
@@ -453,7 +480,7 @@ export async function askPlatformHelp(
         catch (usageErr) {
           console.error('[platform-help] usage log failed:', (usageErr as Error).message)
         }
-        return { answer, source: 'ai', capped: false }
+        return { answer, source: 'ai', capped: false, pendingAction: pendingAction ?? null }
       }
     }
     catch (e) {

@@ -11,6 +11,10 @@ export type AiToolName =
   | 'lookup_service_log'
   | 'lookup_customer'
   | 'search_catalog'
+  | 'list_sms_actions'
+  | 'send_invoice'
+  | 'send_estimate'
+  | 'send_email'
 
 export type OpenAiToolDefinition = {
   type: 'function'
@@ -58,6 +62,104 @@ export type SearchCatalogArgs = {
   itemType?: 'part' | 'labor' | 'fee' | 'package' | 'rate'
   limit?: number
 }
+
+export const SUSAN_SMS_ACTION_TOOLS: OpenAiToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'list_sms_actions',
+      description:
+        'Show the numbered SMS action menu (send/resend invoice, send estimate, email someone, lookups). Use when the user asks what you can do, wants a menu, or says help/actions.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_invoice',
+      description:
+        'Prepare sending or resending an invoice PDF by email. Always returns a preview — never actually sends. The SMS system asks the user to reply YES. Pass invoiceId (UUID) or query (INV-000713, 713, customer name). Optional recipientEmail override.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: {
+            type: 'string',
+            description: 'Invoice UUID when known.',
+          },
+          query: {
+            type: 'string',
+            description: 'Invoice label (INV-000713), bare number (713), or customer name.',
+          },
+          recipientEmail: {
+            type: 'string',
+            description: 'Optional email override. Default is the customer billing email.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_estimate',
+      description:
+        'Prepare sending a draft estimate to the customer. Always returns a preview — never actually sends. The SMS system asks the user to reply YES. Pass estimateId (UUID) or query (EST-000042, 42, customer name).',
+      parameters: {
+        type: 'object',
+        properties: {
+          estimateId: {
+            type: 'string',
+            description: 'Estimate UUID when known.',
+          },
+          query: {
+            type: 'string',
+            description: 'Estimate label (EST-000042), bare number, or customer name.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_email',
+      description:
+        'Prepare a new outbound email to a customer or external address. Always returns a preview — never actually sends. The SMS system asks the user to reply YES. Need toEmail or customerQuery/customerId, plus subject and body.',
+      parameters: {
+        type: 'object',
+        properties: {
+          toEmail: {
+            type: 'string',
+            description: 'Recipient email address.',
+          },
+          customerId: {
+            type: 'string',
+            description: 'Customer UUID when emailing a known customer.',
+          },
+          customerQuery: {
+            type: 'string',
+            description: 'Customer name search when id/email is unknown.',
+          },
+          subject: {
+            type: 'string',
+            description: 'Email subject.',
+          },
+          body: {
+            type: 'string',
+            description: 'Plain-text email body.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+]
 
 export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
   {
