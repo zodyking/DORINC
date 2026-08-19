@@ -168,6 +168,18 @@ export async function getEstimate(db: Db, id: string) {
   return row
 }
 
+/** Resolve a display number like 42 (from EST-000042) to the estimate row id. */
+export async function findEstimateIdByNumber(db: Db, estimateNumber: number): Promise<string | null> {
+  const n = Math.floor(Number(estimateNumber))
+  if (!Number.isFinite(n) || n <= 0) return null
+  const [row] = await db
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.estimateNumber, n))
+    .limit(1)
+  return row?.id ?? null
+}
+
 export async function listEstimateLineItems(db: Db, estimateId: string) {
   return db.select().from(estimateLineItems)
     .where(eq(estimateLineItems.estimateId, estimateId))

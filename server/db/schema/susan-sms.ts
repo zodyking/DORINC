@@ -1,5 +1,6 @@
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { users } from './auth'
+import type { SusanSmsPendingAction } from '../../../shared/susan-sms-actions'
 
 export interface SusanSmsHistoryMessage {
   role: 'user' | 'assistant'
@@ -17,6 +18,7 @@ export const susanSmsThreads = pgTable('susan_sms_threads', {
   phone: text('phone').notNull(),
   messages: jsonb('messages').$type<SusanSmsHistoryMessage[]>().notNull().default([]),
   lastInboundMessageId: text('last_inbound_message_id'),
+  pendingAction: jsonb('pending_action').$type<SusanSmsPendingAction | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

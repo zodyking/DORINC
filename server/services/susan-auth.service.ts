@@ -14,7 +14,12 @@ import {
   type PermissionOverrides,
   type PermissionUser,
 } from '../../shared/permissions/evaluate'
-import { SUSAN_HELP_TOOLS, type AiToolName, type OpenAiToolDefinition } from '../../shared/ai-tools'
+import {
+  SUSAN_HELP_TOOLS,
+  SUSAN_SMS_ACTION_TOOLS,
+  type AiToolName,
+  type OpenAiToolDefinition,
+} from '../../shared/ai-tools'
 
 export type SusanAuthContext = {
   user: PermissionUser & { name: string }
@@ -123,13 +128,28 @@ const TOOL_PERMISSIONS: Partial<Record<AiToolName, PermissionKey | PermissionKey
   lookup_customer: 'customers.read.all',
   search_catalog: 'catalog.read.all',
   lookup_service_log: ['service_logs.read.all', 'service_logs.read.own'],
+  send_invoice: 'invoices.send.all',
+  send_estimate: 'estimates.manage.all',
+  send_email: 'messages.send.own',
+}
+
+export type SusanHelpToolFilterOpts = {
+  /** Mutating SMS action tools are SMS-only. Web Susan stays read-only. */
+  channel?: 'web' | 'sms'
 }
 
 /** Only expose tools the staffer can actually use (avoids wasted tool rounds). */
-export function filterSusanHelpToolsForAuth(auth: SusanAuthContext | null): OpenAiToolDefinition[] {
-  return SUSAN_HELP_TOOLS.filter((tool) => {
+export function filterSusanHelpToolsForAuth(
+  auth: SusanAuthContext | null,
+  opts: SusanHelpToolFilterOpts = {},
+): OpenAiToolDefinition[] {
+  const catalog = opts.channel === 'sms'
+    ? [...SUSAN_HELP_TOOLS, ...SUSAN_SMS_ACTION_TOOLS]
+    : SUSAN_HELP_TOOLS
+
+  return catalog.filter((tool) => {
     const name = tool.function.name
-    if (name === 'get_app_knowledge') return true
+    if (name === 'get_app_knowledge' || name === 'list_sms_actions') return true
     if (!auth) return false
     const required = TOOL_PERMISSIONS[name]
     if (!required) return false

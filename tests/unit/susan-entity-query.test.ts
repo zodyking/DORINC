@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractInvoiceNumber,
   extractServiceLogNumber,
+  extractEstimateNumber,
   inferInvoiceStatus,
   inferInvoiceSort,
   inferServiceLogStatus,
@@ -24,6 +25,13 @@ describe('susan entity query helpers', () => {
     expect(extractInvoiceNumber('invoice #713')).toBe(713)
     expect(extractInvoiceNumber('713')).toBe(713)
     expect(extractInvoiceNumber('Acme Transit')).toBeNull()
+  })
+
+  it('extracts EST numbers from phrases', () => {
+    expect(extractEstimateNumber('EST-000042')).toBe(42)
+    expect(extractEstimateNumber('est 42')).toBe(42)
+    expect(extractEstimateNumber('estimate #9')).toBe(9)
+    expect(extractEstimateNumber('Acme Transit')).toBeNull()
   })
 
   it('extracts SL numbers from phrases', () => {
@@ -117,5 +125,27 @@ describe('permission-filtered Susan tools', () => {
     expect(names).toContain('lookup_customer')
     expect(names).not.toContain('lookup_invoice')
     expect(names).not.toContain('search_catalog')
+    expect(names).not.toContain('send_invoice')
+  })
+
+  it('adds SMS action tools only on the sms channel', () => {
+    const grants = [
+      'ai.help.all',
+      'invoices.read.all',
+      'invoices.send.all',
+      'estimates.manage.all',
+      'messages.send.own',
+      'customers.read.all',
+      'catalog.read.all',
+      'service_logs.read.all',
+    ]
+    const web = filterSusanHelpToolsForAuth(auth(grants)).map(t => t.function.name)
+    const sms = filterSusanHelpToolsForAuth(auth(grants), { channel: 'sms' }).map(t => t.function.name)
+    expect(web).not.toContain('send_invoice')
+    expect(web).not.toContain('list_sms_actions')
+    expect(sms).toContain('list_sms_actions')
+    expect(sms).toContain('send_invoice')
+    expect(sms).toContain('send_estimate')
+    expect(sms).toContain('send_email')
   })
 })
