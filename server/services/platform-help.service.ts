@@ -76,8 +76,9 @@ const HELP_SMS_SYSTEM_PROMPT = [
   HELP_TOOL_INSTRUCTIONS,
   'Reply in plain text only for SMS — no HTML, no markdown headings, no code fences, no bold markers.',
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
-  'For how-to: numbered steps "1) …". For record lookups: 2–4 short factual lines.',
-  'Prefer 3–5 steps for procedures. Skip filler. For simple hellos, greet by name and offer to help with the app.',
+  'Lists and how-to steps: one item per block, with a blank line between items. Never pack 1) 2) 3) into one paragraph.',
+  'Format each list item as "1) Short title" then a new line with one short detail. Max 5 items.',
+  'For record lookups: 2–4 short factual lines. Skip filler. For simple hellos, greet by name and offer to help with the app.',
 ].join(' ')
 
 function firstNameFrom(userName?: string | null): string {

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   formatPlatformHelpForSms,
@@ -75,6 +77,32 @@ describe('formatPlatformHelpForSms', () => {
     expect(sms).toMatch(/1\) Explain navigation/)
     expect(sms).toMatch(/2\) Walk through workflows/)
     expect(sms).toContain('Hi Alex!')
+    expect(sms).toMatch(/1\) Explain navigation\n\n2\) Walk through workflows/)
+  })
+
+  it('breaks a packed feature dump into titled blocks with blank lines', () => {
+    const sms = formatPlatformHelpForSms(
+      'Brandon, some useful DORINC features include: '
+      + '1. AI service-log extraction: upload photos of handwritten or printed logs, review the results, and convert accepted lines into an invoice. '
+      + '2. QR phone uploads: add service-log photos directly from a phone. '
+      + '3. Invoice tools: packages, catalog-based line items, PDF previews, payment recording, and payment reconciliation. '
+      + '4. Customer portal: customers can access their own invoices and account information. '
+      + '5. Fleet records: organize customers with linked vehicles or units. '
+      + '6. Custom templates: design invoice PDFs and edit email or notification templates. '
+      + '7. Dashboard queues: quickly find items needing review or attention.',
+    )
+    expect(sms).toContain('Brandon, some useful DORINC features include:')
+    expect(sms).toContain('1) AI service-log extraction\nUpload photos of handwritten or printed logs')
+    expect(sms).toContain('2) QR phone uploads\nAdd service-log photos directly from a phone.')
+    expect(sms).toContain('4) Customer portal\nCustomers can access their own invoices')
+    expect(sms).toMatch(/1\) AI service-log extraction[\s\S]+\n\n2\) QR phone uploads/)
+    expect(sms).toMatch(/3\) Invoice tools\nPackages/)
+    expect(sms.split('\n\n').length).toBeGreaterThan(6)
+  })
+
+  it('puts a blank line between already-numbered SMS items', () => {
+    const sms = formatPlatformHelpForSms('Try this:\n1. Open Invoices\n2. Tap New Invoice\n3. Save')
+    expect(sms).toBe('Try this:\n\n1) Open Invoices\n\n2) Tap New Invoice\n\n3) Save')
   })
 
   it('does not leave SMS-chat feature wording in the reply', () => {
@@ -87,6 +115,15 @@ describe('formatPlatformHelpForSms', () => {
     const sms = formatPlatformHelpForSms('A'.repeat(2000), 200)
     expect(sms.length).toBeLessThanOrEqual(200)
     expect(sms.endsWith('…')).toBe(true)
+  })
+})
+
+describe('SMS help prompt keeps lists scannable', () => {
+  it('tells the model not to pack numbered items into one paragraph', () => {
+    const src = readFileSync(resolve('server/services/platform-help.service.ts'), 'utf8')
+    expect(src).toContain('Never pack 1) 2) 3) into one paragraph')
+    expect(src).toContain('one item per block, with a blank line between items')
+    expect(src).toContain('Max 5 items')
   })
 })
 
