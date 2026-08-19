@@ -61,7 +61,7 @@ const HELP_SMS_TOOL_INSTRUCTIONS = [
   'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
   'You may call multiple tools in one turn when needed, then answer from the tool results.',
   'Do not invent routes, buttons, permissions, invoice numbers, totals, or other record fields that are not in tool results or the user message.',
-  'For simple greetings, reply directly without tools and mention they can text MENU for actions.',
+  'For simple greetings, reply directly without tools and mention they can text Menu for actions.',
 ].join(' ')
 
 const HELP_SYSTEM_PROMPT = [
@@ -92,7 +92,7 @@ const HELP_SMS_SYSTEM_PROMPT = [
   'Keep replies short and scannable on a phone. Aim under 600 characters when possible; never exceed ~1400.',
   'Lists and how-to steps: one item per block, with a blank line between items. Never pack 1) 2) 3) into one paragraph.',
   'Format each list item as "1) Short title" then a new line with one short detail. Max 5 items.',
-  'For record lookups: 2–4 short factual lines. Skip filler. For simple hellos, greet by name and mention they can text MENU.',
+  'For record lookups: 2–4 short factual lines. Skip filler. For simple hellos, greet by name and mention they can text Menu.',
 ].join(' ')
 
 function firstNameFrom(userName?: string | null): string {

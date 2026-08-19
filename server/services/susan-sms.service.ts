@@ -214,9 +214,20 @@ export async function handleInboundSusanSms(
   let answerText: string
   let pendingAction: SusanSmsPendingAction | null
 
-  if (actionTurn.handled && actionTurn.reply) {
-    answerText = actionTurn.reply
-    pendingAction = actionTurn.pendingAction ?? null
+  if (actionTurn.handled) {
+    pendingAction = actionTurn.pendingAction ?? thread.pendingAction ?? null
+    if (!actionTurn.reply) {
+      await saveHistory(db, {
+        userId: user.id,
+        phone: from,
+        lastInboundMessageId: input.messageId ?? null,
+        pendingAction,
+        messages: thread.messages,
+      })
+      console.info('[susan-sms] step: carrier keyword ignored', { userId: user.id })
+      return { handled: true, reason: 'carrier_keyword', userId: user.id }
+    }
+    answerText = formatPlatformHelpForSms(actionTurn.reply) || actionTurn.reply
     console.info('[susan-sms] step: action menu', {
       userId: user.id,
       pendingKind: pendingAction?.kind ?? null,
