@@ -8,6 +8,10 @@ import {
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 import { formatPlatformHelpForSms } from '../../shared/platform-help'
 import { parseSusanSmsPendingAction, type SusanSmsPendingAction } from '../../shared/susan-sms-actions'
+import {
+  SUSAN_SMS_HISTORY_LIMIT,
+  susanSmsIdleThreadPatch,
+} from '../../shared/susan-sms-idle.mjs'
 import { askPlatformHelp } from './platform-help.service'
 import { handleSusanSmsActionTurn } from './susan-sms-actions.service'
 import {
@@ -15,8 +19,6 @@ import {
   isQuoSmsEnabled,
   sendQuoSms,
 } from './quo.service'
-
-const HISTORY_LIMIT = 20
 
 function phoneDigits(value: string | null | undefined): string {
   return String(value ?? '').replace(/\D/g, '')
@@ -104,10 +106,12 @@ async function saveHistory(
     messages: SusanSmsHistoryMessage[]
     lastInboundMessageId?: string | null
     pendingAction?: SusanSmsPendingAction | null
+    idleKind?: 'user_reply' | 'carrier'
   },
 ) {
   const now = new Date()
-  const messages = input.messages.slice(-HISTORY_LIMIT)
+  const messages = input.messages.slice(-SUSAN_SMS_HISTORY_LIMIT)
+  const idlePatch = susanSmsIdleThreadPatch(input.idleKind ?? 'user_reply', now)
   const [existing] = await db
     .select({ id: susanSmsThreads.id })
     .from(susanSmsThreads)
@@ -121,6 +125,7 @@ async function saveHistory(
       lastInboundMessageId: input.lastInboundMessageId ?? null,
       pendingAction: input.pendingAction ?? null,
       updatedAt: now,
+      ...idlePatch,
     }).where(eq(susanSmsThreads.id, existing.id))
     return
   }
@@ -133,6 +138,7 @@ async function saveHistory(
     pendingAction: input.pendingAction ?? null,
     createdAt: now,
     updatedAt: now,
+    ...idlePatch,
   })
 }
 
@@ -223,6 +229,7 @@ export async function handleInboundSusanSms(
         lastInboundMessageId: input.messageId ?? null,
         pendingAction,
         messages: thread.messages,
+        idleKind: 'carrier',
       })
       console.info('[susan-sms] step: carrier keyword ignored', { userId: user.id })
       return { handled: true, reason: 'carrier_keyword', userId: user.id }
@@ -260,6 +267,7 @@ export async function handleInboundSusanSms(
     phone: from,
     lastInboundMessageId: input.messageId ?? null,
     pendingAction,
+    idleKind: 'user_reply',
     messages: [
       ...thread.messages,
       { role: 'user', content: question, at: nowIso },

@@ -19,6 +19,10 @@ export const susanSmsThreads = pgTable('susan_sms_threads', {
   messages: jsonb('messages').$type<SusanSmsHistoryMessage[]>().notNull().default([]),
   lastInboundMessageId: text('last_inbound_message_id'),
   pendingAction: jsonb('pending_action').$type<SusanSmsPendingAction | null>(),
+  /** Last inbound that received a Susan reply. Idle timeout is 5 minutes from this. */
+  lastUserAt: timestamp('last_user_at', { withTimezone: true }),
+  /** Set when the idle-timeout SMS is sent (or STOP/carrier closes the session). */
+  idleClosedAt: timestamp('idle_closed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

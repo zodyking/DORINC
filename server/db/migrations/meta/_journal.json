@@ -540,6 +540,13 @@
       "when": 1787300000000,
       "tag": "0079_susan_sms_pending_action",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1787400000000,
+      "tag": "0080_susan_sms_idle_timeout",
+      "breakpoints": true
     }
   ]
 }
