@@ -17,18 +17,28 @@ import {
   parseSendInvoiceArgs,
   parseSusanSmsPendingAction,
   visibleSusanSmsMenuActions,
+  type SusanSmsActionResult,
   type SusanSmsMenuActionId,
   type SusanSmsPendingAction,
   type SusanSmsPickOption,
   SUSAN_SMS_MENU_ACTIONS,
 } from '../../shared/susan-sms-actions'
+import {
+  formatSmsMoney,
+  formatSmsStatus,
+  formatSusanSmsChoiceList,
+  formatSusanSmsCustomerChoiceLabel,
+  formatSusanSmsInvoiceChoiceLabel,
+  matchSusanSmsPickOption,
+  SUSAN_SMS_MORE_HINT,
+} from '../../shared/susan-sms-format'
 import { writeAudit } from './audit.service'
 import {
-  executeLookupCustomer,
-  executeLookupInvoice,
-  executeLookupServiceLog,
-  executeSearchCatalog,
-} from './ai-entity-tools.service'
+  lookupCustomerForSms,
+  lookupInvoiceForSms,
+  lookupServiceLogForSms,
+  searchCatalogForSms,
+} from './susan-sms-lookups.service'
 import {
   formatSusanPermissionDenial,
   loadSusanAuthByUserId,
@@ -60,11 +70,7 @@ import { getCustomer, listContacts, listCustomers } from './customers.service'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export type SusanSmsActionResult = {
-  ok: boolean
-  content: string
-  pendingAction?: SusanSmsPendingAction | null
-}
+export type { SusanSmsActionResult }
 
 export type SusanSmsActionTurnResult = {
   handled: boolean
@@ -74,13 +80,6 @@ export type SusanSmsActionTurnResult = {
 
 function isUuid(value: string | undefined | null): value is string {
   return !!value && UUID_RE.test(value.trim())
-}
-
-function money(value: unknown): string {
-  if (value == null || value === '') return '0.00'
-  const n = Number(value)
-  if (!Number.isFinite(n)) return String(value)
-  return n.toFixed(2)
 }
 
 function nowIso(): string {
@@ -94,7 +93,7 @@ function firstNameFrom(userName?: string | null): string {
 }
 
 function confirmText(preview: string): string {
-  return `${preview}\n\nReply YES to send, NO to cancel.`
+  return `${preview}\n\nReply YES to send, or Back.`
 }
 
 function menuForAuth(auth: SusanAuthContext, firstName?: string | null): string {
@@ -112,7 +111,7 @@ function startWizard(action: SusanSmsMenuActionId): SusanSmsActionResult {
   const step = action === 'send_email' ? 'await_to' as const : 'await_query' as const
   return {
     ok: true,
-    content: def?.prompt ?? 'Reply with the details, or CANCEL.',
+    content: def?.prompt ?? 'Reply with the details, or Back.',
     pendingAction: {
       kind: 'wizard',
       action,
@@ -124,10 +123,9 @@ function startWizard(action: SusanSmsMenuActionId): SusanSmsActionResult {
 }
 
 function pickList(prompt: string, options: SusanSmsPickOption[], action: SusanSmsMenuActionId, data: Record<string, string> = {}): SusanSmsActionResult {
-  const lines = options.map(o => `${o.n} ${o.label}`)
   return {
     ok: true,
-    content: [prompt, '', ...lines, '', 'Reply with a number, or CANCEL.'].join('\n'),
+    content: formatSusanSmsChoiceList(prompt, options),
     pendingAction: {
       kind: 'wizard',
       action,
@@ -182,7 +180,7 @@ export async function previewSusanSmsSendInvoice(
     if (!id) {
       return {
         ok: true,
-        content: `No invoice found for INV-${String(invoiceNumber).padStart(6, '0')}. Try another number or CANCEL.`,
+        content: `No invoice found for INV-${String(invoiceNumber).padStart(6, '0')}. Try another number, or Back.`,
       }
     }
     return previewInvoiceById(db, id, args.recipientEmail)
@@ -198,7 +196,7 @@ export async function previewSusanSmsSendInvoice(
     pageSize: 5,
   })
   if (!listed.items.length) {
-    return { ok: true, content: `No invoices matched ${JSON.stringify(query)}. Try another search or CANCEL.` }
+    return { ok: true, content: `No invoices matched “${query}”. Try another search, or Back.` }
   }
   if (listed.items.length === 1) {
     return previewInvoiceById(db, listed.items[0]!.id, args.recipientEmail)
@@ -208,8 +206,11 @@ export async function previewSusanSmsSendInvoice(
     listed.items.map((row, i) => ({
       n: i + 1,
       id: row.id,
-      label: `${row.invoiceNumberFormatted} · ${row.customerName} · $${money(row.total)} [${row.status}]`,
-      extra: args.recipientEmail ? { recipientEmail: args.recipientEmail } : undefined,
+      label: formatSusanSmsInvoiceChoiceLabel(row),
+      extra: {
+        name: row.invoiceNumberFormatted,
+        ...(args.recipientEmail ? { recipientEmail: args.recipientEmail } : {}),
+      },
     })),
     'send_invoice',
     args.recipientEmail ? { recipientEmail: args.recipientEmail } : {},
@@ -235,7 +236,7 @@ async function previewInvoiceById(
       }
     }
     const verb = isInvoiceResendable(inv.status) ? 'resend' : 'send'
-    const preview = `I'll ${verb} ${inv.invoiceNumberFormatted} ($${money(inv.total)}, ${inv.status}) for ${inv.customerName} to ${recipient.email}.`
+    const preview = `I'll ${verb} ${inv.invoiceNumberFormatted} (${formatSmsMoney(inv.total)}, ${formatSmsStatus(inv.status)}) for ${inv.customerName} to ${recipient.email}.`
     return {
       ok: true,
       content: confirmText(preview),
@@ -280,7 +281,7 @@ export async function previewSusanSmsSendEstimate(
     if (!id) {
       return {
         ok: true,
-        content: `No estimate found for EST-${String(estimateNumber).padStart(6, '0')}. Try another number or CANCEL.`,
+        content: `No estimate found for EST-${String(estimateNumber).padStart(6, '0')}. Try another number, or Back.`,
       }
     }
     return previewEstimateById(db, id)
@@ -294,7 +295,7 @@ export async function previewSusanSmsSendEstimate(
     pageSize: 5,
   })
   if (!listed.items.length) {
-    return { ok: true, content: `No estimates matched ${JSON.stringify(query)}. Try another search or CANCEL.` }
+    return { ok: true, content: `No estimates matched “${query}”. Try another search, or Back.` }
   }
   if (listed.items.length === 1) {
     return previewEstimateById(db, listed.items[0]!.id)
@@ -304,7 +305,7 @@ export async function previewSusanSmsSendEstimate(
     listed.items.map((row, i) => ({
       n: i + 1,
       id: row.id,
-      label: `${row.estimateNumberFormatted} · ${row.customerName} · $${money(row.total)} [${row.status}]`,
+      label: `${row.estimateNumberFormatted}\n${row.customerName} · ${formatSmsMoney(row.total)} · ${formatSmsStatus(row.status)}`,
     })),
     'send_estimate',
   )
@@ -322,7 +323,7 @@ async function previewEstimateById(db: Db, estimateId: string): Promise<SusanSms
     }
     const recipient = await resolveInvoiceSendRecipient(db, est.customerId)
     const to = recipient?.email ? ` to ${recipient.email}` : ' (no billing email on file — send may not notify)'
-    const preview = `I'll send ${est.estimateNumberFormatted} ($${money(est.total)}) for ${est.customerName}${to}.`
+    const preview = `I'll send ${est.estimateNumberFormatted} (${formatSmsMoney(est.total)}) for ${est.customerName}${to}.`
     return {
       ok: true,
       content: confirmText(preview),
@@ -512,7 +513,7 @@ async function resolveEmailRecipient(
   if (!listed.items.length) {
     return {
       kind: 'result',
-      result: { ok: true, content: `No customers matched ${JSON.stringify(q)}. Try a name, an email, or CANCEL.` },
+      result: { ok: true, content: `No customers matched “${q}”. Try a name or email, or Back.` },
     }
   }
   if (listed.items.length > 1) {
@@ -523,7 +524,12 @@ async function resolveEmailRecipient(
         listed.items.map((row, i) => ({
           n: i + 1,
           id: row.id,
-          label: `${row.displayName}${row.email ? ` · ${row.email}` : ''}`,
+          label: formatSusanSmsCustomerChoiceLabel({
+            displayName: row.displayName,
+            email: row.email,
+            accountKind: row.accountKind,
+          }),
+          extra: { name: row.displayName },
         })),
         'send_email',
       ),
@@ -562,7 +568,7 @@ async function commitSendInvoice(
     const already = result.alreadyQueued ? ' Delivery was already in progress.' : ''
     return {
       ok: true,
-      content: `Queued. ${label} will go to ${result.recipient.email}.${already} Text MENU for more.`,
+      content: `Queued. ${label} will go to ${result.recipient.email}.${already}\n\n${SUSAN_SMS_MORE_HINT}`,
       pendingAction: null,
     }
   }
@@ -612,7 +618,7 @@ async function commitSendEstimate(
     const label = formatEstimateNumber(estimate.estimateNumber)
     return {
       ok: true,
-      content: `Sent. ${label} is now marked sent. Text MENU for more.`,
+      content: `Sent. ${label} is now marked sent.\n\n${SUSAN_SMS_MORE_HINT}`,
       pendingAction: null,
     }
   }
@@ -657,7 +663,7 @@ async function commitSendEmail(
     })
     return {
       ok: true,
-      content: `Sent. Email went to ${args.toEmail}. Text MENU for more.`,
+      content: `Sent. Email went to ${args.toEmail}.\n\n${SUSAN_SMS_MORE_HINT}`,
       pendingAction: null,
     }
   }
@@ -697,21 +703,12 @@ async function runLookup(
   userId: string,
   action: Exclude<SusanSmsMenuActionId, SusanSmsMutatingId>,
   query: string,
+  explicitId?: string,
 ): Promise<SusanSmsActionResult> {
-  if (action === 'lookup_invoice') {
-    const result = await executeLookupInvoice(db, userId, { query })
-    return { ok: result.ok, content: `${result.content}\n\nText MENU for more.`, pendingAction: null }
-  }
-  if (action === 'lookup_customer') {
-    const result = await executeLookupCustomer(db, userId, { query })
-    return { ok: result.ok, content: `${result.content}\n\nText MENU for more.`, pendingAction: null }
-  }
-  if (action === 'lookup_service_log') {
-    const result = await executeLookupServiceLog(db, userId, { query })
-    return { ok: result.ok, content: `${result.content}\n\nText MENU for more.`, pendingAction: null }
-  }
-  const result = await executeSearchCatalog(db, userId, { query })
-  return { ok: result.ok, content: `${result.content}\n\nText MENU for more.`, pendingAction: null }
+  if (action === 'lookup_invoice') return lookupInvoiceForSms(db, userId, query, explicitId)
+  if (action === 'lookup_customer') return lookupCustomerForSms(db, userId, query, explicitId)
+  if (action === 'lookup_service_log') return lookupServiceLogForSms(db, userId, query, explicitId)
+  return searchCatalogForSms(db, userId, query)
 }
 
 async function continueWizard(
@@ -723,12 +720,19 @@ async function continueWizard(
   const action = pending.action
 
   if (pending.step === 'pick') {
-    const n = Number(text.replace(/[.)]/g, ''))
-    const option = pending.options?.find(o => o.n === n)
+    const matched = matchSusanSmsPickOption(pending.options, text)
+    if (matched === 'ambiguous') {
+      return {
+        ok: true,
+        content: formatSusanSmsChoiceList('A few of those match. Reply with a number.', pending.options ?? []),
+        pendingAction: pending,
+      }
+    }
+    const option = matched
     if (!option) {
       return {
         ok: true,
-        content: 'Reply with a number from the list, or CANCEL.',
+        content: 'Reply with a number or name from the list, or Back.',
         pendingAction: pending,
       }
     }
@@ -748,7 +752,7 @@ async function continueWizard(
         body: pending.data.body,
       })
     }
-    return runLookup(db, userId, action, option.id)
+    return runLookup(db, userId, action, '', option.id)
   }
 
   if (action === 'send_invoice') {
@@ -821,7 +825,7 @@ export async function handleSusanSmsActionTurn(
     if (cls.type === 'confirm' || cls.type === 'reject' || cls.type === 'confirm_needed' || cls.type === 'wizard_input') {
       return {
         handled: true,
-        reply: 'That timed out. Text MENU to start over.',
+        reply: 'That timed out. Text Menu to start over.',
         pendingAction: null,
       }
     }
@@ -832,14 +836,17 @@ export async function handleSusanSmsActionTurn(
   if (cls.type === 'menu') {
     return { handled: true, reply: menuForAuth(auth, first), pendingAction: null }
   }
+  if (cls.type === 'carrier') {
+    return { handled: true, pendingAction: pending }
+  }
   if (cls.type === 'cancel') {
     if (!pending) {
-      return { handled: true, reply: 'Nothing to cancel. Text MENU for actions.', pendingAction: null }
+      return { handled: true, reply: `Nothing to go back from.\n\n${SUSAN_SMS_MORE_HINT}`, pendingAction: null }
     }
-    return { handled: true, reply: 'Cancelled. Text MENU for actions.', pendingAction: null }
+    return { handled: true, reply: `OK — I stopped that.\n\n${SUSAN_SMS_MORE_HINT}`, pendingAction: null }
   }
   if (cls.type === 'reject') {
-    return { handled: true, reply: 'Cancelled. Text MENU for actions.', pendingAction: null }
+    return { handled: true, reply: `OK — I stopped that.\n\n${SUSAN_SMS_MORE_HINT}`, pendingAction: null }
   }
   if (cls.type === 'confirm' && pending?.kind === 'confirm') {
     const result = await commitPending(db, auth, pending)
@@ -848,7 +855,7 @@ export async function handleSusanSmsActionTurn(
   if (cls.type === 'confirm_needed' && pending?.kind === 'confirm') {
     return {
       handled: true,
-      reply: `${pending.preview}\n\nReply YES to send, NO to cancel, or MENU.`,
+      reply: `${pending.preview}\n\nReply YES to send, or Back.`,
       pendingAction: pending,
     }
   }

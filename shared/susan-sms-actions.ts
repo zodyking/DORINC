@@ -102,9 +102,16 @@ export type SusanSmsPendingAction =
       startedAt: string
     }
 
+export type SusanSmsActionResult = {
+  ok: boolean
+  content: string
+  pendingAction?: SusanSmsPendingAction | null
+}
+
 export type SusanSmsTurnClass =
   | { type: 'menu' }
   | { type: 'cancel' }
+  | { type: 'carrier' }
   | { type: 'confirm' }
   | { type: 'reject' }
   | { type: 'confirm_needed' }
@@ -112,11 +119,22 @@ export type SusanSmsTurnClass =
   | { type: 'wizard_input' }
   | { type: 'ai' }
 
-const MENU_RE = /^(menu|actions|options|help|what can you do|what can i do)[\s?!.]*$/i
-const CANCEL_RE = /^(cancel|stop|nevermind|never mind|forget it|abort)\b/i
+/** CTIA/carrier keywords — never ask staff to send these; they unsubscribe or auto-reply. */
+const CARRIER_RE = /^(start|stop|stopall|unsubscribe|end|quit|cancel)[\s?!.]*$/i
+const BACK_RE = /^(back|go back|nevermind|never mind|forget it|abort|0)[\s?!.]*$/i
 const YES_RE = /^(y|yes|yeah|yep|ok|okay|confirm|send it|do it|please send|go ahead)$/i
 const NO_RE = /^(n|no|nope|nah|don'?t|do not)$/i
 const NUMBER_RE = /^([1-9]|10)[.)]?$/
+
+export function isSusanSmsMenuPhrase(raw: string): boolean {
+  const text = String(raw || '').trim().toLowerCase().replace(/[?!.]+$/g, '').trim()
+  return text === 'menu'
+    || text === 'text menu'
+    || text === 'help'
+    || text === 'actions'
+    || text === 'what can you do'
+    || text === 'what can i do'
+}
 
 export function visibleSusanSmsMenuActions(
   can: (key: PermissionKey) => boolean,
@@ -136,14 +154,14 @@ export function formatSusanSmsMenu(
   if (!actions.length) {
     return `${hi}I can still answer questions about the app. I don't have send or lookup permissions on this account.`
   }
-  const lines = actions.map((action, i) => `${i + 1} ${action.label}`)
+  const lines = actions.map((action, i) => `${i + 1}) ${action.label}`)
   return [
     `${hi}what do you need?`,
     '',
-    ...lines,
+    lines.join('\n\n'),
     '',
     'Reply with a number, or just tell me in your own words.',
-    'Text MENU anytime. Text CANCEL to stop.',
+    'Text Menu anytime. Text Back to go back.',
   ].join('\n')
 }
 
@@ -164,8 +182,9 @@ export function classifySusanSmsTurn(
   const text = String(raw || '').trim()
   if (!text) return { type: 'ai' }
 
-  if (MENU_RE.test(text)) return { type: 'menu' }
-  if (CANCEL_RE.test(text)) return { type: 'cancel' }
+  if (isSusanSmsMenuPhrase(text)) return { type: 'menu' }
+  if (CARRIER_RE.test(text)) return { type: 'carrier' }
+  if (BACK_RE.test(text)) return { type: 'cancel' }
 
   if (pending?.kind === 'confirm') {
     if (YES_RE.test(text)) return { type: 'confirm' }

@@ -35,9 +35,10 @@ describe('Susan SMS action menu catalog', () => {
   it('formats a numbered menu', () => {
     const text = formatSusanSmsMenu(SUSAN_SMS_MENU_ACTIONS, 'Alex')
     expect(text).toContain('Hi Alex')
-    expect(text).toContain('1 Send / resend invoice')
-    expect(text).toContain('3 Email someone')
-    expect(text).toMatch(/Text MENU/i)
+    expect(text).toContain('1) Send / resend invoice')
+    expect(text).toContain('3) Email someone')
+    expect(text).toMatch(/Text Menu anytime/)
+    expect(text).not.toMatch(/\bCANCEL\b/)
   })
 })
 
@@ -60,6 +61,8 @@ describe('Susan SMS turn classifier', () => {
   it('opens the menu on MENU/help (exact), not on how-to questions', () => {
     expect(classifySusanSmsTurn('menu', null).type).toBe('menu')
     expect(classifySusanSmsTurn('HELP', null).type).toBe('menu')
+    expect(classifySusanSmsTurn('text menu', null).type).toBe('menu')
+    expect(classifySusanSmsTurn('actions', null).type).toBe('menu')
     expect(classifySusanSmsTurn('what can you do', null).type).toBe('menu')
     expect(classifySusanSmsTurn('help me create an invoice', null).type).toBe('ai')
   })
@@ -75,7 +78,9 @@ describe('Susan SMS turn classifier', () => {
     expect(classifySusanSmsTurn('INV-000713', wizard).type).toBe('wizard_input')
     expect(classifySusanSmsTurn('1', null)).toEqual({ type: 'number', n: 1 })
     expect(classifySusanSmsTurn('3.', null)).toEqual({ type: 'number', n: 3 })
-    expect(classifySusanSmsTurn('cancel', wizard).type).toBe('cancel')
+    expect(classifySusanSmsTurn('back', wizard).type).toBe('cancel')
+    expect(classifySusanSmsTurn('cancel', wizard).type).toBe('carrier')
+    expect(classifySusanSmsTurn('start', wizard).type).toBe('carrier')
   })
 })
 
