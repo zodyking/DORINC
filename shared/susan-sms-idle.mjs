@@ -31,10 +31,10 @@ const CONFIRM_TOPICS = {
  */
 export function susanSmsIdleThreadPatch(kind, now = new Date()) {
   if (kind === 'user_reply') {
-    return { lastUserAt: now, idleClosedAt: null }
+    return { lastUserAt: now, idleClosedAt: null, optedOutAt: null }
   }
   if (kind === 'carrier') {
-    return { idleClosedAt: now }
+    return { idleClosedAt: now, optedOutAt: now }
   }
   return {}
 }

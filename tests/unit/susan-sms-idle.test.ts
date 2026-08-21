@@ -81,12 +81,14 @@ describe('Susan SMS idle thread patch', () => {
     expect(susanSmsIdleThreadPatch('user_reply', now)).toEqual({
       lastUserAt: now,
       idleClosedAt: null,
+      optedOutAt: null,
     })
   })
 
   it('closes the session on a carrier keyword without bumping last_user_at', () => {
     expect(susanSmsIdleThreadPatch('carrier', now)).toEqual({
       idleClosedAt: now,
+      optedOutAt: now,
     })
   })
 })

@@ -74,6 +74,16 @@ describe('migration journal', () => {
     expect(sql).toContain('IF NOT EXISTS')
   })
 
+  it('adds Susan SMS how-to ping columns', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0081_susan_sms_intro_nudge.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('last_intro_at')
+    expect(sql).toContain('opted_out_at')
+    expect(sql).toContain('IF NOT EXISTS')
+  })
+
   it('lets hard-delete keep service logs and messages by detaching the person', () => {
     const sql = readFileSync(
       resolve(MIGRATIONS_DIR, '0078_hard_delete_detach_submitter.sql'),

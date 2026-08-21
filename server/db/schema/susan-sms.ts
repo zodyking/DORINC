@@ -23,6 +23,10 @@ export const susanSmsThreads = pgTable('susan_sms_threads', {
   lastUserAt: timestamp('last_user_at', { withTimezone: true }),
   /** Set when the idle-timeout SMS is sent (or STOP/carrier closes the session). */
   idleClosedAt: timestamp('idle_closed_at', { withTimezone: true }),
+  /** Last periodic how-to SMS. At most once per 72 hours. */
+  lastIntroAt: timestamp('last_intro_at', { withTimezone: true }),
+  /** Set when the staffer texts a carrier keyword (STOP/CANCEL). No further pings. */
+  optedOutAt: timestamp('opted_out_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => [

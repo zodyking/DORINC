@@ -547,6 +547,13 @@
       "when": 1787400000000,
       "tag": "0080_susan_sms_idle_timeout",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0081_susan_sms_intro_nudge",
+      "breakpoints": true
     }
   ]
 }

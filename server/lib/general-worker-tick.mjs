@@ -3,6 +3,7 @@ import { processThumbnailJobs } from '../workers/handlers/derivatives.mjs'
 import { drainMailQueue } from '../workers/handlers/mail-drain.mjs'
 import { processSmsJobs } from '../workers/handlers/sms.mjs'
 import { processSusanSmsIdleTimeouts } from '../workers/handlers/susan-sms-idle.mjs'
+import { processSusanSmsIntros } from '../workers/handlers/susan-sms-intro.mjs'
 import { processInvoiceSendJobs } from '../workers/handlers/invoice-send.mjs'
 import { processAiJobs } from '../workers/handlers/ai.mjs'
 import { processDeletionAiReviewJobs } from '../workers/handlers/deletion-ai-review.mjs'
@@ -46,6 +47,11 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
     const idle = await processSusanSmsIdleTimeouts(pool, smsBatch)
     if (idle.processed || idle.failed) {
       console.log(`${logPrefix} susan_sms_idle processed=${idle.processed} failed=${idle.failed}`)
+    }
+
+    const intro = await processSusanSmsIntros(pool, smsBatch)
+    if (intro.processed || intro.failed) {
+      console.log(`${logPrefix} susan_sms_intro processed=${intro.processed} failed=${intro.failed}`)
     }
   }
 

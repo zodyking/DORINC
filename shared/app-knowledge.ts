@@ -227,6 +227,7 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
       'Susan explains the product and can read invoices, service logs, customers, and catalog via tools when the staffer has permission.',
       'SMS also has a numbered action menu (text Menu, Text Menu, Help, or Actions): send/resend invoice, send estimate, email a customer or any address, plus lookups.',
       'SMS chats (menu or general help) close after 5 minutes of no reply. Susan texts a short timeout wrap-up; staff can text anytime to start again. Never tell staff to text CANCEL/STOP — those are carrier unsubscribe keywords.',
+      'Staff on Text notifications get a short how-to SMS from time to time (chat here or in the app, or text Menu). Susan skips anyone who texted in the last 72 hours and does not send the how-to more than once per 72 hours.',
       'Mutating SMS actions always preview first; staff reply YES to send or Back to stop. Web help stays read-only.',
       'Tools: get_app_knowledge, lookup_invoice, lookup_service_log, lookup_customer, search_catalog; SMS-only: list_sms_actions, send_invoice, send_estimate, send_email (permission-filtered).',
       'Invoice lookup: INV-000713 / invoice 713; unpaid|overdue|stats for KPIs. SL lookup: SL-0713 or review queue.',
