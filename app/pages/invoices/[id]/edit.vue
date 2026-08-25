@@ -225,7 +225,7 @@ function focusLineRate(lineId: string) {
   focusVisibleLineInput(lineId, 'rate')
 }
 
-async function onLineDiscountTabNext(line: LineItem) {
+async function onRateTabNext(line: LineItem) {
   await patchLine(line, { refreshAfter: false })
   if (!editable.value) return
   await addEmptyLine()
@@ -287,7 +287,6 @@ const summaryRows = computed(() => {
     discountPercent: discountPercent.value,
   }, {
     breakdown,
-    omitDiscount: true,
     lineItems: lines.value.map(line => ({
       quantity: line.quantity,
       unitPrice: line.unitPrice,
@@ -1241,7 +1240,7 @@ if (import.meta.client) {
                   @remove="removeLine"
                   @focus-qty="focusLineQty"
                   @focus-rate="focusLineRate"
-                  @discount-tab-next="onLineDiscountTabNext"
+                  @rate-tab-next="onRateTabNext"
                   @discount-blur="patchHeader"
                   @catalog-select="applyCatalogToExistingLine"
                 />
@@ -1263,7 +1262,7 @@ if (import.meta.client) {
               @remove="removeLine"
               @focus-qty="focusLineQty"
               @focus-rate="focusLineRate"
-              @discount-tab-next="onLineDiscountTabNext"
+              @rate-tab-next="onRateTabNext"
               @discount-blur="patchHeader"
               @catalog-select="applyCatalogToExistingLine"
             />

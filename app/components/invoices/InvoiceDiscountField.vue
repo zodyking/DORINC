@@ -17,12 +17,14 @@ const amountValue = computed({
 
 const props = withDefaults(defineProps<{
   disabled?: boolean
+  dense?: boolean
   lineId?: string
   /** Gross amount used when switching $ → % (line total or invoice subtotal). */
   baseAmount?: string
   ariaLabel?: string
 }>(), {
   disabled: false,
+  dense: false,
   lineId: undefined,
   baseAmount: '0',
   ariaLabel: 'Discount',
@@ -35,6 +37,8 @@ const emit = defineEmits<{
 
 const mode = ref<'amount' | 'percent'>(normalizePercentOff(percent.value) ? 'percent' : 'amount')
 const percentDraft = ref(percent.value ?? '')
+const fieldEl = ref<HTMLElement | null>(null)
+const amountInput = ref<{ focus: () => void } | null>(null)
 const percentInput = ref<HTMLInputElement | null>(null)
 
 watch(() => percent.value, (value) => {
@@ -86,8 +90,8 @@ function onPercentInput(event: Event) {
 }
 
 function onPercentBlur() {
+  if (mode.value !== 'percent') return
   commitPercent()
-  emit('blur')
 }
 
 function onPercentKeydown(e: KeyboardEvent) {
@@ -97,22 +101,69 @@ function onPercentKeydown(e: KeyboardEvent) {
     commitPercent()
     percentInput.value?.blur()
     emit('tab-next')
+    emit('blur')
   }
 }
 
 function onAmountBlur() {
+  if (mode.value !== 'amount') return
   percent.value = null
-  emit('blur')
 }
 
 function onAmountTabNext() {
   percent.value = null
   emit('tab-next')
+  emit('blur')
 }
+
+function focus() {
+  void nextTick(() => {
+    if (mode.value === 'percent') percentInput.value?.focus()
+    else amountInput.value?.focus()
+  })
+}
+
+function dismiss() {
+  if (mode.value === 'percent') commitPercent()
+  emit('blur')
+}
+
+function onDocPointerDown(e: PointerEvent) {
+  if (props.disabled) return
+  if (fieldEl.value?.contains(e.target as Node)) return
+  dismiss()
+}
+
+function onFieldKeydown(e: KeyboardEvent) {
+  if (props.disabled) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    dismiss()
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    dismiss()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocPointerDown, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
+})
+
+defineExpose({ focus })
 </script>
 
 <template>
-  <div class="disc-field" :class="{ disabled }">
+  <div
+    ref="fieldEl"
+    class="disc-field"
+    :class="{ disabled, dense }"
+    @keydown="onFieldKeydown"
+  >
     <div class="disc-modes" role="group" :aria-label="`${ariaLabel} type`">
       <button
         type="button"
@@ -137,6 +188,7 @@ function onAmountTabNext() {
     </div>
     <LineCurrencyInput
       v-if="mode === 'amount'"
+      ref="amountInput"
       v-model="amountValue"
       class="disc-input"
       :line-id="lineId"
@@ -213,5 +265,21 @@ function onAmountTabNext() {
   padding: 8px 8px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.disc-field.dense {
+  height: 22px;
+  min-height: 22px;
+  border-radius: 6px;
+}
+.disc-field.dense .disc-mode {
+  width: 22px;
+  font-size: 11px;
+}
+.disc-field.dense .disc-input,
+.disc-field.dense :deep(.line-currency-input) {
+  padding: 0 6px;
+  font-size: 13.5px;
+  line-height: 20px;
+  min-width: 4em !important;
 }
 </style>
