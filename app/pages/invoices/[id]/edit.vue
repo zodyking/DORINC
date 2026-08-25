@@ -2,6 +2,7 @@
 // Invoice editor — catalog picker, line editor, server totals, editing session lock (mockup: PAGE: INVOICE EDITOR / P1-24).
 import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
 import PageActionsMenu from '~/components/staff/PageActionsMenu.vue'
+import { addMoney } from '#shared/money'
 import { isEditingSessionNoise } from '#shared/audit-messages'
 import {
   applyCatalogItemToLineFields,
@@ -59,6 +60,8 @@ interface LineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  discountAmount?: string | null
+  discountPercent?: string | null
   taxable?: boolean
   catalogItemId?: string | null
 }
@@ -87,6 +90,7 @@ interface InvoicePayload {
   feesAmount: string
   shopSuppliesPercent: string | null
   discountAmount: string
+  discountPercent?: string | null
   total: string
   lineItems: LineItem[]
 }
@@ -198,6 +202,8 @@ const paymentTerms = ref('net_30')
 const poNumber = ref('')
 const complaint = ref('')
 const internalNotes = ref('')
+const discountAmount = ref('0')
+const discountPercent = ref<string | null>(null)
 const lines = ref<LineItem[]>([])
 
 const {
@@ -219,7 +225,7 @@ function focusLineRate(lineId: string) {
   focusVisibleLineInput(lineId, 'rate')
 }
 
-async function onLineRateTabNext(line: LineItem) {
+async function onLineDiscountTabNext(line: LineItem) {
   await patchLine(line, { refreshAfter: false })
   if (!editable.value) return
   await addEmptyLine()
@@ -271,16 +277,43 @@ const summaryRows = computed(() => {
     quantity: line.quantity,
     unitPrice: line.unitPrice,
     lineAmount: line.lineAmount,
+    discountAmount: line.discountAmount,
+    discountPercent: line.discountPercent,
   }))
   const breakdown = previewLineTypeBreakdown(lineInputs)
-  return editorSummaryRows(invoice.value, {
+  return editorSummaryRows({
+    ...invoice.value,
+    discountAmount: discountAmount.value,
+    discountPercent: discountPercent.value,
+  }, {
     breakdown,
+    omitDiscount: true,
     lineItems: lines.value.map(line => ({
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       taxable: line.taxable,
+      discountAmount: line.discountAmount,
+      discountPercent: line.discountPercent,
     })),
   })
+})
+
+const discountBase = computed(() => {
+  const breakdown = previewLineTypeBreakdown(lines.value.map(line => ({
+    lineType: line.lineType,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    lineAmount: line.lineAmount,
+    discountAmount: line.discountAmount,
+    discountPercent: line.discountPercent,
+  })))
+  try {
+    return addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
+  }
+  catch {
+    return '0'
+  }
 })
 
 const autosaveText = computed(() => {
@@ -471,12 +504,16 @@ function buildFormSnapshot(): string {
     poNumber: poNumber.value,
     complaint: complaint.value,
     internalNotes: internalNotes.value,
+    discountAmount: discountAmount.value,
+    discountPercent: discountPercent.value,
     lines: lines.value.map(line => ({
       id: line.id,
       lineType: line.lineType,
       description: line.description,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
+      discountAmount: line.discountAmount ?? '0',
+      discountPercent: line.discountPercent ?? null,
       taxable: line.taxable,
       catalogItemId: line.catalogItemId ?? null,
     })),
@@ -511,7 +548,13 @@ function syncFormFromInvoice(inv: InvoicePayload) {
   poNumber.value = inv.poNumber ?? ''
   complaint.value = inv.complaint ?? ''
   internalNotes.value = inv.internalNotes ?? ''
-  lines.value = inv.lineItems.map(l => ({ ...l }))
+  discountAmount.value = inv.discountAmount ?? '0'
+  discountPercent.value = inv.discountPercent ?? null
+  lines.value = inv.lineItems.map(l => ({
+    ...l,
+    discountAmount: l.discountAmount ?? '0',
+    discountPercent: l.discountPercent ?? null,
+  }))
 }
 
 watch(invoice, (inv) => {
@@ -565,6 +608,8 @@ async function patchHeader(opts: { refreshAfter?: boolean, manageBusy?: boolean 
         poNumber: poNumber.value || null,
         complaint: complaint.value || null,
         internalNotes: internalNotes.value || null,
+        discountAmount: discountAmount.value,
+        discountPercent: discountPercent.value,
       },
     })
     if (refreshAfter) await refreshInvoice()
@@ -683,6 +728,8 @@ async function applyCatalogToExistingLine(line: LineItem, item: CatalogQuickItem
   line.quantity = fields.quantity
   line.unitPrice = fields.unitPrice
   line.catalogItemId = fields.catalogItemId
+  line.discountAmount = '0'
+  line.discountPercent = null
   await patchLine(line, { catalogItemId: fields.catalogItemId })
 }
 
@@ -1181,16 +1228,21 @@ if (import.meta.client) {
               </template>
               <template #base>
                 <InvoiceEditorLinesBlock
+                  v-model:discount-amount="discountAmount"
+                  v-model:discount-percent="discountPercent"
                   :lines="lines"
                   :editable="editable"
                   :busy="busy"
                   :summary-rows="summaryRows"
+                  :discount-editable="true"
+                  :discount-base="discountBase"
                   @focus="selectedLineId = $event"
                   @patch="patchLine"
                   @remove="removeLine"
                   @focus-qty="focusLineQty"
                   @focus-rate="focusLineRate"
-                  @rate-tab-next="onLineRateTabNext"
+                  @discount-tab-next="onLineDiscountTabNext"
+                  @discount-blur="patchHeader"
                   @catalog-select="applyCatalogToExistingLine"
                 />
               </template>
@@ -1198,16 +1250,21 @@ if (import.meta.client) {
 
             <InvoiceEditorLinesBlock
               v-else
+              v-model:discount-amount="discountAmount"
+              v-model:discount-percent="discountPercent"
               :lines="lines"
               :editable="editable"
               :busy="busy"
               :summary-rows="summaryRows"
+              :discount-editable="true"
+              :discount-base="discountBase"
               @focus="selectedLineId = $event"
               @patch="patchLine"
               @remove="removeLine"
               @focus-qty="focusLineQty"
               @focus-rate="focusLineRate"
-              @rate-tab-next="onLineRateTabNext"
+              @discount-tab-next="onLineDiscountTabNext"
+              @discount-blur="patchHeader"
               @catalog-select="applyCatalogToExistingLine"
             />
           </div>

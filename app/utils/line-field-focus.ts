@@ -1,6 +1,6 @@
 import { nextTick } from 'vue'
 
-type LineField = 'description' | 'quantity' | 'rate'
+type LineField = 'description' | 'quantity' | 'rate' | 'discount'
 
 function focusVisibleInput(lineId: string, field: LineField) {
   const inputs = document.querySelectorAll<HTMLInputElement>(
@@ -30,6 +30,6 @@ export function focusVisibleLineDescription(lineId: string) {
   focusVisibleLineField(lineId, 'description')
 }
 
-export function focusVisibleLineInput(lineId: string, field: 'quantity' | 'rate') {
+export function focusVisibleLineInput(lineId: string, field: 'quantity' | 'rate' | 'discount') {
   focusVisibleLineField(lineId, field)
 }

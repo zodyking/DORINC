@@ -74,7 +74,7 @@ describe('Susan permission helper', () => {
 
 describe('executeSusanHelpTool entity dispatch', () => {
   it('requires db/userId for lookup tools', async () => {
-    for (const name of ['lookup_invoice', 'lookup_service_log', 'lookup_customer', 'search_catalog'] as const) {
+    for (const name of ['lookup_invoice', 'lookup_service_log', 'lookup_customer', 'search_catalog', 'send_invoice', 'send_estimate', 'send_email', 'list_sms_actions'] as const) {
       const result = await executeSusanHelpTool({
         id: 'c1',
         name,

@@ -17,7 +17,8 @@ import {
   createInvoiceDraft,
   recalculateInvoiceTotals,
 } from './invoices.service'
-import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
+import { calculateInvoiceTotals } from './invoice-totals.service'
+import { resolveLineDiscount } from '../../shared/invoice-discount'
 import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import type { InvoiceTotalsResult } from './invoice-totals.service'
@@ -66,6 +67,7 @@ export interface CreateEstimateInput {
   shopSuppliesPercent?: string | null
   feesAmount?: string
   discountAmount?: string
+  discountPercent?: string | null
 }
 
 export interface EstimatePatch {
@@ -81,6 +83,7 @@ export interface EstimatePatch {
   shopSuppliesPercent?: string | null
   feesAmount?: string
   discountAmount?: string
+  discountPercent?: string | null
 }
 
 export interface AddEstimateLineInput {
@@ -89,6 +92,8 @@ export interface AddEstimateLineInput {
   description: string
   quantity: string
   unitPrice: string
+  discountAmount?: string
+  discountPercent?: string | null
   taxable?: boolean
   sortOrder?: number
 }
@@ -168,6 +173,18 @@ export async function getEstimate(db: Db, id: string) {
   return row
 }
 
+/** Resolve a display number like 42 (from EST-000042) to the estimate row id. */
+export async function findEstimateIdByNumber(db: Db, estimateNumber: number): Promise<string | null> {
+  const n = Math.floor(Number(estimateNumber))
+  if (!Number.isFinite(n) || n <= 0) return null
+  const [row] = await db
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.estimateNumber, n))
+    .limit(1)
+  return row?.id ?? null
+}
+
 export async function listEstimateLineItems(db: Db, estimateId: string) {
   return db.select().from(estimateLineItems)
     .where(eq(estimateLineItems.estimateId, estimateId))
@@ -182,10 +199,13 @@ export async function recalculateEstimateTotals(db: Db, estimateId: string, acto
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       taxable: line.taxable,
+      discountAmount: line.discountAmount,
+      discountPercent: line.discountPercent,
     })),
     taxExempt: estimate.taxExempt,
     taxRate: estimate.taxRate ?? '0',
     discountAmount: estimate.discountAmount ?? '0',
+    discountPercent: estimate.discountPercent,
     amountPaid: '0',
   })
 
@@ -445,7 +465,7 @@ export async function updateEstimateDraft(db: Db, id: string, patch: EstimatePat
 
   for (const key of [
     'estimateDate', 'validUntil', 'serviceLocation', 'poNumber', 'complaint',
-    'internalNotes', 'customerNotes', 'taxRate', 'discountAmount',
+    'internalNotes', 'customerNotes', 'taxRate', 'discountAmount', 'discountPercent',
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])) {
@@ -457,7 +477,7 @@ export async function updateEstimateDraft(db: Db, id: string, patch: EstimatePat
   if (!changedFields.length) return { estimate: before, before, changedFields }
 
   const [updated] = await db.update(estimates).set(changes).where(eq(estimates.id, id)).returning()
-  const totalsFields = ['taxRate', 'discountAmount']
+  const totalsFields = ['taxRate', 'discountAmount', 'discountPercent']
   if (changedFields.some(f => totalsFields.includes(f))) {
     const { estimate } = await recalculateEstimateTotals(db, id, actorId)
     return { estimate, before, changedFields }
@@ -485,7 +505,12 @@ export async function addEstimateLineItem(
     }
   }
 
-  const amount = lineAmount(input.quantity, input.unitPrice)
+  const resolved = resolveLineDiscount({
+    quantity: input.quantity,
+    unitPrice: input.unitPrice,
+    discountAmount: input.discountAmount,
+    discountPercent: input.discountPercent,
+  })
 
   const [row] = await db.insert(estimateLineItems).values({
     estimateId,
@@ -495,7 +520,9 @@ export async function addEstimateLineItem(
     description: input.description.trim(),
     quantity: input.quantity,
     unitPrice: input.unitPrice,
-    lineAmount: amount,
+    lineAmount: resolved.lineAmount,
+    discountAmount: resolved.discountAmount,
+    discountPercent: input.discountPercent ?? null,
     taxable: input.taxable ?? catalogSnapshot?.taxable ?? true,
     sortOrder: input.sortOrder ?? 0,
     createdBy: actorId,
@@ -540,7 +567,7 @@ export async function updateEstimateLineItem(
     changedFields.push('catalogItemId')
   }
 
-  for (const key of ['lineType', 'description', 'quantity', 'unitPrice', 'taxable', 'sortOrder'] as const) {
+  for (const key of ['lineType', 'description', 'quantity', 'unitPrice', 'taxable', 'sortOrder', 'discountAmount', 'discountPercent'] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(existing[key])) {
       changes[key] = key === 'lineType'
@@ -556,7 +583,14 @@ export async function updateEstimateLineItem(
 
   const qty = (changes.quantity as string | undefined) ?? existing.quantity
   const price = (changes.unitPrice as string | undefined) ?? existing.unitPrice
-  changes.lineAmount = lineAmount(qty, price)
+  const resolved = resolveLineDiscount({
+    quantity: qty,
+    unitPrice: price,
+    discountAmount: (changes.discountAmount as string | undefined) ?? existing.discountAmount,
+    discountPercent: (changes.discountPercent as string | null | undefined) ?? existing.discountPercent,
+  })
+  changes.lineAmount = resolved.lineAmount
+  changes.discountAmount = resolved.discountAmount
 
   const [updated] = await db.update(estimateLineItems)
     .set(changes)
@@ -716,6 +750,7 @@ export async function convertEstimateToInvoice(
       customerNotes: before.customerNotes,
       taxRate: before.taxRate ?? '0',
       discountAmount: before.discountAmount ?? '0',
+      discountPercent: before.discountPercent ?? null,
     }, actorId)
 
     for (const line of lines) {
@@ -728,6 +763,8 @@ export async function convertEstimateToInvoice(
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         lineAmount: line.lineAmount,
+        discountAmount: line.discountAmount ?? '0',
+        discountPercent: line.discountPercent ?? null,
         taxable: line.taxable,
         sortOrder: line.sortOrder,
         priceOverridden: line.priceOverridden,

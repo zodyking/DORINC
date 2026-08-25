@@ -154,6 +154,19 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(rows.find(r => r.label === 'Labor')?.value).toBe('$360.00')
   })
 
+  it('hides the discount row when editing and applies a live percent off subtotal', () => {
+    const rows = editorSummaryRows({
+      subtotal: '200.00',
+      taxAmount: '0',
+      taxExempt: true,
+      discountAmount: '0',
+      discountPercent: '10',
+      total: '180.00',
+    }, { omitDiscount: true })
+    expect(rows.find(r => r.label === 'Discount')).toBeUndefined()
+    expect(rows.find(r => r.grand)?.value).toBe('$180.00')
+  })
+
   it('formats audit history rows', () => {
     expect(formatHistoryChange('invoices.line_items.create', { description: 'NOx sensor', lineAmount: '145.00' }))
       .toBe('Added line "NOx sensor" ($145.00)')

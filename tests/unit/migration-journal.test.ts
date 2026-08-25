@@ -64,6 +64,37 @@ describe('migration journal', () => {
     expect(sql).toContain('IF NOT EXISTS')
   })
 
+  it('adds Susan SMS idle-timeout columns', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0080_susan_sms_idle_timeout.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('last_user_at')
+    expect(sql).toContain('idle_closed_at')
+    expect(sql).toContain('IF NOT EXISTS')
+  })
+
+  it('adds Susan SMS how-to ping columns', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0081_susan_sms_intro_nudge.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('last_intro_at')
+    expect(sql).toContain('opted_out_at')
+    expect(sql).toContain('IF NOT EXISTS')
+  })
+
+  it('adds invoice and line discount columns', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0082_invoice_discounts.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('discount_percent')
+    expect(sql).toContain('invoice_line_items')
+    expect(sql).toContain('estimate_line_items')
+    expect(sql).toContain('IF NOT EXISTS')
+  })
+
   it('lets hard-delete keep service logs and messages by detaching the person', () => {
     const sql = readFileSync(
       resolve(MIGRATIONS_DIR, '0078_hard_delete_detach_submitter.sql'),

@@ -28,4 +28,20 @@ describe('previewDraftTotals tax preview', () => {
     expect(totals.waivedTaxAmount).toBe('6.60')
     expect(totals.total).toBe('100.00')
   })
+
+  it('applies a percent invoice discount in the live preview', () => {
+    const line = createEmptyLine()
+    line.description = 'Labor'
+    line.quantity = '1'
+    line.unitPrice = '100.00'
+    line.discountPercent = '10'
+    const totals = previewDraftTotals([line], {
+      taxExempt: true,
+      taxRate: '0.066000',
+      discountPercent: '10',
+    })
+    expect(totals.subtotal).toBe('90.00')
+    expect(totals.discountAmount).toBe('9.00')
+    expect(totals.total).toBe('81.00')
+  })
 })

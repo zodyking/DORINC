@@ -533,6 +533,34 @@
       "when": 1787200000000,
       "tag": "0078_hard_delete_detach_submitter",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1787300000000,
+      "tag": "0079_susan_sms_pending_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1787400000000,
+      "tag": "0080_susan_sms_idle_timeout",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0081_susan_sms_intro_nudge",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1787600000000,
+      "tag": "0082_invoice_discounts",
+      "breakpoints": true
     }
   ]
 }

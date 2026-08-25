@@ -287,6 +287,33 @@ describe('P1-21 draft editing + line item CRUD', () => {
     expect(remaining).toHaveLength(0)
   })
 
+  it('applies line-item and whole-invoice discounts', async () => {
+    const invoice = await createInvoice(db, {
+      customerId: customer.id,
+      vehicleId: vehicle.id,
+      creationSource: 'customer',
+      invoiceDate: '2026-08-25',
+    }, ACTOR)
+
+    const line = await addInvoiceLineItem(db, invoice.id, {
+      lineType: 'labor',
+      description: 'Discounted labor',
+      quantity: '1',
+      unitPrice: '100.00',
+      discountPercent: '10',
+      sortOrder: 1,
+    }, ACTOR)
+    expect(line.lineAmount).toBe('90.00')
+    expect(line.discountAmount).toBe('10.00')
+
+    await updateInvoiceDraft(db, invoice.id, { discountPercent: '10' }, ACTOR)
+    const updated = await getInvoice(db, invoice.id)
+    expect(updated.subtotal).toBe('90.00')
+    expect(Number.parseFloat(String(updated.discountPercent ?? '0'))).toBe(10)
+    expect(updated.discountAmount).toBe('9.00')
+    expect(updated.total).toBe('81.00')
+  })
+
   it('rejects edits on paid invoices but allows sent invoices', async () => {
     const invoice = await draftWithLine()
     await sendAndDeliverInvoice(db, pool, invoice.id, ACTOR)

@@ -12,6 +12,14 @@ import {
   executeSearchCatalog,
   type EntityToolContext,
 } from './ai-entity-tools.service'
+import {
+  listSusanSmsActionsForUser,
+  previewSusanSmsSendEmail,
+  previewSusanSmsSendEstimate,
+  previewSusanSmsSendInvoice,
+  type SusanSmsActionResult,
+} from './susan-sms-actions.service'
+import type { SusanSmsPendingAction } from '../../shared/susan-sms-actions'
 
 export type AiToolCallRequest = {
   id: string
@@ -24,6 +32,7 @@ export type AiToolExecutionResult = {
   name: string
   ok: boolean
   content: string
+  pendingAction?: SusanSmsPendingAction | null
 }
 
 export type SusanHelpToolOpts = {
@@ -116,6 +125,16 @@ function needDbUser(tool: string): { ok: boolean, content: string } {
   }
 }
 
+function wrapAction(toolCallId: string, name: string, result: SusanSmsActionResult): AiToolExecutionResult {
+  return {
+    toolCallId,
+    name,
+    ok: result.ok,
+    content: result.content,
+    pendingAction: result.pendingAction,
+  }
+}
+
 export async function executeSusanHelpTool(
   call: AiToolCallRequest,
   opts: SusanHelpToolOpts = {},
@@ -156,6 +175,26 @@ export async function executeSusanHelpTool(
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
       const result = await executeSearchCatalog(opts.db, opts.userId, parsed)
       return { toolCallId, name, ok: result.ok, content: result.content }
+    }
+
+    if (name === 'list_sms_actions') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      return wrapAction(toolCallId, name, await listSusanSmsActionsForUser(opts.db, opts.userId))
+    }
+
+    if (name === 'send_invoice') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      return wrapAction(toolCallId, name, await previewSusanSmsSendInvoice(opts.db, opts.userId, parsed))
+    }
+
+    if (name === 'send_estimate') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      return wrapAction(toolCallId, name, await previewSusanSmsSendEstimate(opts.db, opts.userId, parsed))
+    }
+
+    if (name === 'send_email') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      return wrapAction(toolCallId, name, await previewSusanSmsSendEmail(opts.db, opts.userId, parsed))
     }
 
     return {

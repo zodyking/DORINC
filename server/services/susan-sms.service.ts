@@ -7,14 +7,18 @@ import {
 } from '../db/schema/susan-sms'
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 import { formatPlatformHelpForSms } from '../../shared/platform-help'
+import { parseSusanSmsPendingAction, type SusanSmsPendingAction } from '../../shared/susan-sms-actions'
+import {
+  SUSAN_SMS_HISTORY_LIMIT,
+  susanSmsIdleThreadPatch,
+} from '../../shared/susan-sms-idle.mjs'
 import { askPlatformHelp } from './platform-help.service'
+import { handleSusanSmsActionTurn } from './susan-sms-actions.service'
 import {
   getQuoConfig,
   isQuoSmsEnabled,
   sendQuoSms,
 } from './quo.service'
-
-const HISTORY_LIMIT = 20
 
 function phoneDigits(value: string | null | undefined): string {
   return String(value ?? '').replace(/\D/g, '')
@@ -79,13 +83,19 @@ export async function findActiveTextUserByPhone(
   return fuzzy ?? null
 }
 
-async function loadHistory(db: Db, userId: string): Promise<SusanSmsHistoryMessage[]> {
+async function loadThread(db: Db, userId: string): Promise<{
+  messages: SusanSmsHistoryMessage[]
+  pendingAction: SusanSmsPendingAction | null
+}> {
   const [thread] = await db
     .select()
     .from(susanSmsThreads)
     .where(eq(susanSmsThreads.userId, userId))
     .limit(1)
-  return Array.isArray(thread?.messages) ? thread.messages : []
+  return {
+    messages: Array.isArray(thread?.messages) ? thread.messages : [],
+    pendingAction: parseSusanSmsPendingAction(thread?.pendingAction),
+  }
 }
 
 async function saveHistory(
@@ -95,10 +105,13 @@ async function saveHistory(
     phone: string
     messages: SusanSmsHistoryMessage[]
     lastInboundMessageId?: string | null
+    pendingAction?: SusanSmsPendingAction | null
+    idleKind?: 'user_reply' | 'carrier'
   },
 ) {
   const now = new Date()
-  const messages = input.messages.slice(-HISTORY_LIMIT)
+  const messages = input.messages.slice(-SUSAN_SMS_HISTORY_LIMIT)
+  const idlePatch = susanSmsIdleThreadPatch(input.idleKind ?? 'user_reply', now)
   const [existing] = await db
     .select({ id: susanSmsThreads.id })
     .from(susanSmsThreads)
@@ -110,7 +123,9 @@ async function saveHistory(
       phone: input.phone,
       messages,
       lastInboundMessageId: input.lastInboundMessageId ?? null,
+      pendingAction: input.pendingAction ?? null,
       updatedAt: now,
+      ...idlePatch,
     }).where(eq(susanSmsThreads.id, existing.id))
     return
   }
@@ -120,8 +135,10 @@ async function saveHistory(
     phone: input.phone,
     messages,
     lastInboundMessageId: input.lastInboundMessageId ?? null,
+    pendingAction: input.pendingAction ?? null,
     createdAt: now,
     updatedAt: now,
+    ...idlePatch,
   })
 }
 
@@ -130,7 +147,7 @@ async function saveHistory(
  * 1) detect new SMS (caller)
  * 2) determine who sent it
  * 3) check active user details (active + Text channel)
- * 4) AI generate response
+ * 4) numbered menu / YES-NO actions, else AI
  * 5) Quo API sends reply
  */
 export async function handleInboundSusanSms(
@@ -191,17 +208,50 @@ export async function handleInboundSusanSms(
     messageId: input.messageId,
   })
 
-  // 4) AI generate response (same Platform Assistant as in-app, SMS-formatted)
-  const history = await loadHistory(db, user.id)
-  const result = await askPlatformHelp(db, {
-    question,
+  // 4) Numbered menu / YES-NO confirm, else the same Platform Assistant as in-app
+  const thread = await loadThread(db, user.id)
+  const actionTurn = await handleSusanSmsActionTurn(db, {
     userId: user.id,
     userName: user.name,
-    channel: 'sms',
-    history: history.map(m => ({ role: m.role, content: m.content })),
+    question,
+    pending: thread.pendingAction,
   })
-  const answerText = formatPlatformHelpForSms(result.answer)
-    || `Hi — I'm Susan. I could not generate a reply just now. Please try again in a moment.`
+
+  let answerText: string
+  let pendingAction: SusanSmsPendingAction | null
+
+  if (actionTurn.handled) {
+    pendingAction = actionTurn.pendingAction ?? thread.pendingAction ?? null
+    if (!actionTurn.reply) {
+      await saveHistory(db, {
+        userId: user.id,
+        phone: from,
+        lastInboundMessageId: input.messageId ?? null,
+        pendingAction,
+        messages: thread.messages,
+        idleKind: 'carrier',
+      })
+      console.info('[susan-sms] step: carrier keyword ignored', { userId: user.id })
+      return { handled: true, reason: 'carrier_keyword', userId: user.id }
+    }
+    answerText = formatPlatformHelpForSms(actionTurn.reply) || actionTurn.reply
+    console.info('[susan-sms] step: action menu', {
+      userId: user.id,
+      pendingKind: pendingAction?.kind ?? null,
+    })
+  }
+  else {
+    const result = await askPlatformHelp(db, {
+      question,
+      userId: user.id,
+      userName: user.name,
+      channel: 'sms',
+      history: thread.messages.map(m => ({ role: m.role, content: m.content })),
+    })
+    answerText = formatPlatformHelpForSms(result.answer)
+      || `Hi — I'm Susan. I could not generate a reply just now. Please try again in a moment.`
+    pendingAction = result.pendingAction ?? null
+  }
 
   // 5) Quo API sends reply
   await sendQuoSms({
@@ -216,8 +266,10 @@ export async function handleInboundSusanSms(
     userId: user.id,
     phone: from,
     lastInboundMessageId: input.messageId ?? null,
+    pendingAction,
+    idleKind: 'user_reply',
     messages: [
-      ...history,
+      ...thread.messages,
       { role: 'user', content: question, at: nowIso },
       { role: 'assistant', content: answerText, at: nowIso },
     ],

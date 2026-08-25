@@ -1,15 +1,25 @@
 import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from './money'
+import { resolveLineDiscount } from './invoice-discount'
 
 export interface TaxableLineInput {
   quantity: string
   unitPrice: string
   taxable?: boolean
+  lineAmount?: string
+  discountAmount?: string | null
+  discountPercent?: string | null
 }
 
 export function taxableSubtotalFromLines(lines: TaxableLineInput[]): string {
   const amounts = lines
     .filter(line => line.taxable !== false)
-    .map(line => multiplyMoney(line.quantity, line.unitPrice))
+    .map((line) => {
+      if (line.discountPercent || (line.discountAmount && Number.parseFloat(line.discountAmount) > 0)) {
+        return resolveLineDiscount(line).lineAmount
+      }
+      if (line.lineAmount) return line.lineAmount
+      return multiplyMoney(line.quantity, line.unitPrice)
+    })
   return amounts.length ? addMoney(...amounts) : '0'
 }
 

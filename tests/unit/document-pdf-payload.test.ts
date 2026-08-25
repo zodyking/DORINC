@@ -176,6 +176,54 @@ describe('document-pdf-payload', () => {
     expect(paid.statusLabel).toBe('Paid in Full')
   })
 
+  it('adds strikethrough keys for discounted lines and hides a zero document discount', () => {
+    const data = buildInvoicePdfData({
+      invoiceNumberFormatted: 'INV-000200',
+      invoiceDate: '2026-08-25',
+      paymentTerms: 'due_on_receipt',
+      status: 'draft',
+      lineItems: [{
+        description: 'Labor',
+        lineType: 'labor',
+        quantity: '1',
+        unitPrice: '100.00',
+        lineAmount: '90.00',
+        discountPercent: '10',
+      }],
+      feesAmount: '0',
+      discountAmount: '0',
+      taxAmount: '0',
+      total: '90.00',
+      balanceDue: '90.00',
+    })
+
+    expect(data.lineItems[0]?.lineAmount).toBe('$90.00')
+    expect(data.lineItems[0]?.originalLineAmount).toBe('$100.00')
+    expect(data.lineItems[0]?.discounted).toBe(true)
+    expect(data.totals.hasDiscount).toBe(false)
+
+    const withInvoiceDiscount = buildInvoicePdfData({
+      invoiceNumberFormatted: 'INV-000201',
+      invoiceDate: '2026-08-25',
+      paymentTerms: 'due_on_receipt',
+      status: 'draft',
+      lineItems: [{
+        description: 'Labor',
+        lineType: 'labor',
+        quantity: '1',
+        unitPrice: '100.00',
+        lineAmount: '100.00',
+      }],
+      feesAmount: '0',
+      discountAmount: '15.00',
+      taxAmount: '0',
+      total: '85.00',
+      balanceDue: '85.00',
+    })
+    expect(withInvoiceDiscount.totals.hasDiscount).toBe(true)
+    expect(withInvoiceDiscount.totals.discount).toBe('$15.00')
+  })
+
   it('formats fleet unit and year/make/model for PDF vehicle blocks', () => {
     expect(formatPdfVehicleUnitDisplay({
       unitType: 'bus',

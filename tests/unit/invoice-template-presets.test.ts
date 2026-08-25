@@ -17,6 +17,7 @@ function scanPresetBlade(filename: string) {
     'fillerRows', 'i', 'key', 'fallback', 'label', 'line1', 'line2', 'cityLine',
     'locality', 'city', 'state', 'postal', 'fleet', 'tag', 'ymm', 'amt', 'badge',
     'lineAmount', 'lineType', 'type', 'description', 'quantity', 'unitPrice',
+    'originalLineAmount', 'discounted', 'hasDiscount',
   ])
   const missing = [...used].filter(v => !defined.has(v) && !skip.has(v))
   return missing

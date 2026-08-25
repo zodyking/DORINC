@@ -267,7 +267,14 @@
           <td style="width:46%;" class="up">{{ $line['description'] ?? '' }}</td>
           <td style="width:10%;" class="num">{{ $line['quantity'] ?? '0' }}</td>
           <td style="width:15%;" class="num">{{ $line['unitPrice'] ?? '$0.00' }}</td>
-          <td style="width:16%;" class="num">{{ $line['lineAmount'] ?? '$0.00' }}</td>
+          <td style="width:16%;" class="num">
+            @if(!empty($line['discounted']) && !empty($line['originalLineAmount']))
+              <span style="display:block;text-decoration:line-through;color:#94a3b8;font-size:7.5pt;font-weight:500;">{{ $line['originalLineAmount'] }}</span>
+              <span style="display:block;font-weight:700;">{{ $line['lineAmount'] }}</span>
+            @else
+              {{ $line['lineAmount'] ?? '$0.00' }}
+            @endif
+          </td>
         </tr>
       @empty
         <tr><td class="center" style="padding:10px;">NO LINE ITEMS</td></tr>
@@ -300,7 +307,9 @@
           <table class="pay-box">
             <tr><td>Parts amount</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
             <tr><td>Labor amount</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
+            @if(!empty($totals['hasDiscount']))
             <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
+            @endif
             <tr><td>Sales tax{{ !empty($totals['taxExempt']) ? ' (tax exempt)' : '' }}</td><td>
               @if(!empty($totals['taxExempt']) && !empty($totals['waivedTax']))
                 <span style="text-decoration:line-through;">{{ $totals['waivedTax'] }}</span>

@@ -51,6 +51,30 @@ export function extractInvoiceNumber(raw: string): number | null {
   return null
 }
 
+/** Extract numeric estimate number from EST-000042, "estimate 42", etc. */
+export function extractEstimateNumber(raw: string): number | null {
+  const text = String(raw || '').trim()
+  if (!text) return null
+
+  const patterns = [
+    /\best[-\s]?0*(\d{1,9})\b/i,
+    /\bestimate\s*[#:]?\s*0*(\d{1,9})\b/i,
+  ]
+  for (const re of patterns) {
+    const m = text.match(re)
+    if (m?.[1]) {
+      const n = Number(m[1])
+      if (Number.isFinite(n) && n > 0) return n
+    }
+  }
+
+  if (/^\d{1,9}$/.test(text)) {
+    const n = Number(text)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  return null
+}
+
 /** Extract numeric service log number from SL-0713, "service log 42", etc. */
 export function extractServiceLogNumber(raw: string): number | null {
   const text = String(raw || '').trim()

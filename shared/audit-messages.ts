@@ -43,6 +43,7 @@ const FIELD_LABELS: Record<string, string> = {
   taxExempt: 'tax exempt',
   taxRate: 'tax rate',
   discountAmount: 'discount',
+  discountPercent: 'discount percent',
   amountPaid: 'amount paid',
   vin: 'VIN',
   busNumber: 'bus number',

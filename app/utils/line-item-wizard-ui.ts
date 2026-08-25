@@ -103,6 +103,8 @@ export function wizardLineToDraft(line: WizardLineDraft): DraftLine {
     unitPrice: line.rate.trim(),
     catalogItemId: null,
     lineAmount: line.amount || previewLineAmount(line.qty, line.rate) || undefined,
+    discountAmount: '0',
+    discountPercent: null,
   }
 }
 

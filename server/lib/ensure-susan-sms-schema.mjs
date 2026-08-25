@@ -10,9 +10,26 @@ CREATE TABLE IF NOT EXISTS "susan_sms_threads" (
   "phone" text NOT NULL,
   "messages" jsonb DEFAULT '[]'::jsonb NOT NULL,
   "last_inbound_message_id" text,
+  "pending_action" jsonb,
+  "last_user_at" timestamp with time zone,
+  "idle_closed_at" timestamp with time zone,
+  "last_intro_at" timestamp with time zone,
+  "opted_out_at" timestamp with time zone,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "susan_sms_threads_phone_idx" ON "susan_sms_threads" USING btree ("phone");
+`)
+  await pool.query(`
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "pending_action" jsonb;
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "last_user_at" timestamp with time zone;
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "idle_closed_at" timestamp with time zone;
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "last_intro_at" timestamp with time zone;
+ALTER TABLE "susan_sms_threads" ADD COLUMN IF NOT EXISTS "opted_out_at" timestamp with time zone;
+CREATE INDEX IF NOT EXISTS "susan_sms_threads_idle_idx"
+  ON "susan_sms_threads" ("last_user_at")
+  WHERE "idle_closed_at" IS NULL AND "last_user_at" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "susan_sms_threads_intro_idx"
+  ON "susan_sms_threads" ("last_intro_at");
 `)
 }

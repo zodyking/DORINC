@@ -24,8 +24,9 @@ import { odoDisplay, vehicleUnitLine } from '~/utils/vehicles-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
 import { phoneDisplay } from '~/utils/phone-ui'
 import { isMessageLinkRoute, messageLinkFetchQuery } from '~/utils/message-link-access'
-import { previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
+import { previewLineGrossAmount, previewLineTypeBreakdown } from '~/utils/invoice-creator-ui'
 import { invoiceDetailSummaryRows } from '~/utils/invoice-editor-ui'
+import InvoicePriceStack from '~/components/invoices/InvoicePriceStack.vue'
 import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
 import { fetchInvoicePreviewPdf } from '~/utils/invoice-pdf'
 import { printPdfBlob } from '~/utils/print-pdf'
@@ -51,6 +52,8 @@ interface LineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  discountAmount?: string | null
+  discountPercent?: string | null
   taxable?: boolean
   catalogSnapshot: CatalogSnapshotBits | null
 }
@@ -391,6 +394,8 @@ const summaryRows = computed(() => {
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       lineAmount: line.lineAmount,
+      discountAmount: line.discountAmount,
+      discountPercent: line.discountPercent,
     }))),
   })
 })
@@ -672,7 +677,12 @@ const summaryRows = computed(() => {
                   </td>
                   <td class="col-qty">{{ lineQuantityDisplay(line.quantity, line.lineType) }}</td>
                   <td class="num col-rate">{{ moneyDisplay(line.unitPrice) }}</td>
-                  <td class="num col-line">{{ moneyDisplay(line.lineAmount) }}</td>
+                  <td class="num col-line">
+                    <InvoicePriceStack
+                      :original="previewLineGrossAmount(line.quantity, line.unitPrice) || line.lineAmount"
+                      :current="line.lineAmount"
+                    />
+                  </td>
                 </tr>
                 <tr v-if="!lines.length">
                   <td colspan="4" class="empty" style="display:table-cell;">No line items yet.</td>

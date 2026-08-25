@@ -1,7 +1,12 @@
 // Invoice creator wizard helpers (mockup: PAGE: INVOICE CREATOR / P1-23).
 
-import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '#shared/money'
+import { addMoney, rateOfMoney, subtractMoney } from '#shared/money'
 import { computeWaivedTaxAmount, taxableSubtotalFromLines } from '#shared/invoice-tax-exempt'
+import {
+  formatPercentOffField,
+  resolveInvoiceDiscount,
+  resolveLineDiscount,
+} from '#shared/invoice-discount'
 import type { InvoiceLineType } from './invoices-ui'
 
 export type InvoiceWizardStepKey =
@@ -61,6 +66,9 @@ export interface DraftLine {
   catalogItemId?: string | null
   serverId?: string
   lineAmount?: string
+  discountAmount?: string | null
+  discountPercent?: string | null
+  taxable?: boolean
 }
 
 /** Compute due date from issue date + payment terms (display default only — API stores explicit dueDate). */
@@ -90,6 +98,8 @@ export function createEmptyLine(): DraftLine {
     quantity: '1',
     unitPrice: '145.00',
     catalogItemId: null,
+    discountAmount: '0',
+    discountPercent: null,
   }
 }
 
@@ -117,7 +127,7 @@ export function formatUnitPriceField(value: string | number): string | null {
 }
 
 export function buildInvoiceLinePatchBody(
-  line: Pick<DraftLine, 'lineType' | 'description' | 'quantity' | 'unitPrice' | 'catalogItemId'>,
+  line: Pick<DraftLine, 'lineType' | 'description' | 'quantity' | 'unitPrice' | 'catalogItemId' | 'discountAmount' | 'discountPercent'>,
   opts: { catalogItemId?: string | null } = {},
 ): Record<string, unknown> | null {
   const description = line.description.trim()
@@ -132,6 +142,10 @@ export function buildInvoiceLinePatchBody(
   const unitPrice = formatUnitPriceField(line.unitPrice)
   if (quantity) body.quantity = quantity
   if (unitPrice !== null) body.unitPrice = unitPrice
+
+  const discountAmount = formatUnitPriceField(line.discountAmount ?? '0') ?? '0.00'
+  body.discountAmount = discountAmount
+  body.discountPercent = formatPercentOffField(line.discountPercent)
 
   if (opts.catalogItemId !== undefined) body.catalogItemId = opts.catalogItemId
   else if (line.catalogItemId !== undefined) body.catalogItemId = line.catalogItemId ?? null
@@ -160,6 +174,7 @@ function coerceAmountField(value: string | number | null | undefined): string {
 export function previewLineAmount(
   quantity: string | number,
   unitPrice: string | number,
+  discount?: Pick<DraftLine, 'discountAmount' | 'discountPercent'> | null,
 ): string {
   try {
     const qty = coerceAmountField(quantity)
@@ -167,17 +182,29 @@ export function previewLineAmount(
     if (!qty || !price) return ''
     if (Number.parseFloat(qty) <= 0) return ''
     if (Number.parseFloat(price) < 0) return ''
-    return multiplyMoney(qty, price)
+    return resolveLineDiscount({
+      quantity: qty,
+      unitPrice: price,
+      discountAmount: discount?.discountAmount,
+      discountPercent: discount?.discountPercent,
+    }).lineAmount
   }
   catch {
     return ''
   }
 }
 
+export function previewLineGrossAmount(
+  quantity: string | number,
+  unitPrice: string | number,
+): string {
+  return previewLineAmount(quantity, unitPrice)
+}
+
 export function previewLinesSubtotal(lines: DraftLine[]): string {
   const amounts = lines
     .filter(isDraftLineValid)
-    .map(line => previewLineAmount(line.quantity, line.unitPrice))
+    .map(line => previewLineAmount(line.quantity, line.unitPrice, line))
     .filter(Boolean)
   if (!amounts.length) return '0.00'
   try {
@@ -200,17 +227,19 @@ export interface LineForBreakdown {
   quantity: string
   unitPrice: string
   lineAmount?: string
+  discountAmount?: string | null
+  discountPercent?: string | null
 }
 
 function lineAmountForBreakdown(line: LineForBreakdown): string {
-  if (line.lineAmount?.trim()) return line.lineAmount
-  if (!line.description.trim()) return ''
+  if (!line.description.trim() && !line.lineAmount?.trim()) return ''
   const qty = coerceAmountField(line.quantity)
   const price = coerceAmountField(line.unitPrice)
-  if (!qty || !price) return ''
-  if (Number.parseFloat(qty) <= 0) return ''
-  if (Number.parseFloat(price) < 0) return ''
-  return previewLineAmount(qty, price)
+  if (qty && price && Number.parseFloat(qty) > 0 && Number.parseFloat(price) >= 0) {
+    const live = previewLineAmount(qty, price, line)
+    if (live) return live
+  }
+  return line.lineAmount?.trim() || ''
 }
 
 /** Sum line amounts by parts, labor, and fees for summary breakdowns. */
@@ -253,6 +282,7 @@ export function previewDraftTotals(
     taxExempt?: boolean
     taxRate?: string
     discountAmount?: string
+    discountPercent?: string | null
   } = {},
 ): DraftTotalsPreview {
   const subtotal = previewLinesSubtotal(lines)
@@ -263,7 +293,13 @@ export function previewDraftTotals(
   const waivedTaxAmount = computeWaivedTaxAmount({ taxExempt, taxRate, taxableSubtotal })
   const taxAmount = taxExempt ? '0' : rateOfMoney(taxableSubtotal, taxRate)
   const feesAmount = '0'
-  const discountAmount = opts.discountAmount ?? '0'
+  const discountAmount = resolveInvoiceDiscount({
+    subtotal,
+    taxAmount,
+    feesAmount,
+    discountAmount: opts.discountAmount,
+    discountPercent: opts.discountPercent,
+  })
   const total = subtractMoney(addMoney(subtotal, feesAmount, taxAmount), discountAmount)
   return {
     subtotal,

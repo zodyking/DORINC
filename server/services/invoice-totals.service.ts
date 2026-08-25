@@ -1,10 +1,13 @@
 import { computeWaivedTaxAmount } from '../../shared/invoice-tax-exempt'
+import { resolveInvoiceDiscount, resolveLineDiscount } from '../../shared/invoice-discount'
 import { addMoney, multiplyMoney, rateOfMoney, subtractMoney } from '../../shared/money'
 
 export interface InvoiceLineTotalsInput {
   quantity: string
   unitPrice: string
   taxable: boolean
+  discountAmount?: string | null
+  discountPercent?: string | null
 }
 
 export interface InvoiceTotalsInput {
@@ -13,6 +16,7 @@ export interface InvoiceTotalsInput {
   /** Decimal rate e.g. "0.066000" for 6.6% */
   taxRate?: string
   discountAmount?: string
+  discountPercent?: string | null
   amountPaid?: string
 }
 
@@ -33,18 +37,25 @@ export function lineAmount(quantity: string, unitPrice: string): string {
   return multiplyMoney(quantity, unitPrice)
 }
 
+export function netLineAmount(line: InvoiceLineTotalsInput): string {
+  return resolveLineDiscount(line).lineAmount
+}
+
 /** Server-side invoice totals — subtotal, tax, discount, balance (SPEC §6.5). */
 export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotalsResult {
-  const discountAmount = input.discountAmount ?? '0'
   const amountPaid = input.amountPaid ?? '0'
   const taxRate = input.taxRate ?? '0'
 
-  const lineAmounts = input.lines.map(line => lineAmount(line.quantity, line.unitPrice))
+  const resolvedLines = input.lines.map(line => ({
+    ...resolveLineDiscount(line),
+    taxable: line.taxable,
+  }))
+  const lineAmounts = resolvedLines.map(line => line.lineAmount)
   const subtotal = lineAmounts.length ? addMoney(...lineAmounts) : '0'
 
-  const taxableLines = input.lines
+  const taxableLines = resolvedLines
     .filter(line => line.taxable)
-    .map(line => lineAmount(line.quantity, line.unitPrice))
+    .map(line => line.lineAmount)
   const taxableSubtotal = taxableLines.length ? addMoney(...taxableLines) : '0'
 
   const feesAmount = '0'
@@ -57,6 +68,14 @@ export function calculateInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals
   const taxAmount = input.taxExempt
     ? '0'
     : rateOfMoney(taxableSubtotal, taxRate)
+
+  const discountAmount = resolveInvoiceDiscount({
+    subtotal,
+    taxAmount,
+    feesAmount,
+    discountAmount: input.discountAmount,
+    discountPercent: input.discountPercent,
+  })
 
   const total = subtractMoney(
     addMoney(subtotal, feesAmount, taxAmount),

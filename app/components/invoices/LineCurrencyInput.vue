@@ -12,10 +12,12 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   ariaLabel?: string
   lineId?: string
+  lineField?: string
 }>(), {
   disabled: false,
   ariaLabel: 'Rate',
   lineId: undefined,
+  lineField: 'rate',
 })
 
 const emit = defineEmits<{
@@ -98,7 +100,7 @@ defineExpose({ focus })
     :disabled="disabled"
     :aria-label="ariaLabel"
     :data-line-id="lineId"
-    data-line-field="rate"
+    :data-line-field="lineField"
     @focus="onFocus"
     @blur="onBlur"
     @keydown="onKeydown"

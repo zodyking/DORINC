@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { invoiceDateDisplay, moneyDisplay, paymentTermsLabel } from '~/utils/invoices-ui'
+import { previewLineGrossAmount } from '~/utils/invoice-creator-ui'
+import InvoicePriceStack from '~/components/invoices/InvoicePriceStack.vue'
 import {
   portalInvoiceDetailStatus,
   portalInvoicePdfUrl,
@@ -219,7 +221,12 @@ function downloadPdf() {
                 <td><span class="lead">{{ line.description }}</span></td>
                 <td class="num">{{ line.quantity }}</td>
                 <td class="num">{{ moneyDisplay(line.unitPrice) }}</td>
-                <td class="num">{{ moneyDisplay(line.lineAmount) }}</td>
+                <td class="num">
+                  <InvoicePriceStack
+                    :original="previewLineGrossAmount(line.quantity, line.unitPrice) || line.lineAmount"
+                    :current="line.lineAmount"
+                  />
+                </td>
                 <td class="col-actions">
                   <button type="button" class="btn sm" @click="openCorrection(line)">
                     Request correction

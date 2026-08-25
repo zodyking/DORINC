@@ -827,7 +827,12 @@
               </td>
 
               <td class="total-cell">
-                {{ $line['lineAmount'] ?? '' }}
+                @if(!empty($line['discounted']) && !empty($line['originalLineAmount']))
+                  <span style="display:block;text-decoration:line-through;color:#707070;font-size:8px;">{{ $line['originalLineAmount'] }}</span>
+                  <span>{{ $line['lineAmount'] }}</span>
+                @else
+                  {{ $line['lineAmount'] ?? '' }}
+                @endif
               </td>
             </tr>
           @empty
@@ -892,6 +897,13 @@
                 <td>LABOR</td>
                 <td>{{ $laborTotal }}</td>
               </tr>
+
+              @if(!empty($totals['hasDiscount']))
+              <tr>
+                <td>DISCOUNT</td>
+                <td>{{ $totals['discount'] ?? '$0.00' }}</td>
+              </tr>
+              @endif
 
               <tr class="grand-total">
                 <td>

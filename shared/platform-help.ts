@@ -322,6 +322,156 @@ export function formatPlatformHelpAnswer(raw: string): string {
 
 const SMS_HELP_MAX_CHARS = 1400
 
+function capitalizeSmsDetail(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+}
+
+/** Split "Short title: the rest of the sentence" for scannable SMS blocks. */
+function splitSmsTitleAndDetail(body: string): { title: string, detail: string | null } {
+  const trimmed = body.replace(/\s+/g, ' ').trim()
+  const match = trimmed.match(/^([^:]{2,55}):\s+(\S[\s\S]*)$/)
+  if (!match) return { title: trimmed, detail: null }
+  const title = match[1]!.trim()
+  const detail = match[2]!.trim()
+  if (/https?:\/\//i.test(title) || /^\d+$/.test(title) || title.includes('. ')) {
+    return { title: trimmed, detail: null }
+  }
+  return { title, detail: capitalizeSmsDetail(detail) }
+}
+
+function formatSmsNumberedItem(n: number, body: string): string {
+  const { title, detail } = splitSmsTitleAndDetail(body)
+  return detail ? `${n}) ${title}\n${detail}` : `${n}) ${title}`
+}
+
+function formatSmsBulletItem(body: string): string {
+  const { title, detail } = splitSmsTitleAndDetail(body)
+  return detail ? `• ${title}\n${detail}` : `• ${title}`
+}
+
+/**
+ * Turn packed "1. foo 2. bar" (or "1) foo 2) bar") blobs into one item per line.
+ */
+function unpackInlineSmsListItems(text: string): string {
+  const markers: Array<{ n: number, start: number, end: number }> = []
+  const re = /(\d{1,2})[.)]\s+/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    markers.push({ n: Number(match[1]), start: match.index, end: match.index + match[0].length })
+  }
+
+  let runStart = -1
+  let runLen = 0
+  for (let i = 0; i < markers.length; i++) {
+    if (markers[i]!.n !== 1) continue
+    let len = 1
+    while (i + len < markers.length && markers[i + len]!.n === len + 1) len += 1
+    if (len >= 2) {
+      runStart = i
+      runLen = len
+      break
+    }
+  }
+
+  if (runStart < 0) {
+    return text.replace(/(^|\n)(\d{1,2})\.\s+/g, '$1$2) ')
+  }
+
+  let out = text
+  for (let i = runStart + runLen - 1; i >= runStart; i--) {
+    const hit = markers[i]!
+    const atLineStart = hit.start === 0 || out[hit.start - 1] === '\n'
+    const prefix = atLineStart ? '' : '\n'
+    out = `${out.slice(0, hit.start)}${prefix}${hit.n}) ${out.slice(hit.end)}`
+  }
+  return out
+}
+
+function consumeSmsList(
+  lines: string[],
+  start: number,
+  kind: 'numbered' | 'bullet',
+): { text: string, next: number } {
+  const items: string[] = []
+  let i = start
+  let expected = 0
+
+  while (i < lines.length) {
+    const line = lines[i]!.trim()
+    if (!line) {
+      if (items.length) i += 1
+      else break
+      continue
+    }
+
+    if (kind === 'numbered') {
+      const match = line.match(/^(\d{1,2})[.)]\s+(.*)$/)
+      if (!match) break
+      const n = Number(match[1])
+      if (expected !== 0 && n !== expected) break
+      expected = n + 1
+      let body = match[2] ?? ''
+      i += 1
+      while (i < lines.length) {
+        const cont = lines[i]!.trim()
+        if (!cont) break
+        if (/^(\d{1,2})[.)]\s+/.test(cont) || /^[•*-]\s+/.test(cont)) break
+        body += ` ${cont}`
+        i += 1
+      }
+      items.push(formatSmsNumberedItem(n, body))
+      continue
+    }
+
+    const bullet = line.match(/^[•*-]\s+(.*)$/)
+    if (!bullet) break
+    let body = bullet[1] ?? ''
+    i += 1
+    while (i < lines.length) {
+      const cont = lines[i]!.trim()
+      if (!cont) break
+      if (/^(\d{1,2})[.)]\s+/.test(cont) || /^[•*-]\s+/.test(cont)) break
+      body += ` ${cont}`
+      i += 1
+    }
+    items.push(formatSmsBulletItem(body))
+  }
+
+  return { text: items.join('\n\n'), next: i }
+}
+
+/**
+ * Blank line between list items; title on the number line, detail on the next.
+ * Stops feature dumps from landing as one iMessage blob.
+ */
+function layoutSmsLists(text: string): string {
+  const unpacked = unpackInlineSmsListItems(text)
+  const lines = unpacked.split('\n')
+  const out: string[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]!.trim()
+    const numbered = /^(\d{1,2})[.)]\s+/.test(line)
+    const bullet = /^[•*-]\s+/.test(line)
+    if (numbered || bullet) {
+      const { text: block, next } = consumeSmsList(lines, i, numbered ? 'numbered' : 'bullet')
+      if (block) {
+        if (out.length && out[out.length - 1] !== '') out.push('')
+        out.push(block)
+        i = next
+        continue
+      }
+    }
+    out.push(lines[i]!)
+    i += 1
+  }
+
+  return out.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 /**
  * Format platform-help output for SMS: plain text, short paragraphs,
  * numbered steps — no HTML/markdown chrome.
@@ -340,7 +490,7 @@ export function formatPlatformHelpForSms(raw: string, maxChars = SMS_HELP_MAX_CH
       .replace(/<\/(p|div|h[1-6]|tr)>/gi, '\n\n')
       .replace(/<li[^>]*>/gi, () => {
         step += 1
-        return `\n${step}) `
+        return `\n\n${step}) `
       })
       .replace(/<\/(li|ul|ol)>/gi, '\n')
       .replace(/<\/?b>/gi, '')
@@ -371,6 +521,8 @@ export function formatPlatformHelpForSms(raw: string, maxChars = SMS_HELP_MAX_CH
     .replace(/\bSMS chat with Susan AI\b/gi, 'DORINC')
     .replace(/\bthe SMS chat\b/gi, 'the app')
     .trim()
+
+  text = layoutSmsLists(text)
 
   if (text.length <= maxChars) return text
   const cut = text.slice(0, maxChars - 1)
