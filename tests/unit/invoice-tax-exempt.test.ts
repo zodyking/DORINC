@@ -16,6 +16,12 @@ describe('invoice tax exempt helpers', () => {
     ])).toBe('145.00')
   })
 
+  it('uses net line amounts when a line discount is present', () => {
+    expect(taxableSubtotalFromLines([
+      { quantity: '1', unitPrice: '100.00', taxable: true, discountPercent: '10' },
+    ])).toBe('90.00')
+  })
+
   it('returns waived tax for exempt customers', () => {
     expect(computeWaivedTaxAmount({
       taxExempt: true,

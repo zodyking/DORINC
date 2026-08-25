@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { LINE_ITEM_TYPES, normalizeLineType } from '#shared/line-item-types'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
+import { percentOffSchema } from './invoices'
 import { ESTIMATE_STATUSES } from '../../server/db/schema/estimates'
 
 export const estimateStatusSchema = z.enum(ESTIMATE_STATUSES)
@@ -25,6 +26,7 @@ const estimateHeaderFields = {
   shopSuppliesPercent: z.string().max(20).nullish(),
   feesAmount: moneySchema.optional(),
   discountAmount: moneySchema.optional(),
+  discountPercent: percentOffSchema,
 }
 
 export const estimateCreateSchema = z.object({
@@ -47,6 +49,8 @@ export const estimateAddLineSchema = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: moneySchema,
   unitPrice: moneySchema,
+  discountAmount: moneySchema.optional(),
+  discountPercent: percentOffSchema,
   taxable: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 })

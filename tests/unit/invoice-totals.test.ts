@@ -98,4 +98,24 @@ describe('P1-20 invoice totals (server-side)', () => {
     expect(result.total).toBe('450.00')
     expect(result.balanceDue).toBe('350.00')
   })
+
+  it('applies a line discount before tax and an invoice percent after tax', () => {
+    const result = calculateInvoiceTotals({
+      lines: [{
+        quantity: '1',
+        unitPrice: '100.00',
+        taxable: true,
+        discountPercent: '10',
+      }],
+      taxExempt: false,
+      taxRate: '0.066000',
+      discountPercent: '10',
+    })
+
+    expect(result.subtotal).toBe('90.00')
+    expect(result.taxableSubtotal).toBe('90.00')
+    expect(result.taxAmount).toBe('5.94')
+    expect(result.discountAmount).toBe('9.00')
+    expect(result.total).toBe('86.94')
+  })
 })

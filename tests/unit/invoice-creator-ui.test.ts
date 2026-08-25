@@ -84,7 +84,20 @@ describe('invoice-creator-ui helpers (P1-23)', () => {
       description: 'Brake labor',
       quantity: '2.00',
       unitPrice: '145.00',
+      discountAmount: '0.00',
+      discountPercent: null,
     })
+  })
+
+  it('previews net line amounts after a line discount', () => {
+    const line = createEmptyLine()
+    line.description = 'Brake labor'
+    line.quantity = '2'
+    line.unitPrice = '145.00'
+    line.discountPercent = '10'
+    expect(previewLineAmount('2', '145.00')).toBe('290.00')
+    expect(previewLineAmount('2', '145.00', line)).toBe('261.00')
+    expect(previewLinesSubtotal([line])).toBe('261.00')
   })
 
   it('breaks subtotals down by parts, labor, and fees', () => {

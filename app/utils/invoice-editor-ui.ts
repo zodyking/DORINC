@@ -2,6 +2,7 @@
 
 import { addMoney, subtractMoney } from '#shared/money'
 import { computeWaivedTaxAmount, taxableSubtotalFromLines, type TaxableLineInput } from '#shared/invoice-tax-exempt'
+import { resolveInvoiceDiscount } from '#shared/invoice-discount'
 import { formatAuditChangeMessage, type AuditMessageInput } from '#shared/audit-messages'
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
@@ -30,6 +31,7 @@ export interface InvoiceTotalsShape {
   taxExempt: boolean
   waivedTaxAmount?: string | null
   discountAmount: string
+  discountPercent?: string | null
   total: string
 }
 
@@ -109,18 +111,39 @@ export function invoiceDisplayTotal(
   inv: InvoiceTotalsShape,
   breakdown?: LineTypeBreakdown,
 ): string {
-  if (!breakdown) return inv.total
-  const lineSubtotal = addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
-  return subtractMoney(
-    addMoney(lineSubtotal, inv.taxAmount ?? '0'),
-    inv.discountAmount ?? '0',
-  )
+  const lineSubtotal = breakdown
+    ? addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
+    : inv.subtotal
+  const discount = resolveInvoiceDiscount({
+    subtotal: lineSubtotal,
+    taxAmount: inv.taxAmount ?? '0',
+    discountAmount: inv.discountAmount,
+    discountPercent: inv.discountPercent,
+  })
+  return subtractMoney(addMoney(lineSubtotal, inv.taxAmount ?? '0'), discount)
+}
+
+function resolvedDocumentDiscount(
+  inv: InvoiceTotalsShape,
+  lineSubtotal: string,
+): string {
+  return resolveInvoiceDiscount({
+    subtotal: lineSubtotal,
+    taxAmount: inv.taxAmount ?? '0',
+    discountAmount: inv.discountAmount,
+    discountPercent: inv.discountPercent,
+  })
 }
 
 /** Server totals rows for editor sidebar — never computed client-side. */
 export function editorSummaryRows(
   inv: InvoiceTotalsShape & { taxRate?: string | null },
-  opts: { breakdown?: LineTypeBreakdown, grandLabel?: string, lineItems?: TaxableLineInput[] } = {},
+  opts: {
+    breakdown?: LineTypeBreakdown
+    grandLabel?: string
+    lineItems?: TaxableLineInput[]
+    omitDiscount?: boolean
+  } = {},
 ): InvoiceSummaryRow[] {
   const waivedTaxAmount = inv.waivedTaxAmount ?? (inv.taxExempt
     ? computeWaivedTaxAmount({
@@ -159,8 +182,9 @@ export function editorSummaryRows(
   else {
     rows.push({ label: 'Tax', value: moneyDisplay(inv.taxAmount) })
   }
-  if (inv.discountAmount && Number.parseFloat(inv.discountAmount) > 0) {
-    rows.push({ label: 'Discount', value: moneyDisplay(inv.discountAmount, { signed: true }) })
+  const discount = resolvedDocumentDiscount(inv, lineSubtotal)
+  if (!opts.omitDiscount && discount && Number.parseFloat(discount) > 0) {
+    rows.push({ label: 'Discount', value: moneyDisplay(discount, { signed: true }) })
   }
   rows.push({
     label: opts.grandLabel ?? 'Total',

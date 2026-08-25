@@ -110,6 +110,8 @@
       font-variant-numeric: tabular-nums;
       font-family: {!! $fontMono !!};
     }
+    .price-was { display: block; text-decoration: line-through; color: {{ $faint }}; font-size: 7.5pt; font-weight: 500; }
+    .price-now { display: block; font-weight: 700; }
     .lines-table .center { text-align: center; }
     .type-pill {
       display: inline-block;
@@ -283,7 +285,14 @@
             <td>{{ $line['description'] ?? '' }}</td>
             <td class="num">{{ $line['quantity'] ?? '0' }}</td>
             <td class="num">{{ $line['unitPrice'] ?? '$0.00' }}</td>
-            <td class="num">{{ $line['lineAmount'] ?? '$0.00' }}</td>
+            <td class="num">
+              @if(!empty($line['discounted']) && !empty($line['originalLineAmount']))
+                <span class="price-was">{{ $line['originalLineAmount'] }}</span>
+                <span class="price-now">{{ $line['lineAmount'] }}</span>
+              @else
+                {{ $line['lineAmount'] ?? '$0.00' }}
+              @endif
+            </td>
           </tr>
         @empty
           <tr>
@@ -312,7 +321,9 @@
             <table class="totals-table">
               <tr><td>Parts</td><td>{{ $totals['parts'] ?? '$0.00' }}</td></tr>
               <tr><td>Labor</td><td>{{ $totals['labor'] ?? '$0.00' }}</td></tr>
+              @if(!empty($totals['hasDiscount']))
               <tr><td>Discount</td><td>{{ $totals['discount'] ?? '$0.00' }}</td></tr>
+              @endif
               <tr><td>Tax{{ !empty($totals['taxExempt']) ? ' (tax exempt)' : '' }}</td><td>
                 @if(!empty($totals['taxExempt']) && !empty($totals['waivedTax']))
                   <span style="text-decoration:line-through;">{{ $totals['waivedTax'] }}</span>

@@ -1,5 +1,6 @@
 import { formatMoney, parseMoney } from './money'
 import { resolveInvoicePdfTotals } from './invoice-tax-exempt'
+import { isDiscountedMoney, resolveLineDiscount } from './invoice-discount'
 import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
@@ -40,12 +41,15 @@ export interface DocumentPdfLineItem {
   quantity: string
   unitPrice: string
   lineAmount: string
+  originalLineAmount?: string
+  discounted?: boolean
 }
 
 export interface DocumentPdfTotals {
   parts: string
   labor: string
   discount: string
+  hasDiscount?: boolean
   tax: string
   taxExempt?: boolean
   waivedTax?: string | null
@@ -293,6 +297,8 @@ export interface BuildInvoicePdfPayloadInput {
     unitPrice: string
     lineAmount: string
     taxable?: boolean
+    discountAmount?: string | null
+    discountPercent?: string | null
   }>
   partsAmount?: string
   laborAmount?: string
@@ -363,13 +369,28 @@ export function buildInvoicePdfData(
           plate: formatPdfVehicleYearMakeModel(vehicle),
         }
       : null,
-    lineItems: detail.lineItems.map(line => ({
-      description: line.description,
-      typeBadge: LINE_TYPE_BADGE[normalizeLineType(line.lineType)] ?? 'L',
-      quantity: line.quantity,
-      unitPrice: moneyDisplay(line.unitPrice),
-      lineAmount: moneyDisplay(line.lineAmount),
-    })),
+    lineItems: detail.lineItems.map((line) => {
+      const resolved = resolveLineDiscount({
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discountAmount: line.discountAmount,
+        discountPercent: line.discountPercent,
+      })
+      const discounted = isDiscountedMoney(resolved.originalLineAmount, resolved.lineAmount)
+      return {
+        description: line.description,
+        typeBadge: LINE_TYPE_BADGE[normalizeLineType(line.lineType)] ?? 'L',
+        quantity: line.quantity,
+        unitPrice: moneyDisplay(line.unitPrice),
+        lineAmount: moneyDisplay(resolved.lineAmount),
+        ...(discounted
+          ? {
+              originalLineAmount: moneyDisplay(resolved.originalLineAmount),
+              discounted: true,
+            }
+          : {}),
+      }
+    }),
     totals: (() => {
       const resolved = resolveInvoicePdfTotals({
         lineItems: detail.lineItems,
@@ -383,6 +404,14 @@ export function buildInvoicePdfData(
         parts: moneyDisplay(formatMoney(partsTotal)),
         labor: moneyDisplay(formatMoney(laborTotal)),
         discount: moneyDisplay(detail.discountAmount),
+        hasDiscount: (() => {
+          try {
+            return parseMoney(detail.discountAmount ?? '0') > 0n
+          }
+          catch {
+            return false
+          }
+        })(),
         tax: moneyDisplay(resolved.taxAmount),
         taxExempt: resolved.taxExempt,
         waivedTax: resolved.waivedTaxAmount ? moneyDisplay(resolved.waivedTaxAmount) : null,

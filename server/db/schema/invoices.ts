@@ -112,6 +112,8 @@ export const invoices = pgTable('invoices', {
   subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull().default('0'),
   taxAmount: numeric('tax_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   discountAmount: numeric('discount_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  /** When set, discountAmount is recomputed as this percent of subtotal. */
+  discountPercent: numeric('discount_percent', { precision: 8, scale: 4 }),
   feesAmount: numeric('fees_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   total: numeric('total', { precision: 12, scale: 2 }).notNull().default('0'),
   amountPaid: numeric('amount_paid', { precision: 12, scale: 2 }).notNull().default('0'),
@@ -156,6 +158,8 @@ export const invoiceLineItems = pgTable('invoice_line_items', {
   quantity: numeric('quantity', { precision: 12, scale: 2 }).notNull().default('1'),
   unitPrice: numeric('unit_price', { precision: 12, scale: 2 }).notNull().default('0'),
   lineAmount: numeric('line_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  discountAmount: numeric('discount_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  discountPercent: numeric('discount_percent', { precision: 8, scale: 4 }),
 
   taxable: boolean('taxable').notNull().default(true),
   sortOrder: integer('sort_order').notNull().default(0),

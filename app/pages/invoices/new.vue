@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Invoice creator wizard — customer → vehicle → service log → dates → lines → review.
-import CatalogLineAutocomplete from '~/components/invoices/CatalogLineAutocomplete.vue'
 import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
-import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
-import LineQuantityInput from '~/components/invoices/LineQuantityInput.vue'
+import InvoiceEditorLinesBlock from '~/components/invoices/InvoiceEditorLinesBlock.vue'
+import InvoiceSummaryPanel from '~/components/invoices/InvoiceSummaryPanel.vue'
+import { addMoney } from '#shared/money'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
   buildInvoiceLinePatchBody,
@@ -15,15 +15,12 @@ import {
   formatQuantityField,
   formatUnitPriceField,
   isDraftLineValid,
-  LINE_TYPE_OPTIONS,
   previewDraftTotals,
-  previewLineAmount,
   previewLineTypeBreakdown,
   type DraftLine,
 } from '~/utils/invoice-creator-ui'
 import {
   auditWhenDisplay,
-  moneyDisplay,
   paymentTermsLabel,
 } from '~/utils/invoices-ui'
 import { logNumberDisplay } from '~/utils/service-logs-ui'
@@ -113,6 +110,7 @@ interface SavedInvoiceTotals {
   feesAmount: string
   shopSuppliesPercent: string | null
   discountAmount: string
+  discountPercent?: string | null
   total: string
   lineItems: { id: string, lineAmount: string }[]
 }
@@ -214,6 +212,8 @@ const {
 } = useProseField(complaint, 'prose')
 
 const lines = ref<DraftLine[]>([])
+const invoiceDiscountAmount = ref('0')
+const invoiceDiscountPercent = ref<string | null>(null)
 type LineEntryMode = 'guided' | 'manual' | null
 const lineEntryMode = ref<LineEntryMode>(null)
 const wizardLines = ref<WizardLineDraft[]>([])
@@ -439,19 +439,34 @@ function wizardCanProceed(stepNumber: number): boolean {
 
 const summaryRows = computed(() => {
   const breakdown = previewLineTypeBreakdown(lines.value)
-  const inv = savedInvoice.value ?? previewDraftTotals(lines.value, {
+  const preview = previewDraftTotals(lines.value, {
     taxExempt: selectedCustomer.value?.taxExempt,
     taxRate: invoiceDefaults.value?.defaultTaxRateDecimal ?? '0',
+    discountAmount: invoiceDiscountAmount.value,
+    discountPercent: invoiceDiscountPercent.value,
   })
-  return editorSummaryRows(inv, {
+  return editorSummaryRows(preview, {
     breakdown,
+    omitDiscount: true,
     grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
     lineItems: lines.value.map(line => ({
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       taxable: line.taxable,
+      discountAmount: line.discountAmount,
+      discountPercent: line.discountPercent,
     })),
   })
+})
+
+const discountBase = computed(() => {
+  try {
+    const breakdown = previewLineTypeBreakdown(lines.value)
+    return addMoney(breakdown.parts, breakdown.labor, breakdown.fees)
+  }
+  catch {
+    return '0'
+  }
 })
 
 watch(stepKey, async (key) => {
@@ -620,6 +635,8 @@ function applyCatalogToLine(line: DraftLine, item: CatalogQuickItem) {
   line.quantity = fields.quantity
   line.unitPrice = fields.unitPrice
   line.catalogItemId = fields.catalogItemId
+  line.discountAmount = '0'
+  line.discountPercent = null
 }
 
 function applyPackageLines(packageLines: ReturnType<typeof applyCatalogItemToLineFields>[]) {
@@ -633,10 +650,6 @@ function applyPackageLines(packageLines: ReturnType<typeof applyCatalogItemToLin
     catalogItemId: fields.catalogItemId,
   }))
   lines.value = [...lines.value, ...next]
-}
-
-function onLineDescriptionTyped(line: DraftLine) {
-  line.catalogItemId = null
 }
 
 function onLineFieldBlur(line: DraftLine) {
@@ -657,7 +670,7 @@ function addLineAndFocusDescription() {
   if (newest) focusVisibleLineDescription(newest.localId)
 }
 
-function onLineRateTabNext(line: DraftLine) {
+function onLineDiscountTabNext(line: DraftLine) {
   onLineFieldBlur(line)
   addLineAndFocusDescription()
 }
@@ -677,6 +690,8 @@ async function refreshSavedInvoice() {
   }>(`/api/invoices/${invoiceId.value}`)
   savedInvoice.value = invoice
   invoiceNumberFormatted.value = invoice.invoiceNumberFormatted
+  invoiceDiscountAmount.value = invoice.discountAmount ?? invoiceDiscountAmount.value
+  invoiceDiscountPercent.value = invoice.discountPercent ?? invoiceDiscountPercent.value
   invoice.lineItems.forEach((serverLine, i) => {
     const local = lines.value[i]
     if (local) {
@@ -697,6 +712,8 @@ async function ensureDraft(): Promise<string> {
     paymentTerms: paymentTerms.value,
     poNumber: poNumber.value || null,
     complaint: complaint.value.trim() || null,
+    discountAmount: invoiceDiscountAmount.value,
+    discountPercent: invoiceDiscountPercent.value,
   }
 
   if (invoiceId.value) {
@@ -1175,123 +1192,34 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
               <AddPackageModal @applied="applyPackageLines" />
               <button type="button" class="btn sm primary" @click="addLine">+ Add line</button>
             </div>
-            <div class="tscroll inv-line-table inv-line-table--desktop">
-              <table class="ed-lines">
-                <thead>
-                  <tr>
-                    <th style="width:110px">Type</th>
-                    <th>Description</th>
-                    <th style="width:110px">Qty / Hrs</th>
-                    <th style="width:150px">Rate</th>
-                    <th style="width:130px; text-align:right">Amount</th>
-                    <th style="width:36px" />
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in lines" :key="line.localId">
-                    <td>
-                      <select v-model="line.lineType">
-                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                      </select>
-                    </td>
-                    <td>
-                      <CatalogLineAutocomplete
-                        v-model="line.description"
-                        v-model:line-type="line.lineType"
-                        :line-id="line.localId"
-                        @typed="onLineDescriptionTyped(line)"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="focusLineQty(line.localId)"
-                        @select="applyCatalogToLine(line, $event)"
-                      />
-                    </td>
-                    <td>
-                      <LineQuantityInput
-                        v-model="line.quantity"
-                        :line-id="line.localId"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="focusLineRate(line.localId)"
-                      />
-                    </td>
-                    <td>
-                      <LineCurrencyInput
-                        v-model="line.unitPrice"
-                        :line-id="line.localId"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="onLineRateTabNext(line)"
-                      />
-                    </td>
-                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
-                    <td>
-                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="inv-line-cards inv-line-table--mobile">
-              <article v-for="line in lines" :key="`card-reveal-${line.localId}`" class="inv-line-card">
-                <div class="inv-line-card-head">
-                  <label class="fld inv-line-card-type">
-                    <span>Type</span>
-                    <select v-model="line.lineType">
-                      <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </label>
-                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                </div>
-                <label class="fld">
-                  <span>Description</span>
-                  <CatalogLineAutocomplete
-                    v-model="line.description"
-                    v-model:line-type="line.lineType"
-                    :line-id="line.localId"
-                    @typed="onLineDescriptionTyped(line)"
-                    @blur="onLineFieldBlur(line)"
-                    @tab-next="focusLineQty(line.localId)"
-                    @select="applyCatalogToLine(line, $event)"
-                  />
-                </label>
-                <div class="inv-line-card-nums">
-                  <label class="fld">
-                    <span>Qty / Hrs</span>
-                    <LineQuantityInput
-                      v-model="line.quantity"
-                      :line-id="line.localId"
-                      @blur="onLineFieldBlur(line)"
-                      @tab-next="focusLineRate(line.localId)"
-                    />
-                  </label>
-                  <label class="fld">
-                    <span>Rate</span>
-                    <LineCurrencyInput
-                      v-model="line.unitPrice"
-                      :line-id="line.localId"
-                      @blur="onLineFieldBlur(line)"
-                      @tab-next="onLineRateTabNext(line)"
-                    />
-                  </label>
-                  <div class="inv-line-card-amt">
-                    <span class="k">Amount</span>
-                    <span class="v">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</span>
-                  </div>
-                </div>
-              </article>
-            </div>
+            <InvoiceEditorLinesBlock
+              v-model:discount-amount="invoiceDiscountAmount"
+              v-model:discount-percent="invoiceDiscountPercent"
+              :lines="lines"
+              :editable="true"
+              :summary-rows="summaryRows"
+              :show-mobile-cards="true"
+              :show-summary="false"
+              :discount-editable="true"
+              :discount-base="discountBase"
+              @patch="onLineFieldBlur"
+              @remove="removeLine"
+              @focus-qty="focusLineQty"
+              @focus-rate="focusLineRate"
+              @discount-tab-next="onLineDiscountTabNext"
+              @catalog-select="applyCatalogToLine"
+            />
             <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
           </div>
 
-          <div class="ed-sums inv-wizard-sums">
-            <div
-              v-for="(row, i) in summaryRows"
-              :key="i"
-              class="row"
-              :class="{ grand: row.grand }"
-            >
-              <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
-              <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-            </div>
-          </div>
+          <InvoiceSummaryPanel
+            v-model:discount-amount="invoiceDiscountAmount"
+            v-model:discount-percent="invoiceDiscountPercent"
+            class="inv-wizard-sums"
+            :rows="summaryRows"
+            :discount-editable="true"
+            :discount-base="discountBase"
+          />
         </template>
       </PanelRevealSlider>
 
@@ -1314,125 +1242,37 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
             </div>
           </div>
           <div class="cbody">
-            <div class="tscroll inv-line-table inv-line-table--desktop">
-              <table class="ed-lines">
-                <thead>
-                  <tr>
-                    <th style="width:110px">Type</th>
-                    <th>Description</th>
-                    <th style="width:110px">Qty / Hrs</th>
-                    <th style="width:150px">Rate</th>
-                    <th style="width:130px; text-align:right">Amount</th>
-                    <th style="width:36px" />
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in lines" :key="line.localId">
-                    <td>
-                      <select v-model="line.lineType">
-                        <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                      </select>
-                    </td>
-                    <td>
-                      <CatalogLineAutocomplete
-                        v-model="line.description"
-                        v-model:line-type="line.lineType"
-                        :line-id="line.localId"
-                        @typed="onLineDescriptionTyped(line)"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="focusLineQty(line.localId)"
-                        @select="applyCatalogToLine(line, $event)"
-                      />
-                    </td>
-                    <td>
-                      <LineQuantityInput
-                        v-model="line.quantity"
-                        :line-id="line.localId"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="focusLineRate(line.localId)"
-                      />
-                    </td>
-                    <td>
-                      <LineCurrencyInput
-                        v-model="line.unitPrice"
-                        :line-id="line.localId"
-                        @blur="onLineFieldBlur(line)"
-                        @tab-next="onLineRateTabNext(line)"
-                      />
-                    </td>
-                    <td class="amt">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</td>
-                    <td>
-                      <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="inv-line-cards inv-line-table--mobile">
-              <article v-for="line in lines" :key="`card-${line.localId}`" class="inv-line-card">
-                <div class="inv-line-card-head">
-                  <label class="fld inv-line-card-type">
-                    <span>Type</span>
-                    <select v-model="line.lineType">
-                      <option v-for="opt in LINE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
-                  </label>
-                  <button type="button" class="rm" aria-label="Remove line" :disabled="lines.length <= 1" @click="removeLine(line.localId)">✕</button>
-                </div>
-                <label class="fld">
-                  <span>Description</span>
-                  <CatalogLineAutocomplete
-                    v-model="line.description"
-                    v-model:line-type="line.lineType"
-                    :line-id="line.localId"
-                    @typed="onLineDescriptionTyped(line)"
-                    @blur="onLineFieldBlur(line)"
-                    @tab-next="focusLineQty(line.localId)"
-                    @select="applyCatalogToLine(line, $event)"
-                  />
-                </label>
-                <div class="inv-line-card-nums">
-                  <label class="fld">
-                    <span>Qty / Hrs</span>
-                    <LineQuantityInput
-                      v-model="line.quantity"
-                      :line-id="line.localId"
-                      @blur="onLineFieldBlur(line)"
-                      @tab-next="focusLineRate(line.localId)"
-                    />
-                  </label>
-                  <label class="fld">
-                    <span>Rate</span>
-                    <LineCurrencyInput
-                      v-model="line.unitPrice"
-                      :line-id="line.localId"
-                      @blur="onLineFieldBlur(line)"
-                      @tab-next="onLineRateTabNext(line)"
-                    />
-                  </label>
-                  <div class="inv-line-card-amt">
-                    <span class="k">Amount</span>
-                    <span class="v">{{ moneyDisplay(previewLineAmount(line.quantity, line.unitPrice) || line.lineAmount || '0') }}</span>
-                  </div>
-                </div>
-              </article>
-            </div>
+            <InvoiceEditorLinesBlock
+              v-model:discount-amount="invoiceDiscountAmount"
+              v-model:discount-percent="invoiceDiscountPercent"
+              :lines="lines"
+              :editable="true"
+              :summary-rows="summaryRows"
+              :show-mobile-cards="true"
+              :show-summary="false"
+              :discount-editable="true"
+              :discount-base="discountBase"
+              @patch="onLineFieldBlur"
+              @remove="removeLine"
+              @focus-qty="focusLineQty"
+              @focus-rate="focusLineRate"
+              @discount-tab-next="onLineDiscountTabNext"
+              @catalog-select="applyCatalogToLine"
+            />
           <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
           </div>
         </div>
       </template>
 
-      <div v-if="lineEntryMode && !hasWizardServiceLogPhotos" class="ed-sums inv-wizard-sums">
-        <div
-          v-for="(row, i) in summaryRows"
-          :key="i"
-          class="row"
-          :class="{ grand: row.grand }"
-        >
-          <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
-          <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-        </div>
-      </div>
+      <InvoiceSummaryPanel
+        v-if="lineEntryMode && !hasWizardServiceLogPhotos"
+        v-model:discount-amount="invoiceDiscountAmount"
+        v-model:discount-percent="invoiceDiscountPercent"
+        class="inv-wizard-sums"
+        :rows="summaryRows"
+        :discount-editable="true"
+        :discount-base="discountBase"
+      />
 
       <div class="sl-foot">
         <button type="button" class="btn" @click="prevFromLinesStep">Back</button>
@@ -1589,73 +1429,6 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
   padding-top: 12px;
 }
 
-.inv-line-table--desktop {
-  margin-bottom: 8px;
-}
-
-.inv-line-cards {
-  display: none;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.inv-line-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px;
-  background: #fff;
-}
-
-.inv-line-card-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.inv-line-card-type {
-  flex: 1;
-  margin: 0;
-}
-
-.inv-line-card-nums {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.inv-line-card-nums .fld {
-  margin: 0;
-}
-
-.inv-line-card-amt {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.inv-line-card-amt .k {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.inv-line-card-amt .v {
-  font-size: 16px;
-  font-weight: 800;
-  color: #4f46e5;
-  font-variant-numeric: tabular-nums;
-}
-
 .inv-wizard-review-foot {
   flex-wrap: wrap;
 }
@@ -1679,16 +1452,6 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
-}
-
-@media (max-width: 720px) {
-  .inv-line-table--desktop {
-    display: none;
-  }
-
-  .inv-line-cards {
-    display: flex;
-  }
 }
 
 .inv-wizard-sums {

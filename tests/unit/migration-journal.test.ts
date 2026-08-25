@@ -84,6 +84,17 @@ describe('migration journal', () => {
     expect(sql).toContain('IF NOT EXISTS')
   })
 
+  it('adds invoice and line discount columns', () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, '0082_invoice_discounts.sql'),
+      'utf8',
+    )
+    expect(sql).toContain('discount_percent')
+    expect(sql).toContain('invoice_line_items')
+    expect(sql).toContain('estimate_line_items')
+    expect(sql).toContain('IF NOT EXISTS')
+  })
+
   it('lets hard-delete keep service logs and messages by detaching the person', () => {
     const sql = readFileSync(
       resolve(MIGRATIONS_DIR, '0078_hard_delete_detach_submitter.sql'),

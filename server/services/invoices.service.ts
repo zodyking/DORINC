@@ -17,7 +17,8 @@ import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import { getDefaultInvoiceTaxRateDecimal } from './workspace-settings.service'
-import { calculateInvoiceTotals, lineAmount } from './invoice-totals.service'
+import { calculateInvoiceTotals } from './invoice-totals.service'
+import { resolveLineDiscount } from '../../shared/invoice-discount'
 import {
   getServiceLog,
   linkServiceLogToExistingInvoice,
@@ -108,6 +109,7 @@ export interface CreateInvoiceInput {
   shopSuppliesPercent?: string | null
   feesAmount?: string
   discountAmount?: string
+  discountPercent?: string | null
 }
 
 export interface InvoicePatch {
@@ -126,6 +128,7 @@ export interface InvoicePatch {
   shopSuppliesPercent?: string | null
   feesAmount?: string
   discountAmount?: string
+  discountPercent?: string | null
 }
 
 export interface AddInvoiceLineInput {
@@ -134,6 +137,8 @@ export interface AddInvoiceLineInput {
   description: string
   quantity: string
   unitPrice: string
+  discountAmount?: string
+  discountPercent?: string | null
   taxable?: boolean
   sortOrder?: number
   priceOverridden?: boolean
@@ -298,6 +303,8 @@ async function copyLineItems(db: Db, sourceInvoiceId: string, targetInvoiceId: s
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       lineAmount: line.lineAmount,
+      discountAmount: line.discountAmount ?? '0',
+      discountPercent: line.discountPercent ?? null,
       taxable: line.taxable,
       sortOrder: line.sortOrder,
       priceOverridden: line.priceOverridden,
@@ -366,6 +373,7 @@ export async function createInvoice(db: Db, input: CreateInvoiceInput, actorId: 
       shopSuppliesPercent: null,
       feesAmount: '0',
       discountAmount: input.discountAmount ?? src.discountAmount ?? '0',
+      discountPercent: input.discountPercent ?? src.discountPercent ?? null,
       sourceInvoiceId: src.id,
     }
   }
@@ -530,6 +538,7 @@ export async function createInvoiceDraft(
     shopSuppliesPercent: null,
     feesAmount: '0',
     discountAmount: input.discountAmount ?? '0',
+    discountPercent: input.discountPercent ?? null,
     createdBy: actorId,
     updatedBy: actorId,
   }
@@ -962,7 +971,7 @@ export async function updateInvoiceDraft(db: Db, id: string, patch: InvoicePatch
   for (const key of [
     'invoiceDate', 'dueDate', 'paymentTerms', 'serviceLocation', 'poNumber',
     'complaint', 'internalNotes', 'customerNotes', 'taxRate',
-    'discountAmount',
+    'discountAmount', 'discountPercent',
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])) {
@@ -1024,7 +1033,12 @@ export async function addInvoiceLineItem(
     }
   }
 
-  const amount = lineAmount(input.quantity, input.unitPrice)
+  const resolved = resolveLineDiscount({
+    quantity: input.quantity,
+    unitPrice: input.unitPrice,
+    discountAmount: input.discountAmount,
+    discountPercent: input.discountPercent,
+  })
 
   const [row] = await db.insert(invoiceLineItems).values({
     invoiceId,
@@ -1034,7 +1048,9 @@ export async function addInvoiceLineItem(
     description: input.description.trim(),
     quantity: input.quantity,
     unitPrice: input.unitPrice,
-    lineAmount: amount,
+    lineAmount: resolved.lineAmount,
+    discountAmount: resolved.discountAmount,
+    discountPercent: input.discountPercent ?? null,
     taxable: input.taxable ?? catalogSnapshot?.taxable ?? true,
     sortOrder: input.sortOrder ?? 0,
     priceOverridden: input.priceOverridden ?? false,
@@ -1084,6 +1100,7 @@ export async function updateInvoiceLineItem(
   for (const key of [
     'lineType', 'description', 'quantity', 'unitPrice', 'taxable',
     'sortOrder', 'priceOverridden', 'priceOverrideReason',
+    'discountAmount', 'discountPercent',
   ] as const) {
     const value = patch[key]
     if (value !== undefined && JSON.stringify(value) !== JSON.stringify(existing[key])) {
@@ -1100,7 +1117,14 @@ export async function updateInvoiceLineItem(
 
   const qty = (changes.quantity as string | undefined) ?? existing.quantity
   const price = (changes.unitPrice as string | undefined) ?? existing.unitPrice
-  changes.lineAmount = lineAmount(qty, price)
+  const resolved = resolveLineDiscount({
+    quantity: qty,
+    unitPrice: price,
+    discountAmount: (changes.discountAmount as string | undefined) ?? existing.discountAmount,
+    discountPercent: (changes.discountPercent as string | null | undefined) ?? existing.discountPercent,
+  })
+  changes.lineAmount = resolved.lineAmount
+  changes.discountAmount = resolved.discountAmount
 
   const [updated] = await db.update(invoiceLineItems)
     .set(changes)
@@ -1146,10 +1170,13 @@ export async function recalculateInvoiceTotals(
       quantity: line.quantity,
       unitPrice: line.unitPrice,
       taxable: line.taxable,
+      discountAmount: line.discountAmount,
+      discountPercent: line.discountPercent,
     })),
     taxExempt: invoice.taxExempt,
     taxRate,
     discountAmount: invoice.discountAmount ?? '0',
+    discountPercent: invoice.discountPercent,
     amountPaid: invoice.amountPaid ?? '0',
   })
 
@@ -1236,10 +1263,13 @@ export async function transitionInvoice(
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         taxable: line.taxable,
+        discountAmount: line.discountAmount,
+        discountPercent: line.discountPercent,
       })),
       taxExempt: refreshed.taxExempt,
       taxRate: refreshed.taxRate ?? '0',
       discountAmount: refreshed.discountAmount ?? '0',
+      discountPercent: refreshed.discountPercent,
       amountPaid,
     })
     changes.amountPaid = amountPaid
@@ -1318,10 +1348,13 @@ export async function markInvoicePaid(
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         taxable: line.taxable,
+        discountAmount: line.discountAmount,
+        discountPercent: line.discountPercent,
       })),
       taxExempt: before.taxExempt,
       taxRate: before.taxRate ?? '0',
       discountAmount: before.discountAmount ?? '0',
+      discountPercent: before.discountPercent,
       amountPaid: newAmountPaid,
     })
 
@@ -1364,10 +1397,13 @@ export async function markInvoiceUnpaid(
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         taxable: line.taxable,
+        discountAmount: line.discountAmount,
+        discountPercent: line.discountPercent,
       })),
       taxExempt: before.taxExempt,
       taxRate: before.taxRate ?? '0',
       discountAmount: before.discountAmount ?? '0',
+      discountPercent: before.discountPercent,
       amountPaid: '0',
     })
 

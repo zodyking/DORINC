@@ -2,6 +2,19 @@ import { z } from 'zod'
 import { LINE_ITEM_TYPES } from '#shared/line-item-types'
 import { moneySchema, paginationSchema, uuidSchema } from './common'
 
+/** 0–100 percent off. Empty/null means a dollar discount (or none). */
+export const percentOffSchema = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined
+    if (value === null || value === '') return null
+    return String(value)
+  },
+  z.union([
+    z.null(),
+    z.string().regex(/^(?:100(?:\.0{1,4})?|\d{1,2}(?:\.\d{1,4})?)$/, 'Enter a percent from 0 to 100'),
+  ]).optional(),
+)
+
 export const invoiceStatusSchema = z.enum(['draft', 'pending_manager_approval', 'sent', 'paid', 'void'])
 
 export const invoiceCreationSourceSchema = z.enum([
@@ -32,6 +45,7 @@ const invoiceHeaderFields = {
   shopSuppliesPercent: z.string().max(20).nullish(),
   feesAmount: moneySchema.optional(),
   discountAmount: moneySchema.optional(),
+  discountPercent: percentOffSchema,
 }
 
 export const invoiceCreateSchema = z.object({
@@ -87,6 +101,8 @@ export const invoiceLineCreateSchema = z.object({
   description: z.string().trim().min(1).max(500),
   quantity: moneySchema,
   unitPrice: moneySchema,
+  discountAmount: moneySchema.optional(),
+  discountPercent: percentOffSchema,
   taxable: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
   priceOverridden: z.boolean().optional(),

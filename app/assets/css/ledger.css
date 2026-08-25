@@ -1221,7 +1221,7 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
     display:block;
   }
 }
-.ed-lines{ width:100%; border-collapse:collapse; min-width:920px; }
+.ed-lines{ width:100%; border-collapse:collapse; min-width:1040px; }
 .ed-lines th{
   text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
   color:#64748b; padding:9px 10px; border-bottom:1px solid #e2e8f0; background:#f8fafc;
@@ -1239,12 +1239,19 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
   box-sizing:border-box;
 }
 .ed-lines .amt{ text-align:right; font-weight:700; font-variant-numeric:tabular-nums; padding-top:17px; white-space:nowrap; min-width:9.5em; }
+.ed-lines .amt-stack{ padding-top:8px; }
+.ed-lines td.disc{ min-width:168px; }
+.ed-lines td.disc .line-currency-input,
+.ed-lines td.disc .disc-input{ min-width:4.25em; }
+.price-stack{ display:inline-flex; flex-direction:column; align-items:flex-end; gap:1px; line-height:1.2; }
+.price-was{ text-decoration:line-through; color:#94a3b8; font-size:12px; font-weight:500; }
+.price-now{ font-weight:800; color:#0f172a; }
 .ed-lines .rm{
   appearance:none; border:none; background:none; color:#94a3b8; cursor:pointer;
   font-size:15px; padding:8px 4px;
 }
 .ed-lines .rm:hover{ color:#dc2626; }
-.ed-sums{ margin-left:auto; width:320px; max-width:100%; padding:16px 18px; }
+.ed-sums{ margin-left:auto; width:360px; max-width:100%; padding:16px 18px; }
 .ed-sums .row{ display:flex; justify-content:space-between; padding:6px 0; font-size:13.5px; color:#64748b; }
 .ed-sums .row span:last-child{ font-variant-numeric:tabular-nums; color:#0f172a; font-weight:600; }
 .ed-sums .grand{ border-top:1px solid #e2e8f0; margin-top:8px; padding-top:12px; font-size:15px; font-weight:800; color:#0f172a; }
@@ -1254,6 +1261,8 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
 .ed-sums .sum-strike{ text-decoration: line-through; }
 /* "tax exempt" sits before the amount (next to the label) — same font/size. */
 .ed-sums .sum-note{ margin-left:6px; font-weight: inherit; }
+.ed-sums .ed-sums-discount{ align-items:center; gap:12px; }
+.ed-sums .ed-sums-discount .disc-field{ width:168px; flex:none; }
 .savebar{
   position:sticky; bottom:0; margin-top:18px;
   background:#fff; border:1px solid #e2e8f0; border-radius:14px;

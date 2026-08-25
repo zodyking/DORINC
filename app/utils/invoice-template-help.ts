@@ -33,8 +33,8 @@ The PDF service also enforces margins as a safety net, but your @page rule gives
 - \`$doc['company']\` — Business name, address, phone, email, fax
 - \`$doc['customer']\` — Customer name, addressLines, phone, email
 - \`$doc['vehicle']\` — year, make, model, makeModel, vin, plate, color, mileageIn, mileageOut, unitNumber
-- \`$doc['lineItems']\` — Array of items with description, quantity, unitPrice, lineAmount, typeBadge
-- \`$doc['totals']\` — parts, labor, fees, discount, tax, total, balanceDue
+- \`$doc['lineItems']\` — Array of items with description, quantity, unitPrice, lineAmount (net after any line discount), typeBadge. Optional: originalLineAmount (gross before a line discount) and discounted (true when the line was discounted). Custom templates that only print lineAmount keep working. To show a crossed-out original, print originalLineAmount struck through and lineAmount underneath when discounted is set.
+- \`$doc['totals']\` — parts, labor, fees, discount, tax, total, balanceDue. Optional: hasDiscount (true when the document discount is greater than zero — hide the Discount row otherwise), taxExempt, waivedTax
 - \`$doc['number']\`, \`$doc['date']\`, \`$doc['dueLabel']\`, \`$doc['statusLabel']\`
 - \`$doc['note']\` — Complaint/symptoms text
 - \`$doc['design']['sections']\` — Section visibility configuration`,
