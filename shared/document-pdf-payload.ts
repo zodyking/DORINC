@@ -1,6 +1,6 @@
-import { formatMoney, parseMoney } from './money'
+import { addMoney, formatMoney, parseMoney } from './money'
 import { resolveInvoicePdfTotals } from './invoice-tax-exempt'
-import { isDiscountedMoney, resolveLineDiscount } from './invoice-discount'
+import { isDiscountedMoney, displayedInvoiceDiscount, resolveLineDiscount, sumLineDiscounts } from './invoice-discount'
 import { formatPhoneDisplay, phoneDisplay } from './format/phone'
 import { normalizeLineType } from './line-item-types'
 import type { InvoiceTemplateDesignSettings } from '../server/db/schema/invoice-templates'
@@ -400,13 +400,23 @@ export function buildInvoicePdfData(
         discountAmount: detail.discountAmount,
         amountPaid: detail.amountPaid,
       })
+      const lineDiscountTotal = sumLineDiscounts(detail.lineItems)
+      const lineAmounts = detail.lineItems.map(line => line.lineAmount)
+      const subtotal = lineAmounts.length ? addMoney(...lineAmounts) : '0'
+      const displayedDiscount = displayedInvoiceDiscount({
+        subtotal,
+        taxAmount: resolved.taxAmount,
+        feesAmount: detail.feesAmount,
+        discountAmount: detail.discountAmount,
+        lineDiscountTotal,
+      })
       return {
         parts: moneyDisplay(formatMoney(partsTotal)),
         labor: moneyDisplay(formatMoney(laborTotal)),
-        discount: moneyDisplay(detail.discountAmount),
+        discount: moneyDisplay(displayedDiscount),
         hasDiscount: (() => {
           try {
-            return parseMoney(detail.discountAmount ?? '0') > 0n
+            return parseMoney(displayedDiscount) > 0n
           }
           catch {
             return false

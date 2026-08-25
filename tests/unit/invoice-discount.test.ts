@@ -4,8 +4,11 @@ import {
   isDiscountedMoney,
   normalizePercentOff,
   percentOffFromAmount,
+  additionalFromInclusiveDiscount,
+  displayedInvoiceDiscount,
   resolveInvoiceDiscount,
   resolveLineDiscount,
+  sumLineDiscounts,
 } from '../../shared/invoice-discount'
 
 describe('invoice discounts', () => {
@@ -66,6 +69,25 @@ describe('invoice discounts', () => {
       taxAmount: '6.60',
       discountAmount: '500.00',
     })).toBe('106.60')
+  })
+
+  it('includes line discounts in the displayed invoice discount and floors additional at that total', () => {
+    expect(sumLineDiscounts([
+      { quantity: '1', unitPrice: '1275.00', discountAmount: '50.00' },
+      { quantity: '1', unitPrice: '100.00', discountPercent: '10' },
+    ])).toBe('60.00')
+    expect(displayedInvoiceDiscount({
+      subtotal: '1315.00',
+      discountAmount: '0',
+      lineDiscountTotal: '60.00',
+    })).toBe('60.00')
+    expect(displayedInvoiceDiscount({
+      subtotal: '1315.00',
+      discountAmount: '25.00',
+      lineDiscountTotal: '60.00',
+    })).toBe('85.00')
+    expect(additionalFromInclusiveDiscount('20.00', '50.00')).toBe('0.00')
+    expect(additionalFromInclusiveDiscount('80.00', '50.00')).toBe('30.00')
   })
 
   it('treats blank and zero percents as not a percent discount', () => {

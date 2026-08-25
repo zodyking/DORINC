@@ -13,6 +13,7 @@ import {
 import { focusVisibleLineInput } from '~/utils/line-field-focus'
 import type { InvoiceLineType } from '~/utils/invoices-ui'
 import type { CatalogQuickItem, InvoiceSummaryRow } from '~/utils/invoice-editor-ui'
+import { sumLineDiscounts } from '#shared/invoice-discount'
 
 export interface EditorLineRow {
   id?: string
@@ -137,6 +138,13 @@ watch(() => props.editable, (editable) => {
   if (!editable) editingDiscountLineId.value = null
 })
 
+const lineDiscountTotal = computed(() => sumLineDiscounts(props.lines.map(line => ({
+  quantity: line.quantity,
+  unitPrice: line.unitPrice,
+  discountAmount: line.discountAmount,
+  discountPercent: line.discountPercent,
+}))))
+
 onMounted(() => {
   if (!props.showMobileCards) return
   syncMobileLines()
@@ -217,7 +225,6 @@ onBeforeUnmount(() => {
                 v-if="showTableDiscount(line)"
                 v-model:amount="line.discountAmount"
                 v-model:percent="line.discountPercent"
-                dense
                 :line-id="lineRowId(line)"
                 :base-amount="lineGross(line)"
                 :disabled="!editable"
@@ -302,21 +309,14 @@ onBeforeUnmount(() => {
               @tab-next="onRateTabNext(line)"
             />
           </label>
-          <div
-            class="inv-line-card-amt"
-            :class="{
-              'amt-discount-hit': editable,
-              'amt-editing': showCardDiscount(line),
-            }"
-            :title="editable ? 'Double-click to add a discount' : undefined"
-            @dblclick.prevent="onAmountDblClick(line)"
+          <label
+            v-if="showCardDiscount(line)"
+            class="fld inv-line-card-disc"
           >
-            <span class="k">Amount</span>
+            <span>Discount</span>
             <InvoiceDiscountField
-              v-if="showCardDiscount(line)"
               v-model:amount="line.discountAmount"
               v-model:percent="line.discountPercent"
-              dense
               :line-id="lineRowId(line)"
               :base-amount="lineGross(line)"
               :disabled="!editable"
@@ -325,8 +325,15 @@ onBeforeUnmount(() => {
               @tab-next="onLineDiscountTabNext(line)"
               @dblclick.stop.prevent="closeLineDiscount(line)"
             />
+          </label>
+          <div
+            class="inv-line-card-amt"
+            :class="{ 'amt-discount-hit': editable }"
+            :title="editable ? 'Double-click to add a discount' : undefined"
+            @dblclick.prevent="onAmountDblClick(line)"
+          >
+            <span class="k">Amount</span>
             <InvoicePriceStack
-              v-else
               :original="lineGross(line)"
               :current="lineNet(line)"
             />
@@ -343,6 +350,7 @@ onBeforeUnmount(() => {
       :discount-editable="discountEditable"
       :discount-disabled="!editable"
       :discount-base="discountBase"
+      :line-discount-total="lineDiscountTotal"
       @discount-blur="emit('discount-blur')"
     />
   </div>
@@ -380,6 +388,13 @@ onBeforeUnmount(() => {
 .inv-line-card-nums .fld {
   margin: 0;
 }
+.inv-line-card-disc {
+  grid-column: 1 / -1;
+}
+.inv-line-card-disc :deep(.disc-field) {
+  width: 100%;
+  margin-top: 6px;
+}
 .inv-line-card-amt {
   grid-column: 1 / -1;
   display: flex;
@@ -397,10 +412,6 @@ onBeforeUnmount(() => {
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-.inv-line-card-amt.amt-editing .disc-field {
-  width: 168px;
-  max-width: 100%;
 }
 .amt-discount-hit {
   cursor: pointer;

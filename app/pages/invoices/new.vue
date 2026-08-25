@@ -4,6 +4,7 @@ import AddPackageModal from '~/components/invoices/AddPackageModal.vue'
 import InvoiceEditorLinesBlock from '~/components/invoices/InvoiceEditorLinesBlock.vue'
 import InvoiceSummaryPanel from '~/components/invoices/InvoiceSummaryPanel.vue'
 import { addMoney } from '#shared/money'
+import { sumLineDiscounts } from '#shared/invoice-discount'
 import { applyCatalogItemToLineFields, editorSummaryRows, type CatalogQuickItem } from '~/utils/invoice-editor-ui'
 import {
   buildInvoiceLinePatchBody,
@@ -457,6 +458,13 @@ const summaryRows = computed(() => {
     })),
   })
 })
+
+const lineDiscountTotal = computed(() => sumLineDiscounts(lines.value.map(line => ({
+  quantity: line.quantity,
+  unitPrice: line.unitPrice,
+  discountAmount: line.discountAmount,
+  discountPercent: line.discountPercent,
+}))))
 
 const discountBase = computed(() => {
   try {
@@ -1218,6 +1226,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
             :rows="summaryRows"
             :discount-editable="true"
             :discount-base="discountBase"
+            :line-discount-total="lineDiscountTotal"
           />
         </template>
       </PanelRevealSlider>
@@ -1271,6 +1280,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
         :rows="summaryRows"
         :discount-editable="true"
         :discount-base="discountBase"
+        :line-discount-total="lineDiscountTotal"
       />
 
       <div class="sl-foot">
