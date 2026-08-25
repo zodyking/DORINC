@@ -28,7 +28,7 @@ export interface EditorLineRow {
   catalogItemId?: string | null
 }
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   lines: EditorLineRow[]
   editable: boolean
   busy?: boolean
@@ -54,10 +54,17 @@ const emit = defineEmits<{
   remove: [lineId: string]
   'focus-qty': [lineId: string]
   'focus-rate': [lineId: string]
-  'discount-tab-next': [line: EditorLineRow]
+  'rate-tab-next': [line: EditorLineRow]
   'catalog-select': [line: EditorLineRow, item: CatalogQuickItem]
   'discount-blur': []
 }>()
+
+const editingDiscountLineId = ref<string | null>(null)
+const mobileLines = ref(false)
+
+function syncMobileLines() {
+  mobileLines.value = window.matchMedia('(max-width: 720px)').matches
+}
 
 function lineRowId(line: EditorLineRow): string {
   return line.id || line.localId || ''
@@ -75,15 +82,70 @@ function lineNet(line: EditorLineRow): string {
   return previewLineAmount(line.quantity, line.unitPrice, line) || line.lineAmount || '0'
 }
 
-function onRateTabNext(line: EditorLineRow) {
+function isEditingLineDiscount(line: EditorLineRow) {
+  return props.editable && editingDiscountLineId.value === lineRowId(line)
+}
+
+function showTableDiscount(line: EditorLineRow) {
+  return isEditingLineDiscount(line) && (!props.showMobileCards || !mobileLines.value)
+}
+
+function showCardDiscount(line: EditorLineRow) {
+  return isEditingLineDiscount(line) && props.showMobileCards && mobileLines.value
+}
+
+function closeLineDiscount(line?: EditorLineRow) {
+  const currentId = editingDiscountLineId.value
+  editingDiscountLineId.value = null
+  const current = line || props.lines.find(item => lineRowId(item) === currentId)
+  if (current) emit('patch', current)
+}
+
+function onAmountDblClick(line: EditorLineRow) {
+  if (!props.editable) return
+  const id = lineRowId(line)
+  if (editingDiscountLineId.value === id) {
+    closeLineDiscount(line)
+    return
+  }
+  if (editingDiscountLineId.value) closeLineDiscount()
   ensureLineDiscount(line)
+  editingDiscountLineId.value = id
+  void nextTick(() => focusVisibleLineInput(id, 'discount'))
+}
+
+function onLineDiscountBlur(line: EditorLineRow) {
+  if (editingDiscountLineId.value !== lineRowId(line)) return
+  closeLineDiscount(line)
+}
+
+function onLineDiscountTabNext(line: EditorLineRow) {
+  onLineDiscountBlur(line)
+  emit('rate-tab-next', line)
+}
+
+function onRateTabNext(line: EditorLineRow) {
   emit('patch', line)
-  focusVisibleLineInput(lineRowId(line), 'discount')
+  emit('rate-tab-next', line)
 }
 
 function onLineTyped(line: EditorLineRow) {
   line.catalogItemId = null
 }
+
+watch(() => props.editable, (editable) => {
+  if (!editable) editingDiscountLineId.value = null
+})
+
+onMounted(() => {
+  if (!props.showMobileCards) return
+  syncMobileLines()
+  window.addEventListener('resize', syncMobileLines)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncMobileLines)
+})
 </script>
 
 <template>
@@ -96,8 +158,7 @@ function onLineTyped(line: EditorLineRow) {
             <th>Description</th>
             <th style="width:110px">Qty / Hrs</th>
             <th style="width:150px">Rate</th>
-            <th style="width:168px">Disc</th>
-            <th style="width:130px; text-align:right">Amount</th>
+            <th style="width:150px; text-align:right">Amount</th>
             <th style="width:36px" />
           </tr>
         </thead>
@@ -143,20 +204,33 @@ function onLineTyped(line: EditorLineRow) {
                 @tab-next="onRateTabNext(line)"
               />
             </td>
-            <td class="disc">
+            <td
+              class="amt amt-stack"
+              :class="{
+                'amt-discount-hit': editable,
+                'amt-editing': showTableDiscount(line),
+              }"
+              :title="editable ? 'Double-click to add a discount' : undefined"
+              @dblclick.prevent="onAmountDblClick(line)"
+            >
               <InvoiceDiscountField
+                v-if="showTableDiscount(line)"
                 v-model:amount="line.discountAmount"
                 v-model:percent="line.discountPercent"
+                dense
                 :line-id="lineRowId(line)"
                 :base-amount="lineGross(line)"
                 :disabled="!editable"
                 aria-label="Line discount"
-                @blur="emit('patch', line)"
-                @tab-next="emit('discount-tab-next', line)"
+                @blur="onLineDiscountBlur(line)"
+                @tab-next="onLineDiscountTabNext(line)"
+                @dblclick.stop.prevent="closeLineDiscount(line)"
               />
-            </td>
-            <td class="amt amt-stack">
-              <InvoicePriceStack :original="lineGross(line)" :current="lineNet(line)" />
+              <InvoicePriceStack
+                v-else
+                :original="lineGross(line)"
+                :current="lineNet(line)"
+              />
             </td>
             <td>
               <button
@@ -228,22 +302,34 @@ function onLineTyped(line: EditorLineRow) {
               @tab-next="onRateTabNext(line)"
             />
           </label>
-          <label class="fld">
-            <span>Disc</span>
+          <div
+            class="inv-line-card-amt"
+            :class="{
+              'amt-discount-hit': editable,
+              'amt-editing': showCardDiscount(line),
+            }"
+            :title="editable ? 'Double-click to add a discount' : undefined"
+            @dblclick.prevent="onAmountDblClick(line)"
+          >
+            <span class="k">Amount</span>
             <InvoiceDiscountField
+              v-if="showCardDiscount(line)"
               v-model:amount="line.discountAmount"
               v-model:percent="line.discountPercent"
+              dense
               :line-id="lineRowId(line)"
               :base-amount="lineGross(line)"
               :disabled="!editable"
               aria-label="Line discount"
-              @blur="emit('patch', line)"
-              @tab-next="emit('discount-tab-next', line)"
+              @blur="onLineDiscountBlur(line)"
+              @tab-next="onLineDiscountTabNext(line)"
+              @dblclick.stop.prevent="closeLineDiscount(line)"
             />
-          </label>
-          <div class="inv-line-card-amt">
-            <span class="k">Amount</span>
-            <InvoicePriceStack :original="lineGross(line)" :current="lineNet(line)" />
+            <InvoicePriceStack
+              v-else
+              :original="lineGross(line)"
+              :current="lineNet(line)"
+            />
           </div>
         </div>
       </article>
@@ -299,6 +385,7 @@ function onLineTyped(line: EditorLineRow) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 44px;
   padding: 10px 12px;
   border-radius: 10px;
   background: #f8fafc;
@@ -310,6 +397,13 @@ function onLineTyped(line: EditorLineRow) {
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.inv-line-card-amt.amt-editing .disc-field {
+  width: 168px;
+  max-width: 100%;
+}
+.amt-discount-hit {
+  cursor: pointer;
 }
 @media (max-width: 720px) {
   .inv-line-table--desktop {

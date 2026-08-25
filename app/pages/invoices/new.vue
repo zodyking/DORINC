@@ -447,7 +447,6 @@ const summaryRows = computed(() => {
   })
   return editorSummaryRows(preview, {
     breakdown,
-    omitDiscount: true,
     grandLabel: savedInvoice.value ? 'Total' : 'Estimated total',
     lineItems: lines.value.map(line => ({
       quantity: line.quantity,
@@ -670,7 +669,7 @@ function addLineAndFocusDescription() {
   if (newest) focusVisibleLineDescription(newest.localId)
 }
 
-function onLineDiscountTabNext(line: DraftLine) {
+function onRateTabNext(line: DraftLine) {
   onLineFieldBlur(line)
   addLineAndFocusDescription()
 }
@@ -1206,7 +1205,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
               @remove="removeLine"
               @focus-qty="focusLineQty"
               @focus-rate="focusLineRate"
-              @discount-tab-next="onLineDiscountTabNext"
+              @rate-tab-next="onRateTabNext"
               @catalog-select="applyCatalogToLine"
             />
             <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>
@@ -1256,7 +1255,7 @@ onBeforeUnmount(() => unregisterSessionSaveHandler(saveOpenWorkForSessionTimeout
               @remove="removeLine"
               @focus-qty="focusLineQty"
               @focus-rate="focusLineRate"
-              @discount-tab-next="onLineDiscountTabNext"
+              @rate-tab-next="onRateTabNext"
               @catalog-select="applyCatalogToLine"
             />
           <button v-if="voiceEntryAvailable" type="button" class="btn ghost sm sl-change-mode" @click="clearLineEntryMode">Change method</button>

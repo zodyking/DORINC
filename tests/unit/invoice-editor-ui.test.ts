@@ -149,12 +149,23 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       'Fees',
       'Subtotal',
       'Tax',
+      'Discount',
       'Estimated total',
     ])
     expect(rows.find(r => r.label === 'Labor')?.value).toBe('$360.00')
+    expect(rows.find(r => r.label === 'Discount')?.value).toBe('$0.00')
   })
 
-  it('hides the discount row when editing and applies a live percent off subtotal', () => {
+  it('always shows the discount row like fees, including a live percent off subtotal', () => {
+    const zero = editorSummaryRows({
+      subtotal: '200.00',
+      taxAmount: '0',
+      taxExempt: true,
+      discountAmount: '0',
+      total: '200.00',
+    })
+    expect(zero.find(r => r.label === 'Discount')?.value).toBe('$0.00')
+
     const rows = editorSummaryRows({
       subtotal: '200.00',
       taxAmount: '0',
@@ -162,8 +173,8 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
       discountAmount: '0',
       discountPercent: '10',
       total: '180.00',
-    }, { omitDiscount: true })
-    expect(rows.find(r => r.label === 'Discount')).toBeUndefined()
+    })
+    expect(rows.find(r => r.label === 'Discount')?.value).toBe('$20.00')
     expect(rows.find(r => r.grand)?.value).toBe('$180.00')
   })
 

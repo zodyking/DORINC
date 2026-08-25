@@ -22,6 +22,48 @@ const emit = defineEmits<{
 
 const leadingRows = computed(() => props.rows.filter(row => !row.grand))
 const grandRows = computed(() => props.rows.filter(row => row.grand))
+const editingDiscount = ref(false)
+const discountFieldRef = ref<{ focus: () => void } | null>(null)
+
+function setDiscountFieldRef(el: unknown) {
+  discountFieldRef.value = el as { focus: () => void } | null
+}
+
+function isDiscountRow(row: InvoiceSummaryRow) {
+  return row.label === 'Discount'
+}
+
+function canEditDiscount() {
+  return props.discountEditable && !props.discountDisabled
+}
+
+function openDiscountEdit() {
+  if (!canEditDiscount() || editingDiscount.value) return
+  editingDiscount.value = true
+}
+
+function closeDiscountEdit() {
+  if (!editingDiscount.value) return
+  editingDiscount.value = false
+  emit('discount-blur')
+}
+
+function onDiscountRowDblClick() {
+  if (!canEditDiscount()) return
+  if (editingDiscount.value) closeDiscountEdit()
+  else openDiscountEdit()
+}
+
+watch(editingDiscount, (open) => {
+  if (!open) return
+  void nextTick(() => {
+    void nextTick(() => discountFieldRef.value?.focus())
+  })
+})
+
+watch(() => props.discountDisabled, (disabled) => {
+  if (disabled) editingDiscount.value = false
+})
 </script>
 
 <template>
@@ -30,20 +72,35 @@ const grandRows = computed(() => props.rows.filter(row => row.grand))
       v-for="(row, i) in leadingRows"
       :key="`lead-${i}`"
       class="row"
+      :class="{ 'ed-sums-discount-row': isDiscountRow(row) }"
+      @dblclick.prevent="isDiscountRow(row) ? onDiscountRowDblClick() : undefined"
     >
       <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
-      <span :class="{ 'sum-strike': row.strikethrough }">{{ row.value }}</span>
-    </div>
-    <div v-if="discountEditable" class="row ed-sums-discount">
-      <span>Discount</span>
-      <InvoiceDiscountField
-        v-model:amount="discountAmount"
-        v-model:percent="discountPercent"
-        :base-amount="discountBase"
-        :disabled="discountDisabled"
-        aria-label="Invoice discount"
-        @blur="emit('discount-blur')"
-      />
+      <span
+        v-if="!(canEditDiscount() && isDiscountRow(row) && editingDiscount)"
+        class="sum-value"
+        :class="{
+          'sum-strike': row.strikethrough,
+          'sum-discount-hit': canEditDiscount() && isDiscountRow(row),
+        }"
+        :title="canEditDiscount() && isDiscountRow(row) ? 'Double-click to edit discount' : undefined"
+      >{{ row.value }}</span>
+      <span
+        v-else
+        class="sum-value sum-value-edit"
+        @dblclick.stop.prevent="closeDiscountEdit"
+      >
+        <InvoiceDiscountField
+          :ref="setDiscountFieldRef"
+          v-model:amount="discountAmount"
+          v-model:percent="discountPercent"
+          dense
+          :base-amount="discountBase"
+          :disabled="discountDisabled"
+          aria-label="Invoice discount"
+          @blur="closeDiscountEdit"
+        />
+      </span>
     </div>
     <div
       v-for="(row, i) in grandRows"
