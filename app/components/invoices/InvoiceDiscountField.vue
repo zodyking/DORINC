@@ -4,7 +4,7 @@ import {
   normalizePercentOff,
   percentOffFromAmount,
 } from '#shared/invoice-discount'
-import { percentOfMoney } from '#shared/money'
+import { parseMoney, percentOfMoney } from '#shared/money'
 import LineCurrencyInput from '~/components/invoices/LineCurrencyInput.vue'
 
 const amount = defineModel<string | null>('amount', { default: '0.00' })
@@ -21,12 +21,15 @@ const props = withDefaults(defineProps<{
   lineId?: string
   /** Gross amount used when switching $ → % (line total or invoice subtotal). */
   baseAmount?: string
+  /** Inclusive invoice discount cannot go below line-item discounts. */
+  minAmount?: string
   ariaLabel?: string
 }>(), {
   disabled: false,
   dense: false,
   lineId: undefined,
   baseAmount: '0',
+  minAmount: '0',
   ariaLabel: 'Discount',
 })
 
@@ -48,6 +51,20 @@ watch(() => percent.value, (value) => {
   }
 }, { immediate: true })
 
+function clampToMin() {
+  const min = props.minAmount || '0'
+  try {
+    if (parseMoney(amount.value || '0') >= parseMoney(min)) return
+  }
+  catch {
+    return
+  }
+  amount.value = min
+  percent.value = null
+  percentDraft.value = ''
+  mode.value = 'amount'
+}
+
 function setMode(next: 'amount' | 'percent') {
   if (props.disabled || mode.value === next) return
   if (next === 'percent') {
@@ -59,6 +76,7 @@ function setMode(next: 'amount' | 'percent') {
       amount.value = percentOfMoney(props.baseAmount, percent.value)
     }
     mode.value = 'percent'
+    clampToMin()
     return
   }
   if (normalizePercentOff(percent.value) && props.baseAmount) {
@@ -67,6 +85,7 @@ function setMode(next: 'amount' | 'percent') {
   percent.value = null
   percentDraft.value = ''
   mode.value = 'amount'
+  clampToMin()
 }
 
 function commitPercent() {
@@ -79,6 +98,7 @@ function commitPercent() {
   else if (!next) {
     amount.value = amount.value || '0.00'
   }
+  clampToMin()
 }
 
 function onPercentInput(event: Event) {
@@ -108,6 +128,7 @@ function onPercentKeydown(e: KeyboardEvent) {
 function onAmountBlur() {
   if (mode.value !== 'amount') return
   percent.value = null
+  clampToMin()
 }
 
 function onAmountTabNext() {
@@ -125,6 +146,7 @@ function focus() {
 
 function dismiss() {
   if (mode.value === 'percent') commitPercent()
+  clampToMin()
   emit('blur')
 }
 
@@ -147,6 +169,7 @@ function onFieldKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  clampToMin()
   document.addEventListener('pointerdown', onDocPointerDown, true)
 })
 
@@ -235,15 +258,29 @@ defineExpose({ focus })
   flex: none;
   border-right: 1px solid #e2e8f0;
 }
+.disc-input,
+.disc-field :deep(.line-currency-input) {
+  flex: 1;
+  min-width: 9.5em !important;
+  width: 100%;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none;
+  padding: 9px 12px;
+  font-size: 16px;
+  line-height: 1.25;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .disc-mode {
   appearance: none;
   border: none;
   background: #f8fafc;
   color: #64748b;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
-  width: 28px;
+  width: 40px;
   cursor: pointer;
   padding: 0;
 }
@@ -253,18 +290,6 @@ defineExpose({ focus })
 }
 .disc-mode:disabled {
   cursor: default;
-}
-.disc-input,
-.disc-field :deep(.line-currency-input) {
-  flex: 1;
-  min-width: 4.25em !important;
-  width: 100%;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none;
-  padding: 8px 8px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .disc-field.dense {
   height: 22px;

@@ -200,7 +200,8 @@ describe('document-pdf-payload', () => {
     expect(data.lineItems[0]?.lineAmount).toBe('$90.00')
     expect(data.lineItems[0]?.originalLineAmount).toBe('$100.00')
     expect(data.lineItems[0]?.discounted).toBe(true)
-    expect(data.totals.hasDiscount).toBe(false)
+    expect(data.totals.hasDiscount).toBe(true)
+    expect(data.totals.discount).toBe('$10.00')
 
     const withInvoiceDiscount = buildInvoicePdfData({
       invoiceNumberFormatted: 'INV-000201',

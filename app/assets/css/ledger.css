@@ -1241,8 +1241,8 @@ dl.kv dd{ margin:0; text-align:right; font-weight:600; min-width:0; overflow-wra
 .ed-lines .amt{ text-align:right; font-weight:700; font-variant-numeric:tabular-nums; padding-top:17px; white-space:nowrap; min-width:10.5em; }
 .ed-lines .amt-stack{ padding-top:8px; }
 .ed-lines .amt-discount-hit{ cursor:pointer; }
-.ed-lines .amt-editing{ padding-top:8px; }
-.ed-lines .amt-editing .disc-field{ width:168px; max-width:100%; margin-left:auto; }
+.ed-lines .amt-editing{ padding-top:8px; min-width:16em; }
+.ed-lines .amt-editing .disc-field{ width:100%; min-width:16em; margin-left:auto; }
 .price-stack{ display:inline-flex; flex-direction:column; align-items:flex-end; gap:1px; line-height:1.2; }
 .price-was{ text-decoration:line-through; color:#94a3b8; font-size:12px; font-weight:500; }
 .price-now{ font-weight:800; color:#0f172a; }

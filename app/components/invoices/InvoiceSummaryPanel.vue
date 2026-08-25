@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  additionalFromInclusiveDiscount,
+  displayedInvoiceDiscount,
+} from '#shared/invoice-discount'
+import { addMoney } from '#shared/money'
 import InvoiceDiscountField from '~/components/invoices/InvoiceDiscountField.vue'
 import type { InvoiceSummaryRow } from '~/utils/invoice-editor-ui'
 
@@ -7,10 +12,12 @@ const props = withDefaults(defineProps<{
   discountEditable?: boolean
   discountDisabled?: boolean
   discountBase?: string
+  lineDiscountTotal?: string
 }>(), {
   discountEditable: false,
   discountDisabled: false,
   discountBase: '0',
+  lineDiscountTotal: '0',
 })
 
 const discountAmount = defineModel<string>('discountAmount', { default: '0' })
@@ -24,6 +31,28 @@ const leadingRows = computed(() => props.rows.filter(row => !row.grand))
 const grandRows = computed(() => props.rows.filter(row => row.grand))
 const editingDiscount = ref(false)
 const discountFieldRef = ref<{ focus: () => void } | null>(null)
+
+const inclusiveBase = computed(() => {
+  try {
+    return addMoney(props.discountBase || '0', props.lineDiscountTotal || '0')
+  }
+  catch {
+    return props.discountBase || '0'
+  }
+})
+
+const inclusiveAmount = computed({
+  get: () => displayedInvoiceDiscount({
+    subtotal: props.discountBase || '0',
+    discountAmount: discountAmount.value,
+    discountPercent: discountPercent.value,
+    lineDiscountTotal: props.lineDiscountTotal,
+  }),
+  set: (value: string) => {
+    discountPercent.value = null
+    discountAmount.value = additionalFromInclusiveDiscount(value, props.lineDiscountTotal || '0')
+  },
+})
 
 function setDiscountFieldRef(el: unknown) {
   discountFieldRef.value = el as { focus: () => void } | null
@@ -92,10 +121,10 @@ watch(() => props.discountDisabled, (disabled) => {
       >
         <InvoiceDiscountField
           :ref="setDiscountFieldRef"
-          v-model:amount="discountAmount"
-          v-model:percent="discountPercent"
+          v-model:amount="inclusiveAmount"
           dense
-          :base-amount="discountBase"
+          :min-amount="lineDiscountTotal"
+          :base-amount="inclusiveBase"
           :disabled="discountDisabled"
           aria-label="Invoice discount"
           @blur="closeDiscountEdit"

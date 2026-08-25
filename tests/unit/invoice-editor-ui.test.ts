@@ -178,6 +178,26 @@ describe('invoice-editor-ui helpers (P1-24)', () => {
     expect(rows.find(r => r.grand)?.value).toBe('$180.00')
   })
 
+  it('includes line-item discounts in the invoice discount row', () => {
+    const rows = editorSummaryRows({
+      subtotal: '1225.00',
+      taxAmount: '0',
+      taxExempt: true,
+      discountAmount: '0',
+      total: '1225.00',
+    }, {
+      breakdown: { parts: '0.00', labor: '1225.00', fees: '0.00' },
+      lineItems: [{
+        quantity: '1',
+        unitPrice: '1275.00',
+        taxable: true,
+        discountAmount: '50.00',
+      }],
+    })
+    expect(rows.find(r => r.label === 'Discount')?.value).toBe('$50.00')
+    expect(rows.find(r => r.grand)?.value).toBe('$1,225.00')
+  })
+
   it('formats audit history rows', () => {
     expect(formatHistoryChange('invoices.line_items.create', { description: 'NOx sensor', lineAmount: '145.00' }))
       .toBe('Added line "NOx sensor" ($145.00)')

@@ -114,3 +114,32 @@ export function resolveInvoiceDiscount(input: InvoiceDiscountInput): string {
   if (parseMoney(amount) > parseMoney(max)) amount = max
   return amount
 }
+
+/** Sum of resolved line-item discounts (already taken out of subtotal). */
+export function sumLineDiscounts(lines: LineDiscountInput[]): string {
+  const amounts = lines.map(line => resolveLineDiscount(line).discountAmount)
+  return amounts.length ? addMoney(...amounts) : '0.00'
+}
+
+/**
+ * Discount shown on totals: line discounts plus any additional invoice discount.
+ * Never less than the line-item discount total.
+ */
+export function displayedInvoiceDiscount(input: InvoiceDiscountInput & {
+  lineDiscountTotal?: string | null
+}): string {
+  const lineTotal = asMoney(input.lineDiscountTotal, '0')
+  const additional = resolveInvoiceDiscount(input)
+  return addMoney(lineTotal, additional)
+}
+
+/** Extra invoice discount after subtracting line discounts already applied. */
+export function additionalFromInclusiveDiscount(
+  inclusiveAmount: string,
+  lineDiscountTotal: string,
+): string {
+  const floor = asMoney(lineDiscountTotal, '0')
+  const inclusive = asMoney(inclusiveAmount, '0')
+  if (parseMoney(inclusive) <= parseMoney(floor)) return '0.00'
+  return subtractMoney(inclusive, floor)
+}

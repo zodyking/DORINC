@@ -2,7 +2,7 @@
 
 import { addMoney, subtractMoney } from '#shared/money'
 import { computeWaivedTaxAmount, taxableSubtotalFromLines, type TaxableLineInput } from '#shared/invoice-tax-exempt'
-import { resolveInvoiceDiscount } from '#shared/invoice-discount'
+import { displayedInvoiceDiscount, resolveInvoiceDiscount, sumLineDiscounts } from '#shared/invoice-discount'
 import { formatAuditChangeMessage, type AuditMessageInput } from '#shared/audit-messages'
 import { normalizeLineType } from '#shared/line-item-types'
 import { inferLineTypeFromDescription } from '#shared/line-item-type-from-description'
@@ -123,19 +123,6 @@ export function invoiceDisplayTotal(
   return subtractMoney(addMoney(lineSubtotal, inv.taxAmount ?? '0'), discount)
 }
 
-function resolvedDocumentDiscount(
-  inv: InvoiceTotalsShape,
-  lineSubtotal: string,
-): string {
-  return resolveInvoiceDiscount({
-    subtotal: lineSubtotal,
-    taxAmount: inv.taxAmount ?? '0',
-    discountAmount: inv.discountAmount,
-    discountPercent: inv.discountPercent,
-  })
-}
-
-/** Server totals rows for editor sidebar — never computed client-side. */
 export function editorSummaryRows(
   inv: InvoiceTotalsShape & { taxRate?: string | null },
   opts: {
@@ -181,10 +168,18 @@ export function editorSummaryRows(
   else {
     rows.push({ label: 'Tax', value: moneyDisplay(inv.taxAmount) })
   }
-  const discount = resolvedDocumentDiscount(inv, lineSubtotal)
+  const lineDiscountTotal = opts.lineItems?.length
+    ? sumLineDiscounts(opts.lineItems)
+    : '0.00'
   rows.push({
     label: 'Discount',
-    value: moneyDisplay(discount || '0'),
+    value: moneyDisplay(displayedInvoiceDiscount({
+      subtotal: lineSubtotal,
+      taxAmount: inv.taxAmount ?? '0',
+      discountAmount: inv.discountAmount,
+      discountPercent: inv.discountPercent,
+      lineDiscountTotal,
+    })),
   })
   rows.push({
     label: opts.grandLabel ?? 'Total',
