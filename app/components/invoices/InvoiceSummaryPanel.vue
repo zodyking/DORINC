@@ -6,6 +6,7 @@ import {
 import { addMoney } from '#shared/money'
 import InvoiceDiscountField from '~/components/invoices/InvoiceDiscountField.vue'
 import type { InvoiceSummaryRow } from '~/utils/invoice-editor-ui'
+import { DiscountRevealSession } from '~/utils/discount-reveal'
 
 const props = withDefaults(defineProps<{
   rows: InvoiceSummaryRow[]
@@ -31,6 +32,8 @@ const leadingRows = computed(() => props.rows.filter(row => !row.grand))
 const grandRows = computed(() => props.rows.filter(row => row.grand))
 const editingDiscount = ref(false)
 const discountFieldRef = ref<{ focus: () => void } | null>(null)
+const discountReveal = new DiscountRevealSession()
+const DISCOUNT_HINT = 'Tap and hold, or double-click, to edit discount'
 
 const inclusiveBase = computed(() => {
   try {
@@ -83,6 +86,28 @@ function onDiscountRowDblClick() {
   else openDiscountEdit()
 }
 
+function onDiscountHoldStart(event: PointerEvent) {
+  if (!canEditDiscount()) return
+  discountReveal.start(event, openDiscountEdit)
+}
+
+function onDiscountHoldMove(event: PointerEvent) {
+  discountReveal.move(event)
+}
+
+function onDiscountHoldEnd() {
+  discountReveal.cancel()
+}
+
+function onDiscountContextMenu(event: Event) {
+  if (!canEditDiscount()) return
+  discountReveal.fromContextMenu(event, openDiscountEdit)
+}
+
+onBeforeUnmount(() => {
+  discountReveal.cancel()
+})
+
 watch(editingDiscount, (open) => {
   if (!open) return
   void nextTick(() => {
@@ -101,7 +126,16 @@ watch(() => props.discountDisabled, (disabled) => {
       v-for="(row, i) in leadingRows"
       :key="`lead-${i}`"
       class="row"
-      :class="{ 'ed-sums-discount-row': isDiscountRow(row) }"
+      :class="{
+        'ed-sums-discount-row': isDiscountRow(row),
+        'ed-sums-discount-hit': canEditDiscount() && isDiscountRow(row),
+      }"
+      :title="canEditDiscount() && isDiscountRow(row) ? DISCOUNT_HINT : undefined"
+      @pointerdown="isDiscountRow(row) ? onDiscountHoldStart($event) : undefined"
+      @pointermove="isDiscountRow(row) ? onDiscountHoldMove($event) : undefined"
+      @pointerup="isDiscountRow(row) ? onDiscountHoldEnd() : undefined"
+      @pointercancel="isDiscountRow(row) ? onDiscountHoldEnd() : undefined"
+      @contextmenu="isDiscountRow(row) ? onDiscountContextMenu($event) : undefined"
       @dblclick.prevent="isDiscountRow(row) ? onDiscountRowDblClick() : undefined"
     >
       <span>{{ row.label }}<span v-if="row.note" class="sum-note">({{ row.note }})</span></span>
@@ -112,7 +146,6 @@ watch(() => props.discountDisabled, (disabled) => {
           'sum-strike': row.strikethrough,
           'sum-discount-hit': canEditDiscount() && isDiscountRow(row),
         }"
-        :title="canEditDiscount() && isDiscountRow(row) ? 'Double-click to edit discount' : undefined"
       >{{ row.value }}</span>
       <span
         v-else
