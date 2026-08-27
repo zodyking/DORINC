@@ -11,6 +11,7 @@ import {
   previewLineGrossAmount,
 } from '~/utils/invoice-creator-ui'
 import { focusVisibleLineInput } from '~/utils/line-field-focus'
+import { DiscountRevealSession } from '~/utils/discount-reveal'
 import type { InvoiceLineType } from '~/utils/invoices-ui'
 import type { CatalogQuickItem, InvoiceSummaryRow } from '~/utils/invoice-editor-ui'
 import { sumLineDiscounts } from '#shared/invoice-discount'
@@ -62,6 +63,8 @@ const emit = defineEmits<{
 
 const editingDiscountLineId = ref<string | null>(null)
 const mobileLines = ref(false)
+const amountReveal = new DiscountRevealSession()
+const DISCOUNT_HINT = 'Tap and hold, or double-click, to add a discount'
 
 function syncMobileLines() {
   mobileLines.value = window.matchMedia('(max-width: 720px)').matches
@@ -102,17 +105,40 @@ function closeLineDiscount(line?: EditorLineRow) {
   if (current) emit('patch', current)
 }
 
-function onAmountDblClick(line: EditorLineRow) {
+function openLineDiscount(line: EditorLineRow) {
   if (!props.editable) return
   const id = lineRowId(line)
-  if (editingDiscountLineId.value === id) {
-    closeLineDiscount(line)
-    return
-  }
+  if (editingDiscountLineId.value === id) return
   if (editingDiscountLineId.value) closeLineDiscount()
   ensureLineDiscount(line)
   editingDiscountLineId.value = id
   void nextTick(() => focusVisibleLineInput(id, 'discount'))
+}
+
+function toggleLineDiscount(line: EditorLineRow) {
+  if (!props.editable) return
+  if (editingDiscountLineId.value === lineRowId(line)) {
+    closeLineDiscount(line)
+    return
+  }
+  openLineDiscount(line)
+}
+
+function onAmountHoldStart(line: EditorLineRow, event: PointerEvent) {
+  amountReveal.start(event, () => openLineDiscount(line))
+}
+
+function onAmountHoldMove(event: PointerEvent) {
+  amountReveal.move(event)
+}
+
+function onAmountHoldEnd() {
+  amountReveal.cancel()
+}
+
+function onAmountContextMenu(line: EditorLineRow, event: Event) {
+  if (!props.editable) return
+  amountReveal.fromContextMenu(event, () => openLineDiscount(line))
 }
 
 function onLineDiscountBlur(line: EditorLineRow) {
@@ -153,6 +179,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', syncMobileLines)
+  amountReveal.cancel()
 })
 </script>
 
@@ -218,8 +245,13 @@ onBeforeUnmount(() => {
                 'amt-discount-hit': editable,
                 'amt-editing': showTableDiscount(line),
               }"
-              :title="editable ? 'Double-click to add a discount' : undefined"
-              @dblclick.prevent="onAmountDblClick(line)"
+              :title="editable ? DISCOUNT_HINT : undefined"
+              @pointerdown="onAmountHoldStart(line, $event)"
+              @pointermove="onAmountHoldMove"
+              @pointerup="onAmountHoldEnd"
+              @pointercancel="onAmountHoldEnd"
+              @contextmenu="onAmountContextMenu(line, $event)"
+              @dblclick.prevent="toggleLineDiscount(line)"
             >
               <InvoiceDiscountField
                 v-if="showTableDiscount(line)"
@@ -329,8 +361,13 @@ onBeforeUnmount(() => {
           <div
             class="inv-line-card-amt"
             :class="{ 'amt-discount-hit': editable }"
-            :title="editable ? 'Double-click to add a discount' : undefined"
-            @dblclick.prevent="onAmountDblClick(line)"
+            :title="editable ? DISCOUNT_HINT : undefined"
+            @pointerdown="onAmountHoldStart(line, $event)"
+            @pointermove="onAmountHoldMove"
+            @pointerup="onAmountHoldEnd"
+            @pointercancel="onAmountHoldEnd"
+            @contextmenu="onAmountContextMenu(line, $event)"
+            @dblclick.prevent="toggleLineDiscount(line)"
           >
             <span class="k">Amount</span>
             <InvoicePriceStack
@@ -415,6 +452,21 @@ onBeforeUnmount(() => {
 }
 .amt-discount-hit {
   cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+.inv-line-card-amt.amt-discount-hit:active {
+  background: #eef2ff;
+}
+@media (hover: none) {
+  .inv-line-card-amt.amt-discount-hit .k::after {
+    content: " · hold";
+    font-weight: 600;
+    color: #94a3b8;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
 }
 @media (max-width: 720px) {
   .inv-line-table--desktop {
