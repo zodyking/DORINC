@@ -188,6 +188,7 @@ async function onTemplateChange(ev: Event) {
       <div class="cbody settings-form">
         <p class="settings-help">
           Send invoice PDFs to a shop printer that accepts email-to-print (HP ePrint, Brother, Epson, and similar).
+          Printer emails are attachment-only (no subject or body) and stay within Brother Email Print limits: 10 files and 20 MB total.
           Susan can also print here when asked in chat or by SMS.
         </p>
 

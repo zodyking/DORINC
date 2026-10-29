@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EMAIL_PRINT_MAX_ATTACHMENTS,
+  EMAIL_PRINT_MAX_BYTES,
+  fitEmailPrintAttachments,
   isValidPrinterEmail,
   normalizePrinterEmail,
   parsePrintToPrinterArgs,
   shouldAttachBlankServiceLog,
+  totalAttachmentBytes,
 } from '../../shared/invoice-printer'
 import { invoiceWorkspaceSettingsSchema } from '../../shared/validators/workspace-settings'
 import { DEFAULT_INVOICE_SETTINGS } from '../../shared/workspace-settings-defaults'
@@ -31,6 +35,30 @@ describe('email-to-print helpers', () => {
     expect(shouldAttachBlankServiceLog(3, 2)).toBe(false)
     expect(shouldAttachBlankServiceLog(3, 3)).toBe(true)
     expect(shouldAttachBlankServiceLog(0, 1)).toBe(false)
+  })
+
+  it('fits attachments to Brother Email Print limits (10 files, 20 MB)', () => {
+    const pdf = (name: string, bytes: number) => ({
+      filename: name,
+      content: Buffer.alloc(bytes),
+    })
+    expect(fitEmailPrintAttachments([
+      pdf('a.pdf', 100),
+      pdf('b.pdf', 200),
+    ])).toHaveLength(2)
+    expect(fitEmailPrintAttachments([
+      pdf('invoice.pdf', 100),
+      pdf('blank-service-log.pdf', EMAIL_PRINT_MAX_BYTES),
+    ]).map(a => a.filename)).toEqual(['invoice.pdf'])
+    expect(fitEmailPrintAttachments([
+      pdf('huge.pdf', EMAIL_PRINT_MAX_BYTES + 1),
+    ])).toHaveLength(0)
+    const many = Array.from({ length: EMAIL_PRINT_MAX_ATTACHMENTS + 3 }, (_, i) => pdf(`${i}.pdf`, 10))
+    expect(fitEmailPrintAttachments(many)).toHaveLength(EMAIL_PRINT_MAX_ATTACHMENTS)
+    expect(totalAttachmentBytes(fitEmailPrintAttachments([
+      pdf('a.pdf', 5 * 1024 * 1024),
+      pdf('b.pdf', 5 * 1024 * 1024),
+    ]))).toBe(10 * 1024 * 1024)
   })
 
   it('parses print_to_printer args including string booleans', () => {
@@ -103,5 +131,20 @@ describe('invoice settings email-to-print UI', () => {
   it('hooks auto print into invoice send after the customer email is queued', () => {
     const send = source('server/services/invoice-send.service.ts')
     expect(send).toContain('maybeAutoPrintInvoiceOnSend')
+  })
+
+  it('sends attachment-only printer mail with no subject or body', () => {
+    const printer = source('server/services/invoice-printer.service.ts')
+    const mailer = source('server/mail/mailer.ts')
+    const printerMailFn = mailer.slice(
+      mailer.indexOf('export async function sendPrinterMail'),
+      mailer.indexOf('export async function sendMail'),
+    )
+    expect(printer).toContain('sendPrinterMail')
+    expect(printer).toContain('fitEmailPrintAttachments')
+    expect(printer).not.toContain('sendNotificationMail')
+    expect(printerMailFn).toContain('subject: \'\'')
+    expect(printerMailFn).not.toMatch(/\btext:/)
+    expect(printerMailFn).not.toMatch(/\bhtml:/)
   })
 })

@@ -1,7 +1,8 @@
 import type { Db } from '../db/client'
 import { formatInvoiceNumber } from '../db/schema/invoices'
-import { sendNotificationMail } from '../mail/mailer'
+import { sendPrinterMail } from '../mail/mailer'
 import {
+  fitEmailPrintAttachments,
   isValidPrinterEmail,
   normalizePrinterEmail,
   shouldAttachBlankServiceLog,
@@ -78,26 +79,25 @@ async function serviceLogAttachment(db: Db) {
 }
 
 async function deliverPrinterEmail(
-  db: Db,
-  input: {
-    printerEmail: string
-    subject: string
-    text: string
-    attachments: Array<{
-      filename: string
-      content: Buffer
-      contentType?: string
-      contentDisposition?: 'inline' | 'attachment'
-    }>
-  },
+  printerEmail: string,
+  attachments: Array<{
+    filename: string
+    content: Buffer
+    contentType?: string
+    contentDisposition?: 'inline' | 'attachment'
+  }>,
 ): Promise<boolean> {
+  const fitted = fitEmailPrintAttachments(attachments)
+  if (!fitted.length) {
+    throw new InvoicePrinterServiceError(
+      'PDF_FAILED',
+      'Printer attachments exceed Brother Email Print limits (10 files, 20 MB total) or were empty.',
+    )
+  }
   try {
-    const { delivered } = await sendNotificationMail(db, {
-      to: input.printerEmail,
-      subject: input.subject,
-      text: input.text,
-      debugLabel: 'invoice-printer',
-      attachments: input.attachments,
+    const { delivered } = await sendPrinterMail({
+      to: printerEmail,
+      attachments: fitted,
     })
     return delivered
   }
@@ -116,12 +116,7 @@ export async function printBlankServiceLogToPrinter(
 ): Promise<InvoicePrinterSendResult> {
   const printerEmail = await resolvePrinterEmail(db)
   const attachment = await serviceLogAttachment(db)
-  const delivered = await deliverPrinterEmail(db, {
-    printerEmail,
-    subject: 'Blank service log',
-    text: 'Blank service log sheet for the shop printer.',
-    attachments: [attachment],
-  })
+  const delivered = await deliverPrinterEmail(printerEmail, [attachment])
 
   await writeAudit(null, {
     entityType: 'system',
@@ -192,37 +187,24 @@ export async function printInvoiceToPrinter(
     contentType: 'application/pdf',
     contentDisposition: 'attachment',
   }]
-  const kinds: InvoicePrinterAttachmentKind[] = ['invoice']
-
-  let includedServiceLog = false
   const includeMode = options.includeServiceLog ?? false
   if (includeMode === true) {
     attachments.push(await serviceLogAttachment(db))
-    kinds.push('service_log')
-    includedServiceLog = true
   }
   else if (includeMode === 'auto' && settings.printBlankServiceLogAfterInvoice) {
     const nextCount = (await getInvoicePrinterCount(db)) + 1
     if (shouldAttachBlankServiceLog(nextCount, settings.blankServiceLogEveryNInvoices)) {
       attachments.push(await serviceLogAttachment(db))
-      kinds.push('service_log')
-      includedServiceLog = true
     }
   }
 
-  const subject = includedServiceLog
-    ? `${invoiceNumber} + service log`
-    : invoiceNumber
-  const text = includedServiceLog
-    ? `${invoiceNumber} and a blank service log for the shop printer.`
-    : `${invoiceNumber} for the shop printer.`
+  const fitted = fitEmailPrintAttachments(attachments)
+  const fittedKinds: InvoicePrinterAttachmentKind[] = fitted.map(att => (
+    att.filename.includes('service-log') ? 'service_log' : 'invoice'
+  ))
+  const includedServiceLog = fittedKinds.includes('service_log')
 
-  const delivered = await deliverPrinterEmail(db, {
-    printerEmail,
-    subject,
-    text,
-    attachments,
-  })
+  const delivered = await deliverPrinterEmail(printerEmail, fitted)
 
   if (includeMode === 'auto' && settings.printBlankServiceLogAfterInvoice) {
     await incrementInvoicePrinterCount(db, actorId)
@@ -238,7 +220,7 @@ export async function printInvoiceToPrinter(
       via: options.source ?? 'susan',
       actorId,
       printerEmail,
-      attachments: kinds,
+      attachments: fittedKinds,
       includedServiceLog,
     },
   }).catch(() => undefined)
@@ -246,7 +228,7 @@ export async function printInvoiceToPrinter(
   return {
     printerEmail,
     delivered,
-    attachments: kinds,
+    attachments: fittedKinds,
     invoiceId,
     invoiceNumber,
     includedServiceLog,

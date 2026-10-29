@@ -110,6 +110,47 @@ export async function sendNotificationMail(
 }
 
 /**
+ * Attachment-only email for shop email-to-print (Brother Email Print, etc.).
+ * Empty subject and no body/HTML — Brother prints the message body by default
+ * and will not print attached PDFs as full pages if any text is present.
+ */
+export async function sendPrinterMail(message: {
+  to: string
+  attachments: NonNullable<MailMessage['attachments']>
+}): Promise<{ delivered: boolean }> {
+  const config = getSmtpConfig()
+  if (!config?.from) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SMTP is not configured')
+    }
+    console.warn('[mail] SMTP not configured (dev, ignored)')
+    console.info(`[mail] printer to=${message.to} attachments=${message.attachments.length}`)
+    return { delivered: false }
+  }
+
+  try {
+    await getTransport().sendMail({
+      from: config.from,
+      to: message.to,
+      subject: '',
+      attachments: message.attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        contentType: att.contentType,
+        contentDisposition: att.contentDisposition ?? 'attachment',
+      })),
+    })
+    return { delivered: true }
+  }
+  catch (err) {
+    if (process.env.NODE_ENV === 'production') throw err
+    console.warn(`[mail] printer delivery failed (dev, ignored): ${(err as Error).message}`)
+    console.info(`[mail] printer to=${message.to}`)
+    return { delivered: false }
+  }
+}
+
+/**
  * Send a mail via SMTP. In development a delivery failure is logged and
  * swallowed so flows (signup, credential send) stay testable without a
  * real SMTP server; production failures propagate to the caller/queue.

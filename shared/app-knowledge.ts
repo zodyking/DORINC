@@ -120,6 +120,7 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
       'Record payment: amount/method/date; rejects overpayment.',
       'Finalize/send generates official PDF and customer notifications.',
       'Control Panel → Invoices can enable Auto print on send: the same send also emails the invoice PDF to a shop printer email (email-to-print). An optional blank service-log sheet can ride along every N invoices.',
+      'Printer emails are attachment-only (empty subject and body). Brother Email Print prints the message body by default, so any text can block full-page PDF print. Limits: 10 files, 20 MB total.',
       'Susan can print an invoice or a blank service log to that printer when asked in the in-app assistant or by SMS (SMS previews first; reply YES).',
     ].join('\n'),
   },

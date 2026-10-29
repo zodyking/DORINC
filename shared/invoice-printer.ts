@@ -3,7 +3,45 @@
  * Shared schema/logic only — sending lives in server/services.
  */
 
+/** Brother Email Print: at most 10 attachments, 20 MB combined. */
+export const EMAIL_PRINT_MAX_ATTACHMENTS = 10
+export const EMAIL_PRINT_MAX_BYTES = 20 * 1024 * 1024
+
 export const PRINTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export type EmailPrintAttachment = {
+  filename: string
+  content: Buffer
+  contentType?: string
+  contentDisposition?: 'inline' | 'attachment'
+}
+
+export function attachmentBytes(att: { content: Buffer }): number {
+  return att.content?.length ?? 0
+}
+
+export function totalAttachmentBytes(attachments: Array<{ content: Buffer }>): number {
+  return attachments.reduce((sum, att) => sum + attachmentBytes(att), 0)
+}
+
+/**
+ * Keep attachments within Brother Email Print limits (≤10 files, ≤20 MB).
+ * Drops trailing files first (service log after invoice) so the primary PDF still prints.
+ */
+export function fitEmailPrintAttachments<T extends EmailPrintAttachment>(attachments: T[]): T[] {
+  const fitted: T[] = []
+  let bytes = 0
+  for (const att of attachments) {
+    if (fitted.length >= EMAIL_PRINT_MAX_ATTACHMENTS) break
+    const size = attachmentBytes(att)
+    if (size <= 0) continue
+    if (size > EMAIL_PRINT_MAX_BYTES) continue
+    if (bytes + size > EMAIL_PRINT_MAX_BYTES) continue
+    fitted.push(att)
+    bytes += size
+  }
+  return fitted
+}
 
 export function normalizePrinterEmail(raw: string | null | undefined): string {
   return String(raw ?? '').trim().toLowerCase()
