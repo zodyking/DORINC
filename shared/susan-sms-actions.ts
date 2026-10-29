@@ -11,12 +11,14 @@ export type SusanSmsMenuActionId =
   | 'send_invoice'
   | 'send_estimate'
   | 'send_email'
+  | 'print_invoice'
+  | 'print_service_log'
   | 'lookup_invoice'
   | 'lookup_customer'
   | 'lookup_service_log'
   | 'search_catalog'
 
-export type SusanSmsMutatingTool = 'send_invoice' | 'send_estimate' | 'send_email'
+export type SusanSmsMutatingTool = 'send_invoice' | 'send_estimate' | 'send_email' | 'print_to_printer'
 
 export type SusanSmsMenuAction = {
   id: SusanSmsMenuActionId
@@ -47,6 +49,20 @@ export const SUSAN_SMS_MENU_ACTIONS: SusanSmsMenuAction[] = [
     hint: 'Start an email to a customer or any address',
     prompt: 'Who should I email? Reply with a customer name or an email address.',
     permission: 'messages.send.own',
+  },
+  {
+    id: 'print_invoice',
+    label: 'Print invoice',
+    hint: 'Email the invoice PDF to the shop printer',
+    prompt: 'Which invoice should I print? Reply with INV-000713, 713, or a customer name.',
+    permission: 'invoices.send.all',
+  },
+  {
+    id: 'print_service_log',
+    label: 'Print blank service log',
+    hint: 'Email a blank service-log sheet to the shop printer',
+    prompt: 'Print a blank service log to the shop printer?',
+    permission: 'invoices.send.all',
   },
   {
     id: 'lookup_invoice',
@@ -122,7 +138,7 @@ export type SusanSmsTurnClass =
 /** CTIA/carrier keywords — never ask staff to send these; they unsubscribe or auto-reply. */
 const CARRIER_RE = /^(start|stop|stopall|unsubscribe|end|quit|cancel)[\s?!.]*$/i
 const BACK_RE = /^(back|go back|nevermind|never mind|forget it|abort|0)[\s?!.]*$/i
-const YES_RE = /^(y|yes|yeah|yep|ok|okay|confirm|send it|do it|please send|go ahead)$/i
+const YES_RE = /^(y|yes|yeah|yep|ok|okay|confirm|send it|do it|please send|go ahead|print it)$/i
 const NO_RE = /^(n|no|nope|nah|don'?t|do not)$/i
 const NUMBER_RE = /^([1-9]|10)[.)]?$/
 
@@ -206,7 +222,11 @@ export function classifySusanSmsTurn(
   return { type: 'ai' }
 }
 
-export function inferSusanSmsActionIntent(raw: string): { action: SusanSmsMenuActionId, query?: string } | null {
+export function inferSusanSmsActionIntent(raw: string): {
+  action: SusanSmsMenuActionId
+  query?: string
+  includeServiceLog?: boolean
+} | null {
   const text = String(raw || '').trim()
   if (!text) return null
 
@@ -228,6 +248,23 @@ export function inferSusanSmsActionIntent(raw: string): { action: SusanSmsMenuAc
     return { action: 'send_email', query: rest || undefined }
   }
 
+  const printLog = text.match(/^(?:please\s+)?print\s+(?:a\s+)?(?:blank\s+)?service\s+logs?\b/i)
+  if (printLog) {
+    return { action: 'print_service_log' }
+  }
+
+  const printInvoice = text.match(/^(?:please\s+)?print\s+(?:the\s+)?invoice\b([\s\S]*)$/i)
+  if (printInvoice) {
+    const rest = printInvoice[1] ?? ''
+    const includeLog = /\band\s+(?:a\s+)?(?:blank\s+)?service\s+logs?\b/i.test(rest)
+    const query = rest.replace(/\s+and\s+(?:a\s+)?(?:blank\s+)?service\s+logs?\b/i, '').replace(/^[:\s#-]+/, '').trim()
+    return {
+      action: 'print_invoice',
+      query: query || undefined,
+      includeServiceLog: includeLog || undefined,
+    }
+  }
+
   return null
 }
 
@@ -239,7 +276,12 @@ export function parseSusanSmsPendingAction(raw: unknown): SusanSmsPendingAction 
 
   if (obj.kind === 'confirm') {
     const tool = obj.tool
-    if (tool !== 'send_invoice' && tool !== 'send_estimate' && tool !== 'send_email') return null
+    if (
+      tool !== 'send_invoice'
+      && tool !== 'send_estimate'
+      && tool !== 'send_email'
+      && tool !== 'print_to_printer'
+    ) return null
     const args = obj.args && typeof obj.args === 'object' && !Array.isArray(obj.args)
       ? Object.fromEntries(
         Object.entries(obj.args as Record<string, unknown>)

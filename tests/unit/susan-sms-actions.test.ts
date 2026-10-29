@@ -20,6 +20,8 @@ describe('Susan SMS action menu catalog', () => {
       'send_invoice',
       'send_estimate',
       'send_email',
+      'print_invoice',
+      'print_service_log',
       'lookup_invoice',
       'lookup_customer',
       'lookup_service_log',
@@ -29,7 +31,12 @@ describe('Susan SMS action menu catalog', () => {
 
   it('filters menu items by permission', () => {
     const visible = visibleSusanSmsMenuActions(key => key === 'invoices.send.all' || key === 'invoices.read.all')
-    expect(visible.map(a => a.id)).toEqual(['send_invoice', 'lookup_invoice'])
+    expect(visible.map(a => a.id)).toEqual([
+      'send_invoice',
+      'print_invoice',
+      'print_service_log',
+      'lookup_invoice',
+    ])
   })
 
   it('formats a numbered menu', () => {
@@ -99,6 +106,18 @@ describe('Susan SMS natural-language send intents', () => {
       action: 'send_email',
       query: 'jane@fleet.com',
     })
+    expect(inferSusanSmsActionIntent('print invoice 713')).toEqual({
+      action: 'print_invoice',
+      query: '713',
+    })
+    expect(inferSusanSmsActionIntent('print invoice INV-000713 and a service log')).toEqual({
+      action: 'print_invoice',
+      query: 'INV-000713',
+      includeServiceLog: true,
+    })
+    expect(inferSusanSmsActionIntent('print a blank service log')).toEqual({
+      action: 'print_service_log',
+    })
     expect(inferSusanSmsActionIntent('how do I send an invoice')).toBeNull()
   })
 })
@@ -114,6 +133,17 @@ describe('Susan SMS pending action parse + expiry', () => {
     }
     expect(parseSusanSmsPendingAction(pending)).toEqual(pending)
     expect(parseSusanSmsPendingAction({ kind: 'confirm', tool: 'nope' })).toBeNull()
+    expect(parseSusanSmsPendingAction({
+      kind: 'confirm',
+      tool: 'print_to_printer',
+      args: { invoiceId: 'inv-1', includeServiceLog: 'true' },
+      preview: 'print',
+      startedAt: '2026-08-19T00:00:00.000Z',
+    })).toMatchObject({
+      kind: 'confirm',
+      tool: 'print_to_printer',
+      args: { invoiceId: 'inv-1', includeServiceLog: 'true' },
+    })
   })
 
   it('expires pending actions after the TTL', () => {
@@ -148,13 +178,14 @@ describe('Susan SMS arg parsers', () => {
 })
 
 describe('Susan SMS action tool schemas', () => {
-  it('keeps web help tools read-only and registers SMS action tools separately', () => {
+  it('registers print on web help tools and keeps customer-send tools SMS-only', () => {
     expect(SUSAN_HELP_TOOLS.map(t => t.function.name)).toEqual([
       'get_app_knowledge',
       'lookup_invoice',
       'lookup_service_log',
       'lookup_customer',
       'search_catalog',
+      'print_to_printer',
     ])
     expect(SUSAN_SMS_ACTION_TOOLS.map(t => t.function.name)).toEqual([
       'list_sms_actions',

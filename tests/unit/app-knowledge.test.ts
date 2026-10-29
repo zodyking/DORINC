@@ -21,6 +21,11 @@ describe('app knowledge corpus', () => {
     expect(APP_KNOWLEDGE_DOCS.length).toBeGreaterThanOrEqual(12)
   })
 
+  it('documents shop email-to-print for printer queries', () => {
+    const hits = searchAppKnowledge({ query: 'email-to-print shop printer', limit: 4 })
+    expect(hits.some(h => h.body.includes('Auto print on send') || h.body.includes('print_to_printer'))).toBe(true)
+  })
+
   it('ranks invoice wizard docs for create-invoice queries', () => {
     const hits = searchAppKnowledge({ query: 'how do I create an invoice', limit: 3 })
     expect(hits.length).toBeGreaterThan(0)

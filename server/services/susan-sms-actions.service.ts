@@ -5,6 +5,7 @@ import { splitPersonName } from '../../shared/format/person-name'
 import {
   extractEstimateNumber,
   extractInvoiceNumber,
+  refersToCurrentRecord,
 } from '../../shared/susan-entity-query'
 import {
   classifySusanSmsTurn,
@@ -23,6 +24,7 @@ import {
   type SusanSmsPickOption,
   SUSAN_SMS_MENU_ACTIONS,
 } from '../../shared/susan-sms-actions'
+import { isValidPrinterEmail, parsePrintToPrinterArgs } from '../../shared/invoice-printer'
 import {
   formatSmsMoney,
   formatSmsStatus,
@@ -67,6 +69,12 @@ import {
 } from './estimates.service'
 import { EmailInboxError, startEmailThread } from './email-inbox.service'
 import { getCustomer, listContacts, listCustomers } from './customers.service'
+import {
+  InvoicePrinterServiceError,
+  printBlankServiceLogToPrinter,
+  printInvoiceToPrinter,
+} from './invoice-printer.service'
+import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -92,8 +100,13 @@ function firstNameFrom(userName?: string | null): string {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
 }
 
-function confirmText(preview: string): string {
-  return `${preview}\n\nReply YES to send, or Back.`
+function confirmText(preview: string, verb = 'send'): string {
+  return `${preview}\n\nReply YES to ${verb}, or Back.`
+}
+
+export type SusanPrintToolContext = {
+  entityType?: 'invoice' | 'service_log' | 'customer' | null
+  entityId?: string | null
 }
 
 function menuForAuth(auth: SusanAuthContext, firstName?: string | null): string {
@@ -428,6 +441,208 @@ export async function previewSusanSmsSendEmail(
   }
 }
 
+async function printerReady(db: Db): Promise<SusanSmsActionResult | null> {
+  const settings = await getInvoiceWorkspaceSettings(db)
+  if (isValidPrinterEmail(settings.printerEmail)) return null
+  return {
+    ok: false,
+    content: 'Shop printer email is not set. An admin can add it in Control Panel → Invoices → Email to print.',
+    pendingAction: null,
+  }
+}
+
+function printConfirmArgs(input: {
+  invoiceId?: string
+  includeServiceLog?: boolean
+  serviceLogOnly?: boolean
+}): Record<string, string> {
+  return {
+    ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+    ...(input.includeServiceLog ? { includeServiceLog: 'true' } : {}),
+    ...(input.serviceLogOnly ? { serviceLogOnly: 'true' } : {}),
+  }
+}
+
+async function previewPrintServiceLog(db: Db): Promise<SusanSmsActionResult> {
+  const blocked = await printerReady(db)
+  if (blocked) return blocked
+  const settings = await getInvoiceWorkspaceSettings(db)
+  const preview = `I'll print a blank service log to ${settings.printerEmail.trim()}.`
+  return {
+    ok: true,
+    content: confirmText(preview, 'print'),
+    pendingAction: {
+      kind: 'confirm',
+      tool: 'print_to_printer',
+      args: printConfirmArgs({ serviceLogOnly: true }),
+      preview,
+      startedAt: nowIso(),
+    },
+  }
+}
+
+async function previewPrintInvoiceById(
+  db: Db,
+  invoiceId: string,
+  includeServiceLog?: boolean,
+): Promise<SusanSmsActionResult> {
+  const blocked = await printerReady(db)
+  if (blocked) return blocked
+  try {
+    const inv = await getInvoiceDetail(db, invoiceId)
+    const settings = await getInvoiceWorkspaceSettings(db)
+    const extra = includeServiceLog ? ' and a blank service log' : ''
+    const preview = `I'll print ${inv.invoiceNumberFormatted} (${formatSmsMoney(inv.total)}, ${formatSmsStatus(inv.status)}) for ${inv.customerName}${extra} to ${settings.printerEmail.trim()}.`
+    return {
+      ok: true,
+      content: confirmText(preview, 'print'),
+      pendingAction: {
+        kind: 'confirm',
+        tool: 'print_to_printer',
+        args: printConfirmArgs({ invoiceId: inv.id, includeServiceLog }),
+        preview,
+        startedAt: nowIso(),
+      },
+    }
+  }
+  catch (err) {
+    if (err instanceof InvoicesServiceError && err.code === 'NOT_FOUND') {
+      return { ok: true, content: 'That invoice was not found.', pendingAction: null }
+    }
+    throw err
+  }
+}
+
+export async function previewSusanSmsPrintToPrinter(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+  ctx: SusanPrintToolContext = {},
+): Promise<SusanSmsActionResult> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return { ok: false, content: 'Unable to resolve staff permissions.', pendingAction: null }
+  if (!susanHasPermission(auth, 'invoices.send.all')) return deny(auth, 'invoices.send.all')
+
+  const args = parsePrintToPrinterArgs(argsRaw)
+  if (args.serviceLogOnly) return previewPrintServiceLog(db)
+
+  const query = args.query || ''
+  const invoiceNumber = extractInvoiceNumber(query) || extractInvoiceNumber(args.invoiceId || '')
+
+  if (isUuid(args.invoiceId) && !invoiceNumber) {
+    return previewPrintInvoiceById(db, args.invoiceId, args.includeServiceLog)
+  }
+  if (invoiceNumber != null) {
+    const id = await findInvoiceIdByNumber(db, invoiceNumber)
+    if (!id) {
+      return {
+        ok: true,
+        content: `No invoice found for INV-${String(invoiceNumber).padStart(6, '0')}. Try another number, or Back.`,
+      }
+    }
+    return previewPrintInvoiceById(db, id, args.includeServiceLog)
+  }
+  if (ctx.entityType === 'invoice' && isUuid(ctx.entityId) && refersToCurrentRecord(query || args.invoiceId)) {
+    return previewPrintInvoiceById(db, ctx.entityId, args.includeServiceLog)
+  }
+  if (!query) return startWizard('print_invoice')
+
+  const listed = await listInvoices(db, {
+    q: query,
+    includeArchived: false,
+    page: 1,
+    pageSize: 5,
+  })
+  if (!listed.items.length) {
+    return { ok: true, content: `No invoices matched “${query}”. Try another search, or Back.` }
+  }
+  if (listed.items.length === 1) {
+    return previewPrintInvoiceById(db, listed.items[0]!.id, args.includeServiceLog)
+  }
+  return pickList(
+    `I found ${listed.items.length} invoices. Which one should I print?`,
+    listed.items.map((row, i) => ({
+      n: i + 1,
+      id: row.id,
+      label: formatSusanSmsInvoiceChoiceLabel(row),
+      extra: {
+        name: row.invoiceNumberFormatted,
+        ...(args.includeServiceLog ? { includeServiceLog: 'true' } : {}),
+      },
+    })),
+    'print_invoice',
+    args.includeServiceLog ? { includeServiceLog: 'true' } : {},
+  )
+}
+
+function formatPrintResult(result: {
+  invoiceNumber: string | null
+  includedServiceLog: boolean
+  printerEmail: string
+  delivered: boolean
+}): string {
+  const docs = result.invoiceNumber
+    ? (result.includedServiceLog ? `${result.invoiceNumber} and a blank service log` : result.invoiceNumber)
+    : 'a blank service log'
+  const status = result.delivered ? 'Sent' : 'Queued'
+  return `${status}. ${docs} went to the shop printer (${result.printerEmail}).\n\n${SUSAN_SMS_MORE_HINT}`
+}
+
+export async function commitSusanPrintToPrinter(
+  db: Db,
+  userId: string,
+  argsRaw: unknown,
+  ctx: SusanPrintToolContext = {},
+): Promise<SusanSmsActionResult> {
+  const auth = await requireAuth(db, userId)
+  if (!auth) return { ok: false, content: 'Unable to resolve staff permissions.', pendingAction: null }
+  if (!susanHasPermission(auth, 'invoices.send.all')) return deny(auth, 'invoices.send.all')
+
+  const args = parsePrintToPrinterArgs(argsRaw)
+  if (args.serviceLogOnly) {
+    try {
+      const result = await printBlankServiceLogToPrinter(db, auth.user.id, 'susan')
+      return { ok: true, content: formatPrintResult(result), pendingAction: null }
+    }
+    catch (err) {
+      return { ok: false, content: printerErrorText(err), pendingAction: null }
+    }
+  }
+
+  const preview = await previewSusanSmsPrintToPrinter(db, userId, args, ctx)
+  const invoiceId = preview.pendingAction?.kind === 'confirm'
+    ? preview.pendingAction.args.invoiceId
+    : undefined
+  if (!invoiceId) {
+    return preview.ok
+      ? preview
+      : { ok: false, content: preview.content, pendingAction: preview.pendingAction ?? null }
+  }
+
+  try {
+    const result = await printInvoiceToPrinter(db, invoiceId, auth.user.id, {
+      includeServiceLog: args.includeServiceLog === true,
+      source: 'susan',
+    })
+    return { ok: true, content: formatPrintResult(result), pendingAction: null }
+  }
+  catch (err) {
+    return { ok: false, content: printerErrorText(err), pendingAction: null }
+  }
+}
+
+function printerErrorText(err: unknown): string {
+  if (err instanceof InvoicePrinterServiceError) {
+    if (err.code === 'NOT_CONFIGURED') {
+      return 'Shop printer email is not set. An admin can add it in Control Panel → Invoices → Email to print.'
+    }
+    if (err.code === 'NOT_FOUND') return 'That invoice was not found.'
+    if (err.code === 'PDF_FAILED') return 'PDF generation failed — try again from the app.'
+    if (err.code === 'SEND_FAILED') return 'The printer email could not be delivered. Check SMTP in Control Panel.'
+  }
+  return 'I could not send that to the shop printer.'
+}
+
 type EmailRecipientResolution =
   | { kind: 'resolved', toEmail: string, customerId?: string, label: string }
   | { kind: 'need_to' }
@@ -686,6 +901,30 @@ async function commitSendEmail(
   }
 }
 
+async function commitPrintPending(
+  db: Db,
+  auth: SusanAuthContext,
+  args: Record<string, string>,
+): Promise<SusanSmsActionResult> {
+  try {
+    if (args.serviceLogOnly === 'true') {
+      const result = await printBlankServiceLogToPrinter(db, auth.user.id, 'susan')
+      return { ok: true, content: formatPrintResult(result), pendingAction: null }
+    }
+    if (!args.invoiceId) {
+      return { ok: false, content: 'That invoice was not found.', pendingAction: null }
+    }
+    const result = await printInvoiceToPrinter(db, args.invoiceId, auth.user.id, {
+      includeServiceLog: args.includeServiceLog === 'true',
+      source: 'susan',
+    })
+    return { ok: true, content: formatPrintResult(result), pendingAction: null }
+  }
+  catch (err) {
+    return { ok: false, content: printerErrorText(err), pendingAction: null }
+  }
+}
+
 async function commitPending(
   db: Db,
   auth: SusanAuthContext,
@@ -693,10 +932,11 @@ async function commitPending(
 ): Promise<SusanSmsActionResult> {
   if (pending.tool === 'send_invoice') return commitSendInvoice(db, auth, pending.args)
   if (pending.tool === 'send_estimate') return commitSendEstimate(db, auth, pending.args)
+  if (pending.tool === 'print_to_printer') return commitPrintPending(db, auth, pending.args)
   return commitSendEmail(db, auth, pending.args)
 }
 
-type SusanSmsMutatingId = 'send_invoice' | 'send_estimate' | 'send_email'
+type SusanSmsMutatingId = 'send_invoice' | 'send_estimate' | 'send_email' | 'print_invoice' | 'print_service_log'
 
 async function runLookup(
   db: Db,
@@ -752,6 +992,15 @@ async function continueWizard(
         body: pending.data.body,
       })
     }
+    if (action === 'print_invoice') {
+      return previewSusanSmsPrintToPrinter(db, userId, {
+        invoiceId: option.id,
+        includeServiceLog: option.extra?.includeServiceLog === 'true' || pending.data.includeServiceLog === 'true',
+      })
+    }
+    if (action === 'print_service_log') {
+      return previewPrintServiceLog(db)
+    }
     return runLookup(db, userId, action, '', option.id)
   }
 
@@ -763,6 +1012,15 @@ async function continueWizard(
   }
   if (action === 'send_estimate') {
     return previewSusanSmsSendEstimate(db, userId, { query: text })
+  }
+  if (action === 'print_invoice') {
+    return previewSusanSmsPrintToPrinter(db, userId, {
+      query: text,
+      includeServiceLog: pending.data.includeServiceLog === 'true',
+    })
+  }
+  if (action === 'print_service_log') {
+    return previewPrintServiceLog(db)
   }
   if (action === 'send_email') {
     if (pending.step === 'await_to') {
@@ -792,7 +1050,13 @@ async function continueWizard(
     return startWizard('send_email')
   }
 
-  if (action === 'send_invoice' || action === 'send_estimate' || action === 'send_email') {
+  if (
+    action === 'send_invoice'
+    || action === 'send_estimate'
+    || action === 'send_email'
+    || action === 'print_invoice'
+    || action === 'print_service_log'
+  ) {
     return startWizard(action)
   }
 
@@ -853,9 +1117,10 @@ export async function handleSusanSmsActionTurn(
     return { handled: true, reply: result.content, pendingAction: result.pendingAction ?? null }
   }
   if (cls.type === 'confirm_needed' && pending?.kind === 'confirm') {
+    const verb = pending.tool === 'print_to_printer' ? 'print' : 'send'
     return {
       handled: true,
-      reply: `${pending.preview}\n\nReply YES to send, or Back.`,
+      reply: `${pending.preview}\n\nReply YES to ${verb}, or Back.`,
       pendingAction: pending,
     }
   }
@@ -871,6 +1136,10 @@ export async function handleSusanSmsActionTurn(
     const action = menuActionAt(auth, cls.n)
     if (!action) {
       return { handled: true, reply: menuForAuth(auth, first), pendingAction: null }
+    }
+    if (action.id === 'print_service_log') {
+      const result = await previewPrintServiceLog(db)
+      return { handled: true, reply: result.content, pendingAction: result.pendingAction ?? null }
     }
     const result = startWizard(action.id)
     return { handled: true, reply: result.content, pendingAction: result.pendingAction ?? null }
@@ -890,6 +1159,15 @@ export async function handleSusanSmsActionTurn(
         customerQuery: intent.query,
         toEmail: intent.query && looksLikeEmail(intent.query) ? intent.query : undefined,
       })
+    }
+    else if (intent.action === 'print_invoice') {
+      result = await previewSusanSmsPrintToPrinter(db, input.userId, {
+        query: intent.query,
+        includeServiceLog: intent.includeServiceLog,
+      })
+    }
+    else if (intent.action === 'print_service_log') {
+      result = await previewPrintServiceLog(db)
     }
     else {
       result = startWizard(intent.action)

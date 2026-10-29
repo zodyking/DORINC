@@ -131,10 +131,11 @@ const TOOL_PERMISSIONS: Partial<Record<AiToolName, PermissionKey | PermissionKey
   send_invoice: 'invoices.send.all',
   send_estimate: 'estimates.manage.all',
   send_email: 'messages.send.own',
+  print_to_printer: 'invoices.send.all',
 }
 
 export type SusanHelpToolFilterOpts = {
-  /** Mutating SMS action tools are SMS-only. Web Susan stays read-only. */
+  /** Mutating SMS send tools are SMS-only. print_to_printer is available on web and SMS. */
   channel?: 'web' | 'sms'
 }
 

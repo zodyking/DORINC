@@ -15,6 +15,7 @@ export type AiToolName =
   | 'send_invoice'
   | 'send_estimate'
   | 'send_email'
+  | 'print_to_printer'
 
 export type OpenAiToolDefinition = {
   type: 'function'
@@ -313,6 +314,36 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
           limit: {
             type: 'integer',
             description: 'Max results per category bucket (default 5, max 8).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'print_to_printer',
+      description:
+        'Send an invoice PDF and/or a blank service-log sheet to the shop email-to-print printer. Use when staff asks to print an invoice, print a blank service log, or print both. On SMS this only previews — never claim you already printed; the staffer replies YES. In the in-app chat this sends immediately. Requires a printer email in Control Panel → Invoices. Pass invoiceId or query for an invoice; set serviceLogOnly true for a blank sheet only; set includeServiceLog true to attach a blank sheet with the invoice.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: {
+            type: 'string',
+            description: 'Invoice UUID when known.',
+          },
+          query: {
+            type: 'string',
+            description: 'Invoice label (INV-000713), bare number (713), customer name, or "this" for the open invoice.',
+          },
+          includeServiceLog: {
+            type: 'boolean',
+            description: 'When true, also attach a blank service-log sheet with the invoice.',
+          },
+          serviceLogOnly: {
+            type: 'boolean',
+            description: 'When true, print only a blank service-log sheet (no invoice).',
           },
         },
         additionalProperties: false,
