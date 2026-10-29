@@ -13,7 +13,9 @@ import {
   type EntityToolContext,
 } from './ai-entity-tools.service'
 import {
+  commitSusanPrintToPrinter,
   listSusanSmsActionsForUser,
+  previewSusanSmsPrintToPrinter,
   previewSusanSmsSendEmail,
   previewSusanSmsSendEstimate,
   previewSusanSmsSendInvoice,
@@ -42,6 +44,7 @@ export type SusanHelpToolOpts = {
   userId?: string | null
   entityType?: EntityToolContext['entityType']
   entityId?: string | null
+  channel?: 'web' | 'sms'
 }
 
 function parseArgsJson(raw: string): unknown {
@@ -195,6 +198,26 @@ export async function executeSusanHelpTool(
     if (name === 'send_email') {
       if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
       return wrapAction(toolCallId, name, await previewSusanSmsSendEmail(opts.db, opts.userId, parsed))
+    }
+
+    if (name === 'print_to_printer') {
+      if (!opts.db || !opts.userId) return { toolCallId, name, ...needDbUser(name) }
+      const printOpts = {
+        entityType: opts.entityType,
+        entityId: opts.entityId,
+      }
+      if (opts.channel === 'sms') {
+        return wrapAction(
+          toolCallId,
+          name,
+          await previewSusanSmsPrintToPrinter(opts.db, opts.userId, parsed, printOpts),
+        )
+      }
+      return wrapAction(
+        toolCallId,
+        name,
+        await commitSusanPrintToPrinter(opts.db, opts.userId, parsed, printOpts),
+      )
     }
 
     return {

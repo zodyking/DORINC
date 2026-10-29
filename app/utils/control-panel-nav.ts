@@ -47,7 +47,7 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         id: 'invoice',
         title: 'Invoices',
         icon: '🧾',
-        subtitle: 'Payment terms and approval thresholds',
+        subtitle: 'Payment terms, email-to-print, and approval thresholds',
       },
       {
         id: 'catalog',

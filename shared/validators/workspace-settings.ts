@@ -26,12 +26,35 @@ export const lineTypeVerbsSchema = z.object({
   fee: z.array(z.string().min(1).max(40)).max(120),
 })
 
+const PRINTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export const invoiceWorkspaceSettingsSchema = z.object({
   defaultPaymentTermsDays: z.coerce.number().int().min(0).max(365).default(30),
   shopSuppliesPercent: z.string().regex(/^\d+(\.\d{1,2})?$/).default('3.5'),
   managerApprovalThreshold: z.string().regex(/^\d+(\.\d{1,2})?$/).default('5000.00'),
   lineItemAiRules: z.string().max(20000).default(''),
   serviceLogExtractionRules: z.string().max(20000).default(''),
+  autoPrintOnSend: z.boolean().default(false),
+  printerEmail: z.string().max(200).default(''),
+  printBlankServiceLogAfterInvoice: z.boolean().default(false),
+  blankServiceLogEveryNInvoices: z.coerce.number().int().min(1).max(99).default(1),
+}).superRefine((value, ctx) => {
+  const email = value.printerEmail.trim()
+  const printerEnabled = value.autoPrintOnSend || value.printBlankServiceLogAfterInvoice
+  if (printerEnabled && !email) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['printerEmail'],
+      message: 'Printer email is required when email-to-print is enabled',
+    })
+  }
+  if (email && !PRINTER_EMAIL_RE.test(email)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['printerEmail'],
+      message: 'Enter a valid printer email address',
+    })
+  }
 })
 
 export const chatWorkspaceSettingsSchema = z.object({

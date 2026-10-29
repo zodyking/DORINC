@@ -30,6 +30,10 @@ const form = reactive({
   defaultPaymentTermsDays: 30,
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
   serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
+  autoPrintOnSend: false,
+  printerEmail: '',
+  printBlankServiceLogAfterInvoice: false,
+  blankServiceLogEveryNInvoices: 1,
 })
 
 watch(() => settingsData.value?.settings, (s) => {
@@ -78,6 +82,10 @@ async function save() {
           managerApprovalThreshold: settingsData.value?.settings.managerApprovalThreshold ?? '5000.00',
           lineItemAiRules: form.lineItemAiRules,
           serviceLogExtractionRules: form.serviceLogExtractionRules,
+          autoPrintOnSend: form.autoPrintOnSend,
+          printerEmail: form.printerEmail.trim(),
+          printBlankServiceLogAfterInvoice: form.printBlankServiceLogAfterInvoice,
+          blankServiceLogEveryNInvoices: form.blankServiceLogEveryNInvoices,
         },
       },
     })
@@ -124,7 +132,7 @@ async function onTemplateChange(ev: Event) {
   <div class="settings-panel">
     <header class="settings-panel-head">
       <h3>Invoice settings</h3>
-      <p>Defaults for new invoices, approval thresholds, and the app-wide PDF template.</p>
+      <p>Defaults for new invoices, shop email-to-print, approval thresholds, and the app-wide PDF template.</p>
     </header>
 
     <div class="card">
@@ -164,6 +172,84 @@ async function onTemplateChange(ev: Event) {
         <label class="fld">
           Payment terms (days)
           <input v-model.number="form.defaultPaymentTermsDays" type="number" min="0" max="365">
+        </label>
+
+        <p v-if="message" class="settings-ok">{{ message }}</p>
+        <p v-if="error" class="settings-err">{{ error }}</p>
+
+        <div class="settings-actions">
+          <button type="submit" class="btn primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save invoice settings' }}</button>
+        </div>
+      </div>
+    </form>
+
+    <form class="card" style="margin-top:16px;" @submit.prevent="save">
+      <div class="chead"><h3>Email to print</h3></div>
+      <div class="cbody settings-form">
+        <p class="settings-help">
+          Send invoice PDFs to a shop printer that accepts email-to-print (HP ePrint, Brother, Epson, and similar).
+          Susan can also print here when asked in chat or by SMS.
+        </p>
+
+        <div class="tglrow">
+          <div>
+            <div class="notif-label">Auto print on send</div>
+            <div class="notif-desc">
+              Whenever an invoice is emailed to the customer, also send the invoice PDF to the printer.
+            </div>
+          </div>
+          <span class="tgl">
+            <input
+              v-model="form.autoPrintOnSend"
+              type="checkbox"
+              aria-label="Auto print on send"
+            >
+            <span class="tr" />
+          </span>
+        </div>
+
+        <label class="fld">
+          Printer email address
+          <input
+            v-model="form.printerEmail"
+            type="email"
+            autocomplete="off"
+            placeholder="printer@print.example.com"
+            :required="form.autoPrintOnSend || form.printBlankServiceLogAfterInvoice"
+          >
+          <span class="help">The printer’s email-to-print address. Required when either print toggle is on.</span>
+        </label>
+
+        <div class="tglrow">
+          <div>
+            <div class="notif-label">Print blank service log after invoices</div>
+            <div class="notif-desc">
+              Include a blank service-log sheet in the same printer email, on the cadence below.
+            </div>
+          </div>
+          <span class="tgl">
+            <input
+              v-model="form.printBlankServiceLogAfterInvoice"
+              type="checkbox"
+              aria-label="Print blank service log after invoices"
+            >
+            <span class="tr" />
+          </span>
+        </div>
+
+        <label class="fld">
+          Blank service log frequency
+          <input
+            v-model.number="form.blankServiceLogEveryNInvoices"
+            type="number"
+            min="1"
+            max="99"
+            :disabled="!form.printBlankServiceLogAfterInvoice"
+          >
+          <span class="help">
+            Print one blank service log after every N invoices sent to the printer.
+            1 = every invoice, 2 = every other, 3 = every third.
+          </span>
         </label>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
@@ -217,4 +303,22 @@ async function onTemplateChange(ev: Event) {
 
 <style scoped>
 @import './settings-panel.css';
+
+.notif-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.notif-desc {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.4;
+  max-width: 48ch;
+}
+
+.tglrow {
+  align-items: flex-start;
+}
 </style>

@@ -76,6 +76,7 @@ const ACTION_LABELS: Record<string, string> = {
   'invoices.submit_for_manager_approval': 'Invoice submitted for manager approval before send',
   'invoices.send': 'Invoice finalized and sent',
   'invoices.send_queued': 'Invoice queued for email delivery',
+  'invoices.printer_print': 'Invoice sent to shop printer',
   'invoices.mark_paid': 'Payment recorded',
   'invoices.mark_unpaid': 'Payment status set to unpaid',
   'invoices.bulk_reconcile': 'Invoice reconciliation updated',

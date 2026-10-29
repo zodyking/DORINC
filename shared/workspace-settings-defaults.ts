@@ -81,6 +81,14 @@ export interface InvoiceWorkspaceSettings {
   lineItemAiRules: string
   /** Editable rule set for service log photo extraction (page type + line items). */
   serviceLogExtractionRules: string
+  /** When an invoice is emailed to the customer, also email the PDF to the shop printer. */
+  autoPrintOnSend: boolean
+  /** Destination for email-to-print (HP ePrint, Brother, Epson, etc.). */
+  printerEmail: string
+  /** Attach a blank service-log sheet with printer emails on the configured cadence. */
+  printBlankServiceLogAfterInvoice: boolean
+  /** Print one blank service log after every N invoice prints (1 = every invoice). */
+  blankServiceLogEveryNInvoices: number
 }
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
@@ -89,6 +97,10 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   managerApprovalThreshold: '5000.00',
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
   serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
+  autoPrintOnSend: false,
+  printerEmail: '',
+  printBlankServiceLogAfterInvoice: false,
+  blankServiceLogEveryNInvoices: 1,
 }
 
 /** App-wide email notification toggles (Control Panel → Notifications). */

@@ -43,7 +43,9 @@ const HELP_TOOL_MAX_ROUNDS = 3
 const HELP_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions about pages, features, workflows, roles, or settings, call get_app_knowledge before answering.',
   'For questions about real records, call the read-only lookup tools available to you (invoice / service log / customer / catalog as permitted).',
+  'If staff asks to print an invoice, a blank service log, or both to the shop printer, call print_to_printer. On the in-app chat that sends immediately.',
   'If Current record id is set and the user asks about this/the current record (balance, total, status), call the matching lookup with that id (or an empty query).',
+  'If they say print this invoice (or print this) while Current record is an invoice, call print_to_printer with that invoice id.',
   'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats. For "oldest invoice" / "newest invoice" set sort oldest|newest — never combine an INV number with status=unpaid.',
   'Service log: query "SL-0713". Review queue → query "review queue".',
   'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
@@ -55,7 +57,7 @@ const HELP_TOOL_INSTRUCTIONS = [
 const HELP_SMS_TOOL_INSTRUCTIONS = [
   'You have tools. For product/how-to questions, call get_app_knowledge before answering.',
   'For questions about real records, call the read-only lookup tools available to you (invoice / service log / customer / catalog as permitted).',
-  'On SMS you can also prepare actions: send_invoice, send_estimate, send_email. Those tools only preview — never claim you already sent. Tell the staffer to reply YES to send or NO to cancel.',
+  'On SMS you can also prepare actions: send_invoice, send_estimate, send_email, print_to_printer. Those tools only preview — never claim you already sent or printed. Tell the staffer to reply YES to continue or NO to cancel.',
   'If they ask what you can do, want a menu, or say help/actions, call list_sms_actions.',
   'Invoice: query "INV-000713" or "invoice 713" for one invoice. For unpaid/overdue counts use status unpaid|overdue|stats.',
   'If a tool returns permission denied, explain the access gap once — do not retry the same tool.',
@@ -68,7 +70,8 @@ const HELP_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant.`,
   'You explain how to use the application and can look up invoices, service logs, customers, and catalog items the staff member is allowed to see.',
   'Speak in first person as Susan. Address the staff member by their first name when greeting or when it feels natural.',
-  'You NEVER modify, create, delete, send, approve, or pay records. Lookups are read-only via tools only.',
+  'You NEVER modify, create, delete, send to customers, approve, or pay records. Lookups are read-only via tools only.',
+  'Exception: when staff asks to print an invoice or a blank service log to the shop printer, call print_to_printer. That emails PDFs to the configured printer. Do not invent a printer address.',
   'Do not invent customer, invoice, service log, or catalog data — only report what tools return.',
   HELP_TOOL_INSTRUCTIONS,
   'Be concise — short sentences, no filler, no repetition.',
@@ -82,7 +85,7 @@ const HELP_SYSTEM_PROMPT = [
 const HELP_SMS_SYSTEM_PROMPT = [
   `You are ${AI_ASSISTANT_NAME}, the ${BRAND_NAME} platform help assistant — the same helper as the in-app Platform Assistant chat.`,
   'Speak in first person as Susan. Never refer to yourself as "SMS chat", "SMS chat with Susan", or any SMS product feature.',
-  'You help with the app, look up invoices/service logs/customers/catalog, and can prepare a few actions from SMS: send/resend an invoice, send an estimate, or email someone.',
+  'You help with the app, look up invoices/service logs/customers/catalog, and can prepare a few actions from SMS: send/resend an invoice, send an estimate, email someone, or print an invoice / blank service log to the shop printer.',
   'Address the staff member by their first name when greeting (e.g. "Hi Alex!") and when it feels natural.',
   'Action tools only prepare a preview. Never say you already sent, emailed, or changed a record. The staffer confirms with YES.',
   'You cannot record payments, void records, approve deletions, change settings, or create invoices.',
@@ -309,6 +312,7 @@ async function callOpenRouterHelp(
         userId: input.userId,
         entityType: input.entityType,
         entityId: input.entityId,
+        channel,
       },
     )
     lastToolResults = toolResults

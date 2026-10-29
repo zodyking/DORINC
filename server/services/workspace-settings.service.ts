@@ -37,6 +37,7 @@ export const WORKSPACE_SETTING_KEYS = {
   catalogKeywords: 'workspace.catalog_keywords',
   lineTypeVerbs: 'workspace.line_type_verbs',
   invoice: 'workspace.invoice_settings',
+  invoicePrinterCounter: 'workspace.invoice_printer_counter',
   notifications: 'workspace.notification_settings',
   chat: 'workspace.chat_settings',
   serviceLogSheet: 'workspace.service_log_sheet',
@@ -150,8 +151,25 @@ export async function saveInvoiceWorkspaceSettings(
     shopSuppliesPercent: settings.shopSuppliesPercent,
     lineItemAiRules: settings.lineItemAiRules.trim(),
     serviceLogExtractionRules: settings.serviceLogExtractionRules.trim(),
+    autoPrintOnSend: settings.autoPrintOnSend,
+    printerEmail: settings.printerEmail.trim(),
+    printBlankServiceLogAfterInvoice: settings.printBlankServiceLogAfterInvoice,
+    blankServiceLogEveryNInvoices: settings.blankServiceLogEveryNInvoices,
   }, updatedBy)
   return settings
+}
+
+export async function getInvoicePrinterCount(db: Db): Promise<number> {
+  const raw = await readJson<{ printedInvoices?: number }>(db, WORKSPACE_SETTING_KEYS.invoicePrinterCounter)
+  const count = Number(raw?.printedInvoices)
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
+}
+
+/** Increment the successful invoice-to-printer count and return the new total. */
+export async function incrementInvoicePrinterCount(db: Db, updatedBy?: string): Promise<number> {
+  const next = (await getInvoicePrinterCount(db)) + 1
+  await writeJson(db, WORKSPACE_SETTING_KEYS.invoicePrinterCounter, { printedInvoices: next }, updatedBy)
+  return next
 }
 
 /** Staff-facing detection rules (no secrets). */

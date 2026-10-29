@@ -10,7 +10,7 @@ import { __entityToolTestUtils } from '../../server/services/ai-entity-tools.ser
 import { susanHasPermission, type SusanAuthContext } from '../../server/services/susan-auth.service'
 
 describe('Susan entity tool schemas', () => {
-  it('registers all five help tools', () => {
+  it('registers help tools including shop printer print', () => {
     const names = SUSAN_HELP_TOOLS.map(t => t.function.name)
     expect(names).toEqual([
       'get_app_knowledge',
@@ -18,6 +18,7 @@ describe('Susan entity tool schemas', () => {
       'lookup_service_log',
       'lookup_customer',
       'search_catalog',
+      'print_to_printer',
     ])
   })
 
@@ -74,7 +75,7 @@ describe('Susan permission helper', () => {
 
 describe('executeSusanHelpTool entity dispatch', () => {
   it('requires db/userId for lookup tools', async () => {
-    for (const name of ['lookup_invoice', 'lookup_service_log', 'lookup_customer', 'search_catalog', 'send_invoice', 'send_estimate', 'send_email', 'list_sms_actions'] as const) {
+    for (const name of ['lookup_invoice', 'lookup_service_log', 'lookup_customer', 'search_catalog', 'send_invoice', 'send_estimate', 'send_email', 'list_sms_actions', 'print_to_printer'] as const) {
       const result = await executeSusanHelpTool({
         id: 'c1',
         name,

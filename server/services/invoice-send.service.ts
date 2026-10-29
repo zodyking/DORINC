@@ -242,6 +242,9 @@ export async function queueInvoiceSend(
     ...mailPayload,
   }, 5)
 
+  const { maybeAutoPrintInvoiceOnSend } = await import('./invoice-printer.service')
+  await maybeAutoPrintInvoiceOnSend(db, invoiceId, actorId)
+
   return {
     invoice,
     job,
