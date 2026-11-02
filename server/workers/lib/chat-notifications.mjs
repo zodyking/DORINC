@@ -127,9 +127,7 @@ export async function notifyChatMessageReceivedWorker(pool, opts) {
   }
   const { imagesHtml, attachmentFileIds } = buildInlineImageHtml(attachmentRows)
   const photoNote = attachmentFileIds.length
-    ? `${attachmentFileIds.length === 1
-      ? 'Photo attached — open the message to view.'
-      : `${attachmentFileIds.length} photos attached — open the message to view.`}\n\n`
+    ? `\n${attachmentFileIds.length === 1 ? 'Photo attached' : `${attachmentFileIds.length} photos attached`}`
     : ''
   const isTeamChat = opts.isTeamChat === true || conversation.type === 'team'
   const channelLabel = isTeamChat

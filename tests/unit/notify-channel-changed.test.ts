@@ -15,8 +15,8 @@ describe('notify channel changed templates', () => {
     const entry = SMS_TEMPLATE_CATALOG.find((t) => t.typeKey === 'notify_channel_changed')
     expect(entry).toBeTruthy()
     expect(entry?.group).toBe('security')
-    expect(entry?.defaults.body).toMatch(/leadMessage/i)
-    expect(entry?.defaults.body).toMatch(/detailMessage/i)
+    expect(entry?.defaults.body).toMatch(/channelLabel/i)
+    expect(entry?.defaults.body).toMatch(/Notifications switched to/i)
     expect(entry?.sampleVars.detailMessage).toMatch(/My Account/i)
   })
 

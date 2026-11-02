@@ -31,10 +31,13 @@ describe('dorinc contact vcard', () => {
     expect(folded.split('\r\n').every(line => line.length <= 75)).toBe(true)
   })
 
-  it('includes contact card SMS template', () => {
+  it('includes contact card SMS template with the public vCard URL', () => {
     const keys = SMS_TEMPLATE_CATALOG.map(t => t.typeKey)
     expect(keys).toContain('dorinc_contact_card')
     expect(keys).not.toContain('susan_sms_ready')
     expect(SMS_DEFAULT_BODIES).toEqual(smsCatalogDefaultBodies())
+    const card = SMS_TEMPLATE_CATALOG.find(t => t.typeKey === 'dorinc_contact_card')
+    expect(card?.defaults.body).toContain('{{contactUrl}}')
+    expect(card?.variables.some(v => v.key === 'contactUrl')).toBe(true)
   })
 })
