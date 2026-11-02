@@ -12,7 +12,12 @@ import {
 import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
 import { getSessionCookie } from '../auth/session-cookie'
-import { hasValidOutsideGeoBypass } from '../auth/outside-geo-bypass'
+import {
+  createOutsideGeoBypassToken,
+  hasValidOutsideGeoBypass,
+  setOutsideGeoBypassCookie,
+} from '../auth/outside-geo-bypass'
+import { userHasKnownNetwork } from '../services/known-network.service'
 import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
@@ -147,10 +152,46 @@ export default defineEventHandler(async (event) => {
         requireTabSession: false,
       })
     : null
-  const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !isGatePage(path)
+
+  let knownNetwork = false
+  if (!isSuperAdmin && decision.blocked && !outsideGeoBypass
+    && (decision.reason === 'geo_outside' || decision.reason === 'geo_unknown')) {
+    try {
+      const identityUserId = viewer?.id ?? (await findKnownOutsideGeoIdentity(useDb(), {
+        ipAddress: ip,
+        userAgent,
+        deviceId,
+      }))?.userId ?? null
+      if (identityUserId) {
+        knownNetwork = await userHasKnownNetwork(useDb(), {
+          userId: identityUserId,
+          ipAddress: ip,
+        })
+      }
+    }
+    catch {
+      knownNetwork = false
+    }
+    if (knownNetwork && viewer) {
+      try {
+        const token = createOutsideGeoBypassToken({
+          userId: viewer.id,
+          ipAddress: ip,
+          userAgent,
+          deviceId,
+        })
+        setOutsideGeoBypassCookie(event, token)
+      }
+      catch {
+        // Cookie mint is optional — this navigation is still allowed.
+      }
+    }
+  }
+
+  const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !knownNetwork && !isGatePage(path)
   // Gate pages must stay reachable, but visits to them still count as security blocks
   // (e.g. /auth/access-restricted should show as Geofence blocked, not Access granted).
-  const recordBlocked = Boolean(decision.blocked && !outsideGeoBypass)
+  const recordBlocked = Boolean(decision.blocked && !outsideGeoBypass && !knownNetwork)
 
   // Capture the visit (best-effort, off the response path). Prefer device_id over IP.
   // Device-signal-rich rows come from the client visit beacon; this is a fallback.

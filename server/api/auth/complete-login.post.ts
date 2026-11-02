@@ -22,6 +22,7 @@ import {
 } from '../../services/access-gate.service'
 import { resolveBrowserLocation } from '../../services/browser-geolocation.service'
 import { resolveIpGeo } from '../../services/ip-geolocation.service'
+import { userHasKnownNetwork } from '../../services/known-network.service'
 import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
@@ -68,7 +69,28 @@ export default defineEventHandler(async (event) => {
             userId: resolved.user.id,
           })
         : null
-      if (bypass) {
+      const knownNetwork = !bypass && (decision.reason === 'geo_outside' || decision.reason === 'geo_unknown')
+        ? await userHasKnownNetwork(useDb(), {
+            userId: resolved.user.id,
+            ipAddress,
+            excludeSessionToken: sessionToken,
+          }).catch(() => false)
+        : false
+      if (knownNetwork) {
+        try {
+          const token = createOutsideGeoBypassToken({
+            userId: resolved.user.id,
+            ipAddress,
+            userAgent,
+            deviceId,
+          })
+          setOutsideGeoBypassCookie(event, token)
+        }
+        catch (err) {
+          console.warn('[auth] complete-login known-network bypass mint failed:', (err as Error).message)
+        }
+      }
+      else if (bypass) {
         outsideGeofenceLogin = true
       }
       else {
@@ -206,6 +228,7 @@ export default defineEventHandler(async (event) => {
       portal: 'staff',
       ipAddress,
       userAgent,
+      sessionToken,
       deviceLocation: locationLabel,
       deviceAccuracyM: body.geo.accuracyM ?? null,
     }))

@@ -20,6 +20,7 @@ import {
   recordAccessEvent,
 } from '../../services/access-gate.service'
 import { resolveSessionSecret } from '../../services/app-config.service'
+import { userHasKnownNetwork } from '../../services/known-network.service'
 import {
   findKnownOutsideGeoIdentity,
   quietlyIssueOutsideGeoChallenge,
@@ -115,7 +116,28 @@ export default defineEventHandler(async (event) => {
               userId: result.user.id,
             })
           : null
-        if (bypass) {
+        const knownNetwork = !bypass && (decision.reason === 'geo_outside' || decision.reason === 'geo_unknown')
+          ? await userHasKnownNetwork(useDb(), {
+              userId: result.user.id,
+              ipAddress,
+              excludeSessionToken: result.sessionToken,
+            }).catch(() => false)
+          : false
+        if (knownNetwork) {
+          try {
+            const token = createOutsideGeoBypassToken({
+              userId: result.user.id,
+              ipAddress,
+              userAgent,
+              deviceId,
+            })
+            setOutsideGeoBypassCookie(event, token)
+          }
+          catch (err) {
+            console.warn('[auth] known-network bypass mint failed:', (err as Error).message)
+          }
+        }
+        else if (bypass) {
           outsideGeofenceLogin = true
         }
         else {
@@ -244,6 +266,7 @@ export default defineEventHandler(async (event) => {
           portal: body.portal,
           ipAddress,
           userAgent,
+          sessionToken: result.sessionToken,
           deviceLocation: locationLabel,
           deviceAccuracyM: body.geo.accuracyM ?? null,
         }))
@@ -284,6 +307,7 @@ export default defineEventHandler(async (event) => {
           portal: body.portal,
           ipAddress,
           userAgent,
+          sessionToken: result.sessionToken,
           deviceLocation: null,
           deviceAccuracyM: null,
         }))

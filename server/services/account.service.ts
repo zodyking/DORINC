@@ -41,6 +41,17 @@ export interface AccountKnownDeviceRow {
   isCurrent: boolean
 }
 
+export interface AccountKnownNetworkRow {
+  key: string
+  label: string
+  ipAddress: string | null
+  locationLabel: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  sessionCount: number
+  isCurrent: boolean
+}
+
 export interface AccountDetail {
   id: string
   name: string
@@ -51,6 +62,7 @@ export interface AccountDetail {
   activeSessionCount: number
   sessions: AccountSessionRow[]
   knownDevices: AccountKnownDeviceRow[]
+  knownNetworks: AccountKnownNetworkRow[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
   phone: string | null
@@ -154,6 +166,9 @@ export async function getAccountDetail(
     return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
   })
 
+  const { listKnownNetworks } = await import('./known-network.service')
+  const knownNetworks = await listKnownNetworks(db, userId, currentSessionId)
+
   const lastLogin = mapped.find(s => s.isCurrent) ?? mapped[0]
   const { isQuoEnabled } = await import('./quo.service')
   const quoSmsEnabled = await isQuoEnabled(db)
@@ -169,6 +184,7 @@ export async function getAccountDetail(
     activeSessionCount: mapped.length,
     sessions: mapped,
     knownDevices,
+    knownNetworks,
     teamChatEnabled: user.teamChatEnabled,
     messageEmailNotify: user.messageEmailNotify,
     phone: user.phone ?? null,

@@ -8,6 +8,7 @@ import { getAppUrl } from './app-config.service'
 import { isNotificationEnabled } from './workspace-settings.service'
 import { resolveIpLocation, normalizeClientIp } from './ip-geolocation.service'
 import { enqueueJob } from './jobs.service'
+import { userHasKnownNetwork } from './known-network.service'
 
 function buildDeviceLabel(userAgent: string | null | undefined): string | null {
   if (!userAgent) return null
@@ -37,6 +38,7 @@ export async function sendLoginNotificationEmail(
     userId?: string | null
     ipAddress?: string | null
     userAgent?: string | null
+    sessionToken?: string | null
     signedInAt?: Date
     deviceLocation?: string | null
     deviceAccuracyM?: number | null
@@ -48,6 +50,15 @@ export async function sendLoginNotificationEmail(
   const toggleKey = opts.portal === 'customer' ? 'customerLoginAlert' : 'staffLoginAlert'
   if (!(await isNotificationEnabled(db, toggleKey))) {
     return { delivered: false, reason: 'disabled' as const }
+  }
+
+  if (opts.userId) {
+    const known = await userHasKnownNetwork(db, {
+      userId: opts.userId,
+      ipAddress: opts.ipAddress,
+      excludeSessionToken: opts.sessionToken,
+    })
+    if (known) return { delivered: false, reason: 'known_network' as const }
   }
 
   const brand = await resolveEmailBrand(db)
