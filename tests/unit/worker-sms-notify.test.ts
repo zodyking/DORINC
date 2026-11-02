@@ -28,10 +28,9 @@ describe('worker sms-notify', () => {
       detailLine: 'Reviewed by Pat.',
       requestorName: 'Jordan',
     })
-    expect(body).toContain('Acme')
     expect(body).toContain('Approved')
     expect(body).toContain('INV-1')
-    expect(body).toContain('Deletion request')
+    expect(body).toContain('Delete request')
   })
 
   it('queues sms_send instead of calling Quo when recipient prefers Text', async () => {

@@ -96,9 +96,7 @@ export async function notifyChatMessageReceived(
     attachmentsByMessage.get(opts.messageId) ?? [],
   )
   const photoNote = attachmentFileIds.length
-    ? `${attachmentFileIds.length === 1
-      ? 'Photo attached — open the message to view.'
-      : `${attachmentFileIds.length} photos attached — open the message to view.`}\n\n`
+    ? `\n${attachmentFileIds.length === 1 ? 'Photo attached' : `${attachmentFileIds.length} photos attached`}`
     : ''
   const channelLabel = opts.isTeamChat || conversation.type === 'team'
     ? (conversation.title ?? TEAM_CHAT_TITLE)

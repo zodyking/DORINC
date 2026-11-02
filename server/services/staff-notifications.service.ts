@@ -494,8 +494,7 @@ export async function notifyCustomerEmailReceived(
 /**
  * Notify a staff user that their Email vs Text preference changed
  * (self-serve My Account or admin User Control).
- * When switching to Text: also send the Dorinc contact card SMS and schedule
- * a Susan AI intro five minutes later.
+ * When switching to Text: also send the Dorinc / Susan AI vCard SMS.
  */
 export async function notifyNotifyChannelChanged(
   db: Db,

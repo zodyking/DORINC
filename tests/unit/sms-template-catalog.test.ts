@@ -11,8 +11,10 @@ import {
 import { SMS_DEFAULT_BODIES } from '../../server/workers/lib/sms-notify.mjs'
 import { normalizePhoneE164 } from '../../shared/format/phone-e164'
 
+const VCARD_TYPE_KEY = 'dorinc_contact_card'
+
 describe('sms template catalog', () => {
-  it('includes core transactional SMS types with email-parity multi-line defaults', () => {
+  it('includes core transactional SMS types with notification-grade defaults', () => {
     const keys = SMS_TEMPLATE_CATALOG.map(t => t.typeKey)
     expect(keys).toContain('notify_channel_changed')
     expect(keys).toContain('dorinc_contact_card')
@@ -36,10 +38,9 @@ describe('sms template catalog', () => {
     for (const def of SMS_TEMPLATE_CATALOG) {
       expect(def.defaults.body.length).toBeGreaterThan(10)
       expect(def.defaults.body.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
-      expect(def.defaults.body).toContain('{{brandName}}')
-      expect(def.defaults.body).toContain('\n')
-      // Detail fields use stacked label/value (no "Label: value" colon form).
-      expect(def.defaults.body).not.toMatch(/^(When|Email|Location|IP address|Device|Verification code|Expires|Record|Type|Decision|Name|Invoice|Customer|Total|Subject|Sent at|Temporary password|Reason for deletion|Reviewed by|Reviewer note|Request type|Topic|Vehicle|Details|Category|Urgency|Customer message|Message|Report date|Status|Requested by): /m)
+      expect(def.defaults.body).not.toMatch(/^Hi \{\{/m)
+      expect(def.defaults.body).not.toMatch(/^Hello \{\{/m)
+      expect(def.defaults.body).not.toMatch(/\{\{brandName\}\}/)
       const rendered = applySmsTemplateContent(def.defaults, def.sampleVars).body
       expect(rendered.length).toBeGreaterThan(10)
       expect(rendered.length).toBeLessThanOrEqual(SMS_BODY_MAX_CHARS)
@@ -50,15 +51,32 @@ describe('sms template catalog', () => {
       smsTemplateByKey('login_notification')!.defaults,
       smsTemplateByKey('login_notification')!.sampleVars,
     ).body
-    expect(login).toContain('When\nAug 10, 2026, 8:15 AM')
-    expect(login).toContain('Email\nalex@example.com')
+    expect(login).toContain('New sign-in')
+    expect(login).toContain('Aug 10, 2026, 8:15 AM')
+    expect(login).toContain('Near Philadelphia, PA')
     expect(login).not.toMatch(/https?:\/\//i)
-    expect(login).not.toContain('Open:')
+
+    const chat = applySmsTemplateContent(
+      smsTemplateByKey('chat_message_received')!.defaults,
+      smsTemplateByKey('chat_message_received')!.sampleVars,
+    ).body
+    expect(chat).toBe('Jordan · Team chat\nBus 40 is ready for pickup.')
 
     for (const def of SMS_TEMPLATE_CATALOG) {
+      if (def.typeKey === VCARD_TYPE_KEY) {
+        expect(def.defaults.body).toContain('{{contactUrl}}')
+        continue
+      }
       expect(def.defaults.body).not.toMatch(/https?:\/\//i)
       expect(def.defaults.body).not.toMatch(/Open:\s*\{\{/)
     }
+
+    const card = applySmsTemplateContent(
+      smsTemplateByKey(VCARD_TYPE_KEY)!.defaults,
+      smsTemplateByKey(VCARD_TYPE_KEY)!.sampleVars,
+    ).body
+    expect(card).toContain('https://app.example.com/api/public/dorinc-contact.vcf')
+    expect(card).toContain('Save Dorinc to text Susan:')
   })
 
   it('keeps worker SMS_DEFAULT_BODIES in sync with the shared catalog', () => {
@@ -77,7 +95,7 @@ describe('sms template catalog', () => {
       ipAddress: '203.0.113.10',
     })
     expect(resolved.body).toContain('123456')
-    expect(resolved.body).toContain('Suspicious location detected')
+    expect(resolved.body).toContain('Your code is 123456')
     expect(interpolateSmsTemplate('Hi {{name}}', { name: 'Pat' })).toBe('Hi Pat')
     const normalized = normalizeSmsTemplateContent({ body: '  Custom {{code}}  ' }, def!.defaults)
     expect(normalized.body).toBe('Custom {{code}}')

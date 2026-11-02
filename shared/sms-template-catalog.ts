@@ -1,8 +1,7 @@
 /**
  * Catalog of transactional SMS templates for Quo.
- * Defaults mirror the email notification workflow with stacked fields:
- * label on its own line, value on the next, blank line between fields.
- * Keep bodies within Quo's 1600-character send limit.
+ * Defaults are notification-grade: no brand header, no greeting,
+ * compact facts. Keep bodies within Quo's 1600-character send limit.
  */
 
 export const SMS_BODY_MAX_CHARS = 1600
@@ -58,17 +57,6 @@ export function applySmsTemplateContent(
   return { body: interpolateSmsTemplate(content.body, vars) }
 }
 
-/** Stack field label above value; blank line between field pairs. */
-export function smsStackedFields(pairs: Array<[string, string]>): string[] {
-  const lines: string[] = []
-  for (let i = 0; i < pairs.length; i++) {
-    const [label, value] = pairs[i]!
-    lines.push(label, value)
-    if (i < pairs.length - 1) lines.push('')
-  }
-  return lines
-}
-
 const brandVars: SmsTemplateVariable[] = [
   { key: 'brandName', label: 'Brand name' },
   { key: 'appUrl', label: 'App URL' },
@@ -82,18 +70,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     audience: 'staff',
     group: 'security',
     defaults: {
-      body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Notification channel updated',
-        '',
-        '{{leadMessage}}',
-        '',
-        '{{detailMessage}}',
-        '',
-      ].join('\n'),
+      body: 'Notifications switched to {{channelLabel}}.',
     },
     variables: [
       ...brandVars,
@@ -116,32 +93,25 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
   {
     typeKey: 'dorinc_contact_card',
     name: 'DORINC contact card',
-    description: 'Sent when Text notifications are enabled so the user can save the Dorinc / Susan AI number on iPhone (no link preview).',
+    description: 'Sent when Text notifications are enabled so the user can save the Dorinc / Susan AI vCard (logo included) on their phone.',
     audience: 'staff',
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Save this number as Dorinc / Susan AI so you can text Susan anytime:',
-        '',
-        ...smsStackedFields([
-          ['Phone', '{{fromNumber}}'],
-        ]),
-        '',
-        'Susan AI helps with platform questions. In future updates she will also be able to send invoices, reply to customer emails, and manage basic platform duties.',
+        'Save Dorinc to text Susan:',
+        '{{contactUrl}}',
       ].join('\n'),
     },
     variables: [
       ...brandVars,
       { key: 'name', label: 'User name' },
+      { key: 'contactUrl', label: 'vCard download URL' },
       { key: 'fromNumber', label: 'Quo from number' },
     ],
     sampleVars: {
       brandName: 'DORINC',
       name: 'Alex Rivera',
+      contactUrl: 'https://app.example.com/api/public/dorinc-contact.vcf',
       fromNumber: '+12125550199',
       appUrl: 'https://app.example.com',
     },
@@ -154,23 +124,11 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
         'New sign-in',
-        '',
-        'Your staff account was used to sign in to {{brandName}}.',
-        '',
-        ...smsStackedFields([
-          ['When', '{{when}}'],
-          ['Email', '{{email}}'],
-          ['Location', '{{locationLine}}'],
-          ['IP address', '{{ipAddress}}'],
-          ['Device', '{{device}}'],
-        ]),
-        '',
-        'If this was not you, contact your administrator immediately and change your password.',
+        '{{when}}',
+        '{{locationLine}}',
+        '{{device}}',
+        'Not you? Change your password.',
       ].join('\n'),
     },
     variables: [
@@ -201,22 +159,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Suspicious location detected',
-        '',
-        'You\'re accessing {{brandName}} from a suspicious location. Enter this verification code to confirm your identity.',
-        '',
-        ...smsStackedFields([
-          ['Verification code', '{{code}}'],
-          ['Expires', '{{expiresMinutes}} minutes'],
-          ['Location', '{{locationLabel}}'],
-          ['IP address', '{{ipAddress}}'],
-        ]),
-        '',
-        'If you did not attempt to sign in, contact your administrator immediately and change your password.',
+        'Your code is {{code}}',
+        'Expires in {{expiresMinutes}} min',
+        '{{locationLabel}}',
       ].join('\n'),
     },
     variables: [
@@ -245,15 +190,8 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Verify your email',
-        '',
-        'Confirm your email to continue your {{brandName}} account request.',
-        '',
-        'Check your email for the verification link (expires in 24 hours). After verification an administrator must approve your account before you can sign in.',
+        'Verify your email to finish signup.',
+        'The link expires in 24 hours.',
       ].join('\n'),
     },
     variables: [
@@ -275,26 +213,14 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     audience: 'staff',
     group: 'workflow',
     defaults: {
-      body: [
-        '{{brandName}}',
-        '',
-        'Hi {{recipientName}},',
-        '',
-        '{{senderName}} sent a message',
-        '',
-        'You received a new message in {{channelLabel}}.',
-        '',
-        '{{messagePreview}}',
-        '',
-        '{{photoNote}}Open Messages in the app to reply.',
-      ].join('\n'),
+      body: '{{senderName}} · {{channelLabel}}\n{{messagePreview}}{{photoNote}}',
     },
     variables: [
       ...brandVars,
       { key: 'senderName', label: 'Sender name' },
       { key: 'channelLabel', label: 'Channel label' },
       { key: 'messagePreview', label: 'Full message body' },
-      { key: 'photoNote', label: 'Photo note (include trailing newlines when set)' },
+      { key: 'photoNote', label: 'Photo note' },
       { key: 'messagesUrl', label: 'Messages URL' },
       { key: 'recipientName', label: 'Recipient name' },
     ],
@@ -317,15 +243,8 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Reset your password',
-        '',
-        'We received a request to reset your {{brandName}} staff password.',
-        '',
-        'Check your email for the reset link (expires in 1 hour). If you did not request this, you can ignore this message.',
+        'Password reset requested.',
+        'Check email for the link (1 hour).',
       ].join('\n'),
     },
     variables: [
@@ -348,23 +267,10 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hello {{name}},',
-        '',
-        'Welcome to the team',
-        '',
-        'You\'ve been invited to join the {{brandName}} staff workspace. Sign in with the credentials below, then choose your own password.',
-        '',
-        ...smsStackedFields([
-          ['Email', '{{email}}'],
-          ['Temporary password', '{{tempPassword}}'],
-        ]),
-        '',
-        'Sign in on the website with these credentials, then choose your own password.',
-        '',
-        'Your email is already verified. Choose a new password when you sign in for the first time.',
-        'This temporary password expires in 7 days.',
+        'You\'re invited',
+        '{{email}}',
+        'Temp password: {{tempPassword}}',
+        'Expires in 7 days',
       ].join('\n'),
     },
     variables: [
@@ -391,23 +297,10 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'security',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hello {{name}},',
-        '',
         'Password reset',
-        '',
-        'An administrator reset your {{brandName}} staff password. Sign in with the temporary password below, then choose a new one.',
-        '',
-        ...smsStackedFields([
-          ['Email', '{{email}}'],
-          ['Temporary password', '{{tempPassword}}'],
-        ]),
-        '',
-        'Sign in on the website with these credentials, then choose a new password.',
-        '',
-        'After any required login messages, you will be asked to choose a new password before continuing.',
-        'This temporary password expires in 7 days.',
+        '{{email}}',
+        'Temp password: {{tempPassword}}',
+        'Expires in 7 days',
       ].join('\n'),
     },
     variables: [
@@ -434,22 +327,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{reviewerName}},',
-        '',
-        'Deletion request',
-        '',
-        '{{submitterName}} requested deletion of a {{entityTypeLabel}}.',
-        '',
-        ...smsStackedFields([
-          ['Record', '{{entityLabel}}'],
-          ['Type', '{{entityTypeLabel}}'],
-          ['Requested by', '{{submitterName}}'],
-          ['Reason for deletion', '{{reason}}'],
-        ]),
-        '',
-        'Review this request in Deletion requests.',
+        'Delete request · {{entityTypeLabel}}',
+        '{{entityLabel}}',
+        '{{submitterName}} · {{reason}}',
       ].join('\n'),
     },
     variables: [
@@ -480,21 +360,10 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{requestorName}},',
-        '',
-        'Deletion request',
-        '',
-        'Your deletion request for {{entityTypeLabel}} "{{entityLabel}}" was updated.',
-        '',
-        ...smsStackedFields([
-          ['Record', '{{entityLabel}}'],
-          ['Type', '{{entityTypeLabel}}'],
-          ['Decision', '{{statusLabel}}'],
-          ['Reviewed by', '{{reviewedByName}}'],
-          ['Reviewer note', '{{reviewReason}}'],
-        ]),
+        'Delete request {{statusLabel}}',
+        '{{entityTypeLabel}} · {{entityLabel}}',
+        '{{reviewedByName}}',
+        '{{reviewReason}}',
       ].join('\n'),
     },
     variables: [
@@ -527,21 +396,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{adminName}},',
-        '',
-        'New user awaiting approval',
-        '',
-        'A staff signup finished email verification and needs an administrator to approve the account.',
-        '',
-        ...smsStackedFields([
-          ['Name', '{{userName}}'],
-          ['Email', '{{userEmail}}'],
-          ['Status', 'Pending approval'],
-        ]),
-        '',
-        'Review and approve in Users.',
+        'Signup needs approval',
+        '{{userName}}',
+        '{{userEmail}}',
       ].join('\n'),
     },
     variables: [
@@ -568,21 +425,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{approverName}},',
-        '',
         'Invoice needs approval',
-        '',
-        'Invoice {{invoiceNumber}} for {{customerName}} is waiting for manager approval.',
-        '',
-        ...smsStackedFields([
-          ['Invoice', '{{invoiceNumber}}'],
-          ['Customer', '{{customerName}}'],
-          ['Total', '{{total}}'],
-        ]),
-        '',
-        'Review this invoice in the app.',
+        '{{invoiceNumber}} · {{customerName}}',
+        '{{total}}',
       ].join('\n'),
     },
     variables: [
@@ -611,24 +456,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{recipientName}},',
-        '',
-        'New customer service request',
-        '',
-        '{{customerName}} submitted a service request. Check the portal for full details and next steps.',
-        '',
-        ...smsStackedFields([
-          ['Customer', '{{customerName}}'],
-          ['Vehicle', '{{vehicleUnit}}'],
-          ['Details', '{{vehicleDetails}}'],
-          ['Category', '{{serviceCategory}}'],
-          ['Urgency', '{{urgency}}'],
-          ['Customer message', '{{message}}'],
-        ]),
-        '',
-        'Open the request in the portal for full details.',
+        'Service request · {{customerName}}',
+        '{{vehicleUnit}} · {{serviceCategory}} · {{urgency}}',
+        '{{message}}',
       ].join('\n'),
     },
     variables: [
@@ -663,24 +493,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{recipientName}},',
-        '',
-        'New customer change request',
-        '',
-        '{{customerName}} submitted a {{requestKindLabel}}.',
-        '',
-        ...smsStackedFields([
-          ['Customer', '{{customerName}}'],
-          ['Request type', '{{requestKindLabel}}'],
-          ['Topic', '{{topic}}'],
-          ['Invoice', '{{invoiceNumber}}'],
-          ['Vehicle', '{{vehicleLabel}}'],
-          ['Customer message', '{{message}}'],
-        ]),
-        '',
-        'Open the request in the portal for full details.',
+        '{{requestKindLabel}} · {{customerName}}',
+        '{{topic}}',
+        '{{message}}',
       ].join('\n'),
     },
     variables: [
@@ -715,20 +530,9 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'workflow',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{recipientName}},',
-        '',
-        '{{customerName}} sent a message',
-        '',
-        '{{customerName}} emailed your company inbox. Sign in, open Messages, and reply.',
-        '',
-        ...smsStackedFields([
-          ['Customer', '{{customerName}}'],
-          ['Email', '{{customerEmail}}'],
-          ['Subject', '{{subject}}'],
-          ['Message', '{{messagePreview}}'],
-        ]),
+        'Email from {{customerName}}',
+        '{{subject}}',
+        '{{messagePreview}}',
       ].join('\n'),
     },
     variables: [
@@ -758,21 +562,7 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     audience: 'staff',
     group: 'workflow',
     defaults: {
-      body: [
-        '{{brandName}}',
-        '',
-        'Hi {{recipientName}},',
-        '',
-        'Daily summary',
-        '',
-        'Stats for {{reportDateLabel}} are ready, with notes from Susan AI Assistant under each section.',
-        '',
-        ...smsStackedFields([
-          ['Report date', '{{reportDateLabel}}'],
-        ]),
-        '',
-        'Open the dashboard for the full report.',
-      ].join('\n'),
+      body: 'Daily summary for {{reportDateLabel}} is ready.',
     },
     variables: [
       ...brandVars,
@@ -796,19 +586,8 @@ export const SMS_TEMPLATE_CATALOG: SmsTemplateDefinition[] = [
     group: 'system',
     defaults: {
       body: [
-        '{{brandName}}',
-        '',
-        'Hi {{name}},',
-        '',
-        'Quo SMS test successful',
-        '',
-        'This is a test message from the {{brandName}} control panel.',
-        '',
-        ...smsStackedFields([
-          ['Sent at', '{{sentAt}}'],
-        ]),
-        '',
-        'If you received this, outbound Quo SMS is working correctly.',
+        'Quo SMS test',
+        '{{sentAt}}',
       ].join('\n'),
     },
     variables: [
