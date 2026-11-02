@@ -26,6 +26,8 @@ describe('sms channel must not block auth flows', () => {
     const src = readFileSync(resolve('server/services/login-notification.service.ts'), 'utf8')
     expect(src).not.toContain('resolveUserNotifyDelivery')
     expect(src).not.toContain('enqueueTemplatedSms')
+    expect(src).toContain('userHasKnownNetwork')
+    expect(src).toContain("reason: 'known_network'")
   })
 
   it('does not await geofence challenge delivery on HTML navigations', () => {

@@ -42,6 +42,17 @@ interface AccountKnownDevice {
   isCurrent: boolean
 }
 
+interface AccountKnownNetwork {
+  key: string
+  label: string
+  ipAddress: string | null
+  locationLabel: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  sessionCount: number
+  isCurrent: boolean
+}
+
 interface AccountDetail {
   id: string
   name: string
@@ -52,6 +63,7 @@ interface AccountDetail {
   activeSessionCount: number
   sessions: AccountSession[]
   knownDevices: AccountKnownDevice[]
+  knownNetworks: AccountKnownNetwork[]
   teamChatEnabled: boolean
   messageEmailNotify: boolean
   phone: string | null
@@ -559,6 +571,36 @@ function isMobileUserAgent(userAgent: string | null | undefined): boolean {
             </div>
             <div v-if="!account.knownDevices?.length" class="cbody known-devices__empty">
               No known devices yet.
+            </div>
+          </div>
+
+          <div class="known-devices">
+            <div class="known-devices__head">
+              <h4>Known networks</h4>
+              <span>{{ account.knownNetworks?.length ?? 0 }}</span>
+            </div>
+            <div
+              v-for="network in account.knownNetworks"
+              :key="network.key"
+              class="userrow known-devices__row"
+            >
+              <div class="thumb sess-thumb">
+                🌐
+              </div>
+              <div class="nm">
+                <b>{{ network.label }}</b>
+                <small>
+                  {{ sessionLocation(network.locationLabel, network.isCurrent) }}
+                  · last seen {{ formatSessionAge(network.lastSeenAt) }}
+                </small>
+              </div>
+              <div class="end">
+                <span v-if="network.isCurrent" class="pill ok">This network</span>
+                <span v-else class="pill gray">Known</span>
+              </div>
+            </div>
+            <div v-if="!account.knownNetworks?.length" class="cbody known-devices__empty">
+              No known networks yet.
             </div>
           </div>
         </div>
