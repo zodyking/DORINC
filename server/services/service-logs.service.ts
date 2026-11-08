@@ -110,7 +110,7 @@ export interface ServiceLogInput {
   customerRequested?: boolean
 }
 
-export async function createServiceLog(db: Db, input: ServiceLogInput, submittedBy: string) {
+export async function createServiceLog(db: Db, input: ServiceLogInput, submittedBy: string | null) {
   const [customer] = await db.select()
     .from(customers).where(and(eq(customers.id, input.customerId), isNull(customers.archivedAt)))
   if (!customer) throw new ServiceLogsServiceError('CUSTOMER_NOT_FOUND')

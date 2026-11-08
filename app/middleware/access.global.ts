@@ -16,7 +16,12 @@ import { startGateCooldown } from '~/utils/staff-gate-cooldown'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // Skip auth pages and tokenized public upload bridges
-  if (to.path.startsWith('/auth/') || to.path === '/setup' || to.path.startsWith('/upload/')) return
+  if (
+    to.path.startsWith('/auth/')
+    || to.path === '/setup'
+    || to.path.startsWith('/upload/')
+    || to.path.startsWith('/i/')
+  ) return
 
   const auth = useAuthStore()
 

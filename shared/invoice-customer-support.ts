@@ -3,15 +3,43 @@ import type { DocumentPdfCompany } from './document-pdf-payload'
 export interface InvoiceCustomerSupportNote {
   title: string
   lines: string[]
+  qrDataUrl?: string | null
+  qrUrl?: string | null
+}
+
+export type InvoiceCustomerSupportInput = {
+  portalUrl?: string | null
+  customerPortalEnabled?: boolean
+  onlineAccessUrl?: string | null
+  qrDataUrl?: string | null
 }
 
 /** Customer guidance block for invoice PDF templates beside totals. */
 export function buildInvoiceCustomerSupportNote(
   company: DocumentPdfCompany,
-  portalUrl?: string | null,
+  portalUrlOrOptions?: string | null | InvoiceCustomerSupportInput,
 ): InvoiceCustomerSupportNote {
+  const options: InvoiceCustomerSupportInput = typeof portalUrlOrOptions === 'string' || portalUrlOrOptions == null
+    ? { portalUrl: portalUrlOrOptions, customerPortalEnabled: true }
+    : portalUrlOrOptions
+
+  const portalOff = options.customerPortalEnabled === false
+  const onlineAccessUrl = options.onlineAccessUrl?.trim() || ''
+  if (portalOff && (options.qrDataUrl || onlineAccessUrl)) {
+    const lines = [
+      'Scan to view this invoice, payment record, and request changes online.',
+    ]
+    if (onlineAccessUrl) lines.push(onlineAccessUrl)
+    return {
+      title: 'Online Access',
+      lines,
+      qrDataUrl: options.qrDataUrl ?? null,
+      qrUrl: onlineAccessUrl || null,
+    }
+  }
+
   const email = company.email?.trim() || ''
-  const portal = portalUrl?.replace(/\/$/, '') || ''
+  const portal = options.portalUrl?.replace(/\/$/, '') || ''
   const emailPhrase = email || 'our business email'
 
   const lines = [

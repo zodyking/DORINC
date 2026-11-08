@@ -710,10 +710,15 @@ function vehicleLabelFromRow(row: {
   return type
 }
 
-export async function getPortalCustomer(db: Db, customerId: string) {
+export async function getActiveCustomer(db: Db, customerId: string) {
   const [row] = await db.select().from(customers)
     .where(and(eq(customers.id, customerId), isNull(customers.archivedAt)))
   if (!row) throw new PortalServiceError('NOT_FOUND')
+  return row
+}
+
+export async function getPortalCustomer(db: Db, customerId: string) {
+  const row = await getActiveCustomer(db, customerId)
   if (!row.portalEnabled) throw new PortalServiceError('PORTAL_DISABLED')
   return row
 }
@@ -1056,10 +1061,12 @@ export interface ServiceRequestInput {
 export async function createServiceRequest(
   db: Db,
   customerId: string,
-  submittedBy: string,
+  submittedBy: string | null,
   input: ServiceRequestInput,
+  options?: { requirePortal?: boolean },
 ) {
-  await getPortalCustomer(db, customerId)
+  if (options?.requirePortal === false) await getActiveCustomer(db, customerId)
+  else await getPortalCustomer(db, customerId)
   await assertPortalVehicle(db, customerId, input.vehicleId)
 
   const preferred = input.preferredDate?.trim()
@@ -1135,10 +1142,12 @@ function proposedVehicleCorrectionFields(
 export async function createInvoiceChangeRequest(
   db: Db,
   customerId: string,
-  submittedBy: string,
+  submittedBy: string | null,
   input: PortalInvoiceChangeRequestInput,
+  options?: { requirePortal?: boolean },
 ) {
-  await getPortalCustomer(db, customerId)
+  if (options?.requirePortal === false) await getActiveCustomer(db, customerId)
+  else await getPortalCustomer(db, customerId)
 
   let description = input.description?.trim() ?? ''
   let correctionPayload: PortalInvoiceCorrectionPayload | null = null

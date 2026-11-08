@@ -26,8 +26,8 @@ import { DEFAULT_INVOICE_TEMPLATE_SLUG, isSystemTemplateSlug } from '../db/seed-
 import { getInvoiceDetail } from './invoices.service'
 import { renderDocumentHtmlBuffer, renderDocumentPdfBuffer } from './laravel-pdf.service'
 import { enqueuePdfRenderJob } from './pdf-render.service'
-import { getAppUrl } from './app-config.service'
 import { getBusinessProfile } from './workspace-settings.service'
+import { buildInvoicePdfCustomerSupport } from './invoice-online-access.service'
 
 export type InvoiceTemplatesServiceErrorCode
   = 'NOT_FOUND'
@@ -423,7 +423,7 @@ async function buildTemplatePreviewPayload(
   const data = buildInvoicePdfData(invoiceDetail, {
     company: businessProfileToDocumentPdfCompany(business),
     design: designSettings,
-    portalUrl: `${getAppUrl().replace(/\/$/, '')}/portal`,
+    customerSupport: await buildInvoicePdfCustomerSupport(db, invoiceDetail.invoiceNumberFormatted),
   })
   const marginInches = designSettings.marginInches
   const paper = designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const
