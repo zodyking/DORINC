@@ -256,7 +256,7 @@ export async function queueInvoiceSend(
 
 /** Data for the send-compose UI: recipient + editable defaults + gating flags. */
 export async function getInvoiceSendPreview(db: Db, invoiceId: string) {
-  const { isNotificationEnabled } = await import('./workspace-settings.service')
+  const { isCustomerPortalEnabled, isNotificationEnabled } = await import('./workspace-settings.service')
   const { invoiceSendEditableDefaults } = await import('../mail/customer-email-templates')
 
   let invoice
@@ -273,7 +273,8 @@ export async function getInvoiceSendPreview(db: Db, invoiceId: string) {
   const invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
   const recipient = invoice.customerId ? await resolveInvoiceSendRecipient(db, invoice.customerId) : null
   const pending = await findPendingInvoiceSendJob(db, invoiceId)
-  const defaults = invoiceSendEditableDefaults(invoiceNumber)
+  const portalEnabled = await isCustomerPortalEnabled(db)
+  const defaults = invoiceSendEditableDefaults(invoiceNumber, portalEnabled ? 'portal' : 'online')
 
   return {
     invoiceId,
@@ -377,8 +378,16 @@ export async function buildInvoiceSendMail(
 ) {
   const { resolveEmailBrand } = await import('./email-branding.service')
   const { getActiveEmailTemplateContent } = await import('./email-templates.service')
+  const { isCustomerPortalEnabled } = await import('./workspace-settings.service')
+  const { resolveInvoiceOnlineAccessLink } = await import('./invoice-online-access.service')
   const brand = await resolveEmailBrand(db)
-  const templateOverride = await getActiveEmailTemplateContent(db, 'invoice_sent')
+  const portalEnabled = await isCustomerPortalEnabled(db)
+  const templateOverride = portalEnabled
+    ? await getActiveEmailTemplateContent(db, 'invoice_sent')
+    : null
+  const viewUrl = portalEnabled
+    ? null
+    : (await resolveInvoiceOnlineAccessLink(db, invoice)).url
   const base = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
@@ -389,6 +398,8 @@ export async function buildInvoiceSendMail(
     customSubject: custom?.subject ?? null,
     customMessage: custom?.message ?? null,
     templateOverride,
+    customerPortalEnabled: portalEnabled,
+    viewUrl,
   })
   return {
     ...base,

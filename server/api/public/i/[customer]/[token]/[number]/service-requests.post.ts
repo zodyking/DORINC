@@ -1,21 +1,21 @@
-import { useDb, hasDatabaseConfigured } from '../../../../db/client'
-import { hasDatabaseConfig } from '../../../../services/runtime-config.service'
-import { writeAudit } from '../../../../services/audit.service'
-import { notifyCustomerServiceRequestSubmitted } from '../../../../services/staff-notifications.service'
-import { resolveCustomerDisplayName } from '../../../../services/entity-snapshots'
+import { useDb, hasDatabaseConfigured } from '../../../../../../db/client'
+import { hasDatabaseConfig } from '../../../../../../services/runtime-config.service'
+import { writeAudit } from '../../../../../../services/audit.service'
+import { notifyCustomerServiceRequestSubmitted } from '../../../../../../services/staff-notifications.service'
+import { resolveCustomerDisplayName } from '../../../../../../services/entity-snapshots'
 import {
   createPublicInvoiceServiceRequest,
   PublicInvoiceServiceError,
   publicInvoiceAuditLabel,
-  requirePublicInvoiceNumber,
-} from '../../../../services/public-invoice.service'
-import { apiError } from '../../../../utils/api-error'
-import { rateLimitKeyFromIp, requireRateLimit } from '../../../../utils/require-rate-limit'
-import { validateBody, validateParams } from '../../../../utils/validate'
+  requirePublicInvoiceAccess,
+} from '../../../../../../services/public-invoice.service'
+import { apiError } from '../../../../../../utils/api-error'
+import { rateLimitKeyFromIp, requireRateLimit } from '../../../../../../utils/require-rate-limit'
+import { validateBody, validateParams } from '../../../../../../utils/validate'
 import {
-  publicInvoiceNumberParamSchema,
+  publicInvoiceAccessParamSchema,
   publicInvoiceServiceRequestSchema,
-} from '../../../../../shared/validators/portal'
+} from '../../../../../../../shared/validators/portal'
 
 export default defineEventHandler(async (event) => {
   if (!hasDatabaseConfig() || !hasDatabaseConfigured()) {
@@ -24,13 +24,13 @@ export default defineEventHandler(async (event) => {
 
   await requireRateLimit(event, 'upload', rateLimitKeyFromIp(event, 'public-invoice-service'))
 
-  const { number } = validateParams(event, publicInvoiceNumberParamSchema)
+  const params = validateParams(event, publicInvoiceAccessParamSchema)
   const body = await validateBody(event, publicInvoiceServiceRequestSchema)
 
   try {
-    const invoiceNumber = requirePublicInvoiceNumber(number)
+    const access = requirePublicInvoiceAccess(params)
     const db = useDb()
-    const log = await createPublicInvoiceServiceRequest(db, invoiceNumber, body)
+    const log = await createPublicInvoiceServiceRequest(db, access.invoiceNumber, access, body)
 
     await writeAudit(event, {
       entityType: 'service_log',
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
         workType: log.workType,
         status: log.status,
         customerRequested: log.customerRequested,
-        invoiceNumber: publicInvoiceAuditLabel(invoiceNumber),
+        invoiceNumber: publicInvoiceAuditLabel(access.invoiceNumber),
       },
       actor: null,
     })

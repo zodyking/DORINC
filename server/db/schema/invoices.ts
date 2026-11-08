@@ -134,6 +134,11 @@ export const invoices = pgTable('invoices', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   paidAt: timestamp('paid_at', { withTimezone: true }),
 
+  /** Frozen unguessable Online Access token. Minted once; QR/email links never rotate. */
+  onlineAccessToken: text('online_access_token'),
+  /** Frozen customer slug used in /i/{slug}/{token}/{INV-n}. */
+  onlineAccessCustomerSlug: text('online_access_customer_slug'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -143,6 +148,9 @@ export const invoices = pgTable('invoices', {
   index('invoices_service_log_idx').on(table.serviceLogId),
   index('invoices_status_idx').on(table.status),
   index('invoices_invoice_date_idx').on(table.invoiceDate),
+  uniqueIndex('invoices_online_access_token_uq')
+    .on(table.onlineAccessToken)
+    .where(sql`online_access_token IS NOT NULL`),
 ])
 
 /** Line items with catalog snapshots — amounts stored for finalized immutability. */

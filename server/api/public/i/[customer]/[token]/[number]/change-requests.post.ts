@@ -1,21 +1,21 @@
-import { useDb, hasDatabaseConfigured } from '../../../../db/client'
-import { hasDatabaseConfig } from '../../../../services/runtime-config.service'
-import { writeAudit } from '../../../../services/audit.service'
-import { notifyCustomerChangeRequestSubmitted } from '../../../../services/staff-notifications.service'
+import { useDb, hasDatabaseConfigured } from '../../../../../../db/client'
+import { hasDatabaseConfig } from '../../../../../../services/runtime-config.service'
+import { writeAudit } from '../../../../../../services/audit.service'
+import { notifyCustomerChangeRequestSubmitted } from '../../../../../../services/staff-notifications.service'
 import {
   createPublicInvoiceChangeRequest,
   PublicInvoiceServiceError,
   publicInvoiceAuditLabel,
-  requirePublicInvoiceNumber,
-} from '../../../../services/public-invoice.service'
-import { getActiveCustomer } from '../../../../services/portal.service'
-import { apiError } from '../../../../utils/api-error'
-import { rateLimitKeyFromIp, requireRateLimit } from '../../../../utils/require-rate-limit'
-import { validateBody, validateParams } from '../../../../utils/validate'
+  requirePublicInvoiceAccess,
+} from '../../../../../../services/public-invoice.service'
+import { getActiveCustomer } from '../../../../../../services/portal.service'
+import { apiError } from '../../../../../../utils/api-error'
+import { rateLimitKeyFromIp, requireRateLimit } from '../../../../../../utils/require-rate-limit'
+import { validateBody, validateParams } from '../../../../../../utils/validate'
 import {
   portalInvoiceChangeRequestSchema,
-  publicInvoiceNumberParamSchema,
-} from '../../../../../shared/validators/portal'
+  publicInvoiceAccessParamSchema,
+} from '../../../../../../../shared/validators/portal'
 
 export default defineEventHandler(async (event) => {
   if (!hasDatabaseConfig() || !hasDatabaseConfigured()) {
@@ -24,13 +24,13 @@ export default defineEventHandler(async (event) => {
 
   await requireRateLimit(event, 'upload', rateLimitKeyFromIp(event, 'public-invoice-change'))
 
-  const { number } = validateParams(event, publicInvoiceNumberParamSchema)
+  const params = validateParams(event, publicInvoiceAccessParamSchema)
   const body = await validateBody(event, portalInvoiceChangeRequestSchema)
 
   try {
-    const invoiceNumber = requirePublicInvoiceNumber(number)
+    const access = requirePublicInvoiceAccess(params)
     const db = useDb()
-    const request = await createPublicInvoiceChangeRequest(db, invoiceNumber, body)
+    const request = await createPublicInvoiceChangeRequest(db, access.invoiceNumber, access, body)
     const customer = await getActiveCustomer(db, request.customerId)
 
     await writeAudit(event, {
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
         invoiceId: request.invoiceId,
         topic: request.topic,
         status: request.status,
-        invoiceNumber: publicInvoiceAuditLabel(invoiceNumber),
+        invoiceNumber: publicInvoiceAuditLabel(access.invoiceNumber),
       },
       actor: null,
     })
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
       requestKind: 'invoice_change',
       topic: request.topic,
       message: request.description,
-      invoiceNumber: publicInvoiceAuditLabel(invoiceNumber),
+      invoiceNumber: publicInvoiceAuditLabel(access.invoiceNumber),
     }).catch(() => {})
 
     return {
