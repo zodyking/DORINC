@@ -17,6 +17,8 @@ import type { LineItemType } from '#shared/line-item-types'
 import { normalizeLineType } from '#shared/line-item-types'
 import { parseServiceLogDraftLineSeeds } from '../../shared/service-log-invoice-lines'
 import { getDefaultInvoiceTaxRateDecimal } from './workspace-settings.service'
+import { mintOnlineAccessToken } from './invoice-online-access.service'
+import { slugifyPublicCustomerName } from '../../shared/public-invoice'
 import { calculateInvoiceTotals } from './invoice-totals.service'
 import { resolveLineDiscount } from '../../shared/invoice-discount'
 import {
@@ -539,6 +541,8 @@ export async function createInvoiceDraft(
     feesAmount: '0',
     discountAmount: input.discountAmount ?? '0',
     discountPercent: input.discountPercent ?? null,
+    onlineAccessToken: mintOnlineAccessToken(),
+    onlineAccessCustomerSlug: slugifyPublicCustomerName(customerSnapshot.displayName),
     createdBy: actorId,
     updatedBy: actorId,
   }

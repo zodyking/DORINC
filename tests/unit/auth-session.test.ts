@@ -11,6 +11,7 @@ describe('auth session helpers', () => {
   it('detects public paths', () => {
     expect(isPublicAppPath('/auth/login')).toBe(true)
     expect(isPublicAppPath('/setup')).toBe(true)
+    expect(isPublicAppPath('/i/tomer-dvora/token/INV-000768')).toBe(true)
     expect(isPublicAppPath('/invoices')).toBe(false)
   })
 
@@ -18,6 +19,7 @@ describe('auth session helpers', () => {
     expect(isProtectedAppPath('/invoices')).toBe(true)
     expect(isProtectedAppPath('/portal/invoices')).toBe(true)
     expect(isProtectedAppPath('/auth/login')).toBe(false)
+    expect(isProtectedAppPath('/i/tomer-dvora/token/INV-000768')).toBe(false)
   })
 
   it('builds login paths by area', () => {

@@ -25,6 +25,12 @@ export const publicInvoiceNumberParamSchema = z.object({
   number: nonEmptyString.max(40),
 })
 
+export const publicInvoiceAccessParamSchema = z.object({
+  customer: nonEmptyString.max(80),
+  token: nonEmptyString.max(80),
+  number: nonEmptyString.max(40),
+})
+
 export const publicInvoiceServiceRequestSchema = portalServiceRequestSchema.omit({ vehicleId: true }).extend({
   vehicleId: z.string().uuid().optional(),
 })

@@ -55,7 +55,7 @@ async function buildInvoicePdfPayload(
   const data = buildInvoicePdfData(detail, {
     company: businessProfileToDocumentPdfCompany(business),
     design: template.designSettings,
-    customerSupport: await buildInvoicePdfCustomerSupport(db, detail.invoiceNumberFormatted),
+    customerSupport: await buildInvoicePdfCustomerSupport(db, detail),
   })
   const options = pdfOptionsFromTemplate(template)
   return buildDocumentPdfRenderPayload(data, options)

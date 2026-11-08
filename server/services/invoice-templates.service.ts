@@ -423,7 +423,7 @@ async function buildTemplatePreviewPayload(
   const data = buildInvoicePdfData(invoiceDetail, {
     company: businessProfileToDocumentPdfCompany(business),
     design: designSettings,
-    customerSupport: await buildInvoicePdfCustomerSupport(db, invoiceDetail.invoiceNumberFormatted),
+    customerSupport: await buildInvoicePdfCustomerSupport(db, invoiceDetail),
   })
   const marginInches = designSettings.marginInches
   const paper = designSettings.pageSize === 'A4' ? 'a4' as const : 'letter' as const

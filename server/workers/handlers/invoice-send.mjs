@@ -7,11 +7,30 @@ import {
 } from '../../lib/invoice-sent-team-notify.mjs'
 import { buildInvoiceAttachedEmail } from '../../mail/templates/system.mjs'
 import { loadActiveEmailTemplateContent } from '../../mail/email-template-override.mjs'
-import { embedInlineLogoInHtml } from '../../mail/inline-logo.mjs'
 import { sendNotificationMail } from '../../mail/outbound-notification-mail.mjs'
 
 function workerAppUrl() {
   return process.env.APP_URL?.trim() || 'http://localhost:3000'
+}
+
+async function isCustomerPortalEnabled(pool) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'workspace.invoice_settings' LIMIT 1`,
+    )
+    return rows[0]?.value?.customerPortalEnabled !== false
+  }
+  catch {
+    return true
+  }
+}
+
+function publicInvoiceUrlFromRow(appUrl, invoice, invoiceNumberFormatted) {
+  const token = String(invoice?.online_access_token ?? '').trim()
+  const slug = String(invoice?.online_access_customer_slug ?? '').trim()
+  if (!token || !slug) return ''
+  const base = String(appUrl || workerAppUrl()).replace(/\/$/, '')
+  return `${base}/i/${encodeURIComponent(slug)}/${encodeURIComponent(token)}/${encodeURIComponent(invoiceNumberFormatted)}`
 }
 
 async function loadEmailBrand(pool) {
@@ -234,7 +253,8 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
       if (!invoiceId) throw new Error('invoice_send payload missing invoiceId')
 
       const { rows: invoiceRows } = await pool.query(
-        `SELECT id, status, customer_id, invoice_number, due_date, total
+        `SELECT id, status, customer_id, invoice_number, due_date, total,
+                online_access_token, online_access_customer_slug
          FROM invoices WHERE id = $1`,
         [invoiceId],
       )
@@ -279,7 +299,13 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
         const invNum = `INV-${String(invoice.invoice_number).padStart(6, '0')}`
         const recipientName = payload.recipientName ?? 'there'
         const brand = await loadEmailBrand(pool)
-        const templateOverride = await loadActiveEmailTemplateContent(pool, 'invoice_attached')
+        const portalEnabled = await isCustomerPortalEnabled(pool)
+        const viewUrl = portalEnabled
+          ? ''
+          : publicInvoiceUrlFromRow(brand.appUrl, invoice, invNum)
+        const templateOverride = portalEnabled
+          ? await loadActiveEmailTemplateContent(pool, 'invoice_attached')
+          : null
         const mail = buildInvoiceAttachedEmail({
           recipientName,
           invoiceNumber: invNum,
@@ -288,6 +314,8 @@ export async function processInvoiceSendJobs(pool, batch = 3) {
           appUrl: brand.appUrl,
           brand,
           templateOverride,
+          customerPortalEnabled: portalEnabled,
+          viewUrl,
         })
         payload.subject = mail.subject
         payload.text = mail.text

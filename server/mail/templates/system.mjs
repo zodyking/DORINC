@@ -742,16 +742,24 @@ export function buildInvoiceAttachedEmail({
   appUrl,
   brand,
   templateOverride,
+  customerPortalEnabled,
+  viewUrl,
 }) {
+  const portalEnabled = customerPortalEnabled !== false
+  const publicUrl = String(viewUrl || '').trim()
   const dueLine = dueDate || null
   const totalLine = formatMoneyForDisplay(total)
   const subject = `Invoice ${invoiceNumber} Is Ready`
+  const helpBody = portalEnabled
+    ? 'If you have questions, reply to this email or submit a request through your customer portal.'
+    : 'If you have questions, reply to this email.'
   const text = [
     `Hello ${recipientName},`,
     '',
     `Invoice ${invoiceNumber} is attached to this email.`,
     dueLine ? `Due date: ${dueLine}` : '',
     totalLine ? `Total: ${totalLine}` : '',
+    !portalEnabled && publicUrl ? `View invoice: ${publicUrl}` : '',
   ].filter(Boolean).join('\n')
 
   return styledEmail({
@@ -777,11 +785,14 @@ export function buildInvoiceAttachedEmail({
     ].filter(Boolean),
     note: {
       title: 'Need help?',
-      body: 'If you have questions, reply to this email or submit a request through your customer portal.',
+      body: helpBody,
     },
+    primaryAction: !portalEnabled && publicUrl
+      ? { href: publicUrl, label: 'View invoice online' }
+      : undefined,
     appUrl,
     brand,
-    templateOverride,
+    templateOverride: portalEnabled ? templateOverride : null,
     templateVars: { recipientName, invoiceNumber, dueDate: dueLine || '', total: totalLine || '' },
 })
 }

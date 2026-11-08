@@ -35,6 +35,8 @@ const REQUEST_KIND_LABELS: Record<PortalRequestKindLabel, string> = {
 
 export type CustomerNotificationKind = 'invoice_sent' | 'request_status' | 'estimate_sent'
 
+export type InvoiceSentAccessMode = 'portal' | 'online'
+
 export interface InvoiceSentTemplateInput {
   recipientName: string
   invoiceNumber: string
@@ -49,24 +51,52 @@ export interface InvoiceSentTemplateInput {
   customMessage?: string | null
   /** Active Control Panel email template override, when set. */
   templateOverride?: EmailTemplateContent | null
+  /** App-wide customer portal switch. When false, copy and CTA use the public invoice page. */
+  customerPortalEnabled?: boolean
+  /** Public Online Access URL used when the customer portal is off. */
+  viewUrl?: string | null
 }
 
 /** Editable defaults surfaced to the send-compose UI (subject + message body). */
-export function invoiceSendEditableDefaults(invoiceNumber: string) {
+export function invoiceSendEditableDefaults(
+  invoiceNumber: string,
+  accessMode: InvoiceSentAccessMode = 'portal',
+) {
+  if (accessMode === 'online') {
+    return {
+      subject: `Invoice ${invoiceNumber} Is Ready`,
+      message: `Invoice ${invoiceNumber} has been sent and is available online.`,
+    }
+  }
   return {
     subject: `Invoice ${invoiceNumber} Is Ready`,
     message: `Invoice ${invoiceNumber} has been sent and is available in your customer portal.`,
   }
 }
 
+export function invoiceSentAccessMode(customerPortalEnabled?: boolean): InvoiceSentAccessMode {
+  return customerPortalEnabled === false ? 'online' : 'portal'
+}
+
 export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
+  const portalEnabled = input.customerPortalEnabled !== false
+  const accessMode = invoiceSentAccessMode(input.customerPortalEnabled)
   const appUrl = input.appUrl || input.brand?.appUrl || getAppUrl()
-  const detailUrl = portalUrl(`/invoices/${input.invoiceId}`, appUrl)
+  const detailUrl = input.viewUrl?.trim()
+    || (portalEnabled ? portalUrl(`/invoices/${input.invoiceId}`, appUrl) : '')
   const dueLine = input.dueDate || null
   const totalLine = formatMoneyForDisplay(input.total)
-  const defaults = invoiceSendEditableDefaults(input.invoiceNumber)
+  const defaults = invoiceSendEditableDefaults(input.invoiceNumber, accessMode)
   const subject = input.customSubject?.trim() || defaults.subject
   const message = input.customMessage?.trim() || defaults.message
+  const helpBody = portalEnabled
+    ? 'If you have questions, reply to this email or submit a request through the portal.'
+    : 'If you have questions, reply to this email.'
+  const actionLabel = portalEnabled ? 'View invoice in the portal' : 'View invoice online'
+  const availabilityLabel = portalEnabled ? 'Portal' : 'Online'
+  // Portal catalog overrides mention the customer portal. Skip them when it is off
+  // so the send cannot reintroduce that copy.
+  const templateOverride = portalEnabled ? input.templateOverride : null
   const text = [
     `Hello ${input.recipientName},`,
     '',
@@ -74,9 +104,9 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
     dueLine ? `Due date: ${dueLine}` : '',
     totalLine ? `Total: ${totalLine}` : '',
     '',
-    `View invoice: ${detailUrl}`,
+    detailUrl ? `View invoice: ${detailUrl}` : '',
     '',
-    'If you have questions, reply to this email or submit a request through the portal.',
+    helpBody,
   ].filter(Boolean).join('\n')
 
   return {
@@ -99,21 +129,21 @@ export function buildInvoiceSentEmail(input: InvoiceSentTemplateInput) {
         { label: 'Customer', value: input.recipientName },
         { label: 'Invoice', value: input.invoiceNumber },
         dueLine ? { label: 'Due Date', value: dueLine } : null,
-        { label: 'Portal', value: 'Available now' },
+        { label: availabilityLabel, value: 'Available now' },
       ].filter(Boolean) as Array<{ label: string, value: string }>,
       note: {
         title: 'Need help?',
-        body: 'If you have questions, reply to this email or submit a request through the portal.',
+        body: helpBody,
       },
-      primaryAction: { href: detailUrl, label: 'View invoice in the portal' },
+      primaryAction: detailUrl ? { href: detailUrl, label: actionLabel } : undefined,
       appUrl,
       brand: input.brand,
-    }, input.templateOverride, {
+    }, templateOverride, {
       recipientName: input.recipientName,
       invoiceNumber: input.invoiceNumber,
       dueDate: dueLine || '',
       total: totalLine || '',
-    })), input.templateOverride, {
+    })), templateOverride, {
       recipientName: input.recipientName,
       invoiceNumber: input.invoiceNumber,
       dueDate: dueLine || '',

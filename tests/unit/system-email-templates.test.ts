@@ -103,6 +103,7 @@ describe('system email templates', () => {
     expect(mail.html).toContain('INV-000001')
     expect(mail.html).toContain('Due Date')
     expect(mail.text).toContain('attached')
+    expect(mail.html).toContain('customer portal')
   })
 
   it('formats raw invoice totals with dollar signs', () => {

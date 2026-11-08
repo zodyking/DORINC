@@ -16,7 +16,7 @@ import { getInvoice } from './invoices.service'
 import { enqueueJob } from './jobs.service'
 import { resolveEmailBrand } from './email-branding.service'
 import { getActiveEmailTemplateContent } from './email-templates.service'
-import { isNotificationEnabled } from './workspace-settings.service'
+import { isCustomerPortalEnabled, isNotificationEnabled } from './workspace-settings.service'
 import { documentChangeRequestTitle } from './document-change-requests.service'
 
 export interface NotificationRecipient {
@@ -110,8 +110,15 @@ export async function notifyInvoiceSent(db: Db, invoiceId: string) {
   const recipient = await resolvePortalRecipient(db, invoice.customerId)
   if (!recipient) return { queued: false as const, reason: 'no_recipient' }
 
+  const { resolveInvoiceOnlineAccessLink } = await import('./invoice-online-access.service')
   const brand = await resolveEmailBrand(db)
-  const templateOverride = await getActiveEmailTemplateContent(db, 'invoice_sent')
+  const portalEnabled = await isCustomerPortalEnabled(db)
+  const templateOverride = portalEnabled
+    ? await getActiveEmailTemplateContent(db, 'invoice_sent')
+    : null
+  const viewUrl = portalEnabled
+    ? null
+    : (await resolveInvoiceOnlineAccessLink(db, invoice)).url
   const mail = buildInvoiceSentEmail({
     recipientName: recipient.name,
     invoiceNumber: formatInvoiceNumber(invoice.invoiceNumber),
@@ -120,6 +127,8 @@ export async function notifyInvoiceSent(db: Db, invoiceId: string) {
     total: invoice.total,
     brand,
     templateOverride,
+    customerPortalEnabled: portalEnabled,
+    viewUrl,
   })
 
   const job = await enqueueCustomerNotification(db, recipient, mail, {

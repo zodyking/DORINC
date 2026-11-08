@@ -60,4 +60,15 @@ describe('app-wide customer portal switch', () => {
     expect(portal).toContain('export async function revokeActiveCustomerPortalSessions')
     expect(portal).toContain("eq(accountTypes.key, 'customer')")
   })
+
+  it('rewrites the invoice email when the portal is off', () => {
+    const templates = source('server/mail/customer-email-templates.ts')
+    expect(templates).toContain('View invoice online')
+    expect(templates).toContain('available online')
+    expect(templates).toContain('customerPortalEnabled')
+
+    const send = source('server/services/invoice-send.service.ts')
+    expect(send).toContain('resolveInvoiceOnlineAccessLink')
+    expect(send).toContain('isCustomerPortalEnabled')
+  })
 })

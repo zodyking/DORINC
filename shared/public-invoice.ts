@@ -1,26 +1,49 @@
-/** Ungated invoice page. Number in the path never changes. */
+/** Ungated invoice page. Path is customer slug + unguessable token + invoice number. */
 export const PUBLIC_INVOICE_PATH_PREFIX = '/i'
 
-export function publicInvoicePath(invoiceNumberFormatted: string): string {
-  const label = invoiceNumberFormatted.trim().toUpperCase()
-  return `${PUBLIC_INVOICE_PATH_PREFIX}/${encodeURIComponent(label)}`
+export interface PublicInvoiceLinkParts {
+  customerSlug: string
+  token: string
+  invoiceNumberFormatted: string
 }
 
-export function publicInvoiceUrl(appUrl: string, invoiceNumberFormatted: string): string {
-  return `${appUrl.replace(/\/$/, '')}${publicInvoicePath(invoiceNumberFormatted)}`
+export function slugifyPublicCustomerName(name: string | null | undefined): string {
+  const slug = String(name ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
+  return slug || 'customer'
+}
+
+export function publicInvoicePath(parts: PublicInvoiceLinkParts): string {
+  const customer = encodeURIComponent(parts.customerSlug.trim().toLowerCase())
+  const token = encodeURIComponent(parts.token.trim())
+  const number = encodeURIComponent(parts.invoiceNumberFormatted.trim().toUpperCase())
+  return `${PUBLIC_INVOICE_PATH_PREFIX}/${customer}/${token}/${number}`
+}
+
+export function publicInvoiceUrl(appUrl: string, parts: PublicInvoiceLinkParts): string {
+  return `${appUrl.replace(/\/$/, '')}${publicInvoicePath(parts)}`
+}
+
+export function decodePublicInvoiceSegment(raw: string | null | undefined): string {
+  if (raw == null) return ''
+  const text = String(raw).trim()
+  if (!text) return ''
+  try {
+    return decodeURIComponent(text).trim()
+  }
+  catch {
+    return text
+  }
 }
 
 /** Parse INV-000768, inv-768, or 768 from a public path segment. */
 export function parsePublicInvoiceSlug(raw: string | null | undefined): number | null {
-  if (raw == null) return null
-  let text = String(raw).trim()
-  try {
-    text = decodeURIComponent(text)
-  }
-  catch {
-    // keep raw
-  }
-  text = text.trim()
+  const text = decodePublicInvoiceSegment(raw)
   if (!text) return null
 
   const labeled = text.match(/^inv[-\s]?0*(\d{1,9})$/i)
@@ -39,4 +62,8 @@ export function parsePublicInvoiceSlug(raw: string | null | undefined): number |
 
 export function publicInvoiceLabel(invoiceNumber: number): string {
   return `INV-${String(invoiceNumber).padStart(6, '0')}`
+}
+
+export function publicInvoiceSlugsMatch(left: string, right: string): boolean {
+  return slugifyPublicCustomerName(left) === slugifyPublicCustomerName(right)
 }
