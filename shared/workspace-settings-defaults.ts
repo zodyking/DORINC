@@ -89,6 +89,8 @@ export interface InvoiceWorkspaceSettings {
   printBlankServiceLogAfterInvoice: boolean
   /** Print one blank service log after every N invoice prints (1 = every invoice). */
   blankServiceLogEveryNInvoices: number
+  /** App-wide customer portal. When false, hide customer login and sign out portal users. */
+  customerPortalEnabled: boolean
 }
 
 export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
@@ -101,6 +103,7 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   printerEmail: '',
   printBlankServiceLogAfterInvoice: false,
   blankServiceLogEveryNInvoices: 1,
+  customerPortalEnabled: true,
 }
 
 /** App-wide email notification toggles (Control Panel → Notifications). */

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm'
 import { hashPassword } from '../auth/password'
 import { generatePortalTempPassword } from '../auth/portal-password'
 import type { Db } from '../db/client'
@@ -500,9 +500,32 @@ export async function markCredentialEmailFailed(db: Db, credentialLogId: string,
 
 export async function isCustomerPortalActive(db: Db, customerId: string | null): Promise<boolean> {
   if (!customerId) return false
+  const { isCustomerPortalEnabled } = await import('./workspace-settings.service')
+  if (!(await isCustomerPortalEnabled(db))) return false
   const [row] = await db
     .select({ portalEnabled: customers.portalEnabled, archivedAt: customers.archivedAt })
     .from(customers)
     .where(and(eq(customers.id, customerId), isNull(customers.archivedAt)))
   return !!row?.portalEnabled
+}
+
+/** Sign out every customer portal session with no notification. */
+export async function revokeActiveCustomerPortalSessions(db: Db): Promise<number> {
+  const now = new Date()
+  const customerRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(accountTypes, eq(users.accountTypeId, accountTypes.id))
+    .where(eq(accountTypes.key, 'customer'))
+  const ids = customerRows.map(row => row.id)
+  if (!ids.length) return 0
+  const rows = await db.update(sessions)
+    .set({ revokedAt: now })
+    .where(and(
+      inArray(sessions.userId, ids),
+      isNull(sessions.revokedAt),
+      gt(sessions.expiresAt, now),
+    ))
+    .returning({ id: sessions.id })
+  return rows.length
 }

@@ -60,6 +60,16 @@ describe('invoice workspace printer settings schema', () => {
     expect(parsed.printerEmail).toBe('')
     expect(parsed.printBlankServiceLogAfterInvoice).toBe(false)
     expect(parsed.blankServiceLogEveryNInvoices).toBe(1)
+    expect(parsed.customerPortalEnabled).toBe(true)
+  })
+
+  it('defaults customer portal on when the field is omitted', () => {
+    const { customerPortalEnabled: _omit, ...rest } = DEFAULT_INVOICE_SETTINGS
+    expect(invoiceWorkspaceSettingsSchema.parse(rest).customerPortalEnabled).toBe(true)
+    expect(invoiceWorkspaceSettingsSchema.parse({
+      ...DEFAULT_INVOICE_SETTINGS,
+      customerPortalEnabled: false,
+    }).customerPortalEnabled).toBe(false)
   })
 
   it('requires a valid printer email when a print toggle is on', () => {
@@ -98,6 +108,8 @@ describe('invoice settings email-to-print UI', () => {
     expect(panel).toContain('form.printerEmail')
     expect(panel).toContain('form.printBlankServiceLogAfterInvoice')
     expect(panel).toContain('form.blankServiceLogEveryNInvoices')
+    expect(panel).toContain('Customer portal')
+    expect(panel).toContain('form.customerPortalEnabled')
   })
 
   it('hooks auto print into invoice send after the customer email is queued', () => {

@@ -7,7 +7,16 @@ definePageMeta({ layout: false })
 
 const route = useRoute()
 
-const isCustomerPortal = computed(() => route.query.portal === 'customer')
+const { data: publicBusiness } = useClientFetch<{ customerPortalEnabled?: boolean }>('/api/public/business')
+const isCustomerPortal = computed(() => (
+  route.query.portal === 'customer' && publicBusiness.value?.customerPortalEnabled !== false
+))
+
+watch(() => publicBusiness.value?.customerPortalEnabled, (enabled) => {
+  if (enabled === false && route.query.portal === 'customer') {
+    void navigateTo('/auth/login?card=staff', { replace: true })
+  }
+}, { immediate: true })
 
 const email = ref('')
 const busy = ref(false)

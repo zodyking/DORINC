@@ -298,6 +298,10 @@ export async function login(
 
   const isCustomer = row.accountTypeKey === 'customer'
   if (isCustomer) {
+    const { isCustomerPortalEnabled } = await import('../services/workspace-settings.service')
+    if (!(await isCustomerPortalEnabled(db))) {
+      throw new AuthError('PORTAL_DISABLED')
+    }
     if (!row.user.customerId) throw new AuthError('PORTAL_NOT_LINKED')
     const [customer] = await db.select({ portalEnabled: customers.portalEnabled, archivedAt: customers.archivedAt })
       .from(customers)
