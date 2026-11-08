@@ -17,6 +17,7 @@ describe('invoice customer support note', () => {
     expect(note.lines[0]).toContain('accounting@devononsiterepairs.com')
     expect(note.lines.some(line => line.includes('Customer portal:'))).toBe(true)
     expect(note.lines.at(-1)).toContain('portal access')
+    expect(note.qrDataUrl).toBeUndefined()
   })
 
   it('is included on invoice pdf data payloads', () => {

@@ -11,6 +11,7 @@ const open = defineModel<boolean>('open', { default: false })
 const props = defineProps<{
   invoiceId: string
   invoiceNumberFormatted: string
+  submitUrl?: string
   vehicle: (VehicleDisplay & {
     vin?: string | null
     plate?: string | null
@@ -89,7 +90,7 @@ async function submit() {
   submitting.value = true
   error.value = ''
   try {
-    await $fetch('/api/portal/invoice-change-requests', {
+    await $fetch(props.submitUrl || '/api/portal/invoice-change-requests', {
       method: 'POST',
       body: portalInvoiceVehicleCorrectionRequestBody({
         invoiceId: props.invoiceId,

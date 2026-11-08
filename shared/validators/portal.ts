@@ -21,6 +21,14 @@ export const portalServiceRequestSchema = z.object({
   description: nonEmptyString.max(4000),
 })
 
+export const publicInvoiceNumberParamSchema = z.object({
+  number: nonEmptyString.max(40),
+})
+
+export const publicInvoiceServiceRequestSchema = portalServiceRequestSchema.omit({ vehicleId: true }).extend({
+  vehicleId: z.string().uuid().optional(),
+})
+
 export const portalLineItemCorrectionInputSchema = z.object({
   lineItemId: uuidSchema,
   description: z.string().trim().min(1).max(500),

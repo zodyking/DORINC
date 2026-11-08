@@ -158,7 +158,20 @@
       color: {{ $muted }};
       line-height: 1.45;
     }
-    .support-line:last-child { margin-bottom: 0; }
+        .support-line:last-child { margin-bottom: 0; }
+    .online-access .support-title {
+      font-size: 11pt;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #111111;
+      margin: 0 0 8px;
+    }
+    .online-access-row { width: 100%; border-collapse: collapse; }
+    .online-access-qr { width: 118px; vertical-align: middle; padding: 0 10px 0 0; }
+    .online-access-qr img { display: block; width: 108px; height: 108px; }
+    .online-access-copy { vertical-align: middle; }
+    .online-access .support-line { font-size: 8pt; color: #222222; font-weight: 600; }
     .totals-table { font-size: 8.5pt; }
     .totals-table td { padding: 2.5px 2px; }
     .totals-table td:first-child { color: {{ $muted }}; }
@@ -308,11 +321,26 @@
       <tr>
         <td width="55%" style="padding-right:24px; vertical-align:top;">
           @if($sectionVisible('footer'))
-            <div class="customer-support-note">
+            <div class="customer-support-note{{ !empty($doc['customerSupport']['qrDataUrl']) ? ' online-access' : '' }}">
               <div class="support-title">{{ $doc['customerSupport']['title'] ?? 'Questions, changes, or portal access' }}</div>
-              @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
-                <p class="support-line">{{ $line }}</p>
-              @endforeach
+              @if(!empty($doc['customerSupport']['qrDataUrl']))
+                <table class="online-access-row" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td class="online-access-qr">
+                      <img src="{{ $doc['customerSupport']['qrDataUrl'] }}" width="108" height="108" alt="Online Access" />
+                    </td>
+                    <td class="online-access-copy">
+                      @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
+                        <p class="support-line">{{ $line }}</p>
+                      @endforeach
+                    </td>
+                  </tr>
+                </table>
+              @else
+                @foreach(($doc['customerSupport']['lines'] ?? []) as $line)
+                  <p class="support-line">{{ $line }}</p>
+                @endforeach
+              @endif
             </div>
           @endif
         </td>
