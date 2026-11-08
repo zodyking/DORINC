@@ -34,7 +34,12 @@ const resendRateLimited = computed(() => resendCooldown.isActive)
 const resendRateLimitMessage = computed(() => resendCooldown.message)
 const resendCountdown = computed(() => resendCooldown.countdownLabel)
 
-const { data: publicBusiness } = useClientFetch<{ businessName: string }>('/api/public/business')
+const { data: publicBusiness } = useClientFetch<{ businessName: string, customerPortalEnabled?: boolean }>('/api/public/business')
+const customerPortalEnabled = computed(() => publicBusiness.value?.customerPortalEnabled !== false)
+
+watch(customerPortalEnabled, (enabled) => {
+  if (!enabled) card.value = 'staff'
+}, { immediate: true })
 const displayBusinessName = computed(() => {
   const name = publicBusiness.value?.businessName?.trim()
   return name || BRAND_NAME
@@ -279,7 +284,7 @@ async function submitSignup() {
   >
     <div class="auth-wrap">
       <!-- Customer portal card -->
-      <div v-if="card === 'customer'" class="auth-card">
+      <div v-if="card === 'customer' && customerPortalEnabled" class="auth-card">
         <div class="auth-head">
           <img class="sq" :src="BRAND_ICON" alt="" width="40" height="40">
           <div class="auth-head__text">
@@ -522,11 +527,11 @@ async function submitSignup() {
         </div>
       </div>
 
-      <p v-if="card === 'customer'" class="auth-switch">
+      <p v-if="card === 'customer' && customerPortalEnabled" class="auth-switch">
         Staff member?
         <button type="button" class="auth-link" @click="card = 'staff'">Open staff portal</button>
       </p>
-      <p v-if="card === 'staff'" class="auth-switch">
+      <p v-if="card === 'staff' && customerPortalEnabled" class="auth-switch">
         Customer account?
         <button type="button" class="auth-link" @click="card = 'customer'">Customer portal</button>
       </p>

@@ -38,6 +38,7 @@ export const invoiceWorkspaceSettingsSchema = z.object({
   printerEmail: z.string().max(200).default(''),
   printBlankServiceLogAfterInvoice: z.boolean().default(false),
   blankServiceLogEveryNInvoices: z.coerce.number().int().min(1).max(99).default(1),
+  customerPortalEnabled: z.boolean().default(true),
 }).superRefine((value, ctx) => {
   const email = value.printerEmail.trim()
   const printerEnabled = value.autoPrintOnSend || value.printBlankServiceLogAfterInvoice

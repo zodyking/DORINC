@@ -3,6 +3,7 @@ import { getSessionCookie } from '../auth/session-cookie'
 import { useDb, hasDatabaseConfigured } from '../db/client'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { isCustomerPortalActive } from '../services/portal-access.service'
+import { isCustomerPortalEnabled } from '../services/workspace-settings.service'
 import { apiError } from '../utils/api-error'
 
 /**
@@ -20,10 +21,18 @@ export default defineEventHandler(async (event) => {
   try {
     const resolved = await resolveSession(useDb(), token)
     if (resolved) {
-      if (event.path.startsWith('/api/portal/') && resolved.user.accountType === 'customer') {
-        const active = await isCustomerPortalActive(useDb(), resolved.user.customerId)
-        if (!active) {
-          throw apiError(event, 'FORBIDDEN', 'Customer portal access is disabled', { reason: 'portal_disabled' })
+      if (resolved.user.accountType === 'customer') {
+        const db = useDb()
+        if (!(await isCustomerPortalEnabled(db))) {
+          // App-wide portal off: treat as signed out (sessions are revoked on save).
+          event.context.staleSessionCookie = true
+          return
+        }
+        if (event.path.startsWith('/api/portal/')) {
+          const active = await isCustomerPortalActive(db, resolved.user.customerId)
+          if (!active) {
+            throw apiError(event, 'FORBIDDEN', 'Customer portal access is disabled', { reason: 'portal_disabled' })
+          }
         }
       }
 

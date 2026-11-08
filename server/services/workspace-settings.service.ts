@@ -155,8 +155,15 @@ export async function saveInvoiceWorkspaceSettings(
     printerEmail: settings.printerEmail.trim(),
     printBlankServiceLogAfterInvoice: settings.printBlankServiceLogAfterInvoice,
     blankServiceLogEveryNInvoices: settings.blankServiceLogEveryNInvoices,
+    customerPortalEnabled: settings.customerPortalEnabled,
   }, updatedBy)
   return settings
+}
+
+/** App-wide customer portal switch (Invoice settings). Defaults on. */
+export async function isCustomerPortalEnabled(db: Db): Promise<boolean> {
+  const settings = await getInvoiceWorkspaceSettings(db)
+  return settings.customerPortalEnabled !== false
 }
 
 export async function getInvoicePrinterCount(db: Db): Promise<number> {

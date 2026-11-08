@@ -34,6 +34,7 @@ const form = reactive({
   printerEmail: '',
   printBlankServiceLogAfterInvoice: false,
   blankServiceLogEveryNInvoices: 1,
+  customerPortalEnabled: true,
 })
 
 watch(() => settingsData.value?.settings, (s) => {
@@ -86,6 +87,7 @@ async function save() {
           printerEmail: form.printerEmail.trim(),
           printBlankServiceLogAfterInvoice: form.printBlankServiceLogAfterInvoice,
           blankServiceLogEveryNInvoices: form.blankServiceLogEveryNInvoices,
+          customerPortalEnabled: form.customerPortalEnabled,
         },
       },
     })
@@ -132,7 +134,7 @@ async function onTemplateChange(ev: Event) {
   <div class="settings-panel">
     <header class="settings-panel-head">
       <h3>Invoice settings</h3>
-      <p>Defaults for new invoices, shop email-to-print, approval thresholds, and the app-wide PDF template.</p>
+      <p>Defaults for new invoices, shop email-to-print, the customer portal, approval thresholds, and the app-wide PDF template.</p>
     </header>
 
     <div class="card">
@@ -173,6 +175,35 @@ async function onTemplateChange(ev: Event) {
           Payment terms (days)
           <input v-model.number="form.defaultPaymentTermsDays" type="number" min="0" max="365">
         </label>
+
+        <p v-if="message" class="settings-ok">{{ message }}</p>
+        <p v-if="error" class="settings-err">{{ error }}</p>
+
+        <div class="settings-actions">
+          <button type="submit" class="btn primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save invoice settings' }}</button>
+        </div>
+      </div>
+    </form>
+
+    <form class="card" style="margin-top:16px;" @submit.prevent="save">
+      <div class="chead"><h3>Customer portal</h3></div>
+      <div class="cbody settings-form">
+        <div class="tglrow">
+          <div>
+            <div class="notif-label">Customer portal</div>
+            <div class="notif-desc">
+              When off, the login page is staff-only and any signed-in customer portal users are signed out with no notice. Per-customer portal settings are kept for when you turn this back on.
+            </div>
+          </div>
+          <span class="tgl">
+            <input
+              v-model="form.customerPortalEnabled"
+              type="checkbox"
+              aria-label="Customer portal"
+            >
+            <span class="tr" />
+          </span>
+        </div>
 
         <p v-if="message" class="settings-ok">{{ message }}</p>
         <p v-if="error" class="settings-err">{{ error }}</p>
