@@ -89,6 +89,7 @@ const nav = computed<NavSection[]>(() => {
         { label: 'Vehicles', to: '/vehicles', icon: 'vehicles', permission: 'vehicles.read.all' },
         { label: 'Service Logs', to: '/service-logs', icon: 'service-logs', permission: ['service_logs.read.all', 'service_logs.read.own'] },
         { label: 'Staples', to: '/staples', icon: 'staples', permission: 'staples.read.all' },
+        { label: 'Printers', to: '/printers', icon: 'printers', permission: 'printers.read.all' },
         { label: 'Portal Requests', to: '/portal-requests', icon: 'portal-requests', permission: 'portal_requests.review.all' },
         { label: 'Deletion Requests', to: '/deletion-requests', icon: 'deletion-requests', permission: 'deletion_requests.review.all' },
         { label: 'Catalog', to: '/catalog', icon: 'catalog', permission: 'catalog.read.all' },

@@ -11,6 +11,7 @@ import { ensureAiAdministratorSchema } from './ensure-ai-administrator-schema.mj
 import { ensureSusanSmsSchema } from './ensure-susan-sms-schema.mjs'
 import { ensureDeletionAiSchema } from './ensure-deletion-ai-schema.mjs'
 import { ensureInvoiceOnlineAccessSchema } from './ensure-invoice-online-access-schema.mjs'
+import { ensurePrintersSchema } from './ensure-printers-schema.mjs'
 
 async function resolveMigrationsFolder() {
   const candidates = [
@@ -47,6 +48,7 @@ export async function applyPendingMigrationsOnBoot() {
     await ensureSusanSmsSchema(pool)
     await ensureDeletionAiSchema(pool)
     await ensureInvoiceOnlineAccessSchema(pool)
+    await ensurePrintersSchema(pool)
     console.log('[migrate] pending migrations applied on boot')
   }
   finally {

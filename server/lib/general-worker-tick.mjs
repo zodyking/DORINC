@@ -10,6 +10,7 @@ import { processDeletionAiReviewJobs } from '../workers/handlers/deletion-ai-rev
 import { maybeEnqueueScheduledBackup, processBackupJobs } from '../workers/handlers/backups.mjs'
 import { maybeEnqueueRetentionPrune, processRetentionPruneJobs } from '../workers/handlers/retention.mjs'
 import { maybeRunImapInboxSync, processImapSyncJobs } from '../workers/handlers/imap-sync.mjs'
+import { processPrintersTick } from '../workers/handlers/printers.mjs'
 import { touchWorkerHeartbeat } from './worker-heartbeat.mjs'
 import { reclaimStaleWorkerJobs } from './reclaim-stale-jobs.mjs'
 
@@ -115,5 +116,13 @@ export async function runGeneralWorkerTick(pool, opts = {}) {
   }
   else if (imap.processed && process.env.IMAP_SYNC_VERBOSE === '1') {
     console.log(`${logPrefix} imap_sync processed=${imap.processed} failed=${imap.failed}`)
+  }
+
+  const printers = await processPrintersTick()
+  if (!printers.ok && !printers.skipped) {
+    console.warn(`${logPrefix} printers tick failed: ${printers.error || 'unknown error'}`)
+  }
+  else if (printers.ok && process.env.PRINTERS_TICK_VERBOSE === '1') {
+    console.log(`${logPrefix} printers tick ok`)
   }
 }
