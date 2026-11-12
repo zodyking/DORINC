@@ -99,7 +99,7 @@ export const PERMISSION_AREAS: PermissionArea[] = [
   {
     id: 'staples',
     label: 'Staples',
-    description: 'Staples PrintMe release codes and blank sheet printing',
+    description: 'Staples PrintMe release codes on the Print page',
     navKeys: ['staples.read.all'],
     cells: [
       cell('staples.read.all', 'View page', 'view'),
@@ -109,7 +109,7 @@ export const PERMISSION_AREAS: PermissionArea[] = [
   {
     id: 'printers',
     label: 'Printers',
-    description: 'Shop printers, CUPS queues, email-to-print, and Tailscale',
+    description: 'Shop printer status and jobs on the Print page',
     navKeys: ['printers.read.all'],
     cells: [
       cell('printers.read.all', 'View page', 'view'),

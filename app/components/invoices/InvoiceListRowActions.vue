@@ -98,7 +98,7 @@ async function printViaStaples() {
       actionError.value = res.job.errorMessage || 'Could not email Staples PrintMe'
       return
     }
-    await navigateTo('/staples')
+    await navigateTo('/printers?tab=staples')
   }
   catch (e: unknown) {
     actionError.value = syncFetchErrorMessage(e, 'Could not start Staples PrintMe')

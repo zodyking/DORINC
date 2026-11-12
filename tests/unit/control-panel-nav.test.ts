@@ -27,6 +27,7 @@ describe('control-panel-nav', () => {
       }
     }
     expect(controlPanelSectionById('catalog')?.title).toBe('Catalog Detection')
+    expect(controlPanelSectionById('printers')?.title).toBe('Printers')
     expect(controlPanelSectionById('ai')?.title).toBe('Susan')
     expect(controlPanelSectionById('quo')?.title).toBe('Quo SMS')
   })

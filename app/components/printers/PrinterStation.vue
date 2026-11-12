@@ -39,6 +39,7 @@ function toneFor(percent: number | null | undefined) {
         width="260"
         height="180"
       >
+      <p v-if="pending" class="photo-pending">Looking up a product photo…</p>
     </div>
     <dl class="sensor-grid">
       <div class="sensor" :class="toneFor(condition.toner?.percent)">
@@ -94,8 +95,9 @@ function toneFor(percent: number | null | undefined) {
   align-items: start;
 }
 .station-visual {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  position: relative;
+  background: #eef2f7;
+  border: 1px solid #cbd5e1;
   border-radius: 12px;
   overflow: hidden;
   aspect-ratio: 13 / 9;
@@ -105,7 +107,21 @@ function toneFor(percent: number | null | undefined) {
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #fff;
+  background: #eef2f7;
+}
+.photo-pending {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
 }
 .sensor-grid {
   display: grid;

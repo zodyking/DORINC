@@ -73,3 +73,12 @@ export const queueParamSchema = z.object({
 export const jobIdParamSchema = z.object({
   id: z.string().uuid(),
 })
+
+export const imageSettingsSchema = z.object({
+  action: z.enum(['save', 'refresh', 'rescan', 'clear']).optional().default('save'),
+  images_auto: z.boolean().optional().default(true),
+  images_unifi: z.boolean().optional().default(true),
+  images_wikimedia: z.boolean().optional().default(true),
+  images_cache: z.boolean().optional().default(true),
+  images_catalog_days: z.coerce.number().int().min(1).max(90).optional().default(14),
+})

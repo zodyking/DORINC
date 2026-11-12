@@ -3,6 +3,7 @@
 export type ControlPanelSectionId
   = | 'business'
     | 'invoice'
+    | 'printers'
     | 'catalog'
     | 'line-detection'
     | 'chat'
@@ -48,6 +49,12 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         title: 'Invoices',
         icon: '🧾',
         subtitle: 'Payment terms, email-to-print, and approval thresholds',
+      },
+      {
+        id: 'printers',
+        title: 'Printers',
+        icon: '🖨',
+        subtitle: 'Shop printers, pictures, email-to-print, and Tailscale',
       },
       {
         id: 'catalog',

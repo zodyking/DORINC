@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Db } from '../../db/client'
 import {
   printerEvents,
+  printerImageCatalog,
   printerJobs,
   printerMailBatches,
   printerSettings,
@@ -166,4 +167,75 @@ export async function jobsWithPrefixStatus(db: Db, prefix: string, status: Print
   return db.select({ id: printerJobs.id })
     .from(printerJobs)
     .where(and(sql`${printerJobs.dedupe} like ${`${prefix}:%`}`, eq(printerJobs.status, status)))
+}
+
+export async function getImageCatalogRow(db: Db, modelKey: string) {
+  if (!modelKey) return null
+  const [row] = await db.select().from(printerImageCatalog).where(eq(printerImageCatalog.modelKey, modelKey)).limit(1)
+  return row || null
+}
+
+export async function upsertImageCatalog(
+  db: Db,
+  fields: {
+    modelKey: string
+    manufacturer?: string
+    model?: string
+    source?: string
+    fingerprintId?: string
+    localPath?: string
+    confidence?: number
+    license?: string
+    attribution?: string
+    sourcePage?: string
+    checkedAt?: Date | null
+    negativeUntil?: Date | null
+    category?: string
+    candidates?: string
+  },
+) {
+  await db.insert(printerImageCatalog).values({
+    modelKey: fields.modelKey,
+    manufacturer: fields.manufacturer || '',
+    model: fields.model || '',
+    source: fields.source || '',
+    fingerprintId: fields.fingerprintId || '',
+    localPath: fields.localPath || '',
+    confidence: fields.confidence || 0,
+    license: fields.license || '',
+    attribution: fields.attribution || '',
+    sourcePage: fields.sourcePage || '',
+    checkedAt: fields.checkedAt ?? new Date(),
+    negativeUntil: fields.negativeUntil ?? null,
+    category: fields.category || 'generic',
+    candidates: fields.candidates || '[]',
+  }).onConflictDoUpdate({
+    target: printerImageCatalog.modelKey,
+    set: {
+      manufacturer: fields.manufacturer || '',
+      model: fields.model || '',
+      source: fields.source || '',
+      fingerprintId: fields.fingerprintId || '',
+      localPath: fields.localPath || '',
+      confidence: fields.confidence || 0,
+      license: fields.license || '',
+      attribution: fields.attribution || '',
+      sourcePage: fields.sourcePage || '',
+      checkedAt: fields.checkedAt ?? new Date(),
+      negativeUntil: fields.negativeUntil ?? null,
+      category: fields.category || 'generic',
+      candidates: fields.candidates || '[]',
+    },
+  })
+  return getImageCatalogRow(db, fields.modelKey)
+}
+
+export async function clearImageCatalog(db: Db) {
+  await db.delete(printerImageCatalog)
+  await db.update(printers).set({
+    imageKey: '',
+    imageData: null,
+    imageContentType: null,
+    updatedAt: new Date(),
+  }).where(eq(printers.imageMode, 'auto'))
 }
