@@ -73,6 +73,9 @@ export async function applyPendingMigrations(db: Db): Promise<void> {
   const { ensureInvoiceOnlineAccessSchema } = await import('../lib/ensure-invoice-online-access-schema.mjs')
   await ensureInvoiceOnlineAccessSchema(usePool())
 
+  const { ensurePrintersSchema } = await import('../lib/ensure-printers-schema.mjs')
+  await ensurePrintersSchema(usePool())
+
   const { scrubDeletedUserIdentity } = await import('../lib/scrub-deleted-user-identity.mjs')
   await scrubDeletedUserIdentity(usePool())
 }

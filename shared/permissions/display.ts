@@ -107,6 +107,17 @@ export const PERMISSION_AREAS: PermissionArea[] = [
     ],
   },
   {
+    id: 'printers',
+    label: 'Printers',
+    description: 'Shop printers, CUPS queues, email-to-print, and Tailscale',
+    navKeys: ['printers.read.all'],
+    cells: [
+      cell('printers.read.all', 'View page', 'view'),
+      cell('printers.print.all', 'Print jobs', 'edit'),
+      cell('printers.manage.all', 'Manage printers', 'edit'),
+    ],
+  },
+  {
     id: 'catalog',
     label: 'Catalog',
     description: 'Parts, labor rates, and categories',
