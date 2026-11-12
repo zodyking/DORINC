@@ -24,7 +24,7 @@ import { resolveBrowserLocation } from '../../services/browser-geolocation.servi
 import { resolveIpGeo } from '../../services/ip-geolocation.service'
 import { userHasKnownNetwork } from '../../services/known-network.service'
 import {
-  findKnownOutsideGeoIdentity,
+  identityFromUser,
   quietlyIssueOutsideGeoChallenge,
 } from '../../services/outside-geo-verify.service'
 import { apiError } from '../../utils/api-error'
@@ -112,20 +112,14 @@ export default defineEventHandler(async (event) => {
 
         let redirectTo = '/auth/access-restricted'
         if (decision.reason === 'geo_outside') {
-          const known = await findKnownOutsideGeoIdentity(useDb(), {
+          redirectTo = '/auth/verify-location?sent=1'
+          void quietlyIssueOutsideGeoChallenge(useDb(), {
             ipAddress,
             userAgent,
             deviceId,
-          }).catch(() => null)
-          if (known) {
-            redirectTo = '/auth/verify-location?sent=1'
-            void quietlyIssueOutsideGeoChallenge(useDb(), {
-              ipAddress,
-              userAgent,
-              deviceId,
-              locationLabel,
-            }).catch(() => {})
-          }
+            locationLabel,
+            identity: identityFromUser(resolved.user),
+          }).catch(() => {})
         }
 
         throw apiError(event, 'FORBIDDEN', 'Access from your location is restricted', {

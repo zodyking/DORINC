@@ -30,10 +30,11 @@ describe('sms channel must not block auth flows', () => {
     expect(src).toContain("reason: 'known_network'")
   })
 
-  it('does not await geofence challenge delivery on HTML navigations', () => {
+  it('does not email geofence verification codes on HTML navigations', () => {
     const src = readFileSync(resolve('server/middleware/guard-access-gate.ts'), 'utf8')
-    expect(src).toContain('void quietlyIssueOutsideGeoChallenge')
-    expect(src).not.toMatch(/await quietlyIssueOutsideGeoChallenge/)
+    expect(src).not.toContain('quietlyIssueOutsideGeoChallenge')
+    expect(src).toContain("'/auth'")
+    expect(src).toContain('/auth/access-restricted')
   })
 
   it('does not run IMAP/PDF/SMS/AI jobs from the web login process', () => {

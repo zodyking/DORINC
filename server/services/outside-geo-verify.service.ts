@@ -46,9 +46,45 @@ export function maskEmail(email: string): string {
   return `${visible}${'*'.repeat(Math.max(local.length - visible.length, 1))}@${domain}`
 }
 
+export function identityFromUser(user: {
+  id: string
+  name: string
+  email: string
+  phone?: string | null
+  messageNotifyChannel?: string | null
+}): KnownOutsideGeoIdentity {
+  return {
+    userId: user.id,
+    userName: user.name,
+    userEmail: user.email,
+    phone: user.phone,
+    messageNotifyChannel: user.messageNotifyChannel,
+    match: 'ip_and_device',
+  }
+}
+
+/**
+ * Rank a historical session against this request.
+ * Never score user-agent alone — common Chrome/Safari strings false-match
+ * email crawlers and other visitors, which was emailing staff on page hits.
+ */
+export function rankKnownOutsideGeoMatch(
+  input: { ip?: string | null, userAgent?: string | null, deviceId?: string | null },
+  row: { ipAddress?: string | null, userAgent?: string | null, deviceId?: string | null },
+): number {
+  const ipMatch = !!(input.ip && row.ipAddress && String(row.ipAddress) === input.ip)
+  const deviceIdMatch = !!(input.deviceId && row.deviceId && row.deviceId === input.deviceId)
+  const uaMatch = !!(input.userAgent && row.userAgent && row.userAgent === input.userAgent)
+  if (ipMatch && deviceIdMatch) return 5
+  if (deviceIdMatch) return 4
+  if (ipMatch && uaMatch) return 3
+  if (ipMatch) return 2
+  return 0
+}
+
 /**
  * Find a previously authenticated user associated with this IP and/or device.
- * Prefer IP+device_id, then device_id, then IP, then user-agent fallback.
+ * Prefer IP+device_id, then device_id, then IP+UA, then IP. Never UA-only.
  */
 export async function findKnownOutsideGeoIdentity(
   db: Db,
@@ -57,12 +93,11 @@ export async function findKnownOutsideGeoIdentity(
   const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress?.trim() ?? null
   const userAgent = input.userAgent?.trim() || null
   const deviceId = normalizeDeviceId(input.deviceId)
-  if (!ip && !userAgent && !deviceId) return null
+  if (!ip && !deviceId) return null
 
   const conditions = []
   if (deviceId) conditions.push(eq(sessions.deviceId, deviceId))
   if (ip) conditions.push(eq(sessions.ipAddress, ip))
-  if (userAgent) conditions.push(eq(sessions.userAgent, userAgent))
   if (!conditions.length) return null
 
   // Include revoked/expired sessions — "known" means this IP/device signed in before.
@@ -88,22 +123,10 @@ export async function findKnownOutsideGeoIdentity(
   let best: KnownOutsideGeoIdentity | null = null
   let bestRank = 0
   for (const row of rows) {
-    const ipMatch = !!(ip && row.ipAddress && String(row.ipAddress) === ip)
-    const deviceIdMatch = !!(deviceId && row.deviceId && row.deviceId === deviceId)
-    const uaMatch = !!(userAgent && row.userAgent && row.userAgent === userAgent)
-    const deviceMatch = deviceIdMatch || uaMatch
-    // Rank: IP+device_id (5), device_id (4), IP+UA (3), IP (2), UA (1)
-    const rank = ipMatch && deviceIdMatch
-      ? 5
-      : deviceIdMatch
-        ? 4
-        : ipMatch && uaMatch
-          ? 3
-          : ipMatch
-            ? 2
-            : deviceMatch
-              ? 1
-              : 0
+    const rank = rankKnownOutsideGeoMatch(
+      { ip, userAgent, deviceId },
+      { ipAddress: row.ipAddress, userAgent: row.userAgent, deviceId: row.deviceId },
+    )
     if (rank > bestRank) {
       bestRank = rank
       best = {
@@ -112,11 +135,7 @@ export async function findKnownOutsideGeoIdentity(
         userEmail: row.userEmail,
         phone: row.phone,
         messageNotifyChannel: row.messageNotifyChannel,
-        match: (rank >= 3 && deviceMatch && ipMatch) || rank === 5
-          ? 'ip_and_device'
-          : rank === 2
-            ? 'ip'
-            : 'device',
+        match: rank >= 3 ? 'ip_and_device' : rank === 2 ? 'ip' : 'device',
       }
       if (rank >= 5) break
     }
@@ -125,20 +144,24 @@ export async function findKnownOutsideGeoIdentity(
   return best
 }
 
-/** True when an unused, unexpired challenge already exists for this IP. */
+/** True when an unused, unexpired challenge already exists for this user and/or IP. */
 export async function hasActiveOutsideGeoChallenge(
   db: Db,
-  input: { ipAddress?: string | null },
+  input: { ipAddress?: string | null, userId?: string | null },
 ): Promise<boolean> {
   const ip = normalizeClientIp(input.ipAddress) ?? input.ipAddress ?? null
-  if (!ip) return false
+  const userId = input.userId?.trim() || null
+  if (!ip && !userId) return false
   const now = new Date()
+  const identity = []
+  if (userId) identity.push(eq(outsideGeoChallenges.userId, userId))
+  if (ip) identity.push(eq(outsideGeoChallenges.ipAddress, ip))
   const [row] = await db.select({ id: outsideGeoChallenges.id })
     .from(outsideGeoChallenges)
     .where(and(
-      eq(outsideGeoChallenges.ipAddress, ip),
       isNull(outsideGeoChallenges.usedAt),
       gt(outsideGeoChallenges.expiresAt, now),
+      or(...identity),
     ))
     .orderBy(desc(outsideGeoChallenges.createdAt))
     .limit(1)
@@ -157,18 +180,24 @@ export async function quietlyIssueOutsideGeoChallenge(
     deviceId?: string | null
     locationLabel?: string | null
     force?: boolean
+    /** When set (credentialed login), email this user — do not guess from IP/UA. */
+    identity?: KnownOutsideGeoIdentity | null
   },
 ): Promise<'issued' | 'already_active' | 'unknown' | 'failed'> {
   try {
-    if (!input.force && await hasActiveOutsideGeoChallenge(db, { ipAddress: input.ipAddress })) {
-      return 'already_active'
-    }
-    const identity = await findKnownOutsideGeoIdentity(db, {
+    const identity = input.identity ?? await findKnownOutsideGeoIdentity(db, {
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
       deviceId: input.deviceId,
     })
     if (!identity) return 'unknown'
+
+    if (!input.force && await hasActiveOutsideGeoChallenge(db, {
+      ipAddress: input.ipAddress,
+      userId: identity.userId,
+    })) {
+      return 'already_active'
+    }
 
     const challenge = await issueOutsideGeoChallenge(db, {
       identity,

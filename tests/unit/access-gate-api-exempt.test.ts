@@ -21,4 +21,9 @@ describe('access gate API exemption (Option A)', () => {
     expect(src).toContain('evaluateAccessDecision')
     expect(src).toContain('/auth/access-restricted')
   })
+
+  it('does not issue verification emails from HTML visits', () => {
+    expect(src).not.toContain('quietlyIssueOutsideGeoChallenge')
+    expect(src).not.toContain('shouldIssueChallenge')
+  })
 })
