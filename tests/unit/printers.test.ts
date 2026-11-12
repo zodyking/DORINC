@@ -4,6 +4,8 @@ import {
   categoryFor,
   chooseDriver,
   evaluateMailMessage,
+  identifyPrinter,
+  illustrationUrl,
   jamWord,
   paperWord,
   parseIpp,
@@ -78,10 +80,21 @@ describe('printer helpers', () => {
   it('classifies illustrations and supply percents', () => {
     expect(categoryFor('Brother MFC-L2700DW')).toBe('mfp')
     expect(categoryFor('HL-L2380DW laser')).toBe('mono')
+    expect(illustrationUrl('mono')).toBe('/printers/mono.svg')
+    expect(illustrationUrl('mystery')).toBe('/printers/generic.svg')
     expect(supplyPercent(50, 100)).toBe(50)
     expect(supplyPercent(12, 0)).toBe(12)
     expect(paperWord('empty')).toBe('Out of paper')
     expect(jamWord('jam')).toBe('Paper jam')
+  })
+
+  it('identifies maker and model codes for product photos', () => {
+    const brother = identifyPrinter('Brother HL-L2380DW')
+    expect(brother.manufacturer).toBe('brother')
+    expect(brother.code).toBe('hll2380dw')
+    expect(brother.key).toBe('brother|hll2380dw')
+    expect(identifyPrinter('HP LaserJet Pro M404dn').code).toBe('m404dn')
+    expect(identifyPrinter('Epson EcoTank ET-2800').code).toBe('et2800')
   })
 
   it('builds condition and hold issues from readings', () => {
@@ -148,9 +161,30 @@ describe('printers staff integration', () => {
     expect(ACCOUNT_TYPE_BUNDLES.manager).toContain('printers.manage.all')
     expect(ACCOUNT_TYPE_BUNDLES.mechanic).toContain('printers.print.all')
     expect(ACCOUNT_TYPE_BUNDLES.viewer).toContain('printers.read.all')
-    expect(source('app/layouts/staff.vue')).toContain("label: 'Printers'")
+    expect(source('app/layouts/staff.vue')).toContain("label: 'Print'")
     expect(source('app/layouts/staff.vue')).toContain("to: '/printers'")
+    expect(source('app/layouts/staff.vue')).not.toContain("to: '/staples'")
     expect(source('server/db/schema/index.ts')).toContain('./printers')
     expect(source('server/db/migrations/meta/_journal.json')).toContain('0084_printers')
+  })
+
+  it('keeps stats and jobs on Print and setup in Control Panel', () => {
+    const printPage = source('app/pages/printers/index.vue')
+    const settings = source('app/components/admin/settings/SettingsPrintersPanel.vue')
+    expect(printPage).toContain('Shop printers')
+    expect(printPage).toContain('StaplesPrintJobsPanel')
+    expect(printPage).toContain('Print queue')
+    expect(printPage).toContain('/printers/mono.svg')
+    expect(printPage).not.toContain('Create printer queue')
+    expect(printPage).not.toContain('Enable email printing')
+    expect(settings).toContain('Create printer queue')
+    expect(settings).toContain('Enable email printing')
+    expect(settings).toContain('Look up product photos automatically')
+    expect(source('app/utils/control-panel-nav.ts')).toContain("id: 'printers'")
+    expect(source('app/pages/admin/index.vue')).toContain('SettingsPrintersPanel')
+    expect(source('app/pages/staples/index.vue')).toContain("tab: 'staples'")
+    expect(source('public/printers/generic.svg')).toMatch(/#1e293b|#334155|#475569/)
+    expect(source('server/api/printers/[queue]/image.get.ts')).toContain('new Uint8Array')
+    expect(source('server/api/internal/printers/tick.post.ts')).toContain('resolvePendingPrinterImages')
   })
 })

@@ -23,7 +23,17 @@ export {
   updatePrinter,
 } from './engine'
 export { checkPrinterMail, handleMailMessage, listMailFolders, mailSnapshot, publishMail } from './mailer'
-export { applyPrinterImage, printerImageBytes, staticIllustration } from './images'
+export {
+  applyPrinterImage,
+  clearPrinterImageCache,
+  printerImageBytes,
+  refreshImageCatalog,
+  rescanPrinterImages,
+  resolvePendingPrinterImages,
+  resolvePrinterImage,
+  saveImageSettings,
+  staticIllustration,
+} from './images'
 export { printerSettingsMap, recordPrinterEvent, setPrinterSetting } from './store'
 export { collectStatus, disconnectTailnet, stopAllTailnet } from './tailnet'
 export { cupsPrintersReport, activeCupsJobs } from './cups'

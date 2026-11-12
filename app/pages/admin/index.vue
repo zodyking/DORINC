@@ -13,6 +13,7 @@ import SettingsImapPanel from '~/components/admin/settings/SettingsImapPanel.vue
 import SettingsQuoPanel from '~/components/admin/settings/SettingsQuoPanel.vue'
 import SettingsNotificationsPanel from '~/components/admin/settings/SettingsNotificationsPanel.vue'
 import SettingsInvoicePanel from '~/components/admin/settings/SettingsInvoicePanel.vue'
+import SettingsPrintersPanel from '~/components/admin/settings/SettingsPrintersPanel.vue'
 import SettingsCatalogPanel from '~/components/admin/settings/SettingsCatalogPanel.vue'
 import SettingsLineDetectionPanel from '~/components/admin/settings/SettingsLineDetectionPanel.vue'
 import SettingsBillingPanel from '~/components/admin/settings/SettingsBillingPanel.vue'
@@ -262,6 +263,18 @@ const canManageAi = computed(() => auth.can('ai.admin.all'))
               @update:open="setSectionOpen('invoice', $event)"
             >
               <SettingsInvoicePanel @saved="refresh()" />
+            </ControlPanelSection>
+
+            <ControlPanelSection
+              v-else-if="section.id === 'printers'"
+              :id="section.id"
+              :title="section.title"
+              :icon="section.icon"
+              :subtitle="section.subtitle"
+              :open="openSections.printers"
+              @update:open="setSectionOpen('printers', $event)"
+            >
+              <SettingsPrintersPanel :active="openSections.printers" @saved="refresh()" />
             </ControlPanelSection>
 
             <ControlPanelSection

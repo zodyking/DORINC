@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
   const image = await printerImageBytes(useDb(), params.queue)
   if (!image) throw apiError(event, 'NOT_FOUND', 'Printer not found')
   setHeader(event, 'content-type', image.contentType)
-  setHeader(event, 'cache-control', 'private, max-age=60')
-  return image.body
+  setHeader(event, 'cache-control', image.pending ? 'private, no-cache' : 'private, max-age=3600')
+  setHeader(event, 'x-content-type-options', 'nosniff')
+  return new Uint8Array(image.body)
 })

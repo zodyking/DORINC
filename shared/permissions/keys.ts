@@ -37,13 +37,13 @@ export const PERMISSIONS = {
   'service_logs.revert_invoice.own': 'Undo send to invoice on own service logs',
 
   // Staples PrintMe
-  'staples.read.all': 'View Staples PrintMe page and release codes',
+  'staples.read.all': 'View Staples PrintMe on the Print page',
   'staples.print.all': 'Email service log sheets to Staples PrintMe',
 
   // Shop printers (PrintHarbor)
-  'printers.read.all': 'View shop printers, jobs, and status',
+  'printers.read.all': 'View shop printer status and jobs on the Print page',
   'printers.print.all': 'Upload documents and manage shop print jobs',
-  'printers.manage.all': 'Add printers, email automation, and Tailscale',
+  'printers.manage.all': 'Manage printers, pictures, email automation, and Tailscale in Control Panel',
 
   // Invoices
   'invoices.read.all': 'View all invoices',

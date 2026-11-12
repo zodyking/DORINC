@@ -21,6 +21,12 @@ export type PrinterJobStatus = (typeof PRINTER_JOB_STATUSES)[number]
 export const PRINTER_TABS = ['overview', 'devices', 'jobs', 'email', 'tailscale'] as const
 export type PrinterTab = (typeof PRINTER_TABS)[number]
 
+export const PRINT_PAGE_TABS = ['printers', 'staples'] as const
+export type PrintPageTab = (typeof PRINT_PAGE_TABS)[number]
+
+export const PRINTER_SETTINGS_TABS = ['devices', 'email', 'tailscale'] as const
+export type PrinterSettingsTab = (typeof PRINTER_SETTINGS_TABS)[number]
+
 export const PRINTER_IMAGE_CATEGORIES = [
   'mono',
   'color',
@@ -32,6 +38,22 @@ export const PRINTER_IMAGE_CATEGORIES = [
   'generic',
 ] as const
 export type PrinterImageCategory = (typeof PRINTER_IMAGE_CATEGORIES)[number]
+
+export const IMAGE_CATEGORY_LABELS: Record<PrinterImageCategory, string> = {
+  mono: 'Mono laser',
+  color: 'Color laser',
+  mfp: 'Multifunction',
+  inkjet: 'Inkjet',
+  label: 'Label',
+  receipt: 'Receipt',
+  large: 'Large format',
+  generic: 'Generic',
+}
+
+export function illustrationUrl(category: string | null | undefined): string {
+  const key = isPrinterImageCategory(category) ? category : 'generic'
+  return `/printers/${key}.svg`
+}
 
 export const PRINTER_ALLOWED_EXTENSIONS = [
   '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.txt', '.docx', '.xlsx', '.odt', '.ods',
@@ -617,6 +639,94 @@ export function categoryFor(text: string | null | undefined): PrinterImageCatego
   if (low.includes('color') || low.includes('colour')) return 'color'
   if (['laser', 'laserjet', 'hl-'].some(word => low.includes(word))) return 'mono'
   return 'generic'
+}
+
+const MAKERS: Array<[string, string]> = [
+  ['hewlett packard', 'hp'],
+  ['konica minolta', 'konica'],
+  ['brother', 'brother'],
+  ['canon', 'canon'],
+  ['epson', 'epson'],
+  ['xerox', 'xerox'],
+  ['samsung', 'samsung'],
+  ['lexmark', 'lexmark'],
+  ['kyocera', 'kyocera'],
+  ['ricoh', 'ricoh'],
+  ['konica', 'konica'],
+  ['sharp', 'sharp'],
+  ['toshiba', 'toshiba'],
+  ['panasonic', 'panasonic'],
+  ['oki', 'oki'],
+  ['okidata', 'oki'],
+  ['dell', 'dell'],
+  ['pantum', 'pantum'],
+  ['dymo', 'dymo'],
+  ['zebra', 'zebra'],
+  ['fuji', 'fuji'],
+  ['hp', 'hp'],
+]
+const MAKER_KEYS = new Set(MAKERS.map(([, key]) => key))
+const CODE_STOP = new Set([
+  'pro', 'plus', 'series', 'printer', 'printers', 'color', 'colour', 'laser', 'laserjet',
+  'ink', 'inkjet', 'mono', 'wireless', 'network', 'all', 'one', 'eco', 'ecotank', 'pixma',
+  'officejet', 'deskjet', 'workforce', 'expression', 'surecolor', 'designjet', 'imageclass',
+  'workcentre', 'versalink', 'phaser', 'smart', 'tank', 'office',
+])
+
+function makerPhrase(phrase: string) {
+  const body = phrase.split(' ').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[- ]')
+  return new RegExp(`(?<![a-z0-9])${body}(?![a-z0-9])`)
+}
+
+export type PrinterModelIdentity = {
+  manufacturer: string
+  model: string
+  code: string
+  key: string
+  display: string
+  category: PrinterImageCategory
+}
+
+export function identifyPrinter(text: string | null | undefined): PrinterModelIdentity {
+  let raw = String(text || '').toLowerCase()
+  raw = raw.replace(/\b(series|industries|corporation|corp|inc|ltd|company)\b/g, ' ')
+  let maker = ''
+  const spaced = raw.replace(/-/g, ' ')
+  for (const [phrase, key] of MAKERS) {
+    const pattern = makerPhrase(phrase)
+    if (pattern.test(spaced)) {
+      maker = key
+      raw = raw.replace(pattern, ' ')
+      break
+    }
+  }
+  const parts = raw.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) || []
+  const found: Array<[string, string]> = []
+  for (let index = 0; index < parts.length; index++) {
+    const token = parts[index] || ''
+    const compact = token.replace(/[^a-z0-9]/g, '')
+    const prev = index ? (parts[index - 1] || '').replace(/[^a-z0-9]/g, '') : ''
+    let glued = ''
+    if (prev && /^[a-z]+$/.test(prev) && prev.length >= 1 && prev.length <= 4 && !CODE_STOP.has(prev) && !MAKER_KEYS.has(prev)) {
+      if (/[a-z]/.test(compact) && /\d/.test(compact) && compact.length >= 3) glued = prev + compact
+      else if (/^\d{3,6}$/.test(compact)) glued = prev + compact
+    }
+    if (glued) found.push([glued, token.includes('-') ? token : `${parts[index - 1]}-${token}`])
+    else if (/[a-z]/.test(compact) && /\d/.test(compact) && compact.length >= 4) found.push([compact, token])
+    else if (/^\d{3,6}$/.test(compact)) found.push([compact, token])
+  }
+  const picked = found.length ? found.reduce((best, item) => item[0].length > best[0].length ? item : best) : ['', '']
+  const code = picked[0]
+  const display = picked[1] || code
+  const key = maker && code ? `${maker}|${code}` : code
+  return {
+    manufacturer: maker,
+    model: code,
+    code,
+    key,
+    display,
+    category: categoryFor(text || ''),
+  }
 }
 
 export function vendorBias(driver: CupsDriver): number {

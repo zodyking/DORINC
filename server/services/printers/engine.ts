@@ -70,6 +70,10 @@ function snapshotKey(host: string, protocol: string) {
   return `${host}|${protocol || ''}`
 }
 
+function kickPrinterImage(db: Db, queue: string) {
+  void import('./images').then(mod => mod.resolvePrinterImage(db, queue)).catch(() => null)
+}
+
 export function clearPrinterSnapshots() {
   snapshots.clear()
 }
@@ -438,12 +442,29 @@ export async function addPrinter(
       await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined)
       saved = true
       await recordPrinterEvent(db, 'warning', `Printer ${queue} joined the tailnet but did not answer`)
+      kickPrinterImage(db, queue)
       return 'joined the tailnet, waiting for the printer'
     }
-    const choice = await configureQueue(queue, address, discovery, await loadDrivers())
+    let choice: { protocol: string, label: string, driver: string }
+    try {
+      choice = await configureQueue(queue, address, discovery, await loadDrivers())
+    }
+    catch (err) {
+      if (!(err instanceof PrintError) || !/not installed|not on PATH/i.test(err.message)) throw err
+      await savePrinter(db, queue, name, address, {
+        protocol: discovery.socket ? 'socket' : 'ipp',
+        label: discovery.identity,
+        driver: '',
+      }, joined)
+      saved = true
+      await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${err.message}`)
+      kickPrinterImage(db, queue)
+      return discovery.identity || name
+    }
     await savePrinter(db, queue, name, address, choice, joined)
     saved = true
     await recordPrinterEvent(db, 'success', `Printer ${queue} configured on ${address} (${choice.label.slice(0, 80)})`)
+    kickPrinterImage(db, queue)
     return choice.label
   }
   catch (err) {
@@ -482,6 +503,7 @@ export async function updatePrinter(db: Db, queue: string, label: string, ip: st
     throw err
   }
   await recordPrinterEvent(db, 'success', `Printer ${queue} updated on ${address}`)
+  kickPrinterImage(db, queue)
   return name
 }
 
@@ -1149,7 +1171,7 @@ export async function buildPrintersPage(db: Db, tab: string) {
         createdAt: job.createdAt.toISOString(),
       }))
     : []
-  const events = tab === 'overview'
+  const events = tab === 'devices'
     ? (await listPrinterEventRows(db, 60)).map(event => ({
         ...event,
         createdAt: event.createdAt.toISOString(),
@@ -1169,7 +1191,7 @@ export async function buildPrintersPage(db: Db, tab: string) {
     tail,
     tailNote: tailnetNotice(devices, tail),
     cups: tab === 'devices' ? await cupsPrintersReport() : { ok: true, lines: [], error: '' },
-    activeJobs: tab === 'jobs' ? await activeCupsJobs() : { ok: true, lines: [], error: '' },
+    activeJobs: tab === 'jobs' || tab === 'overview' ? await activeCupsJobs() : { ok: true, lines: [], error: '' },
     counts: {
       total: jobs.length,
       errors: jobs.filter(j => j.status === 'error' || j.status === 'rejected').length,

@@ -153,7 +153,7 @@ async function submit() {
       }
       open.value = false
       emit('printed')
-      await navigateTo('/staples')
+      await navigateTo('/printers?tab=staples')
     }
   }
   catch (e: unknown) {

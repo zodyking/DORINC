@@ -60,7 +60,7 @@ export function entityPath(entityType: MessageEntityType, entityId: string): str
     case 'deletion_request':
       return `/deletion-requests?request=${entityId}`
     case 'staples_print_job':
-      return `/staples?job=${entityId}`
+      return `/printers?tab=staples&job=${entityId}`
     default:
       return '/'
   }
@@ -92,7 +92,7 @@ export function entityPathForMessageLink(
     case 'deletion_request':
       return `/deletion-requests?request=${entityId}&${refQuery}`
     case 'staples_print_job':
-      return `/staples?job=${entityId}&${refQuery}`
+      return `/printers?tab=staples&job=${entityId}&${refQuery}`
     default:
       return '/'
   }
