@@ -18,10 +18,7 @@ import {
   setOutsideGeoBypassCookie,
 } from '../auth/outside-geo-bypass'
 import { userHasKnownNetwork } from '../services/known-network.service'
-import {
-  findKnownOutsideGeoIdentity,
-  quietlyIssueOutsideGeoChallenge,
-} from '../services/outside-geo-verify.service'
+import { findKnownOutsideGeoIdentity } from '../services/outside-geo-verify.service'
 
 /**
  * Paths that skip the HTML access gate.
@@ -30,11 +27,13 @@ import {
  * Geofence still applies to HTML document navigations below.
  */
 const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
-/** Internal gate pages — never bounce these through the gate again. */
+/**
+ * Auth and upload pages stay reachable from outside the fence.
+ * Verification codes are issued only on credentialed login or explicit resend —
+ * never on HTML document hits (those were spamming staff mailboxes).
+ */
 const GATE_PAGES = [
-  '/auth/verify-location',
-  '/auth/access-restricted',
-  '/auth/session-terminated',
+  '/auth',
   '/upload/service-log',
 ]
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
@@ -44,25 +43,12 @@ const captureSeen = new Map<string, number>()
 const CAPTURE_WINDOW_MS = 60_000
 const CAPTURE_MAP_MAX = 20_000
 
-/** Avoid re-issuing verification emails on every HTML navigation. */
-const challengeIssued = new Map<string, number>()
-const CHALLENGE_COOLDOWN_MS = 60_000
-
 function shouldCapture(key: string): boolean {
   const now = Date.now()
   const last = captureSeen.get(key)
   if (last && now - last < CAPTURE_WINDOW_MS) return false
   if (captureSeen.size >= CAPTURE_MAP_MAX) captureSeen.clear()
   captureSeen.set(key, now)
-  return true
-}
-
-function shouldIssueChallenge(key: string): boolean {
-  const now = Date.now()
-  const last = challengeIssued.get(key)
-  if (last && now - last < CHALLENGE_COOLDOWN_MS) return false
-  if (challengeIssued.size >= CAPTURE_MAP_MAX) challengeIssued.clear()
-  challengeIssued.set(key, now)
   return true
 }
 
@@ -209,28 +195,6 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!effectivelyBlocked) return
-
-  // Outside geofence → internal pages only (no external redirect links).
-  if (decision.reason === 'geo_outside') {
-    try {
-      const known = await findKnownOutsideGeoIdentity(useDb(), { ipAddress: ip, userAgent, deviceId })
-      if (known) {
-        if (shouldIssueChallenge(deviceId || ip || userAgent || 'unknown')) {
-          // Use cached geo only — never await an IP lookup on this HTML path.
-          void quietlyIssueOutsideGeoChallenge(useDb(), {
-            ipAddress: ip,
-            userAgent,
-            deviceId,
-            locationLabel: cachedGeo?.label ?? null,
-          }).catch(() => {})
-        }
-        return sendRedirect(event, '/auth/verify-location?sent=1', 302)
-      }
-    }
-    catch {
-      // Fall through to the unknown-device restricted page.
-    }
-  }
 
   return sendRedirect(event, '/auth/access-restricted', 302)
 })
