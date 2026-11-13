@@ -36,7 +36,7 @@ import {
   type QueueOption,
 } from '../../../shared/printers'
 import { PrintError } from './errors'
-import { cupsAvailable, cupsCmd, cupsPrintersReport } from './cups'
+import { activeCupsJobs, cupsAvailable, cupsCmd, cupsPrintersReport } from './cups'
 import { sendDirectToPrinter } from './direct-print'
 import { brotherReadings, looksLikeBrother, snmpGet, OID_MODEL } from './brother-snmp'
 import {
@@ -1232,8 +1232,8 @@ export async function buildPrintersPage(db: Db, tab: string) {
     mail,
     tail,
     tailNote: tailnetNotice(devices, tail),
-    cups: tab === 'devices' ? await cupsPrintersReport() : { ok: true, available: true, lines: [], error: '' },
-    activeJobs: { ok: true, available: cupsAvailable(), lines: [], error: '' },
+    cups: tab === 'devices' ? await cupsPrintersReport() : { ok: true, available: cupsAvailable(), lines: [], error: '' },
+    activeJobs: tab === 'overview' ? await activeCupsJobs() : { ok: true, available: cupsAvailable(), lines: [], error: '' },
     counts: {
       total: jobs.length,
       errors: jobs.filter(j => j.status === 'error' || j.status === 'rejected').length,

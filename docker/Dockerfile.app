@@ -16,10 +16,17 @@ ENV NODE_ENV=production
 ENV PORT=38471
 ENV NITRO_PORT=38471
 ENV NITRO_HOST=0.0.0.0
+ENV PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+# PrintHarbor needs a local CUPS daemon (lp, lpstat, lpadmin, IPP Everywhere).
+RUN apk add --no-cache cups cups-client cups-filters \
+  && mkdir -p /run/cups /var/run/cups /var/cache/cups /var/spool/cups /var/log/cups
+COPY docker/cupsd.conf /usr/local/share/dorinc/cupsd.conf
+COPY docker/start-app.sh /usr/local/bin/start-app.sh
+RUN chmod +x /usr/local/bin/start-app.sh
 COPY --from=build /src/.output ./.output
 # Setup wizard needs these on disk (not bundled into Nitro output).
 COPY --from=build /src/server/db/migrations ./server/db/migrations
 # Blade baseline for template editor + invoice preview (not in laravel-pdf image).
 COPY --from=build /src/server/assets ./server/assets
 EXPOSE 38471
-CMD ["node", ".output/server/index.mjs"]
+CMD ["start-app.sh"]
