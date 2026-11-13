@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { delimiter, join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { PrintError } from './errors'
@@ -8,6 +10,35 @@ export interface CupsResult {
   returncode: number
   stdout: string
   stderr: string
+}
+
+export interface CupsReport {
+  ok: boolean
+  available: boolean
+  lines: string[]
+  error: string
+}
+
+const EMPTY_CUPS: CupsReport = { ok: true, available: false, lines: [], error: '' }
+
+let cupsPresent: boolean | null = null
+
+function which(bin: string): string | null {
+  for (const dir of (process.env.PATH || '').split(delimiter)) {
+    const full = join(dir, bin)
+    if (existsSync(full)) return full
+  }
+  return null
+}
+
+/** CUPS CLI tools are optional. Cloud hosts print over IPP / port 9100 instead. */
+export function cupsAvailable(): boolean {
+  if (cupsPresent == null) cupsPresent = Boolean(which('lp') && which('lpstat'))
+  return cupsPresent
+}
+
+export function resetCupsAvailableForTests(value: boolean | null = null) {
+  cupsPresent = value
 }
 
 export async function cupsCmd(args: string[], timeout = 25000): Promise<CupsResult> {
@@ -35,31 +66,43 @@ export async function cupsCmd(args: string[], timeout = 25000): Promise<CupsResu
   }
 }
 
-export function interpretLpstat(result: CupsResult): { ok: boolean, lines: string[], error: string } {
+export function interpretLpstat(result: CupsResult): CupsReport {
   const lines = (result.stdout || '').split(/\n/).map(ln => ln.trim()).filter(Boolean).slice(0, 40)
   const err = (result.stderr || '').trim()
-  if (result.returncode === 0) return { ok: true, lines, error: '' }
+  if (result.returncode === 0) return { ok: true, available: true, lines, error: '' }
   const low = err.toLowerCase()
   if (low.includes('no destinations added') || low.includes('no active jobs') || low.includes('no entries')) {
-    return { ok: true, lines: [], error: '' }
+    return { ok: true, available: true, lines: [], error: '' }
   }
-  return { ok: false, lines: [], error: (err || (result.stdout || '').trim() || 'lpstat failed').slice(0, 200) }
+  return { ok: false, available: true, lines: [], error: (err || (result.stdout || '').trim() || 'lpstat failed').slice(0, 200) }
 }
 
-export async function activeCupsJobs() {
+export async function activeCupsJobs(): Promise<CupsReport> {
+  if (!cupsAvailable()) return { ...EMPTY_CUPS }
   try {
     return interpretLpstat(await cupsCmd(['lpstat', '-o'], 10000))
   }
   catch (err) {
-    return { ok: false, lines: [] as string[], error: String(err instanceof Error ? err.message : err).slice(0, 200) }
+    const message = String(err instanceof Error ? err.message : err)
+    if (/not installed|not on PATH/i.test(message)) {
+      cupsPresent = false
+      return { ...EMPTY_CUPS }
+    }
+    return { ok: false, available: true, lines: [], error: message.slice(0, 200) }
   }
 }
 
-export async function cupsPrintersReport() {
+export async function cupsPrintersReport(): Promise<CupsReport> {
+  if (!cupsAvailable()) return { ...EMPTY_CUPS }
   try {
     return interpretLpstat(await cupsCmd(['lpstat', '-p'], 10000))
   }
   catch (err) {
-    return { ok: false, lines: [] as string[], error: String(err instanceof Error ? err.message : err).slice(0, 200) }
+    const message = String(err instanceof Error ? err.message : err)
+    if (/not installed|not on PATH/i.test(message)) {
+      cupsPresent = false
+      return { ...EMPTY_CUPS }
+    }
+    return { ok: false, available: true, lines: [], error: message.slice(0, 200) }
   }
 }

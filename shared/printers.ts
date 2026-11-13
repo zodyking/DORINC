@@ -925,6 +925,69 @@ export function densityOptions(lpoptionsText: string): Array<[string, string]> {
   return chosen
 }
 
+function ippStringAttr(tag: number, name: string, value: string): Buffer {
+  const nameBuf = Buffer.from(name, 'ascii')
+  const valueBuf = Buffer.from(value, 'utf8')
+  const out = Buffer.alloc(1 + 2 + nameBuf.length + 2 + valueBuf.length)
+  out[0] = tag
+  out.writeUInt16BE(nameBuf.length, 1)
+  nameBuf.copy(out, 3)
+  out.writeUInt16BE(valueBuf.length, 3 + nameBuf.length)
+  valueBuf.copy(out, 5 + nameBuf.length)
+  return out
+}
+
+function ippIntAttr(name: string, value: number): Buffer {
+  const nameBuf = Buffer.from(name, 'ascii')
+  const out = Buffer.alloc(1 + 2 + nameBuf.length + 2 + 4)
+  out[0] = 0x21
+  out.writeUInt16BE(nameBuf.length, 1)
+  nameBuf.copy(out, 3)
+  out.writeUInt16BE(4, 3 + nameBuf.length)
+  out.writeInt32BE(value, 5 + nameBuf.length)
+  return out
+}
+
+/** IPP status code from a raw or HTTP-wrapped response. */
+export function ippStatusCode(payload: Buffer): number | null {
+  let raw = payload || Buffer.alloc(0)
+  const sep = raw.indexOf(Buffer.from('\r\n\r\n'))
+  if (raw.subarray(0, 5).toString() === 'HTTP/' && sep >= 0) raw = raw.subarray(sep + 4)
+  if (raw.length < 4) return null
+  return raw.readUInt16BE(2)
+}
+
+export function ippSucceeded(status: number | null): boolean {
+  return status != null && status >= 0 && status < 0x0100
+}
+
+/** Print-Job (0x0002) body plus document bytes. Printer-uri should be the printer's IPP URL. */
+export function buildIppPrintJob(input: {
+  printerUri: string
+  jobName: string
+  copies: number
+  sides: string
+  document: Buffer
+}): Buffer {
+  const copies = Number.isInteger(input.copies) && input.copies >= 1 && input.copies <= 99 ? input.copies : 1
+  const sides = isPrinterSides(input.sides) ? input.sides : 'one-sided'
+  const jobName = String(input.jobName || 'document').slice(0, 80)
+  const header = Buffer.concat([
+    Buffer.from([0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x01]),
+    ippStringAttr(0x47, 'attributes-charset', 'utf-8'),
+    ippStringAttr(0x48, 'attributes-natural-language', 'en'),
+    ippStringAttr(0x45, 'printer-uri', input.printerUri),
+    ippStringAttr(0x42, 'requesting-user-name', 'dorinc'),
+    ippStringAttr(0x42, 'job-name', jobName),
+    ippStringAttr(0x49, 'document-format', 'application/pdf'),
+    Buffer.from([0x02]),
+    ippIntAttr('copies', copies),
+    ippStringAttr(0x44, 'sides', sides),
+    Buffer.from([0x03]),
+  ])
+  return Buffer.concat([header, input.document])
+}
+
 export function parseIpp(payload: Buffer): Record<string, Array<string | number | boolean>> {
   let raw = payload || Buffer.alloc(0)
   const sep = raw.indexOf(Buffer.from('\r\n\r\n'))

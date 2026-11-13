@@ -36,4 +36,4 @@ export {
 } from './images'
 export { printerSettingsMap, recordPrinterEvent, setPrinterSetting } from './store'
 export { collectStatus, disconnectTailnet, stopAllTailnet } from './tailnet'
-export { cupsPrintersReport, activeCupsJobs } from './cups'
+export { cupsPrintersReport, activeCupsJobs, cupsAvailable } from './cups'

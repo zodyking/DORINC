@@ -391,7 +391,10 @@ onUnmounted(() => {
             <div class="card">
               <div class="chead"><h3>CUPS queues</h3></div>
               <div class="cbody">
-                <p v-if="!page.cups.ok" class="help ph-flash ph-flash--err">CUPS is not available. {{ page.cups.error }}</p>
+                <p v-if="page.cups.available === false" class="help ph-flash ph-flash--err">
+                  CUPS is not running on this host. Shop printers need the CUPS service (lp, lpstat, lpadmin).
+                </p>
+                <p v-else-if="!page.cups.ok" class="help ph-flash ph-flash--err">CUPS is not available. {{ page.cups.error }}</p>
                 <div v-else-if="page.cups.lines.length" class="ph-queue-lines">
                   <div v-for="line in page.cups.lines" :key="line">{{ line }}</div>
                 </div>
