@@ -198,7 +198,10 @@ describe('printers staff integration', () => {
     expect(source('server/api/internal/printers/tick.post.ts')).toContain('resolvePendingPrinterImages')
     expect(source('server/services/printers/engine.ts')).toContain('sendDirectToPrinter')
     expect(source('docker/Dockerfile.app')).toContain('cups-client')
+    expect(source('docker/Dockerfile.app')).toContain('ENTRYPOINT ["/usr/local/bin/start-app.sh"]')
+    expect(source('docker/Dockerfile.app')).not.toContain('PATH="/usr/sbin:/usr/bin:/sbin:/bin"')
     expect(source('docker/start-app.sh')).toContain('cupsd')
+    expect(source('docker/start-app.sh')).toContain('/usr/local/bin/node')
   })
 })
 
