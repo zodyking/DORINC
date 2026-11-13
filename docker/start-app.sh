@@ -22,6 +22,9 @@ if [ -f /etc/cups/cups-files.conf ]; then
   else
     printf '\nSystemGroup root\n' >> /etc/cups/cups-files.conf
   fi
+  if ! grep -q '^FileDevice' /etc/cups/cups-files.conf; then
+    printf '\nFileDevice Yes\n' >> /etc/cups/cups-files.conf
+  fi
 fi
 
 persist_cups() {
@@ -47,4 +50,4 @@ done
     persist_cups
   done ) &
 
-exec node .output/server/index.mjs
+exec /usr/local/bin/node .output/server/index.mjs
