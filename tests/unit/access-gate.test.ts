@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateAccessDecision } from '../../server/services/access-gate.service'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import {
+  coordsForHtmlAccessGate,
+  evaluateAccessDecision,
+  isAccessGatePage,
+  shouldRedirectHtmlAccessGate,
+} from '../../server/services/access-gate.service'
 import { DEFAULT_ACCESS_GATE_SETTINGS, type AccessGateSettings } from '../../shared/validators/access-gate'
 
 function settings(overrides: Partial<AccessGateSettings>): AccessGateSettings {
@@ -70,5 +77,69 @@ describe('evaluateAccessDecision', () => {
   it('does not geofence with fewer than 3 polygon points', () => {
     const s = settings({ enabled: true, blockMode: 'geo', allowedPolygon: [{ lat: 40, lng: -75 }, { lat: 41, lng: -74 }] })
     expect(evaluateAccessDecision(s, { ip: '9.9.9.9', coords: { lat: 0, lng: 0 } }).blocked).toBe(false)
+  })
+})
+
+describe('HTML geofence redirect', () => {
+  const blocked = {
+    blocked: true,
+    hasBypass: false,
+    knownNetwork: false,
+    isSuperAdmin: false,
+    isCustomer: false,
+    path: '/',
+  }
+
+  it('does not bounce anonymous visitors — they prove location at login', () => {
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: false })).toBe(false)
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: false, path: '/dashboard' })).toBe(false)
+  })
+
+  it('still bounces signed-in staff whose GPS/IP is outside', () => {
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, path: '/dashboard' })).toBe(true)
+  })
+
+  it('does not bounce when a GPS bypass or known network is present', () => {
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, hasBypass: true })).toBe(false)
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, knownNetwork: true })).toBe(false)
+  })
+
+  it('never bounces auth pages, customers, or super admins', () => {
+    expect(isAccessGatePage('/auth/login')).toBe(true)
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, path: '/auth/login' })).toBe(false)
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, isCustomer: true, path: '/portal' })).toBe(false)
+    expect(shouldRedirectHtmlAccessGate({ ...blocked, signedIn: true, isSuperAdmin: true, path: '/' })).toBe(false)
+  })
+
+  it('prefers session GPS and ignores mobile IP centroids', () => {
+    expect(coordsForHtmlAccessGate({
+      sessionCoords: { lat: 41, lng: -74 },
+      ipCoords: { lat: 50, lng: -74 },
+    })).toEqual({ lat: 41, lng: -74 })
+    expect(coordsForHtmlAccessGate({
+      sessionCoords: null,
+      ipCoords: { lat: 50, lng: -74 },
+      ipMobile: true,
+    })).toBeNull()
+    expect(coordsForHtmlAccessGate({
+      sessionCoords: null,
+      ipCoords: { lat: 41, lng: -74 },
+    })).toEqual({ lat: 41, lng: -74 })
+  })
+
+  it('lets in-area GPS override an out-of-area cellular IP', () => {
+    const s = settings({ enabled: true, blockMode: 'geo', allowedPolygon: areaSquare })
+    const coords = coordsForHtmlAccessGate({
+      sessionCoords: { lat: 41, lng: -74 },
+      ipCoords: { lat: 50, lng: -74 },
+      ipMobile: true,
+    })
+    expect(evaluateAccessDecision(s, { ip: '9.9.9.9', coords }).blocked).toBe(false)
+  })
+
+  it('offers Sign in on the restriction page so cellular visitors can prove GPS', () => {
+    const page = readFileSync(resolve('app/pages/auth/access-restricted.vue'), 'utf8')
+    expect(page).toContain('to="/auth/login?card=staff"')
+    expect(page).toContain('Sign in')
   })
 })

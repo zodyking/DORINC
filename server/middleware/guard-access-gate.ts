@@ -4,10 +4,12 @@ import { ensureDeviceId } from '../utils/device-id'
 import { hasDatabaseConfig } from '../services/runtime-config.service'
 import { hasDatabaseConfigured, useDb } from '../db/client'
 import {
+  coordsForHtmlAccessGate,
   evaluateAccessDecision,
   getCachedAccessGateSettings,
   isAccessGateGeoActive,
   recordAccessEvent,
+  shouldRedirectHtmlAccessGate,
 } from '../services/access-gate.service'
 import { peekIpGeo, resolveIpGeo, resolveIpGeoForEvent } from '../services/ip-geolocation.service'
 import { resolveSession } from '../auth/auth.service'
@@ -32,10 +34,6 @@ const EXEMPT_PREFIXES = ['/api/', '/_nuxt/', '/setup', '/__nuxt', '/favicon']
  * Verification codes are issued only on credentialed login or explicit resend —
  * never on HTML document hits (those were spamming staff mailboxes).
  */
-const GATE_PAGES = [
-  '/auth',
-  '/upload/service-log',
-]
 const ASSET_EXT = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i
 
 /** Throttle visit capture so a single client can't flood the table. */
@@ -60,13 +58,11 @@ function isPageNavigation(event: Parameters<typeof getHeader>[0], path: string):
   return accept.includes('text/html')
 }
 
-function isGatePage(path: string): boolean {
-  return GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
-}
-
 async function resolveViewer(event: Parameters<typeof getHeader>[0]) {
   let isSuperAdmin = false
+  let isCustomer = false
   let viewer: { id: string, name: string, email: string } | null = null
+  let sessionCoords: { lat: number, lng: number } | null = null
   try {
     const token = getSessionCookie(event)
     if (token) {
@@ -74,13 +70,17 @@ async function resolveViewer(event: Parameters<typeof getHeader>[0]) {
       if (resolved) {
         viewer = { id: resolved.user.id, name: resolved.user.name, email: resolved.user.email }
         isSuperAdmin = resolved.user.accountType === 'super_admin'
+        isCustomer = resolved.user.accountType === 'customer' || Boolean(resolved.user.customerId)
+        if (resolved.geoLatitude != null && resolved.geoLongitude != null) {
+          sessionCoords = { lat: resolved.geoLatitude, lng: resolved.geoLongitude }
+        }
       }
     }
   }
   catch {
     // Ignore — treat as anonymous visitor.
   }
-  return { isSuperAdmin, viewer }
+  return { isSuperAdmin, isCustomer, viewer, sessionCoords }
 }
 
 export default defineEventHandler(async (event) => {
@@ -100,14 +100,14 @@ export default defineEventHandler(async (event) => {
   const ip = getClientIp(event)
   const userAgent = getHeader(event, 'user-agent') ?? null
   const deviceId = ensureDeviceId(event)
-  const { isSuperAdmin, viewer } = await resolveViewer(event)
+  const { isSuperAdmin, isCustomer, viewer, sessionCoords } = await resolveViewer(event)
 
   const geoActive = isAccessGateGeoActive(settings)
 
   let cachedGeo = peekIpGeo(ip)
-  // Visit gate stays IP-based (browser GPS remains login-only). Always resolve
-  // IP geo when the fence is active so cold cache / weak peek can't skip the check.
-  if (!isSuperAdmin && geoActive && ip) {
+  // Prefer GPS from a signed-in session. IP geo is a fallback and is often
+  // wrong on cellular (carrier POP / CGNAT), which used to bounce in-area staff.
+  if (!isSuperAdmin && !isCustomer && geoActive && ip && !sessionCoords) {
     try {
       const resolved = await resolveIpGeoForEvent(event, ip)
       if (resolved) cachedGeo = resolved
@@ -117,11 +117,16 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const coords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
+  const ipCoords = cachedGeo && cachedGeo.latitude != null && cachedGeo.longitude != null
     ? { lat: cachedGeo.latitude, lng: cachedGeo.longitude }
     : null
+  const coords = coordsForHtmlAccessGate({
+    sessionCoords,
+    ipCoords,
+    ipMobile: cachedGeo?.mobile,
+  })
 
-  const decision = isSuperAdmin
+  const decision = isSuperAdmin || isCustomer
     ? { blocked: false as const, reason: null }
     : evaluateAccessDecision(settings, { ip, coords })
 
@@ -174,9 +179,17 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const effectivelyBlocked = decision.blocked && !outsideGeoBypass && !knownNetwork && !isGatePage(path)
-  // Gate pages must stay reachable, but visits to them still count as security blocks
-  // (e.g. /auth/access-restricted should show as Geofence blocked, not Access granted).
+  const effectivelyBlocked = shouldRedirectHtmlAccessGate({
+    signedIn: Boolean(viewer),
+    isSuperAdmin,
+    isCustomer,
+    path,
+    blocked: decision.blocked,
+    hasBypass: Boolean(outsideGeoBypass),
+    knownNetwork,
+  })
+  // Gate pages / anonymous logins stay reachable, but IP-outside visits still
+  // count as security blocks on the map (e.g. /auth/access-restricted).
   const recordBlocked = Boolean(decision.blocked && !outsideGeoBypass && !knownNetwork)
 
   // Capture the visit (best-effort, off the response path). Prefer device_id over IP.

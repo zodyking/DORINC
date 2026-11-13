@@ -131,6 +131,48 @@ export function evaluateAccessDecision(
   return ALLOWED
 }
 
+/** Auth and upload pages stay reachable so GPS sign-in can run. */
+export const ACCESS_GATE_PAGES = ['/auth', '/upload/service-log'] as const
+
+export function isAccessGatePage(path: string): boolean {
+  return ACCESS_GATE_PAGES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))
+}
+
+/**
+ * HTML geofence is IP-based and cellular IPs often geolocate to a carrier POP
+ * outside the shop polygon. Anonymous visitors prove location at login (GPS).
+ * Signed-in customers are not bound to the staff service area.
+ */
+export function shouldRedirectHtmlAccessGate(input: {
+  signedIn: boolean
+  isSuperAdmin: boolean
+  isCustomer: boolean
+  path: string
+  blocked: boolean
+  hasBypass: boolean
+  knownNetwork: boolean
+}): boolean {
+  if (!input.blocked) return false
+  if (input.isSuperAdmin || input.isCustomer) return false
+  if (input.hasBypass || input.knownNetwork) return false
+  if (isAccessGatePage(input.path)) return false
+  if (!input.signedIn) return false
+  return true
+}
+
+/** Prefer GPS captured at login over noisy IP geolocation. */
+export function coordsForHtmlAccessGate(input: {
+  sessionCoords: { lat: number, lng: number } | null
+  ipCoords: { lat: number, lng: number } | null
+  ipMobile?: boolean
+}): { lat: number, lng: number } | null {
+  if (input.sessionCoords) return input.sessionCoords
+  // Mobile/CGNAT IP centroids are city-scale and frequently land outside a
+  // tight shop polygon even when the phone is inside it.
+  if (input.ipMobile) return null
+  return input.ipCoords
+}
+
 export interface AccessEventDeviceFields {
   userAgent?: string | null
   deviceId?: string | null
