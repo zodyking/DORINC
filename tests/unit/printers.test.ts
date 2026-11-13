@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
+  buildIppPrintJob,
   categoryFor,
   chooseDriver,
   evaluateMailMessage,
   identifyPrinter,
   illustrationUrl,
+  ippStatusCode,
+  ippSucceeded,
   jamWord,
   paperWord,
   parseIpp,
@@ -17,6 +20,7 @@ import {
   replacementFor,
   supplyPercent,
 } from '../../shared/printers'
+import { cupsAvailable, interpretLpstat, resetCupsAvailableForTests } from '../../server/services/printers/cups'
 import { ACCOUNT_TYPE_BUNDLES } from '../../shared/permissions/keys'
 import { PERMISSION_AREAS } from '../../shared/permissions/display'
 
@@ -177,14 +181,52 @@ describe('printers staff integration', () => {
     expect(printPage).toContain('/printers/mono.svg')
     expect(printPage).not.toContain('Create printer queue')
     expect(printPage).not.toContain('Enable email printing')
+    expect(printPage).not.toContain('Current CUPS queue')
+    expect(printPage).not.toContain('lpstat is not installed')
     expect(settings).toContain('Create printer queue')
     expect(settings).toContain('Enable email printing')
     expect(settings).toContain('Look up product photos automatically')
+    expect(settings).toContain('prints over IPP or port 9100')
     expect(source('app/utils/control-panel-nav.ts')).toContain("id: 'printers'")
     expect(source('app/pages/admin/index.vue')).toContain('SettingsPrintersPanel')
     expect(source('app/pages/staples/index.vue')).toContain("tab: 'staples'")
     expect(source('public/printers/generic.svg')).toMatch(/#1e293b|#334155|#475569/)
     expect(source('server/api/printers/[queue]/image.get.ts')).toContain('new Uint8Array')
     expect(source('server/api/internal/printers/tick.post.ts')).toContain('resolvePendingPrinterImages')
+    expect(source('server/services/printers/engine.ts')).toContain('sendDirectToPrinter')
+  })
+})
+
+describe('CUPS-optional printing', () => {
+  it('treats empty CUPS lpstat as success, not a missing-binary error', () => {
+    expect(interpretLpstat({
+      returncode: 1,
+      stdout: '',
+      stderr: 'lpstat: no active jobs',
+    })).toEqual({ ok: true, available: true, lines: [], error: '' })
+  })
+
+  it('can report that CUPS tools are absent without throwing', () => {
+    resetCupsAvailableForTests(false)
+    expect(cupsAvailable()).toBe(false)
+    resetCupsAvailableForTests(null)
+  })
+
+  it('builds an IPP Print-Job that reports success for status 0', () => {
+    const pdf = Buffer.from('%PDF-1.4 minimal')
+    const job = buildIppPrintJob({
+      printerUri: 'ipp://192.168.1.20/ipp/print',
+      jobName: 'letter.pdf',
+      copies: 2,
+      sides: 'two-sided-long-edge',
+      document: pdf,
+    })
+    expect(job.subarray(0, 4).equals(Buffer.from([0x02, 0x00, 0x00, 0x02]))).toBe(true)
+    expect(job.includes(pdf)).toBe(true)
+    expect(job.includes(Buffer.from('two-sided-long-edge'))).toBe(true)
+    const ok = Buffer.from([0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01])
+    expect(ippStatusCode(ok)).toBe(0)
+    expect(ippSucceeded(0)).toBe(true)
+    expect(ippSucceeded(0x0400)).toBe(false)
   })
 })

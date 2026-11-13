@@ -350,17 +350,6 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-
-        <div class="card">
-          <div class="chead"><h3>Current CUPS queue</h3></div>
-          <div class="cbody">
-            <p v-if="!page.activeJobs.ok" class="help ph-flash ph-flash--err">CUPS queue is unavailable. {{ page.activeJobs.error }}</p>
-            <div v-else-if="page.activeJobs.lines.length" class="ph-queue-lines">
-              <div v-for="line in page.activeJobs.lines" :key="line">{{ line }}</div>
-            </div>
-            <p v-else class="empty">No active jobs in CUPS.</p>
-          </div>
-        </div>
       </template>
       <p v-else-if="!loadError" class="empty">Loading printers…</p>
     </template>

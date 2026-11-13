@@ -51,8 +51,8 @@ export type PrintersPage = {
   settings: Record<string, string>
   mail: { state: string, detail: string, checked: string | null }
   tail: { installed: boolean, online: boolean, state: string, detail: string }
-  cups: { ok: boolean, lines: string[], error: string }
-  activeJobs: { ok: boolean, lines: string[], error: string }
+  cups: { ok: boolean, available?: boolean, lines: string[], error: string }
+  activeJobs: { ok: boolean, available?: boolean, lines: string[], error: string }
   counts: { total: number, errors: number, submitted: number, pending: number, printers: number }
 }
 

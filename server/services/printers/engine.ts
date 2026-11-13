@@ -36,7 +36,8 @@ import {
   type QueueOption,
 } from '../../../shared/printers'
 import { PrintError } from './errors'
-import { activeCupsJobs, cupsCmd, cupsPrintersReport } from './cups'
+import { cupsAvailable, cupsCmd, cupsPrintersReport } from './cups'
+import { sendDirectToPrinter } from './direct-print'
 import { brotherReadings, looksLikeBrother, snmpGet, OID_MODEL } from './brother-snmp'
 import {
   bindHost,
@@ -495,7 +496,18 @@ export async function updatePrinter(db: Db, queue: string, label: string, ip: st
   try {
     const discovery = await discoverPrinter(address)
     if (!discovery.reachable) throw new PrintError('The printer did not answer. The saved printer was left unchanged.')
-    const choice = await configureQueue(queue, address, discovery, await loadDrivers(), address === row.host)
+    let choice: { protocol: string, label: string, driver: string }
+    try {
+      choice = await configureQueue(queue, address, discovery, await loadDrivers(), address === row.host)
+    }
+    catch (err) {
+      if (!(err instanceof PrintError) || !/not installed|not on PATH/i.test(err.message)) throw err
+      choice = {
+        protocol: discovery.socket ? 'socket' : 'ipp',
+        label: discovery.identity || name,
+        driver: '',
+      }
+    }
     await savePrinter(db, queue, name, address, choice)
   }
   catch (err) {
@@ -805,7 +817,7 @@ export async function prepareBytes(filename: string, data: Buffer, maxPages: num
   }
 }
 
-async function sendToQueue(queue: string, copies: number, sides: string, path: string) {
+async function sendViaCups(queue: string, copies: number, sides: string, path: string) {
   let command = ['lp', '-d', queue, '-n', String(copies), '-o', `sides=${sides}`, '-o', 'print-scaling=auto', '-o', 'media=Letter', path]
   let result = await cupsCmd(command, 35000)
   const text = `${result.stderr || ''} ${result.stdout || ''}`.toLowerCase()
@@ -814,6 +826,35 @@ async function sendToQueue(queue: string, copies: number, sides: string, path: s
     result = await cupsCmd(command, 35000)
   }
   return result
+}
+
+async function sendToQueue(
+  queue: string,
+  copies: number,
+  sides: string,
+  path: string,
+  printer: { host: string, protocol: string } | null,
+) {
+  if (cupsAvailable()) {
+    try {
+      const result = await sendViaCups(queue, copies, sides, path)
+      if (!result.returncode) return result
+      const text = `${result.stderr || ''} ${result.stdout || ''}`.toLowerCase()
+      if (!/unknown destination|does not exist|no such|not found/.test(text)) return result
+    }
+    catch (err) {
+      if (!(err instanceof PrintError) || !/not installed|not on PATH/i.test(err.message)) throw err
+    }
+  }
+  if (!printer?.host) throw new PrintError('Printer not configured')
+  return sendDirectToPrinter({
+    queue,
+    host: printer.host,
+    protocol: printer.protocol,
+    copies,
+    sides,
+    path,
+  })
 }
 
 async function sheetForDuplex(path: string, sides: string): Promise<string> {
@@ -992,7 +1033,8 @@ export async function dispatchJob(db: Db, jobId: string) {
   let printPath = path
   try {
     printPath = await sheetForDuplex(path, record.sides)
-    const result = await sendToQueue(record.queue, record.copies, record.sides, printPath)
+    const printer = await getPrinterRow(db, record.queue)
+    const result = await sendToQueue(record.queue, record.copies, record.sides, printPath, printer)
     if (result.returncode) {
       const error = (result.stderr || result.stdout || 'CUPS rejected job').slice(0, 400)
       await db.update(printerJobs).set({ status: 'error', error, updatedAt: new Date() }).where(eq(printerJobs.id, jobId))
@@ -1190,8 +1232,8 @@ export async function buildPrintersPage(db: Db, tab: string) {
     mail,
     tail,
     tailNote: tailnetNotice(devices, tail),
-    cups: tab === 'devices' ? await cupsPrintersReport() : { ok: true, lines: [], error: '' },
-    activeJobs: tab === 'jobs' || tab === 'overview' ? await activeCupsJobs() : { ok: true, lines: [], error: '' },
+    cups: tab === 'devices' ? await cupsPrintersReport() : { ok: true, available: true, lines: [], error: '' },
+    activeJobs: { ok: true, available: cupsAvailable(), lines: [], error: '' },
     counts: {
       total: jobs.length,
       errors: jobs.filter(j => j.status === 'error' || j.status === 'rejected').length,
