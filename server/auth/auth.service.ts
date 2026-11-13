@@ -432,6 +432,8 @@ export interface ResolvedSession {
   overrides: PermissionOverrides
   sessionId: string
   stepUpVerifiedAt: Date | null
+  geoLatitude: number | null
+  geoLongitude: number | null
 }
 
 /** Resolve a session token into an auth context. Enforces inactivity + absolute expiry. */
@@ -501,5 +503,7 @@ export async function resolveSession(db: Db, sessionToken: string): Promise<Reso
     overrides,
     sessionId: row.session.id,
     stepUpVerifiedAt: row.session.stepUpVerifiedAt,
+    geoLatitude: row.session.geoLatitude ?? null,
+    geoLongitude: row.session.geoLongitude ?? null,
   }
 }
