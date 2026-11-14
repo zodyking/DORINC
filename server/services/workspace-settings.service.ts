@@ -152,6 +152,8 @@ export async function saveInvoiceWorkspaceSettings(
     lineItemAiRules: settings.lineItemAiRules.trim(),
     serviceLogExtractionRules: settings.serviceLogExtractionRules.trim(),
     autoPrintOnSend: settings.autoPrintOnSend,
+    autoPrintDestination: settings.autoPrintDestination,
+    autoPrintQueue: settings.autoPrintQueue.trim(),
     printerEmail: settings.printerEmail.trim(),
     printBlankServiceLogAfterInvoice: settings.printBlankServiceLogAfterInvoice,
     blankServiceLogEveryNInvoices: settings.blankServiceLogEveryNInvoices,

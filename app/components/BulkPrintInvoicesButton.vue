@@ -195,8 +195,8 @@ defineExpose({ openModal })
         <div class="chead">
           <h3>
             {{ phase === 'choose'
-              ? 'Bulk print invoices'
-              : (mode === 'staples' ? 'Print At Staples' : mode === 'printer' ? `Send to ${printerLabel}` : 'Print From PC') }}
+              ? 'Print'
+              : (mode === 'staples' ? 'Staples' : mode === 'printer' ? printerLabel : 'Print From This Device') }}
           </h3>
         </div>
         <div class="cbody">
@@ -205,6 +205,22 @@ defineExpose({ openModal })
               Choose how to print. Selected invoices are merged into one PDF, newest to oldest.
             </p>
             <div class="bulk-print-options" role="list">
+              <template v-if="canSendToPrinter">
+                <button
+                  v-for="printer in printTargets"
+                  :key="printer.queue"
+                  type="button"
+                  class="bulk-print-option"
+                  role="listitem"
+                  :disabled="busy"
+                  @click="chooseMode('printer', printer.queue)"
+                >
+                  <span class="bulk-print-option__title">{{ printer.label }}</span>
+                  <span class="bulk-print-option__desc">
+                    Print the merged PDF on this shop printer
+                  </span>
+                </button>
+              </template>
               <button
                 type="button"
                 class="bulk-print-option"
@@ -212,7 +228,7 @@ defineExpose({ openModal })
                 :disabled="busy || !canStaples"
                 @click="chooseMode('staples')"
               >
-                <span class="bulk-print-option__title">Print At Staples</span>
+                <span class="bulk-print-option__title">Staples</span>
                 <span class="bulk-print-option__desc">
                   Email one merged PDF and get a release code on the Staples page
                 </span>
@@ -224,27 +240,11 @@ defineExpose({ openModal })
                 :disabled="busy"
                 @click="chooseMode('device')"
               >
-                <span class="bulk-print-option__title">Print From PC</span>
+                <span class="bulk-print-option__title">Print From This Device</span>
                 <span class="bulk-print-option__desc">
-                  Merge invoices into one PDF and open the browser print dialog
+                  Merge invoices into one PDF and open the print dialog on this computer
                 </span>
               </button>
-              <template v-if="canSendToPrinter">
-                <button
-                  v-for="printer in printTargets"
-                  :key="printer.queue"
-                  type="button"
-                  class="bulk-print-option"
-                  role="listitem"
-                  :disabled="busy"
-                  @click="chooseMode('printer', printer.queue)"
-                >
-                  <span class="bulk-print-option__title">Send to {{ printer.label }}</span>
-                  <span class="bulk-print-option__desc">
-                    Queue one merged PDF on this shop printer
-                  </span>
-                </button>
-              </template>
             </div>
             <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
             <div style="display:flex; gap:8px; margin-top:12px;">

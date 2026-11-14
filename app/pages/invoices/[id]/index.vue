@@ -282,13 +282,23 @@ const showMarkUnpaid = computed(() => {
 
 const markUnpaidBusy = ref(false)
 const markUnpaidError = ref('')
+const printOpen = ref(false)
 const localPrintBusy = ref(false)
 const staplesPrintBusy = ref(false)
 const staplesPrintError = ref('')
 const staplesPrintOk = ref('')
 const printerBusy = ref('')
-const { targets: printTargets, send: sendToPrinter } = usePrintTargets()
+const { send: sendToPrinter } = usePrintTargets()
 const canSendToPrinter = computed(() => canGeneratePdf.value && auth.can('printers.print.all'))
+const canPrint = computed(() => canGeneratePdf.value || canStaplesPrint.value || canSendToPrinter.value)
+const printing = computed(() => localPrintBusy.value || staplesPrintBusy.value || Boolean(printerBusy.value))
+
+async function onPrintChoice(choice: { kind: 'device' } | { kind: 'staples' } | { kind: 'printer', queue: string, label: string }) {
+  printOpen.value = false
+  if (choice.kind === 'device') await printLocal()
+  else if (choice.kind === 'staples') await printViaStaples()
+  else await printOnPrinter(choice.queue, choice.label)
+}
 
 async function printOnPrinter(queue: string, label: string) {
   if (!invoice.value || !canSendToPrinter.value || printerBusy.value) return
@@ -535,35 +545,14 @@ const summaryRows = computed(() => {
           {{ pdfDownloadBusy ? 'Preparing…' : 'Download' }}
         </button>
         <button
-          v-if="canStaplesPrint"
+          v-if="canPrint"
           type="button"
           class="btn"
-          :disabled="staplesPrintBusy"
-          @click="printViaStaples"
+          :disabled="printing"
+          @click="printOpen = true"
         >
-          {{ staplesPrintBusy ? 'Sending to Staples…' : 'Print At Staples' }}
+          {{ printing ? 'Printing…' : 'Print' }}
         </button>
-        <button
-          v-if="canGeneratePdf"
-          type="button"
-          class="btn"
-          :disabled="localPrintBusy"
-          @click="printLocal"
-        >
-          {{ localPrintBusy ? 'Printing…' : 'Print From PC' }}
-        </button>
-        <template v-if="canSendToPrinter">
-          <button
-            v-for="printer in printTargets"
-            :key="printer.queue"
-            type="button"
-            class="btn"
-            :disabled="Boolean(printerBusy)"
-            @click="printOnPrinter(printer.queue, printer.label)"
-          >
-            {{ printerBusy === printer.queue ? 'Sending…' : `Send to ${printer.label}` }}
-          </button>
-        </template>
         <DeleteEntityButton
           v-if="removableInvoice"
           entity-type="invoice"
@@ -575,6 +564,16 @@ const summaryRows = computed(() => {
 
     <p v-if="staplesPrintError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ staplesPrintError }}</p>
     <p v-else-if="staplesPrintOk" class="help" style="color:#15803d; margin:0 0 12px;">{{ staplesPrintOk }}</p>
+
+    <PrintChooser
+      v-model:open="printOpen"
+      :show-device="canGeneratePdf"
+      :show-staples="canStaplesPrint"
+      :show-printers="canSendToPrinter"
+      :busy="printing"
+      :error="staplesPrintError"
+      @choose="onPrintChoice"
+    />
 
     <SendInvoiceButton
       v-if="canSend && canSendNow"

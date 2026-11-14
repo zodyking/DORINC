@@ -233,7 +233,7 @@ async function printServiceLogSheetFromDevice() {
           :disabled="sheetBusy"
           @click="openPrintSheetChooser"
         >
-          {{ sheetBusy ? 'Rendering…' : 'Print Template' }}
+          {{ sheetBusy ? 'Rendering…' : 'Print' }}
         </button>
         <button
           v-if="canEditSheet"

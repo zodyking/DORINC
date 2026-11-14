@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm'
 import type { Db } from '../db/client'
+import { users } from '../db/schema'
 import { formatInvoiceNumber } from '../db/schema/invoices'
 import { sendNotificationMail } from '../mail/mailer'
 import {
@@ -6,6 +8,10 @@ import {
   normalizePrinterEmail,
   shouldAttachBlankServiceLog,
 } from '../../shared/invoice-printer'
+import { QUEUE_RE } from '../../shared/printers'
+import { printTargets } from './printers'
+import { sendAppDocument } from './printers/send-document'
+import { PrintError } from './printers/errors'
 import { resolveInvoicePdfForDisplay, InvoicePdfServiceError } from './invoice-pdf.service'
 import { getInvoice, InvoicesServiceError } from './invoices.service'
 import { renderServiceLogSheetPdf } from './service-log-sheet.service'
@@ -32,7 +38,11 @@ export class InvoicePrinterServiceError extends Error {
 export type InvoicePrinterAttachmentKind = 'invoice' | 'service_log'
 
 export interface InvoicePrinterSendResult {
+  /** 'shop' went straight to a registered printer. 'email' used the printer's email address. */
+  destination: 'shop' | 'email'
   printerEmail: string
+  /** Shop printer name, or the printer email address. */
+  printerLabel: string
   delivered: boolean
   attachments: InvoicePrinterAttachmentKind[]
   invoiceId: string | null
@@ -47,16 +57,60 @@ export interface PrintInvoiceToPrinterOptions {
 }
 
 function printerNotConfiguredMessage(): string {
-  return 'Shop printer email is not set. Add it in Control Panel → Invoices → Email to print.'
+  return 'Shop printer email is not set. Add it in Control Panel → Invoices → Print when sent.'
 }
 
-async function resolvePrinterEmail(db: Db): Promise<string> {
+function shopPrinterNotReadyMessage(): string {
+  return 'The shop printer chosen for auto print is not ready. Choose it again in Control Panel → Invoices → Print when sent.'
+}
+
+async function actorName(db: Db, actorId: string): Promise<string> {
+  const [row] = await db.select({ name: users.name }).from(users).where(eq(users.id, actorId)).limit(1)
+  return row?.name?.trim() || 'Auto print'
+}
+
+type PrintDestination
+  = { kind: 'email', email: string }
+    | { kind: 'shop', queue: string, label: string }
+
+async function resolveDestination(db: Db): Promise<PrintDestination> {
   const settings = await getInvoiceWorkspaceSettings(db)
+  if (settings.autoPrintDestination === 'shop') {
+    const queue = settings.autoPrintQueue.trim()
+    if (!QUEUE_RE.test(queue)) {
+      throw new InvoicePrinterServiceError('NOT_CONFIGURED', 'Choose a shop printer in Control Panel → Invoices → Print when sent.')
+    }
+    const target = (await printTargets()).find(item => item.queue === queue)
+    if (!target) throw new InvoicePrinterServiceError('NOT_CONFIGURED', shopPrinterNotReadyMessage())
+    return { kind: 'shop', queue, label: target.label }
+  }
   const email = normalizePrinterEmail(settings.printerEmail)
   if (!isValidPrinterEmail(email)) {
     throw new InvoicePrinterServiceError('NOT_CONFIGURED', printerNotConfiguredMessage())
   }
-  return email
+  return { kind: 'email', email }
+}
+
+async function deliverToShop(
+  db: Db,
+  actorId: string,
+  queue: string,
+  kind: 'invoice' | 'service-log-sheet',
+  invoiceIds?: string[],
+) {
+  try {
+    await sendAppDocument(db, {
+      kind,
+      queue,
+      ...(invoiceIds ? { invoiceIds } : {}),
+      actorUserId: actorId,
+      actorName: await actorName(db, actorId),
+    })
+  }
+  catch (err) {
+    if (err instanceof PrintError) throw new InvoicePrinterServiceError('SEND_FAILED', err.message)
+    throw err
+  }
 }
 
 async function serviceLogAttachment(db: Db) {
@@ -114,14 +168,22 @@ export async function printBlankServiceLogToPrinter(
   actorId: string,
   source: 'auto_send' | 'susan' = 'susan',
 ): Promise<InvoicePrinterSendResult> {
-  const printerEmail = await resolvePrinterEmail(db)
-  const attachment = await serviceLogAttachment(db)
-  const delivered = await deliverPrinterEmail(db, {
-    printerEmail,
-    subject: 'Blank service log',
-    text: 'Blank service log sheet for the shop printer.',
-    attachments: [attachment],
-  })
+  const destination = await resolveDestination(db)
+  let delivered = true
+  if (destination.kind === 'shop') {
+    await deliverToShop(db, actorId, destination.queue, 'service-log-sheet')
+  }
+  else {
+    const attachment = await serviceLogAttachment(db)
+    delivered = await deliverPrinterEmail(db, {
+      printerEmail: destination.email,
+      subject: 'Blank service log',
+      text: 'Blank service log sheet for the shop printer.',
+      attachments: [attachment],
+    })
+  }
+  const printerLabel = destination.kind === 'shop' ? destination.label : destination.email
+  const printerEmail = destination.kind === 'email' ? destination.email : ''
 
   await writeAudit(null, {
     entityType: 'system',
@@ -131,13 +193,16 @@ export async function printBlankServiceLogToPrinter(
     afterData: {
       via: source,
       actorId,
-      printerEmail,
+      destination: destination.kind,
+      printerLabel,
       attachments: ['service_log'],
     },
   }).catch(() => undefined)
 
   return {
+    destination: destination.kind,
     printerEmail,
+    printerLabel,
     delivered,
     attachments: ['service_log'],
     invoiceId: null,
@@ -152,7 +217,7 @@ export async function printInvoiceToPrinter(
   actorId: string,
   options: PrintInvoiceToPrinterOptions = {},
 ): Promise<InvoicePrinterSendResult> {
-  const printerEmail = await resolvePrinterEmail(db)
+  const destination = await resolveDestination(db)
   const settings = await getInvoiceWorkspaceSettings(db)
 
   let invoice
@@ -166,49 +231,15 @@ export async function printInvoiceToPrinter(
     throw err
   }
 
-  let invoicePdf
-  try {
-    invoicePdf = await resolveInvoicePdfForDisplay(db, invoiceId)
-  }
-  catch (err) {
-    if (err instanceof InvoicePdfServiceError && err.code === 'NOT_FOUND') {
-      throw new InvoicePrinterServiceError('NOT_FOUND')
-    }
-    throw new InvoicePrinterServiceError(
-      'PDF_FAILED',
-      err instanceof Error ? err.message : 'Could not render the invoice PDF',
-    )
-  }
-
   const invoiceNumber = formatInvoiceNumber(invoice.invoiceNumber)
-  const attachments: Array<{
-    filename: string
-    content: Buffer
-    contentType?: string
-    contentDisposition?: 'inline' | 'attachment'
-  }> = [{
-    filename: invoicePdf.filename || `${invoiceNumber}.pdf`,
-    content: invoicePdf.pdf,
-    contentType: 'application/pdf',
-    contentDisposition: 'attachment',
-  }]
-  const kinds: InvoicePrinterAttachmentKind[] = ['invoice']
-
   let includedServiceLog = false
   const includeMode = options.includeServiceLog ?? false
-  if (includeMode === true) {
-    attachments.push(await serviceLogAttachment(db))
-    kinds.push('service_log')
-    includedServiceLog = true
-  }
+  if (includeMode === true) includedServiceLog = true
   else if (includeMode === 'auto' && settings.printBlankServiceLogAfterInvoice) {
     const nextCount = (await getInvoicePrinterCount(db)) + 1
-    if (shouldAttachBlankServiceLog(nextCount, settings.blankServiceLogEveryNInvoices)) {
-      attachments.push(await serviceLogAttachment(db))
-      kinds.push('service_log')
-      includedServiceLog = true
-    }
+    includedServiceLog = shouldAttachBlankServiceLog(nextCount, settings.blankServiceLogEveryNInvoices)
   }
+  const kinds: InvoicePrinterAttachmentKind[] = includedServiceLog ? ['invoice', 'service_log'] : ['invoice']
 
   const subject = includedServiceLog
     ? `${invoiceNumber} + service log`
@@ -217,12 +248,46 @@ export async function printInvoiceToPrinter(
     ? `${invoiceNumber} and a blank service log for the shop printer.`
     : `${invoiceNumber} for the shop printer.`
 
-  const delivered = await deliverPrinterEmail(db, {
-    printerEmail,
-    subject,
-    text,
-    attachments,
-  })
+  let delivered = true
+  if (destination.kind === 'shop') {
+    await deliverToShop(db, actorId, destination.queue, 'invoice', [invoiceId])
+    if (includedServiceLog) await deliverToShop(db, actorId, destination.queue, 'service-log-sheet')
+  }
+  else {
+    let invoicePdf
+    try {
+      invoicePdf = await resolveInvoicePdfForDisplay(db, invoiceId)
+    }
+    catch (err) {
+      if (err instanceof InvoicePdfServiceError && err.code === 'NOT_FOUND') {
+        throw new InvoicePrinterServiceError('NOT_FOUND')
+      }
+      throw new InvoicePrinterServiceError(
+        'PDF_FAILED',
+        err instanceof Error ? err.message : 'Could not render the invoice PDF',
+      )
+    }
+    const attachments: Array<{
+      filename: string
+      content: Buffer
+      contentType?: string
+      contentDisposition?: 'inline' | 'attachment'
+    }> = [{
+      filename: invoicePdf.filename || `${invoiceNumber}.pdf`,
+      content: invoicePdf.pdf,
+      contentType: 'application/pdf',
+      contentDisposition: 'attachment',
+    }]
+    if (includedServiceLog) attachments.push(await serviceLogAttachment(db))
+    delivered = await deliverPrinterEmail(db, {
+      printerEmail: destination.email,
+      subject,
+      text,
+      attachments,
+    })
+  }
+  const printerLabel = destination.kind === 'shop' ? destination.label : destination.email
+  const printerEmail = destination.kind === 'email' ? destination.email : ''
 
   if (includeMode === 'auto' && settings.printBlankServiceLogAfterInvoice) {
     await incrementInvoicePrinterCount(db, actorId)
@@ -237,14 +302,17 @@ export async function printInvoiceToPrinter(
     afterData: {
       via: options.source ?? 'susan',
       actorId,
-      printerEmail,
+      destination: destination.kind,
+      printerLabel,
       attachments: kinds,
       includedServiceLog,
     },
   }).catch(() => undefined)
 
   return {
+    destination: destination.kind,
     printerEmail,
+    printerLabel,
     delivered,
     attachments: kinds,
     invoiceId,
@@ -265,7 +333,10 @@ export async function maybeAutoPrintInvoiceOnSend(
   try {
     const settings = await getInvoiceWorkspaceSettings(db)
     if (!settings.autoPrintOnSend) return null
-    if (!isValidPrinterEmail(settings.printerEmail)) return null
+    if (settings.autoPrintDestination === 'shop') {
+      if (!QUEUE_RE.test(settings.autoPrintQueue.trim())) return null
+    }
+    else if (!isValidPrinterEmail(settings.printerEmail)) return null
 
     return await printInvoiceToPrinter(db, invoiceId, actorId, {
       includeServiceLog: 'auto',

@@ -31,6 +31,8 @@ const form = reactive({
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
   serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
   autoPrintOnSend: false,
+  autoPrintDestination: 'email' as 'shop' | 'email',
+  autoPrintQueue: '',
   printerEmail: '',
   printBlankServiceLogAfterInvoice: false,
   blankServiceLogEveryNInvoices: 1,
@@ -65,6 +67,17 @@ const editorLink = computed(() => ({
   query: selectedTemplateId.value ? { template: selectedTemplateId.value } : {},
 }))
 
+const { data: printerTargets } = useClientFetch<{ printers: Array<{ queue: string, label: string }> }>('/api/printers/targets')
+const shopPrinters = computed(() => {
+  const list = printerTargets.value?.printers ?? []
+  if (form.autoPrintQueue && !list.some(item => item.queue === form.autoPrintQueue)) {
+    return [{ queue: form.autoPrintQueue, label: `${form.autoPrintQueue} (saved)` }, ...list]
+  }
+  return list
+})
+const printViaShop = computed(() => form.autoPrintDestination === 'shop')
+const printRequired = computed(() => form.autoPrintOnSend || form.printBlankServiceLogAfterInvoice)
+
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
@@ -84,6 +97,8 @@ async function save() {
           lineItemAiRules: form.lineItemAiRules,
           serviceLogExtractionRules: form.serviceLogExtractionRules,
           autoPrintOnSend: form.autoPrintOnSend,
+          autoPrintDestination: form.autoPrintDestination,
+          autoPrintQueue: form.autoPrintQueue.trim(),
           printerEmail: form.printerEmail.trim(),
           printBlankServiceLogAfterInvoice: form.printBlankServiceLogAfterInvoice,
           blankServiceLogEveryNInvoices: form.blankServiceLogEveryNInvoices,
@@ -215,18 +230,19 @@ async function onTemplateChange(ev: Event) {
     </form>
 
     <form class="card" style="margin-top:16px;" @submit.prevent="save">
-      <div class="chead"><h3>Email to print</h3></div>
+      <div class="chead"><h3>Print when sent</h3></div>
       <div class="cbody settings-form">
         <p class="settings-help">
-          Send invoice PDFs to a shop printer that accepts email-to-print (HP ePrint, Brother, Epson, and similar).
-          Susan can also print here when asked in chat or by SMS.
+          When an invoice is emailed to the customer, also print it.
+          A registered shop printer gets the PDF directly. Email to print is for a printer that prints from its own address (HP ePrint, Brother, Epson, and similar).
+          Susan uses the same choice when asked in chat or by SMS.
         </p>
 
         <div class="tglrow">
           <div>
             <div class="notif-label">Auto print on send</div>
             <div class="notif-desc">
-              Whenever an invoice is emailed to the customer, also send the invoice PDF to the printer.
+              Whenever an invoice is emailed to the customer, also print the invoice PDF.
             </div>
           </div>
           <span class="tgl">
@@ -239,23 +255,49 @@ async function onTemplateChange(ev: Event) {
           </span>
         </div>
 
-        <label class="fld">
-          Printer email address
-          <input
-            v-model="form.printerEmail"
-            type="email"
-            autocomplete="off"
-            placeholder="printer@print.example.com"
-            :required="form.autoPrintOnSend || form.printBlankServiceLogAfterInvoice"
-          >
-          <span class="help">The printer’s email-to-print address. Required when either print toggle is on.</span>
-        </label>
+        <fieldset class="print-via">
+          <legend>Print using</legend>
+          <label class="print-via__opt">
+            <input v-model="form.autoPrintDestination" type="radio" value="shop">
+            <span>
+              <strong>Registered shop printer</strong>
+              <span class="help">Sends the PDF straight to the printer. No email.</span>
+            </span>
+          </label>
+          <label v-if="printViaShop" class="fld">
+            Printer
+            <select v-model="form.autoPrintQueue" :required="printRequired">
+              <option value="" disabled>Choose a printer</option>
+              <option v-for="printer in shopPrinters" :key="printer.queue" :value="printer.queue">
+                {{ printer.label }}
+              </option>
+            </select>
+            <span v-if="!shopPrinters.length" class="help">Add a printer in Control Panel → Printers first.</span>
+          </label>
+          <label class="print-via__opt">
+            <input v-model="form.autoPrintDestination" type="radio" value="email">
+            <span>
+              <strong>Printer email</strong>
+              <span class="help">For a printer that prints mail sent to its own address.</span>
+            </span>
+          </label>
+          <label v-if="!printViaShop" class="fld">
+            Printer email address
+            <input
+              v-model="form.printerEmail"
+              type="email"
+              autocomplete="off"
+              placeholder="printer@print.example.com"
+              :required="printRequired"
+            >
+          </label>
+        </fieldset>
 
         <div class="tglrow">
           <div>
             <div class="notif-label">Print blank service log after invoices</div>
             <div class="notif-desc">
-              Include a blank service-log sheet in the same printer email, on the cadence below.
+              Also print a blank service-log sheet, on the cadence below.
             </div>
           </div>
           <span class="tgl">
@@ -352,4 +394,28 @@ async function onTemplateChange(ev: Event) {
 .tglrow {
   align-items: flex-start;
 }
+
+.print-via {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.print-via legend {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+.print-via__opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.print-via__opt input { margin-top: 3px; }
+.print-via__opt strong { display: block; font-size: 13.5px; color: #0f172a; }
+.print-via .fld { margin-left: 26px; }
 </style>

@@ -246,8 +246,8 @@ describe('printers staff integration', () => {
     expect(printPage).toContain('StaplesPrintJobsPanel')
     expect(printPage).toContain('Print queue')
     expect(printPage).toContain('No shop printer yet')
-    expect(printPage).toContain('Print Blanks At Staples')
-    expect(printPage).toContain('Send Blank Sheet to ${printer.label}')
+    expect(printPage).toContain('PrintChooser')
+    expect(printPage).toContain('Print a blank sheet')
     expect(printPage).toContain('/api/printers/jobs/${job.id}/file')
     expect(printPage).toContain('PdfViewerDialog')
     expect(printPage).not.toContain('max-width: 1080px')
@@ -287,19 +287,24 @@ describe('printers staff integration', () => {
     }
   })
 
-  it('offers Staples, PC, and each shop printer in print menus', () => {
+  it('offers one Print action for shop printers, Staples, and this device', () => {
+    const chooser = source('app/components/PrintChooser.vue')
+    expect(chooser).toContain('Print From This Device')
+    expect(chooser).toContain('>Staples<')
+    expect(chooser).toContain('Print on this shop printer')
     for (const file of [
       'app/components/invoices/InvoiceListRowActions.vue',
       'app/pages/invoices/[id]/index.vue',
-      'app/components/BulkPrintInvoicesButton.vue',
-      'app/components/service-logs/ServiceLogSheetPrintModal.vue',
+      'app/pages/printers/index.vue',
     ]) {
       const text = source(file)
-      expect(text, file).toContain('Print At Staples')
-      expect(text, file).toContain('Print From PC')
-      expect(text, file).toMatch(/Send to \$\{printer\.label\}|Send to \{\{ printer\.label \}\}/)
-      expect(text, file).toContain('usePrintTargets')
+      expect(text, file).toContain('PrintChooser')
+      expect(text, file).not.toContain('Print At Staples')
+      expect(text, file).not.toContain('Print From PC')
+      expect(text, file).not.toContain('Send Blank Sheet')
     }
+    expect(source('app/components/BulkPrintInvoicesButton.vue')).toContain('Print From This Device')
+    expect(source('app/components/service-logs/ServiceLogSheetPrintModal.vue')).toContain('Print From This Device')
   })
 })
 
