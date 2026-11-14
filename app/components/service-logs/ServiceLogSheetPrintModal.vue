@@ -131,12 +131,12 @@ async function chooseStaples() {
       <div class="mhead">
         <div>
           <h3 id="sl-print-title">
-            {{ step === 'staples' ? 'Print At Staples' : 'Print Template' }}
+            {{ step === 'staples' ? 'Staples' : 'Print' }}
           </h3>
           <p>
             {{ step === 'staples'
               ? 'Sending the sheet to Staples PrintMe…'
-              : 'Choose how to print the blank Letter service catalog' }}
+              : 'Choose where the blank service log should print.' }}
           </p>
         </div>
         <button
@@ -152,6 +152,24 @@ async function chooseStaples() {
 
       <div class="mbody">
         <div v-if="step === 'choose'" class="sl-print-options" role="list">
+          <template v-if="canSendToPrinter">
+            <button
+              v-for="printer in printTargets"
+              :key="printer.queue"
+              type="button"
+              class="sl-print-option"
+              role="listitem"
+              :disabled="deviceBusy || staplesBusy || Boolean(printerBusy)"
+              @click="choosePrinter(printer.queue, printer.label)"
+            >
+              <span class="sl-print-option-title">
+                {{ printerBusy === printer.queue ? 'Sending…' : printer.label }}
+              </span>
+              <span class="sl-print-option-desc">
+                Print on this shop printer
+              </span>
+            </button>
+          </template>
           <button
             type="button"
             class="sl-print-option"
@@ -160,7 +178,7 @@ async function chooseStaples() {
             @click="chooseStaples"
           >
             <span class="sl-print-option-title">
-              Print At Staples
+              Staples
             </span>
             <span class="sl-print-option-desc">
               Email to Staples PrintMe — the release code appears on the Staples page when ready
@@ -175,31 +193,12 @@ async function chooseStaples() {
             @click="chooseDevice"
           >
             <span class="sl-print-option-title">
-              {{ deviceBusy ? 'Printing…' : 'Print From PC' }}
+              {{ deviceBusy ? 'Printing…' : 'Print From This Device' }}
             </span>
             <span class="sl-print-option-desc">
-              Open the browser print dialog for your local printer
+              Open the print dialog on this computer
             </span>
           </button>
-
-          <template v-if="canSendToPrinter">
-            <button
-              v-for="printer in printTargets"
-              :key="printer.queue"
-              type="button"
-              class="sl-print-option"
-              role="listitem"
-              :disabled="deviceBusy || staplesBusy || Boolean(printerBusy)"
-              @click="choosePrinter(printer.queue, printer.label)"
-            >
-              <span class="sl-print-option-title">
-                {{ printerBusy === printer.queue ? 'Sending…' : `Send to ${printer.label}` }}
-              </span>
-              <span class="sl-print-option-desc">
-                Queue the blank sheet on this shop printer
-              </span>
-            </button>
-          </template>
           <p v-if="staplesError" class="sl-staples-error">{{ staplesError }}</p>
         </div>
 

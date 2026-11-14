@@ -3,7 +3,9 @@ import PdfViewerDialog from '~/components/PdfViewerDialog.client.vue'
 import PrinterStation from '~/components/printers/PrinterStation.vue'
 import StaplesPrintJobsPanel from '~/components/staples/StaplesPrintJobsPanel.vue'
 import StaffNavIcon from '~/components/staff/StaffNavIcon.vue'
-import { syncFetchErrorMessage } from '~/utils/fetch-blob-error'
+import { syncFetchErrorMessage, fetchErrorMessage } from '~/utils/fetch-blob-error'
+import { printPdfBlob } from '~/utils/print-pdf'
+import { fetchServiceLogSheetPdf } from '~/utils/service-log-sheet'
 import {
   formatPrinterWhen,
   printerLiveLabel,
@@ -72,9 +74,12 @@ const flashErr = ref('')
 const busy = ref('')
 const printForm = reactive({ queue: '', sides: 'one-sided', copies: 1, file: null as File | null })
 const jobsPanel = ref<{ refresh: () => Promise<void> } | null>(null)
+const printOpen = ref(false)
 const sendBusy = ref(false)
 const blankBusy = ref('')
-const { targets: printTargets, send: sendToPrinter, load: loadTargets } = usePrintTargets()
+const deviceBusy = ref(false)
+const { send: sendToPrinter, load: loadTargets } = usePrintTargets()
+const printingBlank = computed(() => sendBusy.value || deviceBusy.value || Boolean(blankBusy.value))
 const viewer = reactive({ open: false, blob: null as Blob | null, title: '', filename: 'document.pdf', busy: 0 })
 
 const fileLabel = computed(() => printForm.file?.name || '')
@@ -197,6 +202,30 @@ async function deleteJob(job: PrinterJob) {
   })
 }
 
+async function printBlankFromDevice() {
+  if (deviceBusy.value) return
+  deviceBusy.value = true
+  flashErr.value = ''
+  flashOk.value = ''
+  try {
+    const blob = await fetchServiceLogSheetPdf()
+    await printPdfBlob(blob)
+  }
+  catch (e: unknown) {
+    flashErr.value = await fetchErrorMessage(e, 'Could not print the blank sheet')
+  }
+  finally {
+    deviceBusy.value = false
+  }
+}
+
+async function onBlankChoice(choice: { kind: 'device' } | { kind: 'staples' } | { kind: 'printer', queue: string, label: string }) {
+  printOpen.value = false
+  if (choice.kind === 'device') await printBlankFromDevice()
+  else if (choice.kind === 'staples') await sendBlankSheet()
+  else await sendBlankToPrinter(choice.queue, choice.label)
+}
+
 async function sendBlankSheet() {
   if (!canStaplesPrint.value || sendBusy.value) return
   sendBusy.value = true
@@ -252,30 +281,29 @@ onUnmounted(() => {
           Print
         </span>
       </template>
-      <template v-if="canStaplesPrint || (canPrint && printTargets.length)" #actions>
+      <template v-if="canStaplesPrint || canPrint || canPrinters" #actions>
         <button
-          v-if="canStaplesPrint"
           type="button"
           class="btn"
-          :disabled="sendBusy"
-          @click="sendBlankSheet"
+          :disabled="printingBlank"
+          @click="printOpen = true"
         >
-          {{ sendBusy ? 'Sending…' : 'Print Blanks At Staples' }}
+          {{ printingBlank ? 'Printing…' : 'Print' }}
         </button>
-        <template v-if="canPrint">
-          <button
-            v-for="printer in printTargets"
-            :key="printer.queue"
-            type="button"
-            class="btn"
-            :disabled="Boolean(blankBusy)"
-            @click="sendBlankToPrinter(printer.queue, printer.label)"
-          >
-            {{ blankBusy === printer.queue ? 'Sending…' : `Send Blank Sheet to ${printer.label}` }}
-          </button>
-        </template>
       </template>
     </StaffPageHead>
+
+    <PrintChooser
+      v-model:open="printOpen"
+      title="Print a blank sheet"
+      lead="Choose where the blank service log should print."
+      :show-device="canPrinters || canStaples"
+      :show-staples="canStaplesPrint"
+      :show-printers="canPrint"
+      :busy="printingBlank"
+      :error="flashErr"
+      @choose="onBlankChoice"
+    />
 
     <nav v-if="availableTabs.length > 1" class="ph-tabs" aria-label="Print sections">
       <button
