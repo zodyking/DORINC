@@ -280,6 +280,50 @@ def nearest_entry(entries, ident):
     return best
 
 
+def _model_shape(code):
+    """Split dcpl2640dw into family, number, and suffix. Inkjets are left out."""
+    match = re.fullmatch(r'([a-z]+?)(\d+)([a-z]*)', code or '')
+    if not match or 'j' in match.group(1):
+        return None
+    prefix = match.group(1)
+    if prefix.startswith(('dcp', 'mfc')):
+        kind = 'mfp'
+    elif prefix.startswith('hl'):
+        kind = 'laser'
+    else:
+        return None
+    return prefix, int(match.group(2)), match.group(3), kind
+
+
+def family_entry(entries, ident):
+    """Closest same-kind Brother laser photo when the exact model is not catalogued."""
+    code = ident.get('code') or ''
+    maker = ident.get('manufacturer') or ''
+    wanted = _model_shape(code)
+    if not wanted or not maker:
+        return None
+    prefix, number, suffix, kind = wanted
+    color = 'c' in suffix
+    best = None
+    best_key = None
+    for raw in entries:
+        item = _entry(raw)
+        other = item.get('code') or ''
+        if not other or other == code or item.get('manufacturer') != maker:
+            continue
+        shape = _model_shape(other)
+        if not shape or shape[3] != kind or color != ('c' in shape[2]):
+            continue
+        gap = abs(number - shape[1])
+        if gap > 120:
+            continue
+        key = (0 if shape[0] == prefix else 1, gap, other)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = item
+    return best
+
+
 def license_ok(name):
     low = (name or '').lower().replace('_', ' ').replace('-', ' ')
     if not low.strip():
@@ -761,6 +805,10 @@ def resolve_model(ident, force=False):
             near = nearest_entry(load_index(), ident)
             if near:
                 saved = _download_unifi(ident, near, [], 0.6)
+        if not saved:
+            family = family_entry(load_index(), ident)
+            if family:
+                saved = _download_unifi(ident, family, [], 0.55)
     except (ImageError, OSError, ValueError):
         saved = None
     if saved:
@@ -832,6 +880,33 @@ def _icon_host(host):
     return str(address)
 
 
+def _icon_candidates(host, advertised):
+    """Icon URLs pinned to the printer's own address, plus the usual IPP paths."""
+    found = []
+    seen = set()
+
+    def add(url):
+        if url and url not in seen:
+            seen.add(url)
+            found.append(url)
+
+    for raw in advertised or []:
+        parsed = urlsplit(str(raw))
+        if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
+            continue
+        if parsed.port not in (None, 80, 443, 631):
+            continue
+        path = parsed.path or '/'
+        if not path.startswith('/') or path.startswith('//') or '..' in path or '\\' in path:
+            continue
+        port = f':{parsed.port}' if parsed.port else ''
+        query = f'?{parsed.query}' if parsed.query else ''
+        add(f'{parsed.scheme}://{host}{port}{path}{query}')
+    for path in ('/icon.png', '/ipp/icon.png', '/images/icon.png'):
+        add(f'http://{host}{path}')
+    return found[:6]
+
+
 def _read_device_icon(host, url):
     parsed = urlsplit(url or '')
     if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
@@ -863,9 +938,9 @@ def _download_device_icon(printer, ident):
         attrs = printing.ipp_attributes(host)
     except Exception:
         return None
-    urls = [item for item in (attrs.get('printer-icons') or []) if isinstance(item, str)]
-    urls.sort(key=lambda item: 0 if item.lower().split('?', 1)[0].endswith('.png') else 1)
-    for url in urls[:4]:
+    advertised = [item for item in (attrs.get('printer-icons') or []) if isinstance(item, str)]
+    advertised.sort(key=lambda item: 0 if item.lower().split('?', 1)[0].endswith('.png') else 1)
+    for url in _icon_candidates(host, advertised):
         body = _read_device_icon(host, url)
         if not body:
             continue
@@ -935,14 +1010,20 @@ def resolve_printer(queue):
         except Exception:
             store.event('warning', 'Printer image lookup could not finish')
             row = None
-        if row and row.get('source') in ('unifi', 'wikimedia', 'upload') and _fresh(row):
-            pass
-        elif row and row.get('source') == 'printer' and _fresh(row):
-            row = _hold_printer(row)
-        else:
+        confident = (
+            row
+            and row.get('source') in ('unifi', 'wikimedia', 'upload')
+            and _fresh(row)
+            and float(row.get('confidence') or 0) >= 0.9
+        )
+        if not confident:
             icon = _download_device_icon(printer, ident)
             if icon:
                 row = _hold_printer(icon)
+            elif row and row.get('source') in ('unifi', 'wikimedia', 'upload') and _fresh(row):
+                pass
+            elif row and row.get('source') == 'printer' and _fresh(row):
+                row = _hold_printer(row)
             elif not row or row.get('source') != 'miss':
                 row = _remember_fallback(ident, 'miss', [])
     with store.connection() as db:
@@ -1268,6 +1349,11 @@ def search_again(queue):
     ident = identity_of(printer)
     if not ident.get('key'):
         raise ImageError('This printer has no model to look up')
+    if (printer.get('image_mode') or 'auto') != 'manual':
+        _ICON_TRIED.pop(queue, None)
+        found = resolve_printer(queue)
+        if found:
+            return found
     row = resolve_model(ident, force=True)
     if (printer.get('image_mode') or 'auto') != 'manual':
         with store.connection() as db:
