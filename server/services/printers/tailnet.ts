@@ -153,7 +153,7 @@ function runTailscale(args: string[]): { status: number, stdout: string, stderr:
   const name = args[0] || 'tailscale'
   const bin = name.startsWith('/') ? name : (which(name) || name)
   try {
-    const stdout = execFileSync(bin, args.slice(1), { encoding: 'utf8', timeout: 40000, stdio: ['ignore', 'pipe', 'pipe'] })
+    const stdout = execFileSync(bin, args.slice(1), { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] })
     return { status: 0, stdout: stdout || '', stderr: '' }
   }
   catch (err) {
@@ -464,6 +464,35 @@ export function hasNode(queue: string): boolean {
   }
 }
 
+type Backend = { backend: string, health: string[], authUrl: string }
+
+function backendState(queue: string): Backend {
+  try {
+    const result = runTailscale(['tailscale', '--socket', socketFor(queue), 'status', '--json'])
+    const parsed = JSON.parse(result.stdout || '{}') as { BackendState?: string, Health?: string[], AuthURL?: string }
+    return {
+      backend: parsed.BackendState || '',
+      health: (parsed.Health || []).map(item => String(item)).filter(Boolean),
+      authUrl: parsed.AuthURL || '',
+    }
+  }
+  catch {
+    return { backend: '', health: [], authUrl: '' }
+  }
+}
+
+export function joinFailureMessage(state: Backend, raw: string, log: string): string {
+  if (state.backend === 'NeedsMachineAuth') {
+    return 'Approve this device in the Tailscale admin console (Machines), or use a pre-approved auth key.'
+  }
+  if (state.backend === 'NeedsLogin' || state.authUrl) {
+    return 'Tailscale rejected the auth key. Create a new reusable key and try again.'
+  }
+  const health = state.health[0] || ''
+  const detail = health || log || raw
+  return detail ? `Tailscale did not connect: ${detail}` : 'Tailscale did not connect'
+}
+
 function readNode(queue: string): TailDevice {
   const sock = socketFor(queue)
   const result = runTailscale(['tailscale', '--socket', sock, 'status', '--json'])
@@ -492,6 +521,7 @@ export async function connectTailnet(queue: string, key: string, hostname = '', 
   const host = hostnameValue(hostname, label, queue)
   if (!installed()) throw new TailscaleError('Tailscale is not installed on this host.')
   const fresh = !existsSync(stateFor(queue))
+  let awaitingApproval = false
   try {
     startDaemon(queue)
     const result = runTailscale([
@@ -500,11 +530,15 @@ export async function connectTailnet(queue: string, key: string, hostname = '', 
       `--hostname=${host}`,
       '--accept-routes',
       '--reset',
-      '--timeout=20s',
+      '--timeout=45s',
     ])
     if (result.status !== 0) {
-      if (fresh) wipe(queue)
-      throw new TailscaleError(scrub(result.stderr || result.stdout || 'Tailscale did not connect', auth))
+      const state = backendState(queue)
+      if (state.backend === 'NeedsMachineAuth') awaitingApproval = true
+      else if (state.backend !== 'Running' && state.backend !== 'Starting') {
+        const raw = scrub(result.stderr || result.stdout || '', auth)
+        throw new TailscaleError(joinFailureMessage(state, raw, scrub(logTail(queue), auth)))
+      }
     }
   }
   catch (err) {
@@ -515,6 +549,10 @@ export async function connectTailnet(queue: string, key: string, hostname = '', 
   try { info = readNode(queue) }
   catch {
     info = { queue, online: false, hostname: host, ip: '', state: 'Joined', detail: '' }
+  }
+  if (awaitingApproval) {
+    info.state = 'Needs approval'
+    info.detail = 'Approve this device in the Tailscale admin console.'
   }
   if (!info.hostname) info.hostname = host
   PENDING.set(queue, info)

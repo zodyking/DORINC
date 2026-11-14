@@ -141,13 +141,15 @@ function startEdit(printer: PrinterDevice) {
 
 async function addPrinter() {
   await withBusy('add', async () => {
-    const res = await $fetch<{ identity: string }>('/api/printers/devices', { method: 'POST', body: { ...addForm } })
+    const res = await $fetch<{ identity: string, warning?: string }>('/api/printers/devices', { method: 'POST', body: { ...addForm } })
     addForm.label = ''
     addForm.queue = ''
     addForm.host = ''
     addForm.authKey = ''
     addForm.tailHostname = ''
-    return `Printer configured (${res.identity})`
+    return res.warning
+      ? `Printer saved (${res.identity}). ${res.warning}`
+      : `Printer configured (${res.identity})`
   })
 }
 
@@ -209,12 +211,14 @@ async function tailscale(queue: string, action: 'join' | 'leave') {
   const form = tailForms[queue] || { auth_key: '', hostname: '' }
   if (action === 'leave' && !confirm('Remove this printer from the tailnet?')) return
   await withBusy(`tail-${queue}`, async () => {
-    await $fetch(`/api/printers/devices/${encodeURIComponent(queue)}/tailscale`, {
+    const res = await $fetch<{ device?: { state?: string, detail?: string } }>(`/api/printers/devices/${encodeURIComponent(queue)}/tailscale`, {
       method: 'POST',
       body: { action, auth_key: form.auth_key, hostname: form.hostname },
     })
     form.auth_key = ''
-    return action === 'join' ? 'Joined the tailnet' : 'Removed from the tailnet'
+    if (action === 'leave') return 'Removed from the tailnet'
+    if (res.device?.state === 'Needs approval') return `Signed in. ${res.device.detail || 'Approve this device in the Tailscale admin console.'}`
+    return 'Joined the tailnet'
   })
 }
 

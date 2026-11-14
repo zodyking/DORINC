@@ -35,7 +35,7 @@ import {
   type PrinterStats,
   type QueueOption,
 } from '../../../shared/printers'
-import { PrintError } from './errors'
+import { PrintError, TailscaleError } from './errors'
 import { activeCupsJobs, cupsAvailable, cupsCmd, cupsPrintersReport } from './cups'
 import { sendDirectToPrinter } from './direct-print'
 import { brotherReadings, looksLikeBrother, snmpGet, OID_MODEL } from './brother-snmp'
@@ -430,21 +430,32 @@ export async function addPrinter(
   const address = requireIpv4(opts.host)
   const name = opts.label.trim().slice(0, 100)
   if (!name) throw new PrintError('Enter a display name')
-  let joined: { hostname?: string, ip?: string } | null = null
+  let joined: { hostname?: string, ip?: string, state?: string } | null = null
+  let tailWarning = ''
   let saved = false
   try {
     if (opts.authKey?.trim()) {
-      joined = await connectTailnet(queue, opts.authKey, opts.tailHostname || '', name)
-      bindHost(queue, address)
+      try {
+        joined = await connectTailnet(queue, opts.authKey, opts.tailHostname || '', name)
+        bindHost(queue, address)
+        if (joined.state === 'Needs approval') {
+          tailWarning = 'Approve this printer’s device in the Tailscale admin console. It will connect once approved.'
+        }
+      }
+      catch (err) {
+        if (!(err instanceof TailscaleError)) throw err
+        tailWarning = err.message
+      }
     }
     const discovery = await discoverPrinter(address)
     if (!discovery.reachable) {
-      if (!joined) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
-      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined)
+      if (!opts.authKey?.trim()) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
+      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined ?? { hostname: opts.tailHostname || '' })
       saved = true
-      await recordPrinterEvent(db, 'warning', `Printer ${queue} joined the tailnet but did not answer`)
+      const note = tailWarning || 'Joined the tailnet. Waiting for the printer to answer through its route.'
+      await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${note}`.slice(0, 600))
       kickPrinterImage(db, queue)
-      return 'joined the tailnet, waiting for the printer'
+      return { identity: name, warning: note }
     }
     let choice: { protocol: string, label: string, driver: string }
     try {
@@ -460,13 +471,13 @@ export async function addPrinter(
       saved = true
       await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${err.message}`)
       kickPrinterImage(db, queue)
-      return discovery.identity || name
+      return { identity: discovery.identity || name, warning: tailWarning }
     }
     await savePrinter(db, queue, name, address, choice, joined)
     saved = true
     await recordPrinterEvent(db, 'success', `Printer ${queue} configured on ${address} (${choice.label.slice(0, 80)})`)
     kickPrinterImage(db, queue)
-    return choice.label
+    return { identity: choice.label, warning: tailWarning }
   }
   catch (err) {
     if (joined && !saved) {
