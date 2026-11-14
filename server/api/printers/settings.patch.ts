@@ -1,24 +1,26 @@
-import { useDb } from '../../db/client'
 import { requirePermission } from '../../utils/require-permission'
 import { validateBody } from '../../utils/validate'
-import { apiError } from '../../utils/api-error'
 import { mailSettingsSchema } from '../../../shared/validators/printers'
-import { listMailFolders, PrintError, publicSettings, saveMailSettings } from '../../services/printers'
+import { engineJson, printApiError } from '../../services/printers'
 
+/** Save email-to-print settings, or list the mailbox folders for the typed account. */
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'printers.manage.all')
-  const body = await validateBody(event, mailSettingsSchema)
+  const { load_folders: loadFolders, ...values } = await validateBody(event, mailSettingsSchema)
   try {
-    if (body.load_folders) {
-      const cfg = await saveMailSettings(useDb(), body)
-      const folders = await listMailFolders(cfg)
-      return { ok: true, settings: publicSettings(cfg), folders }
+    if (loadFolders) {
+      return await engineJson<{ ok: true, folders: string[] }>('/api/mail/folders', {
+        method: 'POST',
+        json: values,
+        timeoutMs: 45_000,
+      })
     }
-    const settings = await saveMailSettings(useDb(), body)
-    return { ok: true, settings: publicSettings(settings) }
+    return await engineJson<{ ok: true, settings: Record<string, unknown> }>('/api/settings/mail', {
+      method: 'PUT',
+      json: values,
+    })
   }
   catch (err) {
-    if (err instanceof PrintError) throw apiError(event, 'VALIDATION_ERROR', err.message)
-    throw apiError(event, 'UPSTREAM_ERROR', err instanceof Error ? err.message : 'Could not save email settings')
+    throw printApiError(event, err, 'Could not save email settings')
   }
 })

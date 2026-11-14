@@ -5,7 +5,8 @@
 #   APP_URL=https://…  # public URL
 #   DATABASE_URL=…     # optional override (recommended if workers cannot resolve setup host)
 #
-# Services deployed together: nuxt-app + worker + pdf-worker + laravel-pdf (mail, PDF, backups, AI).
+# Services deployed together: nuxt-app + worker + pdf-worker + laravel-pdf (mail, PDF, backups, AI)
+# + dorinc-print-engine (PrintHarbor: CUPS, printer drivers, Tailscale, email-to-print).
 # All services join dokploy-network so linked Postgres hostnames resolve from workers too.
 # Optional profiles: migrate (one-shot), redis (not required for Phase 1).
 
@@ -31,7 +32,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-}
       PDF_RENDER_URL: ${PDF_RENDER_URL:-http://laravel-pdf:8080}
       DORINC_DATA_DIR: /app/.data
-      PRINTER_DATA_DIR: /app/.data/printers
+      # Shop printing runs in its own container. The API token is a file on the shared volume.
+      PRINT_ENGINE_URL: ${PRINT_ENGINE_URL:-http://dorinc-print-engine:47831}
       # Dedicated worker + pdf-worker containers handle background jobs; disable in-process loops.
       EMBEDDED_WORKERS: 'false'
     networks:
@@ -100,6 +102,31 @@ services:
       retries: 3
       start_period: 10s
 
+  # PrintHarbor engine: CUPS + drivers, one Tailscale device per printer, IMAP email-to-print.
+  # Internal only. nuxt-app is its one client and holds every permission check.
+  dorinc-print-engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.printharbor
+    restart: unless-stopped
+    expose:
+      - '47831'
+    volumes:
+      - dorinc-runtime:/runtime
+      - dorinc-print-cups:/etc/cups
+      - dorinc-print-spool:/var/spool/cups
+    environment:
+      DATA_DIR: /runtime/printharbor
+      SNMP_COMMUNITY: ${SNMP_COMMUNITY:-public}
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:47831/api/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
   # Optional one-shot migrate. Upgrades normally rely on boot migrate in nuxt-app/worker/pdf-worker.
   migrate:
     build:
@@ -131,3 +158,5 @@ networks:
 volumes:
   redis-data:
   dorinc-runtime:
+  dorinc-print-cups:
+  dorinc-print-spool:

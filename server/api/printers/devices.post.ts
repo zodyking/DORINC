@@ -1,25 +1,22 @@
-import { useDb } from '../../db/client'
 import { requirePermission } from '../../utils/require-permission'
 import { validateBody } from '../../utils/validate'
-import { apiError } from '../../utils/api-error'
 import { addPrinterSchema } from '../../../shared/validators/printers'
-import { addPrinter, PrintError, TailscaleError } from '../../services/printers'
+import { engineJson, printApiError } from '../../services/printers'
 
+/**
+ * Start adding a printer. The engine joins Tailscale, reads the printer, and
+ * installs a driver in the background; the page shows each step as it runs.
+ */
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'printers.manage.all')
   const body = await validateBody(event, addPrinterSchema)
   try {
-    const result = await addPrinter(useDb(), {
-      label: body.label,
-      queue: body.queue,
-      host: body.host,
-      authKey: body.authKey,
-      tailHostname: body.tailHostname,
+    return await engineJson<{ ok: true, queue: string, label: string }>('/api/printers', {
+      method: 'POST',
+      json: { label: body.label, host: body.host, auth_key: body.authKey },
     })
-    return { ok: true, ...result }
   }
   catch (err) {
-    if (err instanceof PrintError || err instanceof TailscaleError) throw apiError(event, 'VALIDATION_ERROR', err.message)
-    throw apiError(event, 'INTERNAL_ERROR', err instanceof Error ? err.message : 'Could not add printer')
+    throw printApiError(event, err, 'Could not add the printer')
   }
 })

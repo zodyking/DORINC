@@ -12,3 +12,6 @@ coverage
 playwright-report
 test-results
 *.log
+**/__pycache__
+**/*.pyc
+printharbor/tests

@@ -2,7 +2,7 @@ import type { Db } from '../../db/client'
 import { mergeInvoicePdfsNewestFirst } from '../invoice-print.service'
 import { renderServiceLogSheetPdf } from '../service-log-sheet.service'
 import { postDocumentPrintedTeamMessage } from '../workflow-chat.service'
-import { releaseQueues, submitFile } from './engine'
+import { submitPrint } from './engine'
 import { PrintError } from './errors'
 
 export type AppPrintKind = 'invoice' | 'service-log-sheet'
@@ -41,7 +41,7 @@ export async function sendAppDocument(
     filename = 'Blank service log sheet.pdf'
     printed = [{ label: 'Blank service log sheet' }]
   }
-  const jobId = await submitFile(db, {
+  const jobId = await submitPrint({
     filename,
     data: pdf,
     queue: opts.queue,
@@ -49,9 +49,8 @@ export async function sendAppDocument(
     sides: opts.sides || 'one-sided',
     source: 'app',
     sender: opts.actorName,
-    release: false,
+    contentType: 'application/pdf',
   })
-  void releaseQueues(db).catch(() => {})
   for (const item of printed) {
     await postDocumentPrintedTeamMessage(db, {
       senderUserId: opts.actorUserId,
