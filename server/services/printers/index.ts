@@ -7,6 +7,8 @@ export {
   cancelPendingJob,
   clearPrinterSnapshots,
   joinPrinterTailnet,
+  printerSetup,
+  retryPrinterSetup,
   keepTailnetRunning,
   leavePrinterTailnet,
   pageSnapshot,

@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       authKey: body.authKey,
       tailHostname: body.tailHostname,
     })
-    return { ok: true, identity: result.identity, warning: result.warning }
+    return { ok: true, ...result }
   }
   catch (err) {
     if (err instanceof PrintError || err instanceof TailscaleError) throw apiError(event, 'VALIDATION_ERROR', err.message)

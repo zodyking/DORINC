@@ -28,6 +28,7 @@ export type PrinterDevice = {
   tail: { online: boolean, hostname: string, ip: string, state: string }
   options: Array<{ key: string, label: string, current: string, paper: boolean, choices: Array<{ value: string, label: string }> }>
   driverInfo: { name: string, package: string, connection: string, ppd: string } | null
+  setup: { phase: string, error: string, warning: string, startedAt: string } | null
 }
 
 export type PrintersPage = {
