@@ -54,7 +54,7 @@ export const CONTROL_PANEL_GROUPS: ControlPanelGroupDef[] = [
         id: 'printers',
         title: 'Printers',
         icon: '🖨',
-        subtitle: 'Shop printers, pictures, email-to-print, and Tailscale',
+        subtitle: 'Add shop printers and set up email to print',
       },
       {
         id: 'catalog',

@@ -32,7 +32,7 @@ export function usePrintTargets() {
   }
 
   async function send(body: SendToPrinterBody) {
-    return $fetch<{ ok: true, jobId: string, filename: string }>('/api/printers/send', {
+    return $fetch<{ ok: true, jobId: number, filename: string }>('/api/printers/send', {
       method: 'POST',
       body,
     })
