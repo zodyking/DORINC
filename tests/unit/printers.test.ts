@@ -259,12 +259,24 @@ describe('Tailscale join outcomes', () => {
       .toBe('Tailscale did not connect: not connected to home DERP region')
   })
 
-  it('saves the printer when the tailnet join does not finish', () => {
+  it('saves the printer first and finishes setup in the background', () => {
     const engine = source('server/services/printers/engine.ts')
-    expect(engine).toContain('tailWarning = err.message')
-    expect(engine).toContain('return { identity: name, warning: note }')
+    const add = engine.slice(engine.indexOf('export async function addPrinter('), engine.indexOf('function setupStep('))
+    expect(add).toContain('await savePrinter(db, queue, name, address')
+    expect(add).toContain('void finishPrinterSetup(db,')
+    expect(add).not.toContain('await connectTailnet')
+    expect(add).not.toContain('await configureQueue')
+    expect(engine).toContain('setup: printerSetup(row.queue)')
+    expect(engine).toContain('warning = err.message')
     expect(source('server/services/printers/tailnet.ts')).toContain("'--timeout=45s'")
-    expect(source('app/components/admin/settings/SettingsPrintersPanel.vue')).toContain('res.warning')
+    const panel = source('app/components/admin/settings/SettingsPrintersPanel.vue')
+    expect(panel).toContain('Setting up: {{ printer.setup.phase }}')
+    expect(panel).toContain('printer.image.pending || !!printer.setup?.phase')
+    expect(panel).toContain('Set up again')
+  })
+
+  it('only scrolls the Control Panel to a section in the browser', () => {
+    expect(source('app/pages/admin/index.vue')).toContain('if (import.meta.client) nextTick(() => {')
   })
 })
 

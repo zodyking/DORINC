@@ -148,7 +148,7 @@ watch(() => route.query.tab, (tab) => {
     for (const key of CONTROL_PANEL_SECTION_IDS) {
       openSections[key] = key === id
     }
-    nextTick(() => {
+    if (import.meta.client) nextTick(() => {
       document.getElementById(`cp-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }

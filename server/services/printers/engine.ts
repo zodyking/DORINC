@@ -419,6 +419,8 @@ async function savePrinter(
       protocol: choice.protocol,
       identity: (choice.label || '').slice(0, 120),
       driver: (choice.driver || '').slice(0, 120),
+      ...(hostname ? { tailHostname: hostname } : {}),
+      ...(ip ? { tailIp: ip } : {}),
       updatedAt: new Date(),
     },
   })
@@ -433,6 +435,19 @@ async function freeQueueName(db: Db, label: string) {
   throw new PrintError('Choose a different printer name')
 }
 
+export type PrinterSetup = { phase: string, error: string, warning: string, startedAt: string }
+
+const SETUP = new Map<string, PrinterSetup>()
+
+export function printerSetup(queue: string): PrinterSetup | null {
+  return SETUP.get(queue) || null
+}
+
+/**
+ * Save the printer straight away, then join its tailnet device, read it, and
+ * install a driver in the background. That work can take minutes through a
+ * new tailnet route, longer than a reverse proxy keeps a request open.
+ */
 export async function addPrinter(
   db: Db,
   opts: { label: string, queue?: string, host: string, authKey?: string, tailHostname?: string },
@@ -442,64 +457,95 @@ export async function addPrinter(
   const queue = opts.queue?.trim() || await freeQueueName(db, name)
   if (!QUEUE_RE.test(queue)) throw new PrintError('Queue must begin with a letter and contain only letters, numbers, _ or -')
   const address = requireIpv4(opts.host)
+  const key = opts.authKey?.trim() || ''
+  const tailHostname = key ? (opts.tailHostname?.trim() || hostnameFor(name, queue)) : ''
+  await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, tailHostname ? { hostname: tailHostname } : null)
+  SETUP.set(queue, {
+    phase: key ? 'Joining Tailscale' : 'Reading the printer',
+    error: '',
+    warning: '',
+    startedAt: new Date().toISOString(),
+  })
+  await recordPrinterEvent(db, 'info', `Printer ${queue} added on ${address}; setting it up`)
+  void finishPrinterSetup(db, { queue, name, address, key, tailHostname })
+  return { queue, identity: name, pending: true, warning: '' }
+}
+
+function setupStep(queue: string, patch: Partial<PrinterSetup>) {
+  const current = SETUP.get(queue)
+  if (current) SETUP.set(queue, { ...current, ...patch })
+}
+
+export async function finishPrinterSetup(
+  db: Db,
+  opts: { queue: string, name: string, address: string, key: string, tailHostname: string },
+) {
+  const { queue, name, address, key } = opts
   let joined: { hostname?: string, ip?: string, state?: string } | null = null
-  let tailWarning = ''
-  let saved = false
+  let warning = ''
   try {
-    if (opts.authKey?.trim()) {
+    if (key) {
       try {
-        joined = await connectTailnet(queue, opts.authKey, opts.tailHostname || '', name)
+        joined = await connectTailnet(queue, key, opts.tailHostname, name)
         bindHost(queue, address)
+        await db.update(printers).set({
+          tailHostname: joined.hostname || opts.tailHostname,
+          tailIp: joined.ip || '',
+          updatedAt: new Date(),
+        }).where(eq(printers.queue, queue))
         if (joined.state === 'Needs approval') {
-          tailWarning = 'Approve this printer’s device in the Tailscale admin console. It will connect once approved.'
+          warning = 'Approve this printer’s device in the Tailscale admin console. It will connect once approved.'
         }
       }
       catch (err) {
         if (!(err instanceof TailscaleError)) throw err
-        tailWarning = err.message
+        warning = err.message
       }
     }
+    setupStep(queue, { phase: 'Reading the printer', warning })
     const discovery = await discoverPrinter(address)
     if (!discovery.reachable) {
-      if (!opts.authKey?.trim()) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
-      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined ?? { hostname: hostnameFor(name, queue) })
-      saved = true
-      const note = tailWarning || 'Joined the tailnet. Waiting for the printer to answer through its route.'
-      await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${note}`.slice(0, 600))
+      const note = warning || (key
+        ? 'Joined the tailnet, but the printer did not answer through its route. Check that the subnet route is approved and the printer is on.'
+        : 'The printer did not answer. Check the address and that this host can reach it.')
+      setupStep(queue, { phase: '', error: note })
+      await recordPrinterEvent(db, 'warning', `Printer ${queue}: ${note}`.slice(0, 600))
       kickPrinterImage(db, queue)
-      return { identity: name, warning: note }
+      return
     }
+    setupStep(queue, { phase: 'Installing the driver' })
     let choice: { protocol: string, label: string, driver: string }
     try {
       choice = await configureQueue(queue, address, discovery, await loadDrivers())
     }
     catch (err) {
       if (!(err instanceof PrintError) || !/not installed|not on PATH/i.test(err.message)) throw err
-      await savePrinter(db, queue, name, address, {
-        protocol: discovery.socket ? 'socket' : 'ipp',
-        label: discovery.identity,
-        driver: '',
-      }, joined)
-      saved = true
-      await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${err.message}`)
-      kickPrinterImage(db, queue)
-      return { identity: discovery.identity || name, warning: tailWarning }
+      choice = { protocol: discovery.socket ? 'socket' : 'ipp', label: discovery.identity, driver: '' }
+      warning = warning || err.message
     }
     await savePrinter(db, queue, name, address, choice, joined)
-    saved = true
-    await recordPrinterEvent(db, 'success', `Printer ${queue} configured on ${address} (${choice.label.slice(0, 80)})`)
+    await recordPrinterEvent(db, 'success', `Printer ${queue} configured on ${address} (${(choice.label || name).slice(0, 80)})`)
     kickPrinterImage(db, queue)
-    return { identity: choice.label, warning: tailWarning }
+    if (warning) setupStep(queue, { phase: '', warning })
+    else SETUP.delete(queue)
   }
   catch (err) {
-    if (joined && !saved) {
-      try { await disconnectTailnet(queue) }
-      catch {
-        await recordPrinterEvent(db, 'warning', `Printer ${queue} could not be saved, and its tailnet device may still be signed in`)
-      }
-    }
-    throw err
+    const message = String(err instanceof Error ? err.message : err).slice(0, 400) || 'Setup failed'
+    setupStep(queue, { phase: '', error: message })
+    await recordPrinterEvent(db, 'error', `Printer ${queue} setup failed: ${message}`).catch(() => {})
   }
+}
+
+/** Run setup again for a saved printer (after approving a device, fixing a route, etc.). */
+export async function retryPrinterSetup(db: Db, queue: string) {
+  const row = await getPrinterRow(db, queue)
+  if (!row) throw new PrintError('Printer not found')
+  if (SETUP.get(queue)?.phase) return
+  SETUP.set(queue, { phase: 'Reading the printer', error: '', warning: '', startedAt: new Date().toISOString() })
+  if (hasNode(queue)) {
+    await resumeTailnet([{ queue, host: row.host, tailHostname: row.tailHostname }])
+  }
+  void finishPrinterSetup(db, { queue, name: row.label, address: row.host, key: '', tailHostname: row.tailHostname })
 }
 
 export async function updatePrinter(db: Db, queue: string, label: string, ip: string, reread = false) {
@@ -1235,6 +1281,7 @@ export async function buildPrintersPage(db: Db, tab: string) {
         || replacementFor(row.label),
       image: describePrinterImage(row),
       category: categoryFor(row.identity || row.label),
+      setup: printerSetup(row.queue),
       options: live && tab === 'devices' ? await queueOptions(row.queue) : [],
       driverInfo: live && tab === 'devices'
         ? describeDriver(row.driver, row.protocol, await installedDriver(row.queue))

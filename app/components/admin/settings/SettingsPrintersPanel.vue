@@ -141,13 +141,18 @@ function startEdit(printer: PrinterDevice) {
 
 async function addPrinter() {
   await withBusy('add', async () => {
-    const res = await $fetch<{ identity: string, warning?: string }>('/api/printers/devices', { method: 'POST', body: { ...addForm } })
+    const res = await $fetch<{ identity: string }>('/api/printers/devices', { method: 'POST', body: { ...addForm } })
     addForm.label = ''
     addForm.host = ''
     addForm.authKey = ''
-    return res.warning
-      ? `Printer saved (${res.identity}). ${res.warning}`
-      : `Printer configured (${res.identity})`
+    return `${res.identity} saved. Setup continues below.`
+  })
+}
+
+async function retrySetup(queue: string) {
+  await withBusy(`setup-${queue}`, async () => {
+    await $fetch(`/api/printers/devices/${encodeURIComponent(queue)}/setup`, { method: 'POST' })
+    return 'Setting the printer up again'
   })
 }
 
@@ -253,7 +258,7 @@ watch([tab, () => props.active], () => {
 }, { immediate: true })
 
 let pendingTimer: ReturnType<typeof setTimeout> | null = null
-watch(() => page.value?.printers.some(printer => printer.image.pending), (pending) => {
+watch(() => page.value?.printers.some(printer => printer.image.pending || !!printer.setup?.phase), (pending) => {
   if (pendingTimer) {
     clearTimeout(pendingTimer)
     pendingTimer = null
@@ -298,12 +303,19 @@ onUnmounted(() => {
                       <strong>{{ printer.label }}</strong>
                       <small>{{ printer.identity || 'Printer' }} · {{ printer.host }}</small>
                     </div>
-                    <span class="status-pill" :class="printer.online ? 'is-online' : 'is-offline'">{{ printer.online ? 'Reachable' : 'Offline' }}</span>
+                    <span v-if="printer.setup?.phase" class="status-pill is-offline">Setting up</span>
+                    <span v-else class="status-pill" :class="printer.online ? 'is-online' : 'is-offline'">{{ printer.online ? 'Reachable' : 'Offline' }}</span>
                     <div v-if="canManage" class="ph-acts">
                       <button type="button" class="textlink" @click="startEdit(printer)">Edit</button>
                       <button type="button" class="text-danger" :disabled="busy === `rm-${printer.queue}`" @click="removePrinter(printer.queue, printer.label)">Remove</button>
                     </div>
                   </div>
+                  <p v-if="printer.setup?.phase" class="ph-setup">Setting up: {{ printer.setup.phase }}…</p>
+                  <p v-else-if="printer.setup?.error" class="ph-setup is-bad">
+                    {{ printer.setup.error }}
+                    <button v-if="canManage" type="button" class="textlink" :disabled="busy === `setup-${printer.queue}`" @click="retrySetup(printer.queue)">Set up again</button>
+                  </p>
+                  <p v-else-if="printer.setup?.warning" class="ph-setup is-warn">{{ printer.setup.warning }}</p>
                   <PrinterStation
                     :queue="printer.queue"
                     :label="printer.label"
@@ -449,7 +461,7 @@ onUnmounted(() => {
                   <small>Optional. Joins this printer as its own tailnet device named after the printer. The key is used once and is not saved.</small>
                 </label>
                 <button class="btn primary" type="submit" :disabled="busy === 'add'">
-                  {{ busy === 'add' ? (addForm.authKey ? 'Joining Tailscale… this can take a minute' : 'Creating…') : 'Add printer' }}
+                  {{ busy === 'add' ? 'Saving…' : 'Add printer' }}
                 </button>
               </form>
               <p v-else class="empty">You need Manage printers permission to add destinations.</p>
@@ -693,4 +705,7 @@ onUnmounted(() => {
   .ph-row, .ph-row-4, .ph-options, .ph-checks { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
 }
+.ph-setup { margin: .4rem 0; font-size: .85rem; color: var(--color-text-muted, #555); }
+.ph-setup.is-bad { color: var(--color-danger, #b42318); }
+.ph-setup.is-warn { color: var(--color-warning, #9a6700); }
 </style>
