@@ -6,7 +6,7 @@ import { hasPermission, requirePermission, type AuthContext } from '../../utils/
 import { validateBody } from '../../utils/validate'
 import { sendToPrinterSchema } from '../../../shared/validators/printers'
 import { InvoicePrintServiceError } from '../../services/invoice-print.service'
-import { PrintError } from '../../services/printers'
+import { printApiError } from '../../services/printers'
 import { sendAppDocument } from '../../services/printers/send-document'
 
 /** Queue an invoice (or several) or the blank service log sheet on a shop printer. */
@@ -33,10 +33,9 @@ export default defineEventHandler(async (event) => {
     return { ok: true, ...result }
   }
   catch (err) {
-    if (err instanceof PrintError) throw apiError(event, 'VALIDATION_ERROR', err.message)
     if (err instanceof InvoicePrintServiceError) {
       throw apiError(event, err.code === 'NOT_FOUND' ? 'NOT_FOUND' : 'VALIDATION_ERROR', err.message)
     }
-    throw apiError(event, 'INTERNAL_ERROR', err instanceof Error ? err.message : 'Could not send to the printer')
+    throw printApiError(event, err, 'Could not send to the printer')
   }
 })

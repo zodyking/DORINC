@@ -1,21 +1,21 @@
 import { z } from 'zod'
-import { PRINTER_IMAGE_CATEGORIES, PRINTER_SIDES, PRINTER_TABS, QUEUE_RE } from '../printers'
+import { IPV4_RE, PRINTER_IMAGE_CATEGORIES, PRINTER_PAGES, PRINTER_SIDES, QUEUE_RE } from '../printers'
+
+const ipv4 = z.string().trim().regex(IPV4_RE, 'Enter the printer IPv4 address, such as 192.168.1.50')
 
 export const printersPageQuerySchema = z.object({
-  tab: z.enum(PRINTER_TABS).optional().default('overview'),
+  tab: z.enum(PRINTER_PAGES).optional().default('overview'),
 })
 
 export const addPrinterSchema = z.object({
   label: z.string().trim().min(1, 'Enter a printer name').max(100),
-  queue: z.string().trim().optional().default(''),
-  host: z.string().trim().min(7, 'Enter the printer IPv4 address').max(15, 'Enter the printer IPv4 address'),
-  authKey: z.string().optional().default(''),
-  tailHostname: z.string().optional().default(''),
+  host: ipv4,
+  authKey: z.string().trim().max(300).optional().default(''),
 })
 
 export const updatePrinterSchema = z.object({
-  label: z.string().trim().min(1).max(100),
-  host: z.string().trim().min(7).max(15),
+  label: z.string().trim().min(1, 'Enter a printer name').max(100),
+  host: ipv4,
   reread: z.boolean().optional().default(false),
 })
 
@@ -23,14 +23,8 @@ export const printerOptionsSchema = z.object({
   options: z.record(z.string(), z.string()),
 })
 
-export const uploadPrintQuerySchema = z.object({
-  queue: z.string().trim().regex(QUEUE_RE),
-  sides: z.enum(PRINTER_SIDES).optional().default('one-sided'),
-  copies: z.coerce.number().int().min(1).max(10).optional().default(1),
-})
-
 export const mailSettingsSchema = z.object({
-  mail_enabled: z.boolean().optional().default(false),
+  mail_enabled: z.boolean().optional(),
   imap_host: z.string().optional(),
   imap_port: z.coerce.number().int().min(1).max(65535).optional(),
   imap_user: z.string().optional(),
@@ -45,7 +39,6 @@ export const mailSettingsSchema = z.object({
   print_email_body: z.boolean().optional(),
   allowed_senders: z.string().optional(),
   mail_recipient: z.string().optional(),
-  new_pin: z.string().optional(),
   email_pin: z.string().optional(),
   reply_enabled: z.boolean().optional(),
   smtp_from: z.string().optional(),
@@ -56,32 +49,29 @@ export const mailSettingsSchema = z.object({
 
 export const tailscaleActionSchema = z.object({
   action: z.enum(['join', 'leave']),
-  auth_key: z.string().optional().default(''),
-  hostname: z.string().optional().default(''),
-})
-
-export const imageActionSchema = z.object({
-  action: z.enum(['apply', 'auto', 'search', 'preview', 'apply-preview']),
-  illustration: z.enum(PRINTER_IMAGE_CATEGORIES).or(z.literal('')).optional(),
-  choice: z.string().optional(),
+  auth_key: z.string().trim().max(300).optional().default(''),
 })
 
 export const queueParamSchema = z.object({
   queue: z.string().trim().regex(QUEUE_RE),
 })
 
+export const candidateParamSchema = z.object({
+  kind: z.enum(['unifi', 'wiki']),
+  item: z.string().trim().regex(/^[A-Za-z0-9_-]{1,40}$/),
+})
+
 export const jobIdParamSchema = z.object({
-  id: z.string().uuid(),
+  id: z.coerce.number().int().positive(),
 })
 
 export const imageSettingsSchema = z.object({
   action: z.enum(['save', 'refresh', 'rescan', 'clear']).optional().default('save'),
-  images_auto: z.boolean().optional().default(true),
-  images_unifi: z.boolean().optional().default(true),
-  images_wikimedia: z.boolean().optional().default(true),
-  images_cache: z.boolean().optional().default(true),
-  images_catalog_days: z.coerce.number().int().min(1).max(90).optional().default(14),
+  images_auto: z.boolean().optional(),
 })
+
+export const IMAGE_ACTIONS = ['apply', 'auto', 'search', 'preview', 'apply-preview'] as const
+export const imageIllustrationSchema = z.enum(PRINTER_IMAGE_CATEGORIES)
 
 export const sendToPrinterSchema = z.object({
   kind: z.enum(['invoice', 'service-log-sheet']),

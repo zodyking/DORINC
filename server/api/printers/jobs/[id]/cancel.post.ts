@@ -1,19 +1,15 @@
-import { useDb } from '../../../../db/client'
 import { requirePermission } from '../../../../utils/require-permission'
 import { validateParams } from '../../../../utils/validate'
-import { apiError } from '../../../../utils/api-error'
 import { jobIdParamSchema } from '../../../../../shared/validators/printers'
-import { cancelPendingJob, PrintError } from '../../../../services/printers'
+import { engineJson, printApiError } from '../../../../services/printers'
 
 export default defineEventHandler(async (event) => {
   requirePermission(event, 'printers.print.all')
   const params = validateParams(event, jobIdParamSchema)
   try {
-    await cancelPendingJob(useDb(), params.id)
-    return { ok: true }
+    return await engineJson<{ ok: true }>(`/api/jobs/${params.id}/cancel`, { method: 'POST', timeoutMs: 60_000 })
   }
   catch (err) {
-    if (err instanceof PrintError) throw apiError(event, 'VALIDATION_ERROR', err.message)
-    throw apiError(event, 'INTERNAL_ERROR', err instanceof Error ? err.message : 'Could not cancel job')
+    throw printApiError(event, err, 'Could not cancel the job')
   }
 })
