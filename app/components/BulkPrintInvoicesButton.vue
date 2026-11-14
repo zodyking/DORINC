@@ -40,7 +40,7 @@ interface PrintableInvoice {
 }
 
 type Phase = 'choose' | 'select' | 'working'
-type PrintMode = 'device' | 'staples'
+type PrintMode = 'device' | 'staples' | 'printer'
 
 const open = ref(false)
 const phase = ref<Phase>('choose')
@@ -48,6 +48,10 @@ const mode = ref<PrintMode>('device')
 const error = ref('')
 const selected = ref<Set<string>>(new Set())
 const busy = ref(false)
+const printerQueue = ref('')
+const { targets: printTargets, send: sendToPrinter } = usePrintTargets()
+const canSendToPrinter = computed(() => auth.can('printers.print.all'))
+const printerLabel = computed(() => printTargets.value.find(p => p.queue === printerQueue.value)?.label || 'printer')
 
 const {
 
@@ -96,7 +100,8 @@ async function openModal() {
   await refreshInvoices()
 }
 
-function chooseMode(next: PrintMode) {
+function chooseMode(next: PrintMode, queue = '') {
+  printerQueue.value = queue
   if (next === 'staples' && !canStaples.value) {
     error.value = 'You do not have permission to send Staples print orders'
     return
@@ -121,7 +126,12 @@ async function submit() {
   error.value = ''
   phase.value = 'working'
   try {
-    if (mode.value === 'device') {
+    if (mode.value === 'printer') {
+      await sendToPrinter({ kind: 'invoice', queue: printerQueue.value, invoiceIds: [...selected.value] })
+      open.value = false
+      emit('printed')
+    }
+    else if (mode.value === 'device') {
       const blob = await $fetch<Blob>('/api/invoices/bulk-print', {
         method: 'POST',
         body: {
@@ -184,7 +194,9 @@ defineExpose({ openModal })
       <div class="card modal-card" style="max-width:640px; width:100%;">
         <div class="chead">
           <h3>
-            {{ phase === 'choose' ? 'Bulk print invoices' : (mode === 'staples' ? 'Bulk print via Staples' : 'Bulk print on this device') }}
+            {{ phase === 'choose'
+              ? 'Bulk print invoices'
+              : (mode === 'staples' ? 'Print At Staples' : mode === 'printer' ? `Send to ${printerLabel}` : 'Print From PC') }}
           </h3>
         </div>
         <div class="cbody">
@@ -197,26 +209,42 @@ defineExpose({ openModal })
                 type="button"
                 class="bulk-print-option"
                 role="listitem"
-                :disabled="busy"
-                @click="chooseMode('device')"
+                :disabled="busy || !canStaples"
+                @click="chooseMode('staples')"
               >
-                <span class="bulk-print-option__title">Print from this device</span>
+                <span class="bulk-print-option__title">Print At Staples</span>
                 <span class="bulk-print-option__desc">
-                  Merge invoices into one PDF and open the browser print dialog
+                  Email one merged PDF and get a release code on the Staples page
                 </span>
               </button>
               <button
                 type="button"
                 class="bulk-print-option"
                 role="listitem"
-                :disabled="busy || !canStaples"
-                @click="chooseMode('staples')"
+                :disabled="busy"
+                @click="chooseMode('device')"
               >
-                <span class="bulk-print-option__title">Send to Staples PrintMe</span>
+                <span class="bulk-print-option__title">Print From PC</span>
                 <span class="bulk-print-option__desc">
-                  Email one merged PDF and get a release code on the Staples page
+                  Merge invoices into one PDF and open the browser print dialog
                 </span>
               </button>
+              <template v-if="canSendToPrinter">
+                <button
+                  v-for="printer in printTargets"
+                  :key="printer.queue"
+                  type="button"
+                  class="bulk-print-option"
+                  role="listitem"
+                  :disabled="busy"
+                  @click="chooseMode('printer', printer.queue)"
+                >
+                  <span class="bulk-print-option__title">Send to {{ printer.label }}</span>
+                  <span class="bulk-print-option__desc">
+                    Queue one merged PDF on this shop printer
+                  </span>
+                </button>
+              </template>
             </div>
             <p v-if="error" class="help" style="color:#dc2626;">{{ error }}</p>
             <div style="display:flex; gap:8px; margin-top:12px;">
@@ -276,10 +304,12 @@ defineExpose({ openModal })
                 @click="submit"
               >
                 {{ busy
-                  ? (mode === 'staples' ? 'Sending…' : 'Preparing…')
+                  ? (mode === 'device' ? 'Preparing…' : 'Sending…')
                   : (mode === 'staples'
                     ? `Send ${selectedCount || ''} to Staples`
-                    : `Print ${selectedCount || ''} invoice${selectedCount === 1 ? '' : 's'}`) }}
+                    : mode === 'printer'
+                      ? `Send ${selectedCount || ''} to ${printerLabel}`
+                      : `Print ${selectedCount || ''} invoice${selectedCount === 1 ? '' : 's'}`) }}
               </button>
               <button type="button" class="btn" :disabled="busy" @click="backToChoose">Back</button>
               <button type="button" class="btn" :disabled="busy" @click="closeModal">Cancel</button>
