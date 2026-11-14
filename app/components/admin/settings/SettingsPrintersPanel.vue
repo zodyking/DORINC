@@ -449,7 +449,7 @@ onUnmounted(() => {
                   <small>Optional. Joins this printer as its own tailnet device named after the printer. The key is used once and is not saved.</small>
                 </label>
                 <button class="btn primary" type="submit" :disabled="busy === 'add'">
-                  {{ busy === 'add' ? 'Creating…' : 'Create printer queue' }}
+                  {{ busy === 'add' ? (addForm.authKey ? 'Joining Tailscale… this can take a minute' : 'Creating…') : 'Add printer' }}
                 </button>
               </form>
               <p v-else class="empty">You need Manage printers permission to add destinations.</p>

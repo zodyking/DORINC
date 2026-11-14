@@ -21,7 +21,7 @@ ENV NITRO_PORT=38471
 ENV NITRO_HOST=0.0.0.0
 # PrintHarbor needs a local CUPS daemon (lp, lpstat, lpadmin, IPP Everywhere).
 # Do not overwrite PATH — Node, Tailscale, and the start script live in /usr/local/bin.
-RUN apk add --no-cache cups cups-client cups-filters ca-certificates iptables ip6tables iproute2 \
+RUN apk add --no-cache cups cups-client cups-filters ca-certificates iptables ip6tables iproute2 tini \
   && mkdir -p /run/cups /var/run/cups /var/cache/cups /var/spool/cups /var/log/cups \
     /var/run/tailscale /var/lib/tailscale
 COPY --from=tailscale /usr/local/bin/tailscale /usr/local/bin/tailscale
@@ -35,4 +35,5 @@ COPY --from=build /src/server/db/migrations ./server/db/migrations
 # Blade baseline for template editor + invoice preview (not in laravel-pdf image).
 COPY --from=build /src/server/assets ./server/assets
 EXPOSE 38471
-ENTRYPOINT ["/usr/local/bin/start-app.sh"]
+# tini reaps tailscaled and CUPS children and forwards stop signals, as in PrintHarbor.
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/start-app.sh"]

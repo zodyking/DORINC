@@ -186,7 +186,7 @@ describe('printers staff integration', () => {
     expect(printPage).not.toContain('Printer settings')
     expect(printPage).not.toContain('to="/admin?tab=printers"')
     expect(printPage).not.toContain('lpstat is not installed')
-    expect(settings).toContain('Create printer queue')
+    expect(settings).toContain("'Add printer'")
     expect(settings).toContain('Enable email printing')
     expect(settings).toContain('Look up product photos automatically')
     expect(settings).toContain('CUPS is not running on this host')
@@ -198,7 +198,7 @@ describe('printers staff integration', () => {
     expect(source('server/api/internal/printers/tick.post.ts')).toContain('resolvePendingPrinterImages')
     expect(source('server/services/printers/engine.ts')).toContain('sendDirectToPrinter')
     expect(source('docker/Dockerfile.app')).toContain('cups-client')
-    expect(source('docker/Dockerfile.app')).toContain('ENTRYPOINT ["/usr/local/bin/start-app.sh"]')
+    expect(source('docker/Dockerfile.app')).toContain('ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/start-app.sh"]')
     expect(source('docker/Dockerfile.app')).not.toContain('PATH="/usr/sbin:/usr/bin:/sbin:/bin"')
     expect(source('docker/Dockerfile.app')).toContain('tailscale/tailscale:stable')
     expect(source('docker/Dockerfile.app')).toContain('/usr/local/bin/tailscale')
@@ -362,5 +362,29 @@ describe('Tailscale on launch', () => {
     expect(plugin).toContain('keepTailnetRunning')
     expect(plugin).toContain('schedule(boot, BOOT_RETRY_MS)')
     expect(source('server/services/printers/tailnet.ts')).not.toContain("if (!row.tailHostname || !existsSync(stateFor(row.queue))) continue")
+  })
+})
+
+describe('Tailscale device state like PrintHarbor', () => {
+  it('treats only a Running backend as online', async () => {
+    const { nodeFromStatus } = await import('../../server/services/printers/tailnet')
+    const running = nodeFromStatus('Office_Printer', {
+      BackendState: 'Running',
+      Self: { HostName: 'office-printer', TailscaleIPs: ['fd7a:115c::1', '100.101.102.103'] },
+    })
+    expect(running).toMatchObject({ online: true, state: 'Online', hostname: 'office-printer', ip: '100.101.102.103' })
+    const approval = nodeFromStatus('Office_Printer', { BackendState: 'NeedsMachineAuth', Self: { HostName: 'office-printer' } })
+    expect(approval).toMatchObject({ online: false, state: 'Needs approval' })
+    expect(approval.detail).toContain('Tailscale admin console')
+    const signedOut = nodeFromStatus('Office_Printer', { BackendState: 'NeedsLogin', Self: { HostName: 'container-host' } })
+    expect(signedOut).toMatchObject({ online: false, state: 'Signed out', hostname: '' })
+  })
+
+  it('never blocks the server on the tailscale CLI', () => {
+    const tailnet = source('server/services/printers/tailnet.ts')
+    expect(tailnet).not.toContain('execFileSync')
+    expect(tailnet).not.toContain('spawnSync')
+    expect(tailnet).toContain("headers: { Host: 'local-tailscaled.sock' }")
+    expect(tailnet).toContain('await settle(queue, 30000)')
   })
 })

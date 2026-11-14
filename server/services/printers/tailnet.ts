@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
 import { delimiter, join } from 'node:path'
-import { spawn, execFileSync, spawnSync } from 'node:child_process'
+import { request as httpRequest } from 'node:http'
+import { spawn, execFile } from 'node:child_process'
 import { createSocket as createDgram } from 'node:dgram'
 import { TailscaleError } from './errors'
 import { printersDataDir } from './store'
@@ -166,22 +167,72 @@ function logTail(queue: string): string {
   }
 }
 
-function runTailscale(args: string[]): { status: number, stdout: string, stderr: string } {
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+/** Run the tailscale CLI without blocking the server while it waits on the control plane. */
+function runTailscale(args: string[], timeout = 60000): Promise<{ status: number, stdout: string, stderr: string }> {
   const name = args[0] || 'tailscale'
   const bin = name.startsWith('/') ? name : (which(name) || name)
-  try {
-    const stdout = execFileSync(bin, args.slice(1), { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] })
-    return { status: 0, stdout: stdout || '', stderr: '' }
-  }
-  catch (err) {
-    const error = err as { status?: number, stdout?: string, stderr?: string, code?: string }
-    if (error.code === 'ENOENT') throw new TailscaleError('Tailscale is not installed on this host.')
-    if (String(err).includes('ETIMEDOUT')) throw new TailscaleError('Tailscale took too long to answer.')
-    return { status: error.status || 1, stdout: error.stdout || '', stderr: error.stderr || String(err) }
-  }
+  return new Promise((resolve, reject) => {
+    execFile(bin, args.slice(1), { encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (!err) {
+        resolve({ status: 0, stdout: stdout || '', stderr: stderr || '' })
+        return
+      }
+      const error = err as NodeJS.ErrnoException & { killed?: boolean, code?: string | number }
+      if (error.code === 'ENOENT') {
+        reject(new TailscaleError('Tailscale is not installed on this host.'))
+        return
+      }
+      if (error.killed) {
+        reject(new TailscaleError('Tailscale took too long to answer.'))
+        return
+      }
+      resolve({ status: typeof error.code === 'number' ? error.code : 1, stdout: stdout || '', stderr: stderr || String(err) })
+    })
+  })
 }
 
-function startDaemon(queue: string): void {
+export type LocalStatus = {
+  BackendState?: string
+  AuthURL?: string
+  Health?: string[]
+  Self?: { Online?: boolean, HostName?: string, DNSName?: string, TailscaleIPs?: string[] }
+}
+
+/** GET /localapi/v0/status over the device's own socket (no CLI process). */
+function localStatus(queue: string, timeout = 2500): Promise<LocalStatus> {
+  const socketPath = socketFor(queue)
+  return new Promise((resolve, reject) => {
+    if (!existsSync(socketPath)) {
+      reject(new TailscaleError('The printer device is not running'))
+      return
+    }
+    const req = httpRequest({
+      socketPath,
+      path: '/localapi/v0/status',
+      method: 'GET',
+      headers: { Host: 'local-tailscaled.sock' },
+      timeout,
+    }, (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', chunk => chunks.push(chunk as Buffer))
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new TailscaleError('The printer device did not answer'))
+          return
+        }
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as LocalStatus) }
+        catch { reject(new TailscaleError('The printer device sent an unreadable status')) }
+      })
+    })
+    req.on('timeout', () => req.destroy(new TailscaleError('The printer device did not answer')))
+    req.on('error', err => reject(err instanceof TailscaleError ? err : new TailscaleError('The printer device is not running')))
+    req.end()
+  })
+}
+
+async function startDaemon(queue: string): Promise<void> {
   queue = queueName(queue)
   const folder = dirFor(queue)
   const sockPath = join(folder, 'tailscaled.sock')
@@ -213,14 +264,20 @@ function startDaemon(queue: string): void {
   out.unref()
   if (out.pid) writeFileSync(join(folder, 'tailscaled.pid'), String(out.pid))
   PROCS.set(queue, { pid: out.pid || 0, log: null })
-  const deadline = Date.now() + 8000
+  const deadline = Date.now() + 10000
   while (Date.now() < deadline) {
     if (out.exitCode != null) {
       stopDaemon(queue)
       throw new TailscaleError(logTail(queue) || 'The Tailscale device stopped while starting')
     }
-    if (socketReady(sockPath)) return
-    spawnSync('sleep', ['0.15'])
+    if (socketReady(sockPath)) {
+      try {
+        await localStatus(queue, 1000)
+        return
+      }
+      catch { /* socket file exists before the API answers */ }
+    }
+    await sleep(150)
   }
   stopDaemon(queue)
   throw new TailscaleError(logTail(queue) || 'The Tailscale device did not start')
@@ -483,10 +540,9 @@ export function hasNode(queue: string): boolean {
 
 type Backend = { backend: string, health: string[], authUrl: string }
 
-function backendState(queue: string): Backend {
+async function backendState(queue: string): Promise<Backend> {
   try {
-    const result = runTailscale(['tailscale', '--socket', socketFor(queue), 'status', '--json'])
-    const parsed = JSON.parse(result.stdout || '{}') as { BackendState?: string, Health?: string[], AuthURL?: string }
+    const parsed = await localStatus(queue)
     return {
       backend: parsed.BackendState || '',
       health: (parsed.Health || []).map(item => String(item)).filter(Boolean),
@@ -510,26 +566,51 @@ export function joinFailureMessage(state: Backend, raw: string, log: string): st
   return detail ? `Tailscale did not connect: ${detail}` : 'Tailscale did not connect'
 }
 
-function readNode(queue: string): TailDevice {
-  const sock = socketFor(queue)
-  const result = runTailscale(['tailscale', '--socket', sock, 'status', '--json'])
-  if (result.status !== 0) {
-    throw new TailscaleError(result.stderr || result.stdout || 'Tailscale status failed')
-  }
-  let parsed: { Self?: { Online?: boolean, HostName?: string, TailscaleIPs?: string[], DNSName?: string } }
-  try { parsed = JSON.parse(result.stdout) }
-  catch { parsed = {} }
-  const self = parsed.Self || {}
-  const ip = (self.TailscaleIPs || [])[0] || ''
-  const hostname = self.HostName || String(self.DNSName || '').replace(/\.$/, '')
+const STATE_LABELS: Record<string, string> = {
+  Running: 'Online',
+  Starting: 'Connecting',
+  NeedsMachineAuth: 'Needs approval',
+  NeedsLogin: 'Signed out',
+  Stopped: 'Stopped',
+  NoState: 'Starting',
+}
+
+/** Same rule as PrintHarbor: a printer device is online when its backend is Running. */
+export function nodeFromStatus(queue: string, data: LocalStatus): TailDevice {
+  const self = data.Self || {}
+  const ips = self.TailscaleIPs || []
+  const ip = ips.find(item => !item.includes(':')) || ips[0] || ''
+  const backend = data.BackendState || ''
+  const running = backend === 'Running'
+  let detail = ip
+  if (backend === 'NeedsMachineAuth') detail = 'Approve this device in the Tailscale admin console.'
+  else if (backend === 'NeedsLogin') detail = 'Paste an auth key to join this printer.'
+  else if (!running && data.Health?.length) detail = String(data.Health[0])
   return {
     queue,
-    online: Boolean(self.Online),
-    hostname,
+    online: running,
+    hostname: backend === 'NeedsLogin' || backend === 'NoState'
+      ? ''
+      : (self.HostName || String(self.DNSName || '').split('.')[0] || '').trim(),
     ip,
-    state: self.Online ? 'Online' : 'Offline',
-    detail: ip,
+    state: STATE_LABELS[backend] || backend || 'Unknown',
+    detail,
   }
+}
+
+async function readNode(queue: string): Promise<TailDevice> {
+  return nodeFromStatus(queue, await localStatus(queue))
+}
+
+/** Wait for a freshly authorised device to finish connecting. */
+async function settle(queue: string, ms: number): Promise<Backend> {
+  const deadline = Date.now() + ms
+  let state = await backendState(queue)
+  while (Date.now() < deadline && state.backend !== 'Running' && state.backend !== 'NeedsMachineAuth' && state.backend !== 'NeedsLogin') {
+    await sleep(1000)
+    state = await backendState(queue)
+  }
+  return state
 }
 
 export async function connectTailnet(queue: string, key: string, hostname = '', label = ''): Promise<TailDevice> {
@@ -538,21 +619,21 @@ export async function connectTailnet(queue: string, key: string, hostname = '', 
   const host = hostnameValue(hostname, label, queue)
   if (!installed()) throw new TailscaleError('Tailscale is not installed on this host.')
   const fresh = !existsSync(stateFor(queue))
-  let awaitingApproval = false
   try {
-    startDaemon(queue)
-    const result = runTailscale([
+    await startDaemon(queue)
+    const result = await runTailscale([
       'tailscale', '--socket', socketFor(queue), 'up',
       `--auth-key=${auth}`,
       `--hostname=${host}`,
       '--accept-routes',
       '--reset',
       '--timeout=45s',
-    ])
+    ], 75000)
     if (result.status !== 0) {
-      const state = backendState(queue)
-      if (state.backend === 'NeedsMachineAuth') awaitingApproval = true
-      else if (state.backend !== 'Running' && state.backend !== 'Starting') {
+      // The node can register (and show in the admin console) before it reaches Running.
+      const state = await settle(queue, 30000)
+      const registered = state.backend === 'Running' || state.backend === 'Starting' || state.backend === 'NeedsMachineAuth'
+      if (!registered) {
         const raw = scrub(result.stderr || result.stdout || '', auth)
         throw new TailscaleError(joinFailureMessage(state, raw, scrub(logTail(queue), auth)))
       }
@@ -563,13 +644,9 @@ export async function connectTailnet(queue: string, key: string, hostname = '', 
     throw err
   }
   let info: TailDevice
-  try { info = readNode(queue) }
+  try { info = await readNode(queue) }
   catch {
-    info = { queue, online: false, hostname: host, ip: '', state: 'Joined', detail: '' }
-  }
-  if (awaitingApproval) {
-    info.state = 'Needs approval'
-    info.detail = 'Approve this device in the Tailscale admin console.'
+    info = { queue, online: false, hostname: host, ip: '', state: 'Connecting', detail: '' }
   }
   if (!info.hostname) info.hostname = host
   PENDING.set(queue, info)
@@ -583,11 +660,11 @@ function wipe(queue: string): void {
   rmSync(dirFor(queue), { recursive: true, force: true })
 }
 
-export function disconnectTailnet(queue: string): void {
+export async function disconnectTailnet(queue: string): Promise<void> {
   queue = queueName(queue)
   try {
     if (socketReady(socketFor(queue)) && which('tailscale')) {
-      runTailscale(['tailscale', '--socket', socketFor(queue), 'logout'])
+      await runTailscale(['tailscale', '--socket', socketFor(queue), 'logout'], 20000)
     }
   }
   catch { /* ignore */ }
@@ -599,12 +676,12 @@ export function disconnectTailnet(queue: string): void {
   forgetStatus()
 }
 
-export function resumeTailnet(rows: Array<{ queue: string, host: string, tailHostname: string }>): void {
+export async function resumeTailnet(rows: Array<{ queue: string, host: string, tailHostname: string }>): Promise<void> {
   if (!installed()) return
   for (const row of rows) {
     if (!existsSync(stateFor(row.queue))) continue
     try {
-      startDaemon(row.queue)
+      await startDaemon(row.queue)
       bindHost(row.queue, row.host)
     }
     catch { continue }
@@ -616,7 +693,7 @@ export function stopAllTailnet(): void {
   for (const queue of [...PROCS.keys()]) stopDaemon(queue)
 }
 
-export function deviceStatus(queue: string, stored: { hostname: string, ip: string }): TailDevice {
+export async function deviceStatus(queue: string, stored: { hostname: string, ip: string }): Promise<TailDevice> {
   const blank: TailDevice = {
     queue,
     online: false,
@@ -629,7 +706,7 @@ export function deviceStatus(queue: string, stored: { hostname: string, ip: stri
   catch { return { ...blank, queue: '' } }
   if (!installed() || !socketReady(socketFor(queue))) return blank
   try {
-    const info = readNode(queue)
+    const info = await readNode(queue)
     if (!info.hostname) info.hostname = stored.hostname
     return info
   }
