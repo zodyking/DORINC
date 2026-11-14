@@ -325,7 +325,7 @@ export const SUSAN_HELP_TOOLS: OpenAiToolDefinition[] = [
     function: {
       name: 'print_to_printer',
       description:
-        'Send an invoice PDF and/or a blank service-log sheet to the shop email-to-print printer. Use when staff asks to print an invoice, print a blank service log, or print both. On SMS this only previews — never claim you already printed; the staffer replies YES. In the in-app chat this sends immediately. Requires a printer email in Control Panel → Invoices. Pass invoiceId or query for an invoice; set serviceLogOnly true for a blank sheet only; set includeServiceLog true to attach a blank sheet with the invoice.',
+        'Send an invoice PDF and/or a blank service-log sheet to the shop printer set in Control Panel → Invoices. That is either a registered shop printer (no email) or an email-to-print address. Use when staff asks to print an invoice, print a blank service log, or print both. On SMS this only previews — never claim you already printed; the staffer replies YES. In the in-app chat this sends immediately. Pass invoiceId or query for an invoice; set serviceLogOnly true for a blank sheet only; set includeServiceLog true to attach a blank sheet with the invoice.',
       parameters: {
         type: 'object',
         properties: {

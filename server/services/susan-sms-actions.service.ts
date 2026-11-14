@@ -25,6 +25,7 @@ import {
   SUSAN_SMS_MENU_ACTIONS,
 } from '../../shared/susan-sms-actions'
 import { isValidPrinterEmail, parsePrintToPrinterArgs } from '../../shared/invoice-printer'
+import { QUEUE_RE } from '../../shared/printers'
 import {
   formatSmsMoney,
   formatSmsStatus,
@@ -75,6 +76,7 @@ import {
   printInvoiceToPrinter,
 } from './invoice-printer.service'
 import { getInvoiceWorkspaceSettings } from './workspace-settings.service'
+import { printTargets } from './printers'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -441,12 +443,30 @@ export async function previewSusanSmsSendEmail(
   }
 }
 
+async function printerDestinationLabel(db: Db): Promise<string> {
+  const settings = await getInvoiceWorkspaceSettings(db)
+  if (settings.autoPrintDestination === 'shop') {
+    const queue = settings.autoPrintQueue.trim()
+    const match = (await printTargets().catch(() => [])).find(item => item.queue === queue)
+    return match?.label || 'the shop printer'
+  }
+  return settings.printerEmail.trim()
+}
+
 async function printerReady(db: Db): Promise<SusanSmsActionResult | null> {
   const settings = await getInvoiceWorkspaceSettings(db)
+  if (settings.autoPrintDestination === 'shop') {
+    if (QUEUE_RE.test(settings.autoPrintQueue.trim())) return null
+    return {
+      ok: false,
+      content: 'No shop printer is chosen. An admin can pick one in Control Panel → Invoices → Print when sent.',
+      pendingAction: null,
+    }
+  }
   if (isValidPrinterEmail(settings.printerEmail)) return null
   return {
     ok: false,
-    content: 'Shop printer email is not set. An admin can add it in Control Panel → Invoices → Email to print.',
+    content: 'Shop printer email is not set. An admin can add it in Control Panel → Invoices → Print when sent.',
     pendingAction: null,
   }
 }
@@ -466,8 +486,8 @@ function printConfirmArgs(input: {
 async function previewPrintServiceLog(db: Db): Promise<SusanSmsActionResult> {
   const blocked = await printerReady(db)
   if (blocked) return blocked
-  const settings = await getInvoiceWorkspaceSettings(db)
-  const preview = `I'll print a blank service log to ${settings.printerEmail.trim()}.`
+  const where = await printerDestinationLabel(db)
+  const preview = `I'll print a blank service log to ${where}.`
   return {
     ok: true,
     content: confirmText(preview, 'print'),
@@ -490,9 +510,9 @@ async function previewPrintInvoiceById(
   if (blocked) return blocked
   try {
     const inv = await getInvoiceDetail(db, invoiceId)
-    const settings = await getInvoiceWorkspaceSettings(db)
+    const where = await printerDestinationLabel(db)
     const extra = includeServiceLog ? ' and a blank service log' : ''
-    const preview = `I'll print ${inv.invoiceNumberFormatted} (${formatSmsMoney(inv.total)}, ${formatSmsStatus(inv.status)}) for ${inv.customerName}${extra} to ${settings.printerEmail.trim()}.`
+    const preview = `I'll print ${inv.invoiceNumberFormatted} (${formatSmsMoney(inv.total)}, ${formatSmsStatus(inv.status)}) for ${inv.customerName}${extra} to ${where}.`
     return {
       ok: true,
       content: confirmText(preview, 'print'),
@@ -578,14 +598,14 @@ export async function previewSusanSmsPrintToPrinter(
 function formatPrintResult(result: {
   invoiceNumber: string | null
   includedServiceLog: boolean
-  printerEmail: string
+  printerLabel: string
   delivered: boolean
 }): string {
   const docs = result.invoiceNumber
     ? (result.includedServiceLog ? `${result.invoiceNumber} and a blank service log` : result.invoiceNumber)
     : 'a blank service log'
   const status = result.delivered ? 'Sent' : 'Queued'
-  return `${status}. ${docs} went to the shop printer (${result.printerEmail}).\n\n${SUSAN_SMS_MORE_HINT}`
+  return `${status}. ${docs} went to ${result.printerLabel}.\n\n${SUSAN_SMS_MORE_HINT}`
 }
 
 export async function commitSusanPrintToPrinter(
@@ -634,7 +654,7 @@ export async function commitSusanPrintToPrinter(
 function printerErrorText(err: unknown): string {
   if (err instanceof InvoicePrinterServiceError) {
     if (err.code === 'NOT_CONFIGURED') {
-      return 'Shop printer email is not set. An admin can add it in Control Panel → Invoices → Email to print.'
+      return err.message || 'Printing is not set up. An admin can choose a printer in Control Panel → Invoices → Print when sent.'
     }
     if (err.code === 'NOT_FOUND') return 'That invoice was not found.'
     if (err.code === 'PDF_FAILED') return 'PDF generation failed — try again from the app.'

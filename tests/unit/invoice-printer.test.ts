@@ -94,6 +94,26 @@ describe('invoice workspace printer settings schema', () => {
     })
     expect(ok.blankServiceLogEveryNInvoices).toBe(3)
     expect(ok.printerEmail).toBe('printer@shop.example')
+    expect(ok.autoPrintDestination).toBe('email')
+  })
+
+  it('lets auto print use a registered shop printer and skip email', () => {
+    const shop = invoiceWorkspaceSettingsSchema.parse({
+      ...DEFAULT_INVOICE_SETTINGS,
+      autoPrintOnSend: true,
+      autoPrintDestination: 'shop',
+      autoPrintQueue: 'Office_Printer',
+      printerEmail: '',
+    })
+    expect(shop.autoPrintDestination).toBe('shop')
+    expect(shop.autoPrintQueue).toBe('Office_Printer')
+
+    expect(() => invoiceWorkspaceSettingsSchema.parse({
+      ...DEFAULT_INVOICE_SETTINGS,
+      autoPrintOnSend: true,
+      autoPrintDestination: 'shop',
+      autoPrintQueue: '',
+    })).toThrow(/shop printer/i)
   })
 })
 
@@ -101,6 +121,9 @@ describe('invoice settings email-to-print UI', () => {
   it('exposes auto-print, printer email, and service-log cadence controls', () => {
     const panel = source('app/components/admin/settings/SettingsInvoicePanel.vue')
     expect(panel).toContain('Auto print on send')
+    expect(panel).toContain('Registered shop printer')
+    expect(panel).toContain('form.autoPrintDestination')
+    expect(panel).toContain('form.autoPrintQueue')
     expect(panel).toContain('Printer email address')
     expect(panel).toContain('Print blank service log after invoices')
     expect(panel).toContain('Blank service log frequency')

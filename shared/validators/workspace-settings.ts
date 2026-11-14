@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { QUEUE_RE } from '../printers'
 
 export const businessProfileSchema = z.object({
   businessName: z.string().max(200).default(''),
@@ -35,6 +36,8 @@ export const invoiceWorkspaceSettingsSchema = z.object({
   lineItemAiRules: z.string().max(20000).default(''),
   serviceLogExtractionRules: z.string().max(20000).default(''),
   autoPrintOnSend: z.boolean().default(false),
+  autoPrintDestination: z.enum(['shop', 'email']).default('email'),
+  autoPrintQueue: z.string().max(80).default(''),
   printerEmail: z.string().max(200).default(''),
   printBlankServiceLogAfterInvoice: z.boolean().default(false),
   blankServiceLogEveryNInvoices: z.coerce.number().int().min(1).max(99).default(1),
@@ -42,14 +45,21 @@ export const invoiceWorkspaceSettingsSchema = z.object({
 }).superRefine((value, ctx) => {
   const email = value.printerEmail.trim()
   const printerEnabled = value.autoPrintOnSend || value.printBlankServiceLogAfterInvoice
-  if (printerEnabled && !email) {
+  if (printerEnabled && value.autoPrintDestination === 'shop' && !QUEUE_RE.test(value.autoPrintQueue.trim())) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['autoPrintQueue'],
+      message: 'Choose a shop printer',
+    })
+  }
+  if (printerEnabled && value.autoPrintDestination === 'email' && !email) {
     ctx.addIssue({
       code: 'custom',
       path: ['printerEmail'],
       message: 'Printer email is required when email-to-print is enabled',
     })
   }
-  if (email && !PRINTER_EMAIL_RE.test(email)) {
+  if (value.autoPrintDestination === 'email' && email && !PRINTER_EMAIL_RE.test(email)) {
     ctx.addIssue({
       code: 'custom',
       path: ['printerEmail'],

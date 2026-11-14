@@ -81,8 +81,12 @@ export interface InvoiceWorkspaceSettings {
   lineItemAiRules: string
   /** Editable rule set for service log photo extraction (page type + line items). */
   serviceLogExtractionRules: string
-  /** When an invoice is emailed to the customer, also email the PDF to the shop printer. */
+  /** When an invoice is emailed to the customer, also print the PDF. */
   autoPrintOnSend: boolean
+  /** 'shop' queues the PDF on a registered printer. 'email' sends it to printerEmail. */
+  autoPrintDestination: 'shop' | 'email'
+  /** Queue name when autoPrintDestination is 'shop'. */
+  autoPrintQueue: string
   /** Destination for email-to-print (HP ePrint, Brother, Epson, etc.). */
   printerEmail: string
   /** Attach a blank service-log sheet with printer emails on the configured cadence. */
@@ -100,6 +104,8 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceWorkspaceSettings = {
   lineItemAiRules: DEFAULT_INVOICE_LINE_AI_RULES,
   serviceLogExtractionRules: DEFAULT_SERVICE_LOG_EXTRACTION_RULES,
   autoPrintOnSend: false,
+  autoPrintDestination: 'email',
+  autoPrintQueue: '',
   printerEmail: '',
   printBlankServiceLogAfterInvoice: false,
   blankServiceLogEveryNInvoices: 1,
