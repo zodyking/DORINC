@@ -331,7 +331,9 @@ export const APP_KNOWLEDGE_DOCS: AppKnowledgeDoc[] = [
     body: [
       'Staff Print page Staples tab / invoice actions can attach invoice PDFs for PrintMe email workflows when enabled. /staples redirects to /printers?tab=staples.',
       'Requires appropriate staples/print permissions.',
-      'Shop printer status, pictures, and job history live on the Print page Shop printers tab.',
+      'Shop printer status, pictures, and job history live on the Print page Shop printers tab. History entries have View (the PDF that was sent) and Delete (removes only the stored printer copy, never the invoice or source record). Copies are kept once per file name and type.',
+      'Print menus across the app offer Print At Staples, Print From PC (browser print dialog), and Send to <printer> for each configured shop printer. The Print page ⋮ menu has Print Blanks At Staples and Send Blank Sheet to <printer>.',
+      'If adding a printer with a Tailscale key does not finish joining (for example the device needs approval in the Tailscale admin console), the printer is still saved and the join can be retried from Control Panel → Printers → Tailscale.',
       'Printer setup (add printers, pictures, email-to-print IMAP, Tailscale) lives in Control Panel → Printers. The app image includes Tailscale; join each printer as its own userspace device with a tskey-auth- key.',
       'Separate from shop email-to-print: Control Panel → Invoices has Auto print on send plus a printer email for HP/Brother/Epson-style printers. Susan print_to_printer uses that shop printer, not Staples.',
     ].join('\n'),

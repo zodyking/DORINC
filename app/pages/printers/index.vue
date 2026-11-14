@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PdfViewerDialog from '~/components/PdfViewerDialog.client.vue'
 import PrinterStation from '~/components/printers/PrinterStation.vue'
 import StaplesPrintJobsPanel from '~/components/staples/StaplesPrintJobsPanel.vue'
 import StaffNavIcon from '~/components/staff/StaffNavIcon.vue'
@@ -68,6 +69,9 @@ const busy = ref('')
 const printForm = reactive({ queue: '', sides: 'one-sided', copies: 1, file: null as File | null })
 const jobsPanel = ref<{ refresh: () => Promise<void> } | null>(null)
 const sendBusy = ref(false)
+const blankBusy = ref('')
+const { targets: printTargets, send: sendToPrinter, load: loadTargets } = usePrintTargets()
+const viewer = reactive({ open: false, blob: null as Blob | null, title: '', filename: 'document.pdf', busy: '' })
 
 const fileLabel = computed(() => printForm.file?.name || '')
 const liveCupsJobs = computed(() => (
@@ -138,6 +142,55 @@ async function cancelJob(id: string) {
   })
 }
 
+async function sendBlankToPrinter(queue: string, label: string) {
+  if (!canPrint.value || blankBusy.value) return
+  blankBusy.value = queue
+  flashErr.value = ''
+  flashOk.value = ''
+  try {
+    await sendToPrinter({ kind: 'service-log-sheet', queue })
+    flashOk.value = `Blank sheet sent to ${label}`
+    await load()
+  }
+  catch (e: unknown) {
+    flashErr.value = syncFetchErrorMessage(e, `Could not send to ${label}`)
+  }
+  finally {
+    blankBusy.value = ''
+  }
+}
+
+async function viewJob(job: { id: string, filename: string }) {
+  if (viewer.busy) return
+  viewer.busy = job.id
+  flashErr.value = ''
+  try {
+    viewer.blob = await $fetch<Blob>(`/api/printers/jobs/${job.id}/file`, { responseType: 'blob' })
+    viewer.title = job.filename
+    viewer.filename = job.filename.replace(/\.[A-Za-z0-9]{1,5}$/, '') + '.pdf'
+    viewer.open = true
+  }
+  catch (e: unknown) {
+    flashErr.value = syncFetchErrorMessage(e, 'Could not open the document')
+  }
+  finally {
+    viewer.busy = ''
+  }
+}
+
+function closeViewer() {
+  viewer.open = false
+  viewer.blob = null
+}
+
+async function deleteJob(job: { id: string, filename: string }) {
+  if (!confirm(`Delete "${job.filename}" from print history? The copy kept for the printer is removed; the original invoice or record is not affected.`)) return
+  await withBusy(`delete-${job.id}`, async () => {
+    await $fetch(`/api/printers/jobs/${job.id}`, { method: 'DELETE' })
+    return 'Removed from print history'
+  })
+}
+
 async function sendBlankSheet() {
   if (!canStaplesPrint.value || sendBusy.value) return
   sendBusy.value = true
@@ -163,7 +216,10 @@ async function sendBlankSheet() {
   }
 }
 
-watch(tab, () => { void load() }, { immediate: true })
+watch(tab, () => {
+  void load()
+  void loadTargets(true)
+}, { immediate: true })
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pendingTimer: ReturnType<typeof setTimeout> | null = null
@@ -194,15 +250,28 @@ onUnmounted(() => {
           Print
         </span>
       </template>
-      <template v-if="tab === 'staples' && canStaplesPrint" #actions>
+      <template v-if="canStaplesPrint || (canPrint && printTargets.length)" #actions>
         <button
+          v-if="canStaplesPrint"
           type="button"
-          class="btn primary"
+          class="btn"
           :disabled="sendBusy"
           @click="sendBlankSheet"
         >
-          {{ sendBusy ? 'Sending…' : 'Send blank sheet to PrintMe' }}
+          {{ sendBusy ? 'Sending…' : 'Print Blanks At Staples' }}
         </button>
+        <template v-if="canPrint">
+          <button
+            v-for="printer in printTargets"
+            :key="printer.queue"
+            type="button"
+            class="btn"
+            :disabled="Boolean(blankBusy)"
+            @click="sendBlankToPrinter(printer.queue, printer.label)"
+          >
+            {{ blankBusy === printer.queue ? 'Sending…' : `Send Blank Sheet to ${printer.label}` }}
+          </button>
+        </template>
       </template>
     </StaffPageHead>
 
@@ -337,9 +406,29 @@ onUnmounted(() => {
                 <div class="ph-job__meta">
                   <span :class="printerStatusClass(job.status)">{{ JOB_LABELS[job.status] || job.status }}</span>
                   <span class="ph-job__who">{{ job.sender || job.source }}</span>
-                  <div v-if="canPrint" class="ph-job__acts">
-                    <button v-if="job.status === 'error'" type="button" class="textlink" @click="retryJob(job.id)">Retry</button>
-                    <button v-else-if="job.status === 'pending' && !job.cupsId" type="button" class="textlink" @click="cancelJob(job.id)">Cancel</button>
+                  <div class="ph-job__acts">
+                    <button
+                      v-if="job.hasFile"
+                      type="button"
+                      class="textlink"
+                      :disabled="viewer.busy === job.id"
+                      @click="viewJob(job)"
+                    >
+                      {{ viewer.busy === job.id ? 'Opening…' : 'View' }}
+                    </button>
+                    <template v-if="canPrint">
+                      <button v-if="job.status === 'error'" type="button" class="textlink" @click="retryJob(job.id)">Retry</button>
+                      <button v-else-if="job.status === 'pending' && !job.cupsId" type="button" class="textlink" @click="cancelJob(job.id)">Cancel</button>
+                      <button
+                        v-if="job.status !== 'sending' && job.status !== 'preparing'"
+                        type="button"
+                        class="textlink textlink--danger"
+                        :disabled="busy === `delete-${job.id}`"
+                        @click="deleteJob(job)"
+                      >
+                        Delete
+                      </button>
+                    </template>
                   </div>
                 </div>
               </li>
@@ -361,13 +450,21 @@ onUnmounted(() => {
         </div>
       </div>
     </template>
+    <ClientOnly>
+      <PdfViewerDialog
+        v-model:open="viewer.open"
+        :blob="viewer.blob"
+        :title="viewer.title || 'Printed document'"
+        :download-filename="viewer.filename"
+        @close="closeViewer"
+      />
+    </ClientOnly>
   </section>
 </template>
 
 <style scoped>
 .printers-page-title { display: inline-flex; align-items: center; gap: 10px; }
 .printers-page-logo { width: 22px; height: 22px; color: #4f46e5; }
-.ph-page { max-width: 1080px; }
 .ph-tabs {
   display: flex;
   gap: 6px;
@@ -394,7 +491,7 @@ onUnmounted(() => {
 .ph-flash { margin: 0 0 14px; }
 .ph-flash--err { color: #dc2626; }
 .ph-flash--ok { color: #15803d; }
-.ph-stations { display: grid; gap: 16px; }
+.ph-stations { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
 .ph-station {
   padding: 16px;
   border: 1px solid #e2e8f0;
@@ -530,7 +627,7 @@ onUnmounted(() => {
 .ph-job__err.err { color: #dc2626; }
 .ph-job__meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ph-job__who { color: #94a3b8; font-size: 12px; font-weight: 600; }
-.ph-job__acts { margin-left: auto; }
+.ph-job__acts { margin-left: auto; display: inline-flex; gap: 14px; }
 .ph-muted { color: #64748b; }
 .ph-queue-empty { margin: 0; padding: 8px 0 4px; }
 .status-pill {
@@ -544,6 +641,8 @@ onUnmounted(() => {
 .textlink {
   appearance: none; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 0; color: #4f46e5;
 }
+.textlink--danger { color: #dc2626; }
+.textlink:disabled { opacity: .55; cursor: default; }
 .staples-page-card .cbody { padding-top: 14px; }
 @media (max-width: 900px) {
   .ph-work { grid-template-columns: 1fr; }
