@@ -33,3 +33,7 @@ logs
 # Local agent notes / mockups (not shipped)
 Agent-Files/
 agentfiles/
+
+# Python (print engine)
+__pycache__/
+*.pyc
