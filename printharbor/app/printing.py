@@ -399,8 +399,62 @@ def _vendor_bias(driver):
         return 6
     return 0
 
+def _brother_laser(discovery):
+    """Brother mono lasers speak brlaser. Inkjets (the J series) do not."""
+    blob = ' '.join(str(discovery.get(key) or '') for key in ('make', 'model', 'identity'))
+    low = blob.lower()
+    if 'brother' not in low or 'inkjet' in low:
+        return False
+    if re.search(r'\b(?:mfc|dcp|hl)\s*-?\s*j\d', low):
+        return False
+    return bool(re.search(r'\b(?:hl|dcp|mfc|fax)(?:\s*-?\s*[a-z])?\s*-?\s*\d', low))
+
+def _wants_duplex(discovery):
+    blob = ' '.join(str(discovery.get(key) or '') for key in ('make', 'model', 'identity'))
+    low = blob.lower()
+    if 'duplex' in low:
+        return True
+    codes = _model_codes(low)
+    code = codes[0] if codes else re.sub(r'[^a-z0-9]', '', low)
+    return bool(re.search(r'd(?:n|w)?$', code))
+
+def _brlaser_test_driver(drivers, duplex):
+    """brlaser's own fallback for a Brother laser that has no model PPD."""
+    duplex_hit = None
+    plain_hit = None
+    for driver in drivers or []:
+        name = driver.get('name') or ''
+        if not MODEL_RE.fullmatch(name):
+            continue
+        title = (driver.get('make-and-model') or '').lower()
+        blob = f'{name} {title}'.lower()
+        if 'brlaser' not in blob:
+            continue
+        if 'test driver duplex' in title or name.endswith('br0000d.ppd'):
+            duplex_hit = driver
+        elif ('test driver' in title and 'duplex' not in title) or name.endswith('br0000.ppd'):
+            plain_hit = driver
+    if duplex and duplex_hit:
+        return duplex_hit
+    if not duplex and plain_hit:
+        return plain_hit
+    return duplex_hit or plain_hit
+
+def _brlaser_label(identity_label, driver):
+    text = driver.get('make-and-model') or ''
+    version = re.search(r'v\d+(?:\.\d+)+', text)
+    credit = 'Owl-Maintain/brlaser'
+    if version:
+        credit = f'{credit} {version.group(0)}'
+    model = (identity_label or 'Brother').strip() or 'Brother'
+    return f'{model}, using {credit}'[:120]
+
 def choose_driver(discovery, drivers):
-    """Match a discovered printer to its model driver. Generic and sibling models do not qualify."""
+    """Match a discovered printer to its model driver.
+
+    Generic and sibling models do not qualify. A Brother laser with no model
+    PPD uses brlaser's test driver on port 9100 instead of IPP Everywhere.
+    """
     model = _norm(discovery.get('model'))
     make = _norm(discovery.get('make'))
     identity = _norm(discovery.get('identity'))
@@ -446,6 +500,15 @@ def choose_driver(discovery, drivers):
             return {'model': best['name'], 'protocol': 'socket', 'label': identity_label, 'driver': driver_title(best)}
         if discovery.get('socket'):
             return {'model': best['name'], 'protocol': 'socket', 'label': identity_label, 'driver': driver_title(best)}
+    if discovery.get('socket') and _brother_laser(discovery):
+        fallback = _brlaser_test_driver(drivers, _wants_duplex(discovery))
+        if fallback:
+            return {
+                'model': fallback['name'],
+                'protocol': 'socket',
+                'label': identity_label,
+                'driver': _brlaser_label(identity_label, fallback),
+            }
     if discovery.get('ipp'):
         return {'model': 'everywhere', 'protocol': 'ipp', 'label': identity_label, 'driver': 'IPP Everywhere'}
     raise PrintError('The printer answered, but no driver matched it')
@@ -759,7 +822,8 @@ def configure_queue(queue, address, discovery, drivers, keep_options=False):
     if result.returncode:
         raise PrintError((result.stderr or result.stdout or 'The printer could not be added')[:400])
     if saved:
-        _set_options(queue, saved)
+        known = {item['key'] for item in queue_options(queue)}
+        _set_options(queue, [(key, value) for key, value in saved if key in known])
     else:
         listed = cmd('lpoptions', '-p', queue, '-l', timeout=15)
         if listed.returncode == 0:

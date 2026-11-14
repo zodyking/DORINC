@@ -238,6 +238,45 @@ class CoreTests(unittest.TestCase):
             'device-id':'MFG:Brother;MDL:HL-L2350DW;',
         }])
         self.assertEqual(sibling['model'],'everywhere')
+        brlaser=list(drivers)+[
+            {
+                'name':'drv:///brlaser.drv/br0000.ppd',
+                'make-and-model':'Brother A Owl-Maintain/brlaser Test Driver, v6.2.8; compatible with monochrome laser printers',
+                'device-id':'MFG:Brother;MDL:brlaser Test Driver;',
+            },
+            {
+                'name':'drv:///brlaser.drv/br0000d.ppd',
+                'make-and-model':'Brother A Owl-Maintain/brlaser Test Driver Duplex, v6.2.8; compatible with duplex monochrome laser printers',
+                'device-id':'MFG:Brother;MDL:brlaser Test Driver Duplex;',
+            },
+        ]
+        unlisted=printing.choose_driver({
+            'reachable':True,'ipp':True,'socket':True,'make':'Brother',
+            'model':'DCP-L2640DW','identity':'Brother DCP-L2640DW',
+        }, brlaser)
+        self.assertEqual(unlisted['model'],'drv:///brlaser.drv/br0000d.ppd')
+        self.assertEqual(unlisted['protocol'],'socket')
+        self.assertEqual(unlisted['driver'],'Brother DCP-L2640DW, using Owl-Maintain/brlaser v6.2.8')
+        simplex=printing.choose_driver({
+            'reachable':True,'ipp':True,'socket':True,'make':'Brother',
+            'model':'HL-L1110','identity':'Brother HL-L1110',
+        }, brlaser)
+        self.assertEqual(simplex['model'],'drv:///brlaser.drv/br0000.ppd')
+        closed=printing.choose_driver({
+            'reachable':True,'ipp':True,'socket':False,'make':'Brother',
+            'model':'DCP-L2640DW','identity':'Brother DCP-L2640DW',
+        }, brlaser)
+        self.assertEqual(closed['model'],'everywhere')
+        inkjet=printing.choose_driver({
+            'reachable':True,'ipp':True,'socket':True,'make':'Brother',
+            'model':'MFC-J6945DW','identity':'Brother MFC-J6945DW',
+        }, brlaser)
+        self.assertEqual(inkjet['model'],'everywhere')
+        exact=printing.choose_driver({
+            'reachable':True,'ipp':True,'socket':True,'make':'Brother',
+            'model':'HL-L2380DW series','identity':'Brother HL-L2380DW series',
+        }, brlaser)
+        self.assertEqual(exact['model'],'drv:///brlaser.drv/brl2380d.ppd')
         facts=printing.describe_driver('Brother HL-L2380DW series, using brlaser v6.2.8', 'socket')
         self.assertEqual(facts['name'],'Brother HL-L2380DW series, using brlaser v6.2.8')
         self.assertEqual(facts['package'],'brlaser v6.2.8')
@@ -1492,6 +1531,24 @@ class CoreTests(unittest.TestCase):
             images.nearest_entry([{'id':'3952','name':'Brother HL-L2350DW'}], images.identify('Brother HL-L2380DW series'))['id'],
             '3952',
         )
+        self.assertIsNone(images.family_entry(
+            [{'id':'4815','name':'Brother HL-L3210C'}, {'id':'1','name':'HP LaserJet P2055DN'}],
+            images.identify('Brother HL-L2380DW series'),
+        ))
+        newer=images.identify('Brother DCP-L2640DW')
+        self.assertEqual(newer['code'], 'dcpl2640dw')
+        self.assertIsNone(images.nearest_entry([
+            {'id':'5170','name':'Brother MFC-L2710DW'},
+            {'id':'3952','name':'Brother HL-L2350DW'},
+            {'id':'4573','name':'Brother DCP-J105'},
+        ], newer))
+        standin=images.family_entry([
+            {'id':'5170','name':'Brother MFC-L2710DW'},
+            {'id':'3952','name':'Brother HL-L2350DW'},
+            {'id':'4573','name':'Brother DCP-J105'},
+            {'id':'3597','name':'Brother MFC-L3770CDW'},
+        ], newer)
+        self.assertEqual(standin['id'], '5170')
 
     def test_image_providers_cache_fallbacks_and_overrides(self):
         self._reset_images()
@@ -1951,6 +2008,16 @@ class CoreTests(unittest.TestCase):
 
             self._reset_images()
             with store.connection() as db:
+                db.execute("INSERT OR REPLACE INTO printers(queue,label,host,protocol,identity) VALUES('IconQ','Brandons','192.0.2.72','socket','Brother DCP-L2640DW')")
+            with patch('app.images.fetch', side_effect=empty), patch.object(printing,'ipp_attributes',return_value={'printer-icons':['http://BRW3C2AF4.local/icon.png']}), patch('app.images.urllib.request.build_opener') as build:
+                build.return_value.open.return_value=Resp()
+                named=images.resolve_printer('IconQ')
+            self.assertEqual(named['source'], 'printer')
+            requested=build.return_value.open.call_args.args[0]
+            self.assertEqual(requested.full_url, 'http://192.0.2.72/icon.png')
+
+            self._reset_images()
+            with store.connection() as db:
                 db.execute("INSERT OR REPLACE INTO printers(queue,label,host,protocol,identity) VALUES('IconQ','Office','192.0.2.72','socket','Brother HL-L2350DW series')")
             images._remember_fallback(images.identify('Brother HL-L2350DW series'), 'miss', [])
             with patch('app.images.fetch', side_effect=unifi), patch.object(printing,'ipp_attributes',return_value={'printer-icons':['http://192.0.2.72/icon.png']}), patch('app.images.urllib.request.build_opener') as build:
@@ -1998,6 +2065,28 @@ class CoreTests(unittest.TestCase):
             self.assertLess(near['confidence'], 0.9)
             self.assertIn('2350', near['attribution'].lower())
             self.assertTrue(Path(near['local_path']).is_file())
+            self._reset_images()
+
+            def cousin(url, timeout=8, limit=2_000_000):
+                if 'fingerprint-database.json' in url:
+                    return json.dumps({
+                        '5170':'Brother MFC-L2710DW',
+                        '3952':'Brother HL-L2350DW',
+                        '4573':'Brother DCP-J105',
+                    }).encode(), 'application/json'
+                if 'static.ui.com' in url and '5170' in url:
+                    return png, 'image/png'
+                if 'commons.wikimedia.org' in url:
+                    return json.dumps({'query':{'pages':{}}}).encode(), 'application/json'
+                raise images.ImageError('unexpected address')
+
+            with patch('app.images.fetch', side_effect=cousin):
+                photo=images.resolve_model(images.identify('Brother DCP-L2640DW'), force=True)
+            self.assertEqual(photo['source'], 'unifi')
+            self.assertEqual(photo['model_key'], 'brother|dcpl2640dw')
+            self.assertEqual(photo['fingerprint_id'], '5170')
+            self.assertLess(photo['confidence'], 0.9)
+            self.assertTrue(Path(photo['local_path']).is_file())
         finally:
             self._disable_images()
 
