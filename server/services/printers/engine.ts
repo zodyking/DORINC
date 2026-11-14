@@ -27,6 +27,8 @@ import {
   parseQueueOptions,
   printerCondition,
   printerIssues,
+  hostnameFor,
+  queueFor,
   readingsFromIpp,
   replacementFor,
   supplyPercent,
@@ -422,15 +424,24 @@ async function savePrinter(
   })
 }
 
+async function freeQueueName(db: Db, label: string) {
+  const base = queueFor(label)
+  for (let n = 1; n < 100; n++) {
+    const candidate = n === 1 ? base : `${base.slice(0, 41 - String(n).length - 1)}_${n}`
+    if (!await getPrinterRow(db, candidate)) return candidate
+  }
+  throw new PrintError('Choose a different printer name')
+}
+
 export async function addPrinter(
   db: Db,
-  opts: { label: string, queue: string, host: string, authKey?: string, tailHostname?: string },
+  opts: { label: string, queue?: string, host: string, authKey?: string, tailHostname?: string },
 ) {
-  const queue = opts.queue.trim()
+  const name = opts.label.trim().slice(0, 100)
+  if (!name) throw new PrintError('Enter a printer name')
+  const queue = opts.queue?.trim() || await freeQueueName(db, name)
   if (!QUEUE_RE.test(queue)) throw new PrintError('Queue must begin with a letter and contain only letters, numbers, _ or -')
   const address = requireIpv4(opts.host)
-  const name = opts.label.trim().slice(0, 100)
-  if (!name) throw new PrintError('Enter a display name')
   let joined: { hostname?: string, ip?: string, state?: string } | null = null
   let tailWarning = ''
   let saved = false
@@ -451,7 +462,7 @@ export async function addPrinter(
     const discovery = await discoverPrinter(address)
     if (!discovery.reachable) {
       if (!opts.authKey?.trim()) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
-      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined ?? { hostname: opts.tailHostname || '' })
+      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined ?? { hostname: hostnameFor(name, queue) })
       saved = true
       const note = tailWarning || 'Joined the tailnet. Waiting for the printer to answer through its route.'
       await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${note}`.slice(0, 600))
@@ -1150,6 +1161,12 @@ export async function cancelPendingJob(db: Db, jobId: string) {
     .where(and(eq(printerJobs.id, jobId), eq(printerJobs.status, 'pending'), eq(printerJobs.cupsId, '')))
     .returning({ id: printerJobs.id })
   if (!updated.length) throw new PrintError('A document already sent to the printer cannot be cancelled')
+}
+
+/** Restart any saved printer's tailscaled that is not running. */
+export async function keepTailnetRunning(db: Db) {
+  const rows = await listPrinterRows(db)
+  resumeTailnet(rows.map(row => ({ queue: row.queue, host: row.host, tailHostname: row.tailHostname })))
 }
 
 export async function retargetSavedQueues(db: Db) {

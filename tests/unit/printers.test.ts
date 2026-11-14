@@ -327,3 +327,40 @@ describe('app-wide print menus', () => {
     expect(printPage).toContain('PdfViewerDialog')
   })
 })
+
+describe('one-field printer setup', () => {
+  it('derives the queue from the printer name', async () => {
+    const { queueFor, hostnameFor } = await import('../../shared/printers')
+    expect(queueFor('Office Printer')).toBe('Office_Printer')
+    expect(queueFor('  Brother HL-L2380DW ')).toBe('Brother_HL_L2380DW')
+    expect(queueFor('2nd floor')).toBe('Printer_2nd_floor')
+    expect(queueFor('***')).toBe('Printer')
+    expect(hostnameFor('Office Printer', 'Office_Printer')).toBe('office-printer')
+    const { addPrinterSchema } = await import('../../shared/validators/printers')
+    expect(addPrinterSchema.safeParse({ label: 'Office Printer', host: '192.168.0.105' }).success).toBe(true)
+    const settings = source('app/components/admin/settings/SettingsPrintersPanel.vue')
+    expect(settings).toContain('Printer name')
+    expect(settings).not.toContain('Queue name<input')
+    expect(settings).not.toContain('addForm.tailHostname')
+  })
+})
+
+describe('Tailscale on launch', () => {
+  it('only treats a socket as live when its tailscaled is running', async () => {
+    const { daemonAlive } = await import('../../server/services/printers/tailnet')
+    const sock = '/app/.data/printers/tailscale/Office_Printer/tailscaled.sock'
+    const cmd = `/usr/local/bin/tailscaled\0--tun=userspace-networking\0--socket=${sock}\0`
+    expect(daemonAlive(4321, sock, cmd)).toBe(true)
+    expect(daemonAlive(4321, sock, '/usr/local/bin/node\0.output/server/index.mjs\0')).toBe(false)
+    expect(daemonAlive(4321, sock, '')).toBe(false)
+    expect(daemonAlive(0, sock, cmd)).toBe(false)
+  })
+
+  it('starts saved devices on boot and keeps them running', () => {
+    const plugin = source('server/plugins/printers-runtime.ts')
+    expect(plugin).toContain('retargetSavedQueues')
+    expect(plugin).toContain('keepTailnetRunning')
+    expect(plugin).toContain('schedule(boot, BOOT_RETRY_MS)')
+    expect(source('server/services/printers/tailnet.ts')).not.toContain("if (!row.tailHostname || !existsSync(stateFor(row.queue))) continue")
+  })
+})

@@ -33,7 +33,7 @@ const flashErr = ref('')
 const busy = ref('')
 const editingQueue = ref('')
 const optionDrafts = reactive<Record<string, Record<string, string>>>({})
-const addForm = reactive({ label: '', queue: '', host: '', authKey: '', tailHostname: '' })
+const addForm = reactive({ label: '', host: '', authKey: '' })
 const editForm = reactive({ label: '', host: '' })
 const mailForm = reactive({
   mail_enabled: false,
@@ -143,10 +143,8 @@ async function addPrinter() {
   await withBusy('add', async () => {
     const res = await $fetch<{ identity: string, warning?: string }>('/api/printers/devices', { method: 'POST', body: { ...addForm } })
     addForm.label = ''
-    addForm.queue = ''
     addForm.host = ''
     addForm.authKey = ''
-    addForm.tailHostname = ''
     return res.warning
       ? `Printer saved (${res.identity}). ${res.warning}`
       : `Printer configured (${res.identity})`
@@ -443,16 +441,12 @@ onUnmounted(() => {
                 </div>
               </form>
               <form v-else-if="canManage" class="ph-form" @submit.prevent="addPrinter">
-                <label>Display name<input v-model="addForm.label" required maxlength="100" placeholder="Brother HL-L2380DW"></label>
-                <label>Queue name<input v-model="addForm.queue" required maxlength="41" placeholder="Office" autocapitalize="off" spellcheck="false"></label>
+                <label>Printer name<input v-model="addForm.label" required maxlength="100" placeholder="Office Printer"></label>
                 <label>Printer IPv4<input v-model="addForm.host" required placeholder="192.168.50.40" inputmode="decimal" autocomplete="off"></label>
                 <p class="ph-help">DORINC reads the make and model, then picks a matching CUPS driver. A product photo is looked up automatically.</p>
                 <label>Tailscale auth key
                   <input v-model="addForm.authKey" type="password" autocomplete="off" placeholder="tskey-auth-...">
-                  <small>Optional. Joins this printer as its own tailnet device. The key is used once and is not saved.</small>
-                </label>
-                <label>Device hostname
-                  <input v-model="addForm.tailHostname" maxlength="63" placeholder="office-brother" autocapitalize="off">
+                  <small>Optional. Joins this printer as its own tailnet device named after the printer. The key is used once and is not saved.</small>
                 </label>
                 <button class="btn primary" type="submit" :disabled="busy === 'add'">
                   {{ busy === 'add' ? 'Creating…' : 'Create printer queue' }}

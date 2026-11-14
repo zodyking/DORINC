@@ -6,9 +6,9 @@ export const printersPageQuerySchema = z.object({
 })
 
 export const addPrinterSchema = z.object({
-  label: z.string().trim().min(1).max(100),
-  queue: z.string().trim().regex(QUEUE_RE, 'Queue must begin with a letter and contain only letters, numbers, _ or -'),
-  host: z.string().trim().min(7).max(15),
+  label: z.string().trim().min(1, 'Enter a printer name').max(100),
+  queue: z.string().trim().optional().default(''),
+  host: z.string().trim().min(7, 'Enter the printer IPv4 address').max(15, 'Enter the printer IPv4 address'),
   authKey: z.string().optional().default(''),
   tailHostname: z.string().optional().default(''),
 })

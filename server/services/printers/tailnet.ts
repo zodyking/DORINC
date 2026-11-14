@@ -105,16 +105,33 @@ export function assignProxy(queue: string, port: number): number {
   return port
 }
 
+export function daemonAlive(pid: number, sockPath: string, cmdline?: string): boolean {
+  if (!Number.isInteger(pid) || pid < 2) return false
+  let args = cmdline
+  if (args === undefined) {
+    try { args = readFileSync(`/proc/${pid}/cmdline`, 'utf8') }
+    catch {
+      try {
+        process.kill(pid, 0)
+        return true
+      }
+      catch { return false }
+    }
+  }
+  return args.includes('tailscaled') && args.includes(sockPath)
+}
+
+/**
+ * The socket file lives on the persistent data volume and survives restarts,
+ * so it only counts when the tailscaled that owns it is still running.
+ */
 function socketReady(path: string): boolean {
   if (!existsSync(path)) return false
   try {
-    const sock = createConnection(path)
-    sock.destroy()
-    return true
+    const pid = Number(readFileSync(join(path, '..', 'tailscaled.pid'), 'utf8').trim())
+    return daemonAlive(pid, path)
   }
-  catch {
-    return false
-  }
+  catch { return false }
 }
 
 function preferredPort(queue: string, salt: string, base: number): number {
@@ -585,7 +602,7 @@ export function disconnectTailnet(queue: string): void {
 export function resumeTailnet(rows: Array<{ queue: string, host: string, tailHostname: string }>): void {
   if (!installed()) return
   for (const row of rows) {
-    if (!row.tailHostname || !existsSync(stateFor(row.queue))) continue
+    if (!existsSync(stateFor(row.queue))) continue
     try {
       startDaemon(row.queue)
       bindHost(row.queue, row.host)
