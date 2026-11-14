@@ -78,6 +78,15 @@ export const REQUIRED_BACKUP_TABLES = Object.freeze([
   'pdf_render_jobs',
   'staples_print_jobs',
 
+  // shop printers
+  'printers',
+  'printer_jobs',
+  'printer_documents',
+  'printer_events',
+  'printer_settings',
+  'printer_mail_batches',
+  'printer_image_catalog',
+
   // announcements / billing
   'announcements',
   'announcement_targets',

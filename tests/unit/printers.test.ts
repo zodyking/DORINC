@@ -246,3 +246,84 @@ describe('CUPS-optional printing', () => {
     expect(ippSucceeded(0x0400)).toBe(false)
   })
 })
+
+describe('Tailscale join outcomes', () => {
+  it('asks for device approval instead of reporting a timeout', async () => {
+    const { joinFailureMessage } = await import('../../server/services/printers/tailnet')
+    const timeout = 'timeout waiting for Tailscale service to enter a Running state; check health with "tailscale status"'
+    expect(joinFailureMessage({ backend: 'NeedsMachineAuth', health: [], authUrl: '' }, timeout, ''))
+      .toContain('Approve this device')
+    expect(joinFailureMessage({ backend: 'NeedsLogin', health: [], authUrl: 'https://login' }, timeout, ''))
+      .toContain('rejected the auth key')
+    expect(joinFailureMessage({ backend: 'NoState', health: ['not connected to home DERP region'], authUrl: '' }, timeout, ''))
+      .toBe('Tailscale did not connect: not connected to home DERP region')
+  })
+
+  it('saves the printer when the tailnet join does not finish', () => {
+    const engine = source('server/services/printers/engine.ts')
+    expect(engine).toContain('tailWarning = err.message')
+    expect(engine).toContain('return { identity: name, warning: note }')
+    expect(source('server/services/printers/tailnet.ts')).toContain("'--timeout=45s'")
+    expect(source('app/components/admin/settings/SettingsPrintersPanel.vue')).toContain('res.warning')
+  })
+})
+
+describe('printed document history', () => {
+  it('keys stored copies on file name and type', async () => {
+    const { fileTypeFor, viewFilename } = await import('../../server/services/printers/documents')
+    expect(fileTypeFor('INV-0001.pdf')).toBe('application/pdf')
+    expect(fileTypeFor('photo.JPG')).toBe('image/jpeg')
+    expect(fileTypeFor('notes')).toBe('application/octet-stream')
+    expect(viewFilename('report.docx')).toBe('report.pdf')
+    expect(source('server/db/schema/printers.ts')).toContain("uniqueIndex('printer_documents_name_type_uq').on(table.filename, table.fileType)")
+    expect(source('server/db/migrations/0085_printer_documents.sql')).toContain('"printer_documents_name_type_uq"')
+    expect(source('server/lib/ensure-printers-schema.mjs')).toContain('printer_documents')
+  })
+
+  it('deletes only the printer copy, never the source record', () => {
+    const docs = source('server/services/printers/documents.ts')
+    expect(docs).toContain('db.delete(printerJobs)')
+    expect(docs).toContain('db.delete(printerDocuments)')
+    expect(docs).not.toMatch(/schema\/(invoices|service-logs|staples)|delete\((invoices|serviceLogs|staplesPrintJobs)\)/)
+    expect(source('server/api/printers/jobs/[id].delete.ts')).toContain('deletePrinterJob')
+    expect(source('server/api/printers/jobs/[id]/file.get.ts')).toContain("'application/pdf'")
+  })
+
+  it('validates send-to-printer requests', async () => {
+    const { sendToPrinterSchema } = await import('../../shared/validators/printers')
+    expect(sendToPrinterSchema.safeParse({ kind: 'service-log-sheet', queue: 'Office_Printer' }).success).toBe(true)
+    expect(sendToPrinterSchema.safeParse({ kind: 'invoice', queue: 'Office_Printer' }).success).toBe(false)
+    expect(sendToPrinterSchema.safeParse({
+      kind: 'invoice',
+      queue: 'Office_Printer',
+      invoiceIds: ['5b0f3c1e-7d1a-4c55-9a0e-3f2b1c4d5e6f'],
+    }).success).toBe(true)
+  })
+})
+
+describe('app-wide print menus', () => {
+  it('offers Staples, PC, and each shop printer', () => {
+    for (const file of [
+      'app/components/invoices/InvoiceListRowActions.vue',
+      'app/pages/invoices/[id]/index.vue',
+      'app/components/BulkPrintInvoicesButton.vue',
+      'app/components/service-logs/ServiceLogSheetPrintModal.vue',
+    ]) {
+      const text = source(file)
+      expect(text, file).toContain('Print At Staples')
+      expect(text, file).toContain('Print From PC')
+      expect(text, file).toMatch(/Send to \$\{printer\.label\}|Send to \{\{ printer\.label \}\}/)
+      expect(text, file).toContain('usePrintTargets')
+    }
+  })
+
+  it('fills the content area and offers blank sheets on the Print page', () => {
+    const printPage = source('app/pages/printers/index.vue')
+    expect(printPage).not.toContain('max-width: 1080px')
+    expect(printPage).not.toContain('Send blank sheet to PrintMe')
+    expect(printPage).toContain('Print Blanks At Staples')
+    expect(printPage).toContain('Send Blank Sheet to ${printer.label}')
+    expect(printPage).toContain('/api/printers/jobs/${job.id}/file')
+    expect(printPage).toContain('PdfViewerDialog')
+  })
+})

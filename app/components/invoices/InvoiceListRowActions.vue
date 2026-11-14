@@ -61,7 +61,11 @@ const deleteTitle = computed(() => {
 
 const printBusy = ref(false)
 const staplesBusy = ref(false)
+const printerBusy = ref('')
 const actionError = ref('')
+const actionOk = ref('')
+const { targets: printTargets, send: sendToPrinter } = usePrintTargets()
+const canSendToPrinter = computed(() => canGeneratePdf.value && auth.can('printers.print.all'))
 
 function onSendClick() {
   if (!sendAllowed.value) return
@@ -82,6 +86,23 @@ async function printLocal() {
   }
   finally {
     printBusy.value = false
+  }
+}
+
+async function printOnPrinter(queue: string, label: string) {
+  if (!canSendToPrinter.value || printerBusy.value) return
+  printerBusy.value = queue
+  actionError.value = ''
+  actionOk.value = ''
+  try {
+    await sendToPrinter({ kind: 'invoice', queue, invoiceIds: [props.invoiceId] })
+    actionOk.value = `Sent to ${label}`
+  }
+  catch (e: unknown) {
+    actionError.value = syncFetchErrorMessage(e, `Could not send to ${label}`)
+  }
+  finally {
+    printerBusy.value = ''
   }
 }
 
@@ -140,16 +161,6 @@ async function printViaStaples() {
         {{ sendLabel }}
       </button>
       <button
-        v-if="canGeneratePdf"
-        type="button"
-        class="btn"
-        :disabled="printBusy"
-        title="Print invoice PDF on this device"
-        @click="printLocal"
-      >
-        {{ printBusy ? 'Printing…' : 'Print' }}
-      </button>
-      <button
         v-if="canStaplesPrint"
         type="button"
         class="btn"
@@ -157,8 +168,31 @@ async function printViaStaples() {
         title="Send invoice PDF to Staples PrintMe"
         @click="printViaStaples"
       >
-        {{ staplesBusy ? 'Sending…' : 'Print via Staples' }}
+        {{ staplesBusy ? 'Sending…' : 'Print At Staples' }}
       </button>
+      <button
+        v-if="canGeneratePdf"
+        type="button"
+        class="btn"
+        :disabled="printBusy"
+        title="Open the browser print dialog"
+        @click="printLocal"
+      >
+        {{ printBusy ? 'Printing…' : 'Print From PC' }}
+      </button>
+      <template v-if="canSendToPrinter">
+        <button
+          v-for="printer in printTargets"
+          :key="printer.queue"
+          type="button"
+          class="btn"
+          :disabled="Boolean(printerBusy)"
+          :title="`Queue this invoice on ${printer.label}`"
+          @click="printOnPrinter(printer.queue, printer.label)"
+        >
+          {{ printerBusy === printer.queue ? 'Sending…' : `Send to ${printer.label}` }}
+        </button>
+      </template>
       <DeleteEntityButton
         v-if="canDeletePerm"
         :entity-id="invoiceId"
@@ -181,6 +215,7 @@ async function printViaStaples() {
     </PageActionsMenu>
 
     <p v-if="actionError" class="inv-row-actions__err">{{ actionError }}</p>
+    <p v-else-if="actionOk" class="inv-row-actions__ok">{{ actionOk }}</p>
 
     <SendInvoiceButton
       ref="sendRef"
@@ -201,6 +236,13 @@ async function printViaStaples() {
 .inv-row-actions :deep(.page-actions__panel .btn:disabled) {
   opacity: 0.55;
   cursor: not-allowed;
+}
+.inv-row-actions__ok {
+  flex-basis: 100%;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #15803d;
+  text-align: right;
 }
 .inv-row-actions__err {
   flex-basis: 100%;

@@ -82,3 +82,14 @@ export const imageSettingsSchema = z.object({
   images_cache: z.boolean().optional().default(true),
   images_catalog_days: z.coerce.number().int().min(1).max(90).optional().default(14),
 })
+
+export const sendToPrinterSchema = z.object({
+  kind: z.enum(['invoice', 'service-log-sheet']),
+  queue: z.string().trim().regex(QUEUE_RE, 'Choose a printer'),
+  invoiceIds: z.array(z.string().uuid()).max(100).optional().default([]),
+  copies: z.coerce.number().int().min(1).max(10).optional().default(1),
+  sides: z.enum(PRINTER_SIDES).optional().default('one-sided'),
+}).refine(body => body.kind !== 'invoice' || body.invoiceIds.length > 0, {
+  message: 'Choose an invoice to print',
+  path: ['invoiceIds'],
+})

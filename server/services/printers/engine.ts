@@ -35,7 +35,8 @@ import {
   type PrinterStats,
   type QueueOption,
 } from '../../../shared/printers'
-import { PrintError } from './errors'
+import { PrintError, TailscaleError } from './errors'
+import { documentData, storeDocument } from './documents'
 import { activeCupsJobs, cupsAvailable, cupsCmd, cupsPrintersReport } from './cups'
 import { sendDirectToPrinter } from './direct-print'
 import { brotherReadings, looksLikeBrother, snmpGet, OID_MODEL } from './brother-snmp'
@@ -430,21 +431,32 @@ export async function addPrinter(
   const address = requireIpv4(opts.host)
   const name = opts.label.trim().slice(0, 100)
   if (!name) throw new PrintError('Enter a display name')
-  let joined: { hostname?: string, ip?: string } | null = null
+  let joined: { hostname?: string, ip?: string, state?: string } | null = null
+  let tailWarning = ''
   let saved = false
   try {
     if (opts.authKey?.trim()) {
-      joined = await connectTailnet(queue, opts.authKey, opts.tailHostname || '', name)
-      bindHost(queue, address)
+      try {
+        joined = await connectTailnet(queue, opts.authKey, opts.tailHostname || '', name)
+        bindHost(queue, address)
+        if (joined.state === 'Needs approval') {
+          tailWarning = 'Approve this printer’s device in the Tailscale admin console. It will connect once approved.'
+        }
+      }
+      catch (err) {
+        if (!(err instanceof TailscaleError)) throw err
+        tailWarning = err.message
+      }
     }
     const discovery = await discoverPrinter(address)
     if (!discovery.reachable) {
-      if (!joined) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
-      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined)
+      if (!opts.authKey?.trim()) throw new PrintError('The printer did not answer. Check the address and that this host can reach it.')
+      await savePrinter(db, queue, name, address, { protocol: 'socket', label: '', driver: '' }, joined ?? { hostname: opts.tailHostname || '' })
       saved = true
-      await recordPrinterEvent(db, 'warning', `Printer ${queue} joined the tailnet but did not answer`)
+      const note = tailWarning || 'Joined the tailnet. Waiting for the printer to answer through its route.'
+      await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${note}`.slice(0, 600))
       kickPrinterImage(db, queue)
-      return 'joined the tailnet, waiting for the printer'
+      return { identity: name, warning: note }
     }
     let choice: { protocol: string, label: string, driver: string }
     try {
@@ -460,13 +472,13 @@ export async function addPrinter(
       saved = true
       await recordPrinterEvent(db, 'warning', `Printer ${queue} saved. ${err.message}`)
       kickPrinterImage(db, queue)
-      return discovery.identity || name
+      return { identity: discovery.identity || name, warning: tailWarning }
     }
     await savePrinter(db, queue, name, address, choice, joined)
     saved = true
     await recordPrinterEvent(db, 'success', `Printer ${queue} configured on ${address} (${choice.label.slice(0, 80)})`)
     kickPrinterImage(db, queue)
-    return choice.label
+    return { identity: choice.label, warning: tailWarning }
   }
   catch (err) {
     if (joined && !saved) {
@@ -961,12 +973,17 @@ export async function submitFile(
   const jobId = inserted!.id
   try {
     const prepared = await prepareBytes(safeName, opts.data, Math.max(1, Math.min(Number(cfg.max_pages || 40), 200)))
+    const documentId = await storeDocument(db, {
+      filename: safeName,
+      pdf: readFileSync(prepared.path),
+      pages: prepared.pages,
+    })
     await db.update(printerJobs).set({
       filepath: prepared.path,
       pages: prepared.pages,
       status: 'pending',
       error: '',
-      fileData: readFileSync(prepared.path),
+      documentId,
       updatedAt: new Date(),
     }).where(eq(printerJobs.id, jobId))
     if (opts.release !== false) await releaseQueues(db)
@@ -1009,11 +1026,12 @@ export async function dispatchJob(db: Db, jobId: string) {
   if (!record) throw new PrintError('Job not found')
   let path = record.filepath
   if (!path || !existsSync(path)) {
-    if (record.fileData) {
+    const saved = (await documentData(db, record.documentId)) || record.fileData
+    if (saved) {
       const folder = join(printersDataDir(), 'files')
       mkdirSync(folder, { recursive: true })
       path = join(folder, `${record.id}.pdf`)
-      writeFileSync(path, record.fileData)
+      writeFileSync(path, saved)
       await db.update(printerJobs).set({ filepath: path }).where(eq(printerJobs.id, jobId))
     }
   }
@@ -1112,7 +1130,7 @@ export async function releaseQueues(db: Db) {
 export async function requeueJob(db: Db, jobId: string) {
   const [row] = await db.select().from(printerJobs).where(eq(printerJobs.id, jobId)).limit(1)
   if (!row || row.status !== 'error') throw new PrintError('Only failed jobs can be retried')
-  if ((!row.filepath || !existsSync(row.filepath)) && !row.fileData) {
+  if ((!row.filepath || !existsSync(row.filepath)) && !row.fileData && !row.documentId) {
     throw new PrintError('The saved document is not available for retry')
   }
   await db.update(printerJobs).set({ status: 'pending', error: '', updatedAt: new Date() })

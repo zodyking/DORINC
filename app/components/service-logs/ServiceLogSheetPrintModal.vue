@@ -6,7 +6,13 @@ const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{
   'print-device': []
   'staples-sent': [{ jobId: string }]
+  'printer-sent': [{ label: string }]
 }>()
+
+const auth = useAuthStore()
+const { targets: printTargets, send: sendToPrinter } = usePrintTargets()
+const canSendToPrinter = computed(() => auth.can('printers.print.all'))
+const printerBusy = ref('')
 
 type StaplesJob = {
   id: string
@@ -33,6 +39,7 @@ const staplesError = ref('')
 
 function resetStaples() {
   staplesError.value = ''
+  printerBusy.value = ''
   staplesBusy.value = false
   step.value = 'choose'
 }
@@ -61,6 +68,23 @@ async function chooseDevice() {
   }
   finally {
     deviceBusy.value = false
+  }
+}
+
+async function choosePrinter(queue: string, label: string) {
+  if (deviceBusy.value || staplesBusy.value || printerBusy.value) return
+  printerBusy.value = queue
+  staplesError.value = ''
+  try {
+    await sendToPrinter({ kind: 'service-log-sheet', queue })
+    emit('printer-sent', { label })
+    printerBusy.value = ''
+    open.value = false
+    resetStaples()
+  }
+  catch (e: unknown) {
+    printerBusy.value = ''
+    staplesError.value = syncFetchErrorMessage(e, `Could not send to ${label}`)
   }
 }
 
@@ -107,7 +131,7 @@ async function chooseStaples() {
       <div class="mhead">
         <div>
           <h3 id="sl-print-title">
-            {{ step === 'staples' ? 'Print via Staples' : 'Print Template' }}
+            {{ step === 'staples' ? 'Print At Staples' : 'Print Template' }}
           </h3>
           <p>
             {{ step === 'staples'
@@ -132,14 +156,14 @@ async function chooseStaples() {
             type="button"
             class="sl-print-option"
             role="listitem"
-            :disabled="deviceBusy || staplesBusy"
-            @click="chooseDevice"
+            :disabled="deviceBusy || staplesBusy || Boolean(printerBusy)"
+            @click="chooseStaples"
           >
             <span class="sl-print-option-title">
-              {{ deviceBusy ? 'Printing…' : 'Print from this device' }}
+              Print At Staples
             </span>
             <span class="sl-print-option-desc">
-              Open the browser print dialog for your local printer
+              Email to Staples PrintMe — the release code appears on the Staples page when ready
             </span>
           </button>
 
@@ -147,16 +171,36 @@ async function chooseStaples() {
             type="button"
             class="sl-print-option"
             role="listitem"
-            :disabled="deviceBusy || staplesBusy"
-            @click="chooseStaples"
+            :disabled="deviceBusy || staplesBusy || Boolean(printerBusy)"
+            @click="chooseDevice"
           >
             <span class="sl-print-option-title">
-              Print via Staples
+              {{ deviceBusy ? 'Printing…' : 'Print From PC' }}
             </span>
             <span class="sl-print-option-desc">
-              Email to Staples PrintMe — the release code appears on the Staples page when ready
+              Open the browser print dialog for your local printer
             </span>
           </button>
+
+          <template v-if="canSendToPrinter">
+            <button
+              v-for="printer in printTargets"
+              :key="printer.queue"
+              type="button"
+              class="sl-print-option"
+              role="listitem"
+              :disabled="deviceBusy || staplesBusy || Boolean(printerBusy)"
+              @click="choosePrinter(printer.queue, printer.label)"
+            >
+              <span class="sl-print-option-title">
+                {{ printerBusy === printer.queue ? 'Sending…' : `Send to ${printer.label}` }}
+              </span>
+              <span class="sl-print-option-desc">
+                Queue the blank sheet on this shop printer
+              </span>
+            </button>
+          </template>
+          <p v-if="staplesError" class="sl-staples-error">{{ staplesError }}</p>
         </div>
 
         <div v-else class="sl-staples">

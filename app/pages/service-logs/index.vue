@@ -92,6 +92,7 @@ const query = computed(() => ({
 }))
 
 const actionError = ref('')
+const actionOk = ref('')
 
 const { data, error, refresh } = useClientFetch<{ items: ServiceLogRow[], total: number }>(
   '/api/service-logs',
@@ -258,6 +259,7 @@ async function printServiceLogSheetFromDevice() {
     <ServiceLogSheetPrintModal
       v-model:open="printSheetChooserOpen"
       @print-device="printServiceLogSheetFromDevice"
+      @printer-sent="({ label }) => { actionError = ''; actionOk = `Blank sheet sent to ${label}.` }"
     />
 
     <ListFilterBar
@@ -317,6 +319,7 @@ async function printServiceLogSheetFromDevice() {
     </ListFilterBar>
 
     <p v-if="actionError" class="help" style="color:#dc2626; margin:0 0 12px;">{{ actionError }}</p>
+    <p v-else-if="actionOk" class="help" style="color:#15803d; margin:0 0 12px;">{{ actionOk }}</p>
     <p v-else-if="error" class="help" style="color:#dc2626; margin:0 0 12px;">
       Could not load service logs. Try refreshing the page.
     </p>
