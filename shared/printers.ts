@@ -1080,6 +1080,14 @@ export function readingsFromIpp(attrs: Record<string, Array<string | number | bo
   }
 }
 
+/** CUPS queue name from a printer's display name, e.g. "Office Printer" -> "Office_Printer". */
+export function queueFor(label: string): string {
+  let raw = String(label || '').normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+  if (!/^[A-Za-z]/.test(raw)) raw = `Printer${raw ? `_${raw}` : ''}`
+  raw = raw.slice(0, 41).replace(/_$/, '')
+  return QUEUE_RE.test(raw) ? raw : 'Printer'
+}
+
 export function hostnameFor(label: string, queue: string): string {
   let raw = String(label || queue || 'printer').replace(/[^A-Za-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 63).toLowerCase()
   if (!HOSTNAME_RE.test(raw || '')) raw = 'printer'
