@@ -118,8 +118,8 @@ export async function listPrinterJobRows(db: Db, limit = 100) {
     sides: printerJobs.sides,
     status: printerJobs.status,
     cupsId: printerJobs.cupsId,
-    filepath: printerJobs.filepath,
     error: printerJobs.error,
+    hasFile: sql<boolean>`(${printerJobs.documentId} IS NOT NULL OR ${printerJobs.fileData} IS NOT NULL OR ${printerJobs.filepath} <> '')`,
   }).from(printerJobs).orderBy(desc(printerJobs.createdAt)).limit(limit)
 }
 

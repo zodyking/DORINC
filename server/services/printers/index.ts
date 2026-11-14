@@ -1,4 +1,5 @@
 export { PrintError, TailscaleError } from './errors'
+export { deletePrinterJob, jobDocument } from './documents'
 export {
   addPrinter,
   applyQueueOptions,

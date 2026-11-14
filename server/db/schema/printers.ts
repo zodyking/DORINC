@@ -45,6 +45,7 @@ export const printerJobs = pgTable('printer_jobs', {
   cupsId: text('cups_id').notNull().default(''),
   filepath: text('filepath').notNull().default(''),
   fileData: bytea('file_data'),
+  documentId: uuid('document_id'),
   error: text('error').notNull().default(''),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -53,6 +54,21 @@ export const printerJobs = pgTable('printer_jobs', {
   index('printer_jobs_status_idx').on(table.status),
   index('printer_jobs_queue_idx').on(table.queue),
   index('printer_jobs_created_idx').on(table.createdAt),
+  index('printer_jobs_document_idx').on(table.documentId),
+])
+
+/** One stored PDF per original file name + type, shared by every job that printed it. */
+export const printerDocuments = pgTable('printer_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  filename: text('filename').notNull(),
+  fileType: text('file_type').notNull(),
+  pages: integer('pages'),
+  bytes: integer('bytes').notNull().default(0),
+  data: bytea('data').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex('printer_documents_name_type_uq').on(table.filename, table.fileType),
 ])
 
 export const printerEvents = pgTable('printer_events', {

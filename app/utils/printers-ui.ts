@@ -45,6 +45,7 @@ export type PrintersPage = {
     status: string
     cupsId: string
     error: string
+    hasFile: boolean
     createdAt: string
   }>
   events: Array<{ id: string, level: string, message: string, createdAt: string }>
