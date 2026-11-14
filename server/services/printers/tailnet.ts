@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
 import { delimiter, join } from 'node:path'
 import { spawn, execFileSync, spawnSync } from 'node:child_process'
@@ -8,8 +8,15 @@ import { TailscaleError } from './errors'
 import { printersDataDir } from './store'
 import { HOSTNAME_RE, QUEUE_RE, hostnameFor } from '../../../shared/printers'
 
+const BIN_DIRS = ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin']
+
 function which(bin: string): string | null {
-  for (const dir of (process.env.PATH || '').split(delimiter)) {
+  const override = process.env[`DORINC_${bin.toUpperCase()}_PATH`]?.trim()
+  if (override && existsSync(override)) return override
+  const seen = new Set<string>()
+  for (const dir of [...(process.env.PATH || '').split(delimiter), ...BIN_DIRS]) {
+    if (!dir || seen.has(dir)) continue
+    seen.add(dir)
     const full = join(dir, bin)
     if (existsSync(full)) return full
   }
@@ -143,8 +150,10 @@ function logTail(queue: string): string {
 }
 
 function runTailscale(args: string[]): { status: number, stdout: string, stderr: string } {
+  const name = args[0] || 'tailscale'
+  const bin = name.startsWith('/') ? name : (which(name) || name)
   try {
-    const stdout = execFileSync(args[0]!, args.slice(1), { encoding: 'utf8', timeout: 40000, stdio: ['ignore', 'pipe', 'pipe'] })
+    const stdout = execFileSync(bin, args.slice(1), { encoding: 'utf8', timeout: 40000, stdio: ['ignore', 'pipe', 'pipe'] })
     return { status: 0, stdout: stdout || '', stderr: '' }
   }
   catch (err) {
@@ -168,17 +177,22 @@ function startDaemon(queue: string): void {
     try { unlinkSync(sockPath) }
     catch { /* ignore */ }
   }
+  const daemon = which('tailscaled')
+  if (!daemon) throw new TailscaleError('Tailscale is not installed on this host.')
   const socks = freePort(preferredPort(queue, 'socks', 41000))
   writeFileSync(join(folder, 'socks.port'), String(socks))
-  const out = spawn('tailscaled', [
+  const logFd = openSync(join(folder, 'tailscaled.log'), 'a')
+  const out = spawn(daemon, [
     '--tun=userspace-networking',
     `--state=${join(folder, 'tailscaled.state')}`,
     `--socket=${sockPath}`,
     `--socks5-server=127.0.0.1:${socks}`,
   ], {
     detached: true,
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', logFd, logFd],
   })
+  try { closeSync(logFd) }
+  catch { /* child keeps the log */ }
   out.unref()
   if (out.pid) writeFileSync(join(folder, 'tailscaled.pid'), String(out.pid))
   PROCS.set(queue, { pid: out.pid || 0, log: null })

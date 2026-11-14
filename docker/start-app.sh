@@ -1,8 +1,11 @@
 #!/bin/sh
 set -eu
 
-DATA="${DORINC_DATA_DIR:-/app/.data}/cups"
-mkdir -p "$DATA/ppd" "$DATA/spool" /run/cups /var/run/cups /var/cache/cups /var/spool/cups /var/log/cups /etc/cups/ppd
+ROOT="${DORINC_DATA_DIR:-/app/.data}"
+DATA="$ROOT/cups"
+mkdir -p "$DATA/ppd" "$DATA/spool" "$ROOT/printers/tailscale" \
+  /run/cups /var/run/cups /var/cache/cups /var/spool/cups /var/log/cups /etc/cups/ppd \
+  /var/run/tailscale /var/lib/tailscale
 
 if [ -f /usr/local/share/dorinc/cupsd.conf ]; then
   cp /usr/local/share/dorinc/cupsd.conf /etc/cups/cupsd.conf
